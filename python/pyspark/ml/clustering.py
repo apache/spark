@@ -334,55 +334,13 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         return KMeansSummary(self._call_java("summary"))
 
 
-class KMeansSummary(JavaWrapper):
+class KMeansSummary(ClusteringSummary):
     """
     Summary of KMeans.
 
     .. versionadded:: 2.1.0
     """
-
-    def __init__(self, _java_summary):
-        super(KMeansSummary, self).__init__(_java_summary)
-
-    @property
-    @since("2.1.0")
-    def clusterSizes(self):
-        """
-        Size of (number of data points in) each cluster.
-        """
-        return self._call_java("clusterSizes")
-
-    @property
-    @since("2.1.0")
-    def predictions(self):
-        """
-        return the DataFrame of predictions that is produced by KMeansModel.transform().
-        """
-        return self._call_java("predictions")
-
-    @property
-    @since("2.1.0")
-    def predictionCol(self):
-        """
-        Name for column of predicted clusters.
-        """
-        return self._call_java("predictionCol")
-
-    @property
-    @since("2.1.0")
-    def featuresCol(self):
-        """
-        Name for column of features.
-        """
-        return self._call_java("featuresCol")
-
-    @property
-    @since("2.1.0")
-    def k(self):
-        """
-        Number of clusters.
-        """
-        return self._call_java("k")
+    pass
 
 
 @ignore_unicode_prefix
