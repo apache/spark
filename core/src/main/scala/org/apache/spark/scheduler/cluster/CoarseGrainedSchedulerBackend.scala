@@ -24,6 +24,8 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
+import scala.util.{Failure, Success}
+import scala.util.control.NonFatal
 
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
 import org.apache.spark.internal.Logging
@@ -208,6 +210,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case RetrieveSparkProps =>
         context.reply(sparkProperties)
+
+      case UpdateCredentials =>
+        val futures = executorDataMap.map { case (_, executorData) =>
+          executorData.executorEndpoint.ask[Boolean](UpdateCredentials)
+        }
+
+        implicit val executorContext = ThreadUtils.sameThread
+        Future.sequence(futures)
+          .map { booleans => booleans.reduce(_ && _) }
+          .andThen {
+            case Success(b) => context.reply(b)
+            case Failure(NonFatal(e)) => context.sendFailure(e)
+          }
     }
 
     // Make fake resource offers on all executors

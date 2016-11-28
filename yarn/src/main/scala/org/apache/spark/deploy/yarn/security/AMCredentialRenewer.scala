@@ -80,8 +80,6 @@ private[yarn] class AMCredentialRenewer(
    *
    */
   private[spark] def scheduleLoginFromKeytab(): Unit = {
-    val principal = sparkConf.get(PRINCIPAL).get
-    val keytab = sparkConf.get(KEYTAB).get
 
     /**
      * Schedule re-login and creation of new credentials. If credentials have already expired, this
@@ -104,7 +102,7 @@ private[yarn] class AMCredentialRenewer(
       new Runnable {
         override def run(): Unit = {
           try {
-            writeNewCredentialsToHDFS(principal, keytab)
+            renewCredentials()
             cleanupOldFiles()
           } catch {
             case e: Exception =>
@@ -145,7 +143,7 @@ private[yarn] class AMCredentialRenewer(
     }
   }
 
-  private def writeNewCredentialsToHDFS(principal: String, keytab: String): Unit = {
+  def renewCredentials(): Unit = {
     // Keytab is copied by YARN to the working directory of the AM, so full path is
     // not needed.
 
@@ -164,6 +162,8 @@ private[yarn] class AMCredentialRenewer(
     // have to worry about (like once every day or so). This makes this code clearer than having
     // to login and then relogin every time (the HDFS API may not relogin since we don't use this
     // UGI directly for HDFS communication.
+    val principal = sparkConf.get(PRINCIPAL).get
+    val keytab = sparkConf.get(KEYTAB).get
     logInfo(s"Attempting to login to KDC using principal: $principal")
     val keytabLoggedInUGI = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
     logInfo("Successfully logged into KDC.")

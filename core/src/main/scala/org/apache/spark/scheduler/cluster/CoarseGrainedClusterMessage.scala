@@ -106,4 +106,7 @@ private[spark] object CoarseGrainedClusterMessages {
   // Used internally by executors to shut themselves down.
   case object Shutdown extends CoarseGrainedClusterMessage
 
+  // Used to update credentials for Spark on YARN, exchanged between driver and AM, driver and
+  // executors.
+  case object UpdateCredentials extends CoarseGrainedClusterMessage
 }

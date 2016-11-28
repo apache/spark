@@ -125,6 +125,12 @@ private[spark] class CoarseGrainedExecutorBackend(
       }.start()
   }
 
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case UpdateCredentials =>
+      SparkHadoopUtil.get.triggerCredentialUpdater()
+      context.reply(true)
+  }
+
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (stopping.get()) {
       logInfo(s"Driver from $remoteAddress disconnected during shutdown")

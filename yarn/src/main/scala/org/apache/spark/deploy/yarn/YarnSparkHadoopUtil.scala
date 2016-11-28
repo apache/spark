@@ -23,6 +23,7 @@ import java.util.regex.Matcher
 import java.util.regex.Pattern
 
 import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.concurrent.Future
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
@@ -36,11 +37,12 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, P
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.security.{ConfigurableCredentialManager, CredentialUpdater}
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
+import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
 import org.apache.spark.util.Utils
 
 /**
@@ -89,6 +91,14 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     if (credentials != null) credentials.getSecretKey(new Text(key)) else null
   }
 
+  override def updateCredentials(sc: SparkContext): Future[Boolean] = {
+    val sparkConf = sc.conf
+    require(sparkConf.get(PRINCIPAL).isDefined && sparkConf.get(KEYTAB).isDefined,
+      s"${PRINCIPAL.key} and ${KEYTAB.key} should be set to update credentials")
+
+    sc.schedulerBackend.asInstanceOf[YarnSchedulerBackend].updateCredentials()
+  }
+
   private[spark] override def startCredentialUpdater(sparkConf: SparkConf): Unit = {
     credentialUpdater =
       new ConfigurableCredentialManager(sparkConf, newConfiguration(sparkConf)).credentialUpdater()
@@ -99,6 +109,12 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     if (credentialUpdater != null) {
       credentialUpdater.stop()
       credentialUpdater = null
+    }
+  }
+
+  private[spark] override def triggerCredentialUpdater(): Unit = {
+    if (credentialUpdater != null) {
+      credentialUpdater.updateCredentials()
     }
   }
 

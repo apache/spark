@@ -722,6 +722,16 @@ private[spark] class ApplicationMaster(
           case None =>
             logWarning("Container allocator is not ready to find executor loss reasons yet.")
         }
+
+      case UpdateCredentials =>
+        logInfo("Driver request to update credentials")
+        Option(credentialRenewer) match {
+          case Some(r) =>
+            r.renewCredentials()
+            context.reply(true)
+          case None =>
+            context.reply(false)
+        }
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {

@@ -24,6 +24,7 @@ import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
 
 import scala.collection.JavaConverters._
+import scala.concurrent.Future
 import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
@@ -35,7 +36,7 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
@@ -135,6 +136,17 @@ class SparkHadoopUtil extends Logging {
 
   def loginUserFromKeytab(principalName: String, keytabFilename: String) {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
+  }
+
+  /**
+   * Update credentials manually. This will trigger AM to renew the credentials immediately,
+   * also executors and driver (in client mode) will update the credentials accordingly.
+   *
+   * Note this will only be worked under YARN cluster manager.
+   */
+  def updateCredentials(sc: SparkContext): Future[Boolean] = {
+    throw new UnsupportedOperationException("updateCredentials can only be used under YARN " +
+      "cluster manager")
   }
 
   /**
@@ -320,6 +332,11 @@ class SparkHadoopUtil extends Logging {
    * Stop the thread that does the credential updates.
    */
   private[spark] def stopCredentialUpdater() {}
+
+  /**
+   * Manually trigger the credential updater to update the credentials immediately.
+   */
+  private[spark] def triggerCredentialUpdater() {}
 
   /**
    * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.

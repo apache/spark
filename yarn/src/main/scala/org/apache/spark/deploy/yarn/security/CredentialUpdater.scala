@@ -50,7 +50,7 @@ private[spark] class CredentialUpdater(
   // This thread wakes up and picks up new credentials from HDFS, if any.
   private val credentialUpdaterRunnable =
     new Runnable {
-      override def run(): Unit = Utils.logUncaughtExceptions(updateCredentialsIfRequired())
+      override def run(): Unit = Utils.logUncaughtExceptions(timelyUpdateCredentialsIfRequired())
     }
 
   /** Start the credential updater task */
@@ -65,8 +65,8 @@ private[spark] class CredentialUpdater(
     }
   }
 
-  private def updateCredentialsIfRequired(): Unit = {
-    val timeToNextUpdate = try {
+  def updateCredentials(): Long = {
+    try {
       val credentialsFilePath = new Path(credentialsFile)
       val remoteFs = FileSystem.get(freshHadoopConf)
       SparkHadoopUtil.get.listFilesSorted(
@@ -74,6 +74,8 @@ private[spark] class CredentialUpdater(
         credentialsFilePath.getName, SparkHadoopUtil.SPARK_YARN_CREDS_TEMP_EXTENSION)
         .lastOption.map { credentialsStatus =>
           val suffix = SparkHadoopUtil.get.getSuffixForCredentialsPath(credentialsStatus.getPath)
+          val timeOfNextUpdate = getTimeOfNextUpdateFromFileName(credentialsStatus.getPath)
+          val currTime = System.currentTimeMillis()
           if (suffix > lastCredentialsFileSuffix) {
             logInfo("Reading new credentials from " + credentialsStatus.getPath)
             val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentialsStatus.getPath)
@@ -81,11 +83,14 @@ private[spark] class CredentialUpdater(
             UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
             logInfo("Credentials updated from credentials file.")
 
-            val remainingTime = getTimeOfNextUpdateFromFileName(credentialsStatus.getPath)
-              - System.currentTimeMillis()
+            val remainingTime = timeOfNextUpdate - currTime
             if (remainingTime <= 0) TimeUnit.MINUTES.toMillis(1) else remainingTime
+          } else if (timeOfNextUpdate > currTime) {
+            // Current suffix is older than expected but credential update time is later than
+            // current timestamp.
+            // This is due to manual credential update called by user explicitly.
+            timeOfNextUpdate - currTime
           } else {
-            // If current credential file is older than expected, sleep 1 hour and check again.
             TimeUnit.HOURS.toMillis(1)
           }
       }.getOrElse {
@@ -99,7 +104,10 @@ private[spark] class CredentialUpdater(
         logWarning("Error while trying to update credentials, will try again in 1 hour", e)
         TimeUnit.HOURS.toMillis(1)
     }
+  }
 
+  private def timelyUpdateCredentialsIfRequired(): Unit = {
+    val timeToNextUpdate = updateCredentials()
     credentialUpdater.schedule(
       credentialUpdaterRunnable, timeToNextUpdate, TimeUnit.MILLISECONDS)
   }

@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 import org.apache.spark.SparkContext
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
@@ -178,6 +179,39 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 
   /**
+   * Renew and update the credentials. This method will trigger credentials renewal in the AM
+   * side, once successfully renewed, it will trigger credentials updating in executor and
+   * driver side.
+   */
+  def updateCredentials(): Future[Boolean] = {
+    yarnSchedulerEndpoint.amEndpoint match {
+      case Some(am) =>
+        val future = am.ask[Boolean](UpdateCredentials)
+        future.flatMap { _ match {
+            case true =>
+              // Update credentials in the executor side only when AM is successfully renewed the
+              // Credentials.
+              driverEndpoint.ask[Boolean](UpdateCredentials).map { _ match {
+                  case true =>
+                    SparkHadoopUtil.get.triggerCredentialUpdater()
+                    true
+                  case false => false
+                }
+              }(ThreadUtils.sameThread)
+
+            case false =>
+              logWarning(s"Failed to renew credentials in the AM")
+              Future { false }(ThreadUtils.sameThread)
+          }
+        }(ThreadUtils.sameThread)
+
+      case None =>
+        logWarning("Attempted to update credentials before AM has registered")
+        Future { false }(ThreadUtils.sameThread)
+    }
+  }
+
+  /**
    * Override the DriverEndpoint to add extra logic for the case when an executor is disconnected.
    * This endpoint communicates with the executors and queries the AM for an executor's exit
    * status when the executor is disconnected.
@@ -210,7 +244,7 @@ private[spark] abstract class YarnSchedulerBackend(
    */
   private class YarnSchedulerEndpoint(override val rpcEnv: RpcEnv)
     extends ThreadSafeRpcEndpoint with Logging {
-    private var amEndpoint: Option[RpcEndpointRef] = None
+    var amEndpoint: Option[RpcEndpointRef] = None
 
     private[YarnSchedulerBackend] def handleExecutorDisconnectedFromDriver(
         executorId: String,
