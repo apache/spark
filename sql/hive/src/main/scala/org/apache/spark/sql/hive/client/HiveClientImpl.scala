@@ -527,7 +527,9 @@ private[hive] class HiveClientImpl(
       table: CatalogTable,
       partialSpec: Option[TablePartitionSpec] = None): Seq[String] = withHiveState {
     partialSpec match {
-      case None => client.getPartitionNames(table.database, table.identifier.table, -1).asScala
+      case None =>
+        // "-1" means "do not limit the number of results"
+        client.getPartitionNames(table.database, table.identifier.table, -1).asScala
       case Some(s) =>
         client.getPartitionNames(table.database, table.identifier.table, s.asJava, -1).asScala
     }

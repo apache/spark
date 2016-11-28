@@ -198,7 +198,7 @@ abstract class ExternalCatalog {
    *
    * @param db database name
    * @param table table name
-   * @param partialSpec  partition spec
+   * @param partialSpec partition spec
    */
   def listPartitionNames(
       db: String,
@@ -214,7 +214,7 @@ abstract class ExternalCatalog {
    *
    * @param db database name
    * @param table table name
-   * @param partialSpec  partition spec
+   * @param partialSpec partition spec
    */
   def listPartitions(
       db: String,
