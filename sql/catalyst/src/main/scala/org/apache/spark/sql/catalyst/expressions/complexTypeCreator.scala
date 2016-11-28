@@ -279,12 +279,6 @@ trait CreateNamedStructLike extends Expression {
   }
 }
 
-
-object CreateNamedStructLike{
-  def unapply(arg: CreateNamedStructLike): Some[(List[Expression], List[Expression])] = {
-    Some( arg.nameExprs -> arg.valExprs )
-  }
-}
 /**
  * Creates a struct with the given field names and values
  *
