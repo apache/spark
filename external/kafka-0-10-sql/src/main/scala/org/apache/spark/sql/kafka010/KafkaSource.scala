@@ -18,6 +18,8 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.io._
+import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -30,9 +32,12 @@ import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSource._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.UninterruptibleThread
 
 /**
@@ -88,13 +93,19 @@ private[kafka010] case class KafkaSource(
 
   private val sc = sqlContext.sparkContext
 
-  private val pollTimeoutMs = sourceOptions.getOrElse("kafkaConsumer.pollTimeoutMs", "512").toLong
+  private val pollTimeoutMs = sourceOptions.getOrElse(
+    "kafkaConsumer.pollTimeoutMs",
+    sc.conf.getTimeAsMs("spark.network.timeout", "120s").toString
+  ).toLong
 
   private val maxOffsetFetchAttempts =
     sourceOptions.getOrElse("fetchOffset.numRetries", "3").toInt
 
   private val offsetFetchAttemptIntervalMs =
     sourceOptions.getOrElse("fetchOffset.retryIntervalMs", "10").toLong
+
+  private val maxOffsetsPerTrigger =
+    sourceOptions.get("maxOffsetsPerTrigger").map(_.toLong)
 
   /**
    * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the
@@ -108,7 +119,22 @@ private[kafka010] case class KafkaSource(
    * `KafkaConsumer.poll` may hang forever (KAFKA-1894).
    */
   private lazy val initialPartitionOffsets = {
-    val metadataLog = new HDFSMetadataLog[KafkaSourceOffset](sqlContext.sparkSession, metadataPath)
+    val metadataLog =
+      new HDFSMetadataLog[KafkaSourceOffset](sqlContext.sparkSession, metadataPath) {
+        override def serialize(metadata: KafkaSourceOffset, out: OutputStream): Unit = {
+          val bytes = metadata.json.getBytes(StandardCharsets.UTF_8)
+          out.write(bytes.length)
+          out.write(bytes)
+        }
+
+        override def deserialize(in: InputStream): KafkaSourceOffset = {
+          val length = in.read()
+          val bytes = new Array[Byte](length)
+          in.read(bytes)
+          KafkaSourceOffset(SerializedOffset(new String(bytes, StandardCharsets.UTF_8)))
+        }
+      }
+
     metadataLog.get(0).getOrElse {
       val offsets = startingOffsets match {
         case EarliestOffsets => KafkaSourceOffset(fetchEarliestOffsets())
@@ -121,6 +147,8 @@ private[kafka010] case class KafkaSource(
     }.partitionToOffsets
   }
 
+  private var currentPartitionOffsets: Option[Map[TopicPartition, Long]] = None
+
   override def schema: StructType = KafkaSource.kafkaSchema
 
   /** Returns the maximum available offset for this source. */
@@ -128,9 +156,54 @@ private[kafka010] case class KafkaSource(
     // Make sure initialPartitionOffsets is initialized
     initialPartitionOffsets
 
-    val offset = KafkaSourceOffset(fetchLatestOffsets())
-    logDebug(s"GetOffset: ${offset.partitionToOffsets.toSeq.map(_.toString).sorted}")
-    Some(offset)
+    val latest = fetchLatestOffsets()
+    val offsets = maxOffsetsPerTrigger match {
+      case None =>
+        latest
+      case Some(limit) if currentPartitionOffsets.isEmpty =>
+        rateLimit(limit, initialPartitionOffsets, latest)
+      case Some(limit) =>
+        rateLimit(limit, currentPartitionOffsets.get, latest)
+    }
+
+    currentPartitionOffsets = Some(offsets)
+    logDebug(s"GetOffset: ${offsets.toSeq.map(_.toString).sorted}")
+    Some(KafkaSourceOffset(offsets))
+  }
+
+  /** Proportionally distribute limit number of offsets among topicpartitions */
+  private def rateLimit(
+      limit: Long,
+      from: Map[TopicPartition, Long],
+      until: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
+    val fromNew = fetchNewPartitionEarliestOffsets(until.keySet.diff(from.keySet).toSeq)
+    val sizes = until.flatMap {
+      case (tp, end) =>
+        // If begin isn't defined, something's wrong, but let alert logic in getBatch handle it
+        from.get(tp).orElse(fromNew.get(tp)).flatMap { begin =>
+          val size = end - begin
+          logDebug(s"rateLimit $tp size is $size")
+          if (size > 0) Some(tp -> size) else None
+        }
+    }
+    val total = sizes.values.sum.toDouble
+    if (total < 1) {
+      until
+    } else {
+      until.map {
+        case (tp, end) =>
+          tp -> sizes.get(tp).map { size =>
+            val begin = from.get(tp).getOrElse(fromNew(tp))
+            val prorate = limit * (size / total)
+            logDebug(s"rateLimit $tp prorated amount is $prorate")
+            // Don't completely starve small topicpartitions
+            val off = begin + (if (prorate < 1) Math.ceil(prorate) else Math.floor(prorate)).toLong
+            logDebug(s"rateLimit $tp new offset is $off")
+            // Paranoia, make sure not to return an offset that's past end
+            Math.min(end, off)
+          }.getOrElse(end)
+      }
+    }
   }
 
   /**
@@ -153,11 +226,7 @@ private[kafka010] case class KafkaSource(
 
     // Find the new partitions, and get their earliest offsets
     val newPartitions = untilPartitionOffsets.keySet.diff(fromPartitionOffsets.keySet)
-    val newPartitionOffsets = if (newPartitions.nonEmpty) {
-      fetchNewPartitionEarliestOffsets(newPartitions.toSeq)
-    } else {
-      Map.empty[TopicPartition, Long]
-    }
+    val newPartitionOffsets = fetchNewPartitionEarliestOffsets(newPartitions.toSeq)
     if (newPartitionOffsets.keySet != newPartitions) {
       // We cannot get from offsets for some partitions. It means they got deleted.
       val deletedPartitions = newPartitions.diff(newPartitionOffsets.keySet)
@@ -213,15 +282,28 @@ private[kafka010] case class KafkaSource(
       }
     }.toArray
 
-    // Create a RDD that reads from Kafka and get the (key, value) pair as byte arrays.
+    // Create an RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD(
-      sc, executorKafkaParams, offsetRanges, pollTimeoutMs).map { cr =>
-      Row(cr.key, cr.value, cr.topic, cr.partition, cr.offset, cr.timestamp, cr.timestampType.id)
+      sc, executorKafkaParams, offsetRanges, pollTimeoutMs, failOnDataLoss).map { cr =>
+      InternalRow(
+        cr.key,
+        cr.value,
+        UTF8String.fromString(cr.topic),
+        cr.partition,
+        cr.offset,
+        DateTimeUtils.fromJavaTimestamp(new java.sql.Timestamp(cr.timestamp)),
+        cr.timestampType.id)
     }
 
     logInfo("GetBatch generating RDD of offset range: " +
       offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))
-    sqlContext.createDataFrame(rdd, schema)
+
+    // On recovery, getBatch will get called before getOffset
+    if (currentPartitionOffsets.isEmpty) {
+      currentPartitionOffsets = Some(untilPartitionOffsets)
+    }
+
+    sqlContext.internalCreateDataFrame(rdd, schema)
   }
 
   /** Stop this source and free any resources it has allocated. */
@@ -305,23 +387,28 @@ private[kafka010] case class KafkaSource(
    * some partitions if they are deleted.
    */
   private def fetchNewPartitionEarliestOffsets(
-      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
-    // Poll to get the latest assigned partitions
-    consumer.poll(0)
-    val partitions = consumer.assignment()
-    consumer.pause(partitions)
-    logDebug(s"\tPartitions assigned to consumer: $partitions")
+      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] =
+    if (newPartitions.isEmpty) {
+      Map.empty[TopicPartition, Long]
+    } else {
+      withRetriesWithoutInterrupt {
+        // Poll to get the latest assigned partitions
+        consumer.poll(0)
+        val partitions = consumer.assignment()
+        consumer.pause(partitions)
+        logDebug(s"\tPartitions assigned to consumer: $partitions")
 
-    // Get the earliest offset of each partition
-    consumer.seekToBeginning(partitions)
-    val partitionOffsets = newPartitions.filter { p =>
-      // When deleting topics happen at the same time, some partitions may not be in `partitions`.
-      // So we need to ignore them
-      partitions.contains(p)
-    }.map(p => p -> consumer.position(p)).toMap
-    logDebug(s"Got earliest offsets for new partitions: $partitionOffsets")
-    partitionOffsets
-  }
+        // Get the earliest offset of each partition
+        consumer.seekToBeginning(partitions)
+        val partitionOffsets = newPartitions.filter { p =>
+          // When deleting topics happen at the same time, some partitions may not be in
+          // `partitions`. So we need to ignore them
+          partitions.contains(p)
+        }.map(p => p -> consumer.position(p)).toMap
+        logDebug(s"Got earliest offsets for new partitions: $partitionOffsets")
+        partitionOffsets
+      }
+    }
 
   /**
    * Helper function that does multiple retries on the a body of code that returns offsets.
@@ -386,10 +473,9 @@ private[kafka010] case class KafkaSource(
    */
   private def reportDataLoss(message: String): Unit = {
     if (failOnDataLoss) {
-      throw new IllegalStateException(message +
-        ". Set the source option 'failOnDataLoss' to 'false' if you want to ignore these checks.")
+      throw new IllegalStateException(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE")
     } else {
-      logWarning(message)
+      logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
     }
   }
 }
@@ -398,13 +484,29 @@ private[kafka010] case class KafkaSource(
 /** Companion object for the [[KafkaSource]]. */
 private[kafka010] object KafkaSource {
 
+  val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE =
+    """
+      |Some data may have been lost because they are not available in Kafka any more; either the
+      | data was aged out by Kafka or the topic may have been deleted before all the data in the
+      | topic was processed. If you want your streaming query to fail on such cases, set the source
+      | option "failOnDataLoss" to "true".
+    """.stripMargin
+
+  val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE =
+    """
+      |Some data may have been lost because they are not available in Kafka any more; either the
+      | data was aged out by Kafka or the topic may have been deleted before all the data in the
+      | topic was processed. If you don't want your streaming query to fail on such cases, set the
+      | source option "failOnDataLoss" to "false".
+    """.stripMargin
+
   def kafkaSchema: StructType = StructType(Seq(
     StructField("key", BinaryType),
     StructField("value", BinaryType),
     StructField("topic", StringType),
     StructField("partition", IntegerType),
     StructField("offset", LongType),
-    StructField("timestamp", LongType),
+    StructField("timestamp", TimestampType),
     StructField("timestampType", IntegerType)
   ))
 

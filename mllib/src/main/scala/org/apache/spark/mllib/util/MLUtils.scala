@@ -213,7 +213,7 @@ object MLUtils extends Logging {
   }
 
   /**
-   * Version of [[kFold()]] taking a Long seed.
+   * Version of `kFold()` taking a Long seed.
    */
   @Since("2.0.0")
   def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Long): Array[(RDD[T], RDD[T])] = {
@@ -262,7 +262,7 @@ object MLUtils extends Logging {
    * @param dataset input dataset
    * @param cols a list of vector columns to be converted. New vector columns will be ignored. If
    *             unspecified, all old vector columns will be converted except nested ones.
-   * @return the input [[DataFrame]] with old vector columns converted to the new vector type
+   * @return the input `DataFrame` with old vector columns converted to the new vector type
    */
   @Since("2.0.0")
   @varargs
@@ -314,7 +314,7 @@ object MLUtils extends Logging {
    * @param dataset input dataset
    * @param cols a list of vector columns to be converted. Old vector columns will be ignored. If
    *             unspecified, all new vector columns will be converted except nested ones.
-   * @return the input [[DataFrame]] with new vector columns converted to the old vector type
+   * @return the input `DataFrame` with new vector columns converted to the old vector type
    */
   @Since("2.0.0")
   @varargs
@@ -366,7 +366,7 @@ object MLUtils extends Logging {
    * @param dataset input dataset
    * @param cols a list of matrix columns to be converted. New matrix columns will be ignored. If
    *             unspecified, all old matrix columns will be converted except nested ones.
-   * @return the input [[DataFrame]] with old matrix columns converted to the new matrix type
+   * @return the input `DataFrame` with old matrix columns converted to the new matrix type
    */
   @Since("2.0.0")
   @varargs
@@ -416,7 +416,7 @@ object MLUtils extends Logging {
    * @param dataset input dataset
    * @param cols a list of matrix columns to be converted. Old matrix columns will be ignored. If
    *             unspecified, all new matrix columns will be converted except nested ones.
-   * @return the input [[DataFrame]] with new matrix columns converted to the old matrix type
+   * @return the input `DataFrame` with new matrix columns converted to the old matrix type
    */
   @Since("2.0.0")
   @varargs

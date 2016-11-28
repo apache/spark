@@ -19,97 +19,103 @@ application. See the [Deploying](#deploying) subsection below.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+{% highlight scala %}
 
-    // Subscribe to 1 topic
-    val ds1 = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-      .option("subscribe", "topic1")
-      .load()
-    ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-      .as[(String, String)]
+// Subscribe to 1 topic
+val ds1 = spark
+  .readStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .load()
+ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .as[(String, String)]
 
-    // Subscribe to multiple topics
-    val ds2 = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-      .option("subscribe", "topic1,topic2")
-      .load()
-    ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-      .as[(String, String)]
+// Subscribe to multiple topics
+val ds2 = spark
+  .readStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1,topic2")
+  .load()
+ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .as[(String, String)]
 
-    // Subscribe to a pattern
-    val ds3 = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-      .option("subscribePattern", "topic.*")
-      .load()
-    ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-      .as[(String, String)]
+// Subscribe to a pattern
+val ds3 = spark
+  .readStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribePattern", "topic.*")
+  .load()
+ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .as[(String, String)]
 
+{% endhighlight %}
 </div>
 <div data-lang="java" markdown="1">
+{% highlight java %}
 
-    // Subscribe to 1 topic
-    Dataset<Row> ds1 = spark
-      .readStream()
-      .format("kafka")
-      .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-      .option("subscribe", "topic1")
-      .load()
-    ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+// Subscribe to 1 topic
+Dataset<Row> ds1 = spark
+  .readStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .load()
+ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
-    // Subscribe to multiple topics
-    Dataset<Row> ds2 = spark
-      .readStream()
-      .format("kafka")
-      .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-      .option("subscribe", "topic1,topic2")
-      .load()
-    ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+// Subscribe to multiple topics
+Dataset<Row> ds2 = spark
+  .readStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1,topic2")
+  .load()
+ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
-    // Subscribe to a pattern
-    Dataset<Row> ds3 = spark
-      .readStream()
-      .format("kafka")
-      .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-      .option("subscribePattern", "topic.*")
-      .load()
-    ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+// Subscribe to a pattern
+Dataset<Row> ds3 = spark
+  .readStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribePattern", "topic.*")
+  .load()
+ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
+{% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
+{% highlight python %}
 
-    # Subscribe to 1 topic
-    ds1 = spark
-      .readStream()
-      .format("kafka")
-      .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-      .option("subscribe", "topic1")
-      .load()
-    ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+# Subscribe to 1 topic
+ds1 = spark
+  .readStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .load()
+ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
-    # Subscribe to multiple topics
-    ds2 = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-      .option("subscribe", "topic1,topic2")
-      .load()
-    ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+# Subscribe to multiple topics
+ds2 = spark
+  .readStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1,topic2")
+  .load()
+ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
-    # Subscribe to a pattern
-    ds3 = spark
-      .readStream()
-      .format("kafka")
-      .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-      .option("subscribePattern", "topic.*")
-      .load()
-    ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+# Subscribe to a pattern
+ds3 = spark
+  .readStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribePattern", "topic.*")
+  .load()
+ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
+{% endhighlight %}
 </div>
 </div>
 
@@ -221,6 +227,12 @@ The following configurations are optional:
   <td>10</td>
   <td>milliseconds to wait before retrying to fetch Kafka offsets</td>
 </tr>
+<tr>
+  <td>maxOffsetsPerTrigger</td>
+  <td>long</td>
+  <td>none</td>
+  <td>Rate limit on maximum number of offsets processed per trigger interval. The specified total number of offsets will be proportionally split across topicPartitions of different volume.</td>
+</tr>
 </table>
 
 Kafka's own configurations can be set via `DataStreamReader.option` with `kafka.` prefix, e.g, 
@@ -228,6 +240,7 @@ Kafka's own configurations can be set via `DataStreamReader.option` with `kafka.
 [Kafka consumer config docs](http://kafka.apache.org/documentation.html#newconsumerconfigs).
 
 Note that the following Kafka params cannot be set and the Kafka source will throw an exception:
+
 - **group.id**: Kafka source will create a unique group id for each query automatically.
 - **auto.offset.reset**: Set the source option `startingOffsets` to specify
  where to start instead. Structured Streaming manages which offsets are consumed internally, rather 

@@ -264,7 +264,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val hour = minute * 60
     def str: (Long) => String = Utils.msDurationToString(_)
 
-    val sep = new DecimalFormatSymbols(Locale.getDefault()).getDecimalSeparator()
+    val sep = new DecimalFormatSymbols(Locale.US).getDecimalSeparator
 
     assert(str(123) === "123 ms")
     assert(str(second) === "1" + sep + "0 s")
@@ -401,6 +401,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(iterator.toArray === Array(
       (0, -1L + Int.MaxValue), (1, 0L + Int.MaxValue), (2, 1L + Int.MaxValue)
     ))
+    intercept[IllegalArgumentException] {
+      Utils.getIteratorZipWithIndex(Iterator(0, 1, 2), -1L)
+    }
   }
 
   test("doesDirectoryContainFilesNewerThan") {
@@ -970,5 +973,25 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val pValue = chi.chiSquareTest(expected, observed)
 
     assert(pValue > threshold)
+  }
+
+  test("redact sensitive information") {
+    val sparkConf = new SparkConf
+
+    // Set some secret keys
+    val secretKeys = Seq(
+      "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
+      "spark.my.password",
+      "spark.my.sECreT")
+    secretKeys.foreach { key => sparkConf.set(key, "secret_password") }
+    // Set a non-secret key
+    sparkConf.set("spark.regular.property", "not_a_secret")
+
+    // Redact sensitive information
+    val redactedConf = Utils.redact(sparkConf, sparkConf.getAll).toMap
+
+    // Assert that secret information got redacted while the regular property remained the same
+    secretKeys.foreach { key => assert(redactedConf(key) === Utils.REDACTION_REPLACEMENT_TEXT) }
+    assert(redactedConf("spark.regular.property") === "not_a_secret")
   }
 }

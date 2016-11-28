@@ -160,8 +160,12 @@ class LinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable, Java
         training set. An exception is thrown if
         `trainingSummary is None`.
         """
-        java_lrt_summary = self._call_java("summary")
-        return LinearRegressionTrainingSummary(java_lrt_summary)
+        if self.hasSummary:
+            java_lrt_summary = self._call_java("summary")
+            return LinearRegressionTrainingSummary(java_lrt_summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
 
     @property
     @since("2.0.0")
@@ -241,9 +245,9 @@ class LinearRegressionSummary(JavaWrapper):
         .. seealso:: `Wikipedia explain variation \
         <http://en.wikipedia.org/wiki/Explained_variation>`_
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("explainedVariance")
 
@@ -255,9 +259,9 @@ class LinearRegressionSummary(JavaWrapper):
         corresponding to the expected value of the absolute error
         loss or l1-norm loss.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("meanAbsoluteError")
 
@@ -269,9 +273,9 @@ class LinearRegressionSummary(JavaWrapper):
         corresponding to the expected value of the squared error
         loss or quadratic loss.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("meanSquaredError")
 
@@ -282,9 +286,9 @@ class LinearRegressionSummary(JavaWrapper):
         Returns the root mean squared error, which is defined as the
         square root of the mean squared error.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("rootMeanSquaredError")
 
@@ -297,9 +301,9 @@ class LinearRegressionSummary(JavaWrapper):
         .. seealso:: `Wikipedia coefficient of determination \
         <http://en.wikipedia.org/wiki/Coefficient_of_determination>`
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("r2")
 
@@ -594,7 +598,7 @@ class RandomForestParams(TreeEnsembleParams):
     featureSubsetStrategy = \
         Param(Params._dummy(), "featureSubsetStrategy",
               "The number of features to consider for splits at each tree node. Supported " +
-              "options: " + ", ".join(supportedFeatureSubsetStrategies) + " (0.0-1.0], [1-n].",
+              "options: " + ", ".join(supportedFeatureSubsetStrategies) + ", (0.0-1.0], [1-n].",
               typeConverter=TypeConverters.toString)
 
     def __init__(self):
@@ -818,7 +822,7 @@ class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReada
             where gain is scaled by the number of instances passing through node
           - Normalize importances for tree to sum to 1.
 
-        Note: Feature importance for single decision trees can have high variance due to
+        .. note:: Feature importance for single decision trees can have high variance due to
               correlated predictor variables. Consider using a :py:class:`RandomForestRegressor`
               to determine feature importance instead.
         """
@@ -1459,8 +1463,12 @@ class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWri
         training set. An exception is thrown if
         `trainingSummary is None`.
         """
-        java_glrt_summary = self._call_java("summary")
-        return GeneralizedLinearRegressionTrainingSummary(java_glrt_summary)
+        if self.hasSummary:
+            java_glrt_summary = self._call_java("summary")
+            return GeneralizedLinearRegressionTrainingSummary(java_glrt_summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
 
     @property
     @since("2.0.0")

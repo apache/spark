@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.charset.UnsupportedCharsetException
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.util.Locale
 
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
@@ -487,7 +488,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .select("date")
       .collect()
 
-    val dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm")
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.US)
     val expected =
       Seq(Seq(new Timestamp(dateFormat.parse("26/08/2015 18:00").getTime)),
         Seq(new Timestamp(dateFormat.parse("27/10/2014 18:30").getTime)),
@@ -509,7 +510,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .select("date")
       .collect()
 
-    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm")
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm", Locale.US)
     val expected = Seq(
       new Date(dateFormat.parse("26/08/2015 18:00").getTime),
       new Date(dateFormat.parse("27/10/2014 18:30").getTime),
@@ -728,7 +729,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("inferSchema", "false")
         .load(iso8601timestampsPath)
 
-      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSZZ")
+      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSZZ", Locale.US)
       val expectedTimestamps = timestamps.collect().map { r =>
         // This should be ISO8601 formatted string.
         Row(iso8501.format(r.toSeq.head))
@@ -761,7 +762,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("inferSchema", "false")
         .load(iso8601datesPath)
 
-      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd")
+      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd", Locale.US)
       val expectedDates = dates.collect().map { r =>
         // This should be ISO8601 formatted string.
         Row(iso8501.format(r.toSeq.head))
@@ -887,6 +888,21 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         val expectedSchema = StructType(fields)
         assert(actualSchema == expectedSchema)
       }
+    }
+  }
+
+  test("load null when the schema is larger than parsed tokens ") {
+    withTempPath { path =>
+      Seq("1").toDF().write.text(path.getAbsolutePath)
+      val schema = StructType(
+        StructField("a", IntegerType, true) ::
+        StructField("b", IntegerType, true) :: Nil)
+      val df = spark.read
+        .schema(schema)
+        .option("header", "false")
+        .csv(path.getAbsolutePath)
+
+      checkAnswer(df, Row(1, null))
     }
   }
 }

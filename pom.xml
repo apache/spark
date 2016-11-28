@@ -552,7 +552,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.41.Final</version>
+        <version>4.0.42.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -1429,6 +1429,11 @@
             <groupId>jline</groupId>
             <artifactId>jline</artifactId>
           </exclusion>
+          <!-- Cat X license now; see SPARK-18262 -->
+          <exclusion>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1754,6 +1759,10 @@
             <groupId>org.codehaus.janino</groupId>
             <artifactId>janino</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.janino</groupId>
+            <artifactId>commons-compiler</artifactId>
+          </exclusion>
           <!-- hsqldb interferes with the use of derby as the default db
             in hive's use of datanucleus.
           -->
@@ -1789,6 +1798,11 @@
       <dependency>
         <groupId>org.codehaus.janino</groupId>
         <artifactId>janino</artifactId>
+        <version>${janino.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.janino</groupId>
+        <artifactId>commons-compiler</artifactId>
         <version>${janino.version}</version>
       </dependency>
       <dependency>
@@ -2471,6 +2485,38 @@
             <artifactId>maven-javadoc-plugin</artifactId>
             <configuration>
               <additionalparam>-Xdoclint:all -Xdoclint:-missing</additionalparam>
+              <tags>
+                <tag>
+                  <name>example</name>
+                  <placement>a</placement>
+                  <head>Example:</head>
+                </tag>
+                <tag>
+                  <name>note</name>
+                  <placement>a</placement>
+                  <head>Note:</head>
+                </tag>
+                <tag>
+                  <name>group</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>tparam</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>constructor</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>todo</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>groupname</name>
+                  <placement>X</placement>
+                </tag>
+              </tags>
             </configuration>
           </plugin>
         </plugins>
@@ -2691,6 +2737,54 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+
+    <!--
+     This is a profile to enable the use of the ASF snapshot and staging repositories
+     during a build. It is useful when testing againt nightly or RC releases of dependencies.
+     It MUST NOT be used when building copies of Spark to use in production of for distribution,
+     -->
+    <profile>
+      <id>snapshots-and-staging</id>
+      <properties>
+        <!-- override point for ASF staging/snapshot repos -->
+        <asf.staging>https://repository.apache.org/content/groups/staging/</asf.staging>
+        <asf.snapshots>https://repository.apache.org/content/repositories/snapshots/</asf.snapshots>
+      </properties>
+
+      <pluginRepositories>
+        <pluginRepository>
+          <id>ASF Staging</id>
+          <url>${asf.staging}</url>
+        </pluginRepository>
+        <pluginRepository>
+          <id>ASF Snapshots</id>
+          <url>${asf.snapshots}</url>
+          <snapshots>
+            <enabled>true</enabled>
+          </snapshots>
+          <releases>
+            <enabled>false</enabled>
+          </releases>
+        </pluginRepository>
+
+      </pluginRepositories>
+      <repositories>
+        <repository>
+          <id>ASF Staging</id>
+          <url>${asf.staging}</url>
+        </repository>
+        <repository>
+          <id>ASF Snapshots</id>
+          <url>${asf.snapshots}</url>
+          <snapshots>
+            <enabled>true</enabled>
+          </snapshots>
+          <releases>
+            <enabled>false</enabled>
+          </releases>
+        </repository>
+      </repositories>
     </profile>
 
     <!--

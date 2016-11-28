@@ -215,15 +215,10 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("default value of WAREHOUSE_PATH") {
-    val original = spark.conf.get(SQLConf.WAREHOUSE_PATH)
-    try {
-      // to get the default value, always unset it
-      spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
-      assert(new Path(Utils.resolveURI("spark-warehouse")).toString ===
-        spark.sessionState.conf.warehousePath + "/")
-    } finally {
-      sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
-    }
+    // JVM adds a trailing slash if the directory exists and leaves it as-is, if it doesn't
+    // In our comparison, strip trailing slash off of both sides, to account for such cases
+    assert(new Path(Utils.resolveURI("spark-warehouse")).toString.stripSuffix("/") === spark
+      .sessionState.conf.warehousePath.stripSuffix("/"))
   }
 
   test("MAX_CASES_BRANCHES") {

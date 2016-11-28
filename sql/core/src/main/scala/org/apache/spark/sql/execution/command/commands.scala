@@ -66,6 +66,8 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkPlan {
 
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 
+  override def executeToIterator: Iterator[InternalRow] = sideEffectResult.toIterator
+
   override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -102,7 +104,7 @@ case class ExplainCommand(
       if (logicalPlan.isStreaming) {
         // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
         // output mode does not matter since there is no `Sink`.
-        new IncrementalExecution(sparkSession, logicalPlan, OutputMode.Append(), "<unknown>", 0)
+        new IncrementalExecution(sparkSession, logicalPlan, OutputMode.Append(), "<unknown>", 0, 0)
       } else {
         sparkSession.sessionState.executePlan(logicalPlan)
       }

@@ -23,7 +23,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, TableFileCatalog}
+import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -101,13 +101,16 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sql("DROP TABLE IF EXISTS nonexistantTable")
   }
 
-  test("correct error on uncache of nonexistant tables") {
+  test("uncache of nonexistant tables") {
+    // make sure table doesn't exist
+    intercept[NoSuchTableException](spark.table("nonexistantTable"))
     intercept[NoSuchTableException] {
       spark.catalog.uncacheTable("nonexistantTable")
     }
     intercept[NoSuchTableException] {
       sql("UNCACHE TABLE nonexistantTable")
     }
+    sql("UNCACHE TABLE IF EXISTS nonexistantTable")
   }
 
   test("no error on uncache of non-cached table") {
@@ -321,17 +324,17 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sql("DROP TABLE cachedTable")
   }
 
-  test("cache a table using TableFileCatalog") {
+  test("cache a table using CatalogFileIndex") {
     withTable("test") {
       sql("CREATE TABLE test(i int) PARTITIONED BY (p int) STORED AS parquet")
       val tableMeta = spark.sharedState.externalCatalog.getTable("default", "test")
-      val tableFileCatalog = new TableFileCatalog(spark, tableMeta, 0)
+      val catalogFileIndex = new CatalogFileIndex(spark, tableMeta, 0)
 
       val dataSchema = StructType(tableMeta.schema.filterNot { f =>
         tableMeta.partitionColumnNames.contains(f.name)
       })
       val relation = HadoopFsRelation(
-        location = tableFileCatalog,
+        location = catalogFileIndex,
         partitionSchema = tableMeta.partitionSchema,
         dataSchema = dataSchema,
         bucketSpec = None,
@@ -343,7 +346,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
       assert(spark.sharedState.cacheManager.lookupCachedData(plan).isDefined)
 
-      val sameCatalog = new TableFileCatalog(spark, tableMeta, 0)
+      val sameCatalog = new CatalogFileIndex(spark, tableMeta, 0)
       val sameRelation = HadoopFsRelation(
         location = sameCatalog,
         partitionSchema = tableMeta.partitionSchema,

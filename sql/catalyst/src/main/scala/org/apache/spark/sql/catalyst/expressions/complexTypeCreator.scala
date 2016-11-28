@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -28,7 +30,12 @@ import org.apache.spark.unsafe.types.UTF8String
  * Returns an Array containing the evaluation of all children expressions.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(n0, ...) - Returns an array with the given elements.")
+  usage = "_FUNC_(expr, ...) - Returns an array with the given elements.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(1, 2, 3);
+       [1,2,3]
+  """)
 case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -54,7 +61,6 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
     ev.copy(code = s"""
-      final boolean ${ev.isNull} = false;
       this.$values = new Object[${children.size}];""" +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
@@ -71,7 +77,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
       s"""
         final ArrayData ${ev.value} = new $arrayClass($values);
         this.$values = null;
-      """)
+      """, isNull = "false")
   }
 
   override def prettyName: String = "array"
@@ -82,7 +88,12 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
  * The children are a flatted sequence of kv pairs, e.g. (key1, value1, key2, value2, ...)
  */
 @ExpressionDescription(
-  usage = "_FUNC_(key0, value0, key1, value1...) - Creates a map with the given key/value pairs.")
+  usage = "_FUNC_(key0, value0, key1, value1, ...) - Creates a map with the given key/value pairs.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(1.0, '2', 3.0, '4');
+       {1.0:"2",3.0:"4"}
+  """)
 case class CreateMap(children: Seq[Expression]) extends Expression {
   lazy val keys = children.indices.filter(_ % 2 == 0).map(children)
   lazy val values = children.indices.filter(_ % 2 != 0).map(children)
@@ -132,7 +143,6 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val keyData = s"new $arrayClass($keyArray)"
     val valueData = s"new $arrayClass($valueArray)"
     ev.copy(code = s"""
-      final boolean ${ev.isNull} = false;
       $keyArray = new Object[${keys.size}];
       $valueArray = new Object[${values.size}];""" +
       ctx.splitExpressions(
@@ -165,78 +175,94 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
         final MapData ${ev.value} = new $mapClass($keyData, $valueData);
         this.$keyArray = null;
         this.$valueArray = null;
-      """)
+      """, isNull = "false")
   }
 
   override def prettyName: String = "map"
 }
 
 /**
+ * An expression representing a not yet available attribute name. This expression is unevaluable
+ * and as its name suggests it is a temporary place holder until we're able to determine the
+ * actual attribute name.
+ */
+case object NamePlaceholder extends LeafExpression with Unevaluable {
+  override lazy val resolved: Boolean = false
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
+  override def dataType: DataType = StringType
+  override def prettyName: String = "NamePlaceholder"
+  override def toString: String = prettyName
+}
+
+/**
  * Returns a Row containing the evaluation of all children expressions.
  */
-@ExpressionDescription(
-  usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
-case class CreateStruct(children: Seq[Expression]) extends Expression {
+object CreateStruct extends FunctionBuilder {
+  def apply(children: Seq[Expression]): CreateNamedStruct = {
+    CreateNamedStruct(children.zipWithIndex.flatMap {
+      case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
+      case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
+      case (e, index) => Seq(Literal(s"col${index + 1}"), e)
+    })
+  }
 
-  override def foldable: Boolean = children.forall(_.foldable)
+  /**
+   * Entry to use in the function registry.
+   */
+  val registryEntry: (String, (ExpressionInfo, FunctionBuilder)) = {
+    val info: ExpressionInfo = new ExpressionInfo(
+      "org.apache.spark.sql.catalyst.expressions.NamedStruct",
+      null,
+      "struct",
+      "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.",
+      "")
+    ("struct", (info, this))
+  }
+}
+
+/**
+ * Common base class for both [[CreateNamedStruct]] and [[CreateNamedStructUnsafe]].
+ */
+trait CreateNamedStructLike extends Expression {
+  lazy val (nameExprs, valExprs) = children.grouped(2).map {
+    case Seq(name, value) => (name, value)
+  }.toList.unzip
+
+  lazy val names = nameExprs.map(_.eval(EmptyRow))
+
+  override def nullable: Boolean = false
+
+  override def foldable: Boolean = valExprs.forall(_.foldable)
 
   override lazy val dataType: StructType = {
-    val fields = children.zipWithIndex.map { case (child, idx) =>
-      child match {
-        case ne: NamedExpression =>
-          StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
-        case _ =>
-          StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
-      }
+    val fields = names.zip(valExprs).map {
+      case (name, expr) =>
+        val metadata = expr match {
+          case ne: NamedExpression => ne.metadata
+          case _ => Metadata.empty
+        }
+        StructField(name.toString, expr.dataType, expr.nullable, metadata)
     }
     StructType(fields)
   }
 
-  override def nullable: Boolean = false
-
-  override def eval(input: InternalRow): Any = {
-    InternalRow(children.map(_.eval(input)): _*)
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.size % 2 != 0) {
+      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
+    } else {
+      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
+      if (invalidNames.nonEmpty) {
+        TypeCheckResult.TypeCheckFailure(
+          "Only foldable StringType expressions are allowed to appear at odd position, got:" +
+          s" ${invalidNames.mkString(",")}")
+      } else if (!names.contains(null)) {
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        TypeCheckResult.TypeCheckFailure("Field name should not be null")
+      }
+    }
   }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val rowClass = classOf[GenericInternalRow].getName
-    val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
-
-    ev.copy(code = s"""
-      boolean ${ev.isNull} = false;
-      this.$values = new Object[${children.size}];""" +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        children.zipWithIndex.map { case (e, i) =>
-          val eval = e.genCode(ctx)
-          eval.code + s"""
-            if (${eval.isNull}) {
-              $values[$i] = null;
-            } else {
-              $values[$i] = ${eval.value};
-            }"""
-        }) +
-      s"""
-        final InternalRow ${ev.value} = new $rowClass($values);
-        this.$values = null;
-      """)
-  }
-
-  override def prettyName: String = "struct"
-}
-
-
-/**
- * Creates a struct with the given field names and values
- *
- * @param children Seq(name1, val1, name2, val2, ...)
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.")
-// scalastyle:on line.size.limit
-case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
 
   /**
    * Returns Aliased [[Expression]]s that could be used to construct a flattened version of this
@@ -246,47 +272,26 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
     case (v, n) => Alias(v, n.toString)()
   }
 
-  private lazy val (nameExprs, valExprs) =
-    children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
-
-  private lazy val names = nameExprs.map(_.eval(EmptyRow))
-
-  override lazy val dataType: StructType = {
-    val fields = names.zip(valExprs).map {
-      case (name, valExpr: NamedExpression) =>
-        StructField(name.asInstanceOf[UTF8String].toString,
-          valExpr.dataType, valExpr.nullable, valExpr.metadata)
-      case (name, valExpr) =>
-        StructField(name.asInstanceOf[UTF8String].toString,
-          valExpr.dataType, valExpr.nullable, Metadata.empty)
-    }
-    StructType(fields)
-  }
-
-  override def foldable: Boolean = valExprs.forall(_.foldable)
-
-  override def nullable: Boolean = false
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
-    } else {
-      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
-      if (invalidNames.nonEmpty) {
-        TypeCheckResult.TypeCheckFailure(
-          s"Only foldable StringType expressions are allowed to appear at odd position , got :" +
-            s" ${invalidNames.mkString(",")}")
-      } else if (!names.contains(null)) {
-        TypeCheckResult.TypeCheckSuccess
-      } else {
-        TypeCheckResult.TypeCheckFailure("Field name should not be null")
-      }
-    }
-  }
-
   override def eval(input: InternalRow): Any = {
     InternalRow(valExprs.map(_.eval(input)): _*)
   }
+}
+
+/**
+ * Creates a struct with the given field names and values
+ *
+ * @param children Seq(name1, val1, name2, val2, ...)
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
+       {"a":1,"b":2,"c":3}
+  """)
+// scalastyle:on line.size.limit
+case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStructLike {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
@@ -294,7 +299,6 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
     ev.copy(code = s"""
-      boolean ${ev.isNull} = false;
       $values = new Object[${valExprs.size}];""" +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
@@ -310,49 +314,11 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
       s"""
         final InternalRow ${ev.value} = new $rowClass($values);
         this.$values = null;
-      """)
+      """, isNull = "false")
   }
 
   override def prettyName: String = "named_struct"
 }
-
-/**
- * Returns a Row containing the evaluation of all children expressions. This is a variant that
- * returns UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
- * this expression automatically at runtime.
- */
-case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
-
-  override def foldable: Boolean = children.forall(_.foldable)
-
-  override lazy val resolved: Boolean = childrenResolved
-
-  override lazy val dataType: StructType = {
-    val fields = children.zipWithIndex.map { case (child, idx) =>
-      child match {
-        case ne: NamedExpression =>
-          StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
-        case _ =>
-          StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
-      }
-    }
-    StructType(fields)
-  }
-
-  override def nullable: Boolean = false
-
-  override def eval(input: InternalRow): Any = {
-    InternalRow(children.map(_.eval(input)): _*)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = GenerateUnsafeProjection.createCode(ctx, children)
-    ExprCode(code = eval.code, isNull = eval.isNull, value = eval.value)
-  }
-
-  override def prettyName: String = "struct_unsafe"
-}
-
 
 /**
  * Creates a struct with the given field names and values. This is a variant that returns
@@ -361,34 +327,10 @@ case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
  *
  * @param children Seq(name1, val1, name2, val2, ...)
  */
-case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression {
-
-  private lazy val (nameExprs, valExprs) =
-    children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
-
-  private lazy val names = nameExprs.map(_.eval(EmptyRow).toString)
-
-  override lazy val dataType: StructType = {
-    val fields = names.zip(valExprs).map {
-      case (name, valExpr: NamedExpression) =>
-        StructField(name, valExpr.dataType, valExpr.nullable, valExpr.metadata)
-      case (name, valExpr) =>
-        StructField(name, valExpr.dataType, valExpr.nullable, Metadata.empty)
-    }
-    StructType(fields)
-  }
-
-  override def foldable: Boolean = valExprs.forall(_.foldable)
-
-  override def nullable: Boolean = false
-
-  override def eval(input: InternalRow): Any = {
-    InternalRow(valExprs.map(_.eval(input)): _*)
-  }
-
+case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateNamedStructLike {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
-    ExprCode(code = eval.code, isNull = eval.isNull, value = eval.value)
+    ExprCode(code = eval.code, isNull = "false", value = eval.value)
   }
 
   override def prettyName: String = "named_struct_unsafe"
@@ -399,8 +341,12 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(text[, pairDelim, keyValueDelim]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for pairDelim and ':' for keyValueDelim.",
-  extended = """ > SELECT _FUNC_('a:1,b:2,c:3',',',':');\n map("a":"1","b":"2","c":"3") """)
+  usage = "_FUNC_(text[, pairDelim[, keyValueDelim]]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for `pairDelim` and ':' for `keyValueDelim`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
+       map("a":"1","b":"2","c":"3")
+  """)
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
   extends TernaryExpression with CodegenFallback with ExpectsInputTypes {

@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.beans.Introspector
+import java.io.Closeable
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
@@ -72,7 +73,7 @@ import org.apache.spark.util.Utils
 class SparkSession private(
     @transient val sparkContext: SparkContext,
     @transient private val existingSharedState: Option[SharedState])
-  extends Serializable with Logging { self =>
+  extends Serializable with Closeable with Logging { self =>
 
   private[sql] def this(sc: SparkContext) {
     this(sc, None)
@@ -154,9 +155,6 @@ class SparkSession private(
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
-   * Note that the user-defined functions must be deterministic. Due to optimization,
-   * duplicate invocations may be eliminated or the function may even be invoked more times than
-   * it is present in the query.
    *
    * The following example registers a Scala closure as UDF:
    * {{{
@@ -181,6 +179,10 @@ class SparkSession private(
    *       DataTypes.StringType);
    * }}}
    *
+   * @note The user-defined functions must be deterministic. Due to optimization,
+   * duplicate invocations may be eliminated or the function may even be invoked more times than
+   * it is present in the query.
+   *
    * @since 2.0.0
    */
   def udf: UDFRegistration = sessionState.udf
@@ -200,7 +202,7 @@ class SparkSession private(
    * Start a new session with isolated SQL configurations, temporary tables, registered
    * functions are isolated, but sharing the underlying [[SparkContext]] and cached data.
    *
-   * Note: Other than the [[SparkContext]], all shared state is initialized lazily.
+   * @note Other than the [[SparkContext]], all shared state is initialized lazily.
    * This method will force the initialization of the shared state to ensure that parent
    * and child sessions are set up with the same shared state. If the underlying catalog
    * implementation is Hive, this will initialize the metastore, which may take some time.
@@ -646,6 +648,13 @@ class SparkSession private(
   def stop(): Unit = {
     sparkContext.stop()
   }
+
+  /**
+   * Synonym for `stop()`.
+   *
+   * @since 2.1.0
+   */
+  override def close(): Unit = stop()
 
   /**
    * Parses the data type in our internal string representation. The data type string should
