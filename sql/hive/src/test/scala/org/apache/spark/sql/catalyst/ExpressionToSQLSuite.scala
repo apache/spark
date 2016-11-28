@@ -173,6 +173,8 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSqlGeneration("SELECT max(value) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT mean(value) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT min(value) FROM t1 GROUP BY key")
+    checkSqlGeneration("SELECT percentile(value, 0.25) FROM t1 GROUP BY key")
+    checkSqlGeneration("SELECT percentile(value, array(0.25, 0.75)) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT skewness(value) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT stddev(value) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT stddev_pop(value) FROM t1 GROUP BY key")
