@@ -33,6 +33,9 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 
 /**
 * Created by eyalf on 11/4/2016.
+* SPARK-18601 discusses simplification direct access to complex types creators.
+* i.e. {{{create_named_struct(square, `x` * `x`).square}}} can be simplified to {{{`x` * `x`}}}.
+* sam applies to create_array and create_map
 */
 class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers{
   lazy val baseRelation = sqlContext.range( 1L, 1000L)

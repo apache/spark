@@ -1170,4 +1170,3 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
       a.copy(groupingExpressions = newGrouping)
   }
 }
-

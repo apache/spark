@@ -67,11 +67,11 @@ object SimplifyCreateMapOps extends Rule[LogicalPlan]{
       // attempt to unfold 'constant' key extraction,
       // this enables other optimizations to take place.
       case gmv @ GetMapValue(cm @ CreateMap(elems), key @ Literal(v, t)) =>
-        if ( cm.keys.contains( key ) ) {
-          val idx = cm.keys.indexOf(key)
+        val idx = cm.keys.indexOf( key )
+        if( -1 != idx ) {
           cm.values(idx)
         } else {
-          Cast( Literal( null ), gmv.dataType)
+          Literal.create(null, gmv.dataType)
         }
     }
   }
