@@ -93,11 +93,15 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     _value
   }
 
-  private def caclChecksum(block: ByteBuffer): Int = {
-    // block is HeapByteBuffer
-    assert(block.hasArray)
+  private def calcChecksum(block: ByteBuffer): Int = {
     val adler = new Adler32()
-    adler.update(block.array, block.arrayOffset + block.position, block.limit - block.position)
+    if (block.hasArray) {
+      adler.update(block.array, block.arrayOffset + block.position, block.limit - block.position)
+    } else {
+      val bytes = new Array[Byte](block.remaining())
+      block.duplicate.get(bytes)
+      adler.update(bytes)
+    }
     adler.getValue.toInt
   }
 
@@ -119,7 +123,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
       TorrentBroadcast.blockifyObject(value, blockSize, SparkEnv.get.serializer, compressionCodec)
     checksums = new Array[Int](blocks.length)
     blocks.zipWithIndex.foreach { case (block, i) =>
-      checksums(i) = caclChecksum(block)
+      checksums(i) = calcChecksum(block)
       val pieceId = BroadcastBlockId(id, "piece" + i)
       val bytes = new ChunkedByteBuffer(block.duplicate())
       if (!blockManager.putBytes(pieceId, bytes, MEMORY_AND_DISK_SER, tellMaster = true)) {
@@ -149,9 +153,10 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
         case None =>
           bm.getRemoteBytes(pieceId) match {
             case Some(b) =>
-              val sum = caclChecksum(b.chunks(0))
+              val sum = calcChecksum(b.chunks(0))
               if (sum != checksums(pid)) {
-                throw new SparkException(s"corrupt remote block $pid: $sum != ${checksums(pid)}")
+                throw new SparkException(s"corrupt remote block $pieceId of $broadcastId:" +
+                  s" $sum != ${checksums(pid)}")
               }
               // We found the block from remote executors/driver's BlockManager, so put the block
               // in this executor's BlockManager.
