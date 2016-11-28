@@ -72,32 +72,10 @@ If using the Scala 2.10-compatible version of Spark, the artifact is of course `
 
 ### Basic Use
 
+You can refer to data in an object store just as you would data in a filesystem, by
+using a URL to the data in methods like `SparkContext.textFile()` to read data, 
+`saveAsTextFile()` to write it back.
 
-
-To refer to a path in Amazon S3, use `s3a://` as the scheme (Hadoop 2.7+) or `s3n://` on older versions.
-
-{% highlight scala %}
-sparkContext.textFile("s3a://landsat-pds/scene_list.gz").count()
-{% endhighlight %}
-
-Similarly, an RDD can be saved to an object store via `saveAsTextFile()`
-
-
-{% highlight scala %}
-val numbers = sparkContext.parallelize(1 to 1000)
-
-// save to Amazon S3 (or compatible implementation)
-numbers.saveAsTextFile("s3a://testbucket/counts")
-
-// Save to Azure Object store
-numbers.saveAsTextFile("wasb://testbucket@example.blob.core.windows.net/counts")
-
-// save to an OpenStack Swift implementation
-numbers.saveAsTextFile("swift://testbucket.openstack1/counts")
-{% endhighlight %}
-
-That's essentially it: object stores can act as a source and destination of data, using exactly
-the same APIs to load and save data as one uses to work with data in HDFS or other filesystems.
 
 Because object stores are viewed by Spark as filesystems, object stores can
 be used as the source or destination of any spark work —be it batch, SQL, DataFrame,
@@ -109,79 +87,6 @@ The steps to do so are as follows
 to use. Example: `s3a://landsat-pds/scene_list.gz`
 1. Have the Spark context configured with the authentication details of the object store.
 In a YARN cluster, this may also be done in the `core-site.xml` file.
-1. Have the JAR containing the filesystem classes on the classpath —along with all of its dependencies.
-
-### <a name="dataframes"></a>Example: DataFrames
-
-DataFrames can be created from and saved to object stores through the `read()` and `write()` methods.
-
-{% highlight scala %}
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.types.StringType
-
-val spark = SparkSession
-    .builder
-    .appName("DataFrames")
-    .config(sparkConf)
-    .getOrCreate()
-import spark.implicits._
-val numRows = 1000
-
-// generate test data
-val sourceData = spark.range(0, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
-
-// define the destination
-val dest = "wasb://yourcontainer@youraccount.blob.core.windows.net/dataframes"
-
-// write the data
-val orcFile = dest + "/data.orc"
-sourceData.write.format("orc").save(orcFile)
-
-// now read it back
-val orcData = spark.read.format("orc").load(orcFile)
-
-// finally, write the data as Parquet
-orcData.write.format("parquet").save(dest + "/data.parquet")
-spark.stop()
-{% endhighlight %}
-
-### <a name="streaming"></a>Example: Spark Streaming and Cloud Storage
-
-Spark Streaming can monitor files added to object stores, by
-creating a `FileInputDStream` DStream monitoring a path under a bucket.
-
-{% highlight scala %}
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.streaming._
-
-val sparkConf = new SparkConf()
-val ssc = new StreamingContext(sparkConf, Milliseconds(5000))
-try {
-  val lines = ssc.textFileStream("s3a://bucket/incoming")
-  val matches = lines.filter(_.endsWith("3"))
-  matches.print()
-  ssc.start()
-  ssc.awaitTermination()
-} finally {
-  ssc.stop(true)
-}
-{% endhighlight %}
-
-1. The time to scan for new files is proportional to the number of files
-under the path —not the number of *new* files, and that it can become a slow operation.
-The size of the window needs to be set to handle this.
-
-1. Files only appear in an object store once they are completely written; there
-is no need for a worklow of write-then-rename to ensure that files aren't picked up
-while they are still being written. Applications can write straight to the monitored directory.
-
-#### <a name="checkpointing"></a>Checkpointing Streams to object stores
-
-Streams should only be checkpointed to an object store considered compatible with
-HDFS. As the checkpoint operation includes a `rename()` operation, checkpointing to
-an object store can be so slow that streaming throughput collapses.
 
 
 ## <a name="output"></a>Object Stores as a substitute for HDFS
@@ -195,18 +100,36 @@ The brief summary is:
 
 | Object Store Connector      |  Replace HDFS? |
 |-----------------------------|--------------------|
-| Apache `s3a://` `s3n://`    | No  |
+| `s3a://` `s3n://`  from the ASF   | No  |
 | Amazon EMR `s3://`          | Yes |
 | Microsoft Azure `wasb://`   | Yes |
 | OpenStack `swift://`        | No  |
 
 It is possible to use any of the object stores as a destination of work, i.e. use
-`saveAsTextFile()` or `save` to save data there, but the commit process may be slow
+`saveAsTextFile()` or `save()` to save data there, but the commit process may be slow
 and, unreliable in the presence of failures.
 
 It is faster and safer to use the cluster filesystem as the destination of Spark jobs,
 using that data as the data for follow-on work. The final results can
 be persisted in to the object store using `distcp`.
+
+#### <a name="checkpointing"></a>Spark Streaming and object stores
+
+Spark Streaming can monitor files added to object stores, by
+creating a `FileInputDStream` DStream monitoring a path under a bucket through
+`StreamingContext.textFileStream()`.
+
+
+1. The time to scan for new files is proportional to the number of files
+under the path —not the number of *new* files, and that it can become a slow operation.
+The size of the window needs to be set to handle this.
+
+1. Files only appear in an object store once they are completely written; there
+is no need for a worklow of write-then-rename to ensure that files aren't picked up
+while they are still being written. Applications can write straight to the monitored directory.
+
+1. Streams should only be checkpointed to an object store considered compatible with
+HDFS. Otherwise the checkpointing will be slow and potentially unreliable.
 
 ### Recommended settings for writing to object stores
 
@@ -249,13 +172,15 @@ This has to be set in the YARN cluster configuration, not in the Spark configura
 
 For optimal performance when reading files saved in the Apache Parquet format,
 read and write operations must be minimized, including generation of summary metadata,
-and coalescing metadata from multiple files. The Predicate pushdown option
-enables the Parquet library to skip un-needed columns, so saving bandwidth.
+and coalescing metadata from multiple files. The `filterPushdown` option
+enables the Parquet library to optimize data reads itself, potentially saving bandwidth.
 
-    spark.hadoop.parquet.enable.summary-metadata false
-    spark.sql.parquet.mergeSchema false
-    spark.sql.parquet.filterPushdown true
-    spark.sql.hive.metastorePartitionPruning true
+```
+spark.hadoop.parquet.enable.summary-metadata false
+spark.sql.parquet.mergeSchema false
+spark.sql.parquet.filterPushdown true
+spark.sql.hive.metastorePartitionPruning true
+```
 
 ### ORC I/O Settings
 
@@ -263,17 +188,18 @@ For optimal performance when reading files saved in the Apache ORC format,
 read and write operations must be minimized. Here are the options to achieve this.
 
 
-    spark.sql.orc.filterPushdown true
-    spark.sql.orc.splits.include.file.footer true
-    spark.sql.orc.cache.stripe.details.size 10000
-    spark.sql.hive.metastorePartitionPruning true
+```
+spark.sql.orc.filterPushdown true
+spark.sql.orc.splits.include.file.footer true
+spark.sql.orc.cache.stripe.details.size 10000
+spark.sql.hive.metastorePartitionPruning true
+```
 
-The Predicate pushdown option enables the ORC library to skip un-needed columns, and use index
-information to filter out parts of the file where it can be determined that no columns match the predicate.
+The `filterPushdown` option enables the ORC library to optimize data reads itself,
+potentially saving bandwidth.
 
 The `spark.sql.orc.splits.include.file.footer` option means that the ORC file footer information,
 is passed around with the file information —so eliminating the need to reread this data.
-
 
 ## <a name="authenticating"></a>Authenticating with Object Stores
 
@@ -400,25 +326,9 @@ to buckets where the root paths are read only, or not readable at all.
 #### <a name="s3a"></a>S3A Filesystem Client: `s3a://`
 
 The ["S3A" filesystem client](https://hadoop.apache.org/docs/stable2/hadoop-aws/tools/hadoop-aws/index.html)
-shipped with in Hadoop 2.6, and has been considered ready for production use since Hadoop 2.7.1
+is the sole S3 connector undergoing active maintenance at the Apache, and should be used wherever
+possible.
 
-*The S3A connector is the sole S3 connector undergoing active maintenance at the Apache, and
-should be used wherever possible.*
-
-**Classpath**
-
-1. The implementation is in `hadoop-aws`, which is included in `$SPARK_HOME/jars` when Spark
-is built with cloud support.
-
-1. Dependencies: `amazon-aws-sdk` JAR (Hadoop 2.7);
-`amazon-s3-sdk` and `amazon-core-sdk` in Hadoop 2.8+.
-
-1. The Amazon JARs have proven very brittle —the version of the Amazon
-libraries *must* match that which the Hadoop binaries were built against.
-
-1. S3A has authentication problems on Java 8u60+ if there is an old version
-of Joda Time on the classpath.
-If authentication is failing, see if`joda-time.jar` needs upgrading to 2.8.1 or later.
 
 **Tuning for performance:**
 
@@ -429,11 +339,11 @@ spark.hadoop.fs.s3a.experimental.input.fadvise random
 ```
 
 This reads from the object in blocks, which is efficient when seeking backwards as well as
-forwards in a file —at the expense of making full file reads slower. This option is ignored
-on older S3A versions.
+forwards in a file —at the expense of making full file reads slower.
 
-When working with text formats (text, CSV), or any sequential read through an entire file,
-this "random" I/O policy should be disabled. This is actually the default, but can be done
+When working with text formats (text, CSV), or any sequential read through an entire file
+(including .gzip compressed data),
+this "random" I/O policy should be disabled. This is the default, but can be done
 explicitly:
 
 ```
@@ -455,12 +365,6 @@ While stable, S3N is essentially unmaintained, and deprecated in favor of S3A.
 As well as being slower and limited in authentication mechanisms, the
 only maintenance it receives are critical security issues.
 
-**Classpath**
-
-Hadoop 2.5 and earlier: add `jets3t.jar` to the classpath
-
-Hadoop 2.6+: bBoth `hadoop-aws.jar` and `jets3t.jar` (version 0.9.0 or later)
-must be on the classpath.
 
 #### <a name="emrs3"></a>Amazon EMR's S3 Client: `s3://`
 
@@ -494,11 +398,6 @@ The Apache implementation is that used by Microsoft in Azure itself: it can be u
 to access data in Azure as well as remotely. The object store itself is *consistent*, and
 can be reliably used as the destination of queries.
 
-**Classpath**
-
-1. The `wasb` filesystem client is implemented in  the`hadoop-azure` JAR available in Hadoop 2.7.
-1. It also needs a matching `azure-storage` JAR.
-
 
 ### <a name="working_with_swift"></a>Working with OpenStack Swift
 
@@ -507,20 +406,13 @@ The OpenStack [`swift://` filesystem client](https://hadoop.apache.org/docs/stab
 works with Swift object stores in private OpenStack installations, public installations
 including Rackspace Cloud and IBM Softlayer.
 
-**Classpath**
-
-1. `swift://` support comes from `hadoop-openstack`.
-1. All other dependencies, including `httpclient`, `jackson`, and `commons-logging` are always
-included in Spark distributions.
-
 ### <a name="working_with_google_cloud_storage"></a>Working with Google Cloud Storage
 
 [Google Cloud Storage](https://cloud.google.com/storage) is supported via Google's own
 [GCS filesystem client](https://cloud.google.com/hadoop/google-cloud-storage-connector).
 
-**Classpath**
 
-1. For use outside of Google cloud, `gcs-connector.jar` must be be manually downloaded then added
+For use outside of Google cloud, `gcs-connector.jar` must be be manually downloaded then added
 to `$SPARK_HOME/jars`.
 
 
@@ -598,10 +490,8 @@ Places this can be visible include:
 - After deleting an obect: opening it may succeed, returning the data.
 - While reading an object, if it is updated or deleted during the process.
 
-For many years, Amazon US East S3 lacked create consistency: attempting to open a newly created object
-could return a 404 response, which Hadoop maps to a `FileNotFoundException`. This was fixed in August 2015
-—see [S3 Consistency Model](http://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html#ConsistencyModel)
-for the full details.
+Microsoft Azure is consistent; Amazon S3 is "Create consistent" —but directory listing
+operations may visibly lag behind changes to the underlying object.
 
 ### Read Operations May be Significantly Slower Than Normal Filesystem Operations.
 
@@ -613,7 +503,8 @@ and block for responses. Each of these calls can be expensive. For maximum perfo
 the call.
 1. Similarly, avoid wrapper methods such as `FileSystem.exists()`, `isDirectory()` or `isFile()`.
 1. Try to forward `seek()` through a file, rather than backwards.
-1. Avoid renaming files: This is slow and, if it fails, may fail leave the destination in a mess.
+1. Avoid renaming files: This is slow and, if it fails, may fail leave the destination in 
+"an undefined state".
 1. Use the local filesystem as the destination of output which you intend to reload in follow-on work.
 Retain the object store as the final destination of persistent output, not as a replacement for
 HDFS.
