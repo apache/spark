@@ -67,14 +67,14 @@ abstract class Gradient extends Serializable {
  * http://statweb.stanford.edu/~tibs/ElemStatLearn/ , Eq. (4.17) on page 119 gives the formula of
  * multinomial logistic regression model. A simple calculation shows that
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    P(y=0|x, w) = 1 / (1 + \sum_i^{K-1} \exp(x w_i))\\
  *    P(y=1|x, w) = exp(x w_1) / (1 + \sum_i^{K-1} \exp(x w_i))\\
  *    ...\\
  *    P(y=K-1|x, w) = exp(x w_{K-1}) / (1 + \sum_i^{K-1} \exp(x w_i))\\
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * for K classes multiclass classification problem.
  *
@@ -83,7 +83,7 @@ abstract class Gradient extends Serializable {
  * will be (K-1) * N.
  *
  * As a result, the loss of objective function for a single instance of data can be written as
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \begin{align}
  *    l(w, x) &= -log P(y|x, w) = -\alpha(y) log P(y=0|x, w) - (1-\alpha(y)) log P(y|x, w) \\
@@ -91,7 +91,7 @@ abstract class Gradient extends Serializable {
  *            &= log(1 + \sum_i^{K-1}\exp(margins_i)) - (1-\alpha(y)) margins_{y-1}
  *    \end{align}
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * where $\alpha(i) = 1$ if $i \ne 0$, and
  *       $\alpha(i) = 0$ if $i == 0$,
@@ -100,7 +100,7 @@ abstract class Gradient extends Serializable {
  * For optimization, we have to calculate the first derivative of the loss function, and
  * a simple calculation shows that
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \begin{align}
  *      \frac{\partial l(w, x)}{\partial w_{ij}} &=
@@ -108,7 +108,7 @@ abstract class Gradient extends Serializable {
  *                                               &= multiplier_i * x_j
  *    \end{align}
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * where $\delta_{i, j} = 1$ if $i == j$,
  *       $\delta_{i, j} = 0$ if $i != j$, and
@@ -118,12 +118,12 @@ abstract class Gradient extends Serializable {
  * If any of margins is larger than 709.78, the numerical computation of multiplier and loss
  * function will be suffered from arithmetic overflow. This issue occurs when there are outliers
  * in data which are far away from hyperplane, and this will cause the failing of training once
- * infinity / infinity is introduced. Note that this is only a concern when max(margins) > 0.
+ * infinity / infinity is introduced. Note that this is only a concern when max(margins) &gt; 0.
  *
- * Fortunately, when max(margins) = maxMargin > 0, the loss function and the multiplier can be
+ * Fortunately, when max(margins) = maxMargin &gt; 0, the loss function and the multiplier can be
  * easily rewritten into the following equivalent numerically stable formula.
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \begin{align}
  *      l(w, x) &= log(1 + \sum_i^{K-1}\exp(margins_i)) - (1-\alpha(y)) margins_{y-1} \\
@@ -132,7 +132,7 @@ abstract class Gradient extends Serializable {
  *              &= log(1 + sum) + maxMargin - (1-\alpha(y)) margins_{y-1}
  *    \end{align}
  *    $$
- * </blockquote></p>
+ * </blockquote>
 
  * where sum = $\exp(-maxMargin) + \sum_i^{K-1}\exp(margins_i - maxMargin) - 1$.
  *
@@ -141,7 +141,7 @@ abstract class Gradient extends Serializable {
  *
  * For multiplier, similar trick can be applied as the following,
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \begin{align}
  *      multiplier
@@ -150,7 +150,7 @@ abstract class Gradient extends Serializable {
  *       &= \exp(margins_i - maxMargin) / (1 + sum) - (1-\alpha(y)\delta_{y, i+1})
  *    \end{align}
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * where each term in $\exp$ is also smaller than zero, so overflow is not a concern.
  *
@@ -305,7 +305,8 @@ class LeastSquaresGradient extends Gradient {
  * :: DeveloperApi ::
  * Compute gradient and loss for a Hinge loss function, as used in SVM binary classification.
  * See also the documentation for the precise formulation.
- * NOTE: This assumes that the labels are {0,1}
+ *
+ * @note This assumes that the labels are {0,1}
  */
 @DeveloperApi
 class HingeGradient extends Gradient {

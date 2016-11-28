@@ -104,7 +104,7 @@ class MinHashLSHModel private[ml](
  * treated as binary "1" values.
  *
  * References:
- * [[https://en.wikipedia.org/wiki/MinHash Wikipedia on MinHash]]
+ * <a href="https://en.wikipedia.org/wiki/MinHash">Wikipedia on MinHash</a>
  */
 @Experimental
 @Since("2.1.0")

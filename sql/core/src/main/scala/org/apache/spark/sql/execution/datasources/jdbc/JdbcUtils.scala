@@ -667,7 +667,14 @@ object JdbcUtils extends Logging {
     val getConnection: () => Connection = createConnectionFactory(options)
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
-    df.foreachPartition(iterator => savePartition(
+    val numPartitions = options.numPartitions
+    val repartitionedDF =
+      if (numPartitions.isDefined && numPartitions.get < df.rdd.getNumPartitions) {
+        df.coalesce(numPartitions.get)
+      } else {
+        df
+      }
+    repartitionedDF.foreachPartition(iterator => savePartition(
       getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect, isolationLevel)
     )
   }

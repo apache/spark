@@ -123,6 +123,9 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(clusterSizes.length === k)
     assert(clusterSizes.sum === numRows)
     assert(clusterSizes.forall(_ >= 0))
+
+    model.setSummary(None)
+    assert(!model.hasSummary)
   }
 
   test("KMeansModel transform with non-default feature and prediction cols") {

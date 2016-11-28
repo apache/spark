@@ -43,14 +43,14 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Model representing the result of matrix factorization.
  *
- * Note: If you create the model directly using constructor, please be aware that fast prediction
- * requires cached user/product features and their associated partitioners.
- *
  * @param rank Rank for the features in this model.
  * @param userFeatures RDD of tuples where each tuple represents the userId and
  *                     the features computed for this user.
  * @param productFeatures RDD of tuples where each tuple represents the productId
  *                        and the features computed for this product.
+ *
+ * @note If you create the model directly using constructor, please be aware that fast prediction
+ * requires cached user/product features and their associated partitioners.
  */
 @Since("0.8.0")
 class MatrixFactorizationModel @Since("0.8.0") (
@@ -146,7 +146,7 @@ class MatrixFactorizationModel @Since("0.8.0") (
   }
 
   /**
-   * Java-friendly version of [[MatrixFactorizationModel.predict]].
+   * Java-friendly version of `MatrixFactorizationModel.predict`.
    */
   @Since("1.2.0")
   def predict(usersProducts: JavaPairRDD[JavaInteger, JavaInteger]): JavaRDD[Rating] = {
@@ -195,7 +195,7 @@ class MatrixFactorizationModel @Since("0.8.0") (
    *  - human-readable (JSON) model metadata to path/metadata/
    *  - Parquet formatted data to path/data/
    *
-   * The model may be loaded using [[Loader.load]].
+   * The model may be loaded using `Loader.load`.
    *
    * @param sc  Spark context used to save model data.
    * @param path  Path specifying the directory in which to save this model.
@@ -320,7 +320,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
   /**
    * Load a model from the given path.
    *
-   * The model should have been saved by [[Saveable.save]].
+   * The model should have been saved by `Saveable.save`.
    *
    * @param sc  Spark context used for loading model files.
    * @param path  Path specifying the directory to which the model was saved.
