@@ -100,7 +100,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         None
       } else if (potentialSpecs.size == 1) {
         val partValue = potentialSpecs.head._2
-        Some(Alias(Cast(Literal(partValue), field.dataType), "_staticPart")())
+        Some(Alias(Cast(Literal(partValue), field.dataType), field.name)())
       } else {
         throw new AnalysisException(
           s"Partition column ${field.name} have multiple values specified, " +
@@ -128,51 +128,59 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
     projectList
   }
 
+  private def hasBeenPreprocessed(
+      tableOutput: Seq[Attribute],
+      partSchema: StructType,
+      partSpec: Map[String, Option[String]],
+      query: LogicalPlan): Boolean = {
+    val partColNames = partSchema.map(_.name).toSet
+    query.resolved && partSpec.keys.forall(partColNames.contains) && {
+      val staticPartCols = partSpec.filter(_._2.isDefined).keySet
+      val expectedColumns = tableOutput.filterNot(a => staticPartCols.contains(a.name))
+      expectedColumns.toStructType.sameType(query.schema)
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
-    // the user has specified static partitions, we add a Project operator on top of the query
-    // to include those constant column values in the query result.
-    //
-    // Example:
-    // Let's say that we have a table "t", which is created by
-    // CREATE TABLE t (a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)
-    // The statement of "INSERT INTO TABLE t PARTITION (b=2, c) SELECT 1, 3"
-    // will be converted to "INSERT INTO TABLE t PARTITION (b, c) SELECT 1, 2, 3".
-    //
-    // Basically, we will put those partition columns having a assigned value back
-    // to the SELECT clause. The output of the SELECT clause is organized as
-    // normal_columns static_partitioning_columns dynamic_partitioning_columns.
-    // static_partitioning_columns are partitioning columns having assigned
-    // values in the PARTITION clause (e.g. b in the above example).
-    // dynamic_partitioning_columns are partitioning columns that do not assigned
-    // values in the PARTITION clause (e.g. c in the above example).
     case insert @ logical.InsertIntoTable(
-      relation @ LogicalRelation(t: HadoopFsRelation, _, _), parts, query, overwrite, false)
-      if query.resolved && parts.exists(_._2.isDefined) =>
+      l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, false)
+      if hasBeenPreprocessed(l.output, t.partitionSchema, parts, query) =>
 
-      val projectList = convertStaticPartitions(
-        sourceAttributes = query.output,
-        providedPartitions = parts,
-        targetAttributes = relation.output,
-        targetPartitionSchema = t.partitionSchema)
+      // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
+      // the user has specified static partitions, we add a Project operator on top of the query
+      // to include those constant column values in the query result.
+      //
+      // Example:
+      // Let's say that we have a table "t", which is created by
+      // CREATE TABLE t (a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)
+      // The statement of "INSERT INTO TABLE t PARTITION (b=2, c) SELECT 1, 3"
+      // will be converted to "INSERT INTO TABLE t PARTITION (b, c) SELECT 1, 2, 3".
+      //
+      // Basically, we will put those partition columns having a assigned value back
+      // to the SELECT clause. The output of the SELECT clause is organized as
+      // normal_columns static_partitioning_columns dynamic_partitioning_columns.
+      // static_partitioning_columns are partitioning columns having assigned
+      // values in the PARTITION clause (e.g. b in the above example).
+      // dynamic_partitioning_columns are partitioning columns that do not assigned
+      // values in the PARTITION clause (e.g. c in the above example).
+      val actualQuery = if (parts.exists(_._2.isDefined)) {
+        val projectList = convertStaticPartitions(
+          sourceAttributes = query.output,
+          providedPartitions = parts,
+          targetAttributes = l.output,
+          targetPartitionSchema = t.partitionSchema)
+        Project(projectList, query)
+      } else {
+        query
+      }
 
-      // We will remove all assigned values to static partitions because they have been
-      // moved to the projectList.
-      insert.copy(partition = parts.map(p => (p._1, None)), child = Project(projectList, query))
-
-
-    case i @ logical.InsertIntoTable(
-           l @ LogicalRelation(t: HadoopFsRelation, _, table), part, query, overwrite, false)
-        if query.resolved && t.schema.sameType(query.schema) =>
-
-      // Sanity checks
+      // Sanity check
       if (t.location.rootPaths.size != 1) {
-        throw new AnalysisException(
-          "Can only write data to relations with a single path.")
+        throw new AnalysisException("Can only write data to relations with a single path.")
       }
 
       val outputPath = t.location.rootPaths.head
-      val inputPaths = query.collect {
+      val inputPaths = actualQuery.collect {
         case LogicalRelation(r: HadoopFsRelation, _, _) => r.location.rootPaths
       }.flatten
 
@@ -182,13 +190,13 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
           "Cannot overwrite a path that is also being read from.")
       }
 
-      val partitionSchema = query.resolve(
+      val partitionSchema = actualQuery.resolve(
         t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
       val partitionsTrackedByCatalog =
         t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
         l.catalogTable.isDefined && l.catalogTable.get.partitionColumnNames.nonEmpty &&
         l.catalogTable.get.tracksPartitionsInCatalog
-      val staticPartitions = part.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
+      val staticPartitions = parts.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
 
       var initialMatchingPartitions: Seq[TablePartitionSpec] = Nil
       var customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty
@@ -235,7 +243,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         t.fileFormat,
         refreshPartitionsCallback,
         t.options,
-        query,
+        actualQuery,
         mode,
         table)
 
