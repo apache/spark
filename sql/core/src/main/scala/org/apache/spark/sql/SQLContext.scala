@@ -883,8 +883,8 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Loads an JavaRDD[String] storing JSON objects (one object per record) and applies the
-   * given schema, returning the result as a `DataFrame`.
+   * Loads an JavaRDD[String] storing JSON objects (one object per record) and applies the given
+   * schema, returning the result as a `DataFrame`.
    *
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`.

@@ -232,8 +232,8 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   private def defaultConsumerApiVersion: Short = 0
 
   /**
-   * Requires Kafka higher than or equal to 0.8.1.1.
-   * Defaults to the original ZooKeeper backed api version.
+   * Requires Kafka 0.8.1.1 or later.
+   * Defaults to the original ZooKeeper backed API version.
    */
   def getConsumerOffsets(
       groupId: String,
@@ -254,8 +254,8 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   }
 
   /**
-   * Requires Kafka higher than or equal to 0.8.1.1.
-   * Defaults to the original ZooKeeper backed api version.
+   * Requires Kafka 0.8.1.1 or later.
+   * Defaults to the original ZooKeeper backed API version.
    */
   def getConsumerOffsetMetadata(
       groupId: String,
@@ -294,8 +294,8 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   }
 
   /**
-   * Requires Kafka higher than or equal to 0.8.1.1.
-   * Defaults to the original ZooKeeper backed api version.
+   * Requires Kafka 0.8.1.1 or later.
+   * Defaults to the original ZooKeeper backed API version.
    */
   def setConsumerOffsets(
       groupId: String,
@@ -315,8 +315,8 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   }
 
   /**
-   * Requires Kafka higher than or equal to 0.8.1.1.
-   * Defaults to the original ZooKeeper backed api version.
+   * Requires Kafka 0.8.1.1 or later.
+   * Defaults to the original ZooKeeper backed API version.
    */
   def setConsumerOffsetMetadata(
       groupId: String,

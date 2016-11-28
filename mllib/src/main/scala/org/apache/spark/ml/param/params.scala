@@ -166,40 +166,28 @@ object ParamValidators {
   }
 
   /**
-   * Check if
-   * {{{
-   * value > lowerBound
-   * }}}
+   * Check if value is greater than lowerBound
    */
   def gt[T](lowerBound: Double): T => Boolean = { (value: T) =>
     getDouble(value) > lowerBound
   }
 
   /**
-   * Check if
-   * {{{
-   * value >= lowerBound
-   * }}}
+   * Check if value is greater than or equal to lowerBound
    */
   def gtEq[T](lowerBound: Double): T => Boolean = { (value: T) =>
     getDouble(value) >= lowerBound
   }
 
   /**
-   * Check if
-   * {{{
-   * value < upperBound
-   * }}}
+   * Check if value is less than upperBound
    */
   def lt[T](upperBound: Double): T => Boolean = { (value: T) =>
     getDouble(value) < upperBound
   }
 
   /**
-   * Check if
-   * {{{
-   * value <= upperBound
-   * }}}
+   * Check if value is less than or equal to upperBound
    */
   def ltEq[T](upperBound: Double): T => Boolean = { (value: T) =>
     getDouble(value) <= upperBound
@@ -207,14 +195,9 @@ object ParamValidators {
 
   /**
    * Check for value in range lowerBound to upperBound.
-   * @param lowerInclusive {{{
-   *                       If true, check for value >= lowerBound
-   *                       If false, check for value > lowerBound
-   *                       }}}
-   * @param upperInclusive {{{
-   *                       If true, check for value <= upperBound.
-   *                       If false, check for value < upperBound.
-   *                       }}}
+   *
+   * @param lowerInclusive if true, range includes value = lowerBound
+   * @param upperInclusive if true, range includes value = upperBound
    */
   def inRange[T](
       lowerBound: Double,

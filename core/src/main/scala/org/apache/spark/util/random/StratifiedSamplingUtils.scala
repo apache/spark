@@ -167,7 +167,7 @@ private[spark] object StratifiedSamplingUtils extends Logging {
    * {{{
    * numAccepted <= sampleSize <= (numAccepted + numWaitlisted)
    * }}}
-   * , which means we need to sort the elements in the waitlist by their associated values in order
+   * which means we need to sort the elements in the waitlist by their associated values in order
    * to find the value T s.t.
    * {{{
    * |{elements in the stratum whose associated values <= T}| = sampleSize

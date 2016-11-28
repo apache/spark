@@ -216,11 +216,8 @@ abstract class BaseRelation {
 
   /**
    * Whether does it need to convert the objects in Row to internal representation, for example:
-   *
-   * {{{
-   *  java.lang.String -> UTF8String
-   *  java.lang.Decimal -> Decimal
-   * }}}
+   *  java.lang.String to UTF8String
+   *  java.lang.Decimal to Decimal
    *
    * If `needConversion` is `false`, buildScan() should return an `RDD` of `InternalRow`
    *

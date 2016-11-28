@@ -97,7 +97,7 @@ class SimpleUpdater extends Updater {
  *
  * If w is greater than shrinkageVal, set weight component to w-shrinkageVal.
  * If w is less than -shrinkageVal, set weight component to w+shrinkageVal.
- * If -shrinkageVal is less than w and w is less than shrinkageVal, set weight component to 0.
+ * If w is (-shrinkageVal, shrinkageVal), set weight component to 0.
  *
  * Equivalently, set weight component to signum(w) * max(0.0, abs(w) - shrinkageVal)
  */

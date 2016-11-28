@@ -131,12 +131,10 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
  * It supports "gaussian", "binomial", "poisson" and "gamma" as family.
  * Valid link functions for each family is listed below. The first link function of each family
  * is the default one.
- * {{{
- *  - "gaussian" -> "identity", "log", "inverse"
- *  - "binomial" -> "logit", "probit", "cloglog"
- *  - "poisson"  -> "log", "identity", "sqrt"
- *  - "gamma"    -> "inverse", "identity", "log"
- * }}}
+ *  - "gaussian" : "identity", "log", "inverse"
+ *  - "binomial" : "logit", "probit", "cloglog"
+ *  - "poisson"  : "log", "identity", "sqrt"
+ *  - "gamma"    : "inverse", "identity", "log"
  */
 @Experimental
 @Since("2.0.0")
