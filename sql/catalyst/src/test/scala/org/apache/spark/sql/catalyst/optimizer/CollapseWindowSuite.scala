@@ -46,12 +46,15 @@ class CollapseWindowSuite extends PlanTest {
       .window(Seq(sum(b).as('sum_b)), partitionSpec1, orderSpec1)
       .window(Seq(avg(b).as('avg_b)), partitionSpec1, orderSpec1)
 
-    val optimized = Optimize.execute(query.analyze)
+    val analyzed = query.analyze
+    val optimized = Optimize.execute(analyzed)
+    assert(analyzed.output === optimized.output)
+
     val correctAnswer = testRelation.window(Seq(
-        avg(b).as('avg_b),
-        sum(b).as('sum_b),
-        max(a).as('max_a),
-        min(a).as('min_a)), partitionSpec1, orderSpec1)
+      min(a).as('min_a),
+      max(a).as('max_a),
+      sum(b).as('sum_b),
+      avg(b).as('avg_b)), partitionSpec1, orderSpec1)
 
     comparePlans(optimized, correctAnswer)
   }
