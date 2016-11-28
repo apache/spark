@@ -82,7 +82,6 @@ private[r] object LogisticRegressionWrapper
       elasticNetParam: Double,
       maxIter: Int,
       tol: Double,
-      fitIntercept: Boolean,
       family: String,
       standardization: Boolean,
       thresholds: Array[Double],
@@ -96,6 +95,8 @@ private[r] object LogisticRegressionWrapper
       .setForceIndexLabel(true)
     checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
+
+    val fitIntercept = rFormula.hasIntercept
 
     // get labels and feature names from output schema
     val (features, labels) = getFeaturesAndLabels(rFormulaModel, data)
