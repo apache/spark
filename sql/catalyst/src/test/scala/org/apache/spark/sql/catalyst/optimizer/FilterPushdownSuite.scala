@@ -529,7 +529,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
   }
 
-  test("joins: only push down to the right of a left anti join") {
+  test("joins: only push down join conditions to the right of a left anti join") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
     val originalQuery =
