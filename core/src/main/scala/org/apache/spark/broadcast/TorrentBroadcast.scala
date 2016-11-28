@@ -78,6 +78,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     }
     // Note: use getSizeAsKb (not bytes) to maintain compatibility if no units are provided
     blockSize = conf.getSizeAsKb("spark.broadcast.blockSize", "4m").toInt * 1024
+    checksumEnabled = conf.getBoolean("spark.broadcast.checksum", true)
   }
   setConf(SparkEnv.get.conf)
 
@@ -86,6 +87,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   /** Total number of blocks this broadcast variable contains. */
   private val numBlocks: Int = writeBlocks(obj)
 
+  /** Whether to generate checksum for blocks or not. */
+  private var checksumEnabled: Boolean = false
   /** The checksum for all the blocks. */
   private var checksums: Array[Int] = _
 
@@ -121,9 +124,13 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     }
     val blocks =
       TorrentBroadcast.blockifyObject(value, blockSize, SparkEnv.get.serializer, compressionCodec)
-    checksums = new Array[Int](blocks.length)
+    if (checksumEnabled) {
+      checksums = new Array[Int](blocks.length)
+    }
     blocks.zipWithIndex.foreach { case (block, i) =>
-      checksums(i) = calcChecksum(block)
+      if (checksumEnabled) {
+        checksums(i) = calcChecksum(block)
+      }
       val pieceId = BroadcastBlockId(id, "piece" + i)
       val bytes = new ChunkedByteBuffer(block.duplicate())
       if (!blockManager.putBytes(pieceId, bytes, MEMORY_AND_DISK_SER, tellMaster = true)) {
@@ -153,10 +160,12 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
         case None =>
           bm.getRemoteBytes(pieceId) match {
             case Some(b) =>
-              val sum = calcChecksum(b.chunks(0))
-              if (sum != checksums(pid)) {
-                throw new SparkException(s"corrupt remote block $pieceId of $broadcastId:" +
-                  s" $sum != ${checksums(pid)}")
+              if (checksumEnabled) {
+                val sum = calcChecksum(b.chunks(0))
+                if (sum != checksums(pid)) {
+                  throw new SparkException(s"corrupt remote block $pieceId of $broadcastId:" +
+                    s" $sum != ${checksums(pid)}")
+                }
               }
               // We found the block from remote executors/driver's BlockManager, so put the block
               // in this executor's BlockManager.
