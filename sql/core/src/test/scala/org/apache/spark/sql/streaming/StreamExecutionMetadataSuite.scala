@@ -18,12 +18,8 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.execution.streaming.StreamExecutionMetadata
-import org.apache.spark.util.Utils
 
 class StreamExecutionMetadataSuite extends StreamTest {
-
-  private def newMetadataDir =
-    Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
   test("stream execution metadata") {
     assert(StreamExecutionMetadata(0, 0) ===

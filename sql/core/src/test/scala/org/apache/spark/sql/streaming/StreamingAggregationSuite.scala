@@ -30,7 +30,6 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
-import org.apache.spark.util.ManualClock
 
 object FailureSinglton {
   var firstTime = true
@@ -242,11 +241,8 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
 
   test("prune results by current_time, complete mode") {
     import testImplicits._
-    import StreamingAggregationSuite._
-    clock = new StreamManualClock
-
+    val clock = new StreamManualClock
     val inputData = MemoryStream[Long]
-
     val aggregated =
       inputData.toDF()
         .groupBy($"value")
@@ -295,8 +291,7 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
 
   test("prune results by current_date, complete mode") {
     import testImplicits._
-    import StreamingAggregationSuite._
-    clock = new StreamManualClock
+    val clock = new StreamManualClock
     val tz = TimeZone.getDefault.getID
     val inputData = MemoryStream[Long]
     val aggregated =
@@ -340,9 +335,4 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
       CheckLastBatch((90L, 1), (100L, 1), (105L, 1))
     )
   }
-}
-
-object StreamingAggregationSuite {
-  // Singleton reference to clock that does not get serialized in task closures
-  @volatile var clock: ManualClock = null
 }
