@@ -69,7 +69,8 @@ object SparkSubmit extends CommandLineUtils {
   private val STANDALONE = 2
   private val MESOS = 4
   private val LOCAL = 8
-  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL
+  private val KUBERNETES = 16
+  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL | KUBERNETES
 
   // Deploy modes
   private val CLIENT = 1
@@ -227,6 +228,7 @@ object SparkSubmit extends CommandLineUtils {
         printWarning(s"Master ${args.master} is deprecated since 2.0." +
           " Please use master \"yarn\" with specified deploy mode instead.")
         YARN
+      case m if m.startsWith("kubernetes") => KUBERNETES
       case m if m.startsWith("spark") => STANDALONE
       case m if m.startsWith("mesos") => MESOS
       case m if m.startsWith("local") => LOCAL
@@ -264,6 +266,14 @@ object SparkSubmit extends CommandLineUtils {
           "Could not load YARN classes. " +
           "This copy of Spark may not have been compiled with YARN support.")
       }
+    }
+
+    if (clusterManager == KUBERNETES
+        && !Utils.classIsLoadable("org.apache.spark.deploy.kubernetes.Client")
+        && !Utils.isTesting) {
+      printErrorAndExit(
+        "Could not load Kubernetes classes. " +
+          "This copy of Spark may not have been compiled with Kubernetes support.")
     }
 
     // Update args.deployMode if it is null. It will be passed down as a Spark property later.
@@ -334,6 +344,12 @@ object SparkSubmit extends CommandLineUtils {
         printErrorAndExit("Cluster deploy mode is not applicable to Spark SQL shell.")
       case (_, CLUSTER) if isThriftServer(args.mainClass) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark Thrift server.")
+      case (KUBERNETES, CLIENT) =>
+        printErrorAndExit("Client mode is currently not supported for Kubernetes.")
+      case (KUBERNETES, CLUSTER) if args.isPython =>
+        printErrorAndExit("Python is currently not supported for Kubernetes.")
+      case (KUBERNETES, CLUSTER) if args.isR =>
+        printErrorAndExit("R is currently not supported for Kubernetes.")
       case _ =>
     }
 
@@ -453,6 +469,26 @@ object SparkSubmit extends CommandLineUtils {
       OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.principal"),
       OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.keytab"),
 
+      // Kubernetes only
+      OptionAssigner(args.kubernetesAppName, KUBERNETES, CLUSTER,
+        sysProp = "spark.kubernetes.app.name"),
+      OptionAssigner(args.kubernetesAppNamespace, KUBERNETES, CLUSTER,
+        sysProp = "spark.kubernetes.namespace"),
+      OptionAssigner(args.kubernetesCaCertFile, KUBERNETES, CLUSTER,
+        sysProp = "spark.kubernetes.ca.cert.file"),
+      OptionAssigner(args.kubernetesClientCertFile, KUBERNETES, CLUSTER,
+        sysProp = "spark.kubernetes.client.cert.file"),
+      OptionAssigner(args.kubernetesClientKeyFile, KUBERNETES, CLUSTER,
+        sysProp = "spark.kubernetes.client.key.file"),
+      OptionAssigner(args.kubernetesMaster, KUBERNETES, CLUSTER,
+        sysProp = "spark.kubernetes.master"),
+      OptionAssigner(args.customExecutorSpecFile, KUBERNETES, CLUSTER,
+        sysProp = "spark.kubernetes.executor.custom.spec.file"),
+      OptionAssigner(args.customExecutorSpecContainerName, KUBERNETES, CLUSTER,
+        sysProp = "spark.kubernetes.executor.custom.spec.container.name"),
+      OptionAssigner(args.executorDockerImage, KUBERNETES, CLUSTER,
+        sysProp = "spark.kubernetes.executor.docker.image"),
+
       // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.cores"),
@@ -472,6 +508,16 @@ object SparkSubmit extends CommandLineUtils {
         sysProp = "spark.driver.supervise"),
       OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy")
     )
+
+    if (args.isKubernetesCluster) {
+      childMainClass = "org.apache.spark.deploy.kubernetes.Client"
+      for ((portName, portValue) <- args.exposeDriverPorts) {
+        childArgs += ("--expose-driver-port", s"$portName=$portValue")
+      }
+      args.childArgs.foreach(arg => childArgs += ("--arg", arg))
+      childArgs += ("--class", args.mainClass)
+      childArgs += ("--driver-docker-image", args.driverDockerImage)
+    }
 
     // In client mode, launch the application main class directly
     // In addition, add the main application jar and any added jars (if any) to the classpath

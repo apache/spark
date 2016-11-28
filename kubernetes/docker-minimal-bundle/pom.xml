@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one or more
+  ~ contributor license agreements.  See the NOTICE file distributed with
+  ~ this work for additional information regarding copyright ownership.
+  ~ The ASF licenses this file to You under the Apache License, Version 2.0
+  ~ (the "License"); you may not use this file except in compliance with
+  ~ the License.  You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.spark</groupId>
+    <artifactId>spark-parent_2.11</artifactId>
+    <version>2.1.0-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>spark-docker-minimal-bundle_2.11</artifactId>
+  <name>Spark Project Docker Minimal Bundle</name>
+  <url>http://spark.apache.org/</url>
+  <packaging>pom</packaging>
+
+  <properties>
+    <sbt.project.name>docker-minimal-bundle</sbt.project.name>
+    <build.testJarPhase>none</build.testJarPhase>
+    <build.copyDependenciesPhase>pre-integration-test</build.copyDependenciesPhase>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-assembly_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>pom</type>
+    </dependency>
+    <!--
+      Because we don't shade dependencies anymore, we need to restore Guava to compile scope so
+      that the libraries Spark depend on have it available. We'll package the version that Spark
+      uses (14.0.1) which is not the same as Hadoop dependencies, but works.
+    -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+
+    <!-- Unfortunately profiles aren't inherited when we depend on the assembly.
+         However, profile management should be simpler here since this is to
+         be expressly used for a docker image for Kubernetes - so we don't need
+         to consider YARN and Mesos, and always include the kubernetes module. -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-kubernetes_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+  </dependencies>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-assembly-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>driver-docker-dist</id>
+            <phase>pre-integration-test</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <configuration>
+              <descriptors>
+                <descriptor>src/main/assembly/driver-assembly.xml</descriptor>
+              </descriptors>
+              <tarLongFileMode>posix</tarLongFileMode>
+            </configuration>
+          </execution>
+          <execution>
+            <id>executor-docker-dist</id>
+            <phase>pre-integration-test</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <configuration>
+              <descriptors>
+                <descriptor>src/main/assembly/executor-assembly.xml</descriptor>
+              </descriptors>
+              <tarLongFileMode>posix</tarLongFileMode>
+            </configuration>
+          </execution>
+          <execution>
+            <id>shuffle-service-docker-dist</id>
+            <phase>pre-integration-test</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <configuration>
+              <descriptors>
+                <descriptor>src/main/assembly/shuffle-service-assembly.xml</descriptor>
+              </descriptors>
+              <tarLongFileMode>posix</tarLongFileMode>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <!-- Include other profiles from the assembly. -->
+  <profiles>
+    <profile>
+      <id>hive</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-hive_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>hive-thriftserver</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-hive-thriftserver_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>spark-ganglia-lgpl</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-ganglia-lgpl_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
+</project>

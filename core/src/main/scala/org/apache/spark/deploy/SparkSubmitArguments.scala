@@ -78,6 +78,19 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var submissionToRequestStatusFor: String = null
   var useRest: Boolean = true // used internally
 
+  // Kubernetes only
+  var kubernetesAppName: String = null
+  val exposeDriverPorts: HashMap[String, Int] = new HashMap[String, Int]()
+  var driverDockerImage: String = null
+  var executorDockerImage: String = null
+  var customExecutorSpecFile: String = null
+  var customExecutorSpecContainerName: String = null
+  var kubernetesMaster: String = null
+  var kubernetesAppNamespace: String = null
+  var kubernetesClientCertFile: String = null
+  var kubernetesClientKeyFile: String = null
+  var kubernetesCaCertFile: String = null
+
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {
     val defaultProperties = new HashMap[String, String]()
@@ -287,6 +300,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     master.startsWith("spark://") && deployMode == "cluster"
   }
 
+  def isKubernetesCluster: Boolean = {
+    master.startsWith("kubernetes") && deployMode == "cluster"
+  }
+
   override def toString: String = {
     s"""Parsed arguments:
     |  master                  $master
@@ -435,6 +452,43 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case USAGE_ERROR =>
         printUsageAndExit(1)
+
+      // Kubernetes only
+      case KUBERNETES_APP_NAME =>
+        kubernetesAppName = value
+
+      case KUBERNETES_APP_NAMESPACE =>
+        kubernetesAppNamespace = value
+
+      case KUBERNETES_CA_CERT_FILE =>
+        kubernetesCaCertFile = value
+
+      case KUBERNETES_CLIENT_CERT_FILE =>
+        kubernetesClientCertFile = value
+
+      case KUBERNETES_CLIENT_KEY_FILE =>
+        kubernetesClientKeyFile = value
+
+      case KUBERNETES_CUSTOM_EXECUTOR_SPEC_CONTAINER_NAME =>
+        customExecutorSpecFile = value
+
+      case KUBERNETES_CUSTOM_EXECUTOR_SPEC_FILE =>
+        customExecutorSpecContainerName = value
+
+      case KUBERNETES_DRIVER_DOCKER_IMAGE =>
+        driverDockerImage = value
+
+      case KUBERNETES_EXECUTOR_DOCKER_IMAGE =>
+        executorDockerImage = value
+
+      case KUBERNETES_EXPOSE_DRIVER_PORT =>
+        value.split("=", 2).toSeq match {
+          case Seq(k, v) => exposeDriverPorts(k) = v.toInt
+          case _ => SparkSubmit.printErrorAndExit(s"Driver port specified without '=': $value")
+        }
+
+      case KUBERNETES_MASTER =>
+        kubernetesMaster = value
 
       case _ =>
         throw new IllegalArgumentException(s"Unexpected argument '$opt'.")

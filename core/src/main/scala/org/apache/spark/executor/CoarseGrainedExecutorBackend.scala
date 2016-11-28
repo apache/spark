@@ -200,7 +200,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         new SecurityManager(executorConf),
         clientMode = true)
       val driver = fetcher.setupEndpointRefByURI(driverUrl)
-      val props = driver.askWithRetry[Seq[(String, String)]](RetrieveSparkProps) ++
+      val props = driver.askWithRetry[Seq[(String, String)]](RetrieveSparkProps(executorId)) ++
         Seq[(String, String)](("spark.app.id", appId))
       fetcher.shutdown()
 

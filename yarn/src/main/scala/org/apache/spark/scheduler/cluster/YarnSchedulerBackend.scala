@@ -112,7 +112,8 @@ private[spark] abstract class YarnSchedulerBackend(
    * Get an application ID associated with the job.
    * This returns the string value of [[appId]] if set, otherwise
    * the locally-generated ID from the superclass.
-   * @return The application ID
+    *
+    * @return The application ID
    */
   override def applicationId(): String = {
     appId.map(_.toString).getOrElse {
@@ -306,6 +307,15 @@ private[spark] abstract class YarnSchedulerBackend(
         logWarning(s"ApplicationMaster has disassociated: $remoteAddress")
         amEndpoint = None
       }
+    }
+  }
+
+  // The num of current max ExecutorId used to re-register appMaster
+  @volatile protected var currentExecutorIdCounter = 0
+
+  override def registerExecutorId(executorId: String): Unit = {
+    if (currentExecutorIdCounter < executorId.toInt) {
+      currentExecutorIdCounter = executorId.toInt
     }
   }
 }

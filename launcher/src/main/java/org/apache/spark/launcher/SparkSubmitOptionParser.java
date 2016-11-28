@@ -76,6 +76,19 @@ class SparkSubmitOptionParser {
   protected final String PRINCIPAL = "--principal";
   protected final String QUEUE = "--queue";
 
+  // Kubernetes-only options.
+  protected final String KUBERNETES_CUSTOM_EXECUTOR_SPEC_FILE = "--custom-executor-spec";
+  protected final String KUBERNETES_CUSTOM_EXECUTOR_SPEC_CONTAINER_NAME = "--custom-executor-spec-container-name";
+  protected final String KUBERNETES_DRIVER_DOCKER_IMAGE = "--driver-docker-image";
+  protected final String KUBERNETES_EXECUTOR_DOCKER_IMAGE = "--executor-docker-image";
+  protected final String KUBERNETES_EXPOSE_DRIVER_PORT = "--expose-driver-port";
+  protected final String KUBERNETES_APP_NAME = "--kubernetes-app-name";
+  protected final String KUBERNETES_MASTER = "--kubernetes-master";
+  protected final String KUBERNETES_APP_NAMESPACE = "--kubernetes-app-namespace";
+  protected final String KUBERNETES_CLIENT_CERT_FILE = "--kubernetes-client-cert-file";
+  protected final String KUBERNETES_CLIENT_KEY_FILE = "--kubernetes-client-key-file";
+  protected final String KUBERNETES_CA_CERT_FILE = "--kubernetes-ca-cert-file";
+
   /**
    * This is the canonical list of spark-submit options. Each entry in the array contains the
    * different aliases for the same option; the first element of each entry is the "official"
@@ -102,6 +115,17 @@ class SparkSubmitOptionParser {
     { JARS },
     { KEYTAB },
     { KILL_SUBMISSION },
+    { KUBERNETES_APP_NAME },
+    { KUBERNETES_APP_NAMESPACE },
+    { KUBERNETES_CA_CERT_FILE },
+    { KUBERNETES_CLIENT_CERT_FILE },
+    { KUBERNETES_CLIENT_KEY_FILE },
+    { KUBERNETES_CUSTOM_EXECUTOR_SPEC_FILE },
+    { KUBERNETES_CUSTOM_EXECUTOR_SPEC_CONTAINER_NAME },
+    { KUBERNETES_DRIVER_DOCKER_IMAGE },
+    { KUBERNETES_EXECUTOR_DOCKER_IMAGE },
+    { KUBERNETES_EXPOSE_DRIVER_PORT },
+    { KUBERNETES_MASTER },
     { MASTER },
     { NAME },
     { NUM_EXECUTORS },

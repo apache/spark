@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one or more
+  ~ contributor license agreements.  See the NOTICE file distributed with
+  ~ this work for additional information regarding copyright ownership.
+  ~ The ASF licenses this file to You under the Apache License, Version 2.0
+  ~ (the "License"); you may not use this file except in compliance with
+  ~ the License.  You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.spark</groupId>
+    <artifactId>spark-parent_2.11</artifactId>
+    <version>2.1.0-SNAPSHOT</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>spark-kubernetes-integration-tests_2.11</artifactId>
+  <packaging>jar</packaging>
+  <name>Spark Project Kubernetes Integration Tests</name>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-kubernetes_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-kubernetes-integration-tests-spark-jobs_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-docker-minimal-bundle_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>tar.gz</type>
+      <classifier>driver-docker-dist</classifier>
+      <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <artifactId>*</artifactId>
+          <groupId>*</groupId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <scope>test</scope>
+      <!-- For compatibility with Docker client. Should be fine since this is just for tests.-->
+      <version>18.0</version>
+    </dependency>
+    <dependency>
+      <groupId>com.spotify</groupId>
+      <artifactId>docker-client</artifactId>
+      <scope>test</scope>
+      <!--
+        See https://github.com/spotify/docker-client/pull/272#issuecomment-155249101
+        for an explanation of why these exclusions are (necessarily) a mess.
+      -->
+      <exclusions>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.jaxrs</groupId>
+          <artifactId>jackson-jaxrs-json-provider</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-databind</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.glassfish.jersey.core</groupId>
+          <artifactId>jersey-client</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.glassfish.jersey.core</groupId>
+          <artifactId>jersey-common</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>javax.ws.rs</groupId>
+          <artifactId>jsr311-api</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-test-spark-jobs</id>
+            <phase>pre-integration-test</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>org.apache.spark</groupId>
+                  <artifactId>spark-kubernetes-integration-tests-spark-jobs_${scala.binary.version}</artifactId>
+                  <version>${project.version}</version>
+                  <type>jar</type>
+                  <outputDirectory>${project.build.directory}/integration-tests-spark-jobs</outputDirectory>
+                </artifactItem>
+              </artifactItems>
+            </configuration>
+          </execution>
+          <execution>
+            <id>unpack-docker-driver-bundle</id>
+            <phase>pre-integration-test</phase>
+            <goals>
+              <goal>unpack</goal>
+            </goals>
+            <configuration>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>org.apache.spark</groupId>
+                  <artifactId>spark-docker-minimal-bundle_${scala.binary.version}</artifactId>
+                  <version>${project.version}</version>
+                  <classifier>driver-docker-dist</classifier>
+                  <type>tar.gz</type>
+                  <overWrite>true</overWrite>
+                  <outputDirectory>${project.build.directory}/docker/driver</outputDirectory>
+                </artifactItem>
+              </artifactItems>
+            </configuration>
+          </execution>
+          <execution>
+            <id>unpack-docker-executor-bundle</id>
+            <phase>pre-integration-test</phase>
+            <goals>
+              <goal>unpack</goal>
+            </goals>
+            <configuration>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>org.apache.spark</groupId>
+                  <artifactId>spark-docker-minimal-bundle_${scala.binary.version}</artifactId>
+                  <version>${project.version}</version>
+                  <classifier>executor-docker-dist</classifier>
+                  <type>tar.gz</type>
+                  <overWrite>true</overWrite>
+                  <outputDirectory>${project.build.directory}/docker/executor</outputDirectory>
+                </artifactItem>
+              </artifactItems>
+            </configuration>
+          </execution>
+          <execution>
+            <id>unpack-docker-shuffle-service-bundle</id>
+            <phase>pre-integration-test</phase>
+            <goals>
+              <goal>unpack</goal>
+            </goals>
+            <configuration>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>org.apache.spark</groupId>
+                  <artifactId>spark-docker-minimal-bundle_${scala.binary.version}</artifactId>
+                  <version>${project.version}</version>
+                  <classifier>shuffle-service-docker-dist</classifier>
+                  <type>tar.gz</type>
+                  <overWrite>true</overWrite>
+                  <outputDirectory>${project.build.directory}/docker/shuffle-service</outputDirectory>
+                </artifactItem>
+              </artifactItems>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>com.googlecode.maven-download-plugin</groupId>
+        <artifactId>download-maven-plugin</artifactId>
+        <version>1.3.0</version>
+        <executions>
+          <execution>
+            <id>download-minikube-linux</id>
+            <phase>pre-integration-test</phase>
+            <goals>
+              <goal>wget</goal>
+            </goals>
+            <configuration>
+              <url>https://storage.googleapis.com/minikube/releases/v0.12.2/minikube-linux-amd64</url>
+              <outputDirectory>${project.build.directory}/minikube-bin/linux-amd64</outputDirectory>
+              <outputFileName>minikube</outputFileName>
+            </configuration>
+          </execution>
+          <execution>
+            <id>download-minikube-darwin</id>
+            <phase>pre-integration-test</phase>
+            <goals>
+              <goal>wget</goal>
+            </goals>
+            <configuration>
+              <url>https://storage.googleapis.com/minikube/releases/v0.12.2/minikube-darwin-amd64</url>
+              <outputDirectory>${project.build.directory}/minikube-bin/darwin-amd64</outputDirectory>
+              <outputFileName>minikube</outputFileName>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+
+  </build>
+
+</project>
