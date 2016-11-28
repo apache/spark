@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ManualClock, Utils}
 
 
 class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
@@ -111,7 +111,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
   }
 
   testQuietly("query statuses and progresses") {
-    val clock = new StreamManualClock
+    import StreamingQuerySuite._
+    clock = new StreamManualClock
 
     /** Custom MemoryStream that waits for manual clock to reach a time */
     val inputData = new MemoryStream[Int](0, sqlContext) {
@@ -137,57 +138,64 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       x
     }
 
-    case class AssertStreamExecThreadToWaitForClock(time: Long = clock.getTimeMillis())
+    case class AssertStreamExecThreadToWaitForClock()
       extends AssertOnQuery(q => {
         eventually(Timeout(streamingTimeout)) {
-          if (!q.exception.isDefined) {
-            assert(clock.isStreamWaitingAt(time))
+          if (q.exception.isEmpty) {
+            assert(clock.asInstanceOf[StreamManualClock].isStreamWaitingAt(clock.getTimeMillis))
           }
         }
         if (q.exception.isDefined) {
           throw q.exception.get
         }
         true
-      }, s"Waiting for clock = $time")
+      }, "")
 
     testStream(mapped, OutputMode.Complete)(
       StartStream(ProcessingTime(100), triggerClock = clock),
       AssertStreamExecThreadToWaitForClock(),
       AssertOnQuery(_.status.isDataAvailable === false),
-      AssertOnQuery(_.status.isTriggerActive === true),
+      AssertOnQuery(_.status.isTriggerActive === false),
       // TODO: test status.message before trigger has started
-      AssertOnQuery(_.lastProgress === null),
+      // AssertOnQuery(_.lastProgress === null)  // there is an empty trigger as soon as started
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
+      // Test status while offset is being fetched
       AddData(inputData, 1, 2),
       AdvanceManualClock(100), // time = 100 to start new trigger, will block on getOffset
       AssertStreamExecThreadToWaitForClock(),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === true),
-      AssertOnQuery(_.status.message.toLowerCase.contains("offset")),
-      AssertOnQuery(_.lastProgress === null),
+      AssertOnQuery(_.status.message.toLowerCase.contains("getting offsets from")),
+      AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
+      // Test status while batch is being fetched
       AdvanceManualClock(200), // time = 300 to unblock getOffset, will block on getBatch
       AssertStreamExecThreadToWaitForClock(),
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === true),
-      AssertOnQuery(_.status.message.toLowerCase.contains("batch")),
-      AssertOnQuery(_.lastProgress === null),
+      AssertOnQuery(_.status.message === "Processing new data"),
+      AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
-      AdvanceManualClock(300), // time = 600 to unblock getBatch, will block on computation
+      // Test status while batch is being processed
+      AdvanceManualClock(300), // time = 600 to unblock getBatch, will block in Spark job
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === true),
-      AssertOnQuery(_.status.message.toLowerCase.contains("executing")),
-      AssertOnQuery(_.lastProgress === null),
+      AssertOnQuery(_.status.message === "Processing new data"),
+      AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
-      AdvanceManualClock(500), // time = 11000 to unblock computation
+      // Test status while batch processing has completed
+      AdvanceManualClock(500, waitForStreamExecThreadToBlock = false), // time = 1100 to unblock job
       AssertOnQuery { _ => clock.getTimeMillis() === 1100 },
       CheckAnswer(2),
-      AssertOnQuery(_.status.isDataAvailable === false),
+      AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === false),
-      // TODO: test status.message after trigger is over
+      AssertOnQuery(_.status.message === "Waiting for next trigger"),
       AssertOnQuery { query =>
+        assert(query.lastProgress != null)
+        assert(query.recentProgress.exists(_.numInputRows > 0))
         assert(query.recentProgress.last.eq(query.lastProgress))
+
         val progress = query.lastProgress
         assert(progress.id === query.id)
         assert(progress.name === query.name)
@@ -207,7 +215,6 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
         assert(progress.sources(0).startOffset === null)
         assert(progress.sources(0).endOffset !== null)
         assert(progress.sources(0).processedRowsPerSecond === 2.0)
-        // TODO: test inputRecordsPerSecond
 
         assert(progress.stateOperators.length === 1)
         assert(progress.stateOperators(0).numRowsUpdated === 1)
@@ -216,13 +223,24 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       },
 
       AddData(inputData, 1, 2),
-      AdvanceManualClock(100), // unblock getOffset, will block on getBatch
+      AdvanceManualClock(100), // allow another trigger
       CheckAnswer(4),
+      AssertOnQuery(_.status.isDataAvailable === true),
+      AssertOnQuery(_.status.isTriggerActive === false),
+      AssertOnQuery(_.status.message === "Waiting for next trigger"),
       AssertOnQuery { query =>
         assert(query.recentProgress.last.eq(query.lastProgress))
+        assert(query.lastProgress.batchId === 1)
         assert(query.lastProgress.sources(0).inputRowsPerSecond === 1.818)
         true
-      }
+      },
+
+      // Test status after data is not available for a trigger
+      AdvanceManualClock(100), // allow another trigger
+      AssertStreamExecThreadToWaitForClock(),
+      AssertOnQuery(_.status.isDataAvailable === false),
+      AssertOnQuery(_.status.isTriggerActive === false),
+      AssertOnQuery(_.status.message === "Waiting for data to arrive")
     )
   }
 
@@ -383,4 +401,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       true // If the control reached here, then everything worked as expected
     }
   }
+}
+
+object StreamingQuerySuite {
+  // Singleton reference to clock that does not get serialized in task closures
+  var clock: ManualClock = null
 }

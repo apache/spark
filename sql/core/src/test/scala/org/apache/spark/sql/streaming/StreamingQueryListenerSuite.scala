@@ -33,7 +33,6 @@ import org.apache.spark.util.{JsonProtocol, ManualClock}
 class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
-  import StreamingQueryListenerSuite._
 
   // To make === between double tolerate inexact values
   implicit val doubleEquality = TolerantNumerics.tolerantDoubleEquality(0.01)
@@ -253,9 +252,4 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val listenerBus = spark.streams invokePrivate listenerBusMethod()
     listenerBus.listeners.toArray.map(_.asInstanceOf[StreamingQueryListener])
   }
-}
-
-object StreamingQueryListenerSuite {
-  // Singleton reference to clock that does not get serialized in task closures
-  @volatile var clock: ManualClock = null
 }

@@ -211,7 +211,6 @@ class StreamExecution(
                 currentStatus = currentStatus.copy(isDataAvailable = true)
                 updateStatusMessage("Processing new data")
                 runBatch()
-
               }
             }
 
@@ -224,7 +223,7 @@ class StreamExecution(
               currentBatchId += 1
             } else {
               currentStatus = currentStatus.copy(isDataAvailable = false)
-              updateStatusMessage("Waiting for data to arrive.")
+              updateStatusMessage("Waiting for data to arrive")
               Thread.sleep(pollingDelayMs)
             }
             true
@@ -234,7 +233,7 @@ class StreamExecution(
 
         // Update committed offsets.
         committedOffsets ++= availableOffsets
-        updateStatusMessage("Waiting for next trigger.")
+        updateStatusMessage("Waiting for next trigger")
         isTerminated
       })
     } catch {
@@ -316,7 +315,7 @@ class StreamExecution(
       awaitBatchLock.lock()
       try {
         val latestOffsets: Map[Source, Option[Offset]] = uniqueSources.map { s =>
-          updateStatusMessage(s"Getting offsets from $s.")
+          updateStatusMessage(s"Getting offsets from $s")
           reportTimeTaken("getOffset") {
             (s, s.getOffset)
           }
@@ -334,7 +333,7 @@ class StreamExecution(
       }
     }
     if (hasNewData) {
-      updateStatusMessage("Writing offsets to log.")
+      updateStatusMessage("Writing offsets to log")
       reportTimeTaken("walCommit") {
         assert(offsetLog.add(currentBatchId, availableOffsets.toOffsetSeq(sources)),
           s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")

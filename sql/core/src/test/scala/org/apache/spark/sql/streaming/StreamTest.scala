@@ -167,7 +167,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     extends StreamAction
 
   /** Advance the trigger clock's time manually. */
-  case class AdvanceManualClock(timeToAdd: Long) extends StreamAction
+  case class AdvanceManualClock(
+    timeToAdd: Long, waitForStreamExecThreadToBlock: Boolean = true) extends StreamAction
 
   /** Signals that a failure is expected and should not kill the test. */
   case class ExpectFailure[T <: Throwable : ClassTag]() extends StreamAction {
@@ -203,7 +204,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     }
   }
 
-  class StreamManualClock(time: Long = 0L) extends ManualClock(time) {
+  class StreamManualClock(time: Long = 0L) extends ManualClock(time) with Serializable {
     private var waitStartTime: Option[Long] = None
 
     override def waitTillTime(targetTime: Long): Long = synchronized {
@@ -364,16 +365,18 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                 }
               })
 
-          case AdvanceManualClock(timeToAdd) =>
+          case AdvanceManualClock(timeToAdd, waitForStreamExecThreadToBlock) =>
             verify(currentStream != null,
                    "can not advance manual clock when a stream is not running")
             verify(currentStream.triggerClock.isInstanceOf[StreamManualClock],
                    s"can not advance clock of type ${currentStream.triggerClock.getClass}")
             val clock = currentStream.triggerClock.asInstanceOf[StreamManualClock]
             assert(manualClockExpectedTime >= 0)
-            // Make sure we don't advance ManualClock too early. See SPARK-16002.
-            eventually("StreamManualClock has not yet entered the waiting state") {
-              assert(clock.isStreamWaitingAt(manualClockExpectedTime))
+            if (waitForStreamExecThreadToBlock) {
+              // Make sure we don't advance ManualClock too early. See SPARK-16002.
+              eventually("StreamManualClock has not yet entered the waiting state") {
+                assert(clock.isStreamWaitingAt(manualClockExpectedTime))
+              }
             }
             clock.advance(timeToAdd)
             manualClockExpectedTime += timeToAdd
