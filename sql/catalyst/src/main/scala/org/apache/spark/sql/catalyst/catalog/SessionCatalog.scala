@@ -86,6 +86,21 @@ class SessionCatalog(
   protected var currentDb = formatDatabaseName(DEFAULT_DATABASE)
 
   /**
+   * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
+   * i.e. if this name only contains characters, numbers, and _.
+   *
+   * This method is intended to have the same behavior of
+   * org.apache.hadoop.hive.metastore.MetaStoreUtils.validateName.
+   */
+  private def validateName(name: String): Unit = {
+    val validNameFormat = "([\\w_]+)".r
+    if (!validNameFormat.pattern.matcher(name).matches()) {
+      throw new AnalysisException(s"`$name` is not a valid name for tables/databases. " +
+        "Valid names only contain alphabet characters, numbers and _.")
+    }
+  }
+
+  /**
    * Format table name, taking into account case sensitivity.
    */
   protected[this] def formatTableName(name: String): String = {
@@ -143,6 +158,7 @@ class SessionCatalog(
         s"${globalTempViewManager.database} is a system preserved database, " +
           "you cannot create a database with this name.")
     }
+    validateName(dbName)
     val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri).toString
     externalCatalog.createDatabase(
       dbDefinition.copy(name = dbName, locationUri = qualifiedPath),
@@ -226,6 +242,7 @@ class SessionCatalog(
   def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
+    validateName(table)
     val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
     requireDbExists(db)
     externalCatalog.createTable(newTableDefinition, ignoreIfExists)
@@ -474,6 +491,7 @@ class SessionCatalog(
       if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
         requireTableExists(TableIdentifier(oldTableName, Some(db)))
         requireTableNotExists(TableIdentifier(newTableName, Some(db)))
+        validateName(newTableName)
         externalCatalog.renameTable(db, oldTableName, newTableName)
       } else {
         if (newName.database.isDefined) {

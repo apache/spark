@@ -61,6 +61,22 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(!catalog.databaseExists("does_not_exist"))
   }
 
+  def testInvalidName(func: (String) => Unit) {
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    val name = "砖"
+    // scalastyle:on
+    val e = intercept[AnalysisException] {
+      func(name)
+    }.getMessage
+    assert(e.contains(s"`$name` is not a valid name for tables/databases."))
+  }
+
+  test("create databases using invalid names") {
+    val catalog = new SessionCatalog(newEmptyCatalog())
+    testInvalidName(name => catalog.createDatabase(newDb(name), ignoreIfExists = true))
+  }
+
   test("get database when a database exists") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val db1 = catalog.getDatabaseMetadata("db1")
@@ -194,6 +210,11 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2", "tbl3"))
   }
 
+  test("create tables using invalid names") {
+    val catalog = new SessionCatalog(newEmptyCatalog())
+    testInvalidName(name => catalog.createTable(newTable(name, "db1"), ignoreIfExists = false))
+  }
+
   test("create table when database does not exist") {
     val catalog = new SessionCatalog(newBasicCatalog())
     // Creating table in non-existent database should always fail
@@ -307,6 +328,12 @@ class SessionCatalogSuite extends SparkFunSuite {
         TableIdentifier("tblone", Some("db2")),
         TableIdentifier("table_two"))
     }
+  }
+
+  test("rename tables to an invalid name") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    testInvalidName(
+      name => catalog.renameTable(TableIdentifier("tbl1", Some("db2")), TableIdentifier(name)))
   }
 
   test("rename table when database/table does not exist") {
