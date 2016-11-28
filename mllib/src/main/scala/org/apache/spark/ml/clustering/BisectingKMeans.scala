@@ -256,7 +256,7 @@ class BisectingKMeans @Since("2.0.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = {
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     fit(dataset, handlePersistence)
   }
 
@@ -283,7 +283,9 @@ class BisectingKMeans @Since("2.0.0") (
     val summary = new BisectingKMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
     model.setSummary(Some(summary))
-    if (handlePersistence) rdd.unpersist()
+    if (handlePersistence) {
+      rdd.unpersist()
+    }
     instr.logSuccess(model)
     model
   }
