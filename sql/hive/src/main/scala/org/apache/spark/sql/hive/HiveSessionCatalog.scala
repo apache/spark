@@ -234,7 +234,6 @@ private[sql] class HiveSessionCatalog(
   // noopwithmapstreaming, parse_url_tuple, reflect2, windowingtablefunction.
   // Note: don't forget to update SessionCatalog.isTemporaryFunction
   private val hiveFunctions = Seq(
-    "histogram_numeric",
-    "percentile"
+    "histogram_numeric"
   )
 }
