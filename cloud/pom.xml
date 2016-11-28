@@ -36,9 +36,9 @@
 
     Hadoop 2.7:
       hadoop-aws
-      aws-java-sdk-s3
+        aws-java-sdk-s3
       hadoop-azure
-      azure-storage
+        azure-storage
       hadoop-openstack
 
     WARNING: the signatures of methods in aws-java-sdk/aws-java-sdk-s3 can change between versions:
@@ -131,15 +131,11 @@
             <artifactId>jackson-annotations</artifactId>
             <scope>${hadoop.deps.scope}</scope>
           </dependency>
-          <!-- When Hadoop switches to AWS SDK 10.77+ this JAR
-           will need be referenced in in sync with Spark's Jackson 2 version. -->
-          <!--
           <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-cbor</artifactId>
             <scope>${hadoop.deps.scope}</scope>
           </dependency>
-          -->
           <!--Explicit declaration to force in Spark version into transitive dependencies -->
           <dependency>
             <groupId>org.apache.httpcomponents</groupId>
