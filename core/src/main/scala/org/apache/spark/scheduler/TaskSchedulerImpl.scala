@@ -354,12 +354,12 @@ private[spark] class TaskSchedulerImpl(
             if (TaskState.isFinished(state)) {
               cleanupTaskState(tid)
               taskSet.removeRunningTask(tid)
+              if (state == TaskState.FINISHED) {
+                taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
+              } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
+                taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
+              }
             }
-            if (state == TaskState.FINISHED) {
-              taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
-            } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
-              taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
-          }
           case None =>
             logError(
               ("Ignoring update with state %s for TID %s because its task set is gone (this is " +
