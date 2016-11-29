@@ -82,11 +82,11 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
    * invalid values), error (throw an error), or keep (keep invalid values in a special additional
    * bucket).
    * Default: "error"
-   * TODO: Reuse handleInvalid in HasHandleInvalid.
    * @group param
    */
+  // TODO: SPARK-18619 Make Bucketizer inherit from HasHandleInvalid.
   @Since("2.1.0")
-  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle" +
+  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
     "invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
     ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
