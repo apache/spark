@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.streaming.{SourceProgress, StateOperatorProgress, StreamingQueryProgress, StreamingQueryStatus}
+import org.apache.spark.sql.streaming._
 import org.apache.spark.util.Clock
 
 /**
@@ -51,6 +51,7 @@ trait ProgressReporter extends Logging {
   protected def availableOffsets: StreamProgress
   protected def committedOffsets: StreamProgress
   protected def sources: Seq[Source]
+  protected def sink: Sink
   protected def streamExecutionMetadata: StreamExecutionMetadata
   protected def currentBatchId: Long
   protected def sparkSession: SparkSession
@@ -128,6 +129,7 @@ trait ProgressReporter extends Logging {
         processedRowsPerSecond = numRecords / processingTimeSec
       )
     }
+    val sinkProgress = new SinkProgress(sink.toString)
 
     val newProgress = new StreamingQueryProgress(
       id = id,
@@ -137,7 +139,8 @@ trait ProgressReporter extends Logging {
       durationMs = currentDurationsMs.toMap.mapValues(long2Long).asJava,
       currentWatermark = streamExecutionMetadata.batchWatermarkMs,
       stateOperators = executionStats.stateOperators.toArray,
-      sources = sourceProgress.toArray)
+      sources = sourceProgress.toArray,
+      sink = sinkProgress)
 
     progressBuffer.synchronized {
       progressBuffer += newProgress

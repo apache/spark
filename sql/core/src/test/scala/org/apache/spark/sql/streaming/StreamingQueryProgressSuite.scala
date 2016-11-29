@@ -54,7 +54,10 @@ class StreamingQueryProgressSuite extends SparkFunSuite {
         |    "endOffset" : 456,
         |    "numInputRows" : 678,
         |    "inputRowsPerSecond" : 10.0
-        |  } ]
+        |  } ],
+        |  "sink" : {
+        |    "description" : "sink"
+        |  }
         |}
       """.stripMargin.trim)
     assert(compact(parse(json)) === testProgress.json)
@@ -88,7 +91,8 @@ object StreamingQueryProgressSuite {
         inputRowsPerSecond = 10.0,
         processedRowsPerSecond = Double.PositiveInfinity  // should not be present in the json
       )
-    )
+    ),
+    sink = new SinkProgress("sink")
   )
 }
 

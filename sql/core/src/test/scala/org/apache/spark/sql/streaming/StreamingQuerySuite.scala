@@ -219,6 +219,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
         assert(progress.stateOperators.length === 1)
         assert(progress.stateOperators(0).numRowsUpdated === 1)
         assert(progress.stateOperators(0).numRowsTotal === 1)
+
+        assert(progress.sink.description contains "MemorySink")
         true
       },
 
