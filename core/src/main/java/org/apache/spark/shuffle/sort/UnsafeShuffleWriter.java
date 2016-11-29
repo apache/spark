@@ -340,6 +340,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final int numPartitions = partitioner.numPartitions();
     final long[] partitionLengths = new long[numPartitions];
     final InputStream[] spillInputStreams = new FileInputStream[spills.length];
+
+    // Use a counting output stream to avoid having to close the underlying file and ask
+    // the file system for its size after each partition is written.
     final CountingOutputStream mergedFileOutputStream = new CountingOutputStream(
       new FileOutputStream(outputFile));
 
@@ -350,6 +353,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       for (int partition = 0; partition < numPartitions; partition++) {
         final long initialFileLength = mergedFileOutputStream.getByteCount();
+        // Shield the underlying output stream from close() calls, so that we can close the higher
+        // level streams to make sure all data is really flushed and internal state is cleaned.
         OutputStream partitionOutput = new CloseShieldOutputStream(mergedFileOutputStream);
         partitionOutput = blockManager.serializerManager().wrapForEncryption(partitionOutput);
         if (compressionCodec != null) {
@@ -361,12 +366,16 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           if (partitionLengthInSpill > 0) {
             InputStream partitionInputStream = new LimitedInputStream(spillInputStreams[i],
               partitionLengthInSpill, false);
-            partitionInputStream = blockManager.serializerManager().wrapForEncryption(
-              partitionInputStream);
-            if (compressionCodec != null) {
-              partitionInputStream = compressionCodec.compressedInputStream(partitionInputStream);
+            try {
+              partitionInputStream = blockManager.serializerManager().wrapForEncryption(
+                partitionInputStream);
+              if (compressionCodec != null) {
+                partitionInputStream = compressionCodec.compressedInputStream(partitionInputStream);
+              }
+              ByteStreams.copy(partitionInputStream, partitionOutput);
+            } finally {
+              partitionInputStream.close();
             }
-            ByteStreams.copy(partitionInputStream, partitionOutput);
           }
         }
         partitionOutput.flush();

@@ -411,6 +411,18 @@ public class UnsafeShuffleWriterSuite {
   }
 
   @Test
+  public void mergeSpillsWithEncryptionAndNoCompression() throws Exception {
+    // This should actually be translated to a "file stream merge" internally, just have the
+    // test to make sure that it's the case.
+    testMergingSpills(true, null, true);
+  }
+
+  @Test
+  public void mergeSpillsWithFileStreamAndEncryptionAndNoCompression() throws Exception {
+    testMergingSpills(false, null, true);
+  }
+
+  @Test
   public void writeEnoughDataToTriggerSpill() throws Exception {
     memoryManager.limit(PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES);
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);

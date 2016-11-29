@@ -17,12 +17,9 @@
 
 package org.apache.spark.util.collection
 
-import java.security.PrivilegedExceptionAction
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.MemoryTestingUtils
