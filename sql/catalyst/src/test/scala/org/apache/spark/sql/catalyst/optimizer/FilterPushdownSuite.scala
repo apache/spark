@@ -546,6 +546,23 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
   }
 
+  test("joins: only push down join conditions to the right of an existence join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val fillerVal = 'val.boolean
+    val originalQuery =
+      x.join(y,
+        ExistenceJoin(fillerVal),
+        Some("x.a".attr > 1 && "y.b".attr > 2)).analyze
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      x.join(
+        y.where("y.b".attr > 2),
+        ExistenceJoin(fillerVal),
+        Some("x.a".attr > 1))
+      .analyze
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+  }
 
   val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
 
