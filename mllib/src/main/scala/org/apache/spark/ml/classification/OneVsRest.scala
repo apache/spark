@@ -140,6 +140,20 @@ final class OneVsRestModel private[ml] (
     this(uid, Metadata.empty, models.asScala.toArray)
   }
 
+  /** @group setParam */
+  @Since("2.2.0")
+  def setFeaturesCol(value: String): this.type = {
+    models.foreach(_.setFeaturesCol(value))
+    set(featuresCol, value)
+  }
+
+  /** @group setParam */
+  @Since("2.2.0")
+  def setPredictionCol(value: String): this.type = {
+    models.foreach(_.setPredictionCol(value))
+    set(predictionCol, value)
+  }
+
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = false, getClassifier.featuresDataType)
