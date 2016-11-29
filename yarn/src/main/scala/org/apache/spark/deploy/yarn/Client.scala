@@ -1013,12 +1013,7 @@ private[spark] class Client(
     val securityManager = new SecurityManager(sparkConf)
     amContainer.setApplicationACLs(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
-
-    if (sparkConf.get(IO_ENCRYPTION_ENABLED)) {
-      SecurityManager.initIOEncryptionKey(sparkConf, credentials)
-    }
     setupSecurityToken(amContainer)
-
     amContainer
   }
 
