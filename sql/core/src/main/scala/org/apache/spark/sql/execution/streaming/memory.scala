@@ -206,6 +206,10 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
     }
   }
 
+  def clear(): Unit = {
+    batches.clear()
+  }
+
   override def toString(): String = "MemorySink"
 }
 
