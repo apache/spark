@@ -46,7 +46,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    */
   private def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
     // First, we propagate constraints from the null intolerant expressions.
-    var isNotNullConstraints: Set[Expression] = constraints.flatMap(generateIsNotNullConstraints)
+    var isNotNullConstraints: Set[Expression] = constraints.flatMap(inferIsNotNullConstraints)
 
     // Second, we infer additional constraints from non-nullable attributes that are part of the
     // operator's output
@@ -57,10 +57,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   }
 
   /**
-   * Generate Attribute-specific IsNotNull constraints from the null intolerant child expressions
+   * Infer the Attribute-specific IsNotNull constraints from the null intolerant child expressions
    * of constraints.
    */
-  private def generateIsNotNullConstraints(constraint: Expression): Seq[Expression] =
+  private def inferIsNotNullConstraints(constraint: Expression): Seq[Expression] =
     constraint match {
       case IsNotNull(_: Attribute) => constraint :: Nil
       // When the root is IsNotNull, we can push IsNotNull through the child null intolerant
