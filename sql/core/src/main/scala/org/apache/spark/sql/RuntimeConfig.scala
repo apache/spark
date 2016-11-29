@@ -23,7 +23,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 
 /**
- * Runtime configuration interface for Spark. To access this, use [[SparkSession.conf]].
+ * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.
  *
  * Options set here are automatically propagated to the Hadoop configuration during I/O.
  *
@@ -65,7 +65,8 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   /**
    * Returns the value of Spark runtime configuration property for the given key.
    *
-   * @throws NoSuchElementException if the key is not set and does not have a default value
+   * @throws java.util.NoSuchElementException if the key is not set and does not have a default
+   *                                          value
    * @since 2.0.0
    */
   @throws[NoSuchElementException]("if the key is not set")
