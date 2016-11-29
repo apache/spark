@@ -200,7 +200,7 @@ class RandomForestRegressionModel private[ml] (
    * (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
    * and follows the implementation from scikit-learn.
    *
-   * @see [[DecisionTreeRegressionModel.featureImportances]]
+   * @see `DecisionTreeRegressionModel.featureImportances`
    */
   @Since("1.5.0")
   lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)

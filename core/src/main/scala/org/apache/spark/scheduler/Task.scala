@@ -45,7 +45,7 @@ import org.apache.spark.util._
  * @param stageId id of the stage this task belongs to
  * @param stageAttemptId attempt id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
- * @param metrics a [[TaskMetrics]] that is created at driver side and sent to executor side.
+ * @param metrics a `TaskMetrics` that is created at driver side and sent to executor side.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
  *
  * The parameters below are optional:

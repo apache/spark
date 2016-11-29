@@ -48,7 +48,7 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
- * It is based on [[SparkHadoopWriter]].
+ * It is based on `SparkHadoopWriter`.
  */
 private[hive] class SparkHiveWriterContainer(
     @transient private val jobConf: JobConf,
