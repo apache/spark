@@ -74,19 +74,23 @@ class JDBCOptions(
     }
   }
 
+  // the number of partitions
+  val numPartitions = parameters.get(JDBC_NUM_PARTITIONS).map(_.toInt)
+  require(numPartitions.isEmpty || numPartitions.get > 0,
+    s"Invalid value `${numPartitions.get}` for parameter `$JDBC_NUM_PARTITIONS`. " +
+      "The minimum value is 1.")
+
   // ------------------------------------------------------------
   // Optional parameters only for reading
   // ------------------------------------------------------------
   // the column used to partition
-  val partitionColumn = parameters.getOrElse(JDBC_PARTITION_COLUMN, null)
+  val partitionColumn = parameters.get(JDBC_PARTITION_COLUMN)
   // the lower bound of partition column
-  val lowerBound = parameters.getOrElse(JDBC_LOWER_BOUND, null)
+  val lowerBound = parameters.get(JDBC_LOWER_BOUND).map(_.toLong)
   // the upper bound of the partition column
-  val upperBound = parameters.getOrElse(JDBC_UPPER_BOUND, null)
-  // the number of partitions
-  val numPartitions = parameters.getOrElse(JDBC_NUM_PARTITIONS, null)
-  require(partitionColumn == null ||
-    (lowerBound != null && upperBound != null && numPartitions != null),
+  val upperBound = parameters.get(JDBC_UPPER_BOUND).map(_.toLong)
+  require(partitionColumn.isEmpty ||
+    (lowerBound.isDefined && upperBound.isDefined && numPartitions.isDefined),
     s"If '$JDBC_PARTITION_COLUMN' is specified then '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND'," +
       s" and '$JDBC_NUM_PARTITIONS' are required.")
   val fetchSize = {
@@ -122,11 +126,6 @@ class JDBCOptions(
       case "REPEATABLE_READ" => Connection.TRANSACTION_REPEATABLE_READ
       case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
     }
-  // the maximum number of connections
-  val maxConnections = parameters.get(JDBC_MAX_CONNECTIONS).map(_.toInt)
-  require(maxConnections.isEmpty || maxConnections.get > 0,
-    s"Invalid value `${maxConnections.get}` for parameter `$JDBC_MAX_CONNECTIONS`. " +
-      "The minimum value is 1.")
 }
 
 object JDBCOptions {
@@ -149,5 +148,4 @@ object JDBCOptions {
   val JDBC_CREATE_TABLE_OPTIONS = newOption("createTableOptions")
   val JDBC_BATCH_INSERT_SIZE = newOption("batchsize")
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
-  val JDBC_MAX_CONNECTIONS = newOption("maxConnections")
 }

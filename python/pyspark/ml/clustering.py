@@ -155,7 +155,7 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     While this process is generally guaranteed to converge, it is not guaranteed
     to find a global optimum.
 
-    Note: For high-dimensional data (with many features), this algorithm may perform poorly.
+    .. note:: For high-dimensional data (with many features), this algorithm may perform poorly.
           This is due to high-dimensional data (a) making it difficult to cluster at all
           (based on statistical/theoretical arguments) and (b) numerical issues with
           Gaussian distributions.
@@ -749,9 +749,9 @@ class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
         If using checkpointing and :py:attr:`LDA.keepLastCheckpoint` is set to true, then there may
         be saved checkpoint files.  This method is provided so that users can manage those files.
 
-        Note that removing the checkpoints can cause failures if a partition is lost and is needed
-        by certain :py:class:`DistributedLDAModel` methods.  Reference counting will clean up the
-        checkpoints when this model and derivative data go out of scope.
+        .. note:: Removing the checkpoints can cause failures if a partition is lost and is needed
+            by certain :py:class:`DistributedLDAModel` methods.  Reference counting will clean up
+            the checkpoints when this model and derivative data go out of scope.
 
         :return  List of checkpoint files from training
         """

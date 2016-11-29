@@ -896,19 +896,25 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val instanceGen = beanInstance.genCode(ctx)
 
+    val javaBeanInstance = ctx.freshName("javaBean")
+    val beanInstanceJavaType = ctx.javaType(beanInstance.dataType)
+    ctx.addMutableState(beanInstanceJavaType, javaBeanInstance, "")
+
     val initialize = setters.map {
       case (setterMethod, fieldValue) =>
         val fieldGen = fieldValue.genCode(ctx)
         s"""
            ${fieldGen.code}
-           ${instanceGen.value}.$setterMethod(${fieldGen.value});
+           ${javaBeanInstance}.$setterMethod(${fieldGen.value});
          """
     }
+    val initializeCode = ctx.splitExpressions(ctx.INPUT_ROW, initialize.toSeq)
 
     val code = s"""
       ${instanceGen.code}
+      this.${javaBeanInstance} = ${instanceGen.value};
       if (!${instanceGen.isNull}) {
-        ${initialize.mkString("\n")}
+        $initializeCode
       }
      """
     ev.copy(code = code, isNull = instanceGen.isNull, value = instanceGen.value)

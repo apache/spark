@@ -33,7 +33,7 @@ trait StreamingQuery {
 
   /**
    * Returns the name of the query. This name is unique across all active queries. This can be
-   * set in the [[org.apache.spark.sql.DataStreamWriter DataStreamWriter]] as
+   * set in the `org.apache.spark.sql.streaming.DataStreamWriter` as
    * `dataframe.writeStream.queryName("query").start()`.
    * @since 2.0.0
    */
@@ -47,7 +47,7 @@ trait StreamingQuery {
   def id: UUID
 
   /**
-   * Returns the [[SparkSession]] associated with `this`.
+   * Returns the `SparkSession` associated with `this`.
    * @since 2.0.0
    */
   def sparkSession: SparkSession
@@ -95,10 +95,11 @@ trait StreamingQuery {
    * immediately (if the query was terminated by `stop()`), or throw the exception
    * immediately (if the query has terminated with exception).
    *
-   * @throws StreamingQueryException, if `this` query has terminated with an exception.
+   * @throws StreamingQueryException if the query has terminated with an exception.
    *
    * @since 2.0.0
    */
+  @throws[StreamingQueryException]
   def awaitTermination(): Unit
 
   /**
@@ -111,10 +112,11 @@ trait StreamingQuery {
    * `true` immediately (if the query was terminated by `stop()`), or throw the exception
    * immediately (if the query has terminated with exception).
    *
-   * @throws StreamingQueryException, if `this` query has terminated with an exception
+   * @throws StreamingQueryException if the query has terminated with an exception
    *
    * @since 2.0.0
    */
+  @throws[StreamingQueryException]
   def awaitTermination(timeoutMs: Long): Boolean
 
   /**

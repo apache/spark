@@ -373,8 +373,19 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
       case _ =>
-        val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
-        val tableType = if (storage.locationUri.isDefined) {
+        val existingTable = if (tableExists) {
+          Some(df.sparkSession.sessionState.catalog.getTableMetadata(tableIdent))
+        } else {
+          None
+        }
+        val storage = if (tableExists) {
+          existingTable.get.storage
+        } else {
+          DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
+        }
+        val tableType = if (tableExists) {
+          existingTable.get.tableType
+        } else if (storage.locationUri.isDefined) {
           CatalogTableType.EXTERNAL
         } else {
           CatalogTableType.MANAGED
@@ -391,12 +402,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         )
         df.sparkSession.sessionState.executePlan(
           CreateTable(tableDesc, mode, Some(df.logicalPlan))).toRdd
-        if (tableDesc.partitionColumnNames.nonEmpty &&
-            df.sparkSession.sqlContext.conf.manageFilesourcePartitions) {
-          // Need to recover partitions into the metastore so our saved data is visible.
-          df.sparkSession.sessionState.executePlan(
-            AlterTableRecoverPartitionsCommand(tableDesc.identifier)).toRdd
-        }
     }
   }
 
@@ -442,8 +447,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in JSON format ([[http://jsonlines.org/ JSON Lines text
-   * format or newline-delimited JSON]]) at the specified path.
+   * Saves the content of the [[DataFrame]] in JSON format (<a href="http://jsonlines.org/">
+   * JSON Lines text format or newline-delimited JSON</a>) at the specified path.
    * This is equivalent to:
    * {{{
    *   format("json").save(path)

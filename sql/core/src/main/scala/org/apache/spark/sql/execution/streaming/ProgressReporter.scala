@@ -51,7 +51,7 @@ trait ProgressReporter extends Logging {
   protected def availableOffsets: StreamProgress
   protected def committedOffsets: StreamProgress
   protected def sources: Seq[Source]
-  protected def currentEventTimeWatermark: Long
+  protected def streamExecutionMetadata: StreamExecutionMetadata
   protected def currentBatchId: Long
   protected def sparkSession: SparkSession
 
@@ -135,7 +135,7 @@ trait ProgressReporter extends Logging {
       timestamp = currentTriggerStartTimestamp,
       batchId = currentBatchId,
       durationMs = currentDurationsMs.toMap.mapValues(long2Long).asJava,
-      currentWatermark = currentEventTimeWatermark,
+      currentWatermark = streamExecutionMetadata.batchWatermarkMs,
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray)
 

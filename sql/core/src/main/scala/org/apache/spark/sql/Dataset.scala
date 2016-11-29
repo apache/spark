@@ -485,7 +485,10 @@ class Dataset[T] private[sql](
   def isStreaming: Boolean = logicalPlan.isStreaming
 
   /**
-   * Returns a checkpointed version of this Dataset.
+   * Eagerly checkpoint a Dataset and return the new Dataset. Checkpointing can be used to truncate
+   * the logical plan of this Dataset, which is especially useful in iterative algorithms where the
+   * plan may grow exponentially. It will be saved to files inside the checkpoint
+   * directory set with `SparkContext#setCheckpointDir`.
    *
    * @group basic
    * @since 2.1.0
@@ -495,7 +498,10 @@ class Dataset[T] private[sql](
   def checkpoint(): Dataset[T] = checkpoint(eager = true)
 
   /**
-   * Returns a checkpointed version of this Dataset.
+   * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
+   * logical plan of this Dataset, which is especially useful in iterative algorithms where the
+   * plan may grow exponentially. It will be saved to files inside the checkpoint
+   * directory set with `SparkContext#setCheckpointDir`.
    *
    * @group basic
    * @since 2.1.0

@@ -34,7 +34,7 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * :: Experimental ::
- * A class to manage all the [[StreamingQuery]] active on a [[SparkSession]].
+ * A class to manage all the [[StreamingQuery]] active on a `SparkSession`.
  *
  * @since 2.0.0
  */
@@ -91,10 +91,11 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
    * users need to stop all of them after any of them terminates with exception, and then check the
    * `query.exception()` for each query.
    *
-   * @throws StreamingQueryException, if any query has terminated with an exception
+   * @throws StreamingQueryException if any query has terminated with an exception
    *
    * @since 2.0.0
    */
+  @throws[StreamingQueryException]
   def awaitAnyTermination(): Unit = {
     awaitTerminationLock.synchronized {
       while (lastTerminatedQuery == null) {
@@ -123,10 +124,11 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
    * users need to stop all of them after any of them terminates with exception, and then check the
    * `query.exception()` for each query.
    *
-   * @throws StreamingQueryException, if any query has terminated with an exception
+   * @throws StreamingQueryException if any query has terminated with an exception
    *
    * @since 2.0.0
    */
+  @throws[StreamingQueryException]
   def awaitAnyTermination(timeoutMs: Long): Boolean = {
 
     val startTime = System.currentTimeMillis
