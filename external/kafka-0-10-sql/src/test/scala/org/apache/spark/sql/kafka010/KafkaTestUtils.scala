@@ -344,7 +344,7 @@ class KafkaTestUtils extends Logging {
       case _ =>
         false
     }
-    eventually(timeout(10.seconds)) {
+    eventually(timeout(60.seconds)) {
       assert(isPropagated, s"Partition [$topic, $partition] metadata not propagated after timeout")
     }
   }
