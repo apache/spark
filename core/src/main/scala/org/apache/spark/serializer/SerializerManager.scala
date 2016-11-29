@@ -36,7 +36,7 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
 private[spark] class SerializerManager(
     defaultSerializer: Serializer,
     conf: SparkConf,
-    val encryptionKey: Option[Array[Byte]]) {
+    encryptionKey: Option[Array[Byte]]) {
 
   def this(defaultSerializer: Serializer, conf: SparkConf) = this(defaultSerializer, conf, None)
 
@@ -74,6 +74,8 @@ private[spark] class SerializerManager(
    * Executor.updateDependencies. When the BlockManager is initialized, user level jars hasn't been
    * loaded yet. */
   private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
+
+  def encryptionEnabled: Boolean = encryptionKey.isDefined
 
   def canUseKryo(ct: ClassTag[_]): Boolean = {
     primitiveAndPrimitiveArrayClassTags.contains(ct) || ct == stringClassTag
