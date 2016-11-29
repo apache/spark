@@ -604,54 +604,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     testStream(ds)(actions: _*)
   }
 
-
-  /** Collects events from the StreamingQueryListener for testing */
-  class EventCollector extends StreamingQueryListener {
-    // to catch errors in the async listener events
-    @volatile private var asyncTestWaiter = new Waiter
-
-    @volatile var startEvent: QueryStartedEvent = null
-    @volatile var terminationEvent: QueryTerminatedEvent = null
-
-    private val _progressEvents = new mutable.Queue[StreamingQueryProgress]
-
-    def progressEvents: Seq[StreamingQueryProgress] = _progressEvents.synchronized {
-      _progressEvents.filter(_.numInputRows > 0)
-    }
-
-    def reset(): Unit = {
-      startEvent = null
-      terminationEvent = null
-      _progressEvents.clear()
-      asyncTestWaiter = new Waiter
-    }
-
-    def checkAsyncErrors(): Unit = {
-      asyncTestWaiter.await(timeout(streamingTimeout))
-    }
-
-    override def onQueryStarted(queryStarted: QueryStartedEvent): Unit = {
-      asyncTestWaiter {
-        startEvent = queryStarted
-      }
-    }
-
-    override def onQueryProgress(queryProgress: QueryProgressEvent): Unit = {
-      asyncTestWaiter {
-        assert(startEvent != null, "onQueryProgress called before onQueryStarted")
-        _progressEvents.synchronized { _progressEvents += queryProgress.progress }
-      }
-    }
-
-    override def onQueryTerminated(queryTerminated: QueryTerminatedEvent): Unit = {
-      asyncTestWaiter {
-        assert(startEvent != null, "onQueryTerminated called before onQueryStarted")
-        terminationEvent = queryTerminated
-      }
-      asyncTestWaiter.dismiss()
-    }
-  }
-
   object AwaitTerminationTester {
 
     trait ExpectedBehavior
@@ -703,6 +655,53 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
           assert(thrownException.cause.getClass === e.t.runtimeClass,
             "exception of incorrect type was throw")
       }
+    }
+  }
+
+  /** Collects events from the StreamingQueryListener for testing */
+  class EventCollector extends StreamingQueryListener {
+    // to catch errors in the async listener events
+    @volatile private var asyncTestWaiter = new Waiter
+
+    @volatile var startEvent: QueryStartedEvent = null
+    @volatile var terminationEvent: QueryTerminatedEvent = null
+
+    private val _progressEvents = new mutable.Queue[StreamingQueryProgress]
+
+    def progressEvents: Seq[StreamingQueryProgress] = _progressEvents.synchronized {
+      _progressEvents.filter(_.numInputRows > 0)
+    }
+
+    def reset(): Unit = {
+      startEvent = null
+      terminationEvent = null
+      _progressEvents.clear()
+      asyncTestWaiter = new Waiter
+    }
+
+    def checkAsyncErrors(): Unit = {
+      asyncTestWaiter.await(timeout(streamingTimeout))
+    }
+
+    override def onQueryStarted(queryStarted: QueryStartedEvent): Unit = {
+      asyncTestWaiter {
+        startEvent = queryStarted
+      }
+    }
+
+    override def onQueryProgress(queryProgress: QueryProgressEvent): Unit = {
+      asyncTestWaiter {
+        assert(startEvent != null, "onQueryProgress called before onQueryStarted")
+        _progressEvents.synchronized { _progressEvents += queryProgress.progress }
+      }
+    }
+
+    override def onQueryTerminated(queryTerminated: QueryTerminatedEvent): Unit = {
+      asyncTestWaiter {
+        assert(startEvent != null, "onQueryTerminated called before onQueryStarted")
+        terminationEvent = queryTerminated
+      }
+      asyncTestWaiter.dismiss()
     }
   }
 }

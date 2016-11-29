@@ -42,7 +42,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   after {
     spark.streams.active.foreach(_.stop())
     assert(spark.streams.active.isEmpty)
-    // assert(addedListeners.isEmpty)
+    assert(addedListeners.isEmpty)
     // Make sure we don't leak any events to the next test
   }
 
