@@ -88,12 +88,23 @@ class StreamingQuery(object):
         else:
             return self._jsq.awaitTermination()
 
+    @property
+    @since(2.1)
     def recentProgresses(self):
-        """Returns the most recent statistics on progress that has been made in this streaming
-        query.
+        """Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
+        The number of progress updates retained for each stream is configured by Spark session
+        configuration `spark.sql.streaming.numRecentProgresses`.
         """
-
         return [json.loads(p.json()) for p in self._jsq.recentProgresses()]
+
+    @property
+    @since(2.1)
+    def lastProgress(self):
+        """
+        Returns the most recent :class:`StreamingQueryProgress` update of this streaming query.
+        :return: a map
+        """
+        return json.loads(self._jsq.lastProgress().toString())
 
     @since(2.0)
     def processAllAvailable(self):

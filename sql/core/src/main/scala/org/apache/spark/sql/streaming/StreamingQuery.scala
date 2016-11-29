@@ -73,15 +73,15 @@ trait StreamingQuery {
 
   /**
    * Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
-   * The number of records retained for each stream is configured by
-   * `spark.sql.streaming.numProgressRecords`.
+   * The number of progress updates retained for each stream is configured by Spark session
+   * configuration `spark.sql.streaming.numRecentProgresses`.
    *
-   *  @since 2.1.0
+   * @since 2.1.0
    */
   def recentProgresses: Array[StreamingQueryProgress]
 
   /**
-   * Returns the most recent update on the status of the streaming query.
+   * Returns the most recent [[StreamingQueryProgress]] update of this streaming query.
    *
    * @since 2.1.0
    */
