@@ -186,7 +186,7 @@ private[spark] object TestUtils {
 
 
 /**
- * A [[SparkListener]] that detects whether spills have occurred in Spark jobs.
+ * A `SparkListener` that detects whether spills have occurred in Spark jobs.
  */
 private class SpillListener extends SparkListener {
   private val stageIdToTaskMetrics = new mutable.HashMap[Int, ArrayBuffer[TaskMetrics]]

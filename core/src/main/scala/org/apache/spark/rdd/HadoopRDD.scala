@@ -96,7 +96,7 @@ private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: Inp
  * @param minPartitions Minimum number of HadoopRDD partitions (Hadoop Splits) to generate.
  *
  * @note Instantiating this class directly is not recommended, please use
- * [[org.apache.spark.SparkContext.hadoopRDD()]]
+ * `org.apache.spark.SparkContext.hadoopRDD()`
  */
 @DeveloperApi
 class HadoopRDD[K, V](

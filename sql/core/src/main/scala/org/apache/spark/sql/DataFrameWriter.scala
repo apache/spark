@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
- * key-value stores, etc). Use [[Dataset.write]] to access this.
+ * key-value stores, etc). Use `Dataset.write` to access this.
  *
  * @since 1.4.0
  */
@@ -189,7 +189,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] at the specified path.
+   * Saves the content of the `DataFrame` at the specified path.
    *
    * @since 1.4.0
    */
@@ -199,7 +199,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] as the specified table.
+   * Saves the content of the `DataFrame` as the specified table.
    *
    * @since 1.4.0
    */
@@ -215,8 +215,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     dataSource.write(mode, df)
   }
   /**
-   * Inserts the content of the [[DataFrame]] to the specified table. It requires that
-   * the schema of the [[DataFrame]] is the same as the schema of the table.
+   * Inserts the content of the `DataFrame` to the specified table. It requires that
+   * the schema of the `DataFrame` is the same as the schema of the table.
    *
    * @note Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based
    * resolution. For example:
@@ -322,15 +322,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] as the specified table.
+   * Saves the content of the `DataFrame` as the specified table.
    *
    * In the case the table already exists, behavior of this function depends on the
    * save mode, specified by the `mode` function (default to throwing an exception).
-   * When `mode` is `Overwrite`, the schema of the [[DataFrame]] does not need to be
+   * When `mode` is `Overwrite`, the schema of the `DataFrame` does not need to be
    * the same as that of the existing table.
    *
    * When `mode` is `Append`, if there is an existing table, we will use the format and options of
-   * the existing table. The column order in the schema of the [[DataFrame]] doesn't need to be same
+   * the existing table. The column order in the schema of the `DataFrame` doesn't need to be same
    * as that of the existing table. Unlike `insertInto`, `saveAsTable` will use the column names to
    * find the correct column positions. For example:
    *
@@ -346,7 +346,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *    +---+---+
    * }}}
    *
-   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * When the DataFrame is created from a non-partitioned `HadoopFsRelation` with a single input
    * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
    * and Parquet), the table is persisted in a Hive compatible format, which means other systems
    * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
@@ -406,7 +406,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] to an external database table via JDBC. In the case the
+   * Saves the content of the `DataFrame` to an external database table via JDBC. In the case the
    * table already exists in the external database, behavior of this function depends on the
    * save mode, specified by the `mode` function (default to throwing an exception).
    *
@@ -447,7 +447,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in JSON format (<a href="http://jsonlines.org/">
+   * Saves the content of the `DataFrame` in JSON format (<a href="http://jsonlines.org/">
    * JSON Lines text format or newline-delimited JSON</a>) at the specified path.
    * This is equivalent to:
    * {{{
@@ -474,7 +474,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in Parquet format at the specified path.
+   * Saves the content of the `DataFrame` in Parquet format at the specified path.
    * This is equivalent to:
    * {{{
    *   format("parquet").save(path)
@@ -495,7 +495,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in ORC format at the specified path.
+   * Saves the content of the `DataFrame` in ORC format at the specified path.
    * This is equivalent to:
    * {{{
    *   format("orc").save(path)
@@ -516,7 +516,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in a text file at the specified path.
+   * Saves the content of the `DataFrame` in a text file at the specified path.
    * The DataFrame must have only one column that is of string type.
    * Each row becomes a new line in the output file. For example:
    * {{{
@@ -541,7 +541,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in CSV format at the specified path.
+   * Saves the content of the `DataFrame` in CSV format at the specified path.
    * This is equivalent to:
    * {{{
    *   format("csv").save(path)

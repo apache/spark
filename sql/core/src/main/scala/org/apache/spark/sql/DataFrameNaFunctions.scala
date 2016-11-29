@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
 
 
 /**
- * Functionality for working with missing data in [[DataFrame]]s.
+ * Functionality for working with missing data in `DataFrame`s.
  *
  * @since 1.3.1
  */
@@ -36,14 +36,14 @@ import org.apache.spark.sql.types._
 final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
-   * Returns a new [[DataFrame]] that drops rows containing any null or NaN values.
+   * Returns a new `DataFrame` that drops rows containing any null or NaN values.
    *
    * @since 1.3.1
    */
   def drop(): DataFrame = drop("any", df.columns)
 
   /**
-   * Returns a new [[DataFrame]] that drops rows containing null or NaN values.
+   * Returns a new `DataFrame` that drops rows containing null or NaN values.
    *
    * If `how` is "any", then drop rows containing any null or NaN values.
    * If `how` is "all", then drop rows only if every column is null or NaN for that row.
@@ -53,7 +53,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def drop(how: String): DataFrame = drop(how, df.columns)
 
   /**
-   * Returns a new [[DataFrame]] that drops rows containing any null or NaN values
+   * Returns a new `DataFrame` that drops rows containing any null or NaN values
    * in the specified columns.
    *
    * @since 1.3.1
@@ -61,7 +61,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def drop(cols: Array[String]): DataFrame = drop(cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame]] that drops rows containing any null or NaN values
+   * (Scala-specific) Returns a new `DataFrame` that drops rows containing any null or NaN values
    * in the specified columns.
    *
    * @since 1.3.1
@@ -69,7 +69,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def drop(cols: Seq[String]): DataFrame = drop(cols.size, cols)
 
   /**
-   * Returns a new [[DataFrame]] that drops rows containing null or NaN values
+   * Returns a new `DataFrame` that drops rows containing null or NaN values
    * in the specified columns.
    *
    * If `how` is "any", then drop rows containing any null or NaN values in the specified columns.
@@ -80,7 +80,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def drop(how: String, cols: Array[String]): DataFrame = drop(how, cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame]] that drops rows containing null or NaN values
+   * (Scala-specific) Returns a new `DataFrame` that drops rows containing null or NaN values
    * in the specified columns.
    *
    * If `how` is "any", then drop rows containing any null or NaN values in the specified columns.
@@ -97,7 +97,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Returns a new [[DataFrame]] that drops rows containing
+   * Returns a new `DataFrame` that drops rows containing
    * less than `minNonNulls` non-null and non-NaN values.
    *
    * @since 1.3.1
@@ -105,7 +105,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def drop(minNonNulls: Int): DataFrame = drop(minNonNulls, df.columns)
 
   /**
-   * Returns a new [[DataFrame]] that drops rows containing
+   * Returns a new `DataFrame` that drops rows containing
    * less than `minNonNulls` non-null and non-NaN values in the specified columns.
    *
    * @since 1.3.1
@@ -113,7 +113,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def drop(minNonNulls: Int, cols: Array[String]): DataFrame = drop(minNonNulls, cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame]] that drops rows containing less than
+   * (Scala-specific) Returns a new `DataFrame` that drops rows containing less than
    * `minNonNulls` non-null and non-NaN values in the specified columns.
    *
    * @since 1.3.1
@@ -126,21 +126,21 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Returns a new [[DataFrame]] that replaces null or NaN values in numeric columns with `value`.
+   * Returns a new `DataFrame` that replaces null or NaN values in numeric columns with `value`.
    *
    * @since 1.3.1
    */
   def fill(value: Double): DataFrame = fill(value, df.columns)
 
   /**
-   * Returns a new [[DataFrame]] that replaces null values in string columns with `value`.
+   * Returns a new `DataFrame` that replaces null values in string columns with `value`.
    *
    * @since 1.3.1
    */
   def fill(value: String): DataFrame = fill(value, df.columns)
 
   /**
-   * Returns a new [[DataFrame]] that replaces null or NaN values in specified numeric columns.
+   * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns.
    * If a specified column is not a numeric column, it is ignored.
    *
    * @since 1.3.1
@@ -148,7 +148,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def fill(value: Double, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame]] that replaces null or NaN values in specified
+   * (Scala-specific) Returns a new `DataFrame` that replaces null or NaN values in specified
    * numeric columns. If a specified column is not a numeric column, it is ignored.
    *
    * @since 1.3.1
@@ -167,7 +167,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Returns a new [[DataFrame]] that replaces null values in specified string columns.
+   * Returns a new `DataFrame` that replaces null values in specified string columns.
    * If a specified column is not a string column, it is ignored.
    *
    * @since 1.3.1
@@ -175,7 +175,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def fill(value: String, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame]] that replaces null values in
+   * (Scala-specific) Returns a new `DataFrame` that replaces null values in
    * specified string columns. If a specified column is not a string column, it is ignored.
    *
    * @since 1.3.1
@@ -194,7 +194,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Returns a new [[DataFrame]] that replaces null values.
+   * Returns a new `DataFrame` that replaces null values.
    *
    * The key of the map is the column name, and the value of the map is the replacement value.
    * The value must be of the following type:
@@ -213,7 +213,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def fill(valueMap: java.util.Map[String, Any]): DataFrame = fill0(valueMap.asScala.toSeq)
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame]] that replaces null values.
+   * (Scala-specific) Returns a new `DataFrame` that replaces null values.
    *
    * The key of the map is the column name, and the value of the map is the replacement value.
    * The value must be of the following type: `Int`, `Long`, `Float`, `Double`, `String`, `Boolean`.

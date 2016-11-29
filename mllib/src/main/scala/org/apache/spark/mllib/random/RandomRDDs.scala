@@ -249,8 +249,8 @@ object RandomRDDs {
    *  shape and scale.
    *
    * @param sc SparkContext used to create the RDD.
-   * @param shape shape parameter (> 0) for the gamma distribution
-   * @param scale scale parameter (> 0) for the gamma distribution
+   * @param shape shape parameter (greater than 0) for the gamma distribution
+   * @param scale scale parameter (greater than 0) for the gamma distribution
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
@@ -766,8 +766,8 @@ object RandomRDDs {
    * gamma distribution with the input shape and scale.
    *
    * @param sc SparkContext used to create the RDD.
-   * @param shape shape parameter (> 0) for the gamma distribution.
-   * @param scale scale parameter (> 0) for the gamma distribution.
+   * @param shape shape parameter (greater than 0) for the gamma distribution.
+   * @param scale scale parameter (greater than 0) for the gamma distribution.
    * @param numRows Number of Vectors in the RDD.
    * @param numCols Number of elements in each Vector.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`)

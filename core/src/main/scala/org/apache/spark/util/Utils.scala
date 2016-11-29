@@ -1674,7 +1674,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * NaN-safe version of `java.lang.Double.compare()` which allows NaN values to be compared
-   * according to semantics where NaN == NaN and NaN &gt; any non-NaN double.
+   * according to semantics where NaN == NaN and NaN is greater than any non-NaN double.
    */
   def nanSafeCompareDoubles(x: Double, y: Double): Int = {
     val xIsNan: Boolean = java.lang.Double.isNaN(x)
@@ -1688,7 +1688,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * NaN-safe version of `java.lang.Float.compare()` which allows NaN values to be compared
-   * according to semantics where NaN == NaN and NaN &gt; any non-NaN float.
+   * according to semantics where NaN == NaN and NaN is greater than any non-NaN float.
    */
   def nanSafeCompareFloats(x: Float, y: Float): Int = {
     val xIsNan: Boolean = java.lang.Float.isNaN(x)
@@ -2354,8 +2354,9 @@ private[spark] object Utils extends Logging {
    * A spark url (`spark://host:port`) is a special URI that its scheme is `spark` and only contains
    * host and port.
    *
-   * @note Throws `SparkException` if sparkUrl is invalid.
+   * @throws org.apache.spark.SparkException if sparkUrl is invalid.
    */
+  @throws(classOf[SparkException])
   def extractHostPortFromSparkUrl(sparkUrl: String): (String, Int) = {
     try {
       val uri = new java.net.URI(sparkUrl)

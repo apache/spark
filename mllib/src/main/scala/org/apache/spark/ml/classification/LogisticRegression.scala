@@ -56,8 +56,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   /**
    * Set threshold in binary classification, in range [0, 1].
    *
-   * If the estimated probability of class label 1 is &gt; threshold, then predict 1, else 0.
-   * A high threshold encourages the model to predict 0 more often;
+   * If the estimated probability of class label 1 is greater than threshold, then predict 1,
+   * else 0. A high threshold encourages the model to predict 0 more often;
    * a low threshold encourages the model to predict 1 more often.
    *
    * Note: Calling this with threshold p is equivalent to calling `setThresholds(Array(1-p, p))`.
@@ -123,7 +123,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   /**
    * Set thresholds in multiclass (or binary) classification to adjust the probability of
    * predicting each class. Array must have length equal to the number of classes,
-   * with values &gt; 0, excepting that at most one value may be 0.
+   * with values greater than 0, excepting that at most one value may be 0.
    * The class with largest value p/t is predicted, where p is the original probability of that
    * class and t is the class's threshold.
    *
@@ -210,8 +210,9 @@ class LogisticRegression @Since("1.2.0") (
 
   /**
    * Set the ElasticNet mixing parameter.
-   * For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
-   * For 0 &lt; alpha &lt; 1, the penalty is a combination of L1 and L2.
+   * For alpha = 0, the penalty is an L2 penalty.
+   * For alpha = 1, it is an L1 penalty.
+   * For alpha in (0,1), the penalty is a combination of L1 and L2.
    * Default is 0.0 which is an L2 penalty.
    *
    * @group setParam
@@ -298,7 +299,7 @@ class LogisticRegression @Since("1.2.0") (
   override def getThresholds: Array[Double] = super.getThresholds
 
   /**
-   * Suggested depth for treeAggregate (&gt;= 2).
+   * Suggested depth for treeAggregate (greater than or equal to 2).
    * If the dimensions of features or the number of partitions are large,
    * this param could be adjusted to a larger size.
    * Default is 2.
@@ -1517,7 +1518,7 @@ private class LogisticAggregator(
     }
 
     /**
-     * When maxMargin &gt; 0, the original formula could cause overflow.
+     * When maxMargin is greater than 0, the original formula could cause overflow.
      * We address this by subtracting maxMargin from all the margins, so it's guaranteed
      * that all of the new margins will be smaller than zero to prevent arithmetic overflow.
      */

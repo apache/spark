@@ -52,7 +52,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   /**
    * The words to be filtered out.
    * Default: English stop words
-   * @see [[StopWordsRemover.loadDefaultStopWords()]]
+   * @see `StopWordsRemover.loadDefaultStopWords()`
    * @group param
    */
   @Since("1.5.0")

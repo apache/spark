@@ -42,7 +42,7 @@ import org.apache.spark.rdd.RDD
  * @param outputId index of the task in this job (a job can launch tasks on only a subset of the
  *                 input RDD's partitions).
  * @param localProperties copy of thread-local properties set by the user on the driver side.
- * @param metrics a [[TaskMetrics]] that is created at driver side and sent to executor side.
+ * @param metrics a `TaskMetrics` that is created at driver side and sent to executor side.
  *
  * The parameters below are optional:
  * @param jobId id of the job this task belongs to

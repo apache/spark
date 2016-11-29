@@ -399,9 +399,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
    * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
-   * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero `sp > p`
-   * would trigger sparse representation of registers, which may reduce the memory consumption
-   * and increase accuracy when the cardinality is small.
+   * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero (`sp` is
+   * greater than `p`) would trigger sparse representation of registers, which may reduce the
+   * memory consumption and increase accuracy when the cardinality is small.
    *
    * @param p The precision value for the normal set.
    *          `p` must be a value between 4 and `sp` if `sp` is not zero (32 max).
@@ -492,8 +492,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * each time the resulting RDD is evaluated.
    *
    * @note This operation may be very expensive. If you are grouping in order to perform an
-   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
-   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
+   * aggregation (such as a sum or average) over each key, using `PairRDDFunctions.aggregateByKey`
+   * or `PairRDDFunctions.reduceByKey` will provide much better performance.
    *
    * @note As currently implemented, groupByKey must be able to hold all the key-value pairs for any
    * key in memory. If a key has too many values, it can result in an [[OutOfMemoryError]].
@@ -516,8 +516,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * each group is not guaranteed, and may even differ each time the resulting RDD is evaluated.
    *
    * @note This operation may be very expensive. If you are grouping in order to perform an
-   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
-   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
+   * aggregation (such as a sum or average) over each key, using `PairRDDFunctions.aggregateByKey`
+   * or `PairRDDFunctions.reduceByKey` will provide much better performance.
    *
    * @note As currently implemented, groupByKey must be able to hold all the key-value pairs for any
    * key in memory. If a key has too many values, it can result in an [[OutOfMemoryError]].
@@ -637,8 +637,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * evaluated.
    *
    * @note This operation may be very expensive. If you are grouping in order to perform an
-   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
-   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
+   * aggregation (such as a sum or average) over each key, using `PairRDDFunctions.aggregateByKey`
+   * or `PairRDDFunctions.reduceByKey` will provide much better performance.
    */
   def groupByKey(): RDD[(K, Iterable[V])] = self.withScope {
     groupByKey(defaultPartitioner(self))
@@ -908,7 +908,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Return an RDD with the pairs from `this` whose keys are not in `other`.
    *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
-   * RDD will be <= us.
+   * RDD will be less than or equal to us.
    */
   def subtractByKey[W: ClassTag](other: RDD[(K, W)]): RDD[(K, V)] = self.withScope {
     subtractByKey(other, self.partitioner.getOrElse(new HashPartitioner(self.partitions.length)))

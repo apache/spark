@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.{DataType, DataTypes}
 import org.apache.spark.util.Utils
 
 /**
- * Functions for registering user-defined functions. Use [[SQLContext.udf]] to access this.
+ * Functions for registering user-defined functions. Use `SQLContext.udf` to access this.
  *
  * @note The user-defined functions must be deterministic.
  *

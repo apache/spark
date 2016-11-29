@@ -164,7 +164,7 @@ abstract class TaskContext extends Serializable {
 
   /**
    * Get a local property set upstream in the driver, or null if it is missing. See also
-   * [[org.apache.spark.SparkContext.setLocalProperty]].
+   * `org.apache.spark.SparkContext.setLocalProperty`.
    */
   def getLocalProperty(key: String): String
 
@@ -174,7 +174,7 @@ abstract class TaskContext extends Serializable {
   /**
    * ::DeveloperApi::
    * Returns all metrics sources with the given name which are associated with the instance
-   * which runs the task. For more information see [[org.apache.spark.metrics.MetricsSystem!]].
+   * which runs the task. For more information see `org.apache.spark.metrics.MetricsSystem`.
    */
   @DeveloperApi
   def getMetricsSources(sourceName: String): Seq[Source]

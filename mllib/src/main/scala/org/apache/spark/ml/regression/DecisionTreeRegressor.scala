@@ -132,7 +132,8 @@ object DecisionTreeRegressor extends DefaultParamsReadable[DecisionTreeRegressor
 }
 
 /**
- * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] model for regression.
+ * <a href="http://en.wikipedia.org/wiki/Decision_tree_learning">
+ * Decision tree (Wikipedia)</a> model for regression.
  * It supports both continuous and categorical features.
  * @param rootNode  Root of the decision tree
  */

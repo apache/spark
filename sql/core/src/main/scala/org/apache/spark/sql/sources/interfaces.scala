@@ -112,7 +112,7 @@ trait SchemaRelationProvider {
 
 /**
  * ::Experimental::
- * Implemented by objects that can produce a streaming [[Source]] for a specific format or system.
+ * Implemented by objects that can produce a streaming `Source` for a specific format or system.
  *
  * @since 2.0.0
  */
@@ -143,7 +143,7 @@ trait StreamSourceProvider {
 
 /**
  * ::Experimental::
- * Implemented by objects that can produce a streaming [[Sink]] for a specific format or system.
+ * Implemented by objects that can produce a streaming `Sink` for a specific format or system.
  *
  * @since 2.0.0
  */
@@ -185,7 +185,7 @@ trait CreatableRelationProvider {
 
 /**
  * Represents a collection of tuples with a known schema. Classes that extend BaseRelation must
- * be able to produce the schema of their data in the form of a [[StructType]]. Concrete
+ * be able to produce the schema of their data in the form of a `StructType`. Concrete
  * implementation should inherit from one of the descendant `Scan` classes, which define various
  * abstract methods for execution.
  *
@@ -216,10 +216,10 @@ abstract class BaseRelation {
 
   /**
    * Whether does it need to convert the objects in Row to internal representation, for example:
-   *  java.lang.String -> UTF8String
-   *  java.lang.Decimal -> Decimal
+   *  java.lang.String to UTF8String
+   *  java.lang.Decimal to Decimal
    *
-   * If `needConversion` is `false`, buildScan() should return an [[RDD]] of [[InternalRow]]
+   * If `needConversion` is `false`, buildScan() should return an `RDD` of `InternalRow`
    *
    * @note The internal representation is not stable across releases and thus data sources outside
    * of Spark SQL should leave this as true.

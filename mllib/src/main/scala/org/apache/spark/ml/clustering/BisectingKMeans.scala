@@ -55,8 +55,8 @@ private[clustering] trait BisectingKMeansParams extends Params
   def getK: Int = $(k)
 
   /**
-   * The minimum number of points (if &gt;= 1.0) or the minimum proportion
-   * of points (if &lt; 1.0) of a divisible cluster (default: 1.0).
+   * The minimum number of points (if greater than or equal to 1.0) or the minimum proportion
+   * of points (if less than 1.0) of a divisible cluster (default: 1.0).
    * @group expertParam
    */
   @Since("2.0.0")

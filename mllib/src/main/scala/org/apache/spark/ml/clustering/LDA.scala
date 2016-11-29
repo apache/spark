@@ -78,11 +78,11 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *  - EM
    *     - Currently only supports symmetric distributions, so all values in the vector should be
    *       the same.
-   *     - Values should be &gt; 1.0
+   *     - Values should be greater than 1.0
    *     - default = uniformly (50 / k) + 1, where 50/k is common in LDA libraries and +1 follows
    *       from Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Values should be &gt;= 0
+   *     - Values should be greater than or equal to 0
    *     - default = uniformly (1.0 / k), following the implementation from
    *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    *
@@ -120,11 +120,11 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *
    * Optimizer-specific parameter settings:
    *  - EM
-   *     - Value should be &gt; 1.0
+   *     - Value should be greater than 1.0
    *     - default = 0.1 + 1, where 0.1 gives a small amount of smoothing and +1 follows
    *       Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Value should be &gt;= 0
+   *     - Value should be greater than or equal to 0
    *     - default = (1.0 / k), following the implementation from
    *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    *
@@ -247,7 +247,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *
    * Note that this should be adjusted in synch with `LDA.maxIter`
    * so the entire corpus is used.  Specifically, set both so that
-   * maxIterations * miniBatchFraction &gt;= 1.
+   * maxIterations * miniBatchFraction greater than or equal to 1.
    *
    * Note: This is the same as the `miniBatchFraction` parameter in
    *       [[org.apache.spark.mllib.clustering.OnlineLDAOptimizer]].

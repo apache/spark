@@ -350,9 +350,9 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
    * Mini-batch fraction in (0, 1], which sets the fraction of document sampled and used in
    * each iteration.
    *
-   * @note This should be adjusted in synch with [[LDA.setMaxIterations()]]
+   * @note This should be adjusted in synch with `LDA.setMaxIterations()`
    * so the entire corpus is used.  Specifically, set both so that
-   * maxIterations * miniBatchFraction >= 1.
+   * maxIterations * miniBatchFraction is at least 1.
    *
    * Default: 0.05, i.e., 5% of total documents.
    */

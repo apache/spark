@@ -76,7 +76,7 @@ private[util] sealed trait BaseReadWrite {
    */
   protected final def sqlContext: SQLContext = sparkSession.sqlContext
 
-  /** Returns the underlying [[SparkContext]]. */
+  /** Returns the underlying `SparkContext`. */
   protected final def sc: SparkContext = sparkSession.sparkContext
 }
 
@@ -169,7 +169,7 @@ trait MLWritable {
  * This only handles simple [[org.apache.spark.ml.param.Param]] types; e.g., it will not handle
  * [[org.apache.spark.sql.Dataset]].
  *
- * @see  [[DefaultParamsReadable]], the counterpart to this trait
+ * @see `DefaultParamsReadable`, the counterpart to this trait
  */
 @DeveloperApi
 trait DefaultParamsWritable extends MLWritable { self: Params =>
@@ -238,7 +238,7 @@ trait MLReadable[T] {
  * [[org.apache.spark.sql.Dataset]].
  *
  * @tparam T ML instance type
- * @see  [[DefaultParamsWritable]], the counterpart to this trait
+ * @see `DefaultParamsWritable`, the counterpart to this trait
  */
 @DeveloperApi
 trait DefaultParamsReadable[T] extends MLReadable[T] {
@@ -345,7 +345,7 @@ private[ml] object DefaultParamsReader {
   /**
    * All info from metadata file.
    *
-   * @param params  paramMap, as a [[JValue]]
+   * @param params  paramMap, as a `JValue`
    * @param metadata  All metadata, including the other fields
    * @param metadataJson  Full metadata file String (for debugging)
    */
