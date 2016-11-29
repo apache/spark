@@ -714,6 +714,17 @@ object TypeCoercion {
         // try to find the first one we can implicitly cast.
         case (_, TypeCollection(types)) => types.flatMap(implicitCast(e, _)).headOption.orNull
 
+        case (ArrayType(_, nullable), ArrayType(internalType: DataType, expectedNullable))
+          if (expectedNullable || nullable == expectedNullable) =>
+          val newChildren = e.children.map { expr =>
+            implicitCast(expr, internalType).getOrElse(null)
+          }
+          if (newChildren.forall(_ != null)) {
+            Cast(e.withNewChildren(newChildren), ArrayType(internalType, expectedNullable))
+          } else {
+            null
+          }
+
         // Else, just return the same input expression
         case _ => null
       }
