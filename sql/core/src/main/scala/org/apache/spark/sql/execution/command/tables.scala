@@ -489,7 +489,7 @@ case class DescribeTableCommand(
     if (table.tableType == CatalogTableType.VIEW) describeViewInfo(table, buffer)
 
     if (DDLUtils.isDatasourceTable(table) && table.tracksPartitionsInCatalog) {
-      append(buffer, "Partition Provider:", "Hive", "")
+      append(buffer, "Partition Provider:", "Catalog", "")
     }
   }
 
@@ -503,7 +503,8 @@ case class DescribeTableCommand(
     describeBucketingInfo(metadata, buffer)
 
     append(buffer, "Storage Desc Parameters:", "", "")
-    metadata.storage.properties.foreach { case (key, value) =>
+    val maskedProperties = CatalogUtils.maskCredentials(metadata.storage.properties)
+    maskedProperties.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
     }
   }

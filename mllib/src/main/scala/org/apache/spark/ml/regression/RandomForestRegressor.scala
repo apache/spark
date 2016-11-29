@@ -37,7 +37,8 @@ import org.apache.spark.sql.functions._
 
 
 /**
- * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] learning algorithm for regression.
+ * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a>
+ * learning algorithm for regression.
  * It supports both continuous and categorical features.
  */
 @Since("1.4.0")
@@ -132,7 +133,7 @@ object RandomForestRegressor extends DefaultParamsReadable[RandomForestRegressor
 }
 
 /**
- * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for regression.
+ * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a> model for regression.
  * It supports both continuous and categorical features.
  *
  * @param _trees  Decision trees in the ensemble.
@@ -144,7 +145,7 @@ class RandomForestRegressionModel private[ml] (
     private val _trees: Array[DecisionTreeRegressionModel],
     override val numFeatures: Int)
   extends PredictionModel[Vector, RandomForestRegressionModel]
-  with RandomForestRegressionModelParams with TreeEnsembleModel[DecisionTreeRegressionModel]
+  with RandomForestRegressorParams with TreeEnsembleModel[DecisionTreeRegressionModel]
   with MLWritable with Serializable {
 
   require(_trees.nonEmpty, "RandomForestRegressionModel requires at least 1 tree.")
@@ -181,14 +182,6 @@ class RandomForestRegressionModel private[ml] (
     _trees.map(_.rootNode.predictImpl(features).prediction).sum / getNumTrees
   }
 
-  /**
-   * Number of trees in ensemble
-   * @deprecated  Use [[getNumTrees]] instead.  This method will be removed in 2.1.0
-   */
-  // TODO: Once this is removed, then this class can inherit from RandomForestRegressorParams
-  @deprecated("Use getNumTrees instead.  This method will be removed in 2.1.0.", "2.0.0")
-  val numTrees: Int = trees.length
-
   @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestRegressionModel = {
     copyValues(new RandomForestRegressionModel(uid, _trees, numFeatures), extra).setParent(parent)
@@ -207,7 +200,7 @@ class RandomForestRegressionModel private[ml] (
    * (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
    * and follows the implementation from scikit-learn.
    *
-   * @see [[DecisionTreeRegressionModel.featureImportances]]
+   * @see `DecisionTreeRegressionModel.featureImportances`
    */
   @Since("1.5.0")
   lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)

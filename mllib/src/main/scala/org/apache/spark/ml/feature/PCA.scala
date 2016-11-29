@@ -63,7 +63,7 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
 }
 
 /**
- * PCA trains a model to project vectors to a lower dimensional space of the top [[PCA!.k]]
+ * PCA trains a model to project vectors to a lower dimensional space of the top `PCA!.k`
  * principal components.
  */
 @Since("1.5.0")
@@ -144,7 +144,7 @@ class PCAModel private[ml] (
    * Transform a vector by computed Principal Components.
    *
    * @note Vectors to be transformed must be the same length as the source vectors given
-   * to [[PCA.fit()]].
+   * to `PCA.fit()`.
    */
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {

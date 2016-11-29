@@ -44,7 +44,7 @@ import org.apache.spark.storage.StorageLevel
 
 /**
  * Model trained by [[FPGrowth]], which holds frequent itemsets.
- * @param freqItemsets frequent itemset, which is an RDD of [[FreqItemset]]
+ * @param freqItemsets frequent itemset, which is an RDD of `FreqItemset`
  * @tparam Item item type
  */
 @Since("1.3.0")
@@ -69,7 +69,7 @@ class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
    *  - human-readable (JSON) model metadata to path/metadata/
    *  - Parquet formatted data to path/data/
    *
-   * The model may be loaded using [[FPGrowthModel.load]].
+   * The model may be loaded using `FPGrowthModel.load`.
    *
    * @param sc  Spark context used to save model data.
    * @param path  Path specifying the directory in which to save this model.
@@ -147,18 +147,18 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
 
 /**
  * A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
- * [[http://dx.doi.org/10.1145/1454008.1454027 Li et al., PFP: Parallel FP-Growth for Query
- *  Recommendation]]. PFP distributes computation in such a way that each worker executes an
+ * <a href="http://dx.doi.org/10.1145/1454008.1454027">Li et al., PFP: Parallel FP-Growth for Query
+ * Recommendation</a>. PFP distributes computation in such a way that each worker executes an
  * independent group of mining tasks. The FP-Growth algorithm is described in
- * [[http://dx.doi.org/10.1145/335191.335372 Han et al., Mining frequent patterns without candidate
- *  generation]].
+ * <a href="http://dx.doi.org/10.1145/335191.335372">Han et al., Mining frequent patterns without
+ * candidate generation</a>.
  *
  * @param minSupport the minimal support level of the frequent pattern, any pattern that appears
  *                   more than (minSupport * size-of-the-dataset) times will be output
  * @param numPartitions number of partitions used by parallel FP-growth
  *
- * @see [[http://en.wikipedia.org/wiki/Association_rule_learning Association rule learning
- *       (Wikipedia)]]
+ * @see <a href="http://en.wikipedia.org/wiki/Association_rule_learning">
+ * Association rule learning (Wikipedia)</a>
  *
  */
 @Since("1.3.0")
@@ -309,7 +309,7 @@ object FPGrowth {
 
   /**
    * Frequent itemset.
-   * @param items items in this itemset. Java users should call [[FreqItemset#javaItems]] instead.
+   * @param items items in this itemset. Java users should call `FreqItemset.javaItems` instead.
    * @param freq frequency
    * @tparam Item item type
    *

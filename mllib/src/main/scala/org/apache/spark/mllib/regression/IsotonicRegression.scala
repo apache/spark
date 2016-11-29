@@ -238,23 +238,22 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
  * Sequential PAV implementation based on:
  * Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
  *   "Nearly-isotonic regression." Technometrics 53.1 (2011): 54-61.
- *   Available from [[http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf]]
+ *   Available from <a href="http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf">here</a>
  *
  * Sequential PAV parallelization based on:
  * Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset.
  *   "An approach to parallelizing isotonic regression."
  *   Applied Mathematics and Parallel Computing. Physica-Verlag HD, 1996. 141-147.
- *   Available from [[http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf]]
+ *   Available from <a href="http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf">here</a>
  *
- * @see [[http://en.wikipedia.org/wiki/Isotonic_regression Isotonic regression (Wikipedia)]]
+ * @see <a href="http://en.wikipedia.org/wiki/Isotonic_regression">Isotonic regression
+ * (Wikipedia)</a>
  */
 @Since("1.3.0")
 class IsotonicRegression private (private var isotonic: Boolean) extends Serializable {
 
   /**
    * Constructs IsotonicRegression instance with default parameter isotonic = true.
-   *
-   * @return New instance of IsotonicRegression.
    */
   @Since("1.3.0")
   def this() = this(true)

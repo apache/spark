@@ -46,7 +46,7 @@ private[util] sealed trait BaseReadWrite {
    * Sets the Spark SQLContext to use for saving/loading.
    */
   @Since("1.6.0")
-  @deprecated("Use session instead", "2.0.0")
+  @deprecated("Use session instead, This method will be removed in 2.2.0.", "2.0.0")
   def context(sqlContext: SQLContext): this.type = {
     optionSparkSession = Option(sqlContext.sparkSession)
     this
@@ -76,7 +76,7 @@ private[util] sealed trait BaseReadWrite {
    */
   protected final def sqlContext: SQLContext = sparkSession.sqlContext
 
-  /** Returns the underlying [[SparkContext]]. */
+  /** Returns the underlying `SparkContext`. */
   protected final def sc: SparkContext = sparkSession.sparkContext
 }
 
@@ -157,13 +157,13 @@ trait MLWritable {
 /**
  * :: DeveloperApi ::
  *
- * Helper trait for making simple [[Params]] types writable.  If a [[Params]] class stores
+ * Helper trait for making simple `Params` types writable.  If a `Params` class stores
  * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide
  * a default implementation of writing saved instances of the class.
  * This only handles simple [[org.apache.spark.ml.param.Param]] types; e.g., it will not handle
  * [[org.apache.spark.sql.Dataset]].
  *
- * @see  [[DefaultParamsReadable]], the counterpart to this trait
+ * @see `DefaultParamsReadable`, the counterpart to this trait
  */
 @DeveloperApi
 trait DefaultParamsWritable extends MLWritable { self: Params =>
@@ -219,14 +219,14 @@ trait MLReadable[T] {
 /**
  * :: DeveloperApi ::
  *
- * Helper trait for making simple [[Params]] types readable.  If a [[Params]] class stores
+ * Helper trait for making simple `Params` types readable.  If a `Params` class stores
  * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide
  * a default implementation of reading saved instances of the class.
  * This only handles simple [[org.apache.spark.ml.param.Param]] types; e.g., it will not handle
  * [[org.apache.spark.sql.Dataset]].
  *
  * @tparam T ML instance type
- * @see  [[DefaultParamsWritable]], the counterpart to this trait
+ * @see `DefaultParamsWritable`, the counterpart to this trait
  */
 @DeveloperApi
 trait DefaultParamsReadable[T] extends MLReadable[T] {
@@ -333,7 +333,7 @@ private[ml] object DefaultParamsReader {
   /**
    * All info from metadata file.
    *
-   * @param params  paramMap, as a [[JValue]]
+   * @param params  paramMap, as a `JValue`
    * @param metadata  All metadata, including the other fields
    * @param metadataJson  Full metadata file String (for debugging)
    */
@@ -348,7 +348,7 @@ private[ml] object DefaultParamsReader {
 
     /**
      * Get the JSON value of the [[org.apache.spark.ml.param.Param]] of the given name.
-     * This can be useful for getting a Param value before an instance of [[Params]]
+     * This can be useful for getting a Param value before an instance of `Params`
      * is available.
      */
     def getParamValue(paramName: String): JValue = {
@@ -426,7 +426,7 @@ private[ml] object DefaultParamsReader {
   }
 
   /**
-   * Load a [[Params]] instance from the given path, and return it.
+   * Load a `Params` instance from the given path, and return it.
    * This assumes the instance implements [[MLReadable]].
    */
   def loadParamsInstance[T](path: String, sc: SparkContext): T = {
@@ -442,7 +442,7 @@ private[ml] object DefaultParamsReader {
 private[ml] object MetaAlgorithmReadWrite {
   /**
    * Examine the given estimator (which may be a compound estimator) and extract a mapping
-   * from UIDs to corresponding [[Params]] instances.
+   * from UIDs to corresponding `Params` instances.
    */
   def getUidMap(instance: Params): Map[String, Params] = {
     val uidList = getUidMapImpl(instance)
