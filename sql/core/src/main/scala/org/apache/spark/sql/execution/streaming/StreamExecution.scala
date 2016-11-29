@@ -186,7 +186,7 @@ class StreamExecution(
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
 
-      postEvent(new QueryStartedEvent(id)) // Assumption: Does not throw exception.
+      postEvent(new QueryStartedEvent(id, name)) // Assumption: Does not throw exception.
 
       // Unblock starting thread
       startLatch.countDown()
@@ -259,7 +259,7 @@ class StreamExecution(
       // Notify others
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
       postEvent(
-       new QueryTerminatedEvent(id, exception.map(_.cause).map(Utils.exceptionString)))
+       new QueryTerminatedEvent(lastProgress, exception.map(_.cause).map(Utils.exceptionString)))
       terminationLatch.countDown()
     }
   }

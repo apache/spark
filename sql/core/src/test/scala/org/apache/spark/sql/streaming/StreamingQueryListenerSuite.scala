@@ -22,13 +22,15 @@ import java.util.UUID
 import scala.collection.mutable
 
 import org.scalactic.TolerantNumerics
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester._
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.util.{JsonProtocol, ManualClock}
+import org.apache.spark.util.JsonProtocol
 
 class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
@@ -50,21 +52,26 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val df = inputData.toDS().as[Long].map { 10 / _ }
     val listener = new EventCollector
     try {
+      // No events until started
       spark.streams.addListener(listener)
       assert(listener.startEvent === null)
       assert(listener.progressEvents.isEmpty)
       assert(listener.terminationEvent === null)
 
       testStream(df, OutputMode.Append)(
+
+        // Start event generated when query started
         StartStream(ProcessingTime(100), triggerClock = clock),
-        AssertOnQuery(query => {
+        AssertOnQuery { query =>
           assert(listener.startEvent !== null)
           assert(listener.startEvent.id === query.id)
+          assert(listener.startEvent.name === query.name)
           assert(listener.progressEvents.isEmpty)
           assert(listener.terminationEvent === null)
           true
-        }),
+        },
 
+        // Progress event generated when data processed
         AddData(inputData, 1, 2),
         AdvanceManualClock(100),
         CheckAnswer(10, 5),
@@ -75,23 +82,27 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           true
         },
 
+        // Termination event generated when stopped cleanly
         StopStream,
         AssertOnQuery { query =>
-          assert(listener.terminationEvent !== null)
-          assert(listener.terminationEvent.id === query.id)
-          assert(listener.terminationEvent.exception === None)
+          eventually(Timeout(streamingTimeout)) {
+            assert(listener.terminationEvent !== null)
+            assert(listener.terminationEvent.lastProgress === query.lastProgress)
+            assert(listener.terminationEvent.exception === None)
+          }
           listener.checkAsyncErrors()
           listener.reset()
           true
         },
 
+        // Termination event generated with exception message when stopped with error
         StartStream(ProcessingTime(100), triggerClock = clock),
         AddData(inputData, 0),
         AdvanceManualClock(100),
         ExpectFailure[SparkException],
         AssertOnQuery { query =>
           assert(listener.terminationEvent !== null)
-          assert(listener.terminationEvent.id === query.id)
+          assert(listener.terminationEvent.lastProgress === query.lastProgress)
           assert(listener.terminationEvent.exception.nonEmpty)
           listener.checkAsyncErrors()
           true
@@ -100,7 +111,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     } finally {
       spark.streams.removeListener(listener)
     }
-
   }
 
   test("adding and removing listener") {
@@ -170,7 +180,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("QueryStartedEvent serialization") {
-    val queryStarted = new StreamingQueryListener.QueryStartedEvent(UUID.randomUUID())
+    val queryStarted = new StreamingQueryListener.QueryStartedEvent(UUID.randomUUID(), "name")
     val json = JsonProtocol.sparkEventToJson(queryStarted)
     val newQueryStarted = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryStartedEvent]
@@ -182,17 +192,17 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val json = JsonProtocol.sparkEventToJson(event)
     val newEvent = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryProgressEvent]
-    assert(event.progress.jsonValue === newEvent.progress.jsonValue)
+    assert(event.progress.json === newEvent.progress.json)
   }
 
   test("QueryTerminatedEvent serialization") {
     val exception = new RuntimeException("exception")
     val queryQueryTerminated = new StreamingQueryListener.QueryTerminatedEvent(
-      UUID.randomUUID(), Some(exception.getMessage))
+      StreamingQueryProgressSuite.testProgress, Some(exception.getMessage))
     val json = JsonProtocol.sparkEventToJson(queryQueryTerminated)
     val newQueryTerminated = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryTerminatedEvent]
-    assert(queryQueryTerminated.id === newQueryTerminated.id)
+    assert(queryQueryTerminated.lastProgress.json === newQueryTerminated.lastProgress.json)
     assert(queryQueryTerminated.exception === newQueryTerminated.exception)
   }
 
