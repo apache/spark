@@ -324,6 +324,9 @@ class KafkaTestUtils extends Logging {
         assertTopicDeleted()
       } catch {
         case e: Throwable =>
+          // As pushing messages into Kafka updates Zookeeper asynchronously, there is a small
+          // chance that a topic will be recreated after deletion due to the asynchronous update.
+          // Hence, delete the topic and retry.
           AdminUtils.deleteTopic(zkUtils, topic)
           throw e
       }
