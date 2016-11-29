@@ -23,8 +23,8 @@ import org.apache.spark.sql.SparkSession;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.ml.feature.MinHash;
-import org.apache.spark.ml.feature.MinHashModel;
+import org.apache.spark.ml.feature.MinHashLSH;
+import org.apache.spark.ml.feature.MinHashLSHModel;
 import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.ml.linalg.VectorUDT;
 import org.apache.spark.ml.linalg.Vectors;
@@ -57,27 +57,15 @@ public class JavaApproxNearestNeighborExample {
     });
     Dataset<Row> dataFrame = spark.createDataFrame(data, schema);
 
-    MinHash mh = new MinHash()
-      .setOutputDim(5)
+    MinHashLSH mh = new MinHashLSH()
+      .setNumHashTables(5)
       .setInputCol("keys")
       .setOutputCol("values");
 
     Vector key1 = Vectors.sparse(6, new int[]{1, 3}, new double[]{1.0, 1.0, 1.0});
-    Vector key2 = Vectors.sparse(6, new int[]{5}, new double[]{1.0, 1.0, 1.0});
 
-    MinHashModel model = mh.fit(dataFrame);
+    MinHashLSHModel model = mh.fit(dataFrame);
     model.approxNearestNeighbors(dataFrame, key1, 2).show();
-
-    System.out.println("Difference between single probing and multi probing:");
-
-    System.out.println("Single probing sometimes returns less than k rows");
-    model.approxNearestNeighbors(dataFrame, key2, 3, true, "distCol").show();
-
-    System.out.println("Multi probing returns exact k rows whenever possible");
-    model.approxNearestNeighbors(dataFrame, key2, 3, false, "distCol").show();
-
-    System.out.println("Multi probing returns the whole dataset when there are not enough rows");
-    model.approxNearestNeighbors(dataFrame, key2, 4, false, "distCol").show();
     // $example off$
 
     spark.stop();

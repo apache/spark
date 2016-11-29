@@ -23,8 +23,8 @@ import org.apache.spark.sql.SparkSession;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.ml.feature.RandomProjection;
-import org.apache.spark.ml.feature.RandomProjectionModel;
+import org.apache.spark.ml.feature.BucketedRandomProjectionLSH;
+import org.apache.spark.ml.feature.BucketedRandomProjectionLSHModel;
 import org.apache.spark.ml.linalg.VectorUDT;
 import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
@@ -36,11 +36,11 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 // $example off$
 
-public class JavaRandomProjectionExample {
+public class JavaBucketedRandomProjectionLSHExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
       .builder()
-      .appName("JavaRandomProjectionExample")
+      .appName("JavaBucketedRandomProjectionLSHExample")
       .getOrCreate();
 
     // $example on$
@@ -57,13 +57,13 @@ public class JavaRandomProjectionExample {
     });
     Dataset<Row> dataFrame = spark.createDataFrame(data, schema);
 
-    RandomProjection mh = new RandomProjection()
+    BucketedRandomProjectionLSH mh = new BucketedRandomProjectionLSH()
       .setBucketLength(2.0)
-      .setOutputDim(1)
+      .setNumHashTables(1)
       .setInputCol("keys")
       .setOutputCol("values");
 
-    RandomProjectionModel model = mh.fit(dataFrame);
+    BucketedRandomProjectionLSHModel model = mh.fit(dataFrame);
     model.transform(dataFrame).show();
     // $example off$
 

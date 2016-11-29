@@ -19,7 +19,7 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-import org.apache.spark.ml.feature.MinHash
+import org.apache.spark.ml.feature.MinHashLSH
 import org.apache.spark.ml.linalg.Vectors
 // $example off$
 import org.apache.spark.sql.SparkSession
@@ -45,8 +45,8 @@ object ApproxSimilarityJoinExample {
       (5, Vectors.sparse(6, Seq((1, 1.0), (2, 1.0), (4, 1.0))))
     )).toDF("id", "keys")
 
-    val mh = new MinHash()
-      .setOutputDim(5)
+    val mh = new MinHashLSH()
+      .setNumHashTables(5)
       .setInputCol("keys")
       .setOutputCol("values")
 

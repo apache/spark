@@ -23,8 +23,8 @@ import org.apache.spark.sql.SparkSession;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.ml.feature.MinHash;
-import org.apache.spark.ml.feature.MinHashModel;
+import org.apache.spark.ml.feature.MinHashLSH;
+import org.apache.spark.ml.feature.MinHashLSHModel;
 import org.apache.spark.ml.linalg.VectorUDT;
 import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
@@ -63,12 +63,12 @@ public class JavaApproxSimilarityJoinExample {
     Dataset<Row> dfA = spark.createDataFrame(dataA, schema);
     Dataset<Row> dfB = spark.createDataFrame(dataB, schema);
 
-    MinHash mh = new MinHash()
-      .setOutputDim(5)
+    MinHashLSH mh = new MinHashLSH()
+      .setNumHashTables(5)
       .setInputCol("keys")
       .setOutputCol("values");
 
-    MinHashModel model = mh.fit(dfA);
+    MinHashLSHModel model = mh.fit(dfA);
     model.approxSimilarityJoin(dfA, dfB, 0.6).show();
 
     // Cache the transformed columns

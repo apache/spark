@@ -1514,7 +1514,7 @@ Bucketed Random Projection accepts arbitrary vectors as input features, and supp
 Refer to the [RandomProjection Scala docs](api/scala/index.html#org.apache.spark.ml.feature.RandomProjection)
 for more details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/RandomProjectionExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/BucketedRandomProjectionLSHExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -1522,7 +1522,7 @@ for more details on the API.
 Refer to the [RandomProjection Java docs](api/java/org/apache/spark/ml/feature/RandomProjection.html)
 for more details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaRandomProjectionExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaBucketedRandomProjectionLSHExample.java %}
 </div>
 </div>
 
@@ -1546,7 +1546,7 @@ The input sets for MinHash are represented as binary vectors, where the vector i
 Refer to the [MinHash Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MinHash)
 for more details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/MinHashExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/MinHashLSHExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -1554,7 +1554,7 @@ for more details on the API.
 Refer to the [MinHash Java docs](api/java/org/apache/spark/ml/feature/MinHash.html)
 for more details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaMinHashExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaMinHashLSHExample.java %}
 </div>
 </div>
 

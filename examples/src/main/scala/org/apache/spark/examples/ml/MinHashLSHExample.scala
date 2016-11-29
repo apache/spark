@@ -19,34 +19,32 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-import org.apache.spark.ml.feature.RandomProjection
+import org.apache.spark.ml.feature.MinHashLSH
 import org.apache.spark.ml.linalg.Vectors
 // $example off$
 import org.apache.spark.sql.SparkSession
 
-object RandomProjectionExample {
+object MinHashLSHExample {
   def main(args: Array[String]): Unit = {
     // Creates a SparkSession
     val spark = SparkSession
       .builder
-      .appName("RandomProjectionExample")
+      .appName("MinHashLSHExample")
       .getOrCreate()
 
     // $example on$
     val dataFrame = spark.createDataFrame(Seq(
-      (0, Vectors.dense(1.0, 1.0)),
-      (1, Vectors.dense(1.0, -1.0)),
-      (2, Vectors.dense(-1.0, -1.0)),
-      (2, Vectors.dense(-1.0, 1.0))
+      (0, Vectors.sparse(6, Seq((0, 1.0), (1, 1.0), (2, 1.0)))),
+      (1, Vectors.sparse(6, Seq((2, 1.0), (3, 1.0), (4, 1.0)))),
+      (2, Vectors.sparse(6, Seq((0, 1.0), (2, 1.0), (4, 1.0))))
     )).toDF("id", "keys")
 
-    val rp = new RandomProjection()
-      .setBucketLength(2.0)
-      .setOutputDim(1)
+    val mh = new MinHashLSH()
+      .setNumHashTables(1)
       .setInputCol("keys")
       .setOutputCol("values")
 
-    val model = rp.fit(dataFrame)
+    val model = mh.fit(dataFrame)
     model.transform(dataFrame).show()
     // $example off$
 

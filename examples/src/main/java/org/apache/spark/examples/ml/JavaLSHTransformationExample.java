@@ -23,8 +23,8 @@ import org.apache.spark.sql.SparkSession;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.ml.feature.MinHash;
-import org.apache.spark.ml.feature.MinHashModel;
+import org.apache.spark.ml.feature.MinHashLSH;
+import org.apache.spark.ml.feature.MinHashLSHModel;
 import org.apache.spark.ml.linalg.VectorUDT;
 import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
@@ -57,20 +57,19 @@ public class JavaLSHTransformationExample {
         Dataset<Row> dataFrame = spark.createDataFrame(data, schema);
 
         // Single LSH hashing
-        MinHash mhSingleHash = new MinHash()
-                .setOutputDim(1)
+        MinHashLSH mhSingleHash = new MinHashLSH()
                 .setInputCol("keys")
                 .setOutputCol("values");
-        MinHashModel modelSingleHash = mhSingleHash.fit(dataFrame);
+        MinHashLSHModel modelSingleHash = mhSingleHash.fit(dataFrame);
         // Feature transformation: add a new column for a hash value
         modelSingleHash.transform(dataFrame).show();
 
         // Use more than 1 hash functions
-        MinHash mh = new MinHash()
-                .setOutputDim(5)
+        MinHashLSH mh = new MinHashLSH()
+                .setNumHashTables(5)
                 .setInputCol("keys")
                 .setOutputCol("values");
-        MinHashModel model = mh.fit(dataFrame);
+        MinHashLSHModel model = mh.fit(dataFrame);
         // Feature Transformation: add a new column for multiple hash values
         model.transform(dataFrame).show();
         // $example off$

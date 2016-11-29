@@ -19,7 +19,7 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-import org.apache.spark.ml.feature.MinHash
+import org.apache.spark.ml.feature.MinHashLSH
 import org.apache.spark.ml.linalg.Vectors
 // $example off$
 import org.apache.spark.sql.SparkSession
@@ -40,17 +40,16 @@ object LSHTransformationExample {
     )).toDF("id", "keys")
 
     // Single LSH hashing
-    val mhSingleHash = new MinHash()
-      .setOutputDim(1)
+    val mhSingleHash = new MinHashLSH()
       .setInputCol("keys")
       .setOutputCol("values")
     val modelSingleHash = mhSingleHash.fit(dataFrame)
     // Feature transformation: add a new column for a hash value
     modelSingleHash.transform(dataFrame).show()
 
-    // Use more than 1 hash functions
-    val mh = new MinHash()
-      .setOutputDim(5)
+    // Use more than 1 hash tables
+    val mh = new MinHashLSH()
+      .setNumHashTables(5)
       .setInputCol("keys")
       .setOutputCol("values")
     val model = mh.fit(dataFrame)
