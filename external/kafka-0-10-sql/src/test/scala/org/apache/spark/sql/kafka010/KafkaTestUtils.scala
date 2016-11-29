@@ -263,6 +263,8 @@ class KafkaTestUtils extends Logging {
     props.put("log.flush.interval.messages", "1")
     props.put("replica.socket.timeout.ms", "1500")
     props.put("delete.topic.enable", "true")
+    props.put("file.delete.delay.ms", "100")
+    props.put("log.segment.delete.delay.ms", "100")
     props
   }
 
@@ -293,29 +295,34 @@ class KafkaTestUtils extends Logging {
       servers: Seq[KafkaServer]) {
     import ZkUtils._
     val topicAndPartitions = (0 until numPartitions).map(TopicAndPartition(topic, _))
-    def isDeleted(): Boolean = {
+    def assertTopicDeleted(): Unit = {
       // wait until admin path for delete topic is deleted, signaling completion of topic deletion
-      val deletePath = !zkUtils.pathExists(getDeleteTopicPath(topic))
-      val topicPath = !zkUtils.pathExists(getTopicPath(topic))
+      assert(
+        !zkUtils.pathExists(getDeleteTopicPath(topic)),
+        s"${getDeleteTopicPath(topic)} still exists")
+      assert(!zkUtils.pathExists(getTopicPath(topic)), s"${getTopicPath(topic)} still exists")
       // ensure that the topic-partition has been deleted from all brokers' replica managers
-      val replicaManager = servers.forall(server => topicAndPartitions.forall(tp =>
-        server.replicaManager.getPartition(tp.topic, tp.partition) == None))
+      assert(servers.forall(server => topicAndPartitions.forall(tp =>
+        server.replicaManager.getPartition(tp.topic, tp.partition) == None)),
+        s"topic $topic still exists in the replica manager")
       // ensure that logs from all replicas are deleted if delete topic is marked successful
-      val logManager = servers.forall(server => topicAndPartitions.forall(tp =>
-        server.getLogManager().getLog(tp).isEmpty))
+      assert(servers.forall(server => topicAndPartitions.forall(tp =>
+        server.getLogManager().getLog(tp).isEmpty)),
+        s"topic $topic still exists in log mananger")
       // ensure that topic is removed from all cleaner offsets
-      val cleaner = servers.forall(server => topicAndPartitions.forall { tp =>
+      assert(servers.forall(server => topicAndPartitions.forall { tp =>
         val checkpoints = server.getLogManager().logDirs.map { logDir =>
           new OffsetCheckpoint(new File(logDir, "cleaner-offset-checkpoint")).read()
         }
         checkpoints.forall(checkpointsPerLogDir => !checkpointsPerLogDir.contains(tp))
-      })
+      }), s"checkpoint for topic $topic still exists")
       // ensure the topic is gone
-      val deleted = !zkUtils.getAllTopics().contains(topic)
-      deletePath && topicPath && replicaManager && logManager && cleaner && deleted
+      assert(
+        !zkUtils.getAllTopics().contains(topic),
+        s"topic $topic still exists on zookeeper")
     }
     eventually(timeout(60.seconds)) {
-      assert(isDeleted, s"$topic not deleted after timeout")
+      assertTopicDeleted()
     }
   }
 
