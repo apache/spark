@@ -202,6 +202,8 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
             s"Output mode $outputMode is not supported by MemorySink")
       }
     } else {
+      // TODO: THIS IS NOT RIGHT!
+      data.collect()
       logDebug(s"Skipping already committed batch: $batchId")
     }
   }

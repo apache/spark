@@ -55,38 +55,30 @@ class KafkaSourceOffsetSuite extends OffsetSuite with SharedSQLContext {
   }
 
 
-  testWithUninterruptibleThread("OffsetSeqLog serialization - deserialization") {
+  testWithUninterruptibleThread("StreamExecutionProgressLog serialization - deserialization") {
     withTempDir { temp =>
       // use non-existent directory to test whether log make the dir
       val dir = new File(temp, "dir")
-      val metadataLog = new OffsetSeqLog(spark, dir.getAbsolutePath)
-      val batch0 = OffsetSeq.fill(kso1)
-      val batch1 = OffsetSeq.fill(kso2, kso3)
-
-      val batch0Serialized = OffsetSeq.fill(batch0.offsets.flatMap(_.map(o =>
-        SerializedOffset(o.json))): _*)
-
-      val batch1Serialized = OffsetSeq.fill(batch1.offsets.flatMap(_.map(o =>
-        SerializedOffset(o.json))): _*)
+      val metadataLog = new StreamExecutionProgressLog(spark, dir.getAbsolutePath)
+      val batch0 = new StreamExecutionProgress(OffsetSeq.fill(kso1), 100)
+      val batch1 = new StreamExecutionProgress(OffsetSeq.fill(kso2, kso3), 200)
 
       assert(metadataLog.add(0, batch0))
-      assert(metadataLog.getLatest() === Some(0 -> batch0Serialized))
-      assert(metadataLog.get(0) === Some(batch0Serialized))
+      assert(metadataLog.getLatest() === Some(0 -> batch0))
+      assert(metadataLog.get(0) === Some(batch0))
 
       assert(metadataLog.add(1, batch1))
-      assert(metadataLog.get(0) === Some(batch0Serialized))
-      assert(metadataLog.get(1) === Some(batch1Serialized))
-      assert(metadataLog.getLatest() === Some(1 -> batch1Serialized))
-      assert(metadataLog.get(None, Some(1)) ===
-        Array(0 -> batch0Serialized, 1 -> batch1Serialized))
+      assert(metadataLog.get(0) === Some(batch0))
+      assert(metadataLog.get(1) === Some(batch1))
+      assert(metadataLog.getLatest() === Some(1 -> batch1))
+      assert(metadataLog.get(None, Some(1)) === Array(0 -> batch0, 1 -> batch1))
 
       // Adding the same batch does nothing
-      metadataLog.add(1, OffsetSeq.fill(LongOffset(3)))
-      assert(metadataLog.get(0) === Some(batch0Serialized))
-      assert(metadataLog.get(1) === Some(batch1Serialized))
-      assert(metadataLog.getLatest() === Some(1 -> batch1Serialized))
-      assert(metadataLog.get(None, Some(1)) ===
-        Array(0 -> batch0Serialized, 1 -> batch1Serialized))
+      metadataLog.add(1, new StreamExecutionProgress(OffsetSeq.fill(LongOffset(3)), 300))
+      assert(metadataLog.get(0) === Some(batch0))
+      assert(metadataLog.get(1) === Some(batch1))
+      assert(metadataLog.getLatest() === Some(1 -> batch1))
+      assert(metadataLog.get(None, Some(1)) === Array(0 -> batch0, 1 -> batch1))
     }
   }
 }
