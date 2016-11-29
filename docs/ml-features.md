@@ -1492,7 +1492,32 @@ d(p,q) > r2 \Rightarrow Pr(h(p)=h(q)) \leq p2
 \]`
 This LSH family is called `(r1, r2, p1, p2)`-sensitive.
 
+In `spark.ml`, different LSH families are implemented in separate classes (i.e. MinHash), and API for feature transformation, approximate similarity join and approximate nearest neighbor are provided in each class.
+
 In this section, we call a pair of input features a false positive if the two features are hashed into the same hash bucket but they are far away in distance, and we define false negative as the pair of features when their distance are close but they are not in the same hash bucket.
+
+## Feature Transformation
+Feature Transformation is the basic functionality to add hash results as a new column. Users can specify input column name and output column name by setting `inputCol` and `outputCol`.
+
+LSH in `spark.ml` also supports multiple LSH hash tables. Users can specify the number of hash tables by setting `numHashTables`. This is also used for [OR-amplification](https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Amplification) in approximate similarity join and approximate nearest neighbor. Larger number of hash tables will increase the accuracy but takes longer running time.
+
+The type of `outputCol` is `Array[Vector]` where the dimension of the array equals `numHashTables`, and the dimensions of the vectors are currently set to 1. In future releases, we will implement AND-amplification so that users can specify the dimensions of these vectors.
+
+## Approximate Similarity Join
+Approximate similarity join takes two datasets, and approximately returns pairs of rows in the origin datasets which distance is smaller than a user-defined threshold. Approximate Similarity Join supports both joining two different datasets and self joining. Self joining will produce duplicates.
+
+Approximate similarity join accepts both transformed and untransformed datasets as input. If an untransformed dataset is used, it will be transformed automatically. In this case, the hash signature will be created as `outputCol`.
+
+In the joined dataset, the origin datasets can be queried in `datasetA` and `datasetB`. A distance column will be added in the output dataset of approximate similarity join to show the distance between each output pairs of rows in the origin datasets.
+
+## Approximate Nearest Neighbor Search
+Approximate nearest neighbor search takes a dataset and a vector, and approximately returns a specified number of rows in the dataset that are closest to the vector.
+
+Approximate nearest neighbor accepts both transformed and untransformed datasets as input. If an untransformed dataset is used, it will be transformed automatically. In this case, the hash signature will be created as `outputCol`.
+
+A distance column will be added in the output dataset of approximate nearest neighbor search to show the distance between each output row and the searched key.
+
+**Note:** Approximate nearest neighbor search will return less than k rows when there aren't enough candidates in the hash bucket.
 
 ## Bucketed Random Projection for Euclidean Distance
 
@@ -1511,18 +1536,18 @@ Bucketed Random Projection accepts arbitrary vectors as input features, and supp
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [RandomProjection Scala docs](api/scala/index.html#org.apache.spark.ml.feature.RandomProjection)
+Refer to the [BucketedRandomProjectionLSH Scala docs](api/scala/index.html#org.apache.spark.ml.feature.BucketedRandomProjectionLSH)
 for more details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/RandomProjectionExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/BucketedRandomProjectionLSHExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
-Refer to the [RandomProjection Java docs](api/java/org/apache/spark/ml/feature/RandomProjection.html)
+Refer to the [BucketedRandomProjectionLSH Java docs](api/java/org/apache/spark/ml/feature/BucketedRandomProjectionLSH.html)
 for more details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaRandomProjectionExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaBucketedRandomProjectionLSHExample.java %}
 </div>
 </div>
 
@@ -1543,74 +1568,17 @@ The input sets for MinHash are represented as binary vectors, where the vector i
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [MinHash Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MinHash)
+Refer to the [MinHashLSH Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MinHashLSH)
 for more details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/MinHashExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/MinHashLSHExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
-Refer to the [MinHash Java docs](api/java/org/apache/spark/ml/feature/MinHash.html)
+Refer to the [MinHashLSH Java docs](api/java/org/apache/spark/ml/feature/MinHashLSH.html)
 for more details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaMinHashExample.java %}
-</div>
-</div>
-
-## Feature Transformation
-Feature Transformation is the base functionality to add hash results as a new column. Users can specify input column name and output column name by setting `inputCol` and `outputCol`. LSH in `spark.ml` also supports multiple LSH hash tables. Users can specify the number of hash tables by setting `numHashTables`.
-
-The output type of feature type is `Array[Vector]` where the dimension of the array equals `numHashTables`, and the dimensions of the vectors are currently set to 1.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-{% include_example scala/org/apache/spark/examples/ml/LSHTransformationExample.scala %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-{% include_example java/org/apache/spark/examples/ml/JavaLSHTransformationExample.java %}
-</div>
-</div>
-
-## Approximate Similarity Join
-Approximate similarity join takes two datasets, and approximately returns pairs of rows in the origin datasets which distance is smaller than a user-defined threshold. Approximate Similarity Join supports both joining two different datasets and self joining.
-
-Approximate similarity join accepts both transformed and untransformed datasets as input. If an untransformed dataset is used, it will be transformed automatically. In this case, the hash signature will be created as outputCol.
-
-In the joined dataset, the origin datasets can be queried in `datasetA` and `datasetB`. A distance column will be added in the output dataset of approximate similarity join to show the distance between each output pairs of rows in the origin datasets .
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-{% include_example scala/org/apache/spark/examples/ml/ApproxSimilarityJoinExample.scala %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-{% include_example java/org/apache/spark/examples/ml/JavaApproxSimilarityJoinExample.java %}
-</div>
-</div>
-
-## Approximate Nearest Neighbor Search
-Approximate nearest neighbor search takes a dataset and a vector, and approximately returns a specified number of rows in the dataset that are closest to the vector.
-
-Approximate nearest neighbor accepts both transformed and untransformed datasets as input. If an untransformed dataset is used, it will be transformed automatically. In this case, the hash signature will be created as outputCol.
-
-A distance column will be added in the output dataset of approximate nearest neighbor search to show the distance between each output row and the searched key.
-
-**Note:** Approximate nearest neighbor search will return less than k rows when there aren't enough candidates in the hash bucket.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-{% include_example scala/org/apache/spark/examples/ml/ApproxNearestNeighborExample.scala %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-{% include_example java/org/apache/spark/examples/ml/JavaApproxNearestNeighborExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaMinHashLSHExample.java %}
 </div>
 </div>

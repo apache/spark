@@ -23,10 +23,11 @@ import org.apache.spark.sql.SparkSession;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.ml.feature.MinHash;
-import org.apache.spark.ml.feature.MinHashModel;
-import org.apache.spark.ml.linalg.VectorUDT;
+import org.apache.spark.ml.feature.MinHashLSH;
+import org.apache.spark.ml.feature.MinHashLSHModel;
+import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.ml.linalg.Vectors;
+import org.apache.spark.ml.linalg.VectorUDT;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -36,48 +37,57 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 // $example off$
 
-public class JavaApproxSimilarityJoinExample {
+public class JavaMinHashLSHExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
       .builder()
-      .appName("JavaApproxNearestNeighborExample")
+      .appName("JavaMinHashLSHExample")
       .getOrCreate();
 
     // $example on$
     List<Row> dataA = Arrays.asList(
-      RowFactory.create(0, Vectors.sparse(6, new int[]{0, 1, 2}, new double[]{1.0, 1.0, 1.0})),
-      RowFactory.create(1, Vectors.sparse(6, new int[]{2, 3, 4}, new double[]{1.0, 1.0, 1.0})),
-      RowFactory.create(2, Vectors.sparse(6, new int[]{0, 2, 4}, new double[]{1.0, 1.0, 1.0}))
+        RowFactory.create(0, Vectors.sparse(6, new int[]{0, 1, 2}, new double[]{1.0, 1.0, 1.0})),
+        RowFactory.create(1, Vectors.sparse(6, new int[]{2, 3, 4}, new double[]{1.0, 1.0, 1.0})),
+        RowFactory.create(2, Vectors.sparse(6, new int[]{0, 2, 4}, new double[]{1.0, 1.0, 1.0}))
     );
 
     List<Row> dataB = Arrays.asList(
-      RowFactory.create(0, Vectors.sparse(6, new int[]{1, 3, 5}, new double[]{1.0, 1.0, 1.0})),
-      RowFactory.create(1, Vectors.sparse(6, new int[]{2, 3, 5}, new double[]{1.0, 1.0, 1.0})),
-      RowFactory.create(2, Vectors.sparse(6, new int[]{1, 2, 4}, new double[]{1.0, 1.0, 1.0}))
+        RowFactory.create(3, Vectors.sparse(6, new int[]{1, 3, 5}, new double[]{1.0, 1.0, 1.0})),
+        RowFactory.create(4, Vectors.sparse(6, new int[]{2, 3, 5}, new double[]{1.0, 1.0, 1.0})),
+        RowFactory.create(5, Vectors.sparse(6, new int[]{1, 2, 4}, new double[]{1.0, 1.0, 1.0}))
     );
 
     StructType schema = new StructType(new StructField[]{
-      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
-      new StructField("keys", new VectorUDT(), false, Metadata.empty())
+        new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
+        new StructField("keys", new VectorUDT(), false, Metadata.empty())
     });
     Dataset<Row> dfA = spark.createDataFrame(dataA, schema);
     Dataset<Row> dfB = spark.createDataFrame(dataB, schema);
 
-    MinHash mh = new MinHash()
-      .setOutputDim(5)
-      .setInputCol("keys")
-      .setOutputCol("values");
+    Vector key = Vectors.sparse(6, new int[]{1, 3}, new double[]{1.0, 1.0, 1.0});
 
-    MinHashModel model = mh.fit(dfA);
-    model.approxSimilarityJoin(dfA, dfB, 0.6).show();
+    MinHashLSH mh = new MinHashLSH()
+        .setNumHashTables(3)
+        .setInputCol("keys")
+        .setOutputCol("values");
 
+    MinHashLSHModel model = mh.fit(dfA);
+
+    // Feature Transformation
+    model.transform(dfA).show();
     // Cache the transformed columns
-    Dataset<Row> transformedA = model.transform(dfA);
-    Dataset<Row> transformedB = model.transform(dfB);
-    model.approxSimilarityJoin(transformedA, transformedB, 0.6).show();
+    Dataset<Row> transformedA = model.transform(dfA).cache();
+    Dataset<Row> transformedB = model.transform(dfB).cache();
 
+    // Approximate similarity join
+    model.approxSimilarityJoin(dfA, dfB, 0.6).show();
+    model.approxSimilarityJoin(transformedA, transformedB, 0.6).show();
     // Self Join
     model.approxSimilarityJoin(dfA, dfA, 0.6).filter("datasetA.id < datasetB.id").show();
+
+    // Approximate nearest neighbor search
+    model.approxNearestNeighbors(dfA, key, 2).show();
+    model.approxNearestNeighbors(transformedA, key, 2).show();
     // $example off$
 
     spark.stop();
