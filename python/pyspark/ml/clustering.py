@@ -20,8 +20,6 @@ from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
-from pyspark.rdd import ignore_unicode_prefix
-
 
 __all__ = ['BisectingKMeans', 'BisectingKMeansModel', 'BisectingKMeansSummary',
            'KMeans', 'KMeansModel',
@@ -298,6 +296,17 @@ class GaussianMixtureSummary(ClusteringSummary):
         return self._call_java("probability")
 
 
+class KMeansSummary(ClusteringSummary):
+    """
+    .. note:: Experimental
+
+    Summary of KMeans.
+
+    .. versionadded:: 2.1.0
+    """
+    pass
+
+
 class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by KMeans.
@@ -318,32 +327,28 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("computeCost", dataset)
 
+    @property
     @since("2.1.0")
     def hasSummary(self):
         """
-        Return true if there exists summary of model.
+        Indicates whether a training summary exists for this model instance.
         """
-        return self.summary is not None
+        return self._call_java("hasSummary")
 
     @property
     @since("2.1.0")
     def summary(self):
         """
-        Gets summary of model on training set. Or raise exception if no summary is present.
+        Gets summary (e.g. cluster assignments, cluster sizes) of the model trained on the
+        training set. An exception is thrown if no summary exists.
         """
-        return KMeansSummary(self._call_java("summary"))
+        if self.hasSummary:
+            return KMeansSummary(self._call_java("summary"))
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
 
 
-class KMeansSummary(ClusteringSummary):
-    """
-    Summary of KMeans.
-
-    .. versionadded:: 2.1.0
-    """
-    pass
-
-
-@ignore_unicode_prefix
 @inherit_doc
 class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
              JavaMLWritable, JavaMLReadable):
@@ -357,20 +362,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     >>> df = spark.createDataFrame(data, ["features"])
     >>> kmeans = KMeans(k=2, seed=1)
     >>> model = kmeans.fit(df)
-    >>> summary = model.summary
-    >>> summary.k
-    2
-    >>> summary.predictionCol
-    u'prediction'
-    >>> summary.featuresCol
-    u'features'
-    >>> summary.clusterSizes
-    [2, 2]
-    >>> rows = summary.predictions.collect()
-    >>> rows[0].prediction == rows[1].prediction
-    True
-    >>> rows[2].prediction == rows[3].prediction
-    True
     >>> centers = model.clusterCenters()
     >>> len(centers)
     2
@@ -382,6 +373,13 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     True
     >>> rows[2].prediction == rows[3].prediction
     True
+    >>> model.hasSummary
+    True
+    >>> summary = model.summary
+    >>> summary.k
+    2
+    >>> summary.clusterSizes
+    [2, 2]
     >>> kmeans_path = temp_path + "/kmeans"
     >>> kmeans.save(kmeans_path)
     >>> kmeans2 = KMeans.load(kmeans_path)
@@ -390,6 +388,8 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     >>> model_path = temp_path + "/kmeans_model"
     >>> model.save(model_path)
     >>> model2 = KMeansModel.load(model_path)
+    >>> model2.hasSummary
+    False
     >>> model.clusterCenters()[0] == model2.clusterCenters()[0]
     array([ True,  True], dtype=bool)
     >>> model.clusterCenters()[1] == model2.clusterCenters()[1]
