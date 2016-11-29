@@ -334,12 +334,8 @@ private[spark] class MemoryStore(
     val bbos = new ChunkedByteBufferOutputStream(initialMemoryThreshold.toInt, allocator)
     redirectableStream.setOutputStream(bbos)
     val serializationStream: SerializationStream = {
-      val ser = blockId match {
-        case a: StreamBlockId =>
-          serializerManager.getSerializer(classTag, autoPick = false).newInstance()
-        case _ =>
-          serializerManager.getSerializer(classTag, autoPick = true).newInstance()
-      }
+      val autoPick = !blockId.isInstanceOf[StreamBlockId]
+      val ser = serializerManager.getSerializer(classTag, autoPick).newInstance()
       ser.serializeStream(serializerManager.wrapStream(blockId, redirectableStream))
     }
 

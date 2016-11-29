@@ -77,6 +77,10 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
     primitiveAndPrimitiveArrayClassTags.contains(ct) || ct == stringClassTag
   }
 
+  // SPARK-18617: As feature in SPARK-13990 can not be applied to Spark Streaming now. The worst
+  // result is streaming job based on `Receiver` mode can not run on Spark 2.x properly.
+  // It may be a rational choice to close `Kryo auto pick` for streaming in the first step.
+  // TODO: StreamBlock data should support kryo serializer.
   def getSerializer(ct: ClassTag[_], autoPick: Boolean): Serializer = {
     if (autoPick && canUseKryo(ct)) {
       kryoSerializer
@@ -155,12 +159,8 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
       outputStream: OutputStream,
       values: Iterator[T]): Unit = {
     val byteStream = new BufferedOutputStream(outputStream)
-    val ser = blockId match {
-      case a: StreamBlockId =>
-        getSerializer(implicitly[ClassTag[T]], autoPick = false).newInstance()
-      case _ =>
-        getSerializer(implicitly[ClassTag[T]], autoPick = true).newInstance()
-    }
+    val autoPick = !blockId.isInstanceOf[StreamBlockId]
+    val ser = getSerializer(implicitly[ClassTag[T]], autoPick).newInstance()
     ser.serializeStream(wrapStream(blockId, byteStream)).writeAll(values).close()
   }
 
@@ -176,12 +176,8 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
       classTag: ClassTag[_]): ChunkedByteBuffer = {
     val bbos = new ChunkedByteBufferOutputStream(1024 * 1024 * 4, ByteBuffer.allocate)
     val byteStream = new BufferedOutputStream(bbos)
-    val ser = blockId match {
-      case a: StreamBlockId =>
-        getSerializer(classTag, autoPick = false).newInstance()
-      case _ =>
-        getSerializer(classTag, autoPick = true).newInstance()
-    }
+    val autoPick = !blockId.isInstanceOf[StreamBlockId]
+    val ser = getSerializer(classTag, autoPick).newInstance()
     ser.serializeStream(wrapStream(blockId, byteStream)).writeAll(values).close()
     bbos.toChunkedByteBuffer
   }
@@ -195,14 +191,9 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
       inputStream: InputStream)
       (classTag: ClassTag[T]): Iterator[T] = {
     val stream = new BufferedInputStream(inputStream)
-    val ser = blockId match {
-      case a: StreamBlockId =>
-        getSerializer(classTag, autoPick = false)
-      case _ =>
-        getSerializer(classTag, autoPick = true)
-    }
-
-    ser.newInstance()
+    val autoPick = !blockId.isInstanceOf[StreamBlockId]
+    getSerializer(classTag, autoPick)
+      .newInstance()
       .deserializeStream(wrapStream(blockId, stream))
       .asIterator.asInstanceOf[Iterator[T]]
   }
