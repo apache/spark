@@ -17,7 +17,8 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark._
+import org.apache.spark.internal.config._
 
 class MesosClusterManagerSuite extends SparkFunSuite with LocalSparkContext {
     def testURL(masterURL: String, expectedClass: Class[_], coarse: Boolean) {
@@ -43,5 +44,13 @@ class MesosClusterManagerSuite extends SparkFunSuite with LocalSparkContext {
       testURL("mesos://zk://localhost:1234,localhost:2345",
           classOf[MesosFineGrainedSchedulerBackend],
           coarse = false)
+    }
+
+    test("mesos with i/o encryption throws error") {
+      val se = intercept[SparkException] {
+        val conf = new SparkConf().setAppName("test").set(IO_ENCRYPTION_ENABLED, true)
+        sc = new SparkContext("mesos", "test", conf)
+      }
+      assert(se.getCause().isInstanceOf[IllegalArgumentException])
     }
 }

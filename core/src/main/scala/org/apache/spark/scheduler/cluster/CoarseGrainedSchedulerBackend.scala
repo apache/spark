@@ -206,8 +206,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         removeExecutor(executorId, reason)
         context.reply(true)
 
-      case RetrieveSparkProps =>
-        context.reply(sparkProperties)
+      case RetrieveSparkAppConfig =>
+        val reply = SparkAppConfig(sparkProperties,
+          SparkEnv.get.securityManager.getIOEncryptionKey())
+        context.reply(reply)
     }
 
     // Make fake resource offers on all executors

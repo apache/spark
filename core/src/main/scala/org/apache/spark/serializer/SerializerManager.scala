@@ -33,7 +33,12 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
  * Component which configures serialization, compression and encryption for various Spark
  * components, including automatic selection of which [[Serializer]] to use for shuffles.
  */
-private[spark] class SerializerManager(defaultSerializer: Serializer, conf: SparkConf) {
+private[spark] class SerializerManager(
+    defaultSerializer: Serializer,
+    conf: SparkConf,
+    encryptionKey: Option[Array[Byte]]) {
+
+  def this(defaultSerializer: Serializer, conf: SparkConf) = this(defaultSerializer, conf, None)
 
   private[this] val kryoSerializer = new KryoSerializer(conf)
 
@@ -62,9 +67,6 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
   private[this] val compressRdds = conf.getBoolean("spark.rdd.compress", false)
   // Whether to compress shuffle output temporarily spilled to disk
   private[this] val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
-
-  // Whether to enable IO encryption
-  private[this] val enableIOEncryption = conf.get(IO_ENCRYPTION_ENABLED)
 
   /* The compression codec to use. Note that the "lazy" val is necessary because we want to delay
    * the initialization of the compression codec until it is first used. The reason is that a Spark
@@ -125,14 +127,18 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
    * Wrap an input stream for encryption if shuffle encryption is enabled
    */
   private[this] def wrapForEncryption(s: InputStream): InputStream = {
-    if (enableIOEncryption) CryptoStreamUtils.createCryptoInputStream(s, conf) else s
+    encryptionKey
+      .map { key => CryptoStreamUtils.createCryptoInputStream(s, conf, key) }
+      .getOrElse(s)
   }
 
   /**
    * Wrap an output stream for encryption if shuffle encryption is enabled
    */
   private[this] def wrapForEncryption(s: OutputStream): OutputStream = {
-    if (enableIOEncryption) CryptoStreamUtils.createCryptoOutputStream(s, conf) else s
+    encryptionKey
+      .map { key => CryptoStreamUtils.createCryptoOutputStream(s, conf, key) }
+      .getOrElse(s)
   }
 
   /**
