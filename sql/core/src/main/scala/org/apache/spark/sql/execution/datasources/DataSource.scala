@@ -32,6 +32,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.datasources.PartitioningUtils._
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -432,7 +433,19 @@ case class DataSource(
         val outputPath = if (allPaths.length == 1) {
           val path = new Path(allPaths.head)
           val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
-          path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+          val qualifiedPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+          // Check if a data schema does not include partition columns explicitly defined in path
+          val equality = sparkSession.sessionState.conf.resolver
+          parsePartition(qualifiedPath, false, Set.empty[Path])._1
+              .map { case PartitionValues(columnNames, _) =>
+            columnNames.foreach { columnName =>
+              if (data.schema.exists(f => equality(f.name, columnName))) {
+                throw new IllegalArgumentException(s"Cannot use the columns of the data schema " +
+                  s"${data.schema.simpleString} as partition ones, but got $path")
+              }
+            }
+          }
+          qualifiedPath
         } else {
           throw new IllegalArgumentException("Expected exactly one path to be specified, but " +
             s"got: ${allPaths.mkString(", ")}")

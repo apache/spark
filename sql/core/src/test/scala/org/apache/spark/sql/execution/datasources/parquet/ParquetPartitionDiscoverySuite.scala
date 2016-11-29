@@ -477,14 +477,13 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
   test("read partitioned table - partition key included in Parquet file") {
     withTempDir { base =>
-      for {
+      val parquetData = for {
         pi <- Seq(1, 2)
         ps <- Seq("foo", "bar")
-      } {
-        makeParquetFile(
-          (1 to 10).map(i => ParquetDataWithKey(i, pi, i.toString, ps)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
+      } yield {
+        (1 to 10).map(i => ParquetDataWithKey(i, pi, i.toString, ps))
       }
+      makeParquetFile(parquetData.flatten, base, "pi" :: "ps" :: Nil)
 
       spark.read.parquet(base.getCanonicalPath).createOrReplaceTempView("t")
 
@@ -495,7 +494,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", "bar")
-          } yield Row(i, pi, i.toString, ps))
+          } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
           sql("SELECT intField, pi FROM t"),
@@ -510,14 +509,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
-          } yield Row(i, 1, i.toString, ps))
+          } yield Row(i, i.toString, 1, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield Row(i, pi, i.toString, "foo"))
+          } yield Row(i, i.toString, pi, "foo"))
       }
     }
   }
@@ -565,14 +564,13 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
   test("read partitioned table - with nulls and partition keys are included in Parquet file") {
     withTempDir { base =>
-      for {
+      val parquetData = for {
         pi <- Seq(1, 2)
         ps <- Seq("foo", null.asInstanceOf[String])
-      } {
-        makeParquetFile(
-          (1 to 10).map(i => ParquetDataWithKey(i, pi, i.toString, ps)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
+      } yield {
+        (1 to 10).map(i => ParquetDataWithKey(i, pi, i.toString, ps))
       }
+      makeParquetFile(parquetData.flatten, base, "pi" :: "ps" :: Nil)
 
       val parquetRelation = spark.read.format("parquet").load(base.getCanonicalPath)
       parquetRelation.createOrReplaceTempView("t")
@@ -584,14 +582,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", null.asInstanceOf[String])
-          } yield Row(i, pi, i.toString, ps))
+          } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield Row(i, pi, i.toString, null))
+          } yield Row(i, i.toString, pi, null))
       }
     }
   }
@@ -967,6 +965,20 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         Row(1, 0, 0),
         Row(2, 0, 0)
       ))
+    }
+  }
+
+  test("SPARK-18108 Cannot use data columns as partition ones defined in path") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      val df = Seq((1L, 2.0)).toDF("a", "b")
+      val exception = intercept[IllegalArgumentException] {
+        // partition explicitly written
+        df.write.parquet(s"$path/a=1")
+      }
+      assert(exception.getMessage().contains("Cannot use the columns of the data schema " +
+        "struct<a:bigint,b:double> as partition ones, but got"))
     }
   }
 }
