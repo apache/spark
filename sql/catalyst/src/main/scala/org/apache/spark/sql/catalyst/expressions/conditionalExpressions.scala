@@ -67,7 +67,10 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     // place generated code of condition, true value and false value in separate methods if
     // their code combined is large
     val combinedLength = condEval.code.length + trueEval.code.length + falseEval.code.length
-    val generatedCode = if (combinedLength > 16 * 1000) {
+    val generatedCode = if (combinedLength > 1024 &&
+      // Split these expressions only if they are created from a row object
+      (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
+
       val (condFuncName, condGlobalIsNull, condGlobalValue) =
         createAndAddFunction(ctx, condEval, predicate, "evalIfCondExpr")
       val (trueFuncName, trueGlobalIsNull, trueGlobalValue) =
