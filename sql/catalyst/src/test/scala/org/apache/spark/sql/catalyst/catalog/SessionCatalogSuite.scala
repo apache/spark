@@ -981,7 +981,6 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(FunctionRegistry.builtin.functionExists("sum"))
     assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("sum")))
     assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("histogram_numeric")))
-    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("percentile")))
   }
 
   test("drop function") {
