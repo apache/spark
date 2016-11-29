@@ -575,24 +575,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(3, 2) :: Nil)
   }
 
-  test("predicate push down in left anti join") {
-    val df = sql("SELECT l.a, l.b FROM testData2 l LEFT ANTI JOIN testData r ON l.a = l.b")
-    checkAnswer(df,
-      Row(1, 2) ::
-        Row(2, 1) ::
-        Row(3, 1) ::
-        Row(3, 2) :: Nil)
-  }
-
-  test("predicate push down in ExistenceJoin") {
-    val df = sql("SELECT l.a, l.b FROM testData2 l " +
-      "where exists (select 1 from testData r where l.a = l.b) or l.a < 2")
-    checkAnswer(df,
-      Row(1, 1) ::
-        Row(1, 2) ::
-        Row(2, 2) :: Nil)
-  }
-
   test("cross join detection") {
     testData.createOrReplaceTempView("A")
     testData.createOrReplaceTempView("B")
