@@ -70,10 +70,14 @@ import org.apache.spark.util.ClosureCleaner
 @Experimental
 sealed abstract class StateSpec[KeyType, ValueType, StateType, MappedType] extends Serializable {
 
-  /** Set the RDD containing the initial states that will be used by `mapWithState` */
+  /**
+   * Set the RDD containing the initial states that will be used by `mapWithState`
+   */
   def initialState(rdd: RDD[(KeyType, StateType)]): this.type
 
-  /** Set the RDD containing the initial states that will be used by `mapWithState` */
+  /**
+   * Set the RDD containing the initial states that will be used by `mapWithState`
+   */
   def initialState(javaPairRDD: JavaPairRDD[KeyType, StateType]): this.type
 
   /**
