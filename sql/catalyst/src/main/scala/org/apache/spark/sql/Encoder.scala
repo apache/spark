@@ -77,6 +77,8 @@ trait Encoder[T] extends Serializable {
   /** Returns the schema of encoding this type of object as a Row. */
   def schema: StructType
 
-  /** A ClassTag that can be used to construct and Array to contain a collection of `T`. */
+  /**
+   * A ClassTag that can be used to construct and Array to contain a collection of `T`.
+   */
   def clsTag: ClassTag[T]
 }

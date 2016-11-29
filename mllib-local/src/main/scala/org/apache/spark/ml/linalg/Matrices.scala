@@ -85,11 +85,15 @@ sealed trait Matrix extends Serializable {
   @Since("2.0.0")
   def copy: Matrix
 
-  /** Transpose the Matrix. Returns a new `Matrix` instance sharing the same underlying data. */
+  /**
+   * Transpose the Matrix. Returns a new `Matrix` instance sharing the same underlying data.
+   */
   @Since("2.0.0")
   def transpose: Matrix
 
-  /** Convenience method for `Matrix`-`DenseMatrix` multiplication. */
+  /**
+   * Convenience method for `Matrix`-`DenseMatrix` multiplication.
+   */
   @Since("2.0.0")
   def multiply(y: DenseMatrix): DenseMatrix = {
     val C: DenseMatrix = DenseMatrix.zeros(numRows, y.numCols)
@@ -97,13 +101,17 @@ sealed trait Matrix extends Serializable {
     C
   }
 
-  /** Convenience method for `Matrix`-`DenseVector` multiplication. For binary compatibility. */
+  /**
+   * Convenience method for `Matrix`-`DenseVector` multiplication. For binary compatibility.
+   */
   @Since("2.0.0")
   def multiply(y: DenseVector): DenseVector = {
     multiply(y.asInstanceOf[Vector])
   }
 
-  /** Convenience method for `Matrix`-`Vector` multiplication. */
+  /**
+   * Convenience method for `Matrix`-`Vector` multiplication.
+   */
   @Since("2.0.0")
   def multiply(y: Vector): DenseVector = {
     val output = new DenseVector(new Array[Double](numRows))

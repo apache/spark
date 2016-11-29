@@ -176,7 +176,9 @@ object Statistics {
     ChiSqTest.chiSquaredFeatures(data)
   }
 
-  /** Java-friendly version of `chiSqTest()` */
+  /**
+   * Java-friendly version of `chiSqTest()`
+   */
   @Since("1.5.0")
   def chiSqTest(data: JavaRDD[LabeledPoint]): Array[ChiSqTestResult] = chiSqTest(data.rdd)
 
@@ -218,7 +220,9 @@ object Statistics {
     KolmogorovSmirnovTest.testOneSample(data, distName, params: _*)
   }
 
-  /** Java-friendly version of `kolmogorovSmirnovTest()` */
+  /**
+   * Java-friendly version of `kolmogorovSmirnovTest()`
+   */
   @Since("1.5.0")
   @varargs
   def kolmogorovSmirnovTest(

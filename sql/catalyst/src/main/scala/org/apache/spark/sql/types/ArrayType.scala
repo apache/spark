@@ -31,7 +31,9 @@ import org.apache.spark.sql.catalyst.util.ArrayData
  */
 @InterfaceStability.Stable
 object ArrayType extends AbstractDataType {
-  /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
+  /**
+   * Construct a [[ArrayType]] object with the given element type. The `containsNull` is true.
+   */
   def apply(elementType: DataType): ArrayType = ArrayType(elementType, containsNull = true)
 
   override private[sql] def defaultConcreteType: DataType = ArrayType(NullType, containsNull = true)

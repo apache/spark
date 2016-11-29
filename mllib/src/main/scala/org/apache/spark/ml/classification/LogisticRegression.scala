@@ -1105,7 +1105,9 @@ sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary
  */
 sealed trait LogisticRegressionSummary extends Serializable {
 
-  /** Dataframe output by the model's `transform` method. */
+  /**
+   * Dataframe output by the model's `transform` method.
+   */
   def predictions: DataFrame
 
   /** Field in "predictions" which gives the probability of each class as a vector. */

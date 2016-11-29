@@ -295,7 +295,9 @@ class BlockMatrix @Since("1.3.0") (
     new IndexedRowMatrix(rows)
   }
 
-  /** Collect the distributed matrix on the driver as a `DenseMatrix`. */
+  /**
+   * Collect the distributed matrix on the driver as a `DenseMatrix`.
+   */
   @Since("1.3.0")
   def toLocalMatrix(): Matrix = {
     require(numRows() < Int.MaxValue, "The number of rows of this matrix should be less than " +
