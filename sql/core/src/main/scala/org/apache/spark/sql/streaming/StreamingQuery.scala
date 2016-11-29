@@ -35,25 +35,27 @@ trait StreamingQuery {
    * Returns the name of the query. This name is unique across all active queries. This can be
    * set in the `org.apache.spark.sql.streaming.DataStreamWriter` as
    * `dataframe.writeStream.queryName("query").start()`.
+   *
    * @since 2.0.0
    */
   def name: String
 
   /**
-   * Returns the unique id of this query.  An id is tied to the checkpoint location and will
-   * be the same across restarts of a given streaming query.
+   * Returns the unique id of this query.
    * @since 2.1.0
    */
   def id: UUID
 
   /**
    * Returns the `SparkSession` associated with `this`.
+   *
    * @since 2.0.0
    */
   def sparkSession: SparkSession
 
   /**
    * Returns `true` if this query is actively running.
+   *
    * @since 2.0.0
    */
   def isActive: Boolean

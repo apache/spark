@@ -22,6 +22,7 @@ import java.util.UUID
 import scala.collection.mutable
 
 import org.scalactic.TolerantNumerics
+import org.scalatest.concurrent.AsyncAssertions.Waiter
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.BeforeAndAfter
@@ -30,6 +31,7 @@ import org.scalatest.PrivateMethodTester._
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.util.JsonProtocol
 
 class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
@@ -261,5 +263,52 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       PrivateMethod[StreamingQueryListenerBus]('listenerBus)
     val listenerBus = spark.streams invokePrivate listenerBusMethod()
     listenerBus.listeners.toArray.map(_.asInstanceOf[StreamingQueryListener])
+  }
+
+  /** Collects events from the StreamingQueryListener for testing */
+  class EventCollector extends StreamingQueryListener {
+    // to catch errors in the async listener events
+    @volatile private var asyncTestWaiter = new Waiter
+
+    @volatile var startEvent: QueryStartedEvent = null
+    @volatile var terminationEvent: QueryTerminatedEvent = null
+
+    private val _progressEvents = new mutable.Queue[StreamingQueryProgress]
+
+    def progressEvents: Seq[StreamingQueryProgress] = _progressEvents.synchronized {
+      _progressEvents.filter(_.numInputRows > 0)
+    }
+
+    def reset(): Unit = {
+      startEvent = null
+      terminationEvent = null
+      _progressEvents.clear()
+      asyncTestWaiter = new Waiter
+    }
+
+    def checkAsyncErrors(): Unit = {
+      asyncTestWaiter.await(timeout(streamingTimeout))
+    }
+
+    override def onQueryStarted(queryStarted: QueryStartedEvent): Unit = {
+      asyncTestWaiter {
+        startEvent = queryStarted
+      }
+    }
+
+    override def onQueryProgress(queryProgress: QueryProgressEvent): Unit = {
+      asyncTestWaiter {
+        assert(startEvent != null, "onQueryProgress called before onQueryStarted")
+        _progressEvents.synchronized { _progressEvents += queryProgress.progress }
+      }
+    }
+
+    override def onQueryTerminated(queryTerminated: QueryTerminatedEvent): Unit = {
+      asyncTestWaiter {
+        assert(startEvent != null, "onQueryTerminated called before onQueryStarted")
+        terminationEvent = queryTerminated
+      }
+      asyncTestWaiter.dismiss()
+    }
   }
 }

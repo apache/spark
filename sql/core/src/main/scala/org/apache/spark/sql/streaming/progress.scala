@@ -33,7 +33,7 @@ import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
- * Statistics about updates made to a stateful operators in a [[StreamingQuery]] in a trigger.
+ * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
  */
 @Experimental
 class StateOperatorProgress private[sql](
@@ -47,8 +47,8 @@ class StateOperatorProgress private[sql](
 
 /**
  * :: Experimental ::
- * Information about progress that has been made in the execution of a
- * [[StreamingQuery]]. Each event relates to processing done for a single trigger of the streaming
+ * Information about progress made in the execution of a [[StreamingQuery]] during
+ * a trigger. Each event relates to processing done for a single trigger of the streaming
  * query. Events are emitted even when no new data is available to be processed.
  *
  * @param id A unique id of the query.
@@ -69,7 +69,7 @@ class StreamingQueryProgress private[sql](
   val id: UUID,
   val name: String,
   val timestamp: Long,
-  val batchId: Long, // TODO: epoch?
+  val batchId: Long,
   val durationMs: ju.Map[String, java.lang.Long],
   val currentWatermark: Long,
   val stateOperators: Array[StateOperatorProgress],
@@ -118,8 +118,8 @@ class StreamingQueryProgress private[sql](
 
 /**
  * :: Experimental ::
- * Information about progress that has been made for a source in the execution of a
- * [[StreamingQuery]]. See [[StreamingQueryProgress]] for more information.
+ * Information about progress made for a source in the execution of a [[StreamingQuery]]
+ * during a trigger. See [[StreamingQueryProgress]] for more information.
  *
  * @param description            Description of the source.
  * @param startOffset            The starting offset for data being read.
@@ -169,11 +169,10 @@ class SourceProgress protected[sql](
 
 /**
  * :: Experimental ::
- * Information about progress that has been made for a sink in the execution of a
- * [[StreamingQuery]]. See [[StreamingQueryProgress]] for more information.
+ * Information about progress made for a sink in the execution of a [[StreamingQuery]]
+ * during a trigger. See [[StreamingQueryProgress]] for more information.
  *
  * @param description Description of the source corresponding to this status.
- *
  * @since 2.1.0
  */
 @Experimental

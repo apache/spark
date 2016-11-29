@@ -288,7 +288,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
   }
 }
 
-object StreamingQueryManager {
+private object StreamingQueryManager {
   private val _nextId = new AtomicLong(0)
-  def nextId: Long = _nextId.getAndIncrement()
+  private def nextId: Long = _nextId.getAndIncrement()
 }
