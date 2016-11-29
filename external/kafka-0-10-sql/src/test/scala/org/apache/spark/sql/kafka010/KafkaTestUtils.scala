@@ -322,7 +322,13 @@ class KafkaTestUtils extends Logging {
         s"topic $topic still exists on zookeeper")
     }
     eventually(timeout(60.seconds)) {
-      assertTopicDeleted()
+      try {
+        assertTopicDeleted()
+      } catch {
+        case e: Throwable =>
+          AdminUtils.deleteTopic(zkUtils, topic)
+          throw e
+      }
     }
   }
 
