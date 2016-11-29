@@ -28,11 +28,11 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTablePartition, CatalogTableType, SessionCatalog}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
@@ -202,6 +202,7 @@ case class DropTableCommand(
       sparkSession.sharedState.cacheManager.uncacheQuery(
         sparkSession.table(tableName.quotedString))
     } catch {
+      case _: NoSuchTableException if ifExists =>
       case NonFatal(e) => log.warn(e.toString, e)
     }
     catalog.refreshTable(tableName)
@@ -500,7 +501,7 @@ case class AlterTableRecoverPartitionsCommand(
         s"location provided: $tableIdentWithDB")
     }
 
-    val root = new Path(table.storage.locationUri.get)
+    val root = new Path(table.location)
     logInfo(s"Recover all the partitions in $root")
     val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
 
@@ -558,9 +559,9 @@ case class AlterTableRecoverPartitionsCommand(
       val name = st.getPath.getName
       if (st.isDirectory && name.contains("=")) {
         val ps = name.split("=", 2)
-        val columnName = PartitioningUtils.unescapePathName(ps(0))
+        val columnName = ExternalCatalogUtils.unescapePathName(ps(0))
         // TODO: Validate the value
-        val value = PartitioningUtils.unescapePathName(ps(1))
+        val value = ExternalCatalogUtils.unescapePathName(ps(1))
         if (resolver(columnName, partitionNames.head)) {
           scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(partitionNames.head -> value),
             partitionNames.drop(1), threshold, resolver)

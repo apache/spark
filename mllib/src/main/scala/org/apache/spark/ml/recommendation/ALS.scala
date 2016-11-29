@@ -678,6 +678,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       checkpointInterval: Int = 10,
       seed: Long = 0L)(
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
+    require(!ratings.isEmpty(), s"No ratings available from $ratings")
     require(intermediateRDDStorageLevel != StorageLevel.NONE,
       "ALS is not designed to run without persisting intermediate RDDs.")
     val sc = ratings.sparkContext

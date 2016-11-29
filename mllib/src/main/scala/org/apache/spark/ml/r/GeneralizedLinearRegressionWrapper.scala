@@ -23,11 +23,17 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
+import org.apache.spark.ml.feature.{IndexToString, RFormula}
 import org.apache.spark.ml.regression._
+import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 private[r] class GeneralizedLinearRegressionWrapper private (
     val pipeline: PipelineModel,
@@ -42,6 +48,8 @@ private[r] class GeneralizedLinearRegressionWrapper private (
     val rNumIterations: Int,
     val isLoaded: Boolean = false) extends MLWritable {
 
+  import GeneralizedLinearRegressionWrapper._
+
   private val glm: GeneralizedLinearRegressionModel =
     pipeline.stages(1).asInstanceOf[GeneralizedLinearRegressionModel]
 
@@ -52,7 +60,16 @@ private[r] class GeneralizedLinearRegressionWrapper private (
   def residuals(residualsType: String): DataFrame = glm.summary.residuals(residualsType)
 
   def transform(dataset: Dataset[_]): DataFrame = {
-    pipeline.transform(dataset).drop(glm.getFeaturesCol)
+    if (rFamily == "binomial") {
+      pipeline.transform(dataset)
+        .drop(PREDICTED_LABEL_PROB_COL)
+        .drop(PREDICTED_LABEL_INDEX_COL)
+        .drop(glm.getFeaturesCol)
+        .drop(glm.getLabelCol)
+    } else {
+      pipeline.transform(dataset)
+        .drop(glm.getFeaturesCol)
+    }
   }
 
   override def write: MLWriter =
@@ -61,6 +78,10 @@ private[r] class GeneralizedLinearRegressionWrapper private (
 
 private[r] object GeneralizedLinearRegressionWrapper
   extends MLReadable[GeneralizedLinearRegressionWrapper] {
+
+  val PREDICTED_LABEL_PROB_COL = "pred_label_prob"
+  val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
+  val PREDICTED_LABEL_COL = "prediction"
 
   def fit(
       formula: String,
@@ -71,9 +92,9 @@ private[r] object GeneralizedLinearRegressionWrapper
       maxIter: Int,
       weightCol: String,
       regParam: Double): GeneralizedLinearRegressionWrapper = {
-    val rFormula = new RFormula()
-      .setFormula(formula)
-    RWrapperUtils.checkDataColumns(rFormula, data)
+    val rFormula = new RFormula().setFormula(formula)
+    if (family == "binomial") rFormula.setForceIndexLabel(true)
+    checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
     // get labels and feature names from output schema
     val schema = rFormulaModel.transform(data).schema
@@ -90,9 +111,28 @@ private[r] object GeneralizedLinearRegressionWrapper
       .setWeightCol(weightCol)
       .setRegParam(regParam)
       .setFeaturesCol(rFormula.getFeaturesCol)
-    val pipeline = new Pipeline()
-      .setStages(Array(rFormulaModel, glr))
-      .fit(data)
+      .setLabelCol(rFormula.getLabelCol)
+    val pipeline = if (family == "binomial") {
+      // Convert prediction from probability to label index.
+      val probToPred = new ProbabilityToPrediction()
+        .setInputCol(PREDICTED_LABEL_PROB_COL)
+        .setOutputCol(PREDICTED_LABEL_INDEX_COL)
+      // Convert prediction from label index to original label.
+      val labelAttr = Attribute.fromStructField(schema(rFormulaModel.getLabelCol))
+        .asInstanceOf[NominalAttribute]
+      val labels = labelAttr.values.get
+      val idxToStr = new IndexToString()
+        .setInputCol(PREDICTED_LABEL_INDEX_COL)
+        .setOutputCol(PREDICTED_LABEL_COL)
+        .setLabels(labels)
+
+      new Pipeline()
+        .setStages(Array(rFormulaModel, glr.setPredictionCol(PREDICTED_LABEL_PROB_COL),
+          probToPred, idxToStr))
+        .fit(data)
+    } else {
+      new Pipeline().setStages(Array(rFormulaModel, glr)).fit(data)
+    }
 
     val glm: GeneralizedLinearRegressionModel =
       pipeline.stages(1).asInstanceOf[GeneralizedLinearRegressionModel]
@@ -104,30 +144,38 @@ private[r] object GeneralizedLinearRegressionWrapper
       features
     }
 
-    val rCoefficientStandardErrors = if (glm.getFitIntercept) {
-      Array(summary.coefficientStandardErrors.last) ++
-        summary.coefficientStandardErrors.dropRight(1)
-    } else {
-      summary.coefficientStandardErrors
-    }
+    val rCoefficients: Array[Double] = if (summary.isNormalSolver) {
+      val rCoefficientStandardErrors = if (glm.getFitIntercept) {
+        Array(summary.coefficientStandardErrors.last) ++
+          summary.coefficientStandardErrors.dropRight(1)
+      } else {
+        summary.coefficientStandardErrors
+      }
 
-    val rTValues = if (glm.getFitIntercept) {
-      Array(summary.tValues.last) ++ summary.tValues.dropRight(1)
-    } else {
-      summary.tValues
-    }
+      val rTValues = if (glm.getFitIntercept) {
+        Array(summary.tValues.last) ++ summary.tValues.dropRight(1)
+      } else {
+        summary.tValues
+      }
 
-    val rPValues = if (glm.getFitIntercept) {
-      Array(summary.pValues.last) ++ summary.pValues.dropRight(1)
-    } else {
-      summary.pValues
-    }
+      val rPValues = if (glm.getFitIntercept) {
+        Array(summary.pValues.last) ++ summary.pValues.dropRight(1)
+      } else {
+        summary.pValues
+      }
 
-    val rCoefficients: Array[Double] = if (glm.getFitIntercept) {
-      Array(glm.intercept) ++ glm.coefficients.toArray ++
-        rCoefficientStandardErrors ++ rTValues ++ rPValues
+      if (glm.getFitIntercept) {
+        Array(glm.intercept) ++ glm.coefficients.toArray ++
+          rCoefficientStandardErrors ++ rTValues ++ rPValues
+      } else {
+        glm.coefficients.toArray ++ rCoefficientStandardErrors ++ rTValues ++ rPValues
+      }
     } else {
-      glm.coefficients.toArray ++ rCoefficientStandardErrors ++ rTValues ++ rPValues
+      if (glm.getFitIntercept) {
+        Array(glm.intercept) ++ glm.coefficients.toArray
+      } else {
+        glm.coefficients.toArray
+      }
     }
 
     val rDispersion: Double = summary.dispersion
@@ -199,4 +247,28 @@ private[r] object GeneralizedLinearRegressionWrapper
         rAic, rNumIterations, isLoaded = true)
     }
   }
+}
+
+/**
+ * This utility transformer converts the predicted value of GeneralizedLinearRegressionModel
+ * with "binomial" family from probability to prediction according to threshold 0.5.
+ */
+private[r] class ProbabilityToPrediction private[r] (override val uid: String)
+  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
+
+  def this() = this(Identifiable.randomUID("probToPred"))
+
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  override def transformSchema(schema: StructType): StructType = {
+    StructType(schema.fields :+ StructField($(outputCol), DoubleType))
+  }
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    dataset.withColumn($(outputCol), round(col($(inputCol))))
+  }
+
+  override def copy(extra: ParamMap): ProbabilityToPrediction = defaultCopy(extra)
 }

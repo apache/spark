@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.streaming.test
 
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
@@ -28,7 +29,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, StreamingQuery, StreamTest}
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 object LastOptions {
@@ -466,5 +467,112 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     val sq = df.writeStream.format("console").start()
     sq.stop()
+  }
+
+  test("MemorySink can recover from a checkpoint in Complete Mode") {
+    import testImplicits._
+    val ms = new MemoryStream[Int](0, sqlContext)
+    val df = ms.toDF().toDF("a")
+    val checkpointLoc = newMetadataDir
+    val checkpointDir = new File(checkpointLoc, "offsets")
+    checkpointDir.mkdirs()
+    assert(checkpointDir.exists())
+    val tableName = "test"
+    def startQuery: StreamingQuery = {
+      df.groupBy("a")
+        .count()
+        .writeStream
+        .format("memory")
+        .queryName(tableName)
+        .option("checkpointLocation", checkpointLoc)
+        .outputMode("complete")
+        .start()
+    }
+    // no exception here
+    val q = startQuery
+    ms.addData(0, 1)
+    q.processAllAvailable()
+    q.stop()
+
+    checkAnswer(
+      spark.table(tableName),
+      Seq(Row(0, 1), Row(1, 1))
+    )
+    spark.sql(s"drop table $tableName")
+    // verify table is dropped
+    intercept[AnalysisException](spark.table(tableName).collect())
+    val q2 = startQuery
+    ms.addData(0)
+    q2.processAllAvailable()
+    checkAnswer(
+      spark.table(tableName),
+      Seq(Row(0, 2), Row(1, 1))
+    )
+
+    q2.stop()
+  }
+
+  test("append mode memory sink's do not support checkpoint recovery") {
+    import testImplicits._
+    val ms = new MemoryStream[Int](0, sqlContext)
+    val df = ms.toDF().toDF("a")
+    val checkpointLoc = newMetadataDir
+    val checkpointDir = new File(checkpointLoc, "offsets")
+    checkpointDir.mkdirs()
+    assert(checkpointDir.exists())
+
+    val e = intercept[AnalysisException] {
+      df.writeStream
+        .format("memory")
+        .queryName("test")
+        .option("checkpointLocation", checkpointLoc)
+        .outputMode("append")
+        .start()
+    }
+    assert(e.getMessage.contains("does not support recovering"))
+    assert(e.getMessage.contains("checkpoint location"))
+  }
+
+  test("SPARK-18510: use user specified types for partition columns in file sources") {
+    import org.apache.spark.sql.functions.udf
+    import testImplicits._
+    withTempDir { src =>
+      val createArray = udf { (length: Long) =>
+        for (i <- 1 to length.toInt) yield i.toString
+      }
+      spark.range(4).select(createArray('id + 1) as 'ex, 'id, 'id % 4 as 'part).coalesce(1).write
+        .partitionBy("part", "id")
+        .mode("overwrite")
+        .parquet(src.toString)
+      // Specify a random ordering of the schema, partition column in the middle, etc.
+      // Also let's say that the partition columns are Strings instead of Longs.
+      // partition columns should go to the end
+      val schema = new StructType()
+        .add("id", StringType)
+        .add("ex", ArrayType(StringType))
+
+      val sdf = spark.readStream
+        .schema(schema)
+        .format("parquet")
+        .load(src.toString)
+
+      assert(sdf.schema.toList === List(
+        StructField("ex", ArrayType(StringType)),
+        StructField("part", IntegerType), // inferred partitionColumn dataType
+        StructField("id", StringType))) // used user provided partitionColumn dataType
+
+      val sq = sdf.writeStream
+        .queryName("corruption_test")
+        .format("memory")
+        .start()
+      sq.processAllAvailable()
+      checkAnswer(
+        spark.table("corruption_test"),
+        // notice how `part` is ordered before `id`
+        Row(Array("1"), 0, "0") :: Row(Array("1", "2"), 1, "1") ::
+          Row(Array("1", "2", "3"), 2, "2") :: Row(Array("1", "2", "3", "4"), 3, "3") :: Nil
+      )
+      sq.stop()
+    }
   }
 }

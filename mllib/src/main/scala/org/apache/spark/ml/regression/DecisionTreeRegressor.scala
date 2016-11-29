@@ -38,8 +38,8 @@ import org.apache.spark.sql.functions._
 
 
 /**
- * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
- * for regression.
+ * <a href="http://en.wikipedia.org/wiki/Decision_tree_learning">Decision tree</a>
+ * learning algorithm for regression.
  * It supports both continuous and categorical features.
  */
 @Since("1.4.0")
@@ -207,9 +207,9 @@ class DecisionTreeRegressionModel private[ml] (
    *     where gain is scaled by the number of instances passing through node
    *   - Normalize importances for tree to sum to 1.
    *
-   * Note: Feature importance for single decision trees can have high variance due to
-   *       correlated predictor variables. Consider using a [[RandomForestRegressor]]
-   *       to determine feature importance instead.
+   * @note Feature importance for single decision trees can have high variance due to
+   * correlated predictor variables. Consider using a [[RandomForestRegressor]]
+   * to determine feature importance instead.
    */
   @Since("2.0.0")
   lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(this, numFeatures)

@@ -222,9 +222,9 @@ The `sql` function enables applications to run SQL queries programmatically and 
 
 ## Global Temporary View
 
-Temporay views in Spark SQL are session-scoped and will disappear if the session that creates it
+Temporary views in Spark SQL are session-scoped and will disappear if the session that creates it
 terminates. If you want to have a temporary view that is shared among all sessions and keep alive
-until the Spark application terminiates, you can create a global temporary view. Global temporary
+until the Spark application terminates, you can create a global temporary view. Global temporary
 view is tied to a system preserved database `global_temp`, and we must use the qualified name to
 refer it, e.g. `SELECT * FROM global_temp.view1`.
 
@@ -1029,7 +1029,7 @@ following command:
 bin/spark-shell --driver-class-path postgresql-9.4.1207.jar --jars postgresql-9.4.1207.jar
 {% endhighlight %}
 
-Tables from the remote database can be loaded as a DataFrame or Spark SQL Temporary table using
+Tables from the remote database can be loaded as a DataFrame or Spark SQL temporary view using
 the Data Sources API. Users can specify the JDBC connection properties in the data source options.
 <code>user</code> and <code>password</code> are normally provided as connection properties for
 logging into the data sources. In addition to the connection properties, Spark also supports
@@ -1061,15 +1061,26 @@ the following case-sensitive options:
   </tr>
 
   <tr>
-    <td><code>partitionColumn, lowerBound, upperBound, numPartitions</code></td>
+    <td><code>partitionColumn, lowerBound, upperBound</code></td>
     <td>
-      These options must all be specified if any of them is specified. They describe how to
-      partition the table when reading in parallel from multiple workers.
+      These options must all be specified if any of them is specified. In addition,
+      <code>numPartitions</code> must be specified. They describe how to partition the table when
+      reading in parallel from multiple workers.
       <code>partitionColumn</code> must be a numeric column from the table in question. Notice
       that <code>lowerBound</code> and <code>upperBound</code> are just used to decide the
       partition stride, not for filtering the rows in table. So all rows in the table will be
       partitioned and returned. This option applies only to reading.
     </td>
+  </tr>
+
+  <tr>
+     <td><code>numPartitions</code></td>
+     <td>
+       The maximum number of partitions that can be used for parallelism in table reading and
+       writing. This also determines the maximum number of concurrent JDBC connections.
+       If the number of partitions to write exceeds this limit, we decrease it to this limit by
+       calling <code>coalesce(numPartitions)</code> before writing.
+     </td>
   </tr>
 
   <tr>
@@ -1089,7 +1100,7 @@ the following case-sensitive options:
   <tr>
      <td><code>isolationLevel</code></td>
      <td>
-       The transaction isolation level, which applies to current connection. It can be one of <code>NONE<code>, <code>READ_COMMITTED<code>, <code>READ_UNCOMMITTED<code>, <code>REPEATABLE_READ<code>, or <code>SERIALIZABLE<code>, corresponding to standard transaction isolation levels defined by JDBC's Connection object, with default of <code>READ_UNCOMMITTED<code>. This option applies only to writing. Please refer the documentation in <code>java.sql.Connection</code>.
+       The transaction isolation level, which applies to current connection. It can be one of <code>NONE</code>, <code>READ_COMMITTED</code>, <code>READ_UNCOMMITTED</code>, <code>REPEATABLE_READ</code>, or <code>SERIALIZABLE</code>, corresponding to standard transaction isolation levels defined by JDBC's Connection object, with default of <code>READ_UNCOMMITTED</code>. This option applies only to writing. Please refer the documentation in <code>java.sql.Connection</code>.
      </td>
    </tr>
 

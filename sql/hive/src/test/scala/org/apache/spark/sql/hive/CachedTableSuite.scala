@@ -101,13 +101,16 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sql("DROP TABLE IF EXISTS nonexistantTable")
   }
 
-  test("correct error on uncache of nonexistant tables") {
+  test("uncache of nonexistant tables") {
+    // make sure table doesn't exist
+    intercept[NoSuchTableException](spark.table("nonexistantTable"))
     intercept[NoSuchTableException] {
       spark.catalog.uncacheTable("nonexistantTable")
     }
     intercept[NoSuchTableException] {
       sql("UNCACHE TABLE nonexistantTable")
     }
+    sql("UNCACHE TABLE IF EXISTS nonexistantTable")
   }
 
   test("no error on uncache of non-cached table") {

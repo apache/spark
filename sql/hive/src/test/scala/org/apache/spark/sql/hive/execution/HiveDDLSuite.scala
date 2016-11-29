@@ -23,11 +23,10 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -426,7 +425,7 @@ class HiveDDLSuite
     sql("CREATE TABLE tab1 (height INT, length INT) PARTITIONED BY (a INT, b INT)")
     val part1 = Map("a" -> "1", "b" -> "5")
     val part2 = Map("a" -> "2", "b" -> "6")
-    val root = new Path(catalog.getTableMetadata(tableIdent).storage.locationUri.get)
+    val root = new Path(catalog.getTableMetadata(tableIdent).location)
     val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
     // valid
     fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
@@ -620,53 +619,46 @@ class HiveDDLSuite
   }
 
   private def dropDatabase(cascade: Boolean, tableExists: Boolean): Unit = {
-    withTempPath { tmpDir =>
-      val path = tmpDir.toString
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val dbName = "db1"
-        val fs = new Path(path).getFileSystem(spark.sessionState.newHadoopConf())
-        val dbPath = new Path(path)
-        // the database directory does not exist
-        assert(!fs.exists(dbPath))
+    val dbName = "db1"
+    val dbPath = new Path(spark.sessionState.conf.warehousePath)
+    val fs = dbPath.getFileSystem(spark.sessionState.newHadoopConf())
 
-        sql(s"CREATE DATABASE $dbName")
-        val catalog = spark.sessionState.catalog
-        val expectedDBLocation = "file:" + appendTrailingSlash(dbPath.toString) + s"$dbName.db"
-        val db1 = catalog.getDatabaseMetadata(dbName)
-        assert(db1 == CatalogDatabase(
-          dbName,
-          "",
-          expectedDBLocation,
-          Map.empty))
-        // the database directory was created
-        assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
-        sql(s"USE $dbName")
+    sql(s"CREATE DATABASE $dbName")
+    val catalog = spark.sessionState.catalog
+    val expectedDBLocation = "file:" + appendTrailingSlash(dbPath.toString) + s"$dbName.db"
+    val db1 = catalog.getDatabaseMetadata(dbName)
+    assert(db1 == CatalogDatabase(
+      dbName,
+      "",
+      expectedDBLocation,
+      Map.empty))
+    // the database directory was created
+    assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
+    sql(s"USE $dbName")
 
-        val tabName = "tab1"
-        assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
-        sql(s"CREATE TABLE $tabName as SELECT 1")
-        assert(tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
+    val tabName = "tab1"
+    assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
+    sql(s"CREATE TABLE $tabName as SELECT 1")
+    assert(tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
 
-        if (!tableExists) {
-          sql(s"DROP TABLE $tabName")
-          assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
-        }
+    if (!tableExists) {
+      sql(s"DROP TABLE $tabName")
+      assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
+    }
 
-        sql(s"USE default")
-        val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
-        if (tableExists && !cascade) {
-          val message = intercept[AnalysisException] {
-            sql(sqlDropDatabase)
-          }.getMessage
-          assert(message.contains(s"Database $dbName is not empty. One or more tables exist."))
-          // the database directory was not removed
-          assert(fs.exists(new Path(expectedDBLocation)))
-        } else {
-          sql(sqlDropDatabase)
-          // the database directory was removed and the inclusive table directories are also removed
-          assert(!fs.exists(new Path(expectedDBLocation)))
-        }
-      }
+    sql(s"USE default")
+    val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
+    if (tableExists && !cascade) {
+      val message = intercept[AnalysisException] {
+        sql(sqlDropDatabase)
+      }.getMessage
+      assert(message.contains(s"Database $dbName is not empty. One or more tables exist."))
+      // the database directory was not removed
+      assert(fs.exists(new Path(expectedDBLocation)))
+    } else {
+      sql(sqlDropDatabase)
+      // the database directory was removed and the inclusive table directories are also removed
+      assert(!fs.exists(new Path(expectedDBLocation)))
     }
   }
 
@@ -1149,11 +1141,10 @@ class HiveDDLSuite
       sql("TRUNCATE TABLE partTable PARTITION (width=100)")
       assert(spark.table("partTable").count() == data.count())
 
-      // do nothing if no partition is matched for the given non-partial partition spec
-      // TODO: This behaviour is different from Hive, we should decide whether we need to follow
-      // Hive's behaviour or stick with our existing behaviour later.
-      sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
-      assert(spark.table("partTable").count() == data.count())
+      // throw exception if no partition is matched for the given non-partial partition spec.
+      intercept[NoSuchPartitionException] {
+        sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
+      }
 
       // throw exception if the column in partition spec is not a partition column.
       val e = intercept[AnalysisException] {

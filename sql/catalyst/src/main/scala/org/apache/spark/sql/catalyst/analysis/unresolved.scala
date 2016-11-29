@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, Codege
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 
 /**
  * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully
@@ -98,6 +98,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def withNullability(newNullability: Boolean): UnresolvedAttribute = this
   override def withQualifier(newQualifier: Option[String]): UnresolvedAttribute = this
   override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
+  override def withMetadata(newMetadata: Metadata): Attribute = this
 
   override def toString: String = s"'$name"
 

@@ -206,4 +206,30 @@ package object config {
       "encountering corrupt files and contents that have been read will still be returned.")
     .booleanConf
     .createWithDefault(false)
+
+  private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.log.callerContext")
+    .stringConf
+    .createOptional
+
+  private[spark] val FILES_MAX_PARTITION_BYTES = ConfigBuilder("spark.files.maxPartitionBytes")
+    .doc("The maximum number of bytes to pack into a single partition when reading files.")
+    .longConf
+    .createWithDefault(128 * 1024 * 1024)
+
+  private[spark] val FILES_OPEN_COST_IN_BYTES = ConfigBuilder("spark.files.openCostInBytes")
+    .doc("The estimated cost to open a file, measured by the number of bytes could be scanned in" +
+      " the same time. This is used when putting multiple files into a partition. It's better to" +
+      " over estimate, then the partitions with small files will be faster than partitions with" +
+      " bigger files.")
+    .longConf
+    .createWithDefault(4 * 1024 * 1024)
+
+  private[spark] val SECRET_REDACTION_PATTERN =
+    ConfigBuilder("spark.redaction.regex")
+      .doc("Regex to decide which Spark configuration properties and environment variables in " +
+        "driver and executor environments contain sensitive information. When this regex matches " +
+        "a property, its value is redacted from the environment UI and various logs like YARN " +
+        "and event logs.")
+      .stringConf
+      .createWithDefault("(?i)secret|password")
 }

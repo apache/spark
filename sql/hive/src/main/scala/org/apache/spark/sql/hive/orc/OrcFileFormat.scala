@@ -42,8 +42,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 /**
- * [[FileFormat]] for reading ORC files. If this is moved or renamed, please update
- * [[DataSource]]'s backwardCompatibilityMap.
+ * `FileFormat` for reading ORC files. If this is moved or renamed, please update
+ * `DataSource`'s backwardCompatibilityMap.
  */
 class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable {
 
@@ -305,17 +305,7 @@ private[orc] object OrcRelation extends HiveInspectors {
 
   def setRequiredColumns(
       conf: Configuration, physicalSchema: StructType, requestedSchema: StructType): Unit = {
-    val caseInsensitiveFieldMap: Map[String, Int] = physicalSchema.fieldNames
-      .zipWithIndex
-      .map(f => (f._1.toLowerCase, f._2))
-      .toMap
-    val ids = requestedSchema.map { a =>
-      val exactMatch: Option[Int] = physicalSchema.getFieldIndex(a.name)
-      val res = exactMatch.getOrElse(
-        caseInsensitiveFieldMap.getOrElse(a.name,
-          throw new IllegalArgumentException(s"""Field "$a.name" does not exist.""")))
-      res: Integer
-    }
+    val ids = requestedSchema.map(a => physicalSchema.fieldIndex(a.name): Integer)
     val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
     HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
   }

@@ -54,11 +54,12 @@ case class Rating @Since("0.8.0") (
  *
  * For implicit preference data, the algorithm used is based on
  * "Collaborative Filtering for Implicit Feedback Datasets", available at
- * [[http://dx.doi.org/10.1109/ICDM.2008.22]], adapted for the blocked approach used here.
+ * <a href="http://dx.doi.org/10.1109/ICDM.2008.22">here</a>, adapted for the blocked approach
+ * used here.
  *
  * Essentially instead of finding the low-rank approximations to the rating matrix `R`,
  * this finds the approximations for a preference matrix `P` where the elements of `P` are 1 if
- * r > 0 and 0 if r <= 0. The ratings then act as 'confidence' values related to strength of
+ * r &gt; 0 and 0 if r &lt;= 0. The ratings then act as 'confidence' values related to strength of
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
@@ -236,6 +237,8 @@ class ALS private (
    */
   @Since("0.8.0")
   def run(ratings: RDD[Rating]): MatrixFactorizationModel = {
+    require(!ratings.isEmpty(), s"No ratings available from $ratings")
+
     val sc = ratings.context
 
     val numUserBlocks = if (this.numUserBlocks == -1) {
@@ -280,7 +283,7 @@ class ALS private (
   }
 
   /**
-   * Java-friendly version of [[ALS.run]].
+   * Java-friendly version of `ALS.run`.
    */
   @Since("1.3.0")
   def run(ratings: JavaRDD[Rating]): MatrixFactorizationModel = run(ratings.rdd)

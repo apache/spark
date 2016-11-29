@@ -218,7 +218,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Inserts the content of the [[DataFrame]] to the specified table. It requires that
    * the schema of the [[DataFrame]] is the same as the schema of the table.
    *
-   * Note: Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based
+   * @note Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based
    * resolution. For example:
    *
    * {{{
@@ -442,8 +442,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in JSON format ([[http://jsonlines.org/ JSON Lines text
-   * format or newline-delimited JSON]]) at the specified path.
+   * Saves the content of the [[DataFrame]] in JSON format (<a href="http://jsonlines.org/">
+   * JSON Lines text format or newline-delimited JSON</a>) at the specified path.
    * This is equivalent to:
    * {{{
    *   format("json").save(path)

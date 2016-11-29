@@ -78,13 +78,13 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
 
   // =========== Setter methods ===========
 
-  def reportTriggerStarted(triggerId: Long): Unit = synchronized {
+  def reportTriggerStarted(batchId: Long): Unit = synchronized {
     numInputRows.clear()
     triggerDetails.clear()
     sourceTriggerDetails.values.foreach(_.clear())
 
-    reportTriggerDetail(TRIGGER_ID, triggerId)
-    sources.foreach(s => reportSourceTriggerDetail(s, TRIGGER_ID, triggerId))
+    reportTriggerDetail(BATCH_ID, batchId)
+    sources.foreach(s => reportSourceTriggerDetail(s, BATCH_ID, batchId))
     reportTriggerDetail(IS_TRIGGER_ACTIVE, true)
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
     reportTriggerDetail(START_TIMESTAMP, currentTriggerStartTimestamp)
@@ -217,10 +217,11 @@ object StreamMetrics extends Logging {
   }
 
 
-  val TRIGGER_ID = "triggerId"
+  val BATCH_ID = "batchId"
   val IS_TRIGGER_ACTIVE = "isTriggerActive"
   val IS_DATA_PRESENT_IN_TRIGGER = "isDataPresentInTrigger"
   val STATUS_MESSAGE = "statusMessage"
+  val EVENT_TIME_WATERMARK = "eventTimeWatermark"
 
   val START_TIMESTAMP = "timestamp.triggerStart"
   val GET_OFFSET_TIMESTAMP = "timestamp.afterGetOffset"

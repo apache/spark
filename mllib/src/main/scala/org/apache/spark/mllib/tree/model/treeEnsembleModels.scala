@@ -187,7 +187,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    * @param initTreeWeight: learning rate assigned to the first tree.
    * @param initTree: first DecisionTreeModel.
    * @param loss: evaluation metric.
-   * @return a RDD with each element being a zip of the prediction and error
+   * @return an RDD with each element being a zip of the prediction and error
    *         corresponding to every sample.
    */
   @Since("1.4.0")
@@ -213,7 +213,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    * @param treeWeight: Learning rate.
    * @param tree: Tree using which the prediction and error should be updated.
    * @param loss: evaluation metric.
-   * @return a RDD with each element being a zip of the prediction and error
+   * @return an RDD with each element being a zip of the prediction and error
    *         corresponding to each sample.
    */
   @Since("1.4.0")

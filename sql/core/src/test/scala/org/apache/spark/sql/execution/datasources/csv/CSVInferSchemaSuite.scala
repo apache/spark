@@ -109,4 +109,9 @@ class CSVInferSchemaSuite extends SparkFunSuite {
     val mergedNullTypes = CSVInferSchema.mergeRowTypes(Array(NullType), Array(NullType))
     assert(mergedNullTypes.deep == Array(NullType).deep)
   }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    val options = new CSVOptions(Map("TiMeStampFormat" -> "yyyy-mm"))
+    assert(CSVInferSchema.inferField(TimestampType, "2015-08", options) == TimestampType)
+  }
 }

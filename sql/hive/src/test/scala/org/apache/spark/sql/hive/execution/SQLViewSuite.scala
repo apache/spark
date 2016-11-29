@@ -38,21 +38,46 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     spark.sql(s"DROP TABLE IF EXISTS jt")
   }
 
-  test("nested views (interleaved with temporary views)") {
-    withView("jtv1", "jtv2", "jtv3", "temp_jtv1", "temp_jtv2", "temp_jtv3") {
+  test("create a permanent view on a permanent view") {
+    withView("jtv1", "jtv2") {
       sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")
       sql("CREATE VIEW jtv2 AS SELECT * FROM jtv1 WHERE id < 6")
       checkAnswer(sql("select count(*) FROM jtv2"), Row(2))
+    }
+  }
 
-      // Checks temporary views
+  test("create a temp view on a permanent view") {
+    withView("jtv1", "temp_jtv1") {
+      sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")
+      sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jtv1 WHERE id < 6")
+      checkAnswer(sql("select count(*) FROM temp_jtv1"), Row(2))
+    }
+  }
+
+  test("create a temp view on a temp view") {
+    withView("temp_jtv1", "temp_jtv2") {
       sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jt WHERE id > 3")
       sql("CREATE TEMPORARY VIEW temp_jtv2 AS SELECT * FROM temp_jtv1 WHERE id < 6")
       checkAnswer(sql("select count(*) FROM temp_jtv2"), Row(2))
+    }
+  }
 
-      // Checks interleaved temporary view and normal view
-      sql("CREATE TEMPORARY VIEW temp_jtv3 AS SELECT * FROM jt WHERE id > 3")
-      sql("CREATE VIEW jtv3 AS SELECT * FROM temp_jtv3 WHERE id < 6")
-      checkAnswer(sql("select count(*) FROM jtv3"), Row(2))
+  test("create a permanent view on a temp view") {
+    withView("jtv1", "temp_jtv1", "global_temp_jtv1") {
+      sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jt WHERE id > 3")
+      var e = intercept[AnalysisException] {
+        sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
+      }.getMessage
+      assert(e.contains("Not allowed to create a permanent view `jtv1` by " +
+        "referencing a temporary view `temp_jtv1`"))
+
+      val globalTempDB = spark.sharedState.globalTempViewManager.database
+      sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
+      e = intercept[AnalysisException] {
+        sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
+      }.getMessage
+      assert(e.contains(s"Not allowed to create a permanent view `jtv1` by referencing " +
+        s"a temporary view `global_temp`.`global_temp_jtv1`"))
     }
   }
 
@@ -439,7 +464,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("SPARK-14933 - create view from hive parquet tabale") {
+  test("SPARK-14933 - create view from hive parquet table") {
     withTable("t_part") {
       withView("v_part") {
         spark.sql("create table t_part stored as parquet as select 1 as a, 2 as b")
@@ -451,7 +476,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("SPARK-14933 - create view from hive orc tabale") {
+  test("SPARK-14933 - create view from hive orc table") {
     withTable("t_orc") {
       withView("v_orc") {
         spark.sql("create table t_orc stored as orc as select 1 as a, 2 as b")
@@ -459,6 +484,62 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         checkAnswer(
           sql("select * from t_orc"),
           sql("select * from v_orc"))
+      }
+    }
+  }
+
+  test("create a permanent/temp view using a hive, built-in, and permanent user function") {
+    val permanentFuncName = "myUpper"
+    val permanentFuncClass =
+      classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName
+    val builtInFuncNameInLowerCase = "abs"
+    val builtInFuncNameInMixedCase = "aBs"
+    val hiveFuncName = "histogram_numeric"
+
+    withUserDefinedFunction(permanentFuncName -> false) {
+      sql(s"CREATE FUNCTION $permanentFuncName AS '$permanentFuncClass'")
+      withTable("tab1") {
+        (1 to 10).map(i => (s"$i", i)).toDF("str", "id").write.saveAsTable("tab1")
+        Seq("VIEW", "TEMPORARY VIEW").foreach { viewMode =>
+          withView("view1") {
+            sql(
+              s"""
+                 |CREATE $viewMode view1
+                 |AS SELECT
+                 |$permanentFuncName(str),
+                 |$builtInFuncNameInLowerCase(id),
+                 |$builtInFuncNameInMixedCase(id) as aBs,
+                 |$hiveFuncName(id, 5) over()
+                 |FROM tab1
+               """.stripMargin)
+            checkAnswer(sql("select count(*) FROM view1"), Row(10))
+          }
+        }
+      }
+    }
+  }
+
+  test("create a permanent/temp view using a temporary function") {
+    val tempFunctionName = "temp"
+    val functionClass =
+      classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName
+    withUserDefinedFunction(tempFunctionName -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION $tempFunctionName AS '$functionClass'")
+      withView("view1", "tempView1") {
+        withTable("tab1") {
+          (1 to 10).map(i => s"$i").toDF("id").write.saveAsTable("tab1")
+
+          // temporary view
+          sql(s"CREATE TEMPORARY VIEW tempView1 AS SELECT $tempFunctionName(id) from tab1")
+          checkAnswer(sql("select count(*) FROM tempView1"), Row(10))
+
+          // permanent view
+          val e = intercept[AnalysisException] {
+            sql(s"CREATE VIEW view1 AS SELECT $tempFunctionName(id) from tab1")
+          }.getMessage
+          assert(e.contains("Not allowed to create a permanent view `view1` by referencing " +
+            s"a temporary function `$tempFunctionName`"))
+        }
       }
     }
   }
