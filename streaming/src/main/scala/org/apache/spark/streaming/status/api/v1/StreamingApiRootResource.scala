@@ -34,7 +34,7 @@ private[v1] class StreamingApiRootResource extends StreamingUIRootFromServletCon
 
   @Path("statistics")
   def getStreamingStatistics(): StreamingStatisticsResource = {
-    new StreamingStatisticsResource(listener, startTimeMillis)
+    new StreamingStatisticsResource(listener)
   }
 
   @Path("receivers")
@@ -73,8 +73,7 @@ private[spark] object StreamingApiRootResource {
 
   def getServletHandler(
     uiRoot: UIRoot,
-    listener: StreamingJobProgressListener,
-    startTimeMillis: Long
+    listener: StreamingJobProgressListener
   ): ServletContextHandler = {
 
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
@@ -84,7 +83,6 @@ private[spark] object StreamingApiRootResource {
       "org.apache.spark.streaming.status.api.v1")
     StreamingUIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
     StreamingUIRootFromServletContext.setListener(jerseyContext, listener)
-    StreamingUIRootFromServletContext.setStartTimeMillis(jerseyContext, startTimeMillis)
     jerseyContext.addServlet(holder, "/*")
     jerseyContext
   }
@@ -100,14 +98,6 @@ private[v1] object StreamingUIRootFromServletContext {
 
   def getListener(context: ServletContext): StreamingJobProgressListener = {
     context.getAttribute(attribute + "_listener").asInstanceOf[StreamingJobProgressListener]
-  }
-
-  def setStartTimeMillis(contextHandler: ContextHandler, time: Long): Unit = {
-    contextHandler.setAttribute(attribute + "_startTimeMillis", time)
-  }
-
-  def getStartTimeMillis(context: ServletContext): Long = {
-    context.getAttribute(attribute + "_startTimeMillis").asInstanceOf[Long]
   }
 
   def setUiRoot(contextHandler: ContextHandler, uiRoot: UIRoot): Unit = {
@@ -126,7 +116,6 @@ private[v1] trait StreamingUIRootFromServletContext {
   def uiRoot: UIRoot = StreamingUIRootFromServletContext.getUiRoot(servletContext)
   def listener: StreamingJobProgressListener =
     StreamingUIRootFromServletContext.getListener(servletContext)
-  def startTimeMillis: Long = StreamingUIRootFromServletContext.getStartTimeMillis(servletContext)
 }
 
 private[v1] class NotFoundException(msg: String) extends WebApplicationException(

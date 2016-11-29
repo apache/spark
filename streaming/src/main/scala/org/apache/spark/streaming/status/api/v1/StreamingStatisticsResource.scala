@@ -25,7 +25,7 @@ import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class StreamingStatisticsResource(
-    listener: StreamingJobProgressListener, startTimeMillis: Long) {
+    listener: StreamingJobProgressListener) {
 
   @GET
   def streamingStatistics(): StreamingStatistics = {
@@ -37,7 +37,7 @@ private[v1] class StreamingStatisticsResource(
       val avgTotalDelay = avgTime(batches.flatMap(_.totalDelay))
 
       new StreamingStatistics(
-        startTime = new Date(startTimeMillis),
+        startTime = new Date(listener.startTime),
         batchDuration = listener.batchDuration,
         numReceivers = listener.numReceivers,
         numActiveReceivers = listener.numActiveReceivers,
