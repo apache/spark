@@ -25,14 +25,12 @@ import scala.collection.Map
 import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
-
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
-
 import org.apache.spark._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -45,7 +43,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.streaming.scheduler.{ExecutorAllocationManager, JobScheduler, StreamingListener}
+import org.apache.spark.streaming.scheduler.{ExecutorAllocationManager, JobScheduler, StreamingListener, StreamingListenerStreamingStarted}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
 import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
 
@@ -65,6 +63,8 @@ class StreamingContext private[streaming] (
     _cp: Checkpoint,
     _batchDur: Duration
   ) extends Logging {
+
+  val startTime = System.currentTimeMillis()
 
   /**
    * Create a StreamingContext using an existing SparkContext.
@@ -583,6 +583,7 @@ class StreamingContext private[streaming] (
               scheduler.start()
             }
             state = StreamingContextState.ACTIVE
+            scheduler.listenerBus.post(new StreamingListenerStreamingStarted(startTime))
           } catch {
             case NonFatal(e) =>
               logError("Error starting the context, marking it as stopped", e)
