@@ -40,7 +40,6 @@ class StreamingQueryProgressSuite extends SparkFunSuite {
         |  "timestamp" : 1,
         |  "numInputRows" : 678,
         |  "inputRowsPerSecond" : 10.0,
-        |  "processedRowsPerSecond" : 1.7976931348623157E308,
         |  "durationMs" : {
         |    "total" : 0
         |  },
@@ -54,17 +53,16 @@ class StreamingQueryProgressSuite extends SparkFunSuite {
         |    "startOffset" : 123,
         |    "endOffset" : 456,
         |    "numInputRows" : 678,
-        |    "inputRowsPerSecond" : 10.0,
-        |    "processedRowsPerSecond" : 1.7976931348623157E308
+        |    "inputRowsPerSecond" : 10.0
         |  } ]
         |}
       """.stripMargin.trim)
-    assert(parse(json) === testProgress.jsonValue)
+    assert(compact(parse(json)) === testProgress.json)
 
   }
 
   test("json") {
-    assert(parse(testProgress.json) === testProgress.jsonValue)
+    assert(compact(parse(testProgress.json)) === testProgress.json)
   }
 
   test("toString") {
@@ -88,7 +86,7 @@ object StreamingQueryProgressSuite {
         endOffset = "456",
         numInputRows = 678,
         inputRowsPerSecond = 10.0,
-        processedRowsPerSecond = Double.MaxValue
+        processedRowsPerSecond = Double.PositiveInfinity  // should not be present in the json
       )
     )
   )

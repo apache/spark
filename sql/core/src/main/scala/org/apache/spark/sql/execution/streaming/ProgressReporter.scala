@@ -119,23 +119,13 @@ trait ProgressReporter extends Logging {
 
     val sourceProgress = sources.map { source =>
       val numRecords = executionStats.inputRows.getOrElse(source, 0L)
-      val inputRecordsPerSecond = if (inputTimeSec > 0) {
-        numRecords / inputTimeSec
-      } else {
-        Double.MaxValue
-      }
-      val processedRecordsPerSecond = if (processingTimeSec > 0) {
-        numRecords / processingTimeSec
-      } else {
-        Double.MaxValue
-      }
       new SourceProgress(
         description = source.toString,
         startOffset = committedOffsets.get(source).map(_.json).orNull,
         endOffset = availableOffsets.get(source).map(_.json).orNull,
         numInputRows = numRecords,
-        inputRowsPerSecond = inputRecordsPerSecond,
-        processedRowsPerSecond = processedRecordsPerSecond
+        inputRowsPerSecond = numRecords / inputTimeSec,
+        processedRowsPerSecond = numRecords / processingTimeSec
       )
     }
 

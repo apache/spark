@@ -92,12 +92,16 @@ class StreamingQueryProgress private[sql](
   override def toString: String = prettyJson
 
   private[sql] def jsonValue: JValue = {
+    def safeDoubleToJValue(value: Double): JValue = {
+      if (value.isNaN || value.isInfinity) JNothing else JDouble(value)
+    }
+
     ("id" -> JString(id.toString)) ~
     ("name" -> JString(name)) ~
     ("timestamp" -> JInt(timestamp)) ~
     ("numInputRows" -> JInt(numInputRows)) ~
-    ("inputRowsPerSecond" -> JDouble(inputRowsPerSecond)) ~
-    ("processedRowsPerSecond" -> JDouble(processedRowsPerSecond)) ~
+    ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
+    ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
     ("durationMs" -> durationMs
         .asScala
         .map { case (k, v) => k -> JInt(v.toLong): JObject }

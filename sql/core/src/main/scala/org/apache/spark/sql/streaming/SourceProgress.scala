@@ -57,12 +57,16 @@ class SourceProgress protected[sql](
   override def toString: String = prettyJson
 
   private[sql] def jsonValue: JValue = {
+    def safeDoubleToJValue(value: Double): JValue = {
+      if (value.isNaN || value.isInfinity) JNothing else JDouble(value)
+    }
+
     ("description" -> JString(description)) ~
     ("startOffset" -> tryParse(startOffset)) ~
     ("endOffset" -> tryParse(endOffset)) ~
     ("numInputRows" -> JInt(numInputRows)) ~
-    ("inputRowsPerSecond" -> JDouble(inputRowsPerSecond)) ~
-    ("processedRowsPerSecond" -> JDouble(processedRowsPerSecond))
+    ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
+    ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond))
   }
 
   private def tryParse(json: String) = try {
