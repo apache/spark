@@ -87,7 +87,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         AssertOnQuery { query =>
           eventually(Timeout(streamingTimeout)) {
             assert(listener.terminationEvent !== null)
-            assert(listener.terminationEvent.lastProgress === query.lastProgress)
+            assert(listener.terminationEvent.id === query.id)
             assert(listener.terminationEvent.exception === None)
           }
           listener.checkAsyncErrors()
@@ -102,7 +102,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         ExpectFailure[SparkException],
         AssertOnQuery { query =>
           assert(listener.terminationEvent !== null)
-          assert(listener.terminationEvent.lastProgress === query.lastProgress)
+          assert(listener.terminationEvent.id === query.id)
           assert(listener.terminationEvent.exception.nonEmpty)
           listener.checkAsyncErrors()
           true
@@ -198,11 +198,11 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("QueryTerminatedEvent serialization") {
     val exception = new RuntimeException("exception")
     val queryQueryTerminated = new StreamingQueryListener.QueryTerminatedEvent(
-      StreamingQueryProgressSuite.testProgress, Some(exception.getMessage))
+      UUID.randomUUID, Some(exception.getMessage))
     val json = JsonProtocol.sparkEventToJson(queryQueryTerminated)
     val newQueryTerminated = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryTerminatedEvent]
-    assert(queryQueryTerminated.lastProgress.json === newQueryTerminated.lastProgress.json)
+    assert(queryQueryTerminated.id === newQueryTerminated.id)
     assert(queryQueryTerminated.exception === newQueryTerminated.exception)
   }
 

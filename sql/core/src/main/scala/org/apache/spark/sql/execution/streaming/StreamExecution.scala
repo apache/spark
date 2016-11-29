@@ -261,7 +261,7 @@ class StreamExecution(
       // Notify others
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
       postEvent(
-       new QueryTerminatedEvent(lastProgress, exception.map(_.cause).map(Utils.exceptionString)))
+       new QueryTerminatedEvent(id, exception.map(_.cause).map(Utils.exceptionString)))
       terminationLatch.countDown()
     }
   }

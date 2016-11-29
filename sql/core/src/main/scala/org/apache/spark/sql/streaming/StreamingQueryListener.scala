@@ -100,13 +100,11 @@ object StreamingQueryListener {
    * :: Experimental ::
    * Event representing that termination of a query.
    *
-   * @param lastProgress The last progress the query made before it was terminated.
+   * @param id The query id.
    * @param exception The exception message of the query if the query was terminated
    *                  with an exception. Otherwise, it will be `None`.
    * @since 2.1.0
    */
   @Experimental
-  class QueryTerminatedEvent private[sql](
-    val lastProgress: StreamingQueryProgress,
-    val exception: Option[String]) extends Event
+  class QueryTerminatedEvent private[sql](val id: UUID, val exception: Option[String]) extends Event
 }
