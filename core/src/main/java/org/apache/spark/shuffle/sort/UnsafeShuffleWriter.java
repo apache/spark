@@ -355,12 +355,12 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         final long initialFileLength = mergedFileOutputStream.getByteCount();
         // Shield the underlying output stream from close() calls, so that we can close the higher
         // level streams to make sure all data is really flushed and internal state is cleaned.
-        OutputStream partitionOutput = new CloseShieldOutputStream(mergedFileOutputStream);
+        OutputStream partitionOutput = new CloseShieldOutputStream(
+          new TimeTrackingOutputStream(writeMetrics, mergedFileOutputStream));
         partitionOutput = blockManager.serializerManager().wrapForEncryption(partitionOutput);
         if (compressionCodec != null) {
           partitionOutput = compressionCodec.compressedOutputStream(partitionOutput);
         }
-        partitionOutput = new TimeTrackingOutputStream(writeMetrics, partitionOutput);
         for (int i = 0; i < spills.length; i++) {
           final long partitionLengthInSpill = spills[i].partitionLengths[partition];
           if (partitionLengthInSpill > 0) {

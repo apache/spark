@@ -19,7 +19,6 @@ package org.apache.spark.shuffle.sort;
 
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.security.PrivilegedExceptionAction;
 import java.util.*;
 
 import scala.Option;
@@ -27,11 +26,9 @@ import scala.Product2;
 import scala.Tuple2;
 import scala.Tuple2$;
 import scala.collection.Iterator;
-import scala.runtime.AbstractFunction1;
 
 import com.google.common.collect.HashMultiset;
 import com.google.common.collect.Iterators;
-import com.google.common.io.ByteStreams;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -41,11 +38,9 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import org.apache.spark.HashPartitioner;
-import org.apache.spark.SecurityManager;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
-import org.apache.spark.deploy.SparkHadoopUtil;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.io.CompressionCodec$;
