@@ -447,9 +447,8 @@ private[spark] class TaskSetManager(
           lastLaunchTime = curTime
         }
         // Serialize and return the task
-        val startTime = clock.getTimeMillis()
         val serializedTask: ByteBuffer = try {
-          Task.serializeWithDependencies(task, sched.sc.addedFiles, sched.sc.addedJars, ser)
+          ser.serialize(task)
         } catch {
           // If the task cannot be serialized, then there's no point to re-attempt the task,
           // as it will always fail. So just abort the whole task-set.
@@ -476,8 +475,16 @@ private[spark] class TaskSetManager(
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit} bytes)")
 
         sched.dagScheduler.taskStarted(task, info)
-        new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,
-          taskName, index, serializedTask)
+        new TaskDescription(
+          taskId,
+          attemptNum,
+          execId,
+          taskName,
+          index,
+          sched.sc.addedFiles,
+          sched.sc.addedJars,
+          task.localProperties,
+          serializedTask)
       }
     } else {
       None

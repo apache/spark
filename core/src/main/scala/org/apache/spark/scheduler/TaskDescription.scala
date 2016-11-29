@@ -18,12 +18,19 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
+import java.util.Properties
+
+import scala.collection.mutable.Map
 
 import org.apache.spark.util.SerializableBuffer
 
 /**
  * Description of a task that gets passed onto executors to be executed, usually created by
  * [[TaskSetManager.resourceOffer]].
+ *
+ * This class contains a serialized task rather than a Task object, because when a TaskDescription
+ * is received by an Executor, the Executor needs to first get the list of JARs and files and add
+ * these to the classpath before deserializing the Task object.
  */
 private[spark] class TaskDescription(
     val taskId: Long,
@@ -31,6 +38,9 @@ private[spark] class TaskDescription(
     val executorId: String,
     val name: String,
     val index: Int,    // Index within this task's TaskSet
+    val addedFiles: Map[String, Long],
+    val addedJars: Map[String, Long],
+    val properties: Properties,
     _serializedTask: ByteBuffer)
   extends Serializable {
 
