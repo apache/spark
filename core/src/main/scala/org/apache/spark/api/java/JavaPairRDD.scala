@@ -54,7 +54,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   // Common RDD functions
 
-  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
+  /**
+   * Persist this RDD with the default storage level (`MEMORY_ONLY`).
+   */
   def cache(): JavaPairRDD[K, V] = new JavaPairRDD[K, V](rdd.cache())
 
   /**
@@ -454,13 +456,17 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
     fromRDD(rdd.subtractByKey(other))
   }
 
-  /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
+  /**
+   * Return an RDD with the pairs from `this` whose keys are not in `other`.
+   */
   def subtractByKey[W](other: JavaPairRDD[K, W], numPartitions: Int): JavaPairRDD[K, V] = {
     implicit val ctag: ClassTag[W] = fakeClassTag
     fromRDD(rdd.subtractByKey(other, numPartitions))
   }
 
-  /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
+  /**
+   * Return an RDD with the pairs from `this` whose keys are not in `other`.
+   */
   def subtractByKey[W](other: JavaPairRDD[K, W], p: Partitioner): JavaPairRDD[K, V] = {
     implicit val ctag: ClassTag[W] = fakeClassTag
     fromRDD(rdd.subtractByKey(other, p))
