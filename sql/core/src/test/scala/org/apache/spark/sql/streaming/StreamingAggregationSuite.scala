@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.TimeZone
+
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.InternalOutputModes._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
@@ -233,6 +236,103 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
     testStream(aggregated, Update)(
       AddData(inputData, ("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)),
       CheckLastBatch(("a", 30), ("b", 3), ("c", 1))
+    )
+  }
+
+  test("prune results by current_time, complete mode") {
+    import testImplicits._
+    val clock = new StreamManualClock
+    val inputData = MemoryStream[Long]
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .where('value >= current_timestamp().cast("long") - 10L)
+
+    testStream(aggregated, Complete)(
+      StartStream(ProcessingTime("10 seconds"), triggerClock = clock),
+
+      // advance clock to 10 seconds, all keys retained
+      AddData(inputData, 0L, 5L, 5L, 10L),
+      AdvanceManualClock(10 * 1000),
+      CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
+
+      // advance clock to 20 seconds, should retain keys >= 10
+      AddData(inputData, 15L, 15L, 20L),
+      AdvanceManualClock(10 * 1000),
+      CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
+
+      // advance clock to 30 seconds, should retain keys >= 20
+      AddData(inputData, 0L, 85L),
+      AdvanceManualClock(10 * 1000),
+      CheckLastBatch((20L, 1), (85L, 1)),
+
+      // bounce stream and ensure correct batch timestamp is used
+      // i.e., we don't take it from the clock, which is at 90 seconds.
+      StopStream,
+      AssertOnQuery { q => // clear the sink
+        q.sink.asInstanceOf[MemorySink].clear()
+        // advance by a minute i.e., 90 seconds total
+        clock.advance(60 * 1000L)
+        true
+      },
+      StartStream(ProcessingTime("10 seconds"), triggerClock = clock),
+      CheckLastBatch((20L, 1), (85L, 1)),
+      AssertOnQuery { q =>
+        clock.getTimeMillis() == 90000L
+      },
+
+      // advance clock to 100 seconds, should retain keys >= 90
+      AddData(inputData, 85L, 90L, 100L, 105L),
+      AdvanceManualClock(10 * 1000),
+      CheckLastBatch((90L, 1), (100L, 1), (105L, 1))
+    )
+  }
+
+  test("prune results by current_date, complete mode") {
+    import testImplicits._
+    val clock = new StreamManualClock
+    val tz = TimeZone.getDefault.getID
+    val inputData = MemoryStream[Long]
+    val aggregated =
+      inputData.toDF()
+        .select(to_utc_timestamp(from_unixtime('value * DateTimeUtils.SECONDS_PER_DAY), tz))
+        .toDF("value")
+        .groupBy($"value")
+        .agg(count("*"))
+        .where($"value".cast("date") >= date_sub(current_date(), 10))
+        .select(($"value".cast("long") / DateTimeUtils.SECONDS_PER_DAY).cast("long"), $"count(1)")
+    testStream(aggregated, Complete)(
+      StartStream(ProcessingTime("10 day"), triggerClock = clock),
+      // advance clock to 10 days, should retain all keys
+      AddData(inputData, 0L, 5L, 5L, 10L),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
+      // advance clock to 20 days, should retain keys >= 10
+      AddData(inputData, 15L, 15L, 20L),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
+      // advance clock to 30 days, should retain keys >= 20
+      AddData(inputData, 85L),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      CheckLastBatch((20L, 1), (85L, 1)),
+
+      // bounce stream and ensure correct batch timestamp is used
+      // i.e., we don't take it from the clock, which is at 90 days.
+      StopStream,
+      AssertOnQuery { q => // clear the sink
+        q.sink.asInstanceOf[MemorySink].clear()
+        // advance by 60 days i.e., 90 days total
+        clock.advance(DateTimeUtils.MILLIS_PER_DAY * 60)
+        true
+      },
+      StartStream(ProcessingTime("10 day"), triggerClock = clock),
+      CheckLastBatch((20L, 1), (85L, 1)),
+
+      // advance clock to 100 days, should retain keys >= 90
+      AddData(inputData, 85L, 90L, 100L, 105L),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      CheckLastBatch((90L, 1), (100L, 1), (105L, 1))
     )
   }
 }
