@@ -163,7 +163,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
     case i @ logical.InsertIntoTable(
            l @ LogicalRelation(t: HadoopFsRelation, _, table), part, query, overwrite, false)
-        if query.resolved && t.schema.asNullable == query.schema.asNullable =>
+        if query.resolved && t.schema.sameType(query.schema) =>
 
       // Sanity checks
       if (t.location.rootPaths.size != 1) {
