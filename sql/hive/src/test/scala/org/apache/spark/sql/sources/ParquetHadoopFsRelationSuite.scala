@@ -47,21 +47,17 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       val fs = basePath.getFileSystem(SparkHadoopUtil.get.conf)
       val qualifiedBasePath = fs.makeQualified(basePath)
 
-      for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
-        val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
-        sparkContext
-          .parallelize(for (i <- 1 to 3) yield (i, s"val_$i", p1))
-          .toDF("a", "b", "p1")
-          .write.parquet(partitionDir.toString)
+      for (p1 <- 1 to 2) {
+        val p1Dir = new Path(qualifiedBasePath, s"p1=$p1")
+        val df = Seq("foo", "bar").flatMap { p2 =>
+          for (i <- 1 to 3) yield (i, s"val_$i", p2)
+        }.toDF("a", "b", "p2")
+
+        df.write.mode(SaveMode.Append).partitionBy("p2").parquet(p1Dir.toString)
       }
 
-      val dataSchemaWithPartition =
-        StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
-
-      checkQueries(
-        spark.read.format(dataSourceName)
-          .option("dataSchema", dataSchemaWithPartition.json)
-          .load(file.getCanonicalPath))
+      checkQueries(spark.read.options(
+        Map("path" -> file.getCanonicalPath)).format(dataSourceName).load())
     }
   }
 

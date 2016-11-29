@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
@@ -46,22 +46,17 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
       val fs = basePath.getFileSystem(SparkHadoopUtil.get.conf)
       val qualifiedBasePath = fs.makeQualified(basePath)
 
-      for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
-        val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
-        sparkContext
-          .parallelize(for (i <- 1 to 3) yield (i, s"val_$i", p1))
-          .toDF("a", "b", "p1")
-          .write
-          .orc(partitionDir.toString)
+      for (p1 <- 1 to 2) {
+        val p1Dir = new Path(qualifiedBasePath, s"p1=$p1")
+        val df = Seq("foo", "bar").flatMap { p2 =>
+          for (i <- 1 to 3) yield (i, s"val_$i", p2)
+        }.toDF("a", "b", "p2")
+
+        df.write.mode(SaveMode.Append).partitionBy("p2").orc(p1Dir.toString)
       }
 
-      val dataSchemaWithPartition =
-        StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
-
-      checkQueries(
-        spark.read.options(Map(
-          "path" -> file.getCanonicalPath,
-          "dataSchema" -> dataSchemaWithPartition.json)).format(dataSourceName).load())
+      checkQueries(spark.read.options(
+        Map("path" -> file.getCanonicalPath)).format(dataSourceName).load())
     }
   }
 
