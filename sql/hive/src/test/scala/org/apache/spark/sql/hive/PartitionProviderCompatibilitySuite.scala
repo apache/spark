@@ -188,6 +188,25 @@ class PartitionProviderCompatibilitySuite
     }
   }
 
+  for (enabled <- Seq(true, false)) {
+    test(s"SPARK-18544 append with saveAsTable - partition management $enabled") {
+      withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> enabled.toString) {
+        withTable("test") {
+          withTempDir { dir =>
+            setupPartitionedDatasourceTable("test", dir)
+            if (enabled) {
+              spark.sql("msck repair table test")
+            }
+            assert(spark.sql("select * from test").count() == 5)
+            spark.range(10).selectExpr("id as fieldOne", "id as partCol")
+              .write.partitionBy("partCol").mode("append").saveAsTable("test")
+            assert(spark.sql("select * from test").count() == 15)
+          }
+        }
+      }
+    }
+  }
+
   /**
    * Runs a test against a multi-level partitioned table, then validates that the custom locations
    * were respected by the output writer.

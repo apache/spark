@@ -373,8 +373,19 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
       case _ =>
-        val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
-        val tableType = if (storage.locationUri.isDefined) {
+        val existingTable = if (tableExists) {
+          Some(df.sparkSession.sessionState.catalog.getTableMetadata(tableIdent))
+        } else {
+          None
+        }
+        val storage = if (tableExists) {
+          existingTable.get.storage
+        } else {
+          DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
+        }
+        val tableType = if (tableExists) {
+          existingTable.get.tableType
+        } else if (storage.locationUri.isDefined) {
           CatalogTableType.EXTERNAL
         } else {
           CatalogTableType.MANAGED
@@ -391,12 +402,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         )
         df.sparkSession.sessionState.executePlan(
           CreateTable(tableDesc, mode, Some(df.logicalPlan))).toRdd
-        if (tableDesc.partitionColumnNames.nonEmpty &&
-            df.sparkSession.sqlContext.conf.manageFilesourcePartitions) {
-          // Need to recover partitions into the metastore so our saved data is visible.
-          df.sparkSession.sessionState.executePlan(
-            AlterTableRecoverPartitionsCommand(tableDesc.identifier)).toRdd
-        }
     }
   }
 
