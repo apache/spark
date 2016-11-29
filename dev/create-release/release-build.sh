@@ -160,6 +160,11 @@ if [[ "$1" == "package" ]]; then
       ./dev/change-scala-version.sh 2.10
     fi
 
+    # Build R only once
+    if [[ "${NAME}" == "without-hadoop" ]]; then
+      FLAGS="${FLAGS} --r"
+    fi
+
     export ZINC_PORT=$ZINC_PORT
     echo "Creating distribution: $NAME ($FLAGS)"
 
@@ -198,8 +203,10 @@ if [[ "$1" == "package" ]]; then
         $PYTHON_DIST_NAME.sha
     fi
 
-    echo "Copying R source package"
-    cp spark-$SPARK_VERSION-bin-$NAME/R/SparkR_$SPARK_VERSION.tar.gz .
+    if [ -f spark-$SPARK_VERSION-bin-$NAME/R/SparkR_$SPARK_VERSION.tar.gz ]; then
+      echo "Copying R source package"
+      cp spark-$SPARK_VERSION-bin-$NAME/R/SparkR_$SPARK_VERSION.tar.gz .
+    fi
 
     echo "Copying and signing regular binary distribution"
     cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
