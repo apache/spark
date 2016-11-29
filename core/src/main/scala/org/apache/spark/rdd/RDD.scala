@@ -469,7 +469,8 @@ abstract class RDD[T: ClassTag](
    * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
    * @param fraction expected size of the sample as a fraction of this RDD's size
    *  without replacement: probability that each element is chosen; fraction must be [0, 1]
-   *  with replacement: expected number of times each element is chosen; fraction must be &gt;= 0
+   *  with replacement: expected number of times each element is chosen; fraction must be greater
+   *  than or equal to 0
    * @param seed seed for the random number generator
    *
    * @note This is NOT guaranteed to provide exactly the fraction of the count
@@ -750,8 +751,10 @@ abstract class RDD[T: ClassTag](
    *                        print line function (like out.println()) as the 2nd parameter.
    *                        An example of pipe the RDD data of groupBy() in a streaming way,
    *                        instead of constructing a huge String to concat all the elements:
-   *                        def printRDDElement(record:(String, Seq[String]), f:String=&gt;Unit) =
-   *                          for (e &lt;- record._2) {f(e)}
+   *                        {{{
+   *                        def printRDDElement(record:(String, Seq[String]), f:String=>Unit) =
+   *                          for (e <- record._2) {f(e)}
+   *                        }}}
    * @param separateWorkingDir Use separate working directories for each task.
    * @param bufferSize Buffer size for the stdin writer for the piped process.
    * @param encoding Char encoding used for interacting (via stdin, stdout and stderr) with
@@ -1184,8 +1187,13 @@ abstract class RDD[T: ClassTag](
    *
    * @note This method should only be used if the resulting map is expected to be small, as
    * the whole thing is loaded into the driver's memory.
-   * To handle very large results, consider using rdd.map(x =&gt; (x, 1L)).reduceByKey(_ + _), which
-   * returns an RDD[T, Long] instead of a map.
+   * To handle very large results, consider using
+   *
+   * {{{
+   * rdd.map(x => (x, 1L)).reduceByKey(_ + _)
+   * }}}
+   *
+   * , which returns an RDD[T, Long] instead of a map.
    */
   def countByValue()(implicit ord: Ordering[T] = null): Map[T, Long] = withScope {
     map(value => (value, null)).countByKey()
@@ -1223,9 +1231,9 @@ abstract class RDD[T: ClassTag](
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
    * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
-   * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero `sp &gt; p`
-   * would trigger sparse representation of registers, which may reduce the memory consumption
-   * and increase accuracy when the cardinality is small.
+   * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero (`sp` is greater
+   * than `p`) would trigger sparse representation of registers, which may reduce the memory
+   * consumption and increase accuracy when the cardinality is small.
    *
    * @param p The precision value for the normal set.
    *          `p` must be a value between 4 and `sp` if `sp` is not zero (32 max).
