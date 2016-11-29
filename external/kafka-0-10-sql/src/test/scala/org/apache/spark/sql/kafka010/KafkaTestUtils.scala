@@ -263,8 +263,6 @@ class KafkaTestUtils extends Logging {
     props.put("log.flush.interval.messages", "1")
     props.put("replica.socket.timeout.ms", "1500")
     props.put("delete.topic.enable", "true")
-    props.put("file.delete.delay.ms", "100")
-    props.put("log.segment.delete.delay.ms", "100")
     props
   }
 
@@ -321,7 +319,7 @@ class KafkaTestUtils extends Logging {
         !zkUtils.getAllTopics().contains(topic),
         s"topic $topic still exists on zookeeper")
     }
-    eventually(timeout(60.seconds)) {
+    eventually(timeout(60.seconds), interval(200.millis)) {
       try {
         assertTopicDeleted()
       } catch {
