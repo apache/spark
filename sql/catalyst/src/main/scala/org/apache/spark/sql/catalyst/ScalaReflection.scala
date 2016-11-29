@@ -239,14 +239,16 @@ object ScalaReflection extends ScalaReflection {
           DateTimeUtils.getClass,
           ObjectType(classOf[java.sql.Date]),
           "toJavaDate",
-          getPath :: Nil)
+          getPath :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[java.sql.Timestamp] =>
         StaticInvoke(
           DateTimeUtils.getClass,
           ObjectType(classOf[java.sql.Timestamp]),
           "toJavaTimestamp",
-          getPath :: Nil)
+          getPath :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[java.lang.String] =>
         Invoke(getPath, "toString", ObjectType(classOf[String]))
@@ -316,7 +318,8 @@ object ScalaReflection extends ScalaReflection {
           scala.collection.mutable.WrappedArray.getClass,
           ObjectType(classOf[Seq[_]]),
           "make",
-          array :: Nil)
+          array :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[Map[_, _]] =>
         // TODO: add walked type path for map
@@ -344,7 +347,8 @@ object ScalaReflection extends ScalaReflection {
           ArrayBasedMapData.getClass,
           ObjectType(classOf[Map[_, _]]),
           "toScalaMap",
-          keyData :: valueData :: Nil)
+          keyData :: valueData :: Nil,
+          returnNullable = false)
 
       case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
@@ -449,7 +453,8 @@ object ScalaReflection extends ScalaReflection {
               classOf[UnsafeArrayData],
               ArrayType(dt, false),
               "fromPrimitiveArray",
-              input :: Nil)
+              input :: Nil,
+              returnNullable = false)
           } else {
             NewInstance(
               classOf[GenericArrayData],
@@ -505,49 +510,56 @@ object ScalaReflection extends ScalaReflection {
           classOf[UTF8String],
           StringType,
           "fromString",
-          inputObject :: Nil)
+          inputObject :: Nil,
+          returnNullable = true)
 
       case t if t <:< localTypeOf[java.sql.Timestamp] =>
         StaticInvoke(
           DateTimeUtils.getClass,
           TimestampType,
           "fromJavaTimestamp",
-          inputObject :: Nil)
+          inputObject :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[java.sql.Date] =>
         StaticInvoke(
           DateTimeUtils.getClass,
           DateType,
           "fromJavaDate",
-          inputObject :: Nil)
+          inputObject :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[BigDecimal] =>
         StaticInvoke(
           Decimal.getClass,
           DecimalType.SYSTEM_DEFAULT,
           "apply",
-          inputObject :: Nil)
+          inputObject :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[java.math.BigDecimal] =>
         StaticInvoke(
           Decimal.getClass,
           DecimalType.SYSTEM_DEFAULT,
           "apply",
-          inputObject :: Nil)
+          inputObject :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[java.math.BigInteger] =>
         StaticInvoke(
           Decimal.getClass,
           DecimalType.BigIntDecimal,
           "apply",
-          inputObject :: Nil)
+          inputObject :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[scala.math.BigInt] =>
         StaticInvoke(
           Decimal.getClass,
           DecimalType.BigIntDecimal,
           "apply",
-          inputObject :: Nil)
+          inputObject :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[java.lang.Integer] =>
         Invoke(inputObject, "intValue", IntegerType)
