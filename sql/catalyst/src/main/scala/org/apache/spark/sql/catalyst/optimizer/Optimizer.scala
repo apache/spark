@@ -932,7 +932,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         split(joinCondition.map(splitConjunctivePredicates).getOrElse(Nil), left, right)
 
       joinType match {
-        case _: InnerLike |  LeftSemi | ExistenceJoin(_) =>
+        case _: InnerLike |  LeftSemi =>
           // push down the single side only join filter for both sides sub queries
           val newLeft = leftJoinConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -949,7 +949,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newJoinCond = (rightJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
 
           Join(newLeft, newRight, RightOuter, newJoinCond)
-        case LeftOuter | LeftAnti =>
+        case LeftOuter | LeftAnti | ExistenceJoin(_) =>
           // push down the right side only join filter for right sub query
           val newLeft = left
           val newRight = rightJoinConditions.
