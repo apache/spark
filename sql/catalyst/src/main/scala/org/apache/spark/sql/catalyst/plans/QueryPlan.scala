@@ -57,13 +57,14 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   }
 
   /**
-   * Generate IsNotNull constraints from the null intolerant child expressions of constraints.
+   * Generate Attribute-specific IsNotNull constraints from the null intolerant child expressions
+   * of constraints.
    */
   private def generateIsNotNullConstraints(constraint: Expression): Seq[Expression] =
     constraint match {
       case IsNotNull(_: Attribute) => constraint :: Nil
       // When the root is IsNotNull, we can push IsNotNull through the child null intolerant
-      // expressions.
+      // expressions
       case IsNotNull(expr) => scanNullIntolerantExpr(expr).map(IsNotNull(_))
       // Constraints always return true for all the inputs. That means, null will never be returned.
       // Thus, we can infer `IsNotNull(constraint)`, and also push IsNotNull through the child
