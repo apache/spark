@@ -58,7 +58,7 @@ case class Last(child: Expression, ignoreNullsExpr: Expression)
       defaultCheck
     } else if (!ignoreNullsExpr.foldable) {
       TypeCheckFailure(
-        s"The second argument of Last must be a boolean literal, but got: $ignoreNullsExpr")
+        s"The second argument of Last must be a boolean literal, but got: ${ignoreNullsExpr.sql}")
     } else {
       TypeCheckSuccess
     }
