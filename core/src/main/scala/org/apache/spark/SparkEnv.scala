@@ -234,6 +234,12 @@ object SparkEnv extends Logging {
     }
 
     val securityManager = new SecurityManager(conf, ioEncryptionKey)
+    ioEncryptionKey.foreach { _ =>
+      if (!securityManager.isSaslEncryptionEnabled()) {
+        logWarning("I/O encryption enabled without RPC encryption: keys will be visible on the " +
+          "wire.")
+      }
+    }
 
     val systemName = if (isDriver) driverSystemName else executorSystemName
     val rpcEnv = RpcEnv.create(systemName, bindAddress, advertiseAddress, port, conf,
