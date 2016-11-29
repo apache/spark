@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * A command used to create a data source table.
@@ -56,6 +57,22 @@ case class CreateDataSourceTableCommand(
     ignoreIfExists: Boolean,
     managedIfNoPath: Boolean)
   extends RunnableCommand {
+
+  override def argString: String = {
+    val partColumns = if (partitionColumns.isEmpty) {
+      ""
+    } else {
+      "partitionColumns:" + Utils.truncatedString(partitionColumns, "[", ", ", "] ")
+    }
+    s"[tableIdent:$tableIdent " +
+      userSpecifiedSchema.map(_ + " ").getOrElse("") +
+      s"provider:$provider " +
+      CatalogUtils.maskCredentials(options) + " " +
+      partColumns +
+      bucketSpec.map(_ + " ").getOrElse("") +
+      s"ignoreIfExists:$ignoreIfExists " +
+      s"managedIfNoPath:$managedIfNoPath]"
+  }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we are saving metadata to metastore, we need to check if metastore supports
