@@ -185,7 +185,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
       // Test status while batch processing has completed
-      AdvanceManualClock(500, waitForStreamExecThreadToBlock = false), // time = 1100 to unblock job
+      AdvanceManualClock(500), // time = 1100 to unblock job
       AssertOnQuery { _ => clock.getTimeMillis() === 1100 },
       CheckAnswer(2),
       AssertOnQuery(_.status.isDataAvailable === true),
@@ -240,7 +240,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertStreamExecThreadToWaitForClock(),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === false),
-      AssertOnQuery(_.status.message === "Waiting for data to arrive")
+      AssertOnQuery(_.status.message === "Waiting for next trigger")
     )
   }
 
