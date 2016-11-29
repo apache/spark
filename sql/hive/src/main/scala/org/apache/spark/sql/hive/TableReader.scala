@@ -31,7 +31,7 @@ import org.apache.hadoop.hive.serde2.Deserializer
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
-import org.apache.hadoop.mapred.{FileInputFormat, FileSplit, InputFormat, JobConf}
+import org.apache.hadoop.mapred.{FileInputFormat, FileSplit, InputFormat, JobConf, TextInputFormat}
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -115,8 +115,7 @@ class HadoopTableReader(
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
     val skipHeaderLineCount =
       tableDesc.getProperties.getProperty("skip.header.line.count", "0").toInt
-    val isTextInputFormatTable =
-      hiveTable.getInputFormatClass().getName() == "org.apache.hadoop.mapred.TextInputFormat"
+    val isTextInputFormatTable = hiveTable.getInputFormatClass == classOf[TextInputFormat]
 
     // logDebug("Table input: %s".format(tablePath))
     val ifc = hiveTable.getInputFormatClass
@@ -131,13 +130,15 @@ class HadoopTableReader(
       val deserializer = deserializerClass.newInstance()
       deserializer.initialize(hconf, tableDesc.getProperties)
       if (skipHeaderLineCount > 0 && isTextInputFormatTable) {
-        val partition = hadoopRDD.partitions(index).asInstanceOf[HadoopPartition]
-        if (partition.inputSplit.t.asInstanceOf[FileSplit].getStart() == 0) {
-          var i = 0
-          while (i < skipHeaderLineCount && iter.hasNext) {
-            i += 1
-            iter.next()
-          }
+        hadoopRDD.partitions(index) match {
+          case partition: HadoopPartition =>
+            if (partition.inputSplit.t.asInstanceOf[FileSplit].getStart() == 0) {
+              var i = 0
+              while (i < skipHeaderLineCount && iter.hasNext) {
+                i += 1
+                iter.next()
+              }
+            }
         }
       }
       HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)

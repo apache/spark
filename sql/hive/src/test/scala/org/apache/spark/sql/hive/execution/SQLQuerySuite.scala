@@ -2012,7 +2012,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-11374 Support skip.header.line.count option in Hive external table") {
-    withTable("skip_table_0", "skip_table_1", "skip_table_2") {
+    withTable("skip_table_0", "skip_table_1", "skip_table_2", "skip_table_3") {
       withTempDir { dir =>
         dir.delete()
         val path = dir.getCanonicalPath
@@ -2039,6 +2039,23 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           checkAnswer(sql(s"SELECT * FROM skip_table_$i"), result)
         }
       }
+    }
+
+    // Since the default value of fs.local.block.size is 32MB (32 * 1024 * 1024),
+    // the following creates a file with three input splits.
+    withTempDir { dir =>
+      dir.delete()
+      val path = dir.getCanonicalPath
+      spark.range(0, 3 * 1024 * 1024).map(x => "c" * 32).repartition(1).write.csv(path)
+      sql(
+        s"""
+           |CREATE EXTERNAL TABLE skip_table_3 (id INT, b VARCHAR(10))
+           |ROW FORMAT DELIMITED
+           |FIELDS TERMINATED BY ','
+           |STORED AS TEXTFILE LOCATION '$path'
+           |TBLPROPERTIES('skip.header.line.count'='1')
+        """.stripMargin)
+      checkAnswer(sql(s"SELECT count(*) FROM skip_table_3"), Row(3 * 1024 * 1024 - 1) :: Nil)
     }
   }
 
