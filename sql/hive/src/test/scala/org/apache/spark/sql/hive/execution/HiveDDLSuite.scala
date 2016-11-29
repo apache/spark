@@ -159,7 +159,6 @@ class HiveDDLSuite
     val comment = "庙"
     // scalastyle:on
     withTable(tabName) {
-      // non ascii characters are not allowed in the source code, so we disable the scalastyle.
       sql(s"""
              |CREATE TABLE $tabName(`$colName1` int COMMENT '$comment')
              |COMMENT '$comment'
