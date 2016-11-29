@@ -52,7 +52,8 @@ object ExpressionEncoder {
       throw new UnsupportedOperationException(
         "Cannot create encoder for Option of non-flat type, as non-flat type is represented " +
           "as a row, and the entire row can not be null in Spark SQL like normal databases. " +
-          "You can wrap your type with Tuple1 if you do want top level null objects.")
+          "You can wrap your type with Tuple1 if you do want top level null objects, e.g. " +
+          "val ds: Dataset[Tuple1[MyClass]] = Seq(Tuple1(MyClass(...)), Tuple1(null)).toDS")
     }
 
     val cls = mirror.runtimeClass(tpe)
