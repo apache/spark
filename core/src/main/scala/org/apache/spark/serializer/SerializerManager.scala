@@ -78,9 +78,8 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
   }
 
   // SPARK-18617: As feature in SPARK-13990 can not be applied to Spark Streaming now. The worst
-  // result is streaming job based on `Receiver` mode can not run on Spark 2.x properly.
-  // It may be a rational choice to close `Kryo auto pick` for streaming in the first step.
-  // TODO: StreamBlock data should support kryo serializer.
+  // result is streaming job based on `Receiver` mode can not run on Spark 2.x properly. It may be
+  // a rational choice to close `kryo auto pick` feature for streaming in the first step.
   def getSerializer(ct: ClassTag[_], autoPick: Boolean): Serializer = {
     if (autoPick && canUseKryo(ct)) {
       kryoSerializer
