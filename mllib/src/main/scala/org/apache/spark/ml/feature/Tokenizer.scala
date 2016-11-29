@@ -70,7 +70,7 @@ class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   def this() = this(Identifiable.randomUID("regexTok"))
 
   /**
-   * Minimum token length, >= 0.
+   * Minimum token length, greater than or equal to 0.
    * Default: 1, to avoid returning empty strings
    * @group param
    */

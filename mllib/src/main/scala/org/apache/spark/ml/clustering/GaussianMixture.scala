@@ -44,7 +44,7 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   with HasSeed with HasPredictionCol with HasProbabilityCol with HasTol {
 
   /**
-   * Number of independent Gaussians in the mixture model. Must be &gt; 1. Default: 2.
+   * Number of independent Gaussians in the mixture model. Must be greater than 1. Default: 2.
    * @group param
    */
   @Since("2.0.0")

@@ -40,8 +40,8 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  * SQL dialect of a certain database or jdbc driver.
  * Lots of databases define types that aren't explicitly supported
  * by the JDBC spec.  Some JDBC drivers also report inaccurate
- * information---for instance, BIT(n&gt;1) being reported as a BIT type is quite
- * common, even though BIT in JDBC is meant for single-bit values.  Also, there
+ * information---for instance, BIT(n{@literal >}1) being reported as a BIT type is quite
+ * common, even though BIT in JDBC is meant for single-bit values. Also, there
  * does not appear to be a standard name for an unbounded string or binary
  * type; we use BLOB and CLOB by default but override with database-specific
  * alternatives when these are absent or do not behave correctly.
