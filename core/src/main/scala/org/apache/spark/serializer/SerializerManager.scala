@@ -77,8 +77,8 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
     primitiveAndPrimitiveArrayClassTags.contains(ct) || ct == stringClassTag
   }
 
-  def getSerializer(ct: ClassTag[_]): Serializer = {
-    if (canUseKryo(ct)) {
+  def getSerializer(ct: ClassTag[_], autoPick: Boolean): Serializer = {
+    if (autoPick && canUseKryo(ct)) {
       kryoSerializer
     } else {
       defaultSerializer
@@ -155,7 +155,12 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
       outputStream: OutputStream,
       values: Iterator[T]): Unit = {
     val byteStream = new BufferedOutputStream(outputStream)
-    val ser = getSerializer(implicitly[ClassTag[T]]).newInstance()
+    val ser = blockId match {
+      case a: StreamBlockId =>
+        getSerializer(implicitly[ClassTag[T]], autoPick = false).newInstance()
+      case _ =>
+        getSerializer(implicitly[ClassTag[T]], autoPick = true).newInstance()
+    }
     ser.serializeStream(wrapStream(blockId, byteStream)).writeAll(values).close()
   }
 
@@ -171,7 +176,12 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
       classTag: ClassTag[_]): ChunkedByteBuffer = {
     val bbos = new ChunkedByteBufferOutputStream(1024 * 1024 * 4, ByteBuffer.allocate)
     val byteStream = new BufferedOutputStream(bbos)
-    val ser = getSerializer(classTag).newInstance()
+    val ser = blockId match {
+      case a: StreamBlockId =>
+        getSerializer(classTag, autoPick = false).newInstance()
+      case _ =>
+        getSerializer(classTag, autoPick = true).newInstance()
+    }
     ser.serializeStream(wrapStream(blockId, byteStream)).writeAll(values).close()
     bbos.toChunkedByteBuffer
   }
@@ -185,8 +195,14 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
       inputStream: InputStream)
       (classTag: ClassTag[T]): Iterator[T] = {
     val stream = new BufferedInputStream(inputStream)
-    getSerializer(classTag)
-      .newInstance()
+    val ser = blockId match {
+      case a: StreamBlockId =>
+        getSerializer(classTag, autoPick = false)
+      case _ =>
+        getSerializer(classTag, autoPick = true)
+    }
+
+    ser.newInstance()
       .deserializeStream(wrapStream(blockId, stream))
       .asIterator.asInstanceOf[Iterator[T]]
   }
