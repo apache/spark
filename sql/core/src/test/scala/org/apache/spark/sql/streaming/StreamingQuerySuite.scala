@@ -249,7 +249,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
 
     /** Whether metrics of a query is registered for reporting */
     def isMetricsRegistered(query: StreamingQuery): Boolean = {
-      val sourceName = s"StructuredStreaming.${query.name}"
+      val sourceName = s"spark.streaming.${query.name}"
       val sources = spark.sparkContext.env.metricsSystem.getSourcesByName(sourceName)
       require(sources.size <= 1)
       sources.nonEmpty
