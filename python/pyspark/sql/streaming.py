@@ -104,7 +104,7 @@ class StreamingQuery(object):
         Returns the most recent :class:`StreamingQueryProgress` update of this streaming query.
         :return: a map
         """
-        return json.loads(self._jsq.lastProgress().toString())
+        return json.loads(self._jsq.lastProgress().json())
 
     @since(2.0)
     def processAllAvailable(self):
