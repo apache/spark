@@ -158,7 +158,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.isTriggerActive === false),
       // TODO: test status.message before trigger has started
       // AssertOnQuery(_.lastProgress === null)  // there is an empty trigger as soon as started
-      AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
+      AssertOnQuery(_.recentProgresses.count(_.numInputRows > 0) === 0),
 
       // Test status while offset is being fetched
       AddData(inputData, 1, 2),
@@ -167,7 +167,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message.toLowerCase.contains("getting offsets from")),
-      AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
+      AssertOnQuery(_.recentProgresses.count(_.numInputRows > 0) === 0),
 
       // Test status while batch is being fetched
       AdvanceManualClock(200), // time = 300 to unblock getOffset, will block on getBatch
@@ -175,14 +175,14 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message === "Processing new data"),
-      AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
+      AssertOnQuery(_.recentProgresses.count(_.numInputRows > 0) === 0),
 
       // Test status while batch is being processed
       AdvanceManualClock(300), // time = 600 to unblock getBatch, will block in Spark job
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message === "Processing new data"),
-      AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
+      AssertOnQuery(_.recentProgresses.count(_.numInputRows > 0) === 0),
 
       // Test status while batch processing has completed
       AdvanceManualClock(500), // time = 1100 to unblock job
@@ -193,8 +193,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
       AssertOnQuery { query =>
         assert(query.lastProgress != null)
-        assert(query.recentProgress.exists(_.numInputRows > 0))
-        assert(query.recentProgress.last.eq(query.lastProgress))
+        assert(query.recentProgresses.exists(_.numInputRows > 0))
+        assert(query.recentProgresses.last.eq(query.lastProgress))
 
         val progress = query.lastProgress
         assert(progress.id === query.id)
@@ -229,7 +229,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
       AssertOnQuery { query =>
-        assert(query.recentProgress.last.eq(query.lastProgress))
+        assert(query.recentProgresses.last.eq(query.lastProgress))
         assert(query.lastProgress.batchId === 1)
         assert(query.lastProgress.sources(0).inputRowsPerSecond === 1.818)
         true
@@ -343,7 +343,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
     try {
       val q = streamingDF.writeStream.format("memory").queryName("test").start()
       q.processAllAvailable()
-      q.recentProgress.head
+      q.recentProgresses.head
     } finally {
       spark.streams.active.map(_.stop())
     }

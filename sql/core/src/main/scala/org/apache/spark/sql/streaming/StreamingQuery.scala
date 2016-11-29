@@ -78,7 +78,7 @@ trait StreamingQuery {
    *
    *  @since 2.1.0
    */
-  def recentProgress: Array[StreamingQueryProgress]
+  def recentProgresses: Array[StreamingQueryProgress]
 
   /**
    * Returns the most recent update on the status of the streaming query.

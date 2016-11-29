@@ -88,12 +88,12 @@ class StreamingQuery(object):
         else:
             return self._jsq.awaitTermination()
 
-    def recentProgress(self):
+    def recentProgresses(self):
         """Returns the most recent statistics on progress that has been made in this streaming
         query.
         """
 
-        return [json.loads(p.json()) for p in self._jsq.recentProgress()]
+        return [json.loads(p.json()) for p in self._jsq.recentProgresses()]
 
     @since(2.0)
     def processAllAvailable(self):
