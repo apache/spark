@@ -356,6 +356,7 @@ final class ShuffleBlockFetcherIterator(
           // Only copy the stream if it's wrapped by compression or encryption, also the size of
           // block is small (the decompressed block is smaller than maxBytesInFlight)
           if (detectCorrupt && !input.eq(in) && size < maxBytesInFlight / 3) {
+            val originalInput = input
             val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
             try {
               // Decompress the whole block at once to detect any corruption, which could increase
@@ -378,7 +379,7 @@ final class ShuffleBlockFetcherIterator(
                 }
             } finally {
               // TODO: release the buf here to free memory earlier
-              input.close()
+              originalInput.close()
               in.close()
             }
           }
