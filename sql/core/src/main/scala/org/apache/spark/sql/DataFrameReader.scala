@@ -181,7 +181,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @param upperBound the maximum value of `columnName` used to decide partition stride.
    * @param numPartitions the number of partitions. This, along with `lowerBound` (inclusive),
    *                      `upperBound` (exclusive), form partition strides for generated WHERE
-   *                      clause expressions used to split the column `columnName` evenly.
+   *                      clause expressions used to split the column `columnName` evenly. When
+   *                      the input is less than 1, the number is set to 1.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included. "fetchsize" can be used to control the

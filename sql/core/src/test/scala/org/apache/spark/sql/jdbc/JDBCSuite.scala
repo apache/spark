@@ -24,12 +24,12 @@ import java.util.{Calendar, GregorianCalendar, Properties}
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -211,10 +211,12 @@ class JDBCSuite extends SparkFunSuite
 
   // Check whether the tables are fetched in the expected degree of parallelism
   def checkNumPartitions(df: DataFrame, expectedNumPartitions: Int): Unit = {
-    val explain = ExplainCommand(df.queryExecution.logical, extended = true)
-    val plans = spark.sessionState.executePlan(explain).executedPlan
-    val expectedMsg = s"${JDBCOptions.JDBC_NUM_PARTITIONS}=$expectedNumPartitions"
-    assert(plans.executeCollect().map(_.toString).mkString.contains(expectedMsg))
+    df.queryExecution.analyzed.collectFirst {
+      case LogicalRelation(r: JDBCRelation, _, _) if r.parts.length == expectedNumPartitions => ()
+    }.getOrElse {
+      fail(s"Expecting a JDBCRelation with $expectedNumPartitions partitions, but got:\n" +
+        s"${df.queryExecution.analyzed}")
+    }
   }
 
   test("SELECT *") {
