@@ -69,9 +69,11 @@ elif len(JARS_PATH) == 0 and not os.path.exists(TEMP_PATH):
 
 EXAMPLES_PATH = os.path.join(SPARK_HOME, "examples/src/main/python")
 SCRIPTS_PATH = os.path.join(SPARK_HOME, "bin")
+DATA_PATH = os.path.join(SPARK_HOME, "data")
 SCRIPTS_TARGET = os.path.join(TEMP_PATH, "bin")
 JARS_TARGET = os.path.join(TEMP_PATH, "jars")
 EXAMPLES_TARGET = os.path.join(TEMP_PATH, "examples")
+DATA_TARGET = os.path.join(TEMP_PATH, "data")
 
 
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
@@ -114,11 +116,13 @@ try:
             os.symlink(JARS_PATH, JARS_TARGET)
             os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
             os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
+            os.symlink(DATA_PATH, DATA_TARGET)
         else:
             # For windows fall back to the slower copytree
             copytree(JARS_PATH, JARS_TARGET)
             copytree(SCRIPTS_PATH, SCRIPTS_TARGET)
             copytree(EXAMPLES_PATH, EXAMPLES_TARGET)
+            copytree(DATA_PATH, DATA_TARGET)
     else:
         # If we are not inside of SPARK_HOME verify we have the required symlink farm
         if not os.path.exists(JARS_TARGET):
@@ -161,18 +165,21 @@ try:
                   'pyspark.jars',
                   'pyspark.python.pyspark',
                   'pyspark.python.lib',
+                  'pyspark.data',
                   'pyspark.examples.src.main.python'],
         include_package_data=True,
         package_dir={
             'pyspark.jars': 'deps/jars',
             'pyspark.bin': 'deps/bin',
             'pyspark.python.lib': 'lib',
+            'pyspark.data': 'deps/data',
             'pyspark.examples.src.main.python': 'deps/examples',
         },
         package_data={
             'pyspark.jars': ['*.jar'],
             'pyspark.bin': ['*'],
             'pyspark.python.lib': ['*.zip'],
+            'pyspark.data': ['*'],
             'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
@@ -202,8 +209,10 @@ finally:
             os.remove(os.path.join(TEMP_PATH, "jars"))
             os.remove(os.path.join(TEMP_PATH, "bin"))
             os.remove(os.path.join(TEMP_PATH, "examples"))
+            os.remove(os.path.join(TEMP_PATH, "data"))
         else:
             rmtree(os.path.join(TEMP_PATH, "jars"))
             rmtree(os.path.join(TEMP_PATH, "bin"))
             rmtree(os.path.join(TEMP_PATH, "examples"))
+            rmtree(os.path.join(TEMP_PATH, "data"))
         os.rmdir(TEMP_PATH)
