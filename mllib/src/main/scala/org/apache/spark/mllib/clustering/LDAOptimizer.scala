@@ -38,7 +38,7 @@ import org.apache.spark.storage.StorageLevel
  */
 @Since("1.4.0")
 @DeveloperApi
-sealed trait LDAOptimizer {
+trait LDAOptimizer {
 
   /*
     DEVELOPERS NOTE:

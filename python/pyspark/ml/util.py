@@ -62,8 +62,6 @@ class Identifiable(object):
 @inherit_doc
 class MLWriter(object):
     """
-    .. note:: Experimental
-
     Utility class that can save ML instances.
 
     .. versionadded:: 2.0.0
@@ -129,8 +127,6 @@ class JavaMLWriter(MLWriter):
 @inherit_doc
 class MLWritable(object):
     """
-    .. note:: Experimental
-
     Mixin for ML instances that provide :py:class:`MLWriter`.
 
     .. versionadded:: 2.0.0
@@ -159,8 +155,6 @@ class JavaMLWritable(MLWritable):
 @inherit_doc
 class MLReader(object):
     """
-    .. note:: Experimental
-
     Utility class that can load ML instances.
 
     .. versionadded:: 2.0.0
@@ -242,8 +236,6 @@ class JavaMLReader(MLReader):
 @inherit_doc
 class MLReadable(object):
     """
-    .. note:: Experimental
-
     Mixin for instances that provide :py:class:`MLReader`.
 
     .. versionadded:: 2.0.0

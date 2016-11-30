@@ -96,13 +96,11 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 }
 
 /**
- * :: Experimental ::
  * Model fitted by KMeans.
  *
  * @param parentModel a model trained by spark.mllib.clustering.KMeans.
  */
 @Since("1.5.0")
-@Experimental
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
     private val parentModel: MLlibKMeansModel)
@@ -248,13 +246,11 @@ object KMeansModel extends MLReadable[KMeansModel] {
 }
 
 /**
- * :: Experimental ::
  * K-means clustering with support for k-means|| initialization proposed by Bahmani et al.
  *
  * @see <a href="http://dx.doi.org/10.14778/2180912.2180915">Bahmani et al., Scalable k-means++.</a>
  */
 @Since("1.5.0")
-@Experimental
 class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends Estimator[KMeansModel] with KMeansParams with DefaultParamsWritable {

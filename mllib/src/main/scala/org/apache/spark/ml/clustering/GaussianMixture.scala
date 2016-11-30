@@ -68,8 +68,6 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
 }
 
 /**
- * :: Experimental ::
- *
  * Multivariate Gaussian Mixture Model (GMM) consisting of k Gaussians, where points
  * are drawn from each Gaussian i with probability weights(i).
  *
@@ -80,7 +78,6 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
  *                  the Multivariate Gaussian (Normal) Distribution for Gaussian i
  */
 @Since("2.0.0")
-@Experimental
 class GaussianMixtureModel private[ml] (
     @Since("2.0.0") override val uid: String,
     @Since("2.0.0") val weights: Array[Double],
@@ -265,7 +262,6 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
 }
 
 /**
- * :: Experimental ::
  * Gaussian Mixture clustering.
  *
  * This class performs expectation maximization for multivariate Gaussian
@@ -284,7 +280,6 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
  * on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
  */
 @Since("2.0.0")
-@Experimental
 class GaussianMixture @Since("2.0.0") (
     @Since("2.0.0") override val uid: String)
   extends Estimator[GaussianMixtureModel] with GaussianMixtureParams with DefaultParamsWritable {

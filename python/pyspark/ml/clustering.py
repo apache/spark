@@ -87,8 +87,6 @@ class ClusteringSummary(JavaWrapper):
 
 class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by GaussianMixture.
 
     .. versionadded:: 2.0.0
@@ -141,8 +139,6 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
 class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
                       HasProbabilityCol, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     GaussianMixture clustering.
     This class performs expectation maximization for multivariate Gaussian
     Mixture Models (GMMs).  A GMM represents a composite distribution of
@@ -441,8 +437,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
 
 class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by BisectingKMeans.
 
     .. versionadded:: 2.0.0
@@ -487,8 +481,6 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
 class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasSeed,
                       JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     A bisecting k-means algorithm based on the paper "A comparison of document clustering
     techniques" by Steinbach, Karypis, and Kumar, with modification to fit Spark.
     The algorithm starts from a single cluster that contains all points.
@@ -619,8 +611,6 @@ class BisectingKMeansSummary(ClusteringSummary):
 @inherit_doc
 class LDAModel(JavaModel):
     """
-    .. note:: Experimental
-
     Latent Dirichlet Allocation (LDA) model.
     This abstraction permits for different underlying representations,
     including local and distributed data structures.
@@ -697,8 +687,6 @@ class LDAModel(JavaModel):
 @inherit_doc
 class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Distributed model fitted by :py:class:`LDA`.
     This type of model is currently only produced by Expectation-Maximization (EM).
 
@@ -761,8 +749,6 @@ class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
 @inherit_doc
 class LocalLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Local (non-distributed) model fitted by :py:class:`LDA`.
     This model stores the inferred topics only; it does not store info about the training dataset.
 
@@ -775,8 +761,6 @@ class LocalLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
 class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInterval,
           JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
 
     Terminology:
