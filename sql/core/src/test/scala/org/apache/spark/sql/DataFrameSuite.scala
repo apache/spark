@@ -1697,7 +1697,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       expr = "cast((_1 + _2) as boolean)", expectedNonNullableColumns = Seq("_1", "_2"))
   }
 
-  test("SPARK-17897: Attribute is not NullIntolerant") {
+  test("SPARK-17897: Fixed IsNotNull Constraint Inference Rule") {
     val data = Seq[java.lang.Integer](1, null).toDF("key")
     checkAnswer(data.filter("not key is not null"), Row(null))
     checkAnswer(data.filter("not ((- key) is not null)"), Row(null))
