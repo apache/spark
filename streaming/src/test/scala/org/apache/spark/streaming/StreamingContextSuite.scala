@@ -806,6 +806,28 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     ssc.stop()
   }
 
+  test("SPARK-18560 Receiver data should be deserialized properly.") {
+    // Start a two nodes cluster, so receiver will use one node, and Spark jobs will use the
+    // other one. Then Spark jobs need to fetch remote blocks and it will trigger SPARK-18560.
+    val conf = new SparkConf().setMaster("local-cluster[2,1,1024]").setAppName(appName)
+    ssc = new StreamingContext(conf, Milliseconds(100))
+    val input = ssc.receiverStream(new FakeByteArrayReceiver)
+    input.count().foreachRDD { rdd =>
+      // Make sure we can read from BlockRDD
+      if (rdd.collect().headOption.getOrElse(0L) > 0) {
+        // Stop StreamingContext to unblock "awaitTerminationOrTimeout"
+        new Thread() {
+          setDaemon(true)
+          override def run(): Unit = {
+            ssc.stop(stopSparkContext = true, stopGracefully = false)
+          }
+        }.start()
+      }
+    }
+    ssc.start()
+    ssc.awaitTerminationOrTimeout(60000)
+  }
+
   def addInputStream(s: StreamingContext): DStream[Int] = {
     val input = (1 to 100).map(i => 1 to i)
     val inputStream = new TestInputStream(s, input, 1)
@@ -867,6 +889,31 @@ class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging 
 
 object TestReceiver {
   val counter = new AtomicInteger(1)
+}
+
+class FakeByteArrayReceiver extends Receiver[Array[Byte]](StorageLevel.MEMORY_ONLY) with Logging {
+
+  val data: Array[Byte] = "test".getBytes
+  var receivingThreadOption: Option[Thread] = None
+
+  override def onStart(): Unit = {
+    val thread = new Thread() {
+      override def run() {
+        logInfo("Receiving started")
+        while (!isStopped) {
+          store(data)
+        }
+        logInfo("Receiving stopped")
+      }
+    }
+    receivingThreadOption = Some(thread)
+    thread.start()
+  }
+
+  override def onStop(): Unit = {
+    // no clean to be done, the receiving thread should stop on it own, so just wait for it.
+    receivingThreadOption.foreach(_.join())
+  }
 }
 
 /** Custom receiver for testing whether a slow receiver can be shutdown gracefully or not */
