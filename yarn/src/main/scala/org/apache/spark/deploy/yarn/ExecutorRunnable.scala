@@ -53,7 +53,8 @@ private[yarn] class ExecutorRunnable(
     executorCores: Int,
     appId: String,
     securityMgr: SecurityManager,
-    localResources: Map[String, LocalResource]) extends Logging {
+    localResources: Map[String, LocalResource]
+    allocationMeter: Int) extends Logging {
 
   var rpc: YarnRPC = YarnRPC.create(conf)
   var nmClient: NMClient = _
@@ -206,8 +207,12 @@ private[yarn] class ExecutorRunnable(
     }.toSeq
 
     YarnSparkHadoopUtil.addOutOfMemoryErrorArgument(javaOpts)
+
+    //sparkConf.get(NUMA_NODE)
+    val numaNode = allocationMeter%2
+
     val commands = prefixEnv ++ Seq(
-      YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java",
+      s" numactl --cpunodebind=$numaNode --preferred=$numaNode " + YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java",
       "-server") ++
       javaOpts ++
       Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
