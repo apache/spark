@@ -90,8 +90,8 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * @group param
    */
   @Since("2.2.0")
-  final val miniBatchFraction = new DoubleParam(this, "k", "The fraction of the data to update" +
-    " clustering centers per iteration. Must be in (0, 1].",
+  final val miniBatchFraction = new DoubleParam(this, "miniBatchFraction", "The fraction of the" +
+    " data to update clustering centers per iteration. Must be in (0, 1].",
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
   /** @group getParam */
