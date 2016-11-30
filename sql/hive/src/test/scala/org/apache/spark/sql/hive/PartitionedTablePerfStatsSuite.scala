@@ -57,7 +57,11 @@ class PartitionedTablePerfStatsSuite
   }
 
   private def setupPartitionedHiveTable(tableName: String, dir: File): Unit = {
-    spark.range(5).selectExpr("id as fieldOne", "id as partCol1", "id as partCol2").write
+    setupPartitionedHiveTable(tableName, dir, 5)
+  }
+
+  private def setupPartitionedHiveTable(tableName: String, dir: File, scale: Int): Unit = {
+    spark.range(scale).selectExpr("id as fieldOne", "id as partCol1", "id as partCol2").write
       .partitionBy("partCol1", "partCol2")
       .mode("overwrite")
       .parquet(dir.getAbsolutePath)
@@ -71,7 +75,11 @@ class PartitionedTablePerfStatsSuite
   }
 
   private def setupPartitionedDatasourceTable(tableName: String, dir: File): Unit = {
-    spark.range(5).selectExpr("id as fieldOne", "id as partCol1", "id as partCol2").write
+    setupPartitionedDatasourceTable(tableName, dir, 5)
+  }
+
+  private def setupPartitionedDatasourceTable(tableName: String, dir: File, scale: Int): Unit = {
+    spark.range(scale).selectExpr("id as fieldOne", "id as partCol1", "id as partCol2").write
       .partitionBy("partCol1", "partCol2")
       .mode("overwrite")
       .parquet(dir.getAbsolutePath)
@@ -105,12 +113,9 @@ class PartitionedTablePerfStatsSuite
         assert(df4.count() == 0)
         assert(df4.inputFiles.length == 0)
 
-        // TODO(ekl) enable for hive tables as well once SPARK-17983 is fixed
-        if (spec.isDatasourceTable) {
-          val df5 = spark.sql("select * from test where fieldOne = 4")
-          assert(df5.count() == 1)
-          assert(df5.inputFiles.length == 5)
-        }
+        val df5 = spark.sql("select * from test where fieldOne = 4")
+        assert(df5.count() == 1)
+        assert(df5.inputFiles.length == 5)
       }
     }
   }
@@ -240,6 +245,52 @@ class PartitionedTablePerfStatsSuite
           assert(spark.sql("select * from test").count() == 5)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 10)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
+        }
+      }
+    }
+  }
+
+  test("hive table: num hive client calls does not scale with partition count") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+      withTable("test") {
+        withTempDir { dir =>
+          setupPartitionedHiveTable("test", dir, scale = 100)
+
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("select * from test where partCol1 = 1").count() == 1)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() > 0)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("select * from test").count() == 100)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("show partitions test").count() == 100)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+        }
+      }
+    }
+  }
+
+  test("datasource table: num hive client calls does not scale with partition count") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+      withTable("test") {
+        withTempDir { dir =>
+          setupPartitionedDatasourceTable("test", dir, scale = 100)
+
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("select * from test where partCol1 = 1").count() == 1)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() > 0)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("select * from test").count() == 100)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("show partitions test").count() == 100)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
         }
       }
     }

@@ -355,8 +355,8 @@ object ALSModel extends MLReadable[ALSModel] {
  *
  * Essentially instead of finding the low-rank approximations to the rating matrix `R`,
  * this finds the approximations for a preference matrix `P` where the elements of `P` are 1 if
- * r &gt; 0 and 0 if r &lt;= 0. The ratings then act as 'confidence' values related to strength of
- * indicated user
+ * r is greater than 0 and 0 if r is less than or equal to 0. The ratings then act as 'confidence'
+ * values related to strength of indicated user
  * preferences rather than explicit ratings given to items.
  */
 @Since("1.3.0")
@@ -678,6 +678,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       checkpointInterval: Int = 10,
       seed: Long = 0L)(
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
+    require(!ratings.isEmpty(), s"No ratings available from $ratings")
     require(intermediateRDDStorageLevel != StorageLevel.NONE,
       "ALS is not designed to run without persisting intermediate RDDs.")
     val sc = ratings.sparkContext
@@ -877,7 +878,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   }
 
   /**
-   * Builder for [[RatingBlock]]. [[mutable.ArrayBuilder]] is used to avoid boxing/unboxing.
+   * Builder for [[RatingBlock]]. `mutable.ArrayBuilder` is used to avoid boxing/unboxing.
    */
   private[recommendation] class RatingBlockBuilder[@specialized(Int, Long) ID: ClassTag]
     extends Serializable {

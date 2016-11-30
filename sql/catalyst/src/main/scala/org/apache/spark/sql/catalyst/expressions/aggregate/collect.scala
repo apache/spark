@@ -44,8 +44,6 @@ abstract class Collect extends ImperativeAggregate {
 
   override def dataType: DataType = ArrayType(child.dataType)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
-
   override def supportsPartial: Boolean = false
 
   override def aggBufferAttributes: Seq[AttributeReference] = Nil
@@ -106,7 +104,7 @@ case class CollectList(
 }
 
 /**
- * Collect a list of unique elements.
+ * Collect a set of unique elements.
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a set of unique elements.")

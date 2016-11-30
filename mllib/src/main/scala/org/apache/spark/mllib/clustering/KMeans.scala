@@ -56,14 +56,18 @@ class KMeans private (
   def this() = this(2, 20, KMeans.K_MEANS_PARALLEL, 2, 1e-4, Utils.random.nextLong())
 
   /**
-   * Number of clusters to create (k). Note that it is possible for fewer than k clusters to
+   * Number of clusters to create (k).
+   *
+   * @note It is possible for fewer than k clusters to
    * be returned, for example, if there are fewer than k distinct points to cluster.
    */
   @Since("1.4.0")
   def getK: Int = k
 
   /**
-   * Set the number of clusters to create (k). Note that it is possible for fewer than k clusters to
+   * Set the number of clusters to create (k).
+   *
+   * @note It is possible for fewer than k clusters to
    * be returned, for example, if there are fewer than k distinct points to cluster. Default: 2.
    */
   @Since("0.8.0")

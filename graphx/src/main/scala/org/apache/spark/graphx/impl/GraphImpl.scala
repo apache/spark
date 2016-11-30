@@ -42,7 +42,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
   @transient override val edges: EdgeRDDImpl[ED, VD] = replicatedVertexView.edges
 
-  /** Return a RDD that brings edges together with their source and destination vertices. */
+  /** Return an RDD that brings edges together with their source and destination vertices. */
   @transient override lazy val triplets: RDD[EdgeTriplet[VD, ED]] = {
     replicatedVertexView.upgrade(vertices, true, true)
     replicatedVertexView.edges.partitionsRDD.mapPartitions(_.flatMap {
@@ -277,7 +277,9 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
 object GraphImpl {
 
-  /** Create a graph from edges, setting referenced vertices to `defaultVertexAttr`. */
+  /**
+   * Create a graph from edges, setting referenced vertices to `defaultVertexAttr`.
+   */
   def apply[VD: ClassTag, ED: ClassTag](
       edges: RDD[Edge[ED]],
       defaultVertexAttr: VD,
@@ -286,7 +288,9 @@ object GraphImpl {
     fromEdgeRDD(EdgeRDD.fromEdges(edges), defaultVertexAttr, edgeStorageLevel, vertexStorageLevel)
   }
 
-  /** Create a graph from EdgePartitions, setting referenced vertices to `defaultVertexAttr`. */
+  /**
+   * Create a graph from EdgePartitions, setting referenced vertices to `defaultVertexAttr`.
+   */
   def fromEdgePartitions[VD: ClassTag, ED: ClassTag](
       edgePartitions: RDD[(PartitionID, EdgePartition[ED, VD])],
       defaultVertexAttr: VD,
@@ -296,7 +300,9 @@ object GraphImpl {
       vertexStorageLevel)
   }
 
-  /** Create a graph from vertices and edges, setting missing vertices to `defaultVertexAttr`. */
+  /**
+   * Create a graph from vertices and edges, setting missing vertices to `defaultVertexAttr`.
+   */
   def apply[VD: ClassTag, ED: ClassTag](
       vertices: RDD[(VertexId, VD)],
       edges: RDD[Edge[ED]],

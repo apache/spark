@@ -161,7 +161,8 @@ private[spark] class Client(
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
       launcherBackend.setAppId(appId.toString)
 
-      new CallerContext("CLIENT", Option(appId.toString)).setCurrentContext()
+      new CallerContext("CLIENT", sparkConf.get(APP_CALLER_CONTEXT),
+        Option(appId.toString)).setCurrentContext()
 
       // Verify whether the cluster has enough resources for our AM
       verifyClusterResources(newAppResponse)
@@ -598,8 +599,16 @@ private[spark] class Client(
     ).foreach { case (flist, resType, addToClasspath) =>
       flist.foreach { file =>
         val (_, localizedPath) = distribute(file, resType = resType)
-        if (addToClasspath && localizedPath != null) {
-          cachedSecondaryJarLinks += localizedPath
+        // If addToClassPath, we ignore adding jar multiple times to distitrbuted cache.
+        if (addToClasspath) {
+          if (localizedPath != null) {
+            cachedSecondaryJarLinks += localizedPath
+          }
+        } else {
+          if (localizedPath == null) {
+            throw new IllegalArgumentException(s"Attempt to add ($file) multiple times" +
+              " to the distributed cache.")
+          }
         }
       }
     }
@@ -1005,12 +1014,7 @@ private[spark] class Client(
     val securityManager = new SecurityManager(sparkConf)
     amContainer.setApplicationACLs(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
-
-    if (sparkConf.get(IO_ENCRYPTION_ENABLED)) {
-      SecurityManager.initIOEncryptionKey(sparkConf, credentials)
-    }
     setupSecurityToken(amContainer)
-
     amContainer
   }
 

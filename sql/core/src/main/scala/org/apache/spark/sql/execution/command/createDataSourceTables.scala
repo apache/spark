@@ -92,7 +92,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       // If metastore partition management for file source tables is enabled, we start off with
       // partition provider hive, but no partitions in the metastore. The user has to call
       // `msck repair table` to populate the table partitions.
-      partitionProviderIsHive = partitionColumnNames.nonEmpty &&
+      tracksPartitionsInCatalog = partitionColumnNames.nonEmpty &&
         sparkSession.sessionState.conf.manageFilesourcePartitions)
     // We will return Nil or throw exception at the beginning if the table already exists, so when
     // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
@@ -175,6 +175,10 @@ case class CreateDataSourceTableAsSelectCommand(
               existingSchema = Some(l.schema)
             case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
               existingSchema = Some(s.metadata.schema)
+            case c: CatalogRelation if c.catalogTable.provider == Some(DDLUtils.HIVE_PROVIDER) =>
+              throw new AnalysisException("Saving data in the Hive serde table " +
+                s"${c.catalogTable.identifier} is not supported yet. Please use the " +
+                "insertInto() API as an alternative..")
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
@@ -208,7 +212,8 @@ case class CreateDataSourceTableAsSelectCommand(
       className = provider,
       partitionColumns = table.partitionColumnNames,
       bucketSpec = table.bucketSpec,
-      options = table.storage.properties ++ pathOption)
+      options = table.storage.properties ++ pathOption,
+      catalogTable = Some(table))
 
     val result = try {
       dataSource.write(mode, df)

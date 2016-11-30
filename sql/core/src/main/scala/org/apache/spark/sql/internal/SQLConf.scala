@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.execution.datasources.HadoopCommitProtocolWrapper
+import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.execution.streaming.ManifestFileCommitProtocol
 import org.apache.spark.util.Utils
 
@@ -55,11 +55,6 @@ object SQLConf {
     def apply(key: String): ConfigBuilder = new ConfigBuilder(key).onCreate(register)
 
   }
-
-  val WAREHOUSE_PATH = SQLConfigBuilder("spark.sql.warehouse.dir")
-    .doc("The default location for managed databases and tables.")
-    .stringConf
-    .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
 
   val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
     .internal()
@@ -113,7 +108,7 @@ object SQLConf {
     .doc("Configures the maximum size in bytes for a table that will be broadcast to all worker " +
       "nodes when performing a join.  By setting this value to -1 broadcasting can be disabled. " +
       "Note that currently statistics are only supported for Hive Metastore tables where the " +
-      "command<code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been " +
+      "command <code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been " +
       "run, and file-based data source tables where the statistics are computed directly on " +
       "the files of data.")
     .longConf
@@ -385,7 +380,7 @@ object SQLConf {
     SQLConfigBuilder("spark.sql.sources.commitProtocolClass")
       .internal()
       .stringConf
-      .createWithDefault(classOf[HadoopCommitProtocolWrapper].getName)
+      .createWithDefault(classOf[SQLHadoopMapReduceCommitProtocol].getName)
 
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD =
     SQLConfigBuilder("spark.sql.sources.parallelPartitionDiscovery.threshold")
@@ -395,6 +390,14 @@ object SQLConf {
         "LibSVM data sources.")
       .intConf
       .createWithDefault(32)
+
+  val PARALLEL_PARTITION_DISCOVERY_PARALLELISM =
+    SQLConfigBuilder("spark.sql.sources.parallelPartitionDiscovery.parallelism")
+      .doc("The number of parallelism to list a collection of path recursively, Set the " +
+        "number to prevent file listing from generating too many tasks.")
+      .internal()
+      .intConf
+      .createWithDefault(10000)
 
   // Whether to automatically resolve ambiguity in join conditions for self-joins.
   // See SPARK-6231.
@@ -526,6 +529,24 @@ object SQLConf {
       .stringConf
       .createWithDefault(classOf[ManifestFileCommitProtocol].getName)
 
+  val OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD =
+    SQLConfigBuilder("spark.sql.objectHashAggregate.sortBased.fallbackThreshold")
+      .internal()
+      .doc("In the case of ObjectHashAggregateExec, when the size of the in-memory hash map " +
+        "grows too large, we will fall back to sort-based aggregation. This option sets a row " +
+        "count threshold for the size of the hash map.")
+      .intConf
+      // We are trying to be conservative and use a relatively small default count threshold here
+      // since the state object of some TypedImperativeAggregate function can be quite large (e.g.
+      // percentile_approx).
+      .createWithDefault(128)
+
+  val USE_OBJECT_HASH_AGG = SQLConfigBuilder("spark.sql.execution.useObjectHashAggregateExec")
+    .internal()
+    .doc("Decides if we use ObjectHashAggregateExec")
+    .booleanConf
+    .createWithDefault(true)
+
   val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")
@@ -587,6 +608,12 @@ object SQLConf {
       .doc("Whether Dropwizard/Codahale metrics will be reported for active streaming queries.")
       .booleanConf
       .createWithDefault(false)
+
+  val STREAMING_PROGRESS_RETENTION =
+    SQLConfigBuilder("spark.sql.streaming.numRecentProgresses")
+      .doc("The number of progress updates to retain for a streaming query")
+      .intConf
+      .createWithDefault(100)
 
   val NDV_MAX_ERROR =
     SQLConfigBuilder("spark.sql.statistics.ndv.maxError")
@@ -658,6 +685,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def streamingPollingDelay: Long = getConf(STREAMING_POLLING_DELAY)
 
   def streamingMetricsEnabled: Boolean = getConf(STREAMING_METRICS_ENABLED)
+
+  def streamingProgressRetention: Int = getConf(STREAMING_PROGRESS_RETENTION)
 
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
@@ -756,6 +785,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
 
+  def parallelPartitionDiscoveryParallelism: Int =
+    getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_PARALLELISM)
+
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
@@ -769,11 +801,15 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
 
+  def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
+
+  def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
+
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
 
   def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
-  def warehousePath: String = new Path(getConf(WAREHOUSE_PATH)).toString
+  def warehousePath: String = new Path(getConf(StaticSQLConf.WAREHOUSE_PATH)).toString
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
@@ -917,6 +953,11 @@ object StaticSQLConf {
       SQLConf.register(entry)
     }
   }
+
+  val WAREHOUSE_PATH = buildConf("spark.sql.warehouse.dir")
+    .doc("The default location for managed databases and tables.")
+    .stringConf
+    .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
 
   val CATALOG_IMPLEMENTATION = buildConf("spark.sql.catalogImplementation")
     .internal()

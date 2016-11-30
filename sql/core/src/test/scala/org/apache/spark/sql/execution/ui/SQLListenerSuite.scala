@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.ui
 
 import java.util.Properties
 
+import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito.mock
 
 import org.apache.spark._
@@ -35,10 +36,10 @@ import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanIn
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{AccumulatorMetadata, LongAccumulator}
+import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator}
 
 
-class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
+class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTestUtils {
   import testImplicits._
   import org.apache.spark.AccumulatorSuite.makeInfo
 
@@ -374,7 +375,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     val sqlMetricInfo = sqlMetric.toInfo(Some(sqlMetric.value), None)
     val nonSqlMetricInfo = nonSqlMetric.toInfo(Some(nonSqlMetric.value), None)
     val taskInfo = createTaskInfo(0, 0)
-    taskInfo.accumulables ++= Seq(sqlMetricInfo, nonSqlMetricInfo)
+    taskInfo.setAccumulables(List(sqlMetricInfo, nonSqlMetricInfo))
     val taskEnd = SparkListenerTaskEnd(0, 0, "just-a-task", null, taskInfo, null)
     listener.onOtherEvent(executionStart)
     listener.onJobStart(jobStart)
@@ -414,6 +415,45 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     val driverUpdates = listener.getCompletedExecutions.head.driverAccumUpdates
     assert(driverUpdates.size == 1)
     assert(driverUpdates(physicalPlan.longMetric("dummy").id) == expectedAccumValue)
+  }
+
+  test("roundtripping SparkListenerDriverAccumUpdates through JsonProtocol (SPARK-18462)") {
+    val event = SparkListenerDriverAccumUpdates(1L, Seq((2L, 3L)))
+    val json = JsonProtocol.sparkEventToJson(event)
+    assertValidDataInJson(json,
+      parse("""
+        |{
+        |  "Event": "org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates",
+        |  "executionId": 1,
+        |  "accumUpdates": [[2,3]]
+        |}
+      """.stripMargin))
+    JsonProtocol.sparkEventFromJson(json) match {
+      case SparkListenerDriverAccumUpdates(executionId, accums) =>
+        assert(executionId == 1L)
+        accums.foreach { case (a, b) =>
+          assert(a == 2L)
+          assert(b == 3L)
+        }
+    }
+
+    // Test a case where the numbers in the JSON can only fit in longs:
+    val longJson = parse(
+      """
+        |{
+        |  "Event": "org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates",
+        |  "executionId": 4294967294,
+        |  "accumUpdates": [[4294967294,3]]
+        |}
+      """.stripMargin)
+    JsonProtocol.sparkEventFromJson(longJson) match {
+      case SparkListenerDriverAccumUpdates(executionId, accums) =>
+        assert(executionId == 4294967294L)
+        accums.foreach { case (a, b) =>
+          assert(a == 4294967294L)
+          assert(b == 3L)
+        }
+    }
   }
 
 }

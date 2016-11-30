@@ -30,7 +30,12 @@ import org.apache.spark.unsafe.types.UTF8String
  * Returns an Array containing the evaluation of all children expressions.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(n0, ...) - Returns an array with the given elements.")
+  usage = "_FUNC_(expr, ...) - Returns an array with the given elements.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(1, 2, 3);
+       [1,2,3]
+  """)
 case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -56,7 +61,6 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
     ev.copy(code = s"""
-      final boolean ${ev.isNull} = false;
       this.$values = new Object[${children.size}];""" +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
@@ -73,7 +77,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
       s"""
         final ArrayData ${ev.value} = new $arrayClass($values);
         this.$values = null;
-      """)
+      """, isNull = "false")
   }
 
   override def prettyName: String = "array"
@@ -84,7 +88,12 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
  * The children are a flatted sequence of kv pairs, e.g. (key1, value1, key2, value2, ...)
  */
 @ExpressionDescription(
-  usage = "_FUNC_(key0, value0, key1, value1...) - Creates a map with the given key/value pairs.")
+  usage = "_FUNC_(key0, value0, key1, value1, ...) - Creates a map with the given key/value pairs.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(1.0, '2', 3.0, '4');
+       {1.0:"2",3.0:"4"}
+  """)
 case class CreateMap(children: Seq[Expression]) extends Expression {
   lazy val keys = children.indices.filter(_ % 2 == 0).map(children)
   lazy val values = children.indices.filter(_ % 2 != 0).map(children)
@@ -134,7 +143,6 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val keyData = s"new $arrayClass($keyArray)"
     val valueData = s"new $arrayClass($valueArray)"
     ev.copy(code = s"""
-      final boolean ${ev.isNull} = false;
       $keyArray = new Object[${keys.size}];
       $valueArray = new Object[${values.size}];""" +
       ctx.splitExpressions(
@@ -167,7 +175,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
         final MapData ${ev.value} = new $mapClass($keyData, $valueData);
         this.$keyArray = null;
         this.$valueArray = null;
-      """)
+      """, isNull = "false")
   }
 
   override def prettyName: String = "map"
@@ -276,7 +284,12 @@ trait CreateNamedStructLike extends Expression {
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.")
+  usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
+       {"a":1,"b":2,"c":3}
+  """)
 // scalastyle:on line.size.limit
 case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStructLike {
 
@@ -286,7 +299,6 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
     ev.copy(code = s"""
-      boolean ${ev.isNull} = false;
       $values = new Object[${valExprs.size}];""" +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
@@ -302,7 +314,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
       s"""
         final InternalRow ${ev.value} = new $rowClass($values);
         this.$values = null;
-      """)
+      """, isNull = "false")
   }
 
   override def prettyName: String = "named_struct"
@@ -318,7 +330,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
 case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateNamedStructLike {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
-    ExprCode(code = eval.code, isNull = eval.isNull, value = eval.value)
+    ExprCode(code = eval.code, isNull = "false", value = eval.value)
   }
 
   override def prettyName: String = "named_struct_unsafe"
@@ -329,8 +341,12 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateName
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(text[, pairDelim, keyValueDelim]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for pairDelim and ':' for keyValueDelim.",
-  extended = """ > SELECT _FUNC_('a:1,b:2,c:3',',',':');\n map("a":"1","b":"2","c":"3") """)
+  usage = "_FUNC_(text[, pairDelim[, keyValueDelim]]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for `pairDelim` and ':' for `keyValueDelim`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
+       map("a":"1","b":"2","c":"3")
+  """)
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
   extends TernaryExpression with CodegenFallback with ExpectsInputTypes {

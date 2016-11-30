@@ -180,8 +180,8 @@ private[spark] object ThreadUtils {
 
   // scalastyle:off awaitresult
   /**
-   * Preferred alternative to [[Await.result()]]. This method wraps and re-throws any exceptions
-   * thrown by the underlying [[Await]] call, ensuring that this thread's stack trace appears in
+   * Preferred alternative to `Await.result()`. This method wraps and re-throws any exceptions
+   * thrown by the underlying `Await` call, ensuring that this thread's stack trace appears in
    * logs.
    */
   @throws(classOf[SparkException])
@@ -196,7 +196,7 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Calls [[Awaitable.result]] directly to avoid using `ForkJoinPool`'s `BlockingContext`, wraps
+   * Calls `Awaitable.result` directly to avoid using `ForkJoinPool`'s `BlockingContext`, wraps
    * and re-throws any exceptions with nice stack track.
    *
    * Codes running in the user's thread may be in a thread of Scala ForkJoinPool. As concurrent

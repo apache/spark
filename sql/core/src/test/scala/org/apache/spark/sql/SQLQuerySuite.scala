@@ -85,15 +85,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkKeywordsExist(sql("describe function extended upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
-      "Usage: upper(str) - Returns str with all characters changed to uppercase",
+      "Usage: upper(str) - Returns `str` with all characters changed to uppercase",
       "Extended Usage:",
+      "Examples:",
       "> SELECT upper('SparkSql');",
-      "'SPARKSQL'")
+      "SPARKSQL")
 
     checkKeywordsExist(sql("describe functioN Upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
-      "Usage: upper(str) - Returns str with all characters changed to uppercase")
+      "Usage: upper(str) - Returns `str` with all characters changed to uppercase")
 
     checkKeywordsNotExist(sql("describe functioN Upper"), "Extended Usage")
 
@@ -2085,13 +2086,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-14986: Outer lateral view with empty generate expression") {
-    checkAnswer(
-      sql("select nil from (select 1 as x ) x lateral view outer explode(array()) n as nil"),
-      Row(null) :: Nil
-    )
-  }
-
   test("data source table created in InMemoryCatalog should be able to read/write") {
     withTable("tbl") {
       sql("CREATE TABLE tbl(i INT, j STRING) USING parquet")
@@ -2473,6 +2467,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         checkAnswer(spark.table("same_name"), spark.range(10).toDF())
         assert(spark.table("default.same_name").collect().isEmpty)
       }
+    }
+  }
+
+  test("SPARK-18053: ARRAY equality is broken") {
+    withTable("array_tbl") {
+      spark.range(10).select(array($"id").as("arr")).write.saveAsTable("array_tbl")
+      assert(sql("SELECT * FROM array_tbl where arr = ARRAY(1L)").count == 1)
     }
   }
 }
