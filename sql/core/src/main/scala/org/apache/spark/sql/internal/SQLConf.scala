@@ -609,6 +609,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val STREAMING_PROGRESS_RETENTION =
+    SQLConfigBuilder("spark.sql.streaming.numRecentProgresses")
+      .doc("The number of progress updates to retain for a streaming query")
+      .intConf
+      .createWithDefault(100)
+
   val NDV_MAX_ERROR =
     SQLConfigBuilder("spark.sql.statistics.ndv.maxError")
       .internal()
@@ -679,6 +685,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def streamingPollingDelay: Long = getConf(STREAMING_POLLING_DELAY)
 
   def streamingMetricsEnabled: Boolean = getConf(STREAMING_METRICS_ENABLED)
+
+  def streamingProgressRetention: Int = getConf(STREAMING_PROGRESS_RETENTION)
 
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 

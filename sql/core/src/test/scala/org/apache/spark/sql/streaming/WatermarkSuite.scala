@@ -51,6 +51,7 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
 
 
   test("watermark metric") {
+
     val inputData = MemoryStream[Int]
 
     val windowedAggregation = inputData.toDF()
@@ -62,16 +63,19 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
 
     testStream(windowedAggregation)(
       AddData(inputData, 15),
-      AssertOnLastQueryStatus { status =>
-        status.triggerDetails.get(StreamMetrics.EVENT_TIME_WATERMARK) === "5000"
+      CheckAnswer(),
+      AssertOnQuery { query =>
+        query.lastProgress.currentWatermark === 5000
       },
       AddData(inputData, 15),
-      AssertOnLastQueryStatus { status =>
-        status.triggerDetails.get(StreamMetrics.EVENT_TIME_WATERMARK) === "5000"
+      CheckAnswer(),
+      AssertOnQuery { query =>
+        query.lastProgress.currentWatermark === 5000
       },
       AddData(inputData, 25),
-      AssertOnLastQueryStatus { status =>
-        status.triggerDetails.get(StreamMetrics.EVENT_TIME_WATERMARK) === "15000"
+      CheckAnswer(),
+      AssertOnQuery { query =>
+        query.lastProgress.currentWatermark === 15000
       }
     )
   }
