@@ -186,7 +186,7 @@ try:
             'pyspark.jars': ['*.jar'],
             'pyspark.bin': ['*'],
             'pyspark.python.lib': ['*.zip'],
-            'pyspark.data': ['*'],
+            'pyspark.data': ['*.txt', '*.data'],
             'pyspark.licenses': ['*.txt'],
             'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
         data_files=[('', data_files)],
