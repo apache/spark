@@ -158,7 +158,7 @@ private[spark] abstract class Task[T](
   def killed: Boolean = _killed
 
   /**
-   * Returns the amount of time spent deserializing the RDD and function to be run.
+   * Returns the amount of time spent deserializing the RDD and function to be run in nanos.
    */
   def executorDeserializeTime: Long = _executorDeserializeTime
 

@@ -69,11 +69,11 @@ private[spark] class ShuffleMapTask(
 
   override def runTask(context: TaskContext): MapStatus = {
     // Deserialize the RDD using the broadcast variable.
-    val deserializeStartTime = System.currentTimeMillis()
+    val deserializeStartTime = System.nanoTime()
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val (rdd, dep) = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
       ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
-    _executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime
+    _executorDeserializeTime = math.max(System.nanoTime() - deserializeStartTime, 0L)
 
     var writer: ShuffleWriter[Any, Any] = null
     try {

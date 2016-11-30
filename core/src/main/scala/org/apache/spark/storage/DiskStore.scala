@@ -49,7 +49,7 @@ private[spark] class DiskStore(conf: SparkConf, diskManager: DiskBlockManager) e
       throw new IllegalStateException(s"Block $blockId is already present in the disk store")
     }
     logDebug(s"Attempting to put block $blockId")
-    val startTime = System.currentTimeMillis
+    val startTime = if (isDebugEnabled) System.currentTimeMillis else 0L
     val file = diskManager.getFile(blockId)
     val fileOutputStream = new FileOutputStream(file)
     var threwException: Boolean = true
@@ -65,11 +65,10 @@ private[spark] class DiskStore(conf: SparkConf, diskManager: DiskBlockManager) e
         }
       }
     }
-    val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
       file.getName,
       Utils.bytesToString(file.length()),
-      finishTime - startTime))
+      System.currentTimeMillis - startTime))
   }
 
   def putBytes(blockId: BlockId, bytes: ChunkedByteBuffer): Unit = {

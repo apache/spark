@@ -233,7 +233,7 @@ private[spark] class Executor(
 
     override def run(): Unit = {
       val taskMemoryManager = new TaskMemoryManager(env.memoryManager, taskId)
-      val deserializeStartTime = System.currentTimeMillis()
+      val deserializeStartTime = System.nanoTime()
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = env.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
@@ -268,7 +268,7 @@ private[spark] class Executor(
         env.mapOutputTracker.updateEpoch(task.epoch)
 
         // Run the actual task and measure its runtime.
-        taskStart = System.currentTimeMillis()
+        taskStart = System.nanoTime()
         var threwException = true
         val value = try {
           val res = task.run(
@@ -301,7 +301,7 @@ private[spark] class Executor(
             }
           }
         }
-        val taskFinish = System.currentTimeMillis()
+        val taskFinish = System.nanoTime()
 
         // If the task has been killed, let's fail it.
         if (task.killed) {
@@ -309,18 +309,20 @@ private[spark] class Executor(
         }
 
         val resultSer = env.serializer.newInstance()
-        val beforeSerialization = System.currentTimeMillis()
+        val beforeSerialization = System.nanoTime()
         val valueBytes = resultSer.serialize(value)
-        val afterSerialization = System.currentTimeMillis()
+        val afterSerialization = System.nanoTime()
 
         // Deserialization happens in two parts: first, we deserialize a Task object, which
         // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
-        task.metrics.setExecutorDeserializeTime(
-          (taskStart - deserializeStartTime) + task.executorDeserializeTime)
+        task.metrics.setExecutorDeserializeTime(math.max(
+          taskStart - deserializeStartTime + task.executorDeserializeTime, 0L) / 1000000.0)
         // We need to subtract Task.run()'s deserialization time to avoid double-counting
-        task.metrics.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
+        task.metrics.setExecutorRunTime(math.max(
+          taskFinish - taskStart - task.executorDeserializeTime, 0L) / 1000000.0)
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
-        task.metrics.setResultSerializationTime(afterSerialization - beforeSerialization)
+        task.metrics.setResultSerializationTime(math.max(
+          afterSerialization - beforeSerialization, 0L) / 1000000.0)
 
         // Note: accumulator updates must be collected after TaskMetrics is updated
         val accumUpdates = task.collectAccumulatorUpdates()
@@ -378,7 +380,8 @@ private[spark] class Executor(
           // Collect latest accumulator values to report back to the driver
           val accums: Seq[AccumulatorV2[_, _]] =
             if (task != null) {
-              task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
+              task.metrics.setExecutorRunTime(
+                math.max(System.nanoTime() - taskStart, 0L) / 1000000.0)
               task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
               task.collectAccumulatorUpdates(taskFailed = true)
             } else {
@@ -471,7 +474,8 @@ private[spark] class Executor(
    * Download any missing dependencies if we receive a new set of files and JARs from the
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
-  protected def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
+  protected def updateDependencies(newFiles: HashMap[String, Long],
+      newJars: HashMap[String, Long]) {
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     synchronized {
       // Fetch missing dependencies

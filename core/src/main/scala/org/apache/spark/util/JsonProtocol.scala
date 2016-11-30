@@ -308,8 +308,9 @@ private[spark] object JsonProtocol {
       value match {
         case v: Int => JInt(v)
         case v: Long => JInt(v)
-        // We only have 3 kind of internal accumulator types, so if it's not int or long, it must be
-        // the blocks accumulator, whose type is `java.util.List[(BlockId, BlockStatus)]`
+        case v: Double => JDouble(v)
+        // We only have 4 kinds of internal accumulator types, so if it's not int, long or double,
+        // it must be the blocks accumulator with type `java.util.List[(BlockId, BlockStatus)]`
         case v =>
           JArray(v.asInstanceOf[java.util.List[(BlockId, BlockStatus)]].asScala.toList.map {
             case (id, status) =>

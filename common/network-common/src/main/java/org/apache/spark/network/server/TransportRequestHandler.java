@@ -196,7 +196,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
           if (future.isSuccess()) {
-            logger.trace("Sent result {} to client {}", result, remoteAddress);
+            if (logger.isTraceEnabled()) {
+              logger.trace("Sent result {} to client {}", result, remoteAddress);
+            }
           } else {
             logger.error(String.format("Error sending result %s to %s; closing connection",
               result, remoteAddress), future.cause());

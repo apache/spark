@@ -135,7 +135,8 @@ public class TransportClient implements Closeable {
       long streamId,
       final int chunkIndex,
       final ChunkReceivedCallback callback) {
-    final long startTime = System.currentTimeMillis();
+    final boolean isTraceEnabled = logger.isTraceEnabled();
+    final long startTime = isTraceEnabled ? System.currentTimeMillis() : 0L;
     if (logger.isDebugEnabled()) {
       logger.debug("Sending fetch chunk request {} to {}", chunkIndex, getRemoteAddress(channel));
     }
@@ -148,8 +149,8 @@ public class TransportClient implements Closeable {
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
           if (future.isSuccess()) {
-            long timeTaken = System.currentTimeMillis() - startTime;
-            if (logger.isTraceEnabled()) {
+            if (isTraceEnabled) {
+              long timeTaken = System.currentTimeMillis() - startTime;
               logger.trace("Sending request {} to {} took {} ms", streamChunkId,
                 getRemoteAddress(channel), timeTaken);
             }
@@ -176,7 +177,8 @@ public class TransportClient implements Closeable {
    * @param callback Object to call with the stream data.
    */
   public void stream(final String streamId, final StreamCallback callback) {
-    final long startTime = System.currentTimeMillis();
+    final boolean isTraceEnabled = logger.isTraceEnabled();
+    final long startTime = isTraceEnabled ? System.currentTimeMillis() : 0L;
     if (logger.isDebugEnabled()) {
       logger.debug("Sending stream request for {} to {}", streamId, getRemoteAddress(channel));
     }
@@ -191,8 +193,8 @@ public class TransportClient implements Closeable {
           @Override
           public void operationComplete(ChannelFuture future) throws Exception {
             if (future.isSuccess()) {
-              long timeTaken = System.currentTimeMillis() - startTime;
-              if (logger.isTraceEnabled()) {
+              if (isTraceEnabled) {
+                long timeTaken = System.currentTimeMillis() - startTime;
                 logger.trace("Sending request for {} to {} took {} ms", streamId,
                   getRemoteAddress(channel), timeTaken);
               }
@@ -221,8 +223,9 @@ public class TransportClient implements Closeable {
    * @return The RPC's id.
    */
   public long sendRpc(ByteBuffer message, final RpcResponseCallback callback) {
-    final long startTime = System.currentTimeMillis();
-    if (logger.isTraceEnabled()) {
+    final boolean isTraceEnabled = logger.isTraceEnabled();
+    final long startTime = isTraceEnabled ? System.currentTimeMillis() : 0L;
+    if (isTraceEnabled) {
       logger.trace("Sending RPC to {}", getRemoteAddress(channel));
     }
 
@@ -234,8 +237,8 @@ public class TransportClient implements Closeable {
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
           if (future.isSuccess()) {
-            long timeTaken = System.currentTimeMillis() - startTime;
-            if (logger.isTraceEnabled()) {
+            if (isTraceEnabled) {
+              long timeTaken = System.currentTimeMillis() - startTime;
               logger.trace("Sending request {} to {} took {} ms", requestId,
                 getRemoteAddress(channel), timeTaken);
             }
