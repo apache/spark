@@ -1699,8 +1699,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-17897: Fixed IsNotNull Constraint Inference Rule") {
     val data = Seq[java.lang.Integer](1, null).toDF("key")
-    checkAnswer(data.filter("not key is not null"), Row(null))
-    checkAnswer(data.filter("not ((- key) is not null)"), Row(null))
+    checkAnswer(data.filter(!$"key".isNotNull), Row(null))
+    checkAnswer(data.filter(!(- $"key").isNotNull), Row(null))
   }
 
   test("SPARK-17957: outer join + na.fill") {
