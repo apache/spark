@@ -71,8 +71,6 @@ case class TestingTypedCount(
     TestingTypedCount.State(dataStream.readLong())
   }
 
-  override def inputTypes: Seq[AbstractDataType] = AnyDataType :: Nil
-
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
