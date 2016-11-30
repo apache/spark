@@ -26,7 +26,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
@@ -81,11 +81,8 @@ private[util] sealed trait BaseReadWrite {
 }
 
 /**
- * :: Experimental ::
- *
  * Abstract class for utility classes that can save ML instances.
  */
-@Experimental
 @Since("1.6.0")
 abstract class MLWriter extends BaseReadWrite with Logging {
 
@@ -138,11 +135,8 @@ abstract class MLWriter extends BaseReadWrite with Logging {
 }
 
 /**
- * :: Experimental ::
- *
  * Trait for classes that provide [[MLWriter]].
  */
-@Experimental
 @Since("1.6.0")
 trait MLWritable {
 
@@ -178,13 +172,10 @@ trait DefaultParamsWritable extends MLWritable { self: Params =>
 }
 
 /**
- * :: Experimental ::
- *
  * Abstract class for utility classes that can load ML instances.
  *
  * @tparam T ML instance type
  */
-@Experimental
 @Since("1.6.0")
 abstract class MLReader[T] extends BaseReadWrite {
 
@@ -202,13 +193,10 @@ abstract class MLReader[T] extends BaseReadWrite {
 }
 
 /**
- * :: Experimental ::
- *
  * Trait for objects that provide [[MLReader]].
  *
  * @tparam T ML instance type
  */
-@Experimental
 @Since("1.6.0")
 trait MLReadable[T] {
 

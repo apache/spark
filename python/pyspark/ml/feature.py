@@ -654,8 +654,6 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
 @inherit_doc
 class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Rescale each feature individually to range [-1, 1] by dividing through the largest maximum
     absolute value in each feature. It does not shift/center the data, and thus does not destroy
     any sparsity.
@@ -715,8 +713,6 @@ class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
 class MaxAbsScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Model fitted by :py:class:`MaxAbsScaler`.
 
     .. versionadded:: 2.0.0
