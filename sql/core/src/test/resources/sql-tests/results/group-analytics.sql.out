@@ -15,7 +15,7 @@ struct<>
 -- !query 1
 SELECT a + b, b, SUM(a - b) FROM testData GROUP BY a + b, b WITH CUBE
 -- !query 1 schema
-struct<(a + b):int,b:int,sum(CAST((a - b) AS BIGINT)):bigint>
+struct<(a + b):int,b:int,sum((a - b)):bigint>
 -- !query 1 output
 2	1	0
 2	NULL	0
@@ -35,7 +35,7 @@ NULL	NULL	3
 -- !query 2
 SELECT a, b, SUM(b) FROM testData GROUP BY a, b WITH CUBE
 -- !query 2 schema
-struct<a:int,b:int,sum(CAST(b AS BIGINT)):bigint>
+struct<a:int,b:int,sum(b):bigint>
 -- !query 2 output
 1	1	1
 1	2	2
@@ -54,7 +54,7 @@ NULL	NULL	9
 -- !query 3
 SELECT a + b, b, SUM(a - b) FROM testData GROUP BY a + b, b WITH ROLLUP
 -- !query 3 schema
-struct<(a + b):int,b:int,sum(CAST((a - b) AS BIGINT)):bigint>
+struct<(a + b):int,b:int,sum((a - b)):bigint>
 -- !query 3 output
 2	1	0
 2	NULL	0
@@ -72,7 +72,7 @@ NULL	NULL	3
 -- !query 4
 SELECT a, b, SUM(b) FROM testData GROUP BY a, b WITH ROLLUP
 -- !query 4 schema
-struct<a:int,b:int,sum(CAST(b AS BIGINT)):bigint>
+struct<a:int,b:int,sum(b):bigint>
 -- !query 4 output
 1	1	1
 1	2	2
@@ -99,7 +99,7 @@ struct<>
 -- !query 6
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year) ORDER BY course, year
 -- !query 6 schema
-struct<course:string,year:int,sum(CAST(earnings AS BIGINT)):bigint>
+struct<course:string,year:int,sum(earnings):bigint>
 -- !query 6 output
 NULL	NULL	113000
 Java	NULL	50000
@@ -113,7 +113,7 @@ dotNET	2013	48000
 -- !query 7
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year) ORDER BY course, year
 -- !query 7 schema
-struct<course:string,year:int,sum(CAST(earnings AS BIGINT)):bigint>
+struct<course:string,year:int,sum(earnings):bigint>
 -- !query 7 output
 NULL	NULL	113000
 NULL	2012	35000
@@ -129,7 +129,7 @@ dotNET	2013	48000
 -- !query 8
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(course, year)
 -- !query 8 schema
-struct<course:string,year:int,sum(CAST(earnings AS BIGINT)):bigint>
+struct<course:string,year:int,sum(earnings):bigint>
 -- !query 8 output
 Java	NULL	50000
 NULL	2012	35000
@@ -140,7 +140,7 @@ dotNET	NULL	63000
 -- !query 9
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(course)
 -- !query 9 schema
-struct<course:string,year:int,sum(CAST(earnings AS BIGINT)):bigint>
+struct<course:string,year:int,sum(earnings):bigint>
 -- !query 9 output
 Java	NULL	50000
 dotNET	NULL	63000
@@ -149,7 +149,7 @@ dotNET	NULL	63000
 -- !query 10
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(year)
 -- !query 10 schema
-struct<course:string,year:int,sum(CAST(earnings AS BIGINT)):bigint>
+struct<course:string,year:int,sum(earnings):bigint>
 -- !query 10 output
 NULL	2012	35000
 NULL	2013	78000
