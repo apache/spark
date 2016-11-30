@@ -25,7 +25,7 @@ import scala.collection.mutable.HashMap
 private[scheduler] class ExecutorFailuresInTaskSet(val node: String) {
   /**
    * Mapping from index of the tasks in the taskset, to the number of times it has failed on this
-   * executor and the expiry time.
+   * executor and the failure time.
    */
   val taskToFailureCountAndFailureTime = HashMap[Int, (Int, Long)]()
 

@@ -328,7 +328,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       taskScheduler.submitTasks(taskSet)
     }
 
-
     // Setup our mock blacklist:
     // * stage 0 is blacklisted on node "host1"
     // * stage 1 is blacklisted on executor "executor3"
@@ -413,7 +412,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       assert(tsm.isZombie)
     }
 
-    // the tasksSets complete, so the tracker should be notified
+    // the tasksSets complete, so the tracker should be notified of the successful ones
     verify(blacklist, times(1)).updateBlacklistForSuccessfulTaskSet(
       stageId = 0,
       stageAttemptId = 0,
@@ -422,6 +421,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       stageId = 1,
       stageAttemptId = 0,
       failuresByExec = stageToMockTaskSetBlacklist(1).execToFailures)
+    // but we shouldn't update for the failed taskset
     verify(blacklist, never).updateBlacklistForSuccessfulTaskSet(
       stageId = meq(2),
       stageAttemptId = anyInt(),
@@ -444,9 +444,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     // setup our mock blacklist:
     // host1, executor0 & executor3 are completely blacklisted (which covers all the executors)
-    when(blacklist.isNodeBlacklisted(anyString())).thenReturn(false)
     when(blacklist.isNodeBlacklisted("host1")).thenReturn(true)
-    when(blacklist.isExecutorBlacklisted(anyString())).thenReturn(false)
     when(blacklist.isExecutorBlacklisted("executor0")).thenReturn(true)
     when(blacklist.isExecutorBlacklisted("executor3")).thenReturn(true)
 
@@ -483,9 +481,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     ))
 
     // now say our blacklist updates to blacklist a bunch of resources, but *not* everything
-    when(blacklist.isNodeBlacklisted(anyString())).thenReturn(false)
     when(blacklist.isNodeBlacklisted("host1")).thenReturn(true)
-    when(blacklist.isExecutorBlacklisted(anyString())).thenReturn(false)
     when(blacklist.isExecutorBlacklisted("executor0")).thenReturn(true)
 
     // make an offer on the blacklisted resources.  We won't schedule anything, but also won't

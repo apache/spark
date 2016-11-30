@@ -64,8 +64,8 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
   /**
    * Return true if this executor is blacklisted for the given task.  This does *not*
    * need to return true if the executor is blacklisted for the entire stage, or blacklisted
-   * altogether.  That is to keep this method as fast as possible in the inner-loop of the
-   * scheduler, where those filters will have already been applied.
+   * for the entire application.  That is to keep this method as fast as possible in the inner-loop
+   * of the scheduler, where those filters will have already been applied.
    */
   def isExecutorBlacklistedForTask(executorId: String, index: Int): Boolean = {
     execToFailures.get(executorId).exists { execFailures =>

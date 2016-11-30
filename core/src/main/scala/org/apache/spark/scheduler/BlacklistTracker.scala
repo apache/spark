@@ -167,7 +167,10 @@ private[scheduler] class BlacklistTracker (
         // node, and potentially put the entire node into a blacklist as well.
         val blacklistedExecsOnNode = nodeToBlacklistedExecs.getOrElseUpdate(node, HashSet[String]())
         blacklistedExecsOnNode += exec
-        if (blacklistedExecsOnNode.size >= MAX_FAILED_EXEC_PER_NODE) {
+        // If the node is already in the blacklist, we avoid adding it again with a later expiry
+        // time.
+        if (blacklistedExecsOnNode.size >= MAX_FAILED_EXEC_PER_NODE &&
+            !nodeIdToBlacklistExpiryTime.contains(node)) {
           logInfo(s"Blacklisting node $node because it has ${blacklistedExecsOnNode.size} " +
             s"executors blacklisted: ${blacklistedExecsOnNode}")
           nodeIdToBlacklistExpiryTime.put(node, expiryTime)
@@ -254,8 +257,8 @@ private[scheduler] class BlacklistTracker (
      * the blacklist as we expire individual task failures -- each have their own timeout.  Eg.,
      * suppose:
      *  * timeout = 10, maxFailuresPerExec = 2
-     * * Task 1 fails on exec 1 at time 0
-     * * Task 2 fails on exec 1 at time 5
+     *  * Task 1 fails on exec 1 at time 0
+     *  * Task 2 fails on exec 1 at time 5
      * -->  exec 1 is blacklisted from time 5 - 15.
      * This is to simplify the implementation, as well as keep the behavior easier to understand
      * for the end user.

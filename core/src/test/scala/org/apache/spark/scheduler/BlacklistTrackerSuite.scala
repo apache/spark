@@ -58,9 +58,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
   /**
    * Its easier to write our tests as if we could directly look at the sets of nodes & executors in
-   * the blacklist.  However the api doesn't expose a set (for thread-safety), so this is a simple
-   * way to test something similar, since we know the universe of values that might appear in these
-   * sets.
+   * the blacklist.  However the api doesn't expose a set, so this is a simple way to test
+   * something similar, since we know the universe of values that might appear in these sets.
    */
   def assertEquivalentToSet(f: String => Boolean, expected: Set[String]): Unit = {
     allExecutorAndHostIds.foreach { id =>
@@ -113,8 +112,9 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   // If an executor has many task failures, but the task set ends up failing, it shouldn't be
   // counted against the executor.
   test("executors aren't blacklisted if task sets fail") {
-    // for 4 different stages, executor 1 fails a task, and then the taskSet fails.
-    (0 until 4).foreach { stage =>
+    val failuresUntilBlacklisted = conf.get(config.MAX_FAILURES_PER_EXEC)
+    // for many different stages, executor 1 fails a task, and then the taskSet fails.
+    (0 until failuresUntilBlacklisted * 10).foreach { stage =>
       val taskSetBlacklist = createTaskSetBlacklist(stage)
       taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
     }
@@ -122,11 +122,11 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   }
 
   Seq(true, false).foreach { succeedTaskSet =>
-    test(s"stage blacklist updates correctly on stage completion ($succeedTaskSet)") {
+    val label = if (succeedTaskSet) "success" else "failure"
+    test(s"stage blacklist updates correctly on stage $label") {
       // Within one taskset, an executor fails a few times, so it's blacklisted for the taskset.
       // But if the taskset fails, we shouldn't blacklist the executor after the stage.
-      val stageId = 1 + (if (succeedTaskSet) 1 else 0)
-      val taskSetBlacklist = createTaskSetBlacklist(stageId)
+      val taskSetBlacklist = createTaskSetBlacklist(0)
       // We trigger enough failures for both the taskset blacklist, and the application blacklist.
       val numFailures = math.max(conf.get(config.MAX_FAILURES_PER_EXEC),
         conf.get(config.MAX_FAILURES_PER_EXEC_STAGE))
@@ -138,7 +138,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       if (succeedTaskSet) {
         // The task set succeeded elsewhere, so we should count those failures against our executor,
         // and it should be blacklisted for the entire application.
-        blacklist.updateBlacklistForSuccessfulTaskSet(stageId, 0, taskSetBlacklist.execToFailures)
+        blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist.execToFailures)
         assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set("1"))
       } else {
         // The task set failed, so we don't count these failures against the executor for other
