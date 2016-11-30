@@ -18,6 +18,7 @@
 package org.apache.spark.util.sketch
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.nio.charset.StandardCharsets
 
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -44,6 +45,12 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
   }
 
   def testAccuracy[T: ClassTag](typeName: String)(itemGenerator: Random => T): Unit = {
+    def getProbeItem(item: T): Any = item match {
+      // Use a string to represent the content of an array of bytes
+      case bytes: Array[Byte] => new String(bytes, StandardCharsets.UTF_8)
+      case i => identity(i)
+    }
+
     test(s"accuracy - $typeName") {
       // Uses fixed seed to ensure reproducible test execution
       val r = new Random(31)
@@ -56,7 +63,7 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
 
       val exactFreq = {
         val sampledItems = sampledItemIndices.map(allItems)
-        sampledItems.groupBy(identity).mapValues(_.length.toLong)
+        sampledItems.groupBy(getProbeItem).mapValues(_.length.toLong)
       }
 
       val sketch = CountMinSketch.create(epsOfTotalCount, confidence, seed)
@@ -67,7 +74,7 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
 
       val probCorrect = {
         val numErrors = allItems.map { item =>
-          val count = exactFreq.getOrElse(item, 0L)
+          val count = exactFreq.getOrElse(getProbeItem(item), 0L)
           val ratio = (sketch.estimateCount(item) - count).toDouble / numAllItems
           if (ratio > epsOfTotalCount) 1 else 0
         }.sum
@@ -134,6 +141,18 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
   testItemType[Long]("Long") { _.nextLong() }
 
   testItemType[String]("String") { r => r.nextString(r.nextInt(20)) }
+
+  testItemType[Float]("Float") { _.nextFloat() }
+
+  testItemType[Double]("Double") { _.nextDouble() }
+
+  testItemType[java.math.BigDecimal]("Decimal") { r => new java.math.BigDecimal(r.nextDouble()) }
+
+  testItemType[Boolean]("Boolean") { _.nextBoolean() }
+
+  testItemType[Array[Byte]]("Binary") { r =>
+    Utils.getBytesFromUTF8String(r.nextString(r.nextInt(20)))
+  }
 
   test("incompatible merge") {
     intercept[IncompatibleMergeException] {

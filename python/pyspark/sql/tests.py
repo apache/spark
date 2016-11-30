@@ -1082,6 +1082,33 @@ class SQLTests(ReusedPySparkTestCase):
             q.stop()
             shutil.rmtree(tmpPath)
 
+    def test_stream_status_and_progress(self):
+        df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+        for q in self.spark._wrapped.streams.active:
+            q.stop()
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        self.assertTrue(df.isStreaming)
+        out = os.path.join(tmpPath, 'out')
+        chk = os.path.join(tmpPath, 'chk')
+        q = df.writeStream \
+            .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
+        try:
+            q.processAllAvailable()
+            lastProgress = q.lastProgress
+            recentProgresses = q.recentProgresses
+            status = q.status
+            self.assertEqual(lastProgress['name'], q.name)
+            self.assertEqual(lastProgress['id'], q.id)
+            self.assertTrue(any(p == lastProgress for p in recentProgresses))
+            self.assertTrue(
+                "message" in status and
+                "isDataAvailable" in status and
+                "isTriggerActive" in status)
+        finally:
+            q.stop()
+            shutil.rmtree(tmpPath)
+
     def test_stream_await_termination(self):
         df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
         for q in self.spark._wrapped.streams.active:
