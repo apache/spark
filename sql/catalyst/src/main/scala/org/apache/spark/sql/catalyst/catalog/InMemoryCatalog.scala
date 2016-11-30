@@ -385,7 +385,8 @@ class InMemoryCatalog(
       table: String,
       partSpecs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit = synchronized {
+      purge: Boolean,
+      retainData: Boolean): Unit = synchronized {
     requireTableExists(db, table)
     val existingParts = catalog(db).tables(table).partitions
     if (!ignoreIfNotExists) {
@@ -399,7 +400,7 @@ class InMemoryCatalog(
     // TODO: we should follow hive to roll back if one partition path failed to delete, and support
     // partial partition spec.
     partSpecs.foreach { p =>
-      if (existingParts.contains(p) && shouldRemovePartitionLocation) {
+      if (existingParts.contains(p) && shouldRemovePartitionLocation && !retainData) {
         val partitionPath = new Path(existingParts(p).location)
         try {
           val fs = partitionPath.getFileSystem(hadoopConfig)
