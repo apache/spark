@@ -611,11 +611,6 @@ case class ShowTablesCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    if (isExtended && !tableIdentifierPattern.isDefined) {
-      throw new AnalysisException(
-        s"SHOW TABLES EXTENDED must have identifier_with_wildcards specified.")
-    }
-
     // Since we need to return a Seq of rows, we will call getTables directly
     // instead of calling tables in sparkSession.
     val catalog = sparkSession.sessionState.catalog

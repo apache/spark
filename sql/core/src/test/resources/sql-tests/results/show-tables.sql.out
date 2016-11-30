@@ -118,8 +118,11 @@ SHOW TABLES EXTENDED
 -- !query 12 schema
 struct<>
 -- !query 12 output
-org.apache.spark.sql.AnalysisException
-SHOW TABLES EXTENDED must have identifier_with_wildcards specified.;
+org.apache.spark.sql.catalyst.parser.ParseException
+
+SHOW TABLES EXTENDED must have identifier_with_wildcards specified.
+== SQL ==
+SHOW TABLES EXTENDED
 
 
 -- !query 13

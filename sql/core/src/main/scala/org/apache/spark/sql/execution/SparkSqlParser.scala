@@ -134,6 +134,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (ctx.partitionSpec != null) {
       operationNotAllowed("SHOW TABLES [EXTENDED] ... PARTITION", ctx)
     }
+    if (ctx.EXTENDED != null && ctx.pattern == null) {
+      throw new AnalysisException(
+        s"SHOW TABLES EXTENDED must have identifier_with_wildcards specified.")
+    }
+
     ShowTablesCommand(
       Option(ctx.db).map(_.getText),
       Option(ctx.pattern).map(string),
