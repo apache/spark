@@ -206,7 +206,7 @@ class PartitionProviderCompatibilitySuite
       }
     }
 
-    test(s"insert overwrite table files - partition management $enabled") {
+    test(s"SPARK-18659 insert overwrite table files - partition management $enabled") {
       withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> enabled.toString) {
         withTable("test") {
           spark.range(10)
@@ -227,7 +227,7 @@ class PartitionProviderCompatibilitySuite
       }
     }
 
-    test(s"insert overwrite table with lowercase - partition management $enabled") {
+    test(s"SPARK-18659 insert overwrite table with lowercase - partition management $enabled") {
       withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> enabled.toString) {
         withTable("test") {
           spark.range(10)
