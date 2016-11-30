@@ -106,6 +106,11 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           assert(listener.terminationEvent !== null)
           assert(listener.terminationEvent.id === query.id)
           assert(listener.terminationEvent.exception.nonEmpty)
+          // Make sure that the exception message reported through listener
+          // contains the actual exception and relevant stack trace
+          assert(!listener.terminationEvent.exception.get.contains("StreamingQueryException"))
+          assert(listener.terminationEvent.exception.get.contains("java.lang.ArithmeticException"))
+          assert(listener.terminationEvent.exception.get.contains("StreamingQueryListenerSuite"))
           listener.checkAsyncErrors()
           true
         }
@@ -159,28 +164,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  testQuietly("exception should be reported in QueryTerminated") {
-    val listener = new EventCollector
-    withListenerAdded(listener) {
-      val input = MemoryStream[Int]
-      testStream(input.toDS.map(_ / 0))(
-        StartStream(),
-        AddData(input, 1),
-        ExpectFailure[SparkException](),
-        Assert {
-          spark.sparkContext.listenerBus.waitUntilEmpty(10000)
-          assert(listener.terminationEvent !== null)
-          assert(listener.terminationEvent.exception.nonEmpty)
-          // Make sure that the exception message reported through listener
-          // contains the actual exception and relevant stack trace
-          assert(!listener.terminationEvent.exception.get.contains("StreamingQueryException"))
-          assert(listener.terminationEvent.exception.get.contains("java.lang.ArithmeticException"))
-          assert(listener.terminationEvent.exception.get.contains("StreamingQueryListenerSuite"))
-        }
-      )
-    }
-  }
-
   test("QueryStartedEvent serialization") {
     val queryStarted = new StreamingQueryListener.QueryStartedEvent(UUID.randomUUID(), "name")
     val json = JsonProtocol.sparkEventToJson(queryStarted)
@@ -190,7 +173,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   test("QueryProgressEvent serialization") {
     val event = new StreamingQueryListener.QueryProgressEvent(
-      StreamingQueryProgressSuite.testProgress)
+      StreamingQueryStatusAndProgressSuite.testProgress)
     val json = JsonProtocol.sparkEventToJson(event)
     val newEvent = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryProgressEvent]

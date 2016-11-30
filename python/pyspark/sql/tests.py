@@ -1097,9 +1097,14 @@ class SQLTests(ReusedPySparkTestCase):
             q.processAllAvailable()
             lastProgress = q.lastProgress
             recentProgresses = q.recentProgresses
+            status = q.status
             self.assertEqual(lastProgress['name'], q.name)
             self.assertEqual(lastProgress['id'], q.id)
             self.assertTrue(any(p == lastProgress for p in recentProgresses))
+            self.assertTrue(
+                "message" in status and
+                "isDataAvailable" in status and
+                "isTriggerActive" in status)
         finally:
             q.stop()
             shutil.rmtree(tmpPath)

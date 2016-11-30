@@ -90,6 +90,14 @@ class StreamingQuery(object):
 
     @property
     @since(2.1)
+    def status(self):
+        """
+        Returns the current status of the query.
+        """
+        return json.loads(self._jsq.status().json())
+
+    @property
+    @since(2.1)
     def recentProgresses(self):
         """Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
         The number of progress updates retained for each stream is configured by Spark session

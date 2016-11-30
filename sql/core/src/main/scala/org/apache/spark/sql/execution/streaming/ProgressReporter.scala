@@ -70,11 +70,12 @@ trait ProgressReporter extends Logging {
   private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
 
   @volatile
-  protected var currentStatus: StreamingQueryStatus =
-    StreamingQueryStatus(
+  protected var currentStatus: StreamingQueryStatus = {
+    new StreamingQueryStatus(
       message = "Initializing StreamExecution",
       isDataAvailable = false,
       isTriggerActive = false)
+  }
 
   /** Returns the current status of the query. */
   def status: StreamingQueryStatus = currentStatus
