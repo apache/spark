@@ -123,7 +123,7 @@ object JDBCRDD extends Logging {
       case In(attr, value) if value.isEmpty =>
         s"CASE WHEN ${attr} IS NULL THEN NULL ELSE FALSE END"
       case In(attr, value) => s"$attr IN (${compileValue(value)})"
-      case Not(f) => compileFilter(f).map(p => s"(NOT ($p))").getOrElse(null)
+      case Not(f) => compileFilter(f).map(p => s"(NOT ($p))").orNull
       case Or(f1, f2) =>
         // We can't compile Or filter unless both sub-filters are compiled successfully.
         // It applies too for the following And filter.
