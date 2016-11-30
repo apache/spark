@@ -378,10 +378,6 @@ private[hive] case class HiveUDAFFunction(
   @transient
   private lazy val aggBufferSerDe: AggregationBufferSerDe = new AggregationBufferSerDe
 
-  // We rely on Hive to check the input data types, so use `AnyDataType` here to bypass our
-  // catalyst type checking framework.
-  override def inputTypes: Seq[AbstractDataType] = children.map(_ => AnyDataType)
-
   override def nullable: Boolean = true
 
   override def supportsPartial: Boolean = true

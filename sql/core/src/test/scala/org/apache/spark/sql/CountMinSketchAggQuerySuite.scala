@@ -110,9 +110,11 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
     withTempView(table) {
       val rdd: RDD[Row] = spark.sparkContext.parallelize(data)
       spark.createDataFrame(rdd, schema).createOrReplaceTempView(table)
-      val cmsSql = schema.fieldNames.map(col => s"count_min_sketch($col, $eps, $confidence, $seed)")
-        .mkString(", ")
-      val result = sql(s"SELECT $cmsSql FROM $table").head()
+
+      val cmsSql = schema.fieldNames.map { col =>
+        s"count_min_sketch($col, ${eps}D, ${confidence}D, $seed)"
+      }
+      val result = sql(s"SELECT ${cmsSql.mkString(", ")} FROM $table").head()
       schema.indices.foreach { i =>
         val binaryData = result.getAs[Array[Byte]](i)
         val in = new ByteArrayInputStream(binaryData)

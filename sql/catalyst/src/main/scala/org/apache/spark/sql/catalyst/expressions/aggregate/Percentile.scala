@@ -54,10 +54,11 @@ import org.apache.spark.util.collection.OpenHashMap
       be between 0.0 and 1.0.
     """)
 case class Percentile(
-  child: Expression,
-  percentageExpression: Expression,
-  mutableAggBufferOffset: Int = 0,
-  inputAggBufferOffset: Int = 0) extends TypedImperativeAggregate[OpenHashMap[Number, Long]] {
+    child: Expression,
+    percentageExpression: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends TypedImperativeAggregate[OpenHashMap[Number, Long]] with ImplicitCastInputTypes {
 
   def this(child: Expression, percentageExpression: Expression) = {
     this(child, percentageExpression, 0, 0)

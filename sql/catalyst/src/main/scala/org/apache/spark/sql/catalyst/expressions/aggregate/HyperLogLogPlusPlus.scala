@@ -140,8 +140,6 @@ case class HyperLogLogPlusPlus(
 
   override def dataType: DataType = LongType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
-
   override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
   /** Allocate enough words to store all registers. */
