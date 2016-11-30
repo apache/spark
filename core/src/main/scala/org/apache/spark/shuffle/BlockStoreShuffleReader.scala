@@ -49,7 +49,8 @@ private[spark] class BlockStoreShuffleReader[K, C](
       mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition, endPartition),
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024,
-      SparkEnv.get.conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue))
+      SparkEnv.get.conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue),
+      SparkEnv.get.conf.getBoolean("spark.shuffle.checksum", true))
 
     // Wrap the streams for compression and encryption based on configuration
     val wrappedStreams = blockFetcherItr.map { case (blockId, inputStream) =>

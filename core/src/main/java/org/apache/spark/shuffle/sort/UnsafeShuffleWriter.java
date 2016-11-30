@@ -21,6 +21,7 @@ import javax.annotation.Nullable;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
+import java.util.zip.Adler32;
 
 import scala.Option;
 import scala.Product2;
@@ -35,7 +36,10 @@ import com.google.common.io.Files;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.*;
+import org.apache.spark.Partitioner;
+import org.apache.spark.ShuffleDependency;
+import org.apache.spark.SparkConf;
+import org.apache.spark.TaskContext;
 import org.apache.spark.annotation.Private;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.io.CompressionCodec;
@@ -49,6 +53,7 @@ import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.BlockManager;
+import org.apache.spark.storage.ChecksumOutputStream;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
@@ -75,6 +80,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final SparkConf sparkConf;
   private final boolean transferToEnabled;
   private final int initialSortBufferSize;
+  private final boolean checksum;
 
   @Nullable private MapStatus mapStatus;
   @Nullable private ShuffleExternalSorter sorter;
@@ -108,8 +114,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     if (numPartitions > SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE()) {
       throw new IllegalArgumentException(
         "UnsafeShuffleWriter can only be used for shuffles with at most " +
-        SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE() +
-        " reduce partitions");
+          SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE() +
+          " reduce partitions");
     }
     this.blockManager = blockManager;
     this.shuffleBlockResolver = shuffleBlockResolver;
@@ -124,7 +130,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.sparkConf = sparkConf;
     this.transferToEnabled = sparkConf.getBoolean("spark.file.transferTo", true);
     this.initialSortBufferSize = sparkConf.getInt("spark.shuffle.sort.initialBufferSize",
-                                                  DEFAULT_INITIAL_SORT_BUFFER_SIZE);
+      DEFAULT_INITIAL_SORT_BUFFER_SIZE);
+    this.checksum = sparkConf.getBoolean("spark.shuffle.checksum", true);
+
     open();
   }
 
@@ -289,7 +297,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           // Compression is disabled or we are using an IO compression codec that supports
           // decompression of concatenated compressed streams, so we can perform a fast spill merge
           // that doesn't need to interpret the spilled bytes.
-          if (transferToEnabled) {
+          if (transferToEnabled && !checksum) {
             logger.debug("Using transferTo-based fast merge");
             partitionLengths = mergeSpillsWithTransferTo(spills, outputFile);
           } else {
@@ -346,8 +354,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       for (int partition = 0; partition < numPartitions; partition++) {
         final long initialFileLength = outputFile.length();
-        mergedFileOutputStream =
-          new TimeTrackingOutputStream(writeMetrics, new FileOutputStream(outputFile, true));
+        OutputStream fos = new FileOutputStream(outputFile, true);
+        if (checksum) {
+          fos = new ChecksumOutputStream(fos, new Adler32());
+        }
+        mergedFileOutputStream = new TimeTrackingOutputStream(writeMetrics, fos);
         if (compressionCodec != null) {
           mergedFileOutputStream = compressionCodec.compressedOutputStream(mergedFileOutputStream);
         }

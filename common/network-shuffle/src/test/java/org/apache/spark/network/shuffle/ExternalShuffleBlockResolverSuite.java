@@ -24,13 +24,14 @@ import java.nio.charset.StandardCharsets;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.CharStreams;
-import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
-import org.apache.spark.network.util.TransportConf;
-import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
+import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.TransportConf;
 
 import static org.junit.Assert.*;
 
@@ -98,14 +99,14 @@ public class ExternalShuffleBlockResolverSuite {
       dataContext.createExecutorInfo(SORT_MANAGER));
 
     InputStream block0Stream =
-      resolver.getBlockData("app0", "exec0", "shuffle_0_0_0").createInputStream();
+      resolver.getBlockData("app0", "exec0", "shuffle_0_0_0").createInputStream(false);
     String block0 = CharStreams.toString(
         new InputStreamReader(block0Stream, StandardCharsets.UTF_8));
     block0Stream.close();
     assertEquals(sortBlock0, block0);
 
     InputStream block1Stream =
-      resolver.getBlockData("app0", "exec0", "shuffle_0_0_1").createInputStream();
+      resolver.getBlockData("app0", "exec0", "shuffle_0_0_1").createInputStream(false);
     String block1 = CharStreams.toString(
         new InputStreamReader(block1Stream, StandardCharsets.UTF_8));
     block1Stream.close();

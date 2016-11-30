@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStream}
 import java.nio.channels.FileChannel
+import java.util.zip.{Adler32, CRC32}
 
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
@@ -44,7 +45,8 @@ private[spark] class DiskBlockObjectWriter(
     // These write metrics concurrently shared with other active DiskBlockObjectWriters who
     // are themselves performing writes. All updates must be relative.
     writeMetrics: ShuffleWriteMetrics,
-    val blockId: BlockId = null)
+    val blockId: BlockId = null,
+    val checksum: Boolean = false)
   extends OutputStream
   with Logging {
 
@@ -116,7 +118,12 @@ private[spark] class DiskBlockObjectWriter(
       initialized = true
     }
 
-    bs = wrapStream(mcs)
+    val withChecksum = if (checksum) {
+      new ChecksumOutputStream(mcs, new Adler32())
+    } else {
+      mcs
+    }
+    bs = wrapStream(withChecksum)
     objOut = serializerInstance.serializeStream(bs)
     streamOpen = true
     this

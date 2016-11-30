@@ -127,11 +127,11 @@ public class UnsafeShuffleWriterSuite {
       any(File.class),
       any(SerializerInstance.class),
       anyInt(),
-      any(ShuffleWriteMetrics.class))).thenAnswer(new Answer<DiskBlockObjectWriter>() {
+      any(ShuffleWriteMetrics.class),
+      anyBoolean())).thenAnswer(new Answer<DiskBlockObjectWriter>() {
       @Override
       public DiskBlockObjectWriter answer(InvocationOnMock invocationOnMock) throws Throwable {
         Object[] args = invocationOnMock.getArguments();
-
         return new DiskBlockObjectWriter(
           (File) args[1],
           (SerializerInstance) args[2],
@@ -139,7 +139,8 @@ public class UnsafeShuffleWriterSuite {
           new WrapStream(),
           false,
           (ShuffleWriteMetrics) args[4],
-          (BlockId) args[0]
+          (BlockId) args[0],
+          (boolean) args[5] && conf.getBoolean("spark.shuffle.checksum", true)
         );
       }
     });
@@ -203,7 +204,7 @@ public class UnsafeShuffleWriterSuite {
       if (partitionSize > 0) {
         InputStream in = new FileInputStream(mergedOutputFile);
         ByteStreams.skipFully(in, startOffset);
-        in = new LimitedInputStream(in, partitionSize);
+        in = new LimitedInputStream(in, partitionSize - 8);  // ignore checksum
         if (conf.getBoolean("spark.shuffle.compress", true)) {
           in = CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(in);
         }

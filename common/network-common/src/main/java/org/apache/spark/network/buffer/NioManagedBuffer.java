@@ -20,6 +20,7 @@ package org.apache.spark.network.buffer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.zip.Adler32;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBufInputStream;
@@ -46,7 +47,23 @@ public class NioManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public InputStream createInputStream() throws IOException {
+  public InputStream createInputStream(boolean checksum) throws IOException {
+    if (checksum) {
+      Adler32 adler = new Adler32();
+      int position = buf.position();
+      int limit = buf.limit() - 8;
+      buf.position(limit);
+      long sum = buf.getLong();
+      buf.position(position);
+      // simplify this after drop Java 7 support
+      for (int i=buf.position(); i<limit; i++) {
+        adler.update(buf.get(i));
+      }
+      if (sum != adler.getValue()) {
+        throw new IOException("Checksum does not match: " + adler.getValue() + "!=" + sum);
+      }
+      buf.limit(limit);
+    }
     return new ByteBufInputStream(Unpooled.wrappedBuffer(buf));
   }
 

@@ -20,6 +20,7 @@ package org.apache.spark.network.buffer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.zip.Adler32;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
@@ -46,7 +47,21 @@ public class NettyManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public InputStream createInputStream() throws IOException {
+  public InputStream createInputStream(boolean checksum) throws IOException {
+    if (checksum) {
+      Adler32 adler = new Adler32();
+      long size = size();
+      buf.markReaderIndex();
+      for (int i = 0; i < size - 8; i++) {
+        adler.update(buf.readByte());
+      }
+      long sum = buf.readLong();
+      if (adler.getValue() != sum) {
+        throw new IOException("Checksum does not match " + adler.getValue() + "!=" + sum);
+      }
+      buf.resetReaderIndex();
+      buf.writerIndex(buf.writerIndex() - 8);
+    }
     return new ByteBufInputStream(buf);
   }
 

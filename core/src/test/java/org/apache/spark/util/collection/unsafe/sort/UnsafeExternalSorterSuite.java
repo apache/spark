@@ -119,7 +119,8 @@ public class UnsafeExternalSorterSuite {
       any(File.class),
       any(SerializerInstance.class),
       anyInt(),
-      any(ShuffleWriteMetrics.class))).thenAnswer(new Answer<DiskBlockObjectWriter>() {
+      any(ShuffleWriteMetrics.class),
+      anyBoolean())).thenAnswer(new Answer<DiskBlockObjectWriter>() {
       @Override
       public DiskBlockObjectWriter answer(InvocationOnMock invocationOnMock) throws Throwable {
         Object[] args = invocationOnMock.getArguments();
@@ -131,7 +132,8 @@ public class UnsafeExternalSorterSuite {
           new WrapStream(),
           false,
           (ShuffleWriteMetrics) args[4],
-          (BlockId) args[0]
+          (BlockId) args[0],
+          (boolean) args[5]
         );
       }
     });

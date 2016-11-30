@@ -17,13 +17,12 @@
 
 package org.apache.spark.network.buffer;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.RandomAccessFile;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.zip.Adler32;
+import java.util.zip.CheckedInputStream;
+import java.util.zip.Checksum;
 
 import com.google.common.base.Objects;
 import com.google.common.io.ByteStreams;
@@ -92,12 +91,27 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public InputStream createInputStream() throws IOException {
+  public InputStream createInputStream(boolean checksum) throws IOException {
     FileInputStream is = null;
     try {
       is = new FileInputStream(file);
       ByteStreams.skipFully(is, offset);
-      return new LimitedInputStream(is, length);
+      if (checksum) {
+        Checksum ck = new Adler32();
+        DataInputStream din = new DataInputStream(new CheckedInputStream(is, ck));
+        ByteStreams.skipFully(din, length - 8);
+        long sum = ck.getValue();
+        long expected = din.readLong();
+        if (sum != expected) {
+          throw new IOException("Checksum does not match " + sum + "!=" + expected);
+        }
+        is.close();
+        is = new FileInputStream(file);
+        ByteStreams.skipFully(is, offset);
+        return new LimitedInputStream(is, length - 8);
+      } else {
+        return new LimitedInputStream(is, length);
+      }
     } catch (IOException e) {
       try {
         if (is != null) {

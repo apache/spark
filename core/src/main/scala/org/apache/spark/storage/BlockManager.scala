@@ -744,11 +744,13 @@ private[spark] class BlockManager(
       file: File,
       serializerInstance: SerializerInstance,
       bufferSize: Int,
-      writeMetrics: ShuffleWriteMetrics): DiskBlockObjectWriter = {
+      writeMetrics: ShuffleWriteMetrics,
+      checksum: Boolean): DiskBlockObjectWriter = {
     val wrapStream: OutputStream => OutputStream = serializerManager.wrapStream(blockId, _)
     val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
     new DiskBlockObjectWriter(file, serializerInstance, bufferSize, wrapStream,
-      syncWrites, writeMetrics, blockId)
+      syncWrites, writeMetrics, blockId,
+      checksum && conf.getBoolean("spark.shuffle.checksum", true))
   }
 
   /**

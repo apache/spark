@@ -54,6 +54,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Mockito.when;
 
@@ -113,7 +114,8 @@ public abstract class AbstractBytesToBytesMapSuite {
       any(File.class),
       any(SerializerInstance.class),
       anyInt(),
-      any(ShuffleWriteMetrics.class))).thenAnswer(new Answer<DiskBlockObjectWriter>() {
+      any(ShuffleWriteMetrics.class),
+      anyBoolean())).thenAnswer(new Answer<DiskBlockObjectWriter>() {
       @Override
       public DiskBlockObjectWriter answer(InvocationOnMock invocationOnMock) throws Throwable {
         Object[] args = invocationOnMock.getArguments();
@@ -125,7 +127,8 @@ public abstract class AbstractBytesToBytesMapSuite {
           new WrapStream(),
           false,
           (ShuffleWriteMetrics) args[4],
-          (BlockId) args[0]
+          (BlockId) args[0],
+          (boolean) args[5]
         );
       }
     });
