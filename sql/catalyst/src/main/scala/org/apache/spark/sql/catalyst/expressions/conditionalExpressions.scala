@@ -72,11 +72,11 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
       (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
 
       val (condFuncName, condGlobalIsNull, condGlobalValue) =
-        createAndAddFunction(ctx, condEval, predicate, "evalIfCondExpr")
+        createAndAddFunction(ctx, condEval, predicate.dataType, "evalIfCondExpr")
       val (trueFuncName, trueGlobalIsNull, trueGlobalValue) =
-        createAndAddFunction(ctx, trueEval, trueValue, "evalIfTrueExpr")
+        createAndAddFunction(ctx, trueEval, trueValue.dataType, "evalIfTrueExpr")
       val (falseFuncName, falseGlobalIsNull, falseGlobalValue) =
-        createAndAddFunction(ctx, falseEval, falseValue, "evalIfFalseExpr")
+        createAndAddFunction(ctx, falseEval, falseValue.dataType, "evalIfFalseExpr")
       s"""
         $condFuncName(${ctx.INPUT_ROW});
         boolean ${ev.isNull} = false;
@@ -112,13 +112,15 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     ev.copy(code = generatedCode)
   }
 
-  private def createAndAddFunction(ctx: CodegenContext, ev: ExprCode, expr: Expression,
+  private def createAndAddFunction(ctx: CodegenContext,
+                                   ev: ExprCode,
+                                   dataType: DataType,
                                    baseFuncName: String): (String, String, String) = {
     val globalIsNull = ctx.freshName("isNull")
     ctx.addMutableState("boolean", globalIsNull, s"$globalIsNull = false;")
     val globalValue = ctx.freshName("value")
-    ctx.addMutableState(ctx.javaType(expr.dataType), globalValue,
-      s"$globalValue = ${ctx.defaultValue(expr.dataType)};")
+    ctx.addMutableState(ctx.javaType(dataType), globalValue,
+      s"$globalValue = ${ctx.defaultValue(dataType)};")
     val funcName = ctx.freshName(baseFuncName)
     val funcBody =
       s"""
