@@ -18,13 +18,15 @@
 package org.apache.spark.sql
 
 import java.io.CharArrayWriter
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.StringUtils
+import com.ibm.icu.lang.UCharacter
+import com.ibm.icu.lang.UProperty
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.JavaRDD
@@ -236,6 +238,37 @@ class Dataset[T] private[sql](
       }
   }
 
+  var EAST_ASIAN_LANGS = Seq("ja", "vi", "kr", "zh")
+
+  private def unicodeWidth(str: String): Int = {
+    val locale = Locale.getDefault()
+    if (locale == null) {
+      throw new NullPointerException("locale is null")
+    }
+    val ambiguousLen = if (EAST_ASIAN_LANGS.contains(locale.getLanguage())) 2 else 1
+    var len = 0
+    for (i <- 0 until str.length) {
+      val codePoint = str.codePointAt(i)
+      val value = UCharacter.getIntPropertyValue(codePoint, UProperty.EAST_ASIAN_WIDTH);
+      len = len + (value match {
+        case UCharacter.EastAsianWidth.NARROW | UCharacter.EastAsianWidth.NEUTRAL |
+              UCharacter.EastAsianWidth.HALFWIDTH => 1
+        case UCharacter.EastAsianWidth.FULLWIDTH | UCharacter.EastAsianWidth.WIDE => 2
+        case UCharacter.EastAsianWidth.AMBIGUOUS => ambiguousLen
+        case _ => 1
+      })
+    }
+    len
+  }
+
+  private def repeatPadding(len: Int): StringBuilder = {
+    var str = new StringBuilder(len)
+    for (i <- 0 until len) {
+      str.append(' ')
+    }
+    str
+  }
+
   /**
    * Compose the string representing rows for output
    *
@@ -275,36 +308,43 @@ class Dataset[T] private[sql](
     val numCols = schema.fieldNames.length
 
     // Initialise the width of each column to a minimum value of '3'
-    val colWidths = Array.fill(numCols)(3)
+    val colMaxWidths = Array.fill(numCols)(3)
+    val colWidths = Array.ofDim[Int](rows.length, numCols)
 
     // Compute the width of each column
+    var j = 0
     for (row <- rows) {
       for ((cell, i) <- row.zipWithIndex) {
-        colWidths(i) = math.max(colWidths(i), cell.length)
+        val width = unicodeWidth(cell)
+        colWidths(j)(i) = width
+        colMaxWidths(i) = math.max(colMaxWidths(i), width)
       }
+      j = j + 1
     }
 
     // Create SeparateLine
-    val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
+    val sep: String = colMaxWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
 
     // column names
     rows.head.zipWithIndex.map { case (cell, i) =>
       if (truncate > 0) {
-        StringUtils.leftPad(cell, colWidths(i))
+        repeatPadding(colMaxWidths(i) - colWidths(0)(i)).append(cell)
       } else {
-        StringUtils.rightPad(cell, colWidths(i))
+        new StringBuffer(cell).append(repeatPadding(colMaxWidths(i) - colWidths(0)(i)))
       }
     }.addString(sb, "|", "|", "|\n")
 
     sb.append(sep)
 
     // data
+    j = 0
     rows.tail.map {
+      j = j + 1
       _.zipWithIndex.map { case (cell, i) =>
         if (truncate > 0) {
-          StringUtils.leftPad(cell.toString, colWidths(i))
+          repeatPadding(colMaxWidths(i) - colWidths(j)(i)).append(cell)
         } else {
-          StringUtils.rightPad(cell.toString, colWidths(i))
+          new StringBuffer(cell).append(repeatPadding(colMaxWidths(i) - colWidths(j)(i)))
         }
       }.addString(sb, "|", "|", "|\n")
     }
