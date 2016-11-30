@@ -82,11 +82,13 @@ private[feature] trait ChiSqSelectorParams extends Params
    * Default value is 0.05.
    * @group param
    */
+  @Since("2.1.0")
   final val fpr = new DoubleParam(this, "fpr", "The highest p-value for features to be kept.",
     ParamValidators.inRange(0, 1))
   setDefault(fpr -> 0.05)
 
   /** @group getParam */
+  @Since("2.1.0")
   def getFpr: Double = $(fpr)
 
   /**

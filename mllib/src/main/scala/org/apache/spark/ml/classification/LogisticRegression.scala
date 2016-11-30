@@ -312,7 +312,6 @@ class LogisticRegression @Since("1.2.0") (
 
   private var optInitialModel: Option[LogisticRegressionModel] = None
 
-  /** @group setParam */
   private[spark] def setInitialModel(model: LogisticRegressionModel): this.type = {
     this.optInitialModel = Some(model)
     this
@@ -323,8 +322,9 @@ class LogisticRegression @Since("1.2.0") (
     train(dataset, handlePersistence)
   }
 
-  protected[spark] def train(dataset: Dataset[_], handlePersistence: Boolean):
-      LogisticRegressionModel = {
+  protected[spark] def train(
+      dataset: Dataset[_],
+      handlePersistence: Boolean): LogisticRegressionModel = {
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {

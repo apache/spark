@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.DoubleType
 /**
  * Params for Naive Bayes Classifiers.
  */
-private[ml] trait NaiveBayesParams extends PredictorParams with HasWeightCol {
+private[classification] trait NaiveBayesParams extends PredictorParams with HasWeightCol {
 
   /**
    * The smoothing parameter.

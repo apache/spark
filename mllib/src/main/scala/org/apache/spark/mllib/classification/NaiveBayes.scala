@@ -392,13 +392,13 @@ class NaiveBayes private (
 object NaiveBayes {
 
   /** String name for multinomial model type. */
-  private[spark] val Multinomial: String = "multinomial"
+  private[classification] val Multinomial: String = "multinomial"
 
   /** String name for Bernoulli model type. */
-  private[spark] val Bernoulli: String = "bernoulli"
+  private[classification] val Bernoulli: String = "bernoulli"
 
   /* Set of modelTypes that NaiveBayes supports */
-  private[spark] val supportedModelTypes = Set(Multinomial, Bernoulli)
+  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
 
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
