@@ -25,12 +25,12 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.streaming.StreamingQueryProgressSuite._
+import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
 
 
-class StreamingQueryProgressSuite extends SparkFunSuite {
+class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
 
-  test("prettyJson") {
+  test("StreamingQueryProgress - prettyJson") {
     val json = testProgress.prettyJson
     assert(json ===
       s"""
@@ -64,16 +64,36 @@ class StreamingQueryProgressSuite extends SparkFunSuite {
 
   }
 
-  test("json") {
+  test("StreamingQueryProgress - json") {
     assert(compact(parse(testProgress.json)) === testProgress.json)
   }
 
-  test("toString") {
+  test("StreamingQueryProgress - toString") {
     assert(testProgress.toString === testProgress.prettyJson)
+  }
+
+  test("StreamingQueryStatus - prettyJson") {
+    val json = testStatus.prettyJson
+    assert(json ===
+      """
+        |{
+        |  "message" : "active",
+        |  "isDataAvailable" : true,
+        |  "isTriggerActive" : false
+        |}
+      """.stripMargin.trim)
+  }
+
+  test("StreamingQueryStatus - json") {
+    assert(compact(parse(testStatus.json)) === testStatus.json)
+  }
+
+  test("StreamingQueryStatus - toString") {
+    assert(testStatus.toString === testStatus.prettyJson)
   }
 }
 
-object StreamingQueryProgressSuite {
+object StreamingQueryStatusAndProgressSuite {
   val testProgress = new StreamingQueryProgress(
     id = UUID.randomUUID(),
     name = "name",
@@ -94,5 +114,7 @@ object StreamingQueryProgressSuite {
     ),
     sink = new SinkProgress("sink")
   )
+
+  val testStatus = new StreamingQueryStatus("active", true, false)
 }
 
