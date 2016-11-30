@@ -606,9 +606,10 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
-   * Returns true if the given type is option of non flat type, e.g. `Option[Tuple2]`.
+   * Returns true if the given type is option of product type, e.g. `Option[Tuple2]`. Note that,
+   * we also treat [[DefinedByConstructorParams]] as product type.
    */
-  def optionOfNonFlatType(tpe: `Type`): Boolean = ScalaReflectionLock.synchronized {
+  def optionOfProductType(tpe: `Type`): Boolean = ScalaReflectionLock.synchronized {
     tpe match {
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t

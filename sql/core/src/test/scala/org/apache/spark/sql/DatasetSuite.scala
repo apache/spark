@@ -867,10 +867,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(Seq("a", null).toDS(), "a", null)
   }
 
-  test("Dataset should throw RuntimeException if non-flat input object is null") {
+  test("Dataset should throw RuntimeException if top-level product input object is null") {
     val e = intercept[RuntimeException](Seq(ClassData("a", 1), null).toDS())
     assert(e.getMessage.contains("Null value appeared in non-nullable field"))
-    assert(e.getMessage.contains("top level non-flat input object"))
+    assert(e.getMessage.contains("top level Product input object"))
   }
 
   test("dropDuplicates") {
@@ -1052,13 +1052,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(dsString, arrayString)
   }
 
-  test("SPARK-18251: the type of Dataset can't be Option of non-flat type") {
+  test("SPARK-18251: the type of Dataset can't be Option of Product type") {
     checkDataset(Seq(Some(1), None).toDS(), Some(1), None)
 
     val e = intercept[UnsupportedOperationException] {
       Seq(Some(1 -> "a"), None).toDS()
     }
-    assert(e.getMessage.contains("Cannot create encoder for Option of non-flat type"))
+    assert(e.getMessage.contains("Cannot create encoder for Option of Product type"))
   }
 }
 
