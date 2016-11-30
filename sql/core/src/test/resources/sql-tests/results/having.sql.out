@@ -18,7 +18,7 @@ struct<>
 -- !query 1
 SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2
 -- !query 1 schema
-struct<k:string,sum(v):bigint>
+struct<k:string,sum(CAST(v AS BIGINT)):bigint>
 -- !query 1 output
 one	6
 three	3
