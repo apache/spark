@@ -21,3 +21,4 @@ recursive-include deps/data *
 recursive-include deps/examples *.py
 recursive-include lib *.zip
 include README.md
+include deps/licenses/*.txt

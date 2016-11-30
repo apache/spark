@@ -74,7 +74,10 @@ SCRIPTS_TARGET = os.path.join(TEMP_PATH, "bin")
 JARS_TARGET = os.path.join(TEMP_PATH, "jars")
 EXAMPLES_TARGET = os.path.join(TEMP_PATH, "examples")
 DATA_TARGET = os.path.join(TEMP_PATH, "data")
+LICENSES_PATH = os.path.join(SPARK_HOME, "licenses")
+LICENSES_TARGET = os.path.join(TEMP_PATH, "licenses")
 
+data_files = glob.glob(os.path.join(LICENSES_PATH, "*"))
 
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
 # This is important because we only want to build the symlink farm while under Spark otherwise we
@@ -117,12 +120,14 @@ try:
             os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
             os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
             os.symlink(DATA_PATH, DATA_TARGET)
+            os.symlink(LICENSES_PATH, LICENSES_TARGET)
         else:
             # For windows fall back to the slower copytree
             copytree(JARS_PATH, JARS_TARGET)
             copytree(SCRIPTS_PATH, SCRIPTS_TARGET)
             copytree(EXAMPLES_PATH, EXAMPLES_TARGET)
             copytree(DATA_PATH, DATA_TARGET)
+            copytree(LICENSES_PATH, LICENSES_TARGET)
     else:
         # If we are not inside of SPARK_HOME verify we have the required symlink farm
         if not os.path.exists(JARS_TARGET):
@@ -166,6 +171,7 @@ try:
                   'pyspark.python.pyspark',
                   'pyspark.python.lib',
                   'pyspark.data',
+                  'pyspark.licenses',
                   'pyspark.examples.src.main.python'],
         include_package_data=True,
         package_dir={
@@ -173,6 +179,7 @@ try:
             'pyspark.bin': 'deps/bin',
             'pyspark.python.lib': 'lib',
             'pyspark.data': 'deps/data',
+            'pyspark.licenses': 'deps/licenses',
             'pyspark.examples.src.main.python': 'deps/examples',
         },
         package_data={
@@ -180,7 +187,9 @@ try:
             'pyspark.bin': ['*'],
             'pyspark.python.lib': ['*.zip'],
             'pyspark.data': ['*'],
+            'pyspark.licenses': ['*.txt'],
             'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
+        data_files=[('', data_files)],
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
         install_requires=['py4j==0.10.4'],
@@ -210,9 +219,11 @@ finally:
             os.remove(os.path.join(TEMP_PATH, "bin"))
             os.remove(os.path.join(TEMP_PATH, "examples"))
             os.remove(os.path.join(TEMP_PATH, "data"))
+            os.remove(os.path.join(TEMP_PATH, "licenses"))
         else:
             rmtree(os.path.join(TEMP_PATH, "jars"))
             rmtree(os.path.join(TEMP_PATH, "bin"))
             rmtree(os.path.join(TEMP_PATH, "examples"))
             rmtree(os.path.join(TEMP_PATH, "data"))
+            rmtree(os.path.join(TEMP_PATH, "licenses"))
         os.rmdir(TEMP_PATH)
