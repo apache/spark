@@ -120,8 +120,8 @@ statement
         (USING resource (',' resource)*)?                              #createFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN)? statement    #explain
-    | SHOW TABLES ((FROM | IN) db=identifier)?
-        (LIKE? pattern=STRING)?                                        #showTables
+    | SHOW TABLES EXTENDED? ((FROM | IN) db=identifier)?
+        (LIKE? pattern=STRING)? partitionSpec?                         #showTables
     | SHOW DATABASES (LIKE pattern=STRING)?                            #showDatabases
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
