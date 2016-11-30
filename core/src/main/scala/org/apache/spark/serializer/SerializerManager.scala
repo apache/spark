@@ -75,6 +75,8 @@ private[spark] class SerializerManager(
    * loaded yet. */
   private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
 
+  def encryptionEnabled: Boolean = encryptionKey.isDefined
+
   def canUseKryo(ct: ClassTag[_]): Boolean = {
     primitiveAndPrimitiveArrayClassTags.contains(ct) || ct == stringClassTag
   }
@@ -129,7 +131,7 @@ private[spark] class SerializerManager(
   /**
    * Wrap an input stream for encryption if shuffle encryption is enabled
    */
-  private[this] def wrapForEncryption(s: InputStream): InputStream = {
+  def wrapForEncryption(s: InputStream): InputStream = {
     encryptionKey
       .map { key => CryptoStreamUtils.createCryptoInputStream(s, conf, key) }
       .getOrElse(s)
@@ -138,7 +140,7 @@ private[spark] class SerializerManager(
   /**
    * Wrap an output stream for encryption if shuffle encryption is enabled
    */
-  private[this] def wrapForEncryption(s: OutputStream): OutputStream = {
+  def wrapForEncryption(s: OutputStream): OutputStream = {
     encryptionKey
       .map { key => CryptoStreamUtils.createCryptoOutputStream(s, conf, key) }
       .getOrElse(s)

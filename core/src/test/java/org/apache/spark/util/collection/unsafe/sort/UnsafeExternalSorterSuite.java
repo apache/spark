@@ -19,14 +19,12 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.UUID;
 
 import scala.Tuple2;
 import scala.Tuple2$;
-import scala.runtime.AbstractFunction1;
 
 import org.junit.After;
 import org.junit.Before;
@@ -57,13 +55,15 @@ import static org.mockito.Mockito.*;
 
 public class UnsafeExternalSorterSuite {
 
+  private final SparkConf conf = new SparkConf();
+
   final LinkedList<File> spillFilesCreated = new LinkedList<>();
   final TestMemoryManager memoryManager =
-    new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"));
+    new TestMemoryManager(conf.clone().set("spark.memory.offHeap.enabled", "false"));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   final SerializerManager serializerManager = new SerializerManager(
-    new JavaSerializer(new SparkConf()),
-    new SparkConf().set("spark.shuffle.spill.compress", "false"));
+    new JavaSerializer(conf),
+    conf.clone().set("spark.shuffle.spill.compress", "false"));
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
   final PrefixComparator prefixComparator = PrefixComparators.LONG;
   // Since the key fits within the 8-byte prefix, we don't need to do any record comparison, so
@@ -86,14 +86,7 @@ public class UnsafeExternalSorterSuite {
 
   protected boolean shouldUseRadixSort() { return false; }
 
-  private final long pageSizeBytes = new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "4m");
-
-  private static final class WrapStream extends AbstractFunction1<OutputStream, OutputStream> {
-    @Override
-    public OutputStream apply(OutputStream stream) {
-      return stream;
-    }
-  }
+  private final long pageSizeBytes = conf.getSizeAsBytes("spark.buffer.pageSize", "4m");
 
   @Before
   public void setUp() {
@@ -126,9 +119,9 @@ public class UnsafeExternalSorterSuite {
 
         return new DiskBlockObjectWriter(
           (File) args[1],
+          serializerManager,
           (SerializerInstance) args[2],
           (Integer) args[3],
-          new WrapStream(),
           false,
           (ShuffleWriteMetrics) args[4],
           (BlockId) args[0]

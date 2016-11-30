@@ -20,6 +20,7 @@ package org.apache.spark.util.collection
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
+import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.MemoryTestingUtils
 
@@ -230,14 +231,19 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("spilling with compression and encryption") {
+    testSimpleSpilling(Some(CompressionCodec.DEFAULT_COMPRESSION_CODEC), encrypt = true)
+  }
+
   /**
    * Test spilling through simple aggregations and cogroups.
    * If a compression codec is provided, use it. Otherwise, do not compress spills.
    */
-  private def testSimpleSpilling(codec: Option[String] = None): Unit = {
+  private def testSimpleSpilling(codec: Option[String] = None, encrypt: Boolean = false): Unit = {
     val size = 1000
     val conf = createSparkConf(loadDefaults = true, codec)  // Load defaults for Spark home
     conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 4).toString)
+    conf.set(IO_ENCRYPTION_ENABLED, encrypt)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
 
     assertSpilled(sc, "reduceByKey") {
