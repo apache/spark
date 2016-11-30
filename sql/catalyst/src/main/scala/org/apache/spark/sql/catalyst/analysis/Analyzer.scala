@@ -1013,7 +1013,7 @@ class Analyzer(
 
       // Make sure a plan's subtree does not contain outer references
       def failOnOuterReferenceInSubTree(p: LogicalPlan): Unit = {
-        if (p.collect(predicateMap).nonEmpty) {
+        if (p.collectFirst(predicateMap).nonEmpty) {
           failAnalysis(s"Accessing outer query column is not allowed in:\n$p")
         }
       }
@@ -1081,7 +1081,8 @@ class Analyzer(
         // Whitelist operators allowed in a correlated subquery
         // There are 4 categories:
         // 1. Operators that are allowed anywhere in a correlated subquery, and,
-        //    by definition of the operators, they cannot host outer references.
+        //    by definition of the operators, they either do not contain
+        //    any columns or cannot host outer references.
         // 2. Operators that are allowed anywhere in a correlated subquery
         //    so long as they do not host outer references.
         // 3. Operators that need special handlings. These operators are
@@ -1096,29 +1097,25 @@ class Analyzer(
         // up to the operator producing the correlated values.
 
         // Category 1:
-        // Leaf node can be anywhere in a correlated subquery.
-        case n: LeafNode =>
-          n
+        // BroadcastHint, Distinct, LeafNode, Repartition, and SubqueryAlias
+        case p: BroadcastHint =>
+          p
+        case p: Distinct =>
+          p
+        case p: LeafNode =>
+          p
+        case p: Repartition =>
+          p
+        case p: SubqueryAlias =>
+          p
+
         // Category 2:
         // These operators can be anywhere in a correlated subquery.
         // so long as they do not host outer references in the operators.
-        // SubqueryAlias can be anywhere in a correlated subquery.
-        case p: SubqueryAlias =>
-          failOnOuterReference(p)
-          p
-        case p: Distinct =>
-          failOnOuterReference(p)
-          p
         case p: Sort =>
           failOnOuterReference(p)
           p
-        case p: Repartition =>
-          failOnOuterReference(p)
-          p
         case p: RedistributeData =>
-          failOnOuterReference(p)
-          p
-        case p: BroadcastHint =>
           failOnOuterReference(p)
           p
 
@@ -1151,6 +1148,7 @@ class Analyzer(
         // but can be anywhere in a correlated subquery.
         case p @ Project(expressions, child) =>
           failOnOuterReference(p)
+
           val referencesToAdd = missingReferences(p)
           if (referencesToAdd.nonEmpty) {
             Project(expressions ++ referencesToAdd, child)
@@ -1159,7 +1157,7 @@ class Analyzer(
           }
 
         // Aggregate cannot host any correlated expressions
-        // It can be on a correlation path if the correlation has
+        // It can be on a correlation path if the correlation contains
         // only equality correlated predicates.
         // It cannot be on a correlation path if the correlation has
         // non-equality correlated predicates.
@@ -1209,10 +1207,8 @@ class Analyzer(
         // but must not host any outer references.
         // Note:
         // Generator with join=false is treated as Category 4.
-        case p @ Generate(generator, join, _, _, _, _) if (join) =>
-          if (containsOuter(generator)) {
-            failOnOuterReference(p)
-          }
+        case p @ Generate(generator, true, _, _, _, _) =>
+          failOnOuterReference(p)
           p
 
         // Category 4: Any other operators not in the above 3 categories
