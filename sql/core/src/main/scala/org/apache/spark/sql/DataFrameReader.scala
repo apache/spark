@@ -326,7 +326,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     val schema = userSpecifiedSchema.getOrElse {
       InferSchema.infer(
-        sparkSession.createDataset(jsonRDD)(Encoders.STRING),
+        jsonRDD,
         columnNameOfCorruptRecord,
         parsedOptions)
     }

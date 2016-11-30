@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
+import org.apache.spark.sql.SparkSession
 
 private[json] trait TestJsonData {
   protected def spark: SparkSession
@@ -196,14 +196,14 @@ private[json] trait TestJsonData {
       """42""" ::
       """     ","ian":"test"}""" :: Nil)
 
-  def emptyRecords: Dataset[String] =
-    spark.createDataset(
+  def emptyRecords: RDD[String] =
+    spark.sparkContext.parallelize(
       """{""" ::
         """""" ::
         """{"a": {}}""" ::
         """{"a": {"b": {}}}""" ::
         """{"b": [{"c": {}}]}""" ::
-        """]""" :: Nil)(Encoders.STRING)
+        """]""" :: Nil)
 
   def timestampAsLong: RDD[String] =
     spark.sparkContext.parallelize(
@@ -230,5 +230,5 @@ private[json] trait TestJsonData {
 
   lazy val singleRow: RDD[String] = spark.sparkContext.parallelize("""{"a":123}""" :: Nil)
 
-  def empty: Dataset[String] = spark.createDataset(Seq[String]())(Encoders.STRING)
+  def empty: RDD[String] = spark.sparkContext.parallelize(Seq[String]())
 }
