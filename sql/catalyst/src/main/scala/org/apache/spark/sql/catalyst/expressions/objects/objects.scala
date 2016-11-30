@@ -171,7 +171,7 @@ case class StaticInvoke(
  * @param arguments An optional list of expressions, whos evaluation will be passed to the function.
  * @param propagateNull When true, and any of the arguments is null, null will be returned instead
  *                      of calling the function.
- * @param returnNullable When false, return value must be non-null.
+ * @param returnNullable When false, indicating the invoked method will return non-null value.
  */
 case class Invoke(
     targetObject: Expression,
@@ -407,7 +407,10 @@ case class WrapOption(child: Expression, optType: DataType)
  * A place holder for the loop variable used in [[MapObjects]].  This should never be constructed
  * manually, but will instead be passed into the provided lambda function.
  */
-case class LambdaVariable(value: String, isNull: String, dataType: DataType,
+case class LambdaVariable(
+    value: String,
+    isNull: String,
+    dataType: DataType,
     nullable: Boolean = true) extends LeafExpression
   with Unevaluable with NonSQLExpression {
 

@@ -339,8 +339,8 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   }
 
   test("nullable of encoder serializer") {
-    def checkNullable[T: Encoder](nullable: Boolean*): Unit = {
-      assert(encoderFor[T].serializer.map(_.nullable) === nullable.toSeq)
+    def checkNullable[T: Encoder](nullable: Boolean): Unit = {
+      assert(encoderFor[T].serializer.map(_.nullable) === nullable)
     }
 
     // test for flat encoders

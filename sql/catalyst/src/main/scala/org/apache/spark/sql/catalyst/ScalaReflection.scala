@@ -592,7 +592,8 @@ object ScalaReflection extends ScalaReflection {
           }
 
           // we know primitive type takes only non-null, or
-          // we can infer correct nullability for struct's fieldValue by a guard using If(IsNull())
+          // we can infer correct nullability for struct's fieldValue by a guard
+          // using If(IsNull()) at the last line of this section
           val returnNonNull = fieldType.typeSymbol.asClass.isPrimitive ||
             definedByConstructorParams(fieldType)
           val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType),
