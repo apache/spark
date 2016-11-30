@@ -23,7 +23,6 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.jute.compiler.JLong
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
@@ -85,10 +84,10 @@ class StreamingQueryProgress private[sql](
   /** The aggregate (across all sources) rate at which Spark is processing data. */
   def processedRowsPerSecond: Double = sources.map(_.processedRowsPerSecond).sum
 
-  /** The compact JSON representation of this status. */
+  /** The compact JSON representation of this progress. */
   def json: String = compact(render(jsonValue))
 
-  /** The pretty (i.e. indented) JSON representation of this status. */
+  /** The pretty (i.e. indented) JSON representation of this progress. */
   def prettyJson: String = pretty(render(jsonValue))
 
   override def toString: String = prettyJson
@@ -179,10 +178,10 @@ class SourceProgress protected[sql](
 class SinkProgress protected[sql](
     val description: String) {
 
-  /** The compact JSON representation of this status. */
+  /** The compact JSON representation of this progress. */
   def json: String = compact(render(jsonValue))
 
-  /** The pretty (i.e. indented) JSON representation of this status. */
+  /** The pretty (i.e. indented) JSON representation of this progress. */
   def prettyJson: String = pretty(render(jsonValue))
 
   override def toString: String = prettyJson

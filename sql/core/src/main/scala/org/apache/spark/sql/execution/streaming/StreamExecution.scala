@@ -238,8 +238,10 @@ class StreamExecution(
         updateStatusMessage("Waiting for next trigger")
         isTerminated
       })
+      updateStatusMessage("Stopped")
     } catch {
       case _: InterruptedException if state == TERMINATED => // interrupted by stop()
+        updateStatusMessage("Stopped")
       case e: Throwable =>
         streamDeathCause = new StreamingQueryException(
           this,
@@ -247,6 +249,7 @@ class StreamExecution(
           e,
           Some(committedOffsets.toOffsetSeq(sources, streamExecutionMetadata.json)))
         logError(s"Query $name terminated with error", e)
+        updateStatusMessage(s"Terminated with exception: ${e.getMessage}")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
         // handle them
         if (!NonFatal(e)) {
@@ -254,6 +257,7 @@ class StreamExecution(
         }
     } finally {
       state = TERMINATED
+      currentStatus = status.copy(isTriggerActive = false, isDataAvailable = false)
 
       // Update metrics and status
       sparkSession.sparkContext.env.metricsSystem.removeSource(streamMetrics)
