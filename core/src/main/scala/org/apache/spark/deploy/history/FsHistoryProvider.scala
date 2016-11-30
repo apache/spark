@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.io.{FileNotFoundException, IOException, OutputStream}
 import java.util.UUID
-import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
+import java.util.concurrent.{Executors, ExecutorService, Future, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
@@ -107,7 +107,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // The modification time of the newest log detected during the last scan.   Currently only
   // used for logging msgs (logs are re-scanned based on file size, rather than modtime)
-  private var lastScanTime = -1L
+  private val lastScanTime = new java.util.concurrent.atomic.AtomicLong(-1)
 
   // Mapping of application IDs to their metadata, in descending end time order. Apps are inserted
   // into the map in order, so the LinkedHashMap maintains the correct ordering.
@@ -118,6 +118,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // List of application logs to be deleted by event log cleaner.
   private var attemptsToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
+
+  private val pendingReplayTasksCount = new java.util.concurrent.atomic.AtomicInteger(0)
 
   /**
    * Return a runnable that performs the given operation on the event logs.
@@ -223,6 +225,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     applications.get(appId)
   }
 
+  override def getEventLogsUnderProcess(): Int = pendingReplayTasksCount.get()
+
+  override def getLastUpdatedTime(): Long = lastScanTime.get()
+
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
     try {
       applications.get(appId).flatMap { appInfo =>
@@ -310,26 +316,43 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       if (logInfos.nonEmpty) {
         logDebug(s"New/updated attempts found: ${logInfos.size} ${logInfos.map(_.getPath)}")
       }
-      logInfos.map { file =>
-          replayExecutor.submit(new Runnable {
+
+      var tasks = mutable.ListBuffer[Future[_]]()
+
+      try {
+        for (file <- logInfos) {
+          tasks += replayExecutor.submit(new Runnable {
             override def run(): Unit = mergeApplicationListing(file)
           })
         }
-        .foreach { task =>
-          try {
-            // Wait for all tasks to finish. This makes sure that checkForLogs
-            // is not scheduled again while some tasks are already running in
-            // the replayExecutor.
-            task.get()
-          } catch {
-            case e: InterruptedException =>
-              throw e
-            case e: Exception =>
-              logError("Exception while merging application listings", e)
-          }
-        }
+      } catch {
+        // let the iteration over logInfos break, since an exception on
+        // replayExecutor.submit (..) indicates the ExecutorService is unable
+        // to take any more submissions at this time
 
-      lastScanTime = newLastScanTime
+        case e: Exception =>
+          logError(s"Exception while submitting event log for replay", e)
+      }
+
+      pendingReplayTasksCount.addAndGet(tasks.size)
+
+      tasks.foreach { task =>
+        try {
+          // Wait for all tasks to finish. This makes sure that checkForLogs
+          // is not scheduled again while some tasks are already running in
+          // the replayExecutor.
+          task.get()
+        } catch {
+          case e: InterruptedException =>
+            throw e
+          case e: Exception =>
+            logError("Exception while merging application listings", e)
+        } finally {
+          pendingReplayTasksCount.decrementAndGet()
+        }
+      }
+
+      lastScanTime.set(newLastScanTime)
     } catch {
       case e: Exception => logError("Exception in checking for event log updates", e)
     }
@@ -346,7 +369,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } catch {
       case e: Exception =>
         logError("Exception encountered when attempting to update last scan time", e)
-        lastScanTime
+        lastScanTime.get()
     } finally {
       if (!fs.delete(path, true)) {
         logWarning(s"Error deleting ${path}")
