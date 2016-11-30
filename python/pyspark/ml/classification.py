@@ -59,7 +59,7 @@ class JavaClassificationModel(JavaPredictionModel):
         """
         return self._call_java("numClasses")
 
-    @since("2.1.0")
+    @since("2.2.0")
     def setRawPredictionCol(self, value):
         """
         Sets the value of rawPredictionCol.
@@ -76,7 +76,7 @@ class JavaProbabilisticClassificationModel(JavaClassificationModel):
     To be mixed in with class:`pyspark.ml.JavaModel`
     """
 
-    @since("2.1.0")
+    @since("2.2.0")
     def setProbabilityCol(self, value):
         """
         Sets the value of probabilityCol.

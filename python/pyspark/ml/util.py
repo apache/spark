@@ -280,7 +280,7 @@ class JavaPredictionModel():
         """
         return self._call_java("numFeatures")
 
-    @since("2.1.0")
+    @since("2.2.0")
     def setFeaturesCol(self, value):
         """
         Sets the value of featuresCol.
@@ -288,7 +288,7 @@ class JavaPredictionModel():
         self._call_java("setFeaturesCol", value)
         return self
 
-    @since("2.1.0")
+    @since("2.2.0")
     def setPredictionCol(self, value):
         """
         Sets the value of predictionCol.
