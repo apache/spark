@@ -1189,8 +1189,8 @@ that the number of buckets used will be smaller than this value, for example, if
 distinct values of the input to create enough distinct quantiles.
 
 NaN values:
-NaN values will be removed from the column when `QuantileDiscretizer` fitting. This will produce
-a `Bucketizer` model for making prediction and transformation. During the transformation, `Bucketizer`
+NaN values will be removed from the column during `QuantileDiscretizer` fitting. This will produce
+a `Bucketizer` model for making predictions. During the transformation, `Bucketizer`
 will raise an error when it finds NaN values in the dataset, but the user can also choose to either
 keep or remove NaN values within the dataset by setting `handleInvalid`. If the user chooses to keep
 NaN values, they will be handled specially and placed into their own bucket, for example, if 4 buckets

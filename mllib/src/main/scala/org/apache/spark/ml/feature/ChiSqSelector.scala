@@ -49,6 +49,7 @@ private[feature] trait ChiSqSelectorParams extends Params
    *
    * @group param
    */
+  @Since("1.6.0")
   final val numTopFeatures = new IntParam(this, "numTopFeatures",
     "Number of features that selector will select, ordered by ascending p-value. If the" +
       " number of features is < numTopFeatures, then this will select all features.",
@@ -56,6 +57,7 @@ private[feature] trait ChiSqSelectorParams extends Params
   setDefault(numTopFeatures -> 50)
 
   /** @group getParam */
+  @Since("1.6.0")
   def getNumTopFeatures: Int = $(numTopFeatures)
 
   /**
@@ -64,12 +66,14 @@ private[feature] trait ChiSqSelectorParams extends Params
    * Default value is 0.1.
    * @group param
    */
+  @Since("2.1.0")
   final val percentile = new DoubleParam(this, "percentile",
     "Percentile of features that selector will select, ordered by ascending p-value.",
     ParamValidators.inRange(0, 1))
   setDefault(percentile -> 0.1)
 
   /** @group getParam */
+  @Since("2.1.0")
   def getPercentile: Double = $(percentile)
 
   /**
@@ -78,11 +82,13 @@ private[feature] trait ChiSqSelectorParams extends Params
    * Default value is 0.05.
    * @group param
    */
+  @Since("2.1.0")
   final val fpr = new DoubleParam(this, "fpr", "The highest p-value for features to be kept.",
     ParamValidators.inRange(0, 1))
   setDefault(fpr -> 0.05)
 
   /** @group getParam */
+  @Since("2.1.0")
   def getFpr: Double = $(fpr)
 
   /**
@@ -90,6 +96,7 @@ private[feature] trait ChiSqSelectorParams extends Params
    * Supported options: "numTopFeatures" (default), "percentile", "fpr".
    * @group param
    */
+  @Since("2.1.0")
   final val selectorType = new Param[String](this, "selectorType",
     "The selector type of the ChisqSelector. " +
       "Supported options: " + OldChiSqSelector.supportedSelectorTypes.mkString(", "),
@@ -97,6 +104,7 @@ private[feature] trait ChiSqSelectorParams extends Params
   setDefault(selectorType -> OldChiSqSelector.NumTopFeatures)
 
   /** @group getParam */
+  @Since("2.1.0")
   def getSelectorType: String = $(selectorType)
 }
 
