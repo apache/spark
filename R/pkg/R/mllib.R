@@ -768,11 +768,11 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' # multinomial logistic regression
 #'
 #' label <- c(0.0, 1.0, 2.0, 0.0, 0.0)
-#' features1 <- c(4.845940, 5.64480, 7.430381, 6.464263, 5.555667)
-#' features2 <- c(2.941319, 2.614812, 2.162451, 3.339474, 2.970987)
-#' features3 <- c(1.322733, 1.348044, 3.861237, 9.686976, 3.447130)
-#' features4 <- c(1.3246388, 0.5510444, 0.9225810, 1.2147881, 1.6020842)
-#' data <- as.data.frame(cbind(label, features1, features2, features3, features4))
+#' feature1 <- c(4.845940, 5.64480, 7.430381, 6.464263, 5.555667)
+#' feature2 <- c(2.941319, 2.614812, 2.162451, 3.339474, 2.970987)
+#' feature3 <- c(1.322733, 1.348044, 3.861237, 9.686976, 3.447130)
+#' feature4 <- c(1.3246388, 0.5510444, 0.9225810, 1.2147881, 1.6020842)
+#' data <- as.data.frame(cbind(label, feature1, feature2, feature3, feature4))
 #' df <- createDataFrame(data)
 #'
 #' # Note that summary of multinomial logistic regression is not implemented yet
