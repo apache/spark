@@ -30,6 +30,10 @@ import java.io.OutputStream;
  *   <li>{@link Integer}</li>
  *   <li>{@link Long}</li>
  *   <li>{@link String}</li>
+ *   <li>{@link Float}</li>
+ *   <li>{@link Double}</li>
+ *   <li>{@link java.math.BigDecimal}</li>
+ *   <li>{@link Boolean}</li>
  * </ul>
  * A {@link CountMinSketch} is initialized with a random seed, and a pair of parameters:
  * <ol>

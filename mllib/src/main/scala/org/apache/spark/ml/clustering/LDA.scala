@@ -22,7 +22,7 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Matrix, Vector, Vectors, VectorUDT}
@@ -78,11 +78,11 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *  - EM
    *     - Currently only supports symmetric distributions, so all values in the vector should be
    *       the same.
-   *     - Values should be &gt; 1.0
+   *     - Values should be greater than 1.0
    *     - default = uniformly (50 / k) + 1, where 50/k is common in LDA libraries and +1 follows
    *       from Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Values should be &gt;= 0
+   *     - Values should be greater than or equal to 0
    *     - default = uniformly (1.0 / k), following the implementation from
    *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    *
@@ -120,11 +120,11 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *
    * Optimizer-specific parameter settings:
    *  - EM
-   *     - Value should be &gt; 1.0
+   *     - Value should be greater than 1.0
    *     - default = 0.1 + 1, where 0.1 gives a small amount of smoothing and +1 follows
    *       Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Value should be &gt;= 0
+   *     - Value should be greater than or equal to 0
    *     - default = (1.0 / k), following the implementation from
    *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    *
@@ -247,7 +247,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *
    * Note that this should be adjusted in synch with `LDA.maxIter`
    * so the entire corpus is used.  Specifically, set both so that
-   * maxIterations * miniBatchFraction &gt;= 1.
+   * maxIterations * miniBatchFraction greater than or equal to 1.
    *
    * Note: This is the same as the `miniBatchFraction` parameter in
    *       [[org.apache.spark.mllib.clustering.OnlineLDAOptimizer]].
@@ -396,15 +396,13 @@ private object LDAParams {
 
 
 /**
- * :: Experimental ::
  * Model fitted by [[LDA]].
  *
  * @param vocabSize  Vocabulary size (number of terms or words in the vocabulary)
  * @param sparkSession  Used to construct local DataFrames for returning query results
  */
 @Since("1.6.0")
-@Experimental
-sealed abstract class LDAModel private[ml] (
+abstract class LDAModel private[ml] (
     @Since("1.6.0") override val uid: String,
     @Since("1.6.0") val vocabSize: Int,
     @Since("1.6.0") @transient private[ml] val sparkSession: SparkSession)
@@ -556,14 +554,12 @@ sealed abstract class LDAModel private[ml] (
 
 
 /**
- * :: Experimental ::
  *
  * Local (non-distributed) model fitted by [[LDA]].
  *
  * This model stores the inferred topics only; it does not store info about the training dataset.
  */
 @Since("1.6.0")
-@Experimental
 class LocalLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
@@ -641,7 +637,6 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
 
 
 /**
- * :: Experimental ::
  *
  * Distributed model fitted by [[LDA]].
  * This type of model is currently only produced by Expectation-Maximization (EM).
@@ -653,7 +648,6 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
  *                             `copy()` cheap.
  */
 @Since("1.6.0")
-@Experimental
 class DistributedLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
@@ -789,7 +783,6 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
 
 
 /**
- * :: Experimental ::
  *
  * Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
  *
@@ -813,7 +806,6 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
  * Latent Dirichlet allocation (Wikipedia)</a>
  */
 @Since("1.6.0")
-@Experimental
 class LDA @Since("1.6.0") (
     @Since("1.6.0") override val uid: String)
   extends Estimator[LDAModel] with LDAParams with DefaultParamsWritable {

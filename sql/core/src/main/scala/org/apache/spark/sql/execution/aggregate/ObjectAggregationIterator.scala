@@ -262,7 +262,9 @@ class SortBasedAggregator(
           // Firstly, update the aggregation buffer with input rows.
           while (hasNextInput &&
             groupingKeyOrdering.compare(inputIterator.getKey, groupingKey) == 0) {
-            processRow(result.aggregationBuffer, inputIterator.getValue)
+            // Since `inputIterator.getValue` is an `UnsafeRow` whose underlying buffer will be
+            // overwritten when `inputIterator` steps forward, we need to do a deep copy here.
+            processRow(result.aggregationBuffer, inputIterator.getValue.copy())
             hasNextInput = inputIterator.next()
           }
 
@@ -271,7 +273,12 @@ class SortBasedAggregator(
           // be called after calling processRow.
           while (hasNextAggBuffer &&
             groupingKeyOrdering.compare(initialAggBufferIterator.getKey, groupingKey) == 0) {
-            mergeAggregationBuffers(result.aggregationBuffer, initialAggBufferIterator.getValue)
+            mergeAggregationBuffers(
+              result.aggregationBuffer,
+              // Since `inputIterator.getValue` is an `UnsafeRow` whose underlying buffer will be
+              // overwritten when `inputIterator` steps forward, we need to do a deep copy here.
+              initialAggBufferIterator.getValue.copy()
+            )
             hasNextAggBuffer = initialAggBufferIterator.next()
           }
 
