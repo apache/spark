@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.functions.{length, trim}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -182,15 +183,12 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
    * Returns the first line of the first non-empty file in path
    */
   private def findFirstLine(options: CSVOptions, lines: Dataset[String]): String = {
+    import lines.sqlContext.implicits._
+    val nonEmptyLines = lines.filter(length(trim($"value")) > 0)
     if (options.isCommentSet) {
-      val comment = options.comment.toString
-      lines.filter { line =>
-        line.trim.nonEmpty && !line.startsWith(comment)
-      }.first()
+      nonEmptyLines.filter(!$"value".startsWith(options.comment.toString)).first()
     } else {
-      lines.filter { line =>
-        line.trim.nonEmpty
-      }.first()
+      nonEmptyLines.first()
     }
   }
 
