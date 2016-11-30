@@ -205,6 +205,58 @@ class PartitionProviderCompatibilitySuite
         }
       }
     }
+
+    test(s"SPARK-18635 special chars in partition values - partition management $enabled") {
+      withTable("test") {
+        spark.range(10)
+          .selectExpr("id", "id as A", "'%' as B")
+          .write.partitionBy("A", "B").mode("overwrite")
+          .saveAsTable("test")
+        assert(spark.sql("select * from test").count() == 10)
+        assert(spark.sql("select * from test where B = '%'").count() == 10)
+        assert(spark.sql("select * from test where B = '$'").count() == 0)
+        spark.range(10)
+          .selectExpr("id", "id as A", "'=' as B")
+          .write.mode("append").insertInto("test")
+        spark.sql("insert into test partition (A, B) select id, id, '%=' from range(10)")
+        assert(spark.sql("select * from test").count() == 30)
+        assert(spark.sql("select * from test where B = '%'").count() == 10)
+        assert(spark.sql("select * from test where B = '='").count() == 10)
+        assert(spark.sql("select * from test where B = '%='").count() == 10)
+
+        // show partitions sanity check
+        val parts = spark.sql("show partitions test").collect().map(_.get(0)).toSeq
+        assert(parts.length == 30)
+        assert(parts.contains("A=0/B=%25"))
+        assert(parts.contains("A=0/B=%3D"))
+        assert(parts.contains("A=0/B=%25%3D"))
+
+        // custom locations sanity check
+        withTempDir { dir =>
+          spark.sql(s"""
+            |alter table test partition (A=0, B='%')
+            |set location '${dir.getAbsolutePath}'""".stripMargin)
+          assert(spark.sql("select * from test").count() == 29)  // missing 1
+        }
+
+        // drop partition sanity check
+        spark.sql("alter table test drop partition (A=1, B='%')")
+        assert(spark.sql("select * from test").count() == 28)
+
+        // TODO(ekl) fix rename partition
+//        withTempDir { dir =>
+//          spark.sql(s"""
+//            |alter table test partition (A=0, B='%')
+//            |rename to partition (A=100, B='%')""".stripMargin)
+//          assert(spark.sql("select * from test where a = 100").count() == 1)
+//        }
+
+        // TODO(ekl) fix overwrite table
+//        spark.sql("show partitions test").show(false)
+//        spark.sql("insert overwrite table test partition (a, b) select id, id, '%' from range(1)")
+//        assert(spark.sql("select * from test").count() == 1)
+      }
+    }
   }
 
   /**
