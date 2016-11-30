@@ -192,9 +192,12 @@ abstract class ExternalCatalog {
   /**
    * List the names of all partitions that belong to the specified table, assuming it exists.
    *
-   * A partial partition spec may optionally be provided to filter the partitions returned.
-   * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
-   * then a partial spec of (a='1') will return the first two only.
+   * For a table with partition columns p1, p2, p3, each partition name is formatted as
+   * `p1=v1/p2=v2/p3=v3`. Each partition column name and value is an escaped path name, and can be
+   * decoded with the `ExternalCatalogUtils.unescapePathName` method.
+   *
+   * A partial partition spec may optionally be provided to filter the partitions returned, as
+   * described in the `listPartitions` method.
    *
    * @param db database name
    * @param table table name
@@ -227,7 +230,7 @@ abstract class ExternalCatalog {
    *
    * @param db database name
    * @param table table name
-   * @param predicates  partition-pruning predicates
+   * @param predicates partition-pruning predicates
    */
   def listPartitionsByFilter(
       db: String,

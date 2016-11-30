@@ -28,6 +28,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
 
@@ -496,7 +497,7 @@ class InMemoryCatalog(
 
     listPartitions(db, table, partialSpec).map { partition =>
       partitionColumnNames.map { name =>
-        name + "=" + partition.spec(name)
+        escapePathName(name) + "=" + escapePathName(partition.spec(name))
       }.mkString("/")
     }
   }

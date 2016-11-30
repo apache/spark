@@ -35,6 +35,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -935,16 +936,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val actualPartColNames = getTable(db, table).partitionColumnNames
     val clientPartitionNames =
       client.getPartitionNames(db, table, partialSpec.map(lowerCasePartitionSpec))
-
-    if (actualPartColNames.exists(partColName => partColName != partColName.toLowerCase)) {
-      clientPartitionNames.map { partName =>
-        val partSpec = PartitioningUtils.parsePathFragmentAsSeq(partName)
-        partSpec.map { case (partName, partValue) =>
-          actualPartColNames.find(_.equalsIgnoreCase(partName)).get + "=" + partValue
-        }.mkString("/")
-      }
-    } else {
-      clientPartitionNames
+    clientPartitionNames.map { partName =>
+      val partSpec = PartitioningUtils.parsePathFragmentAsSeq(partName)
+      partSpec.map { case (partName, partValue) =>
+        escapePathName(actualPartColNames.find(_.equalsIgnoreCase(partName)).get) + "=" +
+          escapePathName(partValue)
+      }.mkString("/")
     }
   }
 
