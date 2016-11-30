@@ -442,12 +442,13 @@ class KafkaSourceSuite extends KafkaSourceTest {
 
     val mapped = kafka.map(kv => kv._2.toInt + 1)
     testStream(mapped)(
+      StartStream(trigger = ProcessingTime(1)),
       makeSureGetOffsetCalled,
       AddKafkaData(Set(topic), 1, 2, 3),
       CheckAnswer(2, 3, 4),
-      AssertOnLastQueryStatus { status =>
-        assert(status.triggerDetails.get("numRows.input.total").toInt > 0)
-        assert(status.sourceStatuses(0).processingRate > 0.0)
+      AssertOnQuery { query =>
+        val recordsRead = query.recentProgresses.map(_.numInputRows).sum
+        recordsRead == 3
       }
     )
   }
