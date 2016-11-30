@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataTypes, IntegerType, StringType, StructField, StructType}
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -1050,6 +1050,20 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(dsLong, arrayLong)
     checkDataset(dsDouble, arrayDouble)
     checkDataset(dsString, arrayString)
+  }
+
+  test("SPARK-18487: Add completion listener to HashAggregate to avoid memory leak") {
+    val rng = new scala.util.Random(42)
+    val data = sparkContext.parallelize(Seq.tabulate(100) { i =>
+      Row(Array.fill(10)(rng.nextInt(10)))
+    })
+    val schema = StructType(Seq(
+      StructField("arr", DataTypes.createArrayType(DataTypes.IntegerType))
+    ))
+    val df = spark.createDataFrame(data, schema)
+    val exploded = df.select(struct(col("*")).as("star"), explode(col("arr")).as("a"))
+    val joined = exploded.join(exploded, "a").drop("a").distinct()
+    joined.show()
   }
 }
 

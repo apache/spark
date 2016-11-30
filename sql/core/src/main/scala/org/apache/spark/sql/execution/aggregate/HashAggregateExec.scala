@@ -295,6 +295,11 @@ case class HashAggregateExec(
   private var hashMapTerm: String = _
   private var sorterTerm: String = _
 
+  // Becasue Dataset.show/take methods will end of iteraton before reaching the end of all rows,
+  // we may not release resources then and cause memory leak. So we need to hold the reference
+  // of the hash map if it is created and release the resources after task completion.
+  private var hashMapToRelease: UnsafeFixedWidthAggregationMap = _
+
   /**
    * This is called by generated Java class, should be public.
    */
@@ -302,17 +307,23 @@ case class HashAggregateExec(
     // create initialized aggregate buffer
     val initExpr = declFunctions.flatMap(f => f.initialValues)
     val initialBuffer = UnsafeProjection.create(initExpr)(EmptyRow)
+    val context = TaskContext.get()
 
     // create hashMap
-    new UnsafeFixedWidthAggregationMap(
+    hashMapToRelease = new UnsafeFixedWidthAggregationMap(
       initialBuffer,
       bufferSchema,
       groupingKeySchema,
-      TaskContext.get().taskMemoryManager(),
+      context.taskMemoryManager(),
       1024 * 16, // initial capacity
-      TaskContext.get().taskMemoryManager().pageSizeBytes,
+      context.taskMemoryManager().pageSizeBytes,
       false // disable tracking of performance metrics
     )
+
+    // Release the resources of the hash map when the end of task.
+    context.addTaskCompletionListener(_ => hashMapToRelease.free())
+
+    hashMapToRelease
   }
 
   def getTaskMemoryManager(): TaskMemoryManager = {
