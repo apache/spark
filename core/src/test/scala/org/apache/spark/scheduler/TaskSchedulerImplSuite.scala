@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import java.nio.ByteBuffer
+
 import scala.collection.mutable.HashMap
 
 import org.mockito.Matchers.{anyInt, anyString, eq => meq}
@@ -648,4 +650,70 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(taskScheduler.getExecutorsAliveOnHost("host1") === Some(Set("executor1", "executor3")))
   }
 
+  test("if an executor is lost then the state for its running tasks is cleaned up (SPARK-18553)") {
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler.initialize(new FakeSchedulerBackend)
+    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
+    new DAGScheduler(sc, taskScheduler) {
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
+      override def executorAdded(execId: String, host: String) {}
+    }
+
+    val e0Offers = IndexedSeq(WorkerOffer("executor0", "host0", 1))
+    val attempt1 = FakeTask.createTaskSet(1)
+
+    // submit attempt 1, offer resources, task gets scheduled
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(e0Offers).flatten
+    assert(1 === taskDescriptions.length)
+
+    // mark executor0 as dead
+    taskScheduler.executorLost("executor0", SlaveLost())
+    assert(!taskScheduler.isExecutorAlive("executor0"))
+    assert(!taskScheduler.hasExecutorsAliveOnHost("host0"))
+    assert(taskScheduler.getExecutorsAliveOnHost("host0").isEmpty)
+
+
+    // Check that state associated with the lost task attempt is cleaned up:
+    assert(taskScheduler.taskIdToExecutorId.isEmpty)
+    assert(taskScheduler.taskIdToTaskSetManager.isEmpty)
+    assert(taskScheduler.runningTasksByExecutors().get("executor0").isEmpty)
+  }
+
+  test("if a task finishes with TaskState.LOST its executor is marked as dead") {
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler.initialize(new FakeSchedulerBackend)
+    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
+    new DAGScheduler(sc, taskScheduler) {
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
+      override def executorAdded(execId: String, host: String) {}
+    }
+
+    val e0Offers = IndexedSeq(WorkerOffer("executor0", "host0", 1))
+    val attempt1 = FakeTask.createTaskSet(1)
+
+    // submit attempt 1, offer resources, task gets scheduled
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(e0Offers).flatten
+    assert(1 === taskDescriptions.length)
+
+    // Report the task as failed with TaskState.LOST
+    taskScheduler.statusUpdate(
+      tid = taskDescriptions.head.taskId,
+      state = TaskState.LOST,
+      serializedData = ByteBuffer.allocate(0)
+    )
+
+    // Check that state associated with the lost task attempt is cleaned up:
+    assert(taskScheduler.taskIdToExecutorId.isEmpty)
+    assert(taskScheduler.taskIdToTaskSetManager.isEmpty)
+    assert(taskScheduler.runningTasksByExecutors().get("executor0").isEmpty)
+
+    // Check that the executor has been marked as dead
+    assert(!taskScheduler.isExecutorAlive("executor0"))
+    assert(!taskScheduler.hasExecutorsAliveOnHost("host0"))
+    assert(taskScheduler.getExecutorsAliveOnHost("host0").isEmpty)
+  }
 }
