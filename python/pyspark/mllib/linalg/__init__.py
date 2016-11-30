@@ -807,7 +807,8 @@ class SparseVector(Vector):
                 return result
             else:
                 raise AttributeError(
-                    "'{0}' object has no attribute '{1}' or SciPy not installed.".format(self.__class__, item))
+                    ("'{0}' object has no attribute '{1}' "
+                     "and SciPy is not installed to proxy request to SparseVector").format(self.__class__, item))
         return wrapper
 
     def __getitem__(self, index):
