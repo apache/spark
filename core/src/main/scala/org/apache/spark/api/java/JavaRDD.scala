@@ -34,7 +34,9 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
 
   // Common RDD functions
 
-  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
+  /**
+   * Persist this RDD with the default storage level (`MEMORY_ONLY`).
+   */
   def cache(): JavaRDD[T] = wrapRDD(rdd.cache())
 
   /**
@@ -103,7 +105,8 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
    * @param fraction expected size of the sample as a fraction of this RDD's size
    *  without replacement: probability that each element is chosen; fraction must be [0, 1]
-   *  with replacement: expected number of times each element is chosen; fraction must be &gt;= 0
+   *  with replacement: expected number of times each element is chosen; fraction must be greater
+   *  than or equal to 0
    *
    * @note This is NOT guaranteed to provide exactly the fraction of the count
    * of the given `RDD`.
@@ -117,7 +120,8 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
    * @param fraction expected size of the sample as a fraction of this RDD's size
    *  without replacement: probability that each element is chosen; fraction must be [0, 1]
-   *  with replacement: expected number of times each element is chosen; fraction must be &gt;= 0
+   *  with replacement: expected number of times each element is chosen; fraction must be greater
+   *  than or equal to 0
    * @param seed seed for the random number generator
    *
    * @note This is NOT guaranteed to provide exactly the fraction of the count
@@ -167,7 +171,7 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    * Return an RDD with the elements from `this` that are not in `other`.
    *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
-   * RDD will be &lt;= us.
+   * RDD will be less than or equal to us.
    */
   def subtract(other: JavaRDD[T]): JavaRDD[T] = wrapRDD(rdd.subtract(other))
 

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.UUID
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.scheduler.SparkListenerEvent
 
@@ -81,30 +83,28 @@ object StreamingQueryListener {
   /**
    * :: Experimental ::
    * Event representing the start of a query
-   * @since 2.0.0
+   * @since 2.1.0
    */
   @Experimental
-  class QueryStartedEvent private[sql](val queryStatus: StreamingQueryStatus) extends Event
+  class QueryStartedEvent private[sql](val id: UUID, val name: String) extends Event
 
   /**
    * :: Experimental ::
-   * Event representing any progress updates in a query
-   * @since 2.0.0
+   * Event representing any progress updates in a query.
+   * @since 2.1.0
    */
   @Experimental
-  class QueryProgressEvent private[sql](val queryStatus: StreamingQueryStatus) extends Event
+  class QueryProgressEvent private[sql](val progress: StreamingQueryProgress) extends Event
 
   /**
    * :: Experimental ::
-   * Event representing that termination of a query
+   * Event representing that termination of a query.
    *
-   * @param queryStatus Information about the status of the query.
-   * @param exception The exception message of the [[StreamingQuery]] if the query was terminated
+   * @param id The query id.
+   * @param exception The exception message of the query if the query was terminated
    *                  with an exception. Otherwise, it will be `None`.
-   * @since 2.0.0
+   * @since 2.1.0
    */
   @Experimental
-  class QueryTerminatedEvent private[sql](
-      val queryStatus: StreamingQueryStatus,
-      val exception: Option[String]) extends Event
+  class QueryTerminatedEvent private[sql](val id: UUID, val exception: Option[String]) extends Event
 }

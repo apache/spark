@@ -162,7 +162,7 @@ object DecisionTree extends Serializable with Logging {
    * @param numClasses Number of classes for classification. Default value of 2.
    * @param maxBins Maximum number of bins used for splitting features.
    * @param quantileCalculationStrategy  Algorithm for calculating quantiles.
-   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n -> k)
+   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n to k)
    *                                indicates that feature n is categorical with k categories
    *                                indexed from 0: {0, 1, ..., k-1}.
    * @return DecisionTreeModel that can be used for prediction.
@@ -192,7 +192,7 @@ object DecisionTree extends Serializable with Logging {
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              Labels should take values {0, 1, ..., numClasses-1}.
    * @param numClasses Number of classes for classification.
-   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n -> k)
+   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n to k)
    *                                indicates that feature n is categorical with k categories
    *                                indexed from 0: {0, 1, ..., k-1}.
    * @param impurity Criterion used for information gain calculation.
@@ -238,7 +238,7 @@ object DecisionTree extends Serializable with Logging {
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              Labels are real numbers.
-   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n -> k)
+   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n to k)
    *                                indicates that feature n is categorical with k categories
    *                                indexed from 0: {0, 1, ..., k-1}.
    * @param impurity Criterion used for information gain calculation.

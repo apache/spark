@@ -92,7 +92,8 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   }
 
   /**
-   * The default size of a value of the DecimalType is 8 bytes (precision &lt;= 18) or 16 bytes.
+   * The default size of a value of the DecimalType is 8 bytes when precision is at most 18,
+   * and 16 bytes otherwise.
    */
   override def defaultSize: Int = if (precision <= Decimal.MAX_LONG_DIGITS) 8 else 16
 

@@ -38,7 +38,7 @@ import org.apache.spark.util.ThreadUtils
  *
  * @param kafkaParams Map of kafka configuration parameters.
  *                    See: http://kafka.apache.org/configuration.html
- * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+ * @param topics Map of (topic_name to numPartitions) to consume. Each partition is consumed
  * in its own thread.
  * @param storageLevel RDD storage level.
  */
