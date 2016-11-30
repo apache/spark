@@ -175,11 +175,11 @@ run_command() {
 
   case "$mode" in
     (class)
-      execute_command nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-class $command "$@"
+      execute_command nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-class "$command" "$@"
       ;;
 
     (submit)
-      execute_command nice -n "$SPARK_NICENESS" bash "${SPARK_HOME}"/bin/spark-submit --class $command "$@"
+      execute_command nice -n "$SPARK_NICENESS" bash "${SPARK_HOME}"/bin/spark-submit --class "$command" "$@"
       ;;
 
     (*)
