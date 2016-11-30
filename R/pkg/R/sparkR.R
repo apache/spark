@@ -565,7 +565,7 @@ sparkCheckInstall <- function(sparkHome, master, deployMode) {
       message(msg)
       NULL
     } else {
-      if (isMasterLocal(master)) {
+      if (interactive() || isMasterLocal(master)) {
         msg <- paste0("Spark not found in SPARK_HOME: ", sparkHome)
         message(msg)
         packageLocalDir <- install.spark()
