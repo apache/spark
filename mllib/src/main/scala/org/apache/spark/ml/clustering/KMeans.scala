@@ -85,6 +85,20 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   def getInitSteps: Int = $(initSteps)
 
   /**
+   * The fraction of the data to update centers per iteration. Must be &gt; 0 and &le; 1.
+   * Default: 1.0.
+   * @group param
+   */
+  @Since("2.2.0")
+  final val miniBatchFraction = new DoubleParam(this, "k", "The fraction of the data to update" +
+    " clustering centers per iteration. Must be in (0, 1].",
+    ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getMiniBatchFraction: Double = $(miniBatchFraction)
+
+  /**
    * Validates and transforms the input schema.
    * @param schema input schema
    * @return output schema
@@ -260,7 +274,8 @@ class KMeans @Since("1.5.0") (
     maxIter -> 20,
     initMode -> MLlibKMeans.K_MEANS_PARALLEL,
     initSteps -> 2,
-    tol -> 1e-4)
+    tol -> 1e-4,
+    miniBatchFraction -> 1.0)
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeans = defaultCopy(extra)
@@ -300,6 +315,10 @@ class KMeans @Since("1.5.0") (
   @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /** @group setParam */
+  @Since("2.2.0")
+  def setMiniBatchFraction(value: Double): this.type = set(miniBatchFraction, value)
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
     transformSchema(dataset.schema, logging = true)
@@ -314,7 +333,9 @@ class KMeans @Since("1.5.0") (
     }
 
     val instr = Instrumentation.create(this, instances)
-    instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
+    instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol,
+      miniBatchFraction)
+
     val algo = new MLlibKMeans()
       .setK($(k))
       .setInitializationMode($(initMode))
@@ -322,6 +343,7 @@ class KMeans @Since("1.5.0") (
       .setMaxIterations($(maxIter))
       .setSeed($(seed))
       .setEpsilon($(tol))
+      .setMiniBatchFraction($(miniBatchFraction))
     val parentModel = algo.run(instances, Option(instr))
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(

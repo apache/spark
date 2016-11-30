@@ -144,6 +144,14 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(model.getPredictionCol == predictionColName)
   }
 
+  test("SPARK-14174: enable mini-batch EM") {
+    val model1 = new KMeans().setK(k).setSeed(1).fit(dataset)
+    val cost1 = model1.computeCost(dataset)
+    val model2 = new KMeans().setK(k).setMiniBatchFraction(0.9).setSeed(1).fit(dataset)
+    val cost2 = model2.computeCost(dataset)
+    require(cost1 === cost2)
+  }
+
   test("read/write") {
     def checkModelData(model: KMeansModel, model2: KMeansModel): Unit = {
       assert(model.clusterCenters === model2.clusterCenters)
