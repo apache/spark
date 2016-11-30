@@ -211,12 +211,12 @@ class JDBCSuite extends SparkFunSuite
 
   // Check whether the tables are fetched in the expected degree of parallelism
   def checkNumPartitions(df: DataFrame, expectedNumPartitions: Int): Unit = {
-    df.queryExecution.analyzed.collectFirst {
-      case LogicalRelation(r: JDBCRelation, _, _) if r.parts.length == expectedNumPartitions => ()
-    }.getOrElse {
-      fail(s"Expecting a JDBCRelation with $expectedNumPartitions partitions, but got:\n" +
-        s"${df.queryExecution.analyzed}")
+    val jdbcRelations = df.queryExecution.analyzed.collect {
+      case LogicalRelation(r: JDBCRelation, _, _) => r
     }
+    assert(jdbcRelations.length == 1)
+    assert(jdbcRelations.head.parts.length == expectedNumPartitions,
+      s"Expecting a JDBCRelation with $expectedNumPartitions partitions, but got:`$jdbcRelations`")
   }
 
   test("SELECT *") {
