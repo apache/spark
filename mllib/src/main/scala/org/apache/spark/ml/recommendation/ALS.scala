@@ -458,9 +458,9 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
     val instrLog = Instrumentation.create(this, ratings)
-    instrLog.logParams(rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha,
-                       userCol, itemCol, ratingCol, predictionCol, maxIter,
-                       regParam, nonnegative, checkpointInterval, seed)
+    instrLog.logParams(rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha, userCol,
+      itemCol, ratingCol, predictionCol, maxIter, regParam, nonnegative, checkpointInterval,
+      seed, intermediateStorageLevel, finalStorageLevel)
     val (userFactors, itemFactors) = ALS.train(ratings, rank = $(rank),
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
