@@ -44,7 +44,7 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   with HasSeed with HasPredictionCol with HasProbabilityCol with HasTol {
 
   /**
-   * Number of independent Gaussians in the mixture model. Must be > 1. Default: 2.
+   * Number of independent Gaussians in the mixture model. Must be greater than 1. Default: 2.
    * @group param
    */
   @Since("2.0.0")
@@ -68,29 +68,38 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
 }
 
 /**
- * :: Experimental ::
- *
  * Multivariate Gaussian Mixture Model (GMM) consisting of k Gaussians, where points
  * are drawn from each Gaussian i with probability weights(i).
  *
  * @param weights Weight for each Gaussian distribution in the mixture.
  *                This is a multinomial probability distribution over the k Gaussians,
  *                where weights(i) is the weight for Gaussian i, and weights sum to 1.
- * @param gaussians Array of [[MultivariateGaussian]] where gaussians(i) represents
+ * @param gaussians Array of `MultivariateGaussian` where gaussians(i) represents
  *                  the Multivariate Gaussian (Normal) Distribution for Gaussian i
  */
 @Since("2.0.0")
-@Experimental
 class GaussianMixtureModel private[ml] (
     @Since("2.0.0") override val uid: String,
     @Since("2.0.0") val weights: Array[Double],
     @Since("2.0.0") val gaussians: Array[MultivariateGaussian])
   extends Model[GaussianMixtureModel] with GaussianMixtureParams with MLWritable {
 
+  /** @group setParam */
+  @Since("2.1.0")
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setProbabilityCol(value: String): this.type = set(probabilityCol, value)
+
   @Since("2.0.0")
   override def copy(extra: ParamMap): GaussianMixtureModel = {
-    val copied = new GaussianMixtureModel(uid, weights, gaussians)
-    copyValues(copied, extra).setParent(this.parent)
+    val copied = copyValues(new GaussianMixtureModel(uid, weights, gaussians), extra)
+    copied.setSummary(trainingSummary).setParent(this.parent)
   }
 
   @Since("2.0.0")
@@ -149,8 +158,8 @@ class GaussianMixtureModel private[ml] (
 
   private var trainingSummary: Option[GaussianMixtureSummary] = None
 
-  private[clustering] def setSummary(summary: GaussianMixtureSummary): this.type = {
-    this.trainingSummary = Some(summary)
+  private[clustering] def setSummary(summary: Option[GaussianMixtureSummary]): this.type = {
+    this.trainingSummary = summary
     this
   }
 
@@ -253,7 +262,6 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
 }
 
 /**
- * :: Experimental ::
  * Gaussian Mixture clustering.
  *
  * This class performs expectation maximization for multivariate Gaussian
@@ -267,12 +275,11 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
  * While this process is generally guaranteed to converge, it is not guaranteed
  * to find a global optimum.
  *
- * Note: For high-dimensional data (with many features), this algorithm may perform poorly.
- *       This is due to high-dimensional data (a) making it difficult to cluster at all (based
- *       on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
+ * @note For high-dimensional data (with many features), this algorithm may perform poorly.
+ * This is due to high-dimensional data (a) making it difficult to cluster at all (based
+ * on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
  */
 @Since("2.0.0")
-@Experimental
 class GaussianMixture @Since("2.0.0") (
     @Since("2.0.0") override val uid: String)
   extends Estimator[GaussianMixtureModel] with GaussianMixtureParams with DefaultParamsWritable {
@@ -323,6 +330,9 @@ class GaussianMixture @Since("2.0.0") (
       case Row(point: Vector) => OldVectors.fromML(point)
     }
 
+    val instr = Instrumentation.create(this, rdd)
+    instr.logParams(featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
+
     val algo = new MLlibGM()
       .setK($(k))
       .setMaxIterations($(maxIter))
@@ -336,7 +346,10 @@ class GaussianMixture @Since("2.0.0") (
       .setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
-    model.setSummary(summary)
+    model.setSummary(Some(summary))
+    instr.logNumFeatures(model.gaussians.head.mean.size)
+    instr.logSuccess(model)
+    model
   }
 
   @Since("2.0.0")
@@ -356,42 +369,25 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
  * :: Experimental ::
  * Summary of GaussianMixture.
  *
- * @param predictions  [[DataFrame]] produced by [[GaussianMixtureModel.transform()]]
- * @param predictionCol  Name for column of predicted clusters in `predictions`
- * @param probabilityCol  Name for column of predicted probability of each cluster in `predictions`
- * @param featuresCol  Name for column of features in `predictions`
- * @param k  Number of clusters
+ * @param predictions  `DataFrame` produced by `GaussianMixtureModel.transform()`.
+ * @param predictionCol  Name for column of predicted clusters in `predictions`.
+ * @param probabilityCol  Name for column of predicted probability of each cluster
+ *                        in `predictions`.
+ * @param featuresCol  Name for column of features in `predictions`.
+ * @param k  Number of clusters.
  */
 @Since("2.0.0")
 @Experimental
 class GaussianMixtureSummary private[clustering] (
-    @Since("2.0.0") @transient val predictions: DataFrame,
-    @Since("2.0.0") val predictionCol: String,
+    predictions: DataFrame,
+    predictionCol: String,
     @Since("2.0.0") val probabilityCol: String,
-    @Since("2.0.0") val featuresCol: String,
-    @Since("2.0.0") val k: Int) extends Serializable {
-
-  /**
-   * Cluster centers of the transformed data.
-   */
-  @Since("2.0.0")
-  @transient lazy val cluster: DataFrame = predictions.select(predictionCol)
+    featuresCol: String,
+    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
 
   /**
    * Probability of each cluster.
    */
   @Since("2.0.0")
   @transient lazy val probability: DataFrame = predictions.select(probabilityCol)
-
-  /**
-   * Size of (number of data points in) each cluster.
-   */
-  @Since("2.0.0")
-  lazy val clusterSizes: Array[Long] = {
-    val sizes = Array.fill[Long](k)(0)
-    cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
-      case Row(cluster: Int, count: Long) => sizes(cluster) = count
-    }
-    sizes
-  }
 }

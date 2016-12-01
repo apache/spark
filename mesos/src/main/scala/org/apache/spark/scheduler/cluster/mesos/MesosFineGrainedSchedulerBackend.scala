@@ -77,7 +77,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       sc.sparkUser,
       sc.appName,
       sc.conf,
-      sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.appUIAddress)),
+      sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.webUrl)),
       Option.empty,
       Option.empty,
       sc.conf.getOption("spark.mesos.driver.frameworkId")
@@ -155,14 +155,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       .setCommand(command)
       .setData(ByteString.copyFrom(createExecArg()))
 
-    sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
-      MesosSchedulerBackendUtil.setupContainerBuilderDockerInfo(
-        image,
-        sc.conf,
-        executorInfo.getContainerBuilder()
-      )
-    }
-
+    executorInfo.setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
     (executorInfo.build(), resourcesAfterMem.asJava)
   }
 
@@ -286,7 +279,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
           o.getSlaveId.getValue,
           o.getHostname,
           cpus)
-      }
+      }.toIndexedSeq
 
       val slaveIdToOffer = usableOffers.map(o => o.getSlaveId.getValue -> o).toMap
       val slaveIdToWorkerOffer = workerOffers.map(o => o.executorId -> o).toMap

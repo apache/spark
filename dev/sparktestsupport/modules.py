@@ -158,6 +158,18 @@ hive_thriftserver = Module(
 )
 
 
+sql_kafka = Module(
+    name="sql-kafka-0-10",
+    dependencies=[sql],
+    source_file_regexes=[
+        "external/kafka-0-10-sql",
+    ],
+    sbt_test_goals=[
+        "sql-kafka-0-10/test",
+    ]
+)
+
+
 sketch = Module(
     name="sketch",
     dependencies=[tags],
@@ -229,6 +241,17 @@ streaming_kafka = Module(
     ]
 )
 
+streaming_kafka_0_10 = Module(
+    name="streaming-kafka-0-10",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/kafka-0-10",
+        "external/kafka-0-10-assembly",
+    ],
+    sbt_test_goals=[
+        "streaming-kafka-0-10/test",
+    ]
+)
 
 streaming_flume_sink = Module(
     name="streaming-flume-sink",

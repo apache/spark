@@ -25,7 +25,8 @@ import org.apache.spark.sql.types._
  * Compute the covariance between two expressions.
  * When applied on empty data (i.e., count is zero), it returns NULL.
  */
-abstract class Covariance(x: Expression, y: Expression) extends DeclarativeAggregate {
+abstract class Covariance(x: Expression, y: Expression)
+  extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(x, y)
   override def nullable: Boolean = true
@@ -77,7 +78,7 @@ abstract class Covariance(x: Expression, y: Expression) extends DeclarativeAggre
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(x,y) - Returns the population covariance of a set of number pairs.")
+  usage = "_FUNC_(expr1, expr2) - Returns the population covariance of a set of number pairs.")
 case class CovPopulation(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
     If(n === Literal(0.0), Literal.create(null, DoubleType),
@@ -88,7 +89,7 @@ case class CovPopulation(left: Expression, right: Expression) extends Covariance
 
 
 @ExpressionDescription(
-  usage = "_FUNC_(x,y) - Returns the sample covariance of a set of number pairs.")
+  usage = "_FUNC_(expr1, expr2) - Returns the sample covariance of a set of number pairs.")
 case class CovSample(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
     If(n === Literal(0.0), Literal.create(null, DoubleType),

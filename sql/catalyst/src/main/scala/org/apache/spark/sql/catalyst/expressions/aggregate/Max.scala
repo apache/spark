@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the maximum value of expr.")
+  usage = "_FUNC_(expr) - Returns the maximum value of `expr`.")
 case class Max(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
@@ -32,9 +32,6 @@ case class Max(child: Expression) extends DeclarativeAggregate {
 
   // Return data type.
   override def dataType: DataType = child.dataType
-
-  // Expected input data type.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForOrderingExpr(child.dataType, "function max")

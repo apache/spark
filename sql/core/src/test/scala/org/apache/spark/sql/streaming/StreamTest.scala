@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 
 import org.scalatest.Assertions
 import org.scalatest.concurrent.{Eventually, Timeouts}
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.Span
@@ -38,6 +39,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, Ro
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
@@ -50,11 +52,11 @@ import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
  *
  * {{{
  *  val inputData = MemoryStream[Int]
-    val mapped = inputData.toDS().map(_ + 1)
-
-    testStream(mapped)(
-      AddData(inputData, 1, 2, 3),
-      CheckAnswer(2, 3, 4))
+ *  val mapped = inputData.toDS().map(_ + 1)
+ *
+ *  testStream(mapped)(
+ *    AddData(inputData, 1, 2, 3),
+ *    CheckAnswer(2, 3, 4))
  * }}}
  *
  * Note that while we do sleep to allow the other thread to progress without spinning,
@@ -93,6 +95,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
      * offset of added data.
      */
     def addData(query: Option[StreamExecution]): (Source, Offset)
+  }
+
+  /** A trait that can be extended when testing a source. */
+  trait ExternalAction extends StreamAction {
+    def runAction(): Unit
   }
 
   case class AddDataMemory[A](source: MemoryStream[A], data: Seq[A]) extends AddData {
@@ -153,7 +160,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
   /** Starts the stream, resuming if data has already been processed. It must not be running. */
   case class StartStream(
       trigger: Trigger = ProcessingTime(0),
-      triggerClock: Clock = new SystemClock)
+      triggerClock: Clock = new SystemClock,
+      additionalConfs: Map[String, String] = Map.empty)
     extends StreamAction
 
   /** Advance the trigger clock's time manually. */
@@ -162,7 +170,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
   /** Signals that a failure is expected and should not kill the test. */
   case class ExpectFailure[T <: Throwable : ClassTag]() extends StreamAction {
     val causeClass: Class[T] = implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]]
-    override def toString(): String = s"ExpectFailure[${causeClass.getCanonicalName}]"
+    override def toString(): String = s"ExpectFailure[${causeClass.getName}]"
   }
 
   /** Assert that a body is true */
@@ -188,10 +196,28 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       new AssertOnQuery(condition, message)
     }
 
-    def apply(message: String)(condition: StreamExecution => Unit): AssertOnQuery = {
-      new AssertOnQuery(s => { condition(s); true }, message)
+    def apply(message: String)(condition: StreamExecution => Boolean): AssertOnQuery = {
+      new AssertOnQuery(condition, message)
     }
   }
+
+  class StreamManualClock(time: Long = 0L) extends ManualClock(time) with Serializable {
+    private var waitStartTime: Option[Long] = None
+
+    override def waitTillTime(targetTime: Long): Long = synchronized {
+      try {
+        waitStartTime = Some(getTimeMillis())
+        super.waitTillTime(targetTime)
+      } finally {
+        waitStartTime = None
+      }
+    }
+
+    def isStreamWaitingAt(time: Long): Boolean = synchronized {
+      waitStartTime == Some(time)
+    }
+  }
+
 
   /**
    * Executes the specified actions on the given streaming DataFrame and provides helpful
@@ -211,6 +237,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     var lastStream: StreamExecution = null
     val awaiting = new mutable.HashMap[Int, Offset]() // source index -> offset to wait for
     val sink = new MemorySink(stream.schema, outputMode)
+    val resetConfValues = mutable.Map[String, Option[String]]()
 
     @volatile
     var streamDeathCause: Throwable = null
@@ -294,12 +321,27 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
     val testThread = Thread.currentThread()
     val metadataRoot = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
-
+    var manualClockExpectedTime = -1L
     try {
       startedTest.foreach { action =>
+        logInfo(s"Processing test stream action: $action")
         action match {
-          case StartStream(trigger, triggerClock) =>
+          case StartStream(trigger, triggerClock, additionalConfs) =>
             verify(currentStream == null, "stream already running")
+            verify(triggerClock.isInstanceOf[SystemClock]
+              || triggerClock.isInstanceOf[StreamManualClock],
+              "Use either SystemClock or StreamManualClock to start the stream")
+            if (triggerClock.isInstanceOf[StreamManualClock]) {
+              manualClockExpectedTime = triggerClock.asInstanceOf[StreamManualClock].getTimeMillis()
+            }
+
+            additionalConfs.foreach(pair => {
+              val value =
+                if (spark.conf.contains(pair._1)) Some(spark.conf.get(pair._1)) else None
+              resetConfValues(pair._1) = value
+              spark.conf.set(pair._1, pair._2)
+            })
+
             lastStream = currentStream
             currentStream =
               spark
@@ -317,21 +359,27 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
               new UncaughtExceptionHandler {
                 override def uncaughtException(t: Thread, e: Throwable): Unit = {
                   streamDeathCause = e
-                  testThread.interrupt()
                 }
               })
 
           case AdvanceManualClock(timeToAdd) =>
             verify(currentStream != null,
                    "can not advance manual clock when a stream is not running")
-            verify(currentStream.triggerClock.isInstanceOf[ManualClock],
+            verify(currentStream.triggerClock.isInstanceOf[StreamManualClock],
                    s"can not advance clock of type ${currentStream.triggerClock.getClass}")
-            val clock = currentStream.triggerClock.asInstanceOf[ManualClock]
+            val clock = currentStream.triggerClock.asInstanceOf[StreamManualClock]
+            assert(manualClockExpectedTime >= 0)
+
             // Make sure we don't advance ManualClock too early. See SPARK-16002.
-            eventually("ManualClock has not yet entered the waiting state") {
-              assert(clock.isWaiting)
+            eventually("StreamManualClock has not yet entered the waiting state") {
+              assert(clock.isStreamWaitingAt(manualClockExpectedTime))
             }
-            currentStream.triggerClock.asInstanceOf[ManualClock].advance(timeToAdd)
+
+            clock.advance(timeToAdd)
+            manualClockExpectedTime += timeToAdd
+            verify(clock.getTimeMillis() === manualClockExpectedTime,
+              s"Unexpected clock time after updating: " +
+                s"expecting $manualClockExpectedTime, current ${clock.getTimeMillis()}")
 
           case StopStream =>
             verify(currentStream != null, "can not stop a stream that is not running")
@@ -429,6 +477,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                 failTest("Error adding data", e)
             }
 
+          case e: ExternalAction =>
+            e.runAction()
+
           case CheckAnswerRows(expectedAnswer, lastOnly, isSorted) =>
             verify(currentStream != null, "stream not running")
             // Get the map of source index to the current source objects
@@ -466,24 +517,50 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       if (currentStream != null && currentStream.microBatchThread.isAlive) {
         currentStream.stop()
       }
+
+      // Rollback prev configuration values
+      resetConfValues.foreach {
+        case (key, Some(value)) => spark.conf.set(key, value)
+        case (key, None) => spark.conf.unset(key)
+      }
     }
+  }
+
+
+  /**
+   * Creates a stress test that randomly starts/stops/adds data/checks the result.
+   *
+   * @param ds a dataframe that executes + 1 on a stream of integers, returning the result
+   * @param addData an add data action that adds the given numbers to the stream, encoding them
+   *                as needed
+   * @param iterations the iteration number
+   */
+  def runStressTest(
+    ds: Dataset[Int],
+    addData: Seq[Int] => StreamAction,
+    iterations: Int = 100): Unit = {
+    runStressTest(ds, Seq.empty, (data, running) => addData(data), iterations)
   }
 
   /**
    * Creates a stress test that randomly starts/stops/adds data/checks the result.
    *
-   * @param ds a dataframe that executes + 1 on a stream of integers, returning the result.
-   * @param addData and add data action that adds the given numbers to the stream, encoding them
+   * @param ds a dataframe that executes + 1 on a stream of integers, returning the result
+   * @param prepareActions actions need to run before starting the stress test.
+   * @param addData an add data action that adds the given numbers to the stream, encoding them
    *                as needed
+   * @param iterations the iteration number
    */
   def runStressTest(
       ds: Dataset[Int],
-      addData: Seq[Int] => StreamAction,
-      iterations: Int = 100): Unit = {
+      prepareActions: Seq[StreamAction],
+      addData: (Seq[Int], Boolean) => StreamAction,
+      iterations: Int): Unit = {
     implicit val intEncoder = ExpressionEncoder[Int]()
     var dataPos = 0
     var running = true
     val actions = new ArrayBuffer[StreamAction]()
+    actions ++= prepareActions
 
     def addCheck() = { actions += CheckAnswer(1 to dataPos: _*) }
 
@@ -491,7 +568,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       val numItems = Random.nextInt(10)
       val data = dataPos until (dataPos + numItems)
       dataPos += numItems
-      actions += addData(data)
+      actions += addData(data, running)
     }
 
     (1 to iterations).foreach { i =>
@@ -524,7 +601,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     addCheck()
     testStream(ds)(actions: _*)
   }
-
 
   object AwaitTerminationTester {
 

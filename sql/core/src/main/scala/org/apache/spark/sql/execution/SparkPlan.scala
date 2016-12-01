@@ -29,7 +29,7 @@ import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate, _}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -354,7 +354,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   protected def newPredicate(
-      expression: Expression, inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
+      expression: Expression, inputSchema: Seq[Attribute]): GenPredicate = {
     GeneratePredicate.generate(expression, inputSchema)
   }
 
@@ -380,7 +380,7 @@ object SparkPlan {
 }
 
 trait LeafExecNode extends SparkPlan {
-  override def children: Seq[SparkPlan] = Nil
+  override final def children: Seq[SparkPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
 }
 
@@ -394,14 +394,12 @@ object UnaryExecNode {
 trait UnaryExecNode extends SparkPlan {
   def child: SparkPlan
 
-  override def children: Seq[SparkPlan] = child :: Nil
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override final def children: Seq[SparkPlan] = child :: Nil
 }
 
 trait BinaryExecNode extends SparkPlan {
   def left: SparkPlan
   def right: SparkPlan
 
-  override def children: Seq[SparkPlan] = Seq(left, right)
+  override final def children: Seq[SparkPlan] = Seq(left, right)
 }

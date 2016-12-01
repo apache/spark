@@ -54,10 +54,7 @@ case object NullsLast extends NullOrdering{
  * An expression that can be used to sort a tuple.  This class extends expression primarily so that
  * transformations over expression will descend into its child.
  */
-case class SortOrder(
-  child: Expression,
-  direction: SortDirection,
-  nullOrdering: NullOrdering)
+case class SortOrder(child: Expression, direction: SortDirection, nullOrdering: NullOrdering)
   extends UnaryExpression with Unevaluable {
 
   /** Sort order is not foldable because we don't have an eval for it. */
@@ -94,17 +91,9 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
   val nullValue = child.child.dataType match {
     case BooleanType | DateType | TimestampType | _: IntegralType =>
-      if (nullAsSmallest) {
-        Long.MinValue
-      } else {
-        Long.MaxValue
-      }
+      if (nullAsSmallest) Long.MinValue else Long.MaxValue
     case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
-      if (nullAsSmallest) {
-        Long.MinValue
-      } else {
-        Long.MaxValue
-      }
+      if (nullAsSmallest) Long.MinValue else Long.MaxValue
     case _: DecimalType =>
       if (nullAsSmallest) {
         DoublePrefixComparator.computePrefix(Double.NegativeInfinity)
@@ -112,16 +101,13 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
         DoublePrefixComparator.computePrefix(Double.NaN)
       }
     case _ =>
-      if (nullAsSmallest) {
-        0L
-      } else {
-        -1L
-      }
+      if (nullAsSmallest) 0L else -1L
   }
 
-  private def nullAsSmallest: Boolean = (child.isAscending && child.nullOrdering == NullsFirst) ||
+  private def nullAsSmallest: Boolean = {
+    (child.isAscending && child.nullOrdering == NullsFirst) ||
       (!child.isAscending && child.nullOrdering == NullsLast)
-
+  }
 
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 

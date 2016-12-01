@@ -39,6 +39,7 @@ import org.apache.spark.util.Utils
 class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   with DefaultReadWriteTest {
 
+  import testImplicits._
   import GBTClassifierSuite.compareAPIs
 
   // Combinations for estimators, learning rates and subsamplingRate
@@ -67,6 +68,14 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
       Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0, null), 1)),
       Array(1.0), 1)
     ParamsSuite.checkParams(model)
+  }
+
+  test("GBT parameter stepSize should be in interval (0, 1]") {
+    withClue("GBT parameter stepSize should be in interval (0, 1]") {
+      intercept[IllegalArgumentException] {
+        new GBTClassifier().setStepSize(10)
+      }
+    }
   }
 
   test("Binary classification with continuous features: Log Loss") {
@@ -134,15 +143,14 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   */
 
   test("Fitting without numClasses in metadata") {
-    val df: DataFrame = spark.createDataFrame(TreeTests.featureImportanceData(sc))
+    val df: DataFrame = TreeTests.featureImportanceData(sc).toDF()
     val gbt = new GBTClassifier().setMaxDepth(1).setMaxIter(1)
     gbt.fit(df)
   }
 
   test("extractLabeledPoints with bad data") {
     def getTestData(labels: Seq[Double]): DataFrame = {
-      val data = labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }
-      spark.createDataFrame(data)
+      labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }.toDF()
     }
 
     val gbt = new GBTClassifier().setMaxDepth(1).setMaxIter(1)

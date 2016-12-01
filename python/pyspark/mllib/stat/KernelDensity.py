@@ -28,7 +28,7 @@ from pyspark.rdd import RDD
 
 class KernelDensity(object):
     """
-    Estimate probability density at required points given a RDD of samples
+    Estimate probability density at required points given an RDD of samples
     from the population.
 
     >>> kd = KernelDensity()

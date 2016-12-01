@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.stat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
-import org.apache.spark.sql.catalyst.expressions.{Cast, GenericMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{Cast, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.functions._
@@ -41,8 +41,8 @@ object StatFunctions extends Logging {
    *
    * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
    * optimizations).
-   * The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670 Space-efficient
-   * Online Computation of Quantile Summaries]] by Greenwald and Khanna.
+   * The algorithm was first present in <a href="http://dx.doi.org/10.1145/375663.375670">
+   * Space-efficient Online Computation of Quantile Summaries</a> by Greenwald and Khanna.
    *
    * @param df the dataframe
    * @param cols numerical columns of the dataframe
@@ -186,7 +186,7 @@ object StatFunctions extends Logging {
     require(columnSize < 1e4, s"The number of distinct values for $col2, can't " +
       s"exceed 1e4. Currently $columnSize")
     val table = counts.groupBy(_.get(0)).map { case (col1Item, rows) =>
-      val countsRow = new GenericMutableRow(columnSize + 1)
+      val countsRow = new GenericInternalRow(columnSize + 1)
       rows.foreach { (row: Row) =>
         // row.get(0) is column 1
         // row.get(1) is column 2
