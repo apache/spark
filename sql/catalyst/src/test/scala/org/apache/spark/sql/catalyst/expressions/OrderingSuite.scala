@@ -137,7 +137,7 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     // this is FAILING prior to SPARK-16845, but it should be passing after SPARK-16845
     GenerateOrdering.generate(Array.fill(450)(sortOrder))
 
-    // verify that we can support up to 10000 ordering comparisons, which should be sufficient
-    GenerateOrdering.generate(Array.fill(10000)(sortOrder))
+    // verify that we can support up to 5000 ordering comparisons, which should be sufficient
+    GenerateOrdering.generate(Array.fill(5000)(sortOrder))
   }
 }

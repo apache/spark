@@ -72,7 +72,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
    * Generates the code for ordering based on the given order.
    */
   def genComparisons(ctx: CodegenContext, ordering: Seq[SortOrder]): String = {
-    def comparisons(orderingGroup: Seq[SortOrder]) = orderingGroup.map { order =>
+    val comparisons = ordering.map { order =>
       val eval = order.child.genCode(ctx)
       val asc = order.isAscending
       val isNullA = ctx.freshName("isNullA")
@@ -117,43 +117,31 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
             }
           }
       """
-    }.mkString("\n")
-
-    /*
-     * 40 = 7000 bytes / 170 (around 170 bytes per ordering comparison).
-     * The maximum byte code size to be compiled for HotSpot is 8000 bytes.
-     * We should keep less than 8000 bytes.
-     */
-    val numberOfComparisonsThreshold = 40
-
-    if (ordering.size <= numberOfComparisonsThreshold) {
-      comparisons(ordering)
-    } else {
-      val groupedOrderingItr = ordering.grouped(numberOfComparisonsThreshold)
-      val funcNamePrefix = ctx.freshName("compare")
-      val funcNames = groupedOrderingItr.zipWithIndex.map { case (orderingGroup, i) =>
-        val funcName = s"${funcNamePrefix}_$i"
-        val funcCode =
-          s"""
-             |private int $funcName(InternalRow a, InternalRow b) {
-             |  InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
-             |  ${comparisons(orderingGroup)}
-             |  return 0;
-             |}
-          """.stripMargin
-        ctx.addNewFunction(funcName, funcCode)
-        funcName
-      }
-
-      funcNames.zipWithIndex.map { case (funcName, i) =>
-        s"""
-           |int comp_$i = ${funcName}(a, b);
-           |if (comp_$i != 0) {
-           |  return comp_$i;
-           |}
-        """.stripMargin
-      }.mkString
     }
+
+    ctx.splitExpressions(
+      expressions = comparisons,
+      funcName = "compare",
+      arguments = Seq(("InternalRow", "a"), ("InternalRow", "b")),
+      returnType = "int",
+      makeSplitFunction = { body =>
+        s"""
+          InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
+          $body
+          return 0;
+        """
+      },
+      foldFunctions = { funCalls =>
+        val comp = ctx.freshName("comp")
+        funCalls.zipWithIndex.map { case (funCall, i) =>
+          s"""
+            int ${comp}_$i = $funCall;
+            if (${comp}_$i != 0) {
+              return ${comp}_$i;
+            }
+          """
+        }.mkString
+      })
   }
 
   protected def create(ordering: Seq[SortOrder]): BaseOrdering = {

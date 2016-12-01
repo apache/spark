@@ -610,8 +610,13 @@ class CodegenContext {
     splitExpressions(expressions, "apply", ("InternalRow", row) :: Nil)
   }
 
-  private def splitExpressions(
-      expressions: Seq[String], funcName: String, arguments: Seq[(String, String)]): String = {
+  def splitExpressions(
+      expressions: Seq[String],
+      funcName: String,
+      arguments: Seq[(String, String)],
+      returnType: String = "void",
+      makeSplitFunction: String => String = identity,
+      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
@@ -632,18 +637,19 @@ class CodegenContext {
       blocks.head
     } else {
       val func = freshName(funcName)
+      val argString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
       val functions = blocks.zipWithIndex.map { case (body, i) =>
         val name = s"${func}_$i"
         val code = s"""
-           |private void $name(${arguments.map { case (t, name) => s"$t $name" }.mkString(", ")}) {
-           |  $body
+           |private $returnType $name($argString) {
+           |  ${makeSplitFunction(body)}
            |}
          """.stripMargin
         addNewFunction(name, code)
         name
       }
 
-      functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")});").mkString("\n")
+      foldFunctions(functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")})"))
     }
   }
 
