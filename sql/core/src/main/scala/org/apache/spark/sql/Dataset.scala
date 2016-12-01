@@ -238,7 +238,7 @@ class Dataset[T] private[sql](
       }
   }
 
-  var EAST_ASIAN_LANGS = Seq("ja", "vi", "kr", "zh")
+  val EAST_ASIAN_LANGS = Seq("ja", "vi", "kr", "zh")
 
   private def unicodeWidth(str: String): Int = {
     val locale = Locale.getDefault()
@@ -249,24 +249,16 @@ class Dataset[T] private[sql](
     var len = 0
     for (i <- 0 until str.length) {
       val codePoint = str.codePointAt(i)
-      val value = UCharacter.getIntPropertyValue(codePoint, UProperty.EAST_ASIAN_WIDTH);
+      val value = UCharacter.getIntPropertyValue(codePoint, UProperty.EAST_ASIAN_WIDTH)
       len = len + (value match {
         case UCharacter.EastAsianWidth.NARROW | UCharacter.EastAsianWidth.NEUTRAL |
-              UCharacter.EastAsianWidth.HALFWIDTH => 1
+             UCharacter.EastAsianWidth.HALFWIDTH => 1
         case UCharacter.EastAsianWidth.FULLWIDTH | UCharacter.EastAsianWidth.WIDE => 2
         case UCharacter.EastAsianWidth.AMBIGUOUS => ambiguousLen
         case _ => 1
       })
     }
     len
-  }
-
-  private def repeatPadding(len: Int): StringBuilder = {
-    var str = new StringBuilder(len)
-    for (i <- 0 until len) {
-      str.append(' ')
-    }
-    str
   }
 
   /**
@@ -327,10 +319,11 @@ class Dataset[T] private[sql](
 
     // column names
     rows.head.zipWithIndex.map { case (cell, i) =>
+      val paddingLen = colMaxWidths(i) - colWidths(0)(i)
       if (truncate > 0) {
-        repeatPadding(colMaxWidths(i) - colWidths(0)(i)).append(cell)
+        new StringBuilder(cell.length, " " * paddingLen).append(cell)
       } else {
-        new StringBuffer(cell).append(repeatPadding(colMaxWidths(i) - colWidths(0)(i)))
+        new StringBuilder(paddingLen, cell).append(" " * paddingLen)
       }
     }.addString(sb, "|", "|", "|\n")
 
@@ -341,10 +334,11 @@ class Dataset[T] private[sql](
     rows.tail.map { row =>
       j = j + 1
       row.zipWithIndex.map { case (cell, i) =>
+        val paddingLen = colMaxWidths(i) - colWidths(j)(i)
         if (truncate > 0) {
-          repeatPadding(colMaxWidths(i) - colWidths(j)(i)).append(cell)
+          new StringBuilder(cell.length, " " * paddingLen).append(cell)
         } else {
-          new StringBuffer(cell).append(repeatPadding(colMaxWidths(i) - colWidths(j)(i)))
+          new StringBuilder(paddingLen, cell).append(" " * paddingLen)
         }
       }.addString(sb, "|", "|", "|\n")
     }
