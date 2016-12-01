@@ -254,8 +254,10 @@ object LBFGS extends Logging {
       // Adds two (gradient, loss) tuples
       val combOp = (c1: (Vector, Double), c2: (Vector, Double)) =>
         (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
-            axpy(1.0, grad2, grad1)
-            (grad1, loss1 + loss2)
+          val denseGrad1 = grad1.toDense
+          val denseGrad2 = grad2.toDense
+          axpy(1.0, denseGrad2, denseGrad1)
+          (denseGrad1, loss1 + loss2)
        }
 
       val zeroSparseVector = Vectors.sparse(n, Seq())
