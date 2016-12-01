@@ -1176,16 +1176,18 @@ class Analyzer(
         case j @ Join(left, right, joinType, _) =>
           joinType match {
             // Inner join, like Filter, can be anywhere.
-            // LeftSemi is a special case of Inner join which returns
-            // only the first matched row to the right table.
-            case _: InnerLike | LeftSemi =>
+            case _: InnerLike =>
               failOnOuterReference(j)
 
             // Left outer join's right operand cannot be on a correlation path.
             // LeftAnti and ExistenceJoin are special cases of LeftOuter.
             // Note that ExistenceJoin cannot be expressed externally in both SQL and DataFrame
             // so it should not show up here in Analysis phase. This is just a safety net.
-            case LeftOuter | LeftAnti | ExistenceJoin(_) =>
+            //
+            // LeftSemi does not allow output from the right operand.
+            // Any correlated references in the subplan
+            // of the right operand cannot be pulled up.
+            case LeftOuter | LeftSemi | LeftAnti | ExistenceJoin(_) =>
               failOnOuterReference(j)
               failOnOuterReferenceInSubTree(right)
 
