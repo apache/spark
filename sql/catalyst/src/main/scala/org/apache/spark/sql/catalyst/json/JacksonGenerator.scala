@@ -195,7 +195,7 @@ private[sql] class JacksonGenerator(
     }
   }
 
-  private[sql] def writeLineEnding(): Unit = {
+  def writeLineEnding(): Unit = {
     gen.writeRaw('\n')
   }
 }
