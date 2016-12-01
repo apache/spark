@@ -116,7 +116,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
  * @param arguments An optional list of expressions to pass as arguments to the function.
  * @param propagateNull When true, and any of the arguments is null, null will be returned instead
  *                      of calling the function.
- * @param returnNullable When false, return value must be non-null.
+ * @param returnNullable When false, indicating the invoked method will return non-null value.
  */
 case class StaticInvoke(
     staticObject: Class[_],
