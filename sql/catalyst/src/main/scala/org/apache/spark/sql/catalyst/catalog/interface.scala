@@ -44,6 +44,9 @@ case class CatalogFunction(
  * Storage format, used to describe how a partition or a table is stored.
  */
 case class CatalogStorageFormat(
+    // TODO(ekl) consider storing this field as java.net.URI for type safety. Note that this must
+    // be converted to/from a hadoop Path object using new Path(new URI(locationUri)) and
+    // path.toUri respectively before use as a filesystem path due to URI char escaping.
     locationUri: Option[String],
     inputFormat: Option[String],
     outputFormat: Option[String],
