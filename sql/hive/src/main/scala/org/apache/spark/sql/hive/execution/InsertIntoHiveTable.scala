@@ -22,7 +22,6 @@ import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, Random}
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.exec.TaskRunner
@@ -86,6 +85,7 @@ case class InsertIntoHiveTable(
 
   val hadoopConf = sessionState.newHadoopConf()
   val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
+  val scratchDir = hadoopConf.get("hive.exec.scratchdir", "/tmp/hive")
 
   private def executionId: String = {
     val rand: Random = new Random
@@ -93,7 +93,7 @@ case class InsertIntoHiveTable(
     "hive_" + format.format(new Date) + "_" + Math.abs(rand.nextLong)
   }
 
-  private def getStagingDir(inputPath: Path, hadoopConf: Configuration): Path = {
+  private def getStagingDir(inputPath: Path): Path = {
     val inputPathUri: URI = inputPath.toUri
     val inputPathName: String = inputPathUri.getPath
     val fs: FileSystem = inputPath.getFileSystem(hadoopConf)
@@ -121,21 +121,61 @@ case class InsertIntoHiveTable(
     return dir
   }
 
-  private def getExternalScratchDir(extURI: URI, hadoopConf: Configuration): Path = {
-    getStagingDir(new Path(extURI.getScheme, extURI.getAuthority, extURI.getPath), hadoopConf)
+  private def getExternalScratchDir(extURI: URI): Path = {
+    getStagingDir(new Path(extURI.getScheme, extURI.getAuthority, extURI.getPath))
   }
 
-  def getExternalTmpPath(path: Path, hadoopConf: Configuration): Path = {
-    val extURI: URI = path.toUri
-    if (extURI.getScheme == "viewfs") {
-      getExtTmpPathRelTo(path.getParent, hadoopConf)
+  def getExternalTmpPath(path: Path): Path = {
+    val hiveVersion = externalCatalog.asInstanceOf[HiveExternalCatalog].client.version.fullVersion
+    if (hiveVersion.startsWith("0.12") ||
+      hiveVersion.startsWith("0.13") ||
+      hiveVersion.startsWith("0.14") ||
+      hiveVersion.startsWith("1.0")) {
+      oldStyleExternalTempPath(path)
+    } else if (hiveVersion.startsWith("1.1") || hiveVersion.startsWith("1.2")) {
+      newStyleExternalTempPath(path)
     } else {
-      new Path(getExternalScratchDir(extURI, hadoopConf), "-ext-10000")
+      throw new IllegalStateException("Unsupported hive version: " + hiveVersion)
     }
   }
 
-  def getExtTmpPathRelTo(path: Path, hadoopConf: Configuration): Path = {
-    new Path(getStagingDir(path, hadoopConf), "-ext-10000") // Hive uses 10000
+  // Mostly copied from Context.java#getExternalTmpPath of Hive 0.13
+  def oldStyleExternalTempPath(path: Path): Path = {
+    val extURI: URI = path.toUri
+    val scratchPath = new Path(scratchDir, executionId)
+    var dirPath = new Path(
+      extURI.getScheme,
+      extURI.getAuthority,
+      scratchPath.toUri.getPath + "-" + TaskRunner.getTaskRunnerID())
+
+    try {
+      val fs: FileSystem = dirPath.getFileSystem(hadoopConf)
+      dirPath = new Path(fs.makeQualified(dirPath).toString())
+
+      if (!FileUtils.mkdir(fs, dirPath, true, hadoopConf)) {
+        throw new IllegalStateException("Cannot create staging directory: " + dirPath.toString)
+      }
+      fs.deleteOnExit(dirPath)
+    } catch {
+      case e: IOException =>
+        throw new RuntimeException("Cannot create staging directory: " + dirPath.toString, e)
+
+    }
+    dirPath
+  }
+
+  // Mostly copied from Context.java#getExternalTmpPath of Hive 1.2
+  def newStyleExternalTempPath(path: Path): Path = {
+    val extURI: URI = path.toUri
+    if (extURI.getScheme == "viewfs") {
+      getExtTmpPathRelTo(path.getParent)
+    } else {
+      new Path(getExternalScratchDir(extURI), "-ext-10000")
+    }
+  }
+
+  def getExtTmpPathRelTo(path: Path): Path = {
+    new Path(getStagingDir(path), "-ext-10000") // Hive uses 10000
   }
 
   private def saveAsHiveFile(
@@ -172,7 +212,7 @@ case class InsertIntoHiveTable(
     // instances within the closure, since Serializer is not serializable while TableDesc is.
     val tableDesc = table.tableDesc
     val tableLocation = table.hiveQlTable.getDataLocation
-    val tmpLocation = getExternalTmpPath(tableLocation, hadoopConf)
+    val tmpLocation = getExternalTmpPath(tableLocation)
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
     val isCompressed = hadoopConf.get("hive.exec.compress.output", "false").toBoolean
 
