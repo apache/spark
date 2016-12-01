@@ -379,6 +379,24 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(model.getWindowSize(), 6)
 
 
+class EvaluatorTests(SparkSessionTestCase):
+
+    def test_java_params(self):
+        """
+        This tests a bug fixed by SPARK-18274 which causes multiple copies
+        of a Params instance in Python to be linked to the same Java instance.
+        """
+        evaluator = RegressionEvaluator(metricName="r2")
+        df = self.spark.createDataFrame([Row(label=1.0, prediction=1.1)])
+        evaluator.evaluate(df)
+        self.assertEqual(evaluator._java_obj.getMetricName(), "r2")
+        evaluatorCopy = evaluator.copy({evaluator.metricName: "mae"})
+        evaluator.evaluate(df)
+        evaluatorCopy.evaluate(df)
+        self.assertEqual(evaluator._java_obj.getMetricName(), "r2")
+        self.assertEqual(evaluatorCopy._java_obj.getMetricName(), "mae")
+
+
 class FeatureTests(SparkSessionTestCase):
 
     def test_binarizer(self):
