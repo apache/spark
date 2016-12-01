@@ -169,12 +169,14 @@ object SparkHadoopMapReduceWriter extends Logging {
         }
         committer.commitTask(taskContext)
       }(catchBlock = {
-        committer.abortTask(taskContext)
-        logError(s"Task ${taskContext.getTaskAttemptID} aborted.")
-      }, finallyBlock = {
-        if (writer != null) {
-          writer.close(taskContext)
-          writer = null
+        try {
+          if (writer != null) {
+            writer.close(taskContext)
+            writer = null
+          }
+        } finally {
+          committer.abortTask(taskContext)
+          logError(s"Task ${taskContext.getTaskAttemptID} aborted.")
         }
       })
 
