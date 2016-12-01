@@ -115,7 +115,7 @@ object IDF extends DefaultParamsReadable[IDF] {
 @Since("1.4.0")
 class IDFModel private[ml] (
     @Since("1.4.0") override val uid: String,
-    @Since("2.2.0") idf: Vector)
+    @Since("2.2.0") idfVector: Vector)
   extends Model[IDFModel] with IDFBase with MLWritable {
 
   import IDFModel._
@@ -146,7 +146,7 @@ class IDFModel private[ml] (
     copyValues(copied, extra).setParent(parent)
   }
 
-  def idfVector: Vector = idf
+  def idf: Vector = idfVector
 
   @Since("1.6.0")
   override def write: MLWriter = new IDFModelWriter(this)
@@ -161,7 +161,7 @@ object IDFModel extends MLReadable[IDFModel] {
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.idfVector)
+      val data = Data(instance.idf)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
