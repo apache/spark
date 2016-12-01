@@ -988,10 +988,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val df5 = Seq((0, 1.0), (2, 2.0)).toDF("id", "v")
     assert(df5.schema(0).nullable == false)
     assert(df5.schema(1).nullable == false)
-    val df6 = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
+    val df6 = Seq((0, 1.0, "a"), (2, 2.0, "b")).toDF("id", "v1", "v2")
     assert(df6.schema(0).nullable == false)
     assert(df6.schema(1).nullable == false)
-    assert(df6.schema(2).nullable == false)
+    assert(df6.schema(2).nullable == true)
 
     val df7 = (Tuple1(Array(1, 2, 3)) :: Nil).toDF("a")
     assert(df7.schema(0).nullable == true)
