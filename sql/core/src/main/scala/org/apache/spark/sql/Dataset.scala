@@ -338,9 +338,9 @@ class Dataset[T] private[sql](
 
     // data
     j = 0
-    rows.tail.map {
+    rows.tail.map { row =>
       j = j + 1
-      _.zipWithIndex.map { case (cell, i) =>
+      row.zipWithIndex.map { case (cell, i) =>
         if (truncate > 0) {
           repeatPadding(colMaxWidths(i) - colWidths(j)(i)).append(cell)
         } else {
