@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.feature
 
+import breeze.linalg.{DenseVector => BDV}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -86,10 +87,14 @@ final class IDF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): IDFModel = {
     transformSchema(dataset.schema, logging = true)
-    val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
-      case Row(v: Vector) => OldVectors.fromML(v)
+    val input: RDD[Vector] = dataset.select($(inputCol)).rdd.map {
+      case Row(v: Vector) => v
     }
-    val idf = new feature.IDF($(minDocFreq)).fit(input).idf.asML
+    val idf = input.treeAggregate(
+      new IDF.DocumentFrequencyAggregator(minDocFreq = $(minDocFreq)))(
+      seqOp = (df, v) => df.add(v),
+      combOp = (df1, df2) => df1.merge(df2)
+    ).idf()
     copyValues(new IDFModel(uid, idf).setParent(this))
   }
 
@@ -107,6 +112,92 @@ object IDF extends DefaultParamsReadable[IDF] {
 
   @Since("1.6.0")
   override def load(path: String): IDF = super.load(path)
+
+  /** Document frequency aggregator. */
+  class DocumentFrequencyAggregator(val minDocFreq: Int) extends Serializable {
+
+    /** number of documents */
+    private var m = 0L
+    /** document frequency vector */
+    private var df: BDV[Long] = _
+
+
+    def this() = this(0)
+
+    /** Adds a new document. */
+    def add(doc: Vector): this.type = {
+      if (isEmpty) {
+        df = BDV.zeros(doc.size)
+      }
+      doc match {
+        case SparseVector(size, indices, values) =>
+          val nnz = indices.length
+          var k = 0
+          while (k < nnz) {
+            if (values(k) > 0) {
+              df(indices(k)) += 1L
+            }
+            k += 1
+          }
+        case DenseVector(values) =>
+          val n = values.length
+          var j = 0
+          while (j < n) {
+            if (values(j) > 0.0) {
+              df(j) += 1L
+            }
+            j += 1
+          }
+        case other =>
+          throw new UnsupportedOperationException(
+            s"Only sparse and dense vectors are supported but got ${other.getClass}.")
+      }
+      m += 1L
+      this
+    }
+
+    /** Merges another. */
+    def merge(other: DocumentFrequencyAggregator): this.type = {
+      if (!other.isEmpty) {
+        m += other.m
+        if (df == null) {
+          df = other.df.copy
+        } else {
+          df += other.df
+        }
+      }
+      this
+    }
+
+    private def isEmpty: Boolean = m == 0L
+
+    /** Returns the current IDF vector. */
+    def idf(): Vector = {
+      if (isEmpty) {
+        throw new IllegalStateException("Haven't seen any document yet.")
+      }
+      val n = df.length
+      val inv = new Array[Double](n)
+      var j = 0
+      while (j < n) {
+        /*
+         * If the term is not present in the minimum
+         * number of documents, set IDF to 0. This
+         * will cause multiplication in IDFModel to
+         * set TF-IDF to 0.
+         *
+         * Since arrays are initialized to 0 by default,
+         * we just omit changing those entries.
+         */
+        if (df(j) >= minDocFreq) {
+          inv(j) = math.log((m + 1.0) / (df(j) + 1.0))
+        }
+        j += 1
+      }
+      Vectors.dense(inv)
+    }
+  }
+
 }
 
 /**
