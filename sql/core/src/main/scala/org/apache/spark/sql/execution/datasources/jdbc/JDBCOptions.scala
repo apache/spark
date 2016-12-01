@@ -41,6 +41,12 @@ class JDBCOptions(
       JDBCOptions.JDBC_TABLE_NAME -> table)))
   }
 
+  val asProperties: Properties = {
+    val properties = new Properties()
+    parameters.foreach { case (k, v) => properties.setProperty(k, v) }
+    properties
+  }
+
   val asConnectionProperties: Properties = {
     val properties = new Properties()
     // We should avoid to pass the options into properties. See SPARK-17776.
