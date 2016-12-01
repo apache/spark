@@ -29,6 +29,7 @@ import org.apache.spark.ml.regression._
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -64,6 +65,7 @@ private[r] class GeneralizedLinearRegressionWrapper private (
         .drop(PREDICTED_LABEL_PROB_COL)
         .drop(PREDICTED_LABEL_INDEX_COL)
         .drop(glm.getFeaturesCol)
+        .drop(glm.getLabelCol)
     } else {
       pipeline.transform(dataset)
         .drop(glm.getFeaturesCol)
@@ -92,7 +94,7 @@ private[r] object GeneralizedLinearRegressionWrapper
       regParam: Double): GeneralizedLinearRegressionWrapper = {
     val rFormula = new RFormula().setFormula(formula)
     if (family == "binomial") rFormula.setForceIndexLabel(true)
-    RWrapperUtils.checkDataColumns(rFormula, data)
+    checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
     // get labels and feature names from output schema
     val schema = rFormulaModel.transform(data).schema
@@ -109,6 +111,7 @@ private[r] object GeneralizedLinearRegressionWrapper
       .setWeightCol(weightCol)
       .setRegParam(regParam)
       .setFeaturesCol(rFormula.getFeaturesCol)
+      .setLabelCol(rFormula.getLabelCol)
     val pipeline = if (family == "binomial") {
       // Convert prediction from probability to label index.
       val probToPred = new ProbabilityToPrediction()
@@ -141,30 +144,38 @@ private[r] object GeneralizedLinearRegressionWrapper
       features
     }
 
-    val rCoefficientStandardErrors = if (glm.getFitIntercept) {
-      Array(summary.coefficientStandardErrors.last) ++
-        summary.coefficientStandardErrors.dropRight(1)
-    } else {
-      summary.coefficientStandardErrors
-    }
+    val rCoefficients: Array[Double] = if (summary.isNormalSolver) {
+      val rCoefficientStandardErrors = if (glm.getFitIntercept) {
+        Array(summary.coefficientStandardErrors.last) ++
+          summary.coefficientStandardErrors.dropRight(1)
+      } else {
+        summary.coefficientStandardErrors
+      }
 
-    val rTValues = if (glm.getFitIntercept) {
-      Array(summary.tValues.last) ++ summary.tValues.dropRight(1)
-    } else {
-      summary.tValues
-    }
+      val rTValues = if (glm.getFitIntercept) {
+        Array(summary.tValues.last) ++ summary.tValues.dropRight(1)
+      } else {
+        summary.tValues
+      }
 
-    val rPValues = if (glm.getFitIntercept) {
-      Array(summary.pValues.last) ++ summary.pValues.dropRight(1)
-    } else {
-      summary.pValues
-    }
+      val rPValues = if (glm.getFitIntercept) {
+        Array(summary.pValues.last) ++ summary.pValues.dropRight(1)
+      } else {
+        summary.pValues
+      }
 
-    val rCoefficients: Array[Double] = if (glm.getFitIntercept) {
-      Array(glm.intercept) ++ glm.coefficients.toArray ++
-        rCoefficientStandardErrors ++ rTValues ++ rPValues
+      if (glm.getFitIntercept) {
+        Array(glm.intercept) ++ glm.coefficients.toArray ++
+          rCoefficientStandardErrors ++ rTValues ++ rPValues
+      } else {
+        glm.coefficients.toArray ++ rCoefficientStandardErrors ++ rTValues ++ rPValues
+      }
     } else {
-      glm.coefficients.toArray ++ rCoefficientStandardErrors ++ rTValues ++ rPValues
+      if (glm.getFitIntercept) {
+        Array(glm.intercept) ++ glm.coefficients.toArray
+      } else {
+        glm.coefficients.toArray
+      }
     }
 
     val rDispersion: Double = summary.dispersion

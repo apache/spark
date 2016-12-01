@@ -710,7 +710,7 @@ for more details on the API.
 `VectorIndexer` helps index categorical features in datasets of `Vector`s.
 It can both automatically decide which features are categorical and convert original values to category indices.  Specifically, it does the following:
 
-1. Take an input column of type [Vector](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) and a parameter `maxCategories`.
+1. Take an input column of type [Vector](api/scala/index.html#org.apache.spark.ml.linalg.Vector) and a parameter `maxCategories`.
 2. Decide which features should be categorical based on the number of distinct values, where features with at most `maxCategories` are declared categorical.
 3. Compute 0-based category indices for each categorical feature.
 4. Index categorical features and transform original feature values to indices.
@@ -1188,7 +1188,9 @@ categorical features. The number of bins is set by the `numBuckets` parameter. I
 that the number of buckets used will be smaller than this value, for example, if there are too few
 distinct values of the input to create enough distinct quantiles.
 
-NaN values: Note also that QuantileDiscretizer
+NaN values:
+NaN values will be removed from the column during `QuantileDiscretizer` fitting. This will produce
+a `Bucketizer` model for making predictions. During the transformation, `Bucketizer`
 will raise an error when it finds NaN values in the dataset, but the user can also choose to either
 keep or remove NaN values within the dataset by setting `handleInvalid`. If the user chooses to keep
 NaN values, they will be handled specially and placed into their own bucket, for example, if 4 buckets

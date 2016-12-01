@@ -23,10 +23,10 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
 import org.apache.spark.ml.feature.{IndexToString, RFormula}
 import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
@@ -51,6 +51,7 @@ private[r] class RandomForestClassifierWrapper private (
     pipeline.transform(dataset)
       .drop(PREDICTED_LABEL_INDEX_COL)
       .drop(rfcModel.getFeaturesCol)
+      .drop(rfcModel.getLabelCol)
   }
 
   override def write: MLWriter = new
@@ -82,19 +83,11 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
     val rFormula = new RFormula()
       .setFormula(formula)
       .setForceIndexLabel(true)
-    RWrapperUtils.checkDataColumns(rFormula, data)
+    checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 
-    // get feature names from output schema
-    val schema = rFormulaModel.transform(data).schema
-    val featureAttrs = AttributeGroup.fromStructField(schema(rFormulaModel.getFeaturesCol))
-      .attributes.get
-    val features = featureAttrs.map(_.name.get)
-
-    // get label names from output schema
-    val labelAttr = Attribute.fromStructField(schema(rFormulaModel.getLabelCol))
-      .asInstanceOf[NominalAttribute]
-    val labels = labelAttr.values.get
+    // get labels and feature names from output schema
+    val (features, labels) = getFeaturesAndLabels(rFormulaModel, data)
 
     // assemble and fit the pipeline
     val rfc = new RandomForestClassifier()
@@ -111,6 +104,7 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
       .setCacheNodeIds(cacheNodeIds)
       .setProbabilityCol(probabilityCol)
       .setFeaturesCol(rFormula.getFeaturesCol)
+      .setLabelCol(rFormula.getLabelCol)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
     if (seed != null && seed.length > 0) rfc.setSeed(seed.toLong)
 

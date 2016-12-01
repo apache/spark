@@ -82,11 +82,13 @@ private[feature] trait ChiSqSelectorParams extends Params
    * Default value is 0.05.
    * @group param
    */
+  @Since("2.1.0")
   final val fpr = new DoubleParam(this, "fpr", "The highest p-value for features to be kept.",
     ParamValidators.inRange(0, 1))
   setDefault(fpr -> 0.05)
 
   /** @group getParam */
+  @Since("2.1.0")
   def getFpr: Double = $(fpr)
 
   /**
@@ -215,13 +217,6 @@ final class ChiSqSelectorModel private[ml] (
   /** @group setParam */
   @Since("1.6.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
-
-  /**
-   * @group setParam
-   */
-  @Since("1.6.0")
-  @deprecated("labelCol is not used by ChiSqSelectorModel.", "2.0.0")
-  def setLabelCol(value: String): this.type = set(labelCol, value)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {

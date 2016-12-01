@@ -98,7 +98,7 @@ sealed abstract class Attribute extends Serializable {
   def toMetadata(): Metadata = toMetadata(Metadata.empty)
 
   /**
-   * Converts to a [[StructField]] with some existing metadata.
+   * Converts to a `StructField` with some existing metadata.
    * @param existingMetadata existing metadata to carry over
    */
   def toStructField(existingMetadata: Metadata): StructField = {
@@ -109,7 +109,9 @@ sealed abstract class Attribute extends Serializable {
     StructField(name.get, DoubleType, nullable = false, newMetadata)
   }
 
-  /** Converts to a [[StructField]]. */
+  /**
+   * Converts to a `StructField`.
+   */
   def toStructField(): StructField = toStructField(Metadata.empty)
 
   override def toString: String = toMetadataImpl(withType = true).toString
@@ -369,12 +371,16 @@ class NominalAttribute private[ml] (
   override def withIndex(index: Int): NominalAttribute = copy(index = Some(index))
   override def withoutIndex: NominalAttribute = copy(index = None)
 
-  /** Copy with new values and empty `numValues`. */
+  /**
+   * Copy with new values and empty `numValues`.
+   */
   def withValues(values: Array[String]): NominalAttribute = {
     copy(numValues = None, values = Some(values))
   }
 
-  /** Copy with new values and empty `numValues`. */
+  /**
+   * Copy with new values and empty `numValues`.
+   */
   @varargs
   def withValues(first: String, others: String*): NominalAttribute = {
     copy(numValues = None, values = Some((first +: others).toArray))
@@ -385,12 +391,16 @@ class NominalAttribute private[ml] (
     copy(values = None)
   }
 
-  /** Copy with a new `numValues` and empty `values`. */
+  /**
+   * Copy with a new `numValues` and empty `values`.
+   */
   def withNumValues(numValues: Int): NominalAttribute = {
     copy(numValues = Some(numValues), values = None)
   }
 
-  /** Copy without the `numValues`. */
+  /**
+   * Copy without the `numValues`.
+   */
   def withoutNumValues: NominalAttribute = copy(numValues = None)
 
   /**

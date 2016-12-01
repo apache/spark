@@ -56,12 +56,13 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
   final def getIsotonic: Boolean = $(isotonic)
 
   /**
-   * Param for the index of the feature if [[featuresCol]] is a vector column (default: `0`), no
+   * Param for the index of the feature if `featuresCol` is a vector column (default: `0`), no
    * effect otherwise.
    * @group param
    */
   final val featureIndex: IntParam = new IntParam(this, "featureIndex",
-    "The index of the feature if featuresCol is a vector column, no effect otherwise.")
+    "The index of the feature if featuresCol is a vector column, no effect otherwise (>= 0)",
+    ParamValidators.gtEq(0))
 
   /** @group getParam */
   final def getFeatureIndex: Int = $(featureIndex)
@@ -193,7 +194,7 @@ object IsotonicRegression extends DefaultParamsReadable[IsotonicRegression] {
  * Model fitted by IsotonicRegression.
  * Predicts using a piecewise linear function.
  *
- * For detailed rules see [[org.apache.spark.mllib.regression.IsotonicRegressionModel.predict()]].
+ * For detailed rules see `org.apache.spark.mllib.regression.IsotonicRegressionModel.predict()`.
  *
  * @param oldModel A [[org.apache.spark.mllib.regression.IsotonicRegressionModel]]
  *                 model trained by [[org.apache.spark.mllib.regression.IsotonicRegression]].
