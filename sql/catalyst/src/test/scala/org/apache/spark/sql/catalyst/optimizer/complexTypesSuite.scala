@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.scalatest.ShouldMatchers
+import org.scalatest.Matchers
 
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateMap, CreateNamedStruct, Expression, GetArrayItem, GetArrayStructFields, GetMapValue, GetStructField, Literal}
@@ -27,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-
+import org.apache.spark.sql.types._
 
 /**
 * Created by eyalf on 11/4/2016.
@@ -35,7 +34,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 * i.e. {{{create_named_struct(square, `x` * `x`).square}}} can be simplified to {{{`x` * `x`}}}.
 * sam applies to create_array and create_map
 */
-class ComplexTypesSuite extends PlanTest with ShouldMatchers{
+class ComplexTypesSuite extends PlanTest with Matchers{
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
