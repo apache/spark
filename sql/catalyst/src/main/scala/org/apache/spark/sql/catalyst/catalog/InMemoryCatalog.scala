@@ -396,11 +396,16 @@ class InMemoryCatalog(
       }
     }
 
-    val shouldRemovePartitionLocation = getTable(db, table).tableType == CatalogTableType.MANAGED
+    val shouldRemovePartitionLocation = if (retainData) {
+      false
+    } else {
+      getTable(db, table).tableType == CatalogTableType.MANAGED
+    }
+
     // TODO: we should follow hive to roll back if one partition path failed to delete, and support
     // partial partition spec.
     partSpecs.foreach { p =>
-      if (existingParts.contains(p) && shouldRemovePartitionLocation && !retainData) {
+      if (existingParts.contains(p) && shouldRemovePartitionLocation) {
         val partitionPath = new Path(existingParts(p).location)
         try {
           val fs = partitionPath.getFileSystem(hadoopConfig)
