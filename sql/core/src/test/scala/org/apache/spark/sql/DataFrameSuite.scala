@@ -1697,6 +1697,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       expr = "cast((_1 + _2) as boolean)", expectedNonNullableColumns = Seq("_1", "_2"))
   }
 
+  test("SPARK-17897: Fixed IsNotNull Constraint Inference Rule") {
+    val data = Seq[java.lang.Integer](1, null).toDF("key")
+    checkAnswer(data.filter(!$"key".isNotNull), Row(null))
+    checkAnswer(data.filter(!(- $"key").isNotNull), Row(null))
+  }
+
   test("SPARK-17957: outer join + na.fill") {
     val df1 = Seq((1, 2), (2, 3)).toDF("a", "b")
     val df2 = Seq((2, 5), (3, 4)).toDF("a", "c")

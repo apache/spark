@@ -21,7 +21,7 @@ import org.apache.spark.annotation.InterfaceStability
 
 
 /**
- * The data type representing `NULL` values. Please use the singleton [[DataTypes.NullType]].
+ * The data type representing `NULL` values. Please use the singleton `DataTypes.NullType`.
  *
  * @since 1.3.0
  */

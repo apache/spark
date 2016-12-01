@@ -82,7 +82,7 @@ private[spark] object RandomForest extends Logging {
   /**
    * Train a random forest.
    *
-   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param input Training data: RDD of `LabeledPoint`
    * @return an unweighted set of trees
    */
   def run(
@@ -343,7 +343,7 @@ private[spark] object RandomForest extends Logging {
   /**
    * Given a group of nodes, this finds the best split for each node.
    *
-   * @param input Training data: RDD of [[org.apache.spark.ml.tree.impl.TreePoint]]
+   * @param input Training data: RDD of [[TreePoint]]
    * @param metadata Learning and dataset metadata
    * @param topNodesForGroup For each tree in group, tree index -> root node.
    *                         Used for matching instances with nodes.
@@ -854,10 +854,10 @@ private[spark] object RandomForest extends Logging {
    *       and for multiclass classification with a high-arity feature,
    *       there is one bin per category.
    *
-   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param input Training data: RDD of [[LabeledPoint]]
    * @param metadata Learning and dataset metadata
    * @param seed random seed
-   * @return Splits, an Array of [[org.apache.spark.mllib.tree.model.Split]]
+   * @return Splits, an Array of [[Split]]
    *          of size (numFeatures, numSplits)
    */
   protected[tree] def findSplits(

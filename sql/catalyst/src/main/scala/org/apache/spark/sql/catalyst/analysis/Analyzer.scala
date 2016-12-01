@@ -1027,7 +1027,8 @@ class Analyzer(
       def failOnOuterReference(p: LogicalPlan): Unit = {
         if (p.expressions.exists(containsOuter)) {
           failAnalysis(
-            s"Correlated predicates are not supported outside of WHERE/HAVING clauses: $p")
+            "Expressions referencing the outer query are not supported outside of WHERE/HAVING " +
+              s"clauses: $p")
         }
       }
 
@@ -1076,6 +1077,10 @@ class Analyzer(
 
       // Simplify the predicates before pulling them out.
       val transformed = BooleanSimplification(sub) transformUp {
+        // WARNING:
+        // Only Filter can host correlated expressions at this time
+        // Anyone adding a new "case" below needs to add the call to
+        // "failOnOuterReference" to disallow correlated expressions in it.
         case f @ Filter(cond, child) =>
           // Find all predicates with an outer reference.
           val (correlated, local) = splitConjunctivePredicates(cond).partition(containsOuter)
@@ -1116,11 +1121,17 @@ class Analyzer(
             a
           }
         case w : Window =>
+          failOnOuterReference(w)
           failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, w)
           w
         case j @ Join(left, _, RightOuter, _) =>
           failOnOuterReference(j)
           failOnOuterReferenceInSubTree(left, "a RIGHT OUTER JOIN")
+          j
+        // SPARK-18578: Do not allow any correlated predicate
+        // in a Full (Outer) Join operator and its descendants
+        case j @ Join(_, _, FullOuter, _) =>
+          failOnOuterReferenceInSubTree(j, "a FULL OUTER JOIN")
           j
         case j @ Join(_, right, jt, _) if !jt.isInstanceOf[InnerLike] =>
           failOnOuterReference(j)
@@ -1241,9 +1252,6 @@ class Analyzer(
      */
     private def resolveSubQueries(plan: LogicalPlan, plans: Seq[LogicalPlan]): LogicalPlan = {
       plan transformExpressions {
-        case s @ ScalarSubquery(sub, conditions, exprId)
-            if sub.resolved && conditions.isEmpty && sub.output.size != 1 =>
-          failAnalysis(s"Scalar subquery must return only one column, but got ${sub.output.size}")
         case s @ ScalarSubquery(sub, _, exprId) if !sub.resolved =>
           resolveSubQuery(s, plans, 1)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, exprId) =>

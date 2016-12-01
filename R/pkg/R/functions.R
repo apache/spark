@@ -2296,7 +2296,7 @@ setMethod("n", signature(x = "Column"),
 #' A pattern could be for instance \preformatted{dd.MM.yyyy} and could return a string like '18.03.1993'. All
 #' pattern letters of \code{java.text.SimpleDateFormat} can be used.
 #'
-#' NOTE: Use when ever possible specialized functions like \code{year}. These benefit from a
+#' Note: Use when ever possible specialized functions like \code{year}. These benefit from a
 #' specialized implementation.
 #'
 #' @param y Column to compute on.
@@ -2341,7 +2341,7 @@ setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
 #' Locate the position of the first occurrence of substr column in the given string.
 #' Returns null if either of the arguments are null.
 #'
-#' NOTE: The position is not zero based, but 1 based index. Returns 0 if substr
+#' Note: The position is not zero based, but 1 based index. Returns 0 if substr
 #' could not be found in str.
 #'
 #' @param y column to check
@@ -2779,7 +2779,8 @@ setMethod("window", signature(x = "Column"),
 #' locate
 #'
 #' Locate the position of the first occurrence of substr.
-#' NOTE: The position is not zero based, but 1 based index. Returns 0 if substr
+#'
+#' Note: The position is not zero based, but 1 based index. Returns 0 if substr
 #' could not be found in str.
 #'
 #' @param substr a character string to be matched.

@@ -28,7 +28,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 /**
  * PageRank algorithm implementation. There are two implementations of PageRank implemented.
  *
- * The first implementation uses the standalone [[Graph]] interface and runs PageRank
+ * The first implementation uses the standalone `Graph` interface and runs PageRank
  * for a fixed number of iterations:
  * {{{
  * var PR = Array.fill(n)( 1.0 )
@@ -41,7 +41,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
  * }
  * }}}
  *
- * The second implementation uses the [[Pregel]] interface and runs PageRank until
+ * The second implementation uses the `Pregel` interface and runs PageRank until
  * convergence:
  *
  * {{{
@@ -58,7 +58,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
  * `alpha` is the random reset probability (typically 0.15), `inNbrs[i]` is the set of
  * neighbors which link to `i` and `outDeg[j]` is the out degree of vertex `j`.
  *
- * Note that this is not the "normalized" PageRank and as a consequence pages that have no
+ * @note This is not the "normalized" PageRank and as a consequence pages that have no
  * inlinks will have a PageRank of alpha.
  */
 object PageRank extends Logging {

@@ -474,9 +474,11 @@ object functions {
   /**
    * Aggregate function: returns the level of grouping, equals to
    *
-   *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+   * {{{
+   *   (grouping(c1) <<; (n-1)) + (grouping(c2) <<; (n-2)) + ... + grouping(cn)
+   * }}}
    *
-   * Note: the list of columns should match with grouping columns exactly, or empty (means all the
+   * @note The list of columns should match with grouping columns exactly, or empty (means all the
    * grouping columns).
    *
    * @group agg_funcs
@@ -487,9 +489,11 @@ object functions {
   /**
    * Aggregate function: returns the level of grouping, equals to
    *
-   *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+   * {{{
+   *   (grouping(c1) <<; (n-1)) + (grouping(c2) <<; (n-2)) + ... + grouping(cn)
+   * }}}
    *
-   * Note: the list of columns should match with grouping columns exactly.
+   * @note The list of columns should match with grouping columns exactly.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -1048,9 +1052,12 @@ object functions {
    * within each partition in the lower 33 bits. The assumption is that the data frame has
    * less than 1 billion partitions, and each partition has less than 8 billion records.
    *
-   * As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+   * As an example, consider a `DataFrame` with two partitions, each with 3 records.
    * This expression would return the following IDs:
+   *
+   * {{{
    * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   * }}}
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1066,9 +1073,12 @@ object functions {
    * within each partition in the lower 33 bits. The assumption is that the data frame has
    * less than 1 billion partitions, and each partition has less than 8 billion records.
    *
-   * As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+   * As an example, consider a `DataFrame` with two partitions, each with 3 records.
    * This expression would return the following IDs:
+   *
+   * {{{
    * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   * }}}
    *
    * @group normal_funcs
    * @since 1.6.0
@@ -1120,7 +1130,7 @@ object functions {
    * Generate a random column with independent and identically distributed (i.i.d.) samples
    * from U[0.0, 1.0].
    *
-   * Note that this is indeterministic when data partitions are not fixed.
+   * @note This is indeterministic when data partitions are not fixed.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1140,7 +1150,7 @@ object functions {
    * Generate a column with independent and identically distributed (i.i.d.) samples from
    * the standard normal distribution.
    *
-   * Note that this is indeterministic when data partitions are not fixed.
+   * @note This is indeterministic when data partitions are not fixed.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1159,7 +1169,7 @@ object functions {
   /**
    * Partition ID.
    *
-   * Note that this is indeterministic because it depends on data partitioning and task scheduling.
+   * @note This is indeterministic because it depends on data partitioning and task scheduling.
    *
    * @group normal_funcs
    * @since 1.6.0
@@ -1184,7 +1194,7 @@ object functions {
 
   /**
    * Creates a new struct column.
-   * If the input column is a column in a [[DataFrame]], or a derived column expression
+   * If the input column is a column in a `DataFrame`, or a derived column expression
    * that is named (i.e. aliased), its name would be remained as the StructField's name,
    * otherwise, the newly generated StructField's name would be auto generated as col${index + 1},
    * i.e. col1, col2, col3, ...
@@ -1846,8 +1856,8 @@ object functions {
   def round(e: Column): Column = round(e, 0)
 
   /**
-   * Round the value of `e` to `scale` decimal places if `scale` >= 0
-   * or at integral part when `scale` < 0.
+   * Round the value of `e` to `scale` decimal places if `scale` is greater than or equal to 0
+   * or at integral part when `scale` is less than 0.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1864,7 +1874,7 @@ object functions {
 
   /**
    * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode
-   * if `scale` >= 0 or at integral part when `scale` < 0.
+   * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
    *
    * @group math_funcs
    * @since 2.0.0
@@ -2172,7 +2182,7 @@ object functions {
    * and returns the result as a string column.
    *
    * If d is 0, the result has no decimal point or fractional part.
-   * If d < 0, the result will be null.
+   * If d is less than 0, the result will be null.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2207,7 +2217,7 @@ object functions {
    * Locate the position of the first occurrence of substr column in the given string.
    * Returns null if either of the arguments are null.
    *
-   * NOTE: The position is not zero based, but 1 based index. Returns 0 if substr
+   * @note The position is not zero based, but 1 based index. Returns 0 if substr
    * could not be found in str.
    *
    * @group string_funcs
@@ -2242,7 +2252,8 @@ object functions {
 
   /**
    * Locate the position of the first occurrence of substr.
-   * NOTE: The position is not zero based, but 1 based index. Returns 0 if substr
+   *
+   * @note The position is not zero based, but 1 based index. Returns 0 if substr
    * could not be found in str.
    *
    * @group string_funcs
@@ -2255,7 +2266,7 @@ object functions {
   /**
    * Locate the position of the first occurrence of substr in a string column, after position pos.
    *
-   * NOTE: The position is not zero based, but 1 based index. returns 0 if substr
+   * @note The position is not zero based, but 1 based index. returns 0 if substr
    * could not be found in str.
    *
    * @group string_funcs
@@ -2369,7 +2380,8 @@ object functions {
 
   /**
    * Splits str around pattern (pattern is a regular expression).
-   * NOTE: pattern is a string representation of the regular expression.
+   *
+   * @note Pattern is a string representation of the regular expression.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2468,7 +2480,7 @@ object functions {
    * A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
    * pattern letters of [[java.text.SimpleDateFormat]] can be used.
    *
-   * NOTE: Use when ever possible specialized functions like [[year]]. These benefit from a
+   * @note Use when ever possible specialized functions like [[year]]. These benefit from a
    * specialized implementation.
    *
    * @group datetime_funcs
@@ -2886,7 +2898,7 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Parses a column containing a JSON string into a [[StructType]] with the
+   * (Scala-specific) Parses a column containing a JSON string into a `StructType` with the
    * specified schema. Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -2902,7 +2914,7 @@ object functions {
   }
 
   /**
-   * (Java-specific) Parses a column containing a JSON string into a [[StructType]] with the
+   * (Java-specific) Parses a column containing a JSON string into a `StructType` with the
    * specified schema. Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -2917,7 +2929,7 @@ object functions {
     from_json(e, schema, options.asScala.toMap)
 
   /**
-   * Parses a column containing a JSON string into a [[StructType]] with the specified schema.
+   * Parses a column containing a JSON string into a `StructType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -2930,7 +2942,7 @@ object functions {
     from_json(e, schema, Map.empty[String, String])
 
   /**
-   * Parses a column containing a JSON string into a [[StructType]] with the specified schema.
+   * Parses a column containing a JSON string into a `StructType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -2944,7 +2956,7 @@ object functions {
 
 
   /**
-   * (Scala-specific) Converts a column containing a [[StructType]] into a JSON string with the
+   * (Scala-specific) Converts a column containing a `StructType` into a JSON string with the
    * specified schema. Throws an exception, in the case of an unsupported type.
    *
    * @param e a struct column.
@@ -2959,7 +2971,7 @@ object functions {
   }
 
   /**
-   * (Java-specific) Converts a column containing a [[StructType]] into a JSON string with the
+   * (Java-specific) Converts a column containing a `StructType` into a JSON string with the
    * specified schema. Throws an exception, in the case of an unsupported type.
    *
    * @param e a struct column.
@@ -2973,7 +2985,7 @@ object functions {
     to_json(e, options.asScala.toMap)
 
   /**
-   * Converts a column containing a [[StructType]] into a JSON string with the
+   * Converts a column containing a `StructType` into a JSON string with the
    * specified schema. Throws an exception, in the case of an unsupported type.
    *
    * @param e a struct column.

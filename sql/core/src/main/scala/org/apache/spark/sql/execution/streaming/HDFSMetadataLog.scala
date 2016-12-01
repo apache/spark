@@ -70,7 +70,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   /**
    * A `PathFilter` to filter only batch files
    */
-  private val batchFilesFilter = new PathFilter {
+  protected val batchFilesFilter = new PathFilter {
     override def accept(path: Path): Boolean = isBatchFile(path)
   }
 
@@ -105,38 +105,40 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   /**
    * Store the metadata for the specified batchId and return `true` if successful. If the batchId's
    * metadata has already been stored, this method will return `false`.
-   *
-   * Note that this method must be called on a [[org.apache.spark.util.UninterruptibleThread]]
-   * so that interrupts can be disabled while writing the batch file. This is because there is a
-   * potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622). If the thread
-   * running "Shell.runCommand" is interrupted, then the thread can get deadlocked. In our
-   * case, `writeBatch` creates a file using HDFS API and calls "Shell.runCommand" to set the
-   * file permissions, and can get deadlocked if the stream execution thread is stopped by
-   * interrupt. Hence, we make sure that this method is called on [[UninterruptibleThread]] which
-   * allows us to disable interrupts here. Also see SPARK-14131.
    */
   override def add(batchId: Long, metadata: T): Boolean = {
     get(batchId).map(_ => false).getOrElse {
       // Only write metadata when the batch has not yet been written
-      Thread.currentThread match {
-        case ut: UninterruptibleThread =>
-          ut.runUninterruptibly { writeBatch(batchId, metadata, serialize) }
-        case _ =>
-          throw new IllegalStateException(
-            "HDFSMetadataLog.add() must be executed on a o.a.spark.util.UninterruptibleThread")
+      if (fileManager.isLocalFileSystem) {
+        Thread.currentThread match {
+          case ut: UninterruptibleThread =>
+            // When using a local file system, "writeBatch" must be called on a
+            // [[org.apache.spark.util.UninterruptibleThread]] so that interrupts can be disabled
+            // while writing the batch file. This is because there is a potential dead-lock in
+            // Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622). If the thread running
+            // "Shell.runCommand" is interrupted, then the thread can get deadlocked. In our case,
+            // `writeBatch` creates a file using HDFS API and will call "Shell.runCommand" to set
+            // the file permission if using the local file system, and can get deadlocked if the
+            // stream execution thread is stopped by interrupt. Hence, we make sure that
+            // "writeBatch" is called on [[UninterruptibleThread]] which allows us to disable
+            // interrupts here. Also see SPARK-14131.
+            ut.runUninterruptibly { writeBatch(batchId, metadata, serialize) }
+          case _ =>
+            throw new IllegalStateException(
+              "HDFSMetadataLog.add() on a local file system must be executed on " +
+                "a o.a.spark.util.UninterruptibleThread")
+        }
+      } else {
+        // For a distributed file system, such as HDFS or S3, if the network is broken, write
+        // operations may just hang until timeout. We should enable interrupts to allow stopping
+        // the query fast.
+        writeBatch(batchId, metadata, serialize)
       }
       true
     }
   }
 
-  /**
-   * Write a batch to a temp file then rename it to the batch file.
-   *
-   * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
-   * valid behavior, we still need to prevent it from destroying the files.
-   */
-  private def writeBatch(batchId: Long, metadata: T, writer: (T, OutputStream) => Unit): Unit = {
-    // Use nextId to create a temp file
+  def writeTempBatch(metadata: T, writer: (T, OutputStream) => Unit = serialize): Option[Path] = {
     var nextId = 0
     while (true) {
       val tempPath = new Path(metadataPath, s".${UUID.randomUUID.toString}.tmp")
@@ -144,32 +146,9 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
         val output = fileManager.create(tempPath)
         try {
           writer(metadata, output)
+          return Some(tempPath)
         } finally {
           IOUtils.closeQuietly(output)
-        }
-        try {
-          // Try to commit the batch
-          // It will fail if there is an existing file (someone has committed the batch)
-          logDebug(s"Attempting to write log #${batchIdToPath(batchId)}")
-          fileManager.rename(tempPath, batchIdToPath(batchId))
-
-          // SPARK-17475: HDFSMetadataLog should not leak CRC files
-          // If the underlying filesystem didn't rename the CRC file, delete it.
-          val crcPath = new Path(tempPath.getParent(), s".${tempPath.getName()}.crc")
-          if (fileManager.exists(crcPath)) fileManager.delete(crcPath)
-          return
-        } catch {
-          case e: IOException if isFileAlreadyExistsException(e) =>
-            // If "rename" fails, it means some other "HDFSMetadataLog" has committed the batch.
-            // So throw an exception to tell the user this is not a valid behavior.
-            throw new ConcurrentModificationException(
-              s"Multiple HDFSMetadataLog are using $path", e)
-          case e: FileNotFoundException =>
-            // Sometimes, "create" will succeed when multiple writers are calling it at the same
-            // time. However, only one writer can call "rename" successfully, others will get
-            // FileNotFoundException because the first writer has removed it.
-            throw new ConcurrentModificationException(
-              s"Multiple HDFSMetadataLog are using $path", e)
         }
       } catch {
         case e: IOException if isFileAlreadyExistsException(e) =>
@@ -186,9 +165,44 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           // metadata path. In addition, the old Streaming also have this issue, people can create
           // malicious checkpoint files to crash a Streaming application too.
           nextId += 1
-      } finally {
-        fileManager.delete(tempPath)
       }
+    }
+    None
+  }
+
+  /**
+   * Write a batch to a temp file then rename it to the batch file.
+   *
+   * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
+   * valid behavior, we still need to prevent it from destroying the files.
+   */
+  private def writeBatch(batchId: Long, metadata: T, writer: (T, OutputStream) => Unit): Unit = {
+    val tempPath = writeTempBatch(metadata, writer).getOrElse(
+      throw new IllegalStateException(s"Unable to create temp batch file $batchId"))
+    try {
+      // Try to commit the batch
+      // It will fail if there is an existing file (someone has committed the batch)
+      logDebug(s"Attempting to write log #${batchIdToPath(batchId)}")
+      fileManager.rename(tempPath, batchIdToPath(batchId))
+
+      // SPARK-17475: HDFSMetadataLog should not leak CRC files
+      // If the underlying filesystem didn't rename the CRC file, delete it.
+      val crcPath = new Path(tempPath.getParent(), s".${tempPath.getName()}.crc")
+      if (fileManager.exists(crcPath)) fileManager.delete(crcPath)
+    } catch {
+      case e: IOException if isFileAlreadyExistsException(e) =>
+        // If "rename" fails, it means some other "HDFSMetadataLog" has committed the batch.
+        // So throw an exception to tell the user this is not a valid behavior.
+        throw new ConcurrentModificationException(
+          s"Multiple HDFSMetadataLog are using $path", e)
+      case e: FileNotFoundException =>
+        // Sometimes, "create" will succeed when multiple writers are calling it at the same
+        // time. However, only one writer can call "rename" successfully, others will get
+        // FileNotFoundException because the first writer has removed it.
+        throw new ConcurrentModificationException(
+          s"Multiple HDFSMetadataLog are using $path", e)
+    } finally {
+      fileManager.delete(tempPath)
     }
   }
 
@@ -197,6 +211,22 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       // Old Hadoop versions don't throw FileAlreadyExistsException. Although it's fixed in
       // HADOOP-9361 in Hadoop 2.5, we still need to support old Hadoop versions.
       (e.getMessage != null && e.getMessage.startsWith("File already exists: "))
+  }
+
+  /**
+   * @return the deserialized metadata in a batch file, or None if file not exist.
+   * @throws IllegalArgumentException when path does not point to a batch file.
+   */
+  def get(batchFile: Path): Option[T] = {
+    if (fileManager.exists(batchFile)) {
+      if (isBatchFile(batchFile)) {
+        get(pathToBatchId(batchFile))
+      } else {
+        throw new IllegalArgumentException(s"File ${batchFile} is not a batch file!")
+      }
+    } else {
+      None
+    }
   }
 
   override def get(batchId: Long): Option[T] = {
@@ -239,6 +269,17 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       }
     }
     None
+  }
+
+  /**
+   * Get an array of [FileStatus] referencing batch files.
+   * The array is sorted by most recent batch file first to
+   * oldest batch file.
+   */
+  def getOrderedBatchFiles(): Array[FileStatus] = {
+    fileManager.list(metadataPath, batchFilesFilter)
+      .sortBy(f => pathToBatchId(f.getPath))
+      .reverse
   }
 
   /**
@@ -298,6 +339,9 @@ object HDFSMetadataLog {
 
     /** Recursively delete a path if it exists. Should not throw exception if file doesn't exist. */
     def delete(path: Path): Unit
+
+    /** Whether the file systme is a local FS. */
+    def isLocalFileSystem: Boolean
   }
 
   /**
@@ -341,6 +385,13 @@ object HDFSMetadataLog {
         case e: FileNotFoundException =>
         // ignore if file has already been deleted
       }
+    }
+
+    override def isLocalFileSystem: Boolean = fc.getDefaultFileSystem match {
+      case _: local.LocalFs | _: local.RawLocalFs =>
+        // LocalFs = RawLocalFs + ChecksumFs
+        true
+      case _ => false
     }
   }
 
@@ -397,6 +448,13 @@ object HDFSMetadataLog {
         case e: FileNotFoundException =>
           // ignore if file has already been deleted
       }
+    }
+
+    override def isLocalFileSystem: Boolean = fs match {
+      case _: LocalFileSystem | _: RawLocalFileSystem =>
+        // LocalFileSystem = RawLocalFileSystem + ChecksumFileSystem
+        true
+      case _ => false
     }
   }
 }

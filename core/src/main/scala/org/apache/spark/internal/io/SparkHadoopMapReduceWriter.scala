@@ -119,7 +119,7 @@ object SparkHadoopMapReduceWriter extends Logging {
     }
   }
 
-  /** Write a RDD partition out in a single Spark task. */
+  /** Write an RDD partition out in a single Spark task. */
   private def executeTask[K, V: ClassTag](
       context: TaskContext,
       jobTrackerId: String,

@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.beans.Introspector
+import java.io.Closeable
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
@@ -72,7 +73,7 @@ import org.apache.spark.util.Utils
 class SparkSession private(
     @transient val sparkContext: SparkContext,
     @transient private val existingSharedState: Option[SharedState])
-  extends Serializable with Logging { self =>
+  extends Serializable with Closeable with Logging { self =>
 
   private[sql] def this(sc: SparkContext) {
     this(sc, None)
@@ -92,7 +93,7 @@ class SparkSession private(
    * ----------------------- */
 
   /**
-   * State shared across sessions, including the [[SparkContext]], cached data, listener,
+   * State shared across sessions, including the `SparkContext`, cached data, listener,
    * and a catalog that interacts with external systems.
    */
   @transient
@@ -124,7 +125,7 @@ class SparkSession private(
    *
    * This is the interface through which the user can get and set all Spark and Hadoop
    * configurations that are relevant to Spark SQL. When getting the value of a config,
-   * this defaults to the value set in the underlying [[SparkContext]], if any.
+   * this defaults to the value set in the underlying `SparkContext`, if any.
    *
    * @since 2.0.0
    */
@@ -154,9 +155,6 @@ class SparkSession private(
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
-   * Note that the user-defined functions must be deterministic. Due to optimization,
-   * duplicate invocations may be eliminated or the function may even be invoked more times than
-   * it is present in the query.
    *
    * The following example registers a Scala closure as UDF:
    * {{{
@@ -181,14 +179,18 @@ class SparkSession private(
    *       DataTypes.StringType);
    * }}}
    *
+   * @note The user-defined functions must be deterministic. Due to optimization,
+   * duplicate invocations may be eliminated or the function may even be invoked more times than
+   * it is present in the query.
+   *
    * @since 2.0.0
    */
   def udf: UDFRegistration = sessionState.udf
 
   /**
    * :: Experimental ::
-   * Returns a [[StreamingQueryManager]] that allows managing all the
-   * [[StreamingQuery StreamingQueries]] active on `this`.
+   * Returns a `StreamingQueryManager` that allows managing all the
+   * `StreamingQuery`s active on `this`.
    *
    * @since 2.0.0
    */
@@ -198,9 +200,9 @@ class SparkSession private(
 
   /**
    * Start a new session with isolated SQL configurations, temporary tables, registered
-   * functions are isolated, but sharing the underlying [[SparkContext]] and cached data.
+   * functions are isolated, but sharing the underlying `SparkContext` and cached data.
    *
-   * Note: Other than the [[SparkContext]], all shared state is initialized lazily.
+   * @note Other than the `SparkContext`, all shared state is initialized lazily.
    * This method will force the initialization of the shared state to ensure that parent
    * and child sessions are set up with the same shared state. If the underlying catalog
    * implementation is Hive, this will initialize the metastore, which may take some time.
@@ -217,7 +219,7 @@ class SparkSession private(
    * --------------------------------- */
 
   /**
-   * Returns a [[DataFrame]] with no rows or columns.
+   * Returns a `DataFrame` with no rows or columns.
    *
    * @since 2.0.0
    */
@@ -241,7 +243,7 @@ class SparkSession private(
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] from an RDD of Product (e.g. case classes, tuples).
+   * Creates a `DataFrame` from an RDD of Product (e.g. case classes, tuples).
    *
    * @since 2.0.0
    */
@@ -255,7 +257,7 @@ class SparkSession private(
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] from a local Seq of Product.
+   * Creates a `DataFrame` from a local Seq of Product.
    *
    * @since 2.0.0
    */
@@ -270,7 +272,7 @@ class SparkSession private(
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from an [[RDD]] containing [[Row]]s using the given schema.
+   * Creates a `DataFrame` from an `RDD` containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
    * the provided schema. Otherwise, there will be runtime exception.
    * Example:
@@ -307,7 +309,7 @@ class SparkSession private(
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from a [[JavaRDD]] containing [[Row]]s using the given schema.
+   * Creates a `DataFrame` from a `JavaRDD` containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
@@ -321,7 +323,7 @@ class SparkSession private(
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from a [[java.util.List]] containing [[Row]]s using the given schema.
+   * Creates a `DataFrame` from a [[java.util.List]] containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided List matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
@@ -379,7 +381,7 @@ class SparkSession private(
   }
 
   /**
-   * Convert a [[BaseRelation]] created for external data sources into a [[DataFrame]].
+   * Convert a `BaseRelation` created for external data sources into a `DataFrame`.
    *
    * @since 2.0.0
    */
@@ -468,7 +470,7 @@ class SparkSession private(
 
   /**
    * :: Experimental ::
-   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
    * in a range from 0 to `end` (exclusive) with step value 1.
    *
    * @since 2.0.0
@@ -479,7 +481,7 @@ class SparkSession private(
 
   /**
    * :: Experimental ::
-   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
    * in a range from `start` to `end` (exclusive) with step value 1.
    *
    * @since 2.0.0
@@ -492,7 +494,7 @@ class SparkSession private(
 
   /**
    * :: Experimental ::
-   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
    * in a range from `start` to `end` (exclusive) with a step value.
    *
    * @since 2.0.0
@@ -505,7 +507,7 @@ class SparkSession private(
 
   /**
    * :: Experimental ::
-   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
    * in a range from `start` to `end` (exclusive) with a step value, with partition number
    * specified.
    *
@@ -518,7 +520,7 @@ class SparkSession private(
   }
 
   /**
-   * Creates a [[DataFrame]] from an RDD[Row].
+   * Creates a `DataFrame` from an RDD[Row].
    * User can specify whether the input rows should be converted to Catalyst rows.
    */
   private[sql] def internalCreateDataFrame(
@@ -531,7 +533,7 @@ class SparkSession private(
   }
 
   /**
-   * Creates a [[DataFrame]] from an RDD[Row].
+   * Creates a `DataFrame` from an RDD[Row].
    * User can specify whether the input rows should be converted to Catalyst rows.
    */
   private[sql] def createDataFrame(
@@ -564,7 +566,7 @@ class SparkSession private(
   @transient lazy val catalog: Catalog = new CatalogImpl(self)
 
   /**
-   * Returns the specified table as a [[DataFrame]].
+   * Returns the specified table as a `DataFrame`.
    *
    * @since 2.0.0
    */
@@ -581,7 +583,7 @@ class SparkSession private(
    * ----------------- */
 
   /**
-   * Executes a SQL query using Spark, returning the result as a [[DataFrame]].
+   * Executes a SQL query using Spark, returning the result as a `DataFrame`.
    * The dialect that is used for SQL parsing can be configured with 'spark.sql.dialect'.
    *
    * @since 2.0.0
@@ -592,7 +594,7 @@ class SparkSession private(
 
   /**
    * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
-   * [[DataFrame]].
+   * `DataFrame`.
    * {{{
    *   sparkSession.read.parquet("/path/to/file.parquet")
    *   sparkSession.read.schema(schema).json("/path/to/file.json")
@@ -604,7 +606,7 @@ class SparkSession private(
 
   /**
    * :: Experimental ::
-   * Returns a [[DataStreamReader]] that can be used to read streaming data in as a [[DataFrame]].
+   * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
    * {{{
    *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
    *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
@@ -622,7 +624,7 @@ class SparkSession private(
   /**
    * :: Experimental ::
    * (Scala-specific) Implicit methods available in Scala for converting
-   * common Scala objects into [[DataFrame]]s.
+   * common Scala objects into `DataFrame`s.
    *
    * {{{
    *   val sparkSession = SparkSession.builder.getOrCreate()
@@ -639,13 +641,20 @@ class SparkSession private(
   // scalastyle:on
 
   /**
-   * Stop the underlying [[SparkContext]].
+   * Stop the underlying `SparkContext`.
    *
    * @since 2.0.0
    */
   def stop(): Unit = {
     sparkContext.stop()
   }
+
+  /**
+   * Synonym for `stop()`.
+   *
+   * @since 2.1.0
+   */
+  override def close(): Unit = stop()
 
   /**
    * Parses the data type in our internal string representation. The data type string should
@@ -717,7 +726,7 @@ object SparkSession {
 
     /**
      * Sets a config option. Options set using this method are automatically propagated to
-     * both [[SparkConf]] and SparkSession's own configuration.
+     * both `SparkConf` and SparkSession's own configuration.
      *
      * @since 2.0.0
      */
@@ -728,7 +737,7 @@ object SparkSession {
 
     /**
      * Sets a config option. Options set using this method are automatically propagated to
-     * both [[SparkConf]] and SparkSession's own configuration.
+     * both `SparkConf` and SparkSession's own configuration.
      *
      * @since 2.0.0
      */
@@ -739,7 +748,7 @@ object SparkSession {
 
     /**
      * Sets a config option. Options set using this method are automatically propagated to
-     * both [[SparkConf]] and SparkSession's own configuration.
+     * both `SparkConf` and SparkSession's own configuration.
      *
      * @since 2.0.0
      */
@@ -750,7 +759,7 @@ object SparkSession {
 
     /**
      * Sets a config option. Options set using this method are automatically propagated to
-     * both [[SparkConf]] and SparkSession's own configuration.
+     * both `SparkConf` and SparkSession's own configuration.
      *
      * @since 2.0.0
      */
@@ -760,7 +769,7 @@ object SparkSession {
     }
 
     /**
-     * Sets a list of config options based on the given [[SparkConf]].
+     * Sets a list of config options based on the given `SparkConf`.
      *
      * @since 2.0.0
      */
