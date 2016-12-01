@@ -43,7 +43,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     clock.setTime(0)
 
     listenerBusMock = mock[LiveListenerBus]
-    blacklist = new BlacklistTracker(listenerBusMock, conf, clock)
+    blacklist = new BlacklistTracker(null, conf, None, clock)
   }
 
   override def afterEach(): Unit = {
