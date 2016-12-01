@@ -319,9 +319,12 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       df.write.format("jdbc")
         .option("dbtable", "TEST.SAVETEST")
         .option("url", url1)
+        .option("user", "testUser")
+        .option("password", "testPass")
         .option(s"${JDBCOptions.JDBC_NUM_PARTITIONS}", "0")
         .save()
     }.getMessage
-    assert(e.contains("Invalid value `0` for parameter `numPartitions`. The minimum value is 1"))
+    assert(e.contains("Invalid value `0` for parameter `numPartitions` in table writing " +
+      "via JDBC. The minimum value is 1."))
   }
 }

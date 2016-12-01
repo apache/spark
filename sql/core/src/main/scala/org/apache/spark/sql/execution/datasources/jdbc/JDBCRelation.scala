@@ -137,7 +137,8 @@ private[sql] case class JDBCRelation(
   }
 
   override def toString: String = {
+    val partitioningInfo = if (parts.nonEmpty) s" [numPartitions=${parts.length}]" else ""
     // credentials should not be included in the plan output, table information is sufficient.
-    s"JDBCRelation(${jdbcOptions.table})"
+    s"JDBCRelation(${jdbcOptions.table})" + partitioningInfo
   }
 }

@@ -657,7 +657,7 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       url: String,
       table: String,
-      options: JDBCOptions) {
+      options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
       getJdbcType(field.dataType, dialect).jdbcNullType
@@ -667,13 +667,13 @@ object JdbcUtils extends Logging {
     val getConnection: () => Connection = createConnectionFactory(options)
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
-    val numPartitions = options.numPartitions
-    val repartitionedDF =
-      if (numPartitions.isDefined && numPartitions.get < df.rdd.getNumPartitions) {
-        df.coalesce(numPartitions.get)
-      } else {
-        df
-      }
+    val repartitionedDF = options.numPartitions match {
+      case Some(n) if n <= 0 => throw new IllegalArgumentException(
+        s"Invalid value `$n` for parameter `${JDBCOptions.JDBC_NUM_PARTITIONS}` in table writing " +
+          "via JDBC. The minimum value is 1.")
+      case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
+      case _ => df
+    }
     repartitionedDF.foreachPartition(iterator => savePartition(
       getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect, isolationLevel)
     )
