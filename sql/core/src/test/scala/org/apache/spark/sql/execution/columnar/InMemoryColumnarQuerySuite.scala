@@ -390,12 +390,6 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val columnarIterator2 = new GenerateColumnAccessor(sparkConf).generate(columnTypes2)
   }
 
-  test("access only some column of the all of columns") {
-    val df = spark.range(1, 100).map(i => (i, (i + 1).toFloat)).toDF("i", "f").cache
-    df.count
-    assert(df.filter("f <= 10.0").count == 9)
-  }
-
   test("access columns in CachedColumnarBatch without whole stage codegen") {
     // whole stage codegen is not applied to a row with more than WHOLESTAGE_MAX_NUM_FIELDS fields
     val dummySeq = Seq.range(0, 20)
