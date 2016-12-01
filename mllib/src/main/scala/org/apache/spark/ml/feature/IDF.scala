@@ -18,9 +18,10 @@
 package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
-import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, VectorUDT, Vectors}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -114,7 +115,7 @@ object IDF extends DefaultParamsReadable[IDF] {
 @Since("1.4.0")
 class IDFModel private[ml] (
     @Since("1.4.0") override val uid: String,
-    idfModel: feature.IDFModel)
+    idf: Vector)
   extends Model[IDFModel] with IDFBase with MLWritable {
 
   import IDFModel._
@@ -130,7 +131,7 @@ class IDFModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val idf = udf { vec: Vector => IDFModel.transform(idfModel.idf.asML, vec) }
+    val idf = udf { vec: Vector => IDFModel.transform(idf, vec) }
     dataset.withColumn($(outputCol), idf(col($(inputCol))))
   }
 
@@ -141,13 +142,9 @@ class IDFModel private[ml] (
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): IDFModel = {
-    val copied = new IDFModel(uid, idfModel)
+    val copied = new IDFModel(uid, idf)
     copyValues(copied, extra).setParent(parent)
   }
-
-  /** Returns the IDF vector. */
-  @Since("2.0.0")
-  def idf: Vector = idfModel.idf.asML
 
   @Since("1.6.0")
   override def write: MLWriter = new IDFModelWriter(this)
