@@ -115,7 +115,7 @@ object IDF extends DefaultParamsReadable[IDF] {
 @Since("1.4.0")
 class IDFModel private[ml] (
     @Since("1.4.0") override val uid: String,
-    idf: Vector)
+    @Since("2.2.0") idf: Vector)
   extends Model[IDFModel] with IDFBase with MLWritable {
 
   import IDFModel._
