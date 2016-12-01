@@ -133,8 +133,10 @@ class TextOutputWriter(
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
-    val utf8string = row.getUTF8String(0)
-    writer.write(utf8string.getBytes)
+    if (!row.isNullAt(0)) {
+      val utf8string = row.getUTF8String(0)
+      utf8string.writeTo(writer)
+    }
     writer.write('\n')
   }
 

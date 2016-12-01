@@ -147,6 +147,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     buffer.position(pos + numBytes);
   }
 
+  public void writeTo(OutputStream out) throws IOException {
+    if (base instanceof byte[] &&
+        offset >= BYTE_ARRAY_OFFSET &&
+        offset < (long) Integer.MAX_VALUE) {
+      // the offset includes the object header... but it is only needed for unsafe copies
+      out.write((byte[]) base, (int) offset - BYTE_ARRAY_OFFSET, numBytes);
+    } else {
+      out.write(getBytes());
+    }
+  }
+
   /**
    * Returns the number of bytes for a code point with the first byte as `b`
    * @param b The first byte of a code point
