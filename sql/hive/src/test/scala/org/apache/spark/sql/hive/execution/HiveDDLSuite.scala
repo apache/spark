@@ -1941,4 +1941,36 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("alter table add columns -- not support temp view") {
+    withTempView("tmp_v") {
+      sql("create temporary view tmp_v as select 1 as c1, 2 as c2")
+      val e = intercept[AnalysisException] {
+        sql("alter table tmp_v add columns (c3 int)")
+      }
+      assert(e.message.contains("is a temporary VIEW, which does not support ALTER ADD COLUMNS"))
+    }
+  }
+
+  test("alter table add columns -- not support view") {
+    withView("v1") {
+      sql("create view v1 as select 1 as c1, 2 as c2")
+      val e = intercept[AnalysisException] {
+        sql("alter table v1 add columns (c3 int)")
+      }
+      assert(e.message.contains("is a VIEW, which does not support ALTER ADD COLUMNS"))
+    }
+  }
+
+  test("alter table add columns -- not datasource table") {
+    withTempDir { dir =>
+      withTable("t_ds") {
+        sql(s"create table t_ds (c1 int, c2 int) using parquet options(path '$dir')")
+        val e = intercept[AnalysisException] {
+          sql("alter table t_ds add columns (c3 int)")
+        }
+        assert(e.message.contains("datasource table, which does not support ALTER ADD COLUMNS yet"))
+      }
+    }
+  }
 }
