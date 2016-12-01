@@ -35,7 +35,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.{MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 // TODO(gatorsmile): combine HiveCatalogedDDLSuite and HiveDDLSuite
 class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeAndAfterEach {
@@ -1857,6 +1857,87 @@ class HiveDDLSuite
         sql("CREATE TABLE spark_19905 STORED AS RCFILE AS SELECT * FROM spark_19905_view")
         assert(spark.table("spark_19905").inputFiles.nonEmpty)
         assert(sql("SELECT input_file_name() FROM spark_19905").count() > 0)
+      }
+    }
+  }
+
+  Seq("a b", "a:b", "a%b").foreach { specialChars =>
+    test(s"location uri contains $specialChars for database") {
+      try {
+        withTable("t") {
+          withTempDir { dir =>
+            val loc = new File(dir, specialChars)
+            spark.sql(s"CREATE DATABASE tmpdb LOCATION '$loc'")
+            spark.sql("USE tmpdb")
+
+            Seq(1).toDF("a").write.saveAsTable("t")
+            val tblloc = new File(loc, "t")
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            val tblPath = new Path(tblloc.getAbsolutePath)
+            val fs = tblPath.getFileSystem(spark.sessionState.newHadoopConf())
+            assert(table.location == fs.makeQualified(tblPath).toUri)
+            assert(tblloc.listFiles().nonEmpty)
+          }
+        }
+      } finally {
+        spark.sql("DROP DATABASE IF EXISTS tmpdb")
+      }
+    }
+  }
+
+  test("alter table add columns -- partitioned") {
+    val tableTypes = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
+    tableTypes.foreach{ tableType =>
+      withTable("alter_add_partitioned") {
+        sql(
+          s"""
+            |CREATE TABLE alter_add_partitioned (c1 int, c2 int)
+            |PARTITIONED BY (c3 int) STORED AS $tableType
+          """.stripMargin)
+
+        sql("INSERT INTO alter_add_partitioned PARTITION (c3=1) VALUES (1, 2)")
+        sql("ALTER TABLE alter_add_partitioned ADD COLUMNS (c4 int)")
+        checkAnswer(
+          sql("SELECT * FROM alter_add_partitioned WHERE c3 = 1"),
+          Seq(Row(1, 2, null, 1))
+        )
+        assert(sql("SELECT * FROM alter_add_partitioned").schema
+          .contains(StructField("c4", IntegerType)))
+        sql("INSERT INTO alter_add_partitioned PARTITION (c3=2) VALUES (2, 3, 4)")
+        checkAnswer(
+          sql("SELECT * FROM alter_add_partitioned"),
+          Seq(Row(1, 2, null, 1), Row(2, 3, 4, 2))
+        )
+        checkAnswer(
+          sql("SELECT * FROM alter_add_partitioned WHERE c3 = 2 AND c4 IS NOT NULL"),
+          Seq(Row(2, 3, 4, 2))
+        )
+      }
+    }
+  }
+
+  test("alter table add columns -- with predicate") {
+    val tableTypes = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
+    tableTypes.foreach { tableType =>
+      withTable("alter_add_predicate") {
+        sql(s"CREATE TABLE alter_add_predicate (c1 int, c2 int) STORED AS $tableType")
+        sql("INSERT INTO alter_add_predicate VALUES (1, 2)")
+        sql("ALTER TABLE alter_add_predicate ADD COLUMNS (c4 int)")
+        checkAnswer(
+          sql("SELECT * FROM alter_add_predicate WHERE c4 IS NULL"),
+          Seq(Row(1, 2, null))
+        )
+        assert(sql("SELECT * FROM alter_add_predicate").schema
+          .contains(StructField("c4", IntegerType)))
+        sql("INSERT INTO alter_add_predicate VALUES (2, 3, 4)")
+        checkAnswer(
+          sql("SELECT * FROM alter_add_predicate WHERE c4 = 4 "),
+          Seq(Row(2, 3, 4))
+        )
+        checkAnswer(
+          sql("SELECT * FROM alter_add_predicate"),
+          Seq(Row(1, 2, null), Row(2, 3, 4))
+        )
       }
     }
   }

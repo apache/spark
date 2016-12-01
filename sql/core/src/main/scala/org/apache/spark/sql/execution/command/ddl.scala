@@ -815,4 +815,28 @@ object DDLUtils {
       }
     }
   }
+
+  /**
+   * ALTER TABLE ADD COLUMNS command does not support temporary view/table,
+   * view, or datasource table yet.
+   */
+  def verifyAlterTableAddColumn(
+      catalog: SessionCatalog,
+      table: TableIdentifier): CatalogTable = {
+    if (catalog.isTemporaryTable(table)) {
+      throw new AnalysisException(
+        s"${table.toString} is a temporary VIEW, which does not support ALTER ADD COLUMNS.")
+    }
+
+    val catalogTable = catalog.getTableMetadata(table)
+    if (catalogTable.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException(
+        s"${table.toString} is a VIEW, which does not support ALTER ADD COLUMNS.")
+    }
+    if (isDatasourceTable(catalogTable)) {
+      throw new AnalysisException(
+        s"${table.toString} is a datasource table, which does not support ALTER ADD COLUMNS yet.")
+    }
+    catalogTable
+  }
 }

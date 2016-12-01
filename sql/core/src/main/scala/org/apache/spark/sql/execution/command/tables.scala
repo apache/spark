@@ -179,33 +179,25 @@ case class AlterTableAddColumnsCommand(
     columns: Seq[StructField]) extends RunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    val catalogTable = DDLUtils.verifyAlterTableAddColumn(catalog, table)
 
-    if (catalog.isTemporaryTable(table)) {
-      throw new AnalysisException(
-        s"${table.toString} is a temporary VIEW, which does not support ALTER ADD COLUMNS.")
-    } else {
-      val catalogTable = catalog.getTableMetadata(table)
-      if (catalogTable.tableType == VIEW) {
-        throw new AnalysisException(
-          s"${table.toString} is a VIEW, which does not support ALTER ADD COLUMNS.")
+    // If an exception is thrown here we can just assume the table is uncached;
+    // this can happen with Hive tables when the underlying catalog is in-memory.
+    val wasCached = Try(sparkSession.catalog.isCached(table.unquotedString)).getOrElse(false)
+    if (wasCached) {
+      try {
+        sparkSession.catalog.uncacheTable(table.unquotedString)
+      } catch {
+        case NonFatal(e) => log.warn(e.toString, e)
       }
-      // If an exception is thrown here we can just assume the table is uncached;
-      // this can happen with Hive tables when the underlying catalog is in-memory.
-      val wasCached = Try(sparkSession.catalog.isCached(table.unquotedString)).getOrElse(false)
-      if (wasCached) {
-        try {
-          sparkSession.catalog.uncacheTable(table.unquotedString)
-        } catch {
-          case NonFatal(e) => log.warn(e.toString, e)
-        }
-      }
-      // Invalidate the table last, otherwise uncaching the table would load the logical plan
-      // back into the hive metastore cache
-      catalog.refreshTable(table)
-
-      val newSchema = catalogTable.schema.copy(fields = catalogTable.schema.fields ++ columns)
-      catalog.alterTable(catalogTable.copy(schema = newSchema))
     }
+    // Invalidate the table last, otherwise uncaching the table would load the logical plan
+    // back into the hive metastore cache
+    catalog.refreshTable(table)
+
+    val newSchema = catalogTable.schema.copy(fields = catalogTable.schema.fields ++ columns)
+    catalog.alterTable(catalogTable.copy(schema = newSchema))
+
     Seq.empty[Row]
   }
 }
