@@ -1887,15 +1887,7 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case j @ Join(left, right, UsingJoin(joinType, usingCols), condition)
           if left.resolved && right.resolved && j.duplicateResolved =>
-        // Resolve the column names referenced in using clause from both the legs of join.
-        val lCols = usingCols.flatMap(col => left.resolveQuoted(col.name, resolver))
-        val rCols = usingCols.flatMap(col => right.resolveQuoted(col.name, resolver))
-        if ((lCols.length == usingCols.length) && (rCols.length == usingCols.length)) {
-          val joinNames = lCols.map(exp => exp.name)
-          commonNaturalJoinProcessing(left, right, joinType, joinNames, None)
-        } else {
-          j
-        }
+        commonNaturalJoinProcessing(left, right, joinType, usingCols, None)
       case j @ Join(left, right, NaturalJoin(joinType), condition) if j.resolvedExceptNatural =>
         // find common column names from both sides
         val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
@@ -1910,18 +1902,16 @@ class Analyzer(
       joinNames: Seq[String],
       condition: Option[Expression]) = {
     val leftKeys = joinNames.map { keyName =>
-      val joinColumn = left.output.find(attr => resolver(attr.name, keyName))
-      assert(
-        joinColumn.isDefined,
-        s"$keyName should exist in ${left.output.map(_.name).mkString(",")}")
-      joinColumn.get
+      left.output.find(attr => resolver(attr.name, keyName)).getOrElse {
+        throw new AnalysisException(s"USING column `$keyName` can not be resolved with the " +
+          s"left join side, the left output is: [${left.output.map(_.name).mkString(", ")}]")
+      }
     }
     val rightKeys = joinNames.map { keyName =>
-      val joinColumn = right.output.find(attr => resolver(attr.name, keyName))
-      assert(
-        joinColumn.isDefined,
-        s"$keyName should exist in ${right.output.map(_.name).mkString(",")}")
-      joinColumn.get
+      right.output.find(attr => resolver(attr.name, keyName)).getOrElse {
+        throw new AnalysisException(s"USING column `$keyName` can not be resolved with the " +
+          s"right join side, the right output is: [${right.output.map(_.name).mkString(", ")}]")
+      }
     }
     val joinPairs = leftKeys.zip(rightKeys)
 
