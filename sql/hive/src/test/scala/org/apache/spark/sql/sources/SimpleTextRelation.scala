@@ -120,7 +120,7 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
 class SimpleTextOutputWriter(path: String, context: TaskAttemptContext)
   extends OutputWriter {
 
-  private val writer = CodecStreams.getOutputStreamWriter(context, new Path(path))
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
 
   override def write(row: Row): Unit = {
     val serialized = row.toSeq.map { v =>

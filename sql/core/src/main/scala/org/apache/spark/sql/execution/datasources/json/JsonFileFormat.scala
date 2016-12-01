@@ -159,7 +159,7 @@ private[json] class JsonOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter with Logging {
 
-  private val writer = CodecStreams.getOutputStreamWriter(context, new Path(path))
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
 
   // create the Generator without separator inserted between 2 records
   private[this] val gen = new JacksonGenerator(dataSchema, writer, options)

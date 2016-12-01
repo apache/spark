@@ -194,7 +194,7 @@ private[csv] class CsvOutputWriter(
     dataSchema.map(_.dataType).map(makeConverter).toArray
 
   private var printHeader: Boolean = params.headerFlag
-  private val writer = CodecStreams.getOutputStream(context, new Path(path))
+  private val writer = CodecStreams.createOutputStream(context, new Path(path))
   private val csvWriter = new LineCsvWriter(params, dataSchema.fieldNames.toSeq, writer)
 
   private def rowToString(row: InternalRow): Seq[String] = {

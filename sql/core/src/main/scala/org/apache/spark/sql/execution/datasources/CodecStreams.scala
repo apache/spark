@@ -44,11 +44,12 @@ object CodecStreams {
     }
   }
 
-  /** Create a new file and open it for writing.
+  /**
+   * Create a new file and open it for writing.
    * If compression is enabled in the [[JobContext]] the stream will write compressed data to disk.
    * An exception will be thrown if the file already exists.
    */
-  def getOutputStream(context: JobContext, file: Path): OutputStream = {
+  def createOutputStream(context: JobContext, file: Path): OutputStream = {
     val fs = file.getFileSystem(context.getConfiguration)
     val outputStream: OutputStream = fs.create(file, false)
 
@@ -57,11 +58,11 @@ object CodecStreams {
     }
   }
 
-  def getOutputStreamWriter(
+  def createOutputStreamWriter(
       context: JobContext,
       file: Path,
       charset: Charset = StandardCharsets.UTF_8): OutputStreamWriter = {
-    new OutputStreamWriter(getOutputStream(context, file), charset)
+    new OutputStreamWriter(createOutputStream(context, file), charset)
   }
 
   /** Returns the compression codec extension to be used in a file name, e.g. ".gzip"). */

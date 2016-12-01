@@ -128,7 +128,7 @@ class TextOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter {
 
-  private val writer = CodecStreams.getOutputStream(context, new Path(path))
+  private val writer = CodecStreams.createOutputStream(context, new Path(path))
 
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 

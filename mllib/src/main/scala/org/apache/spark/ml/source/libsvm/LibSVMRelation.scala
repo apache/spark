@@ -43,7 +43,7 @@ private[libsvm] class LibSVMOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter {
 
-  private val writer = CodecStreams.getOutputStreamWriter(context, new Path(path))
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
 
   override def write(row: Row): Unit = {
     val label = row.get(0)
