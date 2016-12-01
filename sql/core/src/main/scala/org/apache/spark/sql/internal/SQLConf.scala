@@ -603,6 +603,13 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10L)
 
+  val STREAMING_NO_DATA_REPORT_INTERVAL =
+    SQLConfigBuilder("spark.sql.streaming.noDataReportInterval")
+      .internal()
+      .doc("How long to wait between two progress events when there is no data")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(10000L)
+
   val STREAMING_METRICS_ENABLED =
     SQLConfigBuilder("spark.sql.streaming.metricsEnabled")
       .doc("Whether Dropwizard/Codahale metrics will be reported for active streaming queries.")
@@ -683,6 +690,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def streamingSchemaInference: Boolean = getConf(STREAMING_SCHEMA_INFERENCE)
 
   def streamingPollingDelay: Long = getConf(STREAMING_POLLING_DELAY)
+
+  def streamingNoDataReportInterval: Long = getConf(STREAMING_NO_DATA_REPORT_INTERVAL)
 
   def streamingMetricsEnabled: Boolean = getConf(STREAMING_METRICS_ENABLED)
 

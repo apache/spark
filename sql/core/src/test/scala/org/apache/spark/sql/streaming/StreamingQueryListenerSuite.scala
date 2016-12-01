@@ -31,6 +31,7 @@ import org.scalatest.PrivateMethodTester._
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.util.JsonProtocol
 
@@ -189,6 +190,48 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       .asInstanceOf[StreamingQueryListener.QueryTerminatedEvent]
     assert(queryQueryTerminated.id === newQueryTerminated.id)
     assert(queryQueryTerminated.exception === newQueryTerminated.exception)
+  }
+
+  test("noDataReportInterval") {
+    withSQLConf(SQLConf.STREAMING_NO_DATA_REPORT_INTERVAL.key -> "100ms") {
+      @volatile var progressEventCount = 0
+
+      val listener = new StreamingQueryListener {
+        override def onQueryStarted(event: QueryStartedEvent): Unit = {}
+
+        override def onQueryProgress(event: QueryProgressEvent): Unit = {
+          progressEventCount += 1
+        }
+
+        override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
+      }
+      spark.streams.addListener(listener)
+      try {
+        val clock = new StreamManualClock()
+        val actions = mutable.ArrayBuffer[StreamAction]()
+        actions += StartStream(trigger = ProcessingTime(10), triggerClock = clock)
+        actions += AssertOnQuery { _ =>
+          // It should report at least one progress
+          eventually(timeout(streamingTimeout)) {
+            assert(progressEventCount > 0)
+          }
+          true
+        }
+        for (_ <- 1 to 100) {
+          actions += AdvanceManualClock(10)
+          actions += AssertOnQuery { _ =>
+            // Sleep so that if the config `noDataReportInterval` doesn't work, it has enough time
+            // to report too many events.
+            Thread.sleep(10)
+            true
+          }
+        }
+        testStream(MemoryStream[Int].toDS)(actions: _*)
+        assert(progressEventCount <= 11)
+      } finally {
+        spark.streams.removeListener(listener)
+      }
+    }
   }
 
   testQuietly("ReplayListenerBus should ignore broken event jsons generated in 2.0.0") {
