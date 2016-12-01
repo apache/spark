@@ -1074,7 +1074,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-18653: Dataset.show() should generate correct padding for Unicode Character") {
     // scalastyle:off
-    val ds = Seq(UnicodeCaseClass(1, 1.1, "文字列1")).toDS
+    val ds = Seq(UnicodeCaseClass(1, 1.1, "文字列1"), UnicodeCaseClass(-2, -2.2, "文字列")).toDS
     val leftPadding = ds.showString(1, 99)
     val rightPadding = ds.showString(1, -99)
     checkString(leftPadding,
@@ -1082,6 +1082,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         ||整数|実数|      s|
         |+----+----+-------+
         ||   1| 1.1|文字列1|
+        ||  -2|-2.2| 文字列|
         |+----+----+-------+
         |""".stripMargin)
     checkString(rightPadding,
@@ -1089,6 +1090,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         ||整数|実数|s      |
         |+----+----+-------+
         ||1   |1.1 |文字列1|
+        ||-2  |-2.2|文字列 |
         |+----+----+-------+
         |""".stripMargin)
     // scalastyle:on
