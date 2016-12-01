@@ -255,8 +255,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: getPartitionNames(catalogTable)") {
-      assert(testPartitionCount ==
-        client.getPartitionNames(client.getTable("default", "src_part")).size)
+      val partitionNames = (1 to testPartitionCount).map(key2 => s"key1=1/key2=$key2")
+      assert(partitionNames == client.getPartitionNames(client.getTable("default", "src_part")))
     }
 
     test(s"$version: getPartitions(catalogTable)") {
