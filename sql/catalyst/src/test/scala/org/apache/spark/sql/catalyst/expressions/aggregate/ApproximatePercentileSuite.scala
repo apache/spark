@@ -86,7 +86,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       (headBufferSize + bufferSize) * 2
     }
 
-    val sizePerInputs = Seq(100, 1000, 10000, 100000, 1000000, 10000000).map { count =>
+    Seq(100, 1000, 10000, 100000, 1000000, 10000000).foreach { count =>
       val buffer = new PercentileDigest(relativeError)
       // Worst case, data is linear sorted
       (0 until count).foreach(buffer.add(_))
