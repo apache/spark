@@ -31,6 +31,7 @@ import org.apache.parquet.hadoop.metadata.BlockMetaData
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
@@ -53,9 +54,12 @@ object ParquetDefaultFileSplitter extends ParquetFileSplitter {
 class ParquetMetadataFileSplitter(
     val root: Path,
     val blocks: Seq[BlockMetaData],
-    val schema: StructType)
+    val schema: StructType,
+    val session: SparkSession)
   extends ParquetFileSplitter
   with Logging {
+
+  private val int96AsTimestamp = session.sessionState.conf.isParquetINT96AsTimestamp
 
   private val referencedFiles = blocks.map(bmd => new Path(root, bmd.getPath)).toSet
 
@@ -99,7 +103,7 @@ class ParquetMetadataFileSplitter(
       filters: Seq[Filter],
       blocks: Seq[BlockMetaData]): Seq[BlockMetaData] = {
     val predicates = filters.flatMap {
-      ParquetFilters.createFilter(schema, _)
+      ParquetFilters.createFilter(schema, _, int96AsTimestamp)
     }
     if (predicates.nonEmpty) {
       // Asynchronously build bitmaps
@@ -121,7 +125,7 @@ class ParquetMetadataFileSplitter(
         .filter(filterSets.getIfPresent(_) == null)
         .flatMap { filter =>
           val bitmap = new RoaringBitmap
-          ParquetFilters.createFilter(schema, filter)
+          ParquetFilters.createFilter(schema, filter, int96AsTimestamp)
             .map((filter, _, bitmap))
         }
       var i = 0

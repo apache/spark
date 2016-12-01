@@ -368,14 +368,8 @@ private[parquet] class ParquetSchemaConverter(
       // from Spark 1.5.0, we resort to a timestamp type with 100 ns precision so that we can store
       // a timestamp into a `Long`.  This design decision is subject to change though, for example,
       // we may resort to microsecond precision in the future.
-      //
-      // For Parquet, we plan to write all `TimestampType` value as `TIMESTAMP_MICROS`, but it's
-      // currently not implemented yet because parquet-mr 1.7.0 (the version we're currently using)
-      // hasn't implemented `TIMESTAMP_MICROS` yet.
-      //
-      // TODO Converts `TIMESTAMP_MICROS` once parquet-mr implements that.
       case TimestampType =>
-        Types.primitive(INT96, repetition).named(field.name)
+        Types.primitive(INT64, repetition).as(TIMESTAMP_MICROS).named(field.name)
 
       case BinaryType =>
         Types.primitive(BINARY, repetition).named(field.name)

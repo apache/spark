@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 import java.net.URI
+import java.sql.{Date, Timestamp}
 
 import com.google.common.collect.{HashMultiset, Multiset}
 import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path, RawLocalFileSystem}
@@ -792,6 +793,48 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         val df = spark.read.parquet(path.getCanonicalPath)
         val column: Column = df.col("x").startsWith("1000")
         assert(df.filter(column).count == 1)
+      }
+    }
+  }
+
+  test("Ensure timestamps are filterable") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key -> "false") {
+      withTempPath { path =>
+        implicit val encoder = Encoders.TIMESTAMP
+        val ts = new Timestamp(System.currentTimeMillis())
+        spark.createDataset(Seq(ts)).write.parquet(path.getCanonicalPath)
+
+        val df = spark.read.parquet(path.getCanonicalPath)
+        val columnHit: Column = df.col("value").eqNullSafe(ts)
+        val filterHit = df.filter(columnHit)
+        assert(filterHit.rdd.partitions.length == 1 && filterHit.count == 1)
+
+        val newTs = new Timestamp(System.currentTimeMillis())
+        val columnMiss: Column = df.col("value").eqNullSafe(newTs)
+        val filterMiss = df.filter(columnMiss)
+        assert(filterMiss.rdd.partitions.length == 0 && filterMiss.count == 0)
+      }
+    }
+  }
+
+  test("Ensure dates are filterable") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key -> "false") {
+      withTempPath { path =>
+        implicit val encoder = Encoders.DATE
+        val date = new Date(2016, 1, 1)
+        spark.createDataset(Seq(date)).write.parquet(path.getCanonicalPath)
+
+        val df = spark.read.parquet(path.getCanonicalPath)
+        val columnHit: Column = df.col("value").eqNullSafe(date)
+        val filterHit = df.filter(columnHit)
+        assert(filterHit.rdd.partitions.length == 1 && filterHit.count == 1)
+
+        val newDate = new Date(2015, 1, 1)
+        val columnMiss: Column = df.col("value").eqNullSafe(newDate)
+        val filterMiss = df.filter(columnMiss)
+        assert(filterMiss.rdd.partitions.length == 0 && filterMiss.count == 0)
       }
     }
   }

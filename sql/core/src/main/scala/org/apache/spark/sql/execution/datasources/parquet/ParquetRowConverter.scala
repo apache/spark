@@ -252,6 +252,9 @@ private[parquet] class ParquetRowConverter(
       case StringType =>
         new ParquetStringConverter(updater)
 
+      case _: TimestampType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 =>
+        new ParquetPrimitiveConverter(updater)
+
       case TimestampType =>
         // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
         new ParquetPrimitiveConverter(updater) {
