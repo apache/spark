@@ -480,7 +480,6 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     assert(cached.batchStats.value === expectedAnswer.size * INT.defaultSize)
   }
 
-<<<<<<< d3dd78fee6464d6c97485a00cda984d3ed67c07e
   test("access primitive-type columns in CachedBatch without whole stage codegen") {
     // whole stage codegen is not applied to a row with more than WHOLESTAGE_MAX_NUM_FIELDS fields
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "2") {
