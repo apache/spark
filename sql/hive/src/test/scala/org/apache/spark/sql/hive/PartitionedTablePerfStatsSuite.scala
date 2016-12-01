@@ -96,7 +96,6 @@ class PartitionedTablePerfStatsSuite
 
     if (clearMetricsBeforeCreate) {
       HiveCatalogMetrics.reset()
-      println("CLEARED___________________")
     }
 
     spark.sql(s"""
