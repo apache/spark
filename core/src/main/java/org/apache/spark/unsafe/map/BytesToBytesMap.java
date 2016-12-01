@@ -170,7 +170,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   private long peakMemoryUsedBytes = 0L;
 
-  private int initialCapacity;
+  final private int initialCapacity;
 
   private final BlockManager blockManager;
   private final SerializerManager serializerManager;
