@@ -814,10 +814,12 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     ssc = new StreamingContext(conf, Milliseconds(100))
     val input = ssc.receiverStream(new TestReceiver)
     val latch = new CountDownLatch(1)
+    @volatile var stopping = false
     input.count().foreachRDD { rdd =>
       // Make sure we can read from BlockRDD
-      if (rdd.collect().headOption.getOrElse(0L) > 0) {
+      if (rdd.collect().headOption.getOrElse(0L) > 0 && !stopping) {
         // Stop StreamingContext to unblock "awaitTerminationOrTimeout"
+        stopping = true
         new Thread() {
           setDaemon(true)
           override def run(): Unit = {
