@@ -124,9 +124,8 @@ if [ "$SPARK_NICENESS" = "" ]; then
 fi
 
 execute_command() {
-  local command="$@"
   if [ -z ${SPARK_NO_DAEMONIZE+set} ]; then
-      nohup -- $command >> $log 2>&1 < /dev/null &
+      nohup -- "$@" >> $log 2>&1 < /dev/null &
       newpid="$!"
 
       echo "$newpid" > "$pid"
@@ -143,12 +142,12 @@ execute_command() {
       sleep 2
       # Check if the process has died; in that case we'll tail the log so the user can see
       if [[ ! $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
-        echo "failed to launch $command:"
+        echo "failed to launch: $@"
         tail -2 "$log" | sed 's/^/  /'
         echo "full log in $log"
       fi
   else
-      $command
+      "$@"
   fi
 }
 
@@ -176,11 +175,11 @@ run_command() {
 
   case "$mode" in
     (class)
-      execute_command nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-class $command $@
+      execute_command nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-class "$command" "$@"
       ;;
 
     (submit)
-      execute_command nice -n "$SPARK_NICENESS" bash "${SPARK_HOME}"/bin/spark-submit --class $command $@
+      execute_command nice -n "$SPARK_NICENESS" bash "${SPARK_HOME}"/bin/spark-submit --class "$command" "$@"
       ;;
 
     (*)
