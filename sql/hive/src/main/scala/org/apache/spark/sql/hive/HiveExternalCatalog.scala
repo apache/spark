@@ -936,6 +936,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val actualPartColNames = getTable(db, table).partitionColumnNames
     val clientPartitionNames =
       client.getPartitionNames(db, table, partialSpec.map(lowerCasePartitionSpec))
+    // No need to sort the results, because according to the Hive wiki Hive sorts them for us
     clientPartitionNames.map { partName =>
       val partSpec = PartitioningUtils.parsePathFragmentAsSeq(partName)
       partSpec.map { case (partName, partValue) =>

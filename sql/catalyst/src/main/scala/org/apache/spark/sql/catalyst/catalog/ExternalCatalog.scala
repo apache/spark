@@ -196,6 +196,8 @@ abstract class ExternalCatalog {
    * `p1=v1/p2=v2/p3=v3`. Each partition column name and value is an escaped path name, and can be
    * decoded with the `ExternalCatalogUtils.unescapePathName` method.
    *
+   * The returned sequence is sorted as strings.
+   *
    * A partial partition spec may optionally be provided to filter the partitions returned, as
    * described in the `listPartitions` method.
    *

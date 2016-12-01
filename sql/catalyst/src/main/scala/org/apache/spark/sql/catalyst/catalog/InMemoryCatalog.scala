@@ -499,7 +499,7 @@ class InMemoryCatalog(
       partitionColumnNames.map { name =>
         escapePathName(name) + "=" + escapePathName(partition.spec(name))
       }.mkString("/")
-    }
+    }.sorted
   }
 
   override def listPartitions(
