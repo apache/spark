@@ -172,7 +172,7 @@ case class StaticInvoke(
  * @param propagateNull When true, and any of the arguments is null, null will be returned instead
  *                      of calling the function.
  * @param returnNullable When false, indicating the invoked method will always return
- *                      non-null value.
+ *                       non-null value.
  */
 case class Invoke(
     targetObject: Expression,

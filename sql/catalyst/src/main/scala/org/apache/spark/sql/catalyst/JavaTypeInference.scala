@@ -403,7 +403,7 @@ object JavaTypeInference {
             serializerFor(_, keyType),
             ObjectType(valueType.getRawType),
             serializerFor(_, valueType),
-            true
+            valueNullable = true
           )
 
         case other =>
