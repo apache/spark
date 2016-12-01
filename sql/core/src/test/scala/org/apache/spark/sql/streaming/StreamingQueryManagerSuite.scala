@@ -62,7 +62,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       assert(spark.streams.get(q1.id).eq(q1))
       assert(spark.streams.get(q2.id).eq(q2))
       assert(spark.streams.get(q3.id).eq(q3))
-      assert(spark.streams.get(-1) === null) // non-existent id
+      assert(spark.streams.get(java.util.UUID.randomUUID()) === null) // non-existent id
       q1.stop()
 
       assert(spark.streams.active.toSet === Set(q2, q3))

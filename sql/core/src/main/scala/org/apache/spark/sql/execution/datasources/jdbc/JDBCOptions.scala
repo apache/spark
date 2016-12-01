@@ -76,9 +76,6 @@ class JDBCOptions(
 
   // the number of partitions
   val numPartitions = parameters.get(JDBC_NUM_PARTITIONS).map(_.toInt)
-  require(numPartitions.isEmpty || numPartitions.get > 0,
-    s"Invalid value `${numPartitions.get}` for parameter `$JDBC_NUM_PARTITIONS`. " +
-      "The minimum value is 1.")
 
   // ------------------------------------------------------------
   // Optional parameters only for reading

@@ -712,7 +712,6 @@ setMethod("predict", signature(object = "KMeansModel"),
 #'                        of L1 and L2. Default is 0.0 which is an L2 penalty.
 #' @param maxIter maximum iteration number.
 #' @param tol convergence tolerance of iterations.
-#' @param fitIntercept whether to fit an intercept term.
 #' @param family the name of family which is a description of the label distribution to be used in the model.
 #'               Supported options:
 #'                 \itemize{
@@ -747,11 +746,11 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' \dontrun{
 #' sparkR.session()
 #' # binary logistic regression
-#' label <- c(1.0, 1.0, 1.0, 0.0, 0.0)
-#' feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
-#' binary_data <- as.data.frame(cbind(label, feature))
+#' label <- c(0.0, 0.0, 0.0, 1.0, 1.0)
+#' features <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
+#' binary_data <- as.data.frame(cbind(label, features))
 #' binary_df <- createDataFrame(binary_data)
-#' blr_model <- spark.logit(binary_df, label ~ feature, thresholds = 1.0)
+#' blr_model <- spark.logit(binary_df, label ~ features, thresholds = 1.0)
 #' blr_predict <- collect(select(predict(blr_model, binary_df), "prediction"))
 #'
 #' # summary of binary logistic regression
@@ -783,7 +782,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @note spark.logit since 2.1.0
 setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, elasticNetParam = 0.0, maxIter = 100,
-                   tol = 1E-6, fitIntercept = TRUE, family = "auto", standardization = TRUE,
+                   tol = 1E-6, family = "auto", standardization = TRUE,
                    thresholds = 0.5, weightCol = NULL, aggregationDepth = 2,
                    probabilityCol = "probability") {
             formula <- paste(deparse(formula), collapse = "")
@@ -795,10 +794,10 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
             jobj <- callJStatic("org.apache.spark.ml.r.LogisticRegressionWrapper", "fit",
                                 data@sdf, formula, as.numeric(regParam),
                                 as.numeric(elasticNetParam), as.integer(maxIter),
-                                as.numeric(tol), as.logical(fitIntercept),
-                                as.character(family), as.logical(standardization),
-                                as.array(thresholds), as.character(weightCol),
-                                as.integer(aggregationDepth), as.character(probabilityCol))
+                                as.numeric(tol), as.character(family),
+                                as.logical(standardization), as.array(thresholds),
+                                as.character(weightCol), as.integer(aggregationDepth),
+                                as.character(probabilityCol))
             new("LogisticRegressionModel", jobj = jobj)
           })
 
