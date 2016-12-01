@@ -91,7 +91,7 @@ private[csv] class LineCsvWriter(
       writer.writeHeaders()
     }
 
-    writer.writeRow(row.toArray: _*)
+    writer.writeRow(row: _*)
   }
 
   def close(): Unit = {
