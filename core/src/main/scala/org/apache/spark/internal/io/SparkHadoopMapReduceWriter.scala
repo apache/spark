@@ -154,6 +154,7 @@ object SparkHadoopMapReduceWriter extends Logging {
     // Write all rows in RDD partition.
     try {
       val ret = Utils.tryWithSafeFinallyAndFailureCallbacks {
+        // Write rows out, release resource and commit the task.
         while (iterator.hasNext) {
           val pair = iterator.next()
           writer.write(pair._1, pair._2)
@@ -169,6 +170,7 @@ object SparkHadoopMapReduceWriter extends Logging {
         }
         committer.commitTask(taskContext)
       }(catchBlock = {
+        // If there is an error, release resource and then abort the task.
         try {
           if (writer != null) {
             writer.close(taskContext)
