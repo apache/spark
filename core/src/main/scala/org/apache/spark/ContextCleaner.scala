@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.lang.ref.{ReferenceQueue, WeakReference}
-import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, ScheduledExecutorService, TimeUnit}
 
 import scala.collection.JavaConverters._
 
@@ -58,7 +58,8 @@ private class CleanupTaskWeakReference(
  */
 private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
-  private val referenceBuffer = new ConcurrentLinkedQueue[CleanupTaskWeakReference]()
+  private val referenceBuffer =
+    new ConcurrentHashMap[CleanupTaskWeakReference, java.lang.Boolean]()
 
   private val referenceQueue = new ReferenceQueue[AnyRef]
 
@@ -165,7 +166,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /** Register an object for cleanup. */
   private def registerForCleanup(objectForCleanup: AnyRef, task: CleanupTask): Unit = {
-    referenceBuffer.add(new CleanupTaskWeakReference(task, objectForCleanup, referenceQueue))
+    referenceBuffer.put(new CleanupTaskWeakReference(task, objectForCleanup,
+      referenceQueue), java.lang.Boolean.TRUE)
   }
 
   /** Keep cleaning RDD, shuffle, and broadcast state. */
