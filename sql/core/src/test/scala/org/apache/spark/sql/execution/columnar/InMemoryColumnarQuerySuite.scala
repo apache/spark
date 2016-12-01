@@ -315,7 +315,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val allColumns = fields.map(_.name).mkString(",")
     val schema = StructType(fields)
 
-    // Create an RDD for the schema
+    // Create a RDD for the schema
     val rdd =
       sparkContext.parallelize((1 to 10000), 10).map { i =>
         Row(
