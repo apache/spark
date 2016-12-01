@@ -71,6 +71,10 @@ class JavaParams(JavaWrapper, Params):
 
     __metaclass__ = ABCMeta
 
+    def __del__(self):
+        if SparkContext._active_spark_context:
+            SparkContext._active_spark_context._gateway.detach(self._java_obj)
+
     def _make_java_param_pair(self, param, value):
         """
         Makes a Java parm pair.
@@ -180,6 +184,25 @@ class JavaParams(JavaWrapper, Params):
                                       % stage_name)
         return py_stage
 
+    def copy(self, extra=None):
+        """
+        Creates a copy of this instance with the same uid and some
+        extra params. This implementation first calls Params.copy and
+        then make a copy of the companion Java pipeline component with
+        extra params. So both the Python wrapper and the Java pipeline
+        component get copied.
+
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        if extra is None:
+            extra = dict()
+        that = super(JavaParams, self).copy(extra)
+        if self._java_obj is not None:
+            that._java_obj = self._java_obj.copy(self._empty_java_param_map())
+            that._transfer_params_to_java()
+        return that
+
 
 @inherit_doc
 class JavaEstimator(JavaParams, Estimator):
@@ -256,21 +279,3 @@ class JavaModel(JavaTransformer, Model):
         super(JavaModel, self).__init__(java_model)
         if java_model is not None:
             self._resetUid(java_model.uid())
-
-    def copy(self, extra=None):
-        """
-        Creates a copy of this instance with the same uid and some
-        extra params. This implementation first calls Params.copy and
-        then make a copy of the companion Java model with extra params.
-        So both the Python wrapper and the Java model get copied.
-
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
-        """
-        if extra is None:
-            extra = dict()
-        that = super(JavaModel, self).copy(extra)
-        if self._java_obj is not None:
-            that._java_obj = self._java_obj.copy(self._empty_java_param_map())
-            that._transfer_params_to_java()
-        return that
