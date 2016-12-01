@@ -300,6 +300,11 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   encodeDecodeTest(
     ReferenceValueClass(ReferenceValueClass.Container(1)), "reference value class")
 
+  encodeDecodeTest(Option(31), "option of int")
+  encodeDecodeTest(Option.empty[Int], "empty option of int")
+  encodeDecodeTest(Option("abc"), "option of string")
+  encodeDecodeTest(Option.empty[String], "empty option of string")
+
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
   test("nullable of encoder schema") {
@@ -340,7 +345,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
 
   test("nullable of encoder serializer") {
     def checkNullable[T: Encoder](nullable: Boolean): Unit = {
-      assert(encoderFor[T].serializer.map(_.nullable) === nullable)
+      assert(encoderFor[T].serializer.forall(_.nullable === nullable))
     }
 
     // test for flat encoders
