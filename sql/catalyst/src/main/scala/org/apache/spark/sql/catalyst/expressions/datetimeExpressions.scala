@@ -1076,13 +1076,38 @@ case class ToDate(dateExp: Expression, format: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    left.dataType match {
-      case DateType =>
-        null
-      case TimestampType =>
-        null
-      case StringType =>
-        null
+    if (formatter == null) {
+      ExprCode("", "true", "(UTF8String) null")
+      // I see conflicting points at which I put this, this is confusing to me
+    } else {
+      left.dataType match {
+        case DateType =>
+          ExprCode("", "true", "(UTF8String) null")
+        // fix me!
+        case TimestampType =>
+          ExprCode("", "true", "(UTF8String) null")
+        // Fix me!
+        case StringType if right.foldable =>
+          val sdf = classOf[SimpleDateFormat].getName
+          // fix me!
+          ExprCode("", "true", "(UTF8String) null")
+        case StringType =>
+          val sdf = classOf[SimpleDateFormat].getName
+          val formatterName = ctx.addReferenceObj("formatter", formatter, sdf)
+          val eval1 = left.genCode(ctx)
+          ev.copy(code =
+            s"""
+            ${eval1.code}
+            boolean ${ev.isNull} = ${eval1.isNull};
+            ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+            if (!${ev.isNull}) {
+              try {
+                ${ev.value} = $formatterName.parse(${eval1.value}.toString()).getTime() / 1000L;
+              } catch (java.text.ParseException e) {
+                ${ev.isNull} = true;
+              }
+            }""")
+      }
     }
   }
 
