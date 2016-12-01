@@ -72,8 +72,11 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
     primitiveAndPrimitiveArrayClassTags.contains(ct) || ct == stringClassTag
   }
 
-  def getSerializer(ct: ClassTag[_]): Serializer = {
-    if (canUseKryo(ct)) {
+  // SPARK-18617: As feature in SPARK-13990 can not be applied to Spark Streaming now. The worst
+  // result is streaming job based on `Receiver` mode can not run on Spark 2.x properly. It may be
+  // a rational choice to close `kryo auto pick` feature for streaming in the first step.
+  def getSerializer(ct: ClassTag[_], autoPick: Boolean): Serializer = {
+    if (autoPick && canUseKryo(ct)) {
       kryoSerializer
     } else {
       defaultSerializer
@@ -122,7 +125,8 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
       outputStream: OutputStream,
       values: Iterator[T]): Unit = {
     val byteStream = new BufferedOutputStream(outputStream)
-    val ser = getSerializer(implicitly[ClassTag[T]]).newInstance()
+    val autoPick = !blockId.isInstanceOf[StreamBlockId]
+    val ser = getSerializer(implicitly[ClassTag[T]], autoPick).newInstance()
     ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
   }
 
@@ -138,7 +142,8 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
       classTag: ClassTag[_]): ChunkedByteBuffer = {
     val bbos = new ChunkedByteBufferOutputStream(1024 * 1024 * 4, ByteBuffer.allocate)
     val byteStream = new BufferedOutputStream(bbos)
-    val ser = getSerializer(classTag).newInstance()
+    val autoPick = !blockId.isInstanceOf[StreamBlockId]
+    val ser = getSerializer(classTag, autoPick).newInstance()
     ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
     bbos.toChunkedByteBuffer
   }
@@ -152,7 +157,8 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
       inputStream: InputStream)
       (classTag: ClassTag[T]): Iterator[T] = {
     val stream = new BufferedInputStream(inputStream)
-    getSerializer(classTag)
+    val autoPick = !blockId.isInstanceOf[StreamBlockId]
+    getSerializer(classTag, autoPick)
       .newInstance()
       .deserializeStream(wrapForCompression(blockId, stream))
       .asIterator.asInstanceOf[Iterator[T]]

@@ -31,7 +31,7 @@ import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
-import org.apache.spark.storage.{BlockId, BlockInfoManager, StorageLevel}
+import org.apache.spark.storage.{BlockId, BlockInfoManager, StorageLevel, StreamBlockId}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
@@ -332,7 +332,8 @@ private[spark] class MemoryStore(
     val bbos = new ChunkedByteBufferOutputStream(initialMemoryThreshold.toInt, allocator)
     redirectableStream.setOutputStream(bbos)
     val serializationStream: SerializationStream = {
-      val ser = serializerManager.getSerializer(classTag).newInstance()
+      val autoPick = !blockId.isInstanceOf[StreamBlockId]
+      val ser = serializerManager.getSerializer(classTag, autoPick).newInstance()
       ser.serializeStream(serializerManager.wrapForCompression(blockId, redirectableStream))
     }
 
