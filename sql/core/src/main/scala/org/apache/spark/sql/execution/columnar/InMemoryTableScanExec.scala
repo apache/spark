@@ -53,7 +53,7 @@ case class InMemoryTableScanExec(
 
           // Do partition batch pruning if enabled
           cachedColumnarBatchIterator.filter { cachedColumnarBatch =>
-            if (!partitionFilter(cachedColumnarBatch.stats)) {
+            if (!partitionFilter.eval(cachedColumnarBatch.stats)) {
               def statsString: String = schemaIndex.map {
                 case (a, i) =>
                   val value = cachedColumnarBatch.stats.get(i, a.dataType)

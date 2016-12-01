@@ -34,18 +34,24 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   setupTestData()
 
-  private def cachePrimitiveTest(data: DataFrame, dataType: String) {
+  def cachePrimitiveTest(data: DataFrame, dataType: String) {
     data.createOrReplaceTempView(s"testData$dataType")
-    val storageLevel = MEMORY_ONLY
-    val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
-    val inMemoryRelation = InMemoryRelation(useCompression = true, 5, storageLevel, plan, None)
+    val useColumnBatches = true
+    withSQLConf(SQLConf.CACHE_CODEGEN.key -> useColumnBatches.toString) {
+      Seq(MEMORY_ONLY, MEMORY_ONLY_SER).map { storageLevel =>
+        val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
+        val inMemoryRelation = InMemoryRelation(useCompression = false, 5, storageLevel, plan, None)
 
-    assert(inMemoryRelation.cachedColumnBuffers.getStorageLevel == storageLevel)
-    inMemoryRelation.cachedColumnBuffers.collect().head match {
-      case _: CachedBatch =>
-      case other => fail(s"Unexpected cached batch type: ${other.getClass.getName}")
+        assert(inMemoryRelation.useColumnarBatches == useColumnBatches)
+        assert(inMemoryRelation.cachedColumnBuffers.getStorageLevel == storageLevel)
+        inMemoryRelation.cachedColumnBuffers.collect().head match {
+          case _: CachedColumnarBatch => assert(useColumnBatches)
+          case _: CachedBatchBytes => assert(!useColumnBatches)
+          case other => fail(s"Unexpected cached batch type: ${other.getClass.getName}")
+        }
+        checkAnswer(inMemoryRelation, data.collect().toSeq)
+      }
     }
-    checkAnswer(inMemoryRelation, data.collect().toSeq)
   }
 
   private def testPrimitiveType(nullability: Boolean): Unit = {
@@ -71,7 +77,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     cachePrimitiveTest(spark.createDataFrame(rdd, schema), "primitivesDateTimeStamp")
   }
 
-  private def tesNonPrimitiveType(nullability: Boolean): Unit = {
+  private def testNonPrimitiveType(nullability: Boolean): Unit = {
     val struct = StructType(StructField("f1", FloatType, false) ::
       StructField("f2", ArrayType(BooleanType), true) :: Nil)
     val schema = StructType(Seq(
@@ -105,31 +111,11 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val rddNull = spark.sparkContext.parallelize((1 to 10).map(i => Row(null)))
     cachePrimitiveTest(spark.createDataFrame(rddNull, schemaNull), "Null")
 
-    tesNonPrimitiveType(true)
+    testNonPrimitiveType(true)
   }
 
   test("non-primitive type with nullability:false") {
-      tesNonPrimitiveType(false)
-  }
-
-  def cachePrimitiveTest(data: DataFrame, dataType: String) {
-    data.createOrReplaceTempView(s"testData$dataType")
-    val useColumnBatches = true
-    withSQLConf(SQLConf.CACHE_CODEGEN.key -> useColumnBatches.toString) {
-      Seq(MEMORY_ONLY, MEMORY_ONLY_SER).map { storageLevel =>
-        val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
-        val inMemoryRelation = InMemoryRelation(useCompression = false, 5, storageLevel, plan, None)
-
-        assert(inMemoryRelation.useColumnarBatches == useColumnBatches)
-        assert(inMemoryRelation.cachedColumnBuffers.getStorageLevel == storageLevel)
-        inMemoryRelation.cachedColumnBuffers.collect().head match {
-          case _: CachedColumnarBatch => assert(useColumnBatches)
-          case _: CachedBatchBytes => assert(!useColumnBatches)
-          case other => fail(s"Unexpected cached batch type: ${other.getClass.getName}")
-        }
-        checkAnswer(inMemoryRelation, data.collect().toSeq)
-      }
-    }
+    testNonPrimitiveType(false)
   }
 
   test("all data type w && w/o nullability") {
