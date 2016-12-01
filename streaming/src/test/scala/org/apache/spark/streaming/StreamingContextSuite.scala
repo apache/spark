@@ -18,6 +18,7 @@
 package org.apache.spark.streaming
 
 import java.io.{File, NotSerializableException}
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
@@ -811,7 +812,8 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     // other one. Then Spark jobs need to fetch remote blocks and it will trigger SPARK-18560.
     val conf = new SparkConf().setMaster("local-cluster[2,1,1024]").setAppName(appName)
     ssc = new StreamingContext(conf, Milliseconds(100))
-    val input = ssc.receiverStream(new FakeByteArrayReceiver)
+    val input = ssc.receiverStream(new TestReceiver)
+    val latch = new CountDownLatch(1)
     input.count().foreachRDD { rdd =>
       // Make sure we can read from BlockRDD
       if (rdd.collect().headOption.getOrElse(0L) > 0) {
@@ -820,12 +822,17 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
           setDaemon(true)
           override def run(): Unit = {
             ssc.stop(stopSparkContext = true, stopGracefully = false)
+            latch.countDown()
           }
         }.start()
       }
     }
     ssc.start()
     ssc.awaitTerminationOrTimeout(60000)
+    // Wait until `ssc.top` returns. Otherwise, we may finish this test too fast and leak an active
+    // SparkContext. Note: the stop codes in `after` will just do nothing if `ssc.stop` in this test
+    // is running.
+    assert(latch.await(60, TimeUnit.SECONDS))
   }
 
   def addInputStream(s: StreamingContext): DStream[Int] = {
@@ -889,31 +896,6 @@ class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging 
 
 object TestReceiver {
   val counter = new AtomicInteger(1)
-}
-
-class FakeByteArrayReceiver extends Receiver[Array[Byte]](StorageLevel.MEMORY_ONLY) with Logging {
-
-  val data: Array[Byte] = "test".getBytes
-  var receivingThreadOption: Option[Thread] = None
-
-  override def onStart(): Unit = {
-    val thread = new Thread() {
-      override def run() {
-        logInfo("Receiving started")
-        while (!isStopped) {
-          store(data)
-        }
-        logInfo("Receiving stopped")
-      }
-    }
-    receivingThreadOption = Some(thread)
-    thread.start()
-  }
-
-  override def onStop(): Unit = {
-    // no clean to be done, the receiving thread should stop on it own, so just wait for it.
-    receivingThreadOption.foreach(_.join())
-  }
 }
 
 /** Custom receiver for testing whether a slow receiver can be shutdown gracefully or not */
