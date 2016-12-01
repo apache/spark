@@ -66,7 +66,7 @@ abstract class LDAModel private[clustering] extends Saveable {
    *
    * This is the parameter to a symmetric Dirichlet distribution.
    *
-   * Note: The topics' distributions over terms are called "beta" in the original LDA paper
+   * @note The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    */
   @Since("1.5.0")
@@ -171,7 +171,7 @@ abstract class LDAModel private[clustering] extends Saveable {
    *                   The term count vectors are "bags of words" with a fixed-size vocabulary
    *                   (where the vocabulary size is the length of the vector).
    *                   This must use the same vocabulary (ordering of term counts) as in training.
-   *                   Document IDs must be unique and >= 0.
+   *                   Document IDs must be unique and greater than or equal to 0.
    * @return  Estimated topic distribution for each document.
    *          The returned RDD may be zipped with the given RDD, where each returned vector
    *          is a multinomial distribution over topics.
@@ -392,7 +392,7 @@ class LocalLDAModel private[spark] (
    * literature).  Returns a vector of zeros for an empty document.
    *
    * Note this means to allow quick query for single document. For batch documents, please refer
-   * to [[topicDistributions()]] to avoid overhead.
+   * to `topicDistributions()` to avoid overhead.
    *
    * @param document document to predict topic mixture distributions for
    * @return topic mixture distribution for the document

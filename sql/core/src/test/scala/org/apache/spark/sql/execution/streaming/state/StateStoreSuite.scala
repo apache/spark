@@ -468,6 +468,69 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(e.getCause.getMessage.contains("Failed to rename"))
   }
 
+  test("SPARK-18416: do not create temp delta file until the store is updated") {
+    val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
+    val storeId = StateStoreId(dir, 0, 0)
+    val storeConf = StateStoreConf.empty
+    val hadoopConf = new Configuration()
+    val deltaFileDir = new File(s"$dir/0/0/")
+
+    def numTempFiles: Int = {
+      if (deltaFileDir.exists) {
+        deltaFileDir.listFiles.map(_.getName).count(n => n.contains("temp") && !n.startsWith("."))
+      } else 0
+    }
+
+    def numDeltaFiles: Int = {
+      if (deltaFileDir.exists) {
+        deltaFileDir.listFiles.map(_.getName).count(n => n.contains(".delta") && !n.startsWith("."))
+      } else 0
+    }
+
+    def shouldNotCreateTempFile[T](body: => T): T = {
+      val before = numTempFiles
+      val result = body
+      assert(numTempFiles === before)
+      result
+    }
+
+    // Getting the store should not create temp file
+    val store0 = shouldNotCreateTempFile {
+      StateStore.get(storeId, keySchema, valueSchema, 0, storeConf, hadoopConf)
+    }
+
+    // Put should create a temp file
+    put(store0, "a", 1)
+    assert(numTempFiles === 1)
+    assert(numDeltaFiles === 0)
+
+    // Commit should remove temp file and create a delta file
+    store0.commit()
+    assert(numTempFiles === 0)
+    assert(numDeltaFiles === 1)
+
+    // Remove should create a temp file
+    val store1 = shouldNotCreateTempFile {
+      StateStore.get(storeId, keySchema, valueSchema, 1, storeConf, hadoopConf)
+    }
+    remove(store1, _ == "a")
+    assert(numTempFiles === 1)
+    assert(numDeltaFiles === 1)
+
+    // Commit should remove temp file and create a delta file
+    store1.commit()
+    assert(numTempFiles === 0)
+    assert(numDeltaFiles === 2)
+
+    // Commit without any updates should create a delta file
+    val store2 = shouldNotCreateTempFile {
+      StateStore.get(storeId, keySchema, valueSchema, 2, storeConf, hadoopConf)
+    }
+    store2.commit()
+    assert(numTempFiles === 0)
+    assert(numDeltaFiles === 3)
+  }
+
   def getDataFromFiles(
       provider: HDFSBackedStateStoreProvider,
     version: Int = -1): Set[(String, Int)] = {
@@ -605,11 +668,11 @@ private[state] object StateStoreSuite {
   }
 
   def updatesToSet(iterator: Iterator[StoreUpdate]): Set[TestUpdate] = {
-    iterator.map { _ match {
+    iterator.map {
       case ValueAdded(key, value) => Added(rowToString(key), rowToInt(value))
       case ValueUpdated(key, value) => Updated(rowToString(key), rowToInt(value))
-      case KeyRemoved(key) => Removed(rowToString(key))
-    }}.toSet
+      case ValueRemoved(key, _) => Removed(rowToString(key))
+    }.toSet
   }
 }
 

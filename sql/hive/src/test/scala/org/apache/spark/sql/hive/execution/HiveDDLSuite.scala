@@ -147,6 +147,51 @@ class HiveDDLSuite
     }
   }
 
+  test("create Hive-serde table and view with unicode columns and comment") {
+    val catalog = spark.sessionState.catalog
+    val tabName = "tab1"
+    val viewName = "view1"
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    val colName1 = "和"
+    val colName2 = "尼"
+    val comment = "庙"
+    // scalastyle:on
+    withTable(tabName) {
+      sql(s"""
+             |CREATE TABLE $tabName(`$colName1` int COMMENT '$comment')
+             |COMMENT '$comment'
+             |PARTITIONED BY (`$colName2` int)
+           """.stripMargin)
+      sql(s"INSERT OVERWRITE TABLE $tabName partition (`$colName2`=2) SELECT 1")
+      withView(viewName) {
+        sql(
+          s"""
+             |CREATE VIEW $viewName(`$colName1` COMMENT '$comment', `$colName2`)
+             |COMMENT '$comment'
+             |AS SELECT `$colName1`, `$colName2` FROM $tabName
+           """.stripMargin)
+        val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+        val viewMetadata = catalog.getTableMetadata(TableIdentifier(viewName, Some("default")))
+        assert(tableMetadata.comment == Option(comment))
+        assert(viewMetadata.comment == Option(comment))
+
+        assert(tableMetadata.schema.fields.length == 2 && viewMetadata.schema.fields.length == 2)
+        val column1InTable = tableMetadata.schema.fields.head
+        val column1InView = viewMetadata.schema.fields.head
+        assert(column1InTable.name == colName1 && column1InView.name == colName1)
+        assert(column1InTable.getComment() == Option(comment))
+        assert(column1InView.getComment() == Option(comment))
+
+        assert(tableMetadata.schema.fields(1).name == colName2 &&
+          viewMetadata.schema.fields(1).name == colName2)
+
+        checkAnswer(sql(s"SELECT `$colName1`, `$colName2` FROM $tabName"), Row(1, 2) :: Nil)
+        checkAnswer(sql(s"SELECT `$colName1`, `$colName2` FROM $viewName"), Row(1, 2) :: Nil)
+      }
+    }
+  }
+
   test("create table: partition column names exist in table definition") {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int) PARTITIONED BY (a string)")
@@ -619,53 +664,46 @@ class HiveDDLSuite
   }
 
   private def dropDatabase(cascade: Boolean, tableExists: Boolean): Unit = {
-    withTempPath { tmpDir =>
-      val path = tmpDir.toString
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val dbName = "db1"
-        val fs = new Path(path).getFileSystem(spark.sessionState.newHadoopConf())
-        val dbPath = new Path(path)
-        // the database directory does not exist
-        assert(!fs.exists(dbPath))
+    val dbName = "db1"
+    val dbPath = new Path(spark.sessionState.conf.warehousePath)
+    val fs = dbPath.getFileSystem(spark.sessionState.newHadoopConf())
 
-        sql(s"CREATE DATABASE $dbName")
-        val catalog = spark.sessionState.catalog
-        val expectedDBLocation = "file:" + appendTrailingSlash(dbPath.toString) + s"$dbName.db"
-        val db1 = catalog.getDatabaseMetadata(dbName)
-        assert(db1 == CatalogDatabase(
-          dbName,
-          "",
-          expectedDBLocation,
-          Map.empty))
-        // the database directory was created
-        assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
-        sql(s"USE $dbName")
+    sql(s"CREATE DATABASE $dbName")
+    val catalog = spark.sessionState.catalog
+    val expectedDBLocation = "file:" + appendTrailingSlash(dbPath.toString) + s"$dbName.db"
+    val db1 = catalog.getDatabaseMetadata(dbName)
+    assert(db1 == CatalogDatabase(
+      dbName,
+      "",
+      expectedDBLocation,
+      Map.empty))
+    // the database directory was created
+    assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
+    sql(s"USE $dbName")
 
-        val tabName = "tab1"
-        assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
-        sql(s"CREATE TABLE $tabName as SELECT 1")
-        assert(tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
+    val tabName = "tab1"
+    assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
+    sql(s"CREATE TABLE $tabName as SELECT 1")
+    assert(tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
 
-        if (!tableExists) {
-          sql(s"DROP TABLE $tabName")
-          assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
-        }
+    if (!tableExists) {
+      sql(s"DROP TABLE $tabName")
+      assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
+    }
 
-        sql(s"USE default")
-        val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
-        if (tableExists && !cascade) {
-          val message = intercept[AnalysisException] {
-            sql(sqlDropDatabase)
-          }.getMessage
-          assert(message.contains(s"Database $dbName is not empty. One or more tables exist."))
-          // the database directory was not removed
-          assert(fs.exists(new Path(expectedDBLocation)))
-        } else {
-          sql(sqlDropDatabase)
-          // the database directory was removed and the inclusive table directories are also removed
-          assert(!fs.exists(new Path(expectedDBLocation)))
-        }
-      }
+    sql(s"USE default")
+    val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
+    if (tableExists && !cascade) {
+      val message = intercept[AnalysisException] {
+        sql(sqlDropDatabase)
+      }.getMessage
+      assert(message.contains(s"Database $dbName is not empty. One or more tables exist."))
+      // the database directory was not removed
+      assert(fs.exists(new Path(expectedDBLocation)))
+    } else {
+      sql(sqlDropDatabase)
+      // the database directory was removed and the inclusive table directories are also removed
+      assert(!fs.exists(new Path(expectedDBLocation)))
     }
   }
 

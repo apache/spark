@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.commons.codec.binary.Base64
+import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.types._
+
 
 /**
  * Estimates of various statistics.  The default estimation logic simply lazily multiplies the
@@ -58,60 +61,175 @@ case class Statistics(
   }
 }
 
+
 /**
- * Statistics for a column.
+ * Statistics collected for a column.
+ *
+ * 1. Supported data types are defined in `ColumnStat.supportsType`.
+ * 2. The JVM data type stored in min/max is the external data type (used in Row) for the
+ * corresponding Catalyst data type. For example, for DateType we store java.sql.Date, and for
+ * TimestampType we store java.sql.Timestamp.
+ * 3. For integral types, they are all upcasted to longs, i.e. shorts are stored as longs.
+ * 4. There is no guarantee that the statistics collected are accurate. Approximation algorithms
+ *    (sketches) might have been used, and the data collected can also be stale.
+ *
+ * @param distinctCount number of distinct values
+ * @param min minimum value
+ * @param max maximum value
+ * @param nullCount number of nulls
+ * @param avgLen average length of the values. For fixed-length types, this should be a constant.
+ * @param maxLen maximum length of the values. For fixed-length types, this should be a constant.
  */
-case class ColumnStat(statRow: InternalRow) {
+case class ColumnStat(
+    distinctCount: BigInt,
+    min: Option[Any],
+    max: Option[Any],
+    nullCount: BigInt,
+    avgLen: Long,
+    maxLen: Long) {
 
-  def forNumeric[T <: AtomicType](dataType: T): NumericColumnStat[T] = {
-    NumericColumnStat(statRow, dataType)
+  // We currently don't store min/max for binary/string type. This can change in the future and
+  // then we need to remove this require.
+  require(min.isEmpty || (!min.get.isInstanceOf[Array[Byte]] && !min.get.isInstanceOf[String]))
+  require(max.isEmpty || (!max.get.isInstanceOf[Array[Byte]] && !max.get.isInstanceOf[String]))
+
+  /**
+   * Returns a map from string to string that can be used to serialize the column stats.
+   * The key is the name of the field (e.g. "distinctCount" or "min"), and the value is the string
+   * representation for the value. The deserialization side is defined in [[ColumnStat.fromMap]].
+   *
+   * As part of the protocol, the returned map always contains a key called "version".
+   * In the case min/max values are null (None), they won't appear in the map.
+   */
+  def toMap: Map[String, String] = {
+    val map = new scala.collection.mutable.HashMap[String, String]
+    map.put(ColumnStat.KEY_VERSION, "1")
+    map.put(ColumnStat.KEY_DISTINCT_COUNT, distinctCount.toString)
+    map.put(ColumnStat.KEY_NULL_COUNT, nullCount.toString)
+    map.put(ColumnStat.KEY_AVG_LEN, avgLen.toString)
+    map.put(ColumnStat.KEY_MAX_LEN, maxLen.toString)
+    min.foreach { v => map.put(ColumnStat.KEY_MIN_VALUE, v.toString) }
+    max.foreach { v => map.put(ColumnStat.KEY_MAX_VALUE, v.toString) }
+    map.toMap
   }
-  def forString: StringColumnStat = StringColumnStat(statRow)
-  def forBinary: BinaryColumnStat = BinaryColumnStat(statRow)
-  def forBoolean: BooleanColumnStat = BooleanColumnStat(statRow)
+}
 
-  override def toString: String = {
-    // use Base64 for encoding
-    Base64.encodeBase64String(statRow.asInstanceOf[UnsafeRow].getBytes)
+
+object ColumnStat extends Logging {
+
+  // List of string keys used to serialize ColumnStat
+  val KEY_VERSION = "version"
+  private val KEY_DISTINCT_COUNT = "distinctCount"
+  private val KEY_MIN_VALUE = "min"
+  private val KEY_MAX_VALUE = "max"
+  private val KEY_NULL_COUNT = "nullCount"
+  private val KEY_AVG_LEN = "avgLen"
+  private val KEY_MAX_LEN = "maxLen"
+
+  /** Returns true iff the we support gathering column statistics on column of the given type. */
+  def supportsType(dataType: DataType): Boolean = dataType match {
+    case _: IntegralType => true
+    case _: DecimalType => true
+    case DoubleType | FloatType => true
+    case BooleanType => true
+    case DateType => true
+    case TimestampType => true
+    case BinaryType | StringType => true
+    case _ => false
   }
-}
 
-object ColumnStat {
-  def apply(numFields: Int, str: String): ColumnStat = {
-    // use Base64 for decoding
-    val bytes = Base64.decodeBase64(str)
-    val unsafeRow = new UnsafeRow(numFields)
-    unsafeRow.pointTo(bytes, bytes.length)
-    ColumnStat(unsafeRow)
+  /**
+   * Creates a [[ColumnStat]] object from the given map. This is used to deserialize column stats
+   * from some external storage. The serialization side is defined in [[ColumnStat.toMap]].
+   */
+  def fromMap(table: String, field: StructField, map: Map[String, String])
+    : Option[ColumnStat] = {
+    val str2val: (String => Any) = field.dataType match {
+      case _: IntegralType => _.toLong
+      case _: DecimalType => new java.math.BigDecimal(_)
+      case DoubleType | FloatType => _.toDouble
+      case BooleanType => _.toBoolean
+      case DateType => java.sql.Date.valueOf
+      case TimestampType => java.sql.Timestamp.valueOf
+      // This version of Spark does not use min/max for binary/string types so we ignore it.
+      case BinaryType | StringType => _ => null
+      case _ =>
+        throw new AnalysisException("Column statistics deserialization is not supported for " +
+          s"column ${field.name} of data type: ${field.dataType}.")
+    }
+
+    try {
+      Some(ColumnStat(
+        distinctCount = BigInt(map(KEY_DISTINCT_COUNT).toLong),
+        // Note that flatMap(Option.apply) turns Option(null) into None.
+        min = map.get(KEY_MIN_VALUE).map(str2val).flatMap(Option.apply),
+        max = map.get(KEY_MAX_VALUE).map(str2val).flatMap(Option.apply),
+        nullCount = BigInt(map(KEY_NULL_COUNT).toLong),
+        avgLen = map.getOrElse(KEY_AVG_LEN, field.dataType.defaultSize.toString).toLong,
+        maxLen = map.getOrElse(KEY_MAX_LEN, field.dataType.defaultSize.toString).toLong
+      ))
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Failed to parse column statistics for column ${field.name} in table $table", e)
+        None
+    }
   }
-}
 
-case class NumericColumnStat[T <: AtomicType](statRow: InternalRow, dataType: T) {
-  // The indices here must be consistent with `ColumnStatStruct.numericColumnStat`.
-  val numNulls: Long = statRow.getLong(0)
-  val max: T#InternalType = statRow.get(1, dataType).asInstanceOf[T#InternalType]
-  val min: T#InternalType = statRow.get(2, dataType).asInstanceOf[T#InternalType]
-  val ndv: Long = statRow.getLong(3)
-}
+  /**
+   * Constructs an expression to compute column statistics for a given column.
+   *
+   * The expression should create a single struct column with the following schema:
+   * distinctCount: Long, min: T, max: T, nullCount: Long, avgLen: Long, maxLen: Long
+   *
+   * Together with [[rowToColumnStat]], this function is used to create [[ColumnStat]] and
+   * as a result should stay in sync with it.
+   */
+  def statExprs(col: Attribute, relativeSD: Double): CreateNamedStruct = {
+    def struct(exprs: Expression*): CreateNamedStruct = CreateStruct(exprs.map { expr =>
+      expr.transformUp { case af: AggregateFunction => af.toAggregateExpression() }
+    })
+    val one = Literal(1, LongType)
 
-case class StringColumnStat(statRow: InternalRow) {
-  // The indices here must be consistent with `ColumnStatStruct.stringColumnStat`.
-  val numNulls: Long = statRow.getLong(0)
-  val avgColLen: Double = statRow.getDouble(1)
-  val maxColLen: Long = statRow.getInt(2)
-  val ndv: Long = statRow.getLong(3)
-}
+    // the approximate ndv (num distinct value) should never be larger than the number of rows
+    val numNonNulls = if (col.nullable) Count(col) else Count(one)
+    val ndv = Least(Seq(HyperLogLogPlusPlus(col, relativeSD), numNonNulls))
+    val numNulls = Subtract(Count(one), numNonNulls)
 
-case class BinaryColumnStat(statRow: InternalRow) {
-  // The indices here must be consistent with `ColumnStatStruct.binaryColumnStat`.
-  val numNulls: Long = statRow.getLong(0)
-  val avgColLen: Double = statRow.getDouble(1)
-  val maxColLen: Long = statRow.getInt(2)
-}
+    def fixedLenTypeStruct(castType: DataType) = {
+      // For fixed width types, avg size should be the same as max size.
+      val avgSize = Literal(col.dataType.defaultSize, LongType)
+      struct(ndv, Cast(Min(col), castType), Cast(Max(col), castType), numNulls, avgSize, avgSize)
+    }
 
-case class BooleanColumnStat(statRow: InternalRow) {
-  // The indices here must be consistent with `ColumnStatStruct.booleanColumnStat`.
-  val numNulls: Long = statRow.getLong(0)
-  val numTrues: Long = statRow.getLong(1)
-  val numFalses: Long = statRow.getLong(2)
+    col.dataType match {
+      case _: IntegralType => fixedLenTypeStruct(LongType)
+      case _: DecimalType => fixedLenTypeStruct(col.dataType)
+      case DoubleType | FloatType => fixedLenTypeStruct(DoubleType)
+      case BooleanType => fixedLenTypeStruct(col.dataType)
+      case DateType => fixedLenTypeStruct(col.dataType)
+      case TimestampType => fixedLenTypeStruct(col.dataType)
+      case BinaryType | StringType =>
+        // For string and binary type, we don't store min/max.
+        val nullLit = Literal(null, col.dataType)
+        struct(
+          ndv, nullLit, nullLit, numNulls,
+          Ceil(Average(Length(col))), Cast(Max(Length(col)), LongType))
+      case _ =>
+        throw new AnalysisException("Analyzing column statistics is not supported for column " +
+            s"${col.name} of data type: ${col.dataType}.")
+    }
+  }
+
+  /** Convert a struct for column stats (defined in statExprs) into [[ColumnStat]]. */
+  def rowToColumnStat(row: Row): ColumnStat = {
+    ColumnStat(
+      distinctCount = BigInt(row.getLong(0)),
+      min = Option(row.get(1)),  // for string/binary min/max, get should return null
+      max = Option(row.get(2)),
+      nullCount = BigInt(row.getLong(3)),
+      avgLen = row.getLong(4),
+      maxLen = row.getLong(5)
+    )
+  }
+
 }

@@ -14,7 +14,9 @@ It also supports a rich set of higher-level tools including [Spark SQL](sql-prog
 
 Get Spark from the [downloads page](http://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. Spark uses Hadoop's client libraries for HDFS and YARN. Downloads are pre-packaged for a handful of popular Hadoop versions.
 Users can also download a "Hadoop free" binary and run Spark with any Hadoop version
-[by augmenting Spark's classpath](hadoop-provided.html). 
+[by augmenting Spark's classpath](hadoop-provided.html).
+Scala and Java users can include Spark in their projects using its maven cooridnates and in the future Python users can also install Spark from PyPI.
+
 
 If you'd like to build Spark from 
 source, visit [Building Spark](building-spark.html).
@@ -123,8 +125,8 @@ options for deployment:
 * Integration with other storage systems:
   * [OpenStack Swift](storage-openstack-swift.html)
 * [Building Spark](building-spark.html): build Spark using the Maven system
-* [Contributing to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark)
-* [Third Party Projects](https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects): related third party Spark projects
+* [Contributing to Spark](http://spark.apache.org/contributing.html)
+* [Third Party Projects](http://spark.apache.org/third-party-projects.html): related third party Spark projects
 
 **External Resources:**
 

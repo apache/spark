@@ -322,6 +322,54 @@ class DataFrame(object):
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
+    @since(2.1)
+    def checkpoint(self, eager=True):
+        """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
+        logical plan of this DataFrame, which is especially useful in iterative algorithms where the
+        plan may grow exponentially. It will be saved to files inside the checkpoint
+        directory set with L{SparkContext.setCheckpointDir()}.
+
+        :param eager: Whether to checkpoint this DataFrame immediately
+
+        .. note:: Experimental
+        """
+        jdf = self._jdf.checkpoint(eager)
+        return DataFrame(jdf, self.sql_ctx)
+
+    @since(2.1)
+    def withWatermark(self, eventTime, delayThreshold):
+        """Defines an event time watermark for this :class:`DataFrame`. A watermark tracks a point
+        in time before which we assume no more late data is going to arrive.
+
+        Spark will use this watermark for several purposes:
+          - To know when a given time window aggregation can be finalized and thus can be emitted
+            when using output modes that do not allow updates.
+
+          - To minimize the amount of state that we need to keep for on-going aggregations.
+
+        The current watermark is computed by looking at the `MAX(eventTime)` seen across
+        all of the partitions in the query minus a user specified `delayThreshold`.  Due to the cost
+        of coordinating this value across partitions, the actual watermark used is only guaranteed
+        to be at least `delayThreshold` behind the actual event time.  In some cases we may still
+        process records that arrive more than `delayThreshold` late.
+
+        :param eventTime: the name of the column that contains the event time of the row.
+        :param delayThreshold: the minimum delay to wait to data to arrive late, relative to the
+            latest record that has been processed in the form of an interval
+            (e.g. "1 minute" or "5 hours").
+
+        .. note:: Experimental
+
+        >>> sdf.select('name', sdf.time.cast('timestamp')).withWatermark('time', '10 minutes')
+        DataFrame[name: string, time: timestamp]
+        """
+        if not eventTime or type(eventTime) is not str:
+            raise TypeError("eventTime should be provided as a string")
+        if not delayThreshold or type(delayThreshold) is not str:
+            raise TypeError("delayThreshold should be provided as a string interval")
+        jdf = self._jdf.withWatermark(eventTime, delayThreshold)
+        return DataFrame(jdf, self.sql_ctx)
+
     @since(1.3)
     def count(self):
         """Returns the number of rows in this :class:`DataFrame`.
@@ -409,7 +457,7 @@ class DataFrame(object):
     def cache(self):
         """Persists the :class:`DataFrame` with the default storage level (C{MEMORY_AND_DISK}).
 
-        .. note:: the default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
+        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
         """
         self.is_cached = True
         self._jdf.cache()
@@ -422,7 +470,7 @@ class DataFrame(object):
         a new storage level if the :class:`DataFrame` does not have a storage level set yet.
         If no storage level is specified defaults to (C{MEMORY_AND_DISK}).
 
-        .. note:: the default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
+        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
@@ -548,6 +596,9 @@ class DataFrame(object):
     @since(1.3)
     def sample(self, withReplacement, fraction, seed=None):
         """Returns a sampled subset of this :class:`DataFrame`.
+
+        .. note:: This is not guaranteed to provide exactly the fraction specified of the total
+            count of the given :class:`DataFrame`.
 
         >>> df.sample(False, 0.5, 42).count()
         2
@@ -813,8 +864,8 @@ class DataFrame(object):
         This include count, mean, stddev, min, and max. If no columns are
         given, this function computes statistics for all numerical or string columns.
 
-        .. note:: This function is meant for exploratory data analysis, as we make no \
-        guarantee about the backward compatibility of the schema of the resulting DataFrame.
+        .. note:: This function is meant for exploratory data analysis, as we make no
+            guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
         >>> df.describe(['age']).show()
         +-------+------------------+
@@ -847,8 +898,8 @@ class DataFrame(object):
     def head(self, n=None):
         """Returns the first ``n`` rows.
 
-        Note that this method should only be used if the resulting array is expected
-        to be small, as all the data is loaded into the driver's memory.
+        .. note:: This method should only be used if the resulting array is expected
+            to be small, as all the data is loaded into the driver's memory.
 
         :param n: int, default 1. Number of rows to return.
         :return: If n is greater than 1, return a list of :class:`Row`.
@@ -1409,8 +1460,8 @@ class DataFrame(object):
         "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
-        .. note::  This function is meant for exploratory data analysis, as we make no \
-        guarantee about the backward compatibility of the schema of the resulting DataFrame.
+        .. note:: This function is meant for exploratory data analysis, as we make no
+            guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
         :param cols: Names of the columns to calculate frequent items for as a list or tuple of
             strings.
@@ -1511,10 +1562,10 @@ class DataFrame(object):
     def toPandas(self):
         """Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
-        Note that this method should only be used if the resulting Pandas's DataFrame is expected
-        to be small, as all the data is loaded into the driver's memory.
-
         This is only available if Pandas is installed and available.
+
+        .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
+            to be small, as all the data is loaded into the driver's memory.
 
         >>> df.toPandas()  # doctest: +SKIP
            age   name
@@ -1621,6 +1672,7 @@ def _test():
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext, SparkSession
     import pyspark.sql.dataframe
+    from pyspark.sql.functions import from_unixtime
     globs = pyspark.sql.dataframe.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
@@ -1633,9 +1685,11 @@ def _test():
     globs['df3'] = sc.parallelize([Row(name='Alice', age=2),
                                    Row(name='Bob', age=5)]).toDF()
     globs['df4'] = sc.parallelize([Row(name='Alice', age=10, height=80),
-                                  Row(name='Bob', age=5, height=None),
-                                  Row(name='Tom', age=None, height=None),
-                                  Row(name=None, age=None, height=None)]).toDF()
+                                   Row(name='Bob', age=5, height=None),
+                                   Row(name='Tom', age=None, height=None),
+                                   Row(name=None, age=None, height=None)]).toDF()
+    globs['sdf'] = sc.parallelize([Row(name='Tom', time=1479441846),
+                                   Row(name='Bob', time=1479442946)]).toDF()
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,

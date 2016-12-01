@@ -278,8 +278,10 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
 
 #' @param object a fitted generalized linear model.
 #' @return \code{summary} returns a summary object of the fitted model, a list of components
-#'         including at least the coefficients, null/residual deviance, null/residual degrees
-#'         of freedom, AIC and number of iterations IRLS takes.
+#'         including at least the coefficients matrix (which includes coefficients, standard error
+#'         of coefficients, t value and p value), null/residual deviance, null/residual degrees of
+#'         freedom, AIC and number of iterations IRLS takes. If there are collinear columns
+#'         in you data, the coefficients matrix only provides coefficients.
 #'
 #' @rdname spark.glm
 #' @export
@@ -303,9 +305,18 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             } else {
               dataFrame(callJMethod(jobj, "rDevianceResiduals"))
             }
-            coefficients <- matrix(coefficients, ncol = 4)
-            colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
-            rownames(coefficients) <- unlist(features)
+            # If the underlying WeightedLeastSquares using "normal" solver, we can provide
+            # coefficients, standard error of coefficients, t value and p value. Otherwise,
+            # it will be fitted by local "l-bfgs", we can only provide coefficients.
+            if (length(features) == length(coefficients)) {
+              coefficients <- matrix(coefficients, ncol = 1)
+              colnames(coefficients) <- c("Estimate")
+              rownames(coefficients) <- unlist(features)
+            } else {
+              coefficients <- matrix(coefficients, ncol = 4)
+              colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
+              rownames(coefficients) <- unlist(features)
+            }
             ans <- list(deviance.resid = deviance.resid, coefficients = coefficients,
                         dispersion = dispersion, null.deviance = null.deviance,
                         deviance = deviance, df.null = df.null, df.residual = df.residual,
@@ -525,7 +536,7 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #' @note spark.isoreg since 2.1.0
 setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, isotonic = TRUE, featureIndex = 0, weightCol = NULL) {
-            formula <- paste0(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
 
             if (is.null(weightCol)) {
               weightCol <- ""
@@ -701,7 +712,6 @@ setMethod("predict", signature(object = "KMeansModel"),
 #'                        of L1 and L2. Default is 0.0 which is an L2 penalty.
 #' @param maxIter maximum iteration number.
 #' @param tol convergence tolerance of iterations.
-#' @param fitIntercept whether to fit an intercept term.
 #' @param family the name of family which is a description of the label distribution to be used in the model.
 #'               Supported options:
 #'                 \itemize{
@@ -736,11 +746,11 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' \dontrun{
 #' sparkR.session()
 #' # binary logistic regression
-#' label <- c(1.0, 1.0, 1.0, 0.0, 0.0)
-#' feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
-#' binary_data <- as.data.frame(cbind(label, feature))
+#' label <- c(0.0, 0.0, 0.0, 1.0, 1.0)
+#' features <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
+#' binary_data <- as.data.frame(cbind(label, features))
 #' binary_df <- createDataFrame(binary_data)
-#' blr_model <- spark.logit(binary_df, label ~ feature, thresholds = 1.0)
+#' blr_model <- spark.logit(binary_df, label ~ features, thresholds = 1.0)
 #' blr_predict <- collect(select(predict(blr_model, binary_df), "prediction"))
 #'
 #' # summary of binary logistic regression
@@ -772,10 +782,10 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @note spark.logit since 2.1.0
 setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, elasticNetParam = 0.0, maxIter = 100,
-                   tol = 1E-6, fitIntercept = TRUE, family = "auto", standardization = TRUE,
+                   tol = 1E-6, family = "auto", standardization = TRUE,
                    thresholds = 0.5, weightCol = NULL, aggregationDepth = 2,
                    probabilityCol = "probability") {
-            formula <- paste0(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
 
             if (is.null(weightCol)) {
               weightCol <- ""
@@ -784,10 +794,10 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
             jobj <- callJStatic("org.apache.spark.ml.r.LogisticRegressionWrapper", "fit",
                                 data@sdf, formula, as.numeric(regParam),
                                 as.numeric(elasticNetParam), as.integer(maxIter),
-                                as.numeric(tol), as.logical(fitIntercept),
-                                as.character(family), as.logical(standardization),
-                                as.array(thresholds), as.character(weightCol),
-                                as.integer(aggregationDepth), as.character(probabilityCol))
+                                as.numeric(tol), as.character(family),
+                                as.logical(standardization), as.array(thresholds),
+                                as.character(weightCol), as.integer(aggregationDepth),
+                                as.character(probabilityCol))
             new("LogisticRegressionModel", jobj = jobj)
           })
 
@@ -858,6 +868,8 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 #'   Multilayer Perceptron}
 #'
 #' @param data a \code{SparkDataFrame} of observations and labels for model fitting.
+#' @param formula a symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param blockSize blockSize parameter.
 #' @param layers integer vector containing the number of nodes for each layer
 #' @param solver solver parameter, supported options: "gd" (minibatch gradient descent) or "l-bfgs".
@@ -870,7 +882,7 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model.
 #' @rdname spark.mlp
-#' @aliases spark.mlp,SparkDataFrame-method
+#' @aliases spark.mlp,SparkDataFrame,formula-method
 #' @name spark.mlp
 #' @seealso \link{read.ml}
 #' @export
@@ -879,7 +891,7 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 #' df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
 #'
 #' # fit a Multilayer Perceptron Classification Model
-#' model <- spark.mlp(df, blockSize = 128, layers = c(4, 3), solver = "l-bfgs",
+#' model <- spark.mlp(df, label ~ features, blockSize = 128, layers = c(4, 3), solver = "l-bfgs",
 #'                    maxIter = 100, tol = 0.5, stepSize = 1, seed = 1,
 #'                    initialWeights = c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
 #'
@@ -896,9 +908,10 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 #' summary(savedModel)
 #' }
 #' @note spark.mlp since 2.1.0
-setMethod("spark.mlp", signature(data = "SparkDataFrame"),
-          function(data, layers, blockSize = 128, solver = "l-bfgs", maxIter = 100,
+setMethod("spark.mlp", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, layers, blockSize = 128, solver = "l-bfgs", maxIter = 100,
                    tol = 1E-6, stepSize = 0.03, seed = NULL, initialWeights = NULL) {
+            formula <- paste(deparse(formula), collapse = "")
             if (is.null(layers)) {
               stop ("layers must be a integer vector with length > 1.")
             }
@@ -913,7 +926,7 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame"),
               initialWeights <- as.array(as.numeric(na.omit(initialWeights)))
             }
             jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
-                                "fit", data@sdf, as.integer(blockSize), as.array(layers),
+                                "fit", data@sdf, formula, as.integer(blockSize), as.array(layers),
                                 as.character(solver), as.integer(maxIter), as.numeric(tol),
                                 as.numeric(stepSize), seed, initialWeights)
             new("MultilayerPerceptronClassificationModel", jobj = jobj)
@@ -936,9 +949,10 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 # Returns the summary of a Multilayer Perceptron Classification Model produced by \code{spark.mlp}
 
 #' @param object a Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
-#' @return \code{summary} returns a list containing \code{labelCount}, \code{layers}, and
-#'         \code{weights}. For \code{weights}, it is a numeric vector with length equal to
-#'         the expected given the architecture (i.e., for 8-10-2 network, 100 connection weights).
+#' @return \code{summary} returns a list containing \code{numOfInputs}, \code{numOfOutputs},
+#'         \code{layers}, and \code{weights}. For \code{weights}, it is a numeric vector with
+#'         length equal to the expected given the architecture (i.e., for 8-10-2 network,
+#'         112 connection weights).
 #' @rdname spark.mlp
 #' @export
 #' @aliases summary,MultilayerPerceptronClassificationModel-method
@@ -946,10 +960,12 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel"),
           function(object) {
             jobj <- object@jobj
-            labelCount <- callJMethod(jobj, "labelCount")
             layers <- unlist(callJMethod(jobj, "layers"))
+            numOfInputs <- head(layers, n = 1)
+            numOfOutputs <- tail(layers, n = 1)
             weights <- callJMethod(jobj, "weights")
-            list(labelCount = labelCount, layers = layers, weights = weights)
+            list(numOfInputs = numOfInputs, numOfOutputs = numOfOutputs,
+                 layers = layers, weights = weights)
           })
 
 #' Naive Bayes Models

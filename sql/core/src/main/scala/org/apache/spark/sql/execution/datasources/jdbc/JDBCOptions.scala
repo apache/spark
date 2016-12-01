@@ -22,19 +22,23 @@ import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+
 /**
  * Options for the JDBC data source.
  */
 class JDBCOptions(
-    @transient private val parameters: Map[String, String])
+    @transient private val parameters: CaseInsensitiveMap)
   extends Serializable {
 
   import JDBCOptions._
 
+  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
+
   def this(url: String, table: String, parameters: Map[String, String]) = {
-    this(parameters ++ Map(
+    this(new CaseInsensitiveMap(parameters ++ Map(
       JDBCOptions.JDBC_URL -> url,
-      JDBCOptions.JDBC_TABLE_NAME -> table))
+      JDBCOptions.JDBC_TABLE_NAME -> table)))
   }
 
   val asConnectionProperties: Properties = {
@@ -70,19 +74,20 @@ class JDBCOptions(
     }
   }
 
+  // the number of partitions
+  val numPartitions = parameters.get(JDBC_NUM_PARTITIONS).map(_.toInt)
+
   // ------------------------------------------------------------
   // Optional parameters only for reading
   // ------------------------------------------------------------
   // the column used to partition
-  val partitionColumn = parameters.getOrElse(JDBC_PARTITION_COLUMN, null)
+  val partitionColumn = parameters.get(JDBC_PARTITION_COLUMN)
   // the lower bound of partition column
-  val lowerBound = parameters.getOrElse(JDBC_LOWER_BOUND, null)
+  val lowerBound = parameters.get(JDBC_LOWER_BOUND).map(_.toLong)
   // the upper bound of the partition column
-  val upperBound = parameters.getOrElse(JDBC_UPPER_BOUND, null)
-  // the number of partitions
-  val numPartitions = parameters.getOrElse(JDBC_NUM_PARTITIONS, null)
-  require(partitionColumn == null ||
-    (lowerBound != null && upperBound != null && numPartitions != null),
+  val upperBound = parameters.get(JDBC_UPPER_BOUND).map(_.toLong)
+  require(partitionColumn.isEmpty ||
+    (lowerBound.isDefined && upperBound.isDefined && numPartitions.isDefined),
     s"If '$JDBC_PARTITION_COLUMN' is specified then '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND'," +
       s" and '$JDBC_NUM_PARTITIONS' are required.")
   val fetchSize = {

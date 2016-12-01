@@ -28,11 +28,11 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
@@ -202,6 +202,7 @@ case class DropTableCommand(
       sparkSession.sharedState.cacheManager.uncacheQuery(
         sparkSession.table(tableName.quotedString))
     } catch {
+      case _: NoSuchTableException if ifExists =>
       case NonFatal(e) => log.warn(e.toString, e)
     }
     catalog.refreshTable(tableName)

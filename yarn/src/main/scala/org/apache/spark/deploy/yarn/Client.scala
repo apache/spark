@@ -161,7 +161,8 @@ private[spark] class Client(
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
       launcherBackend.setAppId(appId.toString)
 
-      new CallerContext("CLIENT", Option(appId.toString)).setCurrentContext()
+      new CallerContext("CLIENT", sparkConf.get(APP_CALLER_CONTEXT),
+        Option(appId.toString)).setCurrentContext()
 
       // Verify whether the cluster has enough resources for our AM
       verifyClusterResources(newAppResponse)
@@ -1013,12 +1014,7 @@ private[spark] class Client(
     val securityManager = new SecurityManager(sparkConf)
     amContainer.setApplicationACLs(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
-
-    if (sparkConf.get(IO_ENCRYPTION_ENABLED)) {
-      SecurityManager.initIOEncryptionKey(sparkConf, credentials)
-    }
     setupSecurityToken(amContainer)
-
     amContainer
   }
 

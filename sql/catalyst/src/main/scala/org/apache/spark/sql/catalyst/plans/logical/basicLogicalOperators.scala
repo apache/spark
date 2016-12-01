@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * When planning take() or collect() operations, this special node that is inserted at the top of
@@ -133,7 +134,7 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
     childrenResolved &&
       left.output.length == right.output.length &&
       left.output.zip(right.output).forall { case (l, r) =>
-        l.dataType.asNullable == r.dataType.asNullable
+        l.dataType.sameType(r.dataType)
       } && duplicateResolved
 }
 
@@ -210,8 +211,8 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
         child.output.length == children.head.output.length &&
         // compare the data types with the first child
         child.output.zip(children.head.output).forall {
-          case (l, r) => l.dataType.asNullable == r.dataType.asNullable }
-      )
+          case (l, r) => l.dataType.sameType(r.dataType)
+        })
     children.length > 1 && childrenResolved && allChildrenCompatible
   }
 
@@ -404,6 +405,13 @@ case class InsertIntoTable(
  */
 case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  override def simpleString: String = {
+    val cteAliases = Utils.truncatedString(cteRelations.map(_._1), "[", ", ", "]")
+    s"CTE $cteAliases"
+  }
+
+  override def innerChildren: Seq[QueryPlan[_]] = cteRelations.map(_._2)
 }
 
 case class WithWindowDefinition(

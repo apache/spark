@@ -26,6 +26,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.serializer.SerializerInstance
@@ -45,7 +46,7 @@ import org.apache.spark.util._
  * @param stageId id of the stage this task belongs to
  * @param stageAttemptId attempt id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
- * @param metrics a [[TaskMetrics]] that is created at driver side and sent to executor side.
+ * @param metrics a `TaskMetrics` that is created at driver side and sent to executor side.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
  *
  * The parameters below are optional:
@@ -92,8 +93,16 @@ private[spark] abstract class Task[T](
       kill(interruptThread = false)
     }
 
-    new CallerContext("TASK", appId, appAttemptId, jobId, Option(stageId), Option(stageAttemptId),
-      Option(taskAttemptId), Option(attemptNumber)).setCurrentContext()
+    new CallerContext(
+      "TASK",
+      SparkEnv.get.conf.get(APP_CALLER_CONTEXT),
+      appId,
+      appAttemptId,
+      jobId,
+      Option(stageId),
+      Option(stageAttemptId),
+      Option(taskAttemptId),
+      Option(attemptNumber)).setCurrentContext()
 
     try {
       runTask(context)

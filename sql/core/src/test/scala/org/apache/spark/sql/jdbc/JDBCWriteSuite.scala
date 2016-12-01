@@ -303,4 +303,28 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(e.contains("If 'partitionColumn' is specified then 'lowerBound', 'upperBound'," +
       " and 'numPartitions' are required."))
   }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    df.write.format("jdbc")
+      .option("Url", url1)
+      .option("dbtable", "TEST.SAVETEST")
+      .options(properties.asScala)
+      .save()
+  }
+
+  test("SPARK-18413: Use `numPartitions` JDBCOption") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    val e = intercept[IllegalArgumentException] {
+      df.write.format("jdbc")
+        .option("dbtable", "TEST.SAVETEST")
+        .option("url", url1)
+        .option("user", "testUser")
+        .option("password", "testPass")
+        .option(s"${JDBCOptions.JDBC_NUM_PARTITIONS}", "0")
+        .save()
+    }.getMessage
+    assert(e.contains("Invalid value `0` for parameter `numPartitions` in table writing " +
+      "via JDBC. The minimum value is 1."))
+  }
 }

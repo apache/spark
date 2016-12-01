@@ -147,6 +147,8 @@ class LogisticRegressionSuite
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
+    model.setSummary(None)
+    assert(!model.hasSummary)
   }
 
   test("empty probabilityCol") {
@@ -190,6 +192,12 @@ class LogisticRegressionSuite
       }
     }
     // thresholds and threshold must be consistent: values
+    withClue("fit with ParamMap should throw error if threshold, thresholds do not match.") {
+      intercept[IllegalArgumentException] {
+        lr2.fit(smallBinaryDataset,
+          lr2.thresholds -> Array(0.3, 0.7), lr2.threshold -> (expectedThreshold / 2.0))
+      }
+    }
     withClue("fit with ParamMap should throw error if threshold, thresholds do not match.") {
       intercept[IllegalArgumentException] {
         val lr2model = lr2.fit(smallBinaryDataset,

@@ -24,12 +24,12 @@ import java.util.{Calendar, GregorianCalendar, Properties}
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -209,6 +209,16 @@ class JDBCSuite extends SparkFunSuite
     conn.close()
   }
 
+  // Check whether the tables are fetched in the expected degree of parallelism
+  def checkNumPartitions(df: DataFrame, expectedNumPartitions: Int): Unit = {
+    val jdbcRelations = df.queryExecution.analyzed.collect {
+      case LogicalRelation(r: JDBCRelation, _, _) => r
+    }
+    assert(jdbcRelations.length == 1)
+    assert(jdbcRelations.head.parts.length == expectedNumPartitions,
+      s"Expecting a JDBCRelation with $expectedNumPartitions partitions, but got:`$jdbcRelations`")
+  }
+
   test("SELECT *") {
     assert(sql("SELECT * FROM foobar").collect().size === 3)
   }
@@ -313,13 +323,23 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("SELECT * partitioned") {
-    assert(sql("SELECT * FROM parts").collect().size == 3)
+    val df = sql("SELECT * FROM parts")
+    checkNumPartitions(df, expectedNumPartitions = 3)
+    assert(df.collect().length == 3)
   }
 
   test("SELECT WHERE (simple predicates) partitioned") {
-    assert(sql("SELECT * FROM parts WHERE THEID < 1").collect().size === 0)
-    assert(sql("SELECT * FROM parts WHERE THEID != 2").collect().size === 2)
-    assert(sql("SELECT THEID FROM parts WHERE THEID = 1").collect().size === 1)
+    val df1 = sql("SELECT * FROM parts WHERE THEID < 1")
+    checkNumPartitions(df1, expectedNumPartitions = 3)
+    assert(df1.collect().length === 0)
+
+    val df2 = sql("SELECT * FROM parts WHERE THEID != 2")
+    checkNumPartitions(df2, expectedNumPartitions = 3)
+    assert(df2.collect().length === 2)
+
+    val df3 = sql("SELECT THEID FROM parts WHERE THEID = 1")
+    checkNumPartitions(df3, expectedNumPartitions = 3)
+    assert(df3.collect().length === 1)
   }
 
   test("SELECT second field partitioned") {
@@ -370,24 +390,27 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
-    assert(
-      spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties())
-      .collect().length === 3)
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties())
+    checkNumPartitions(df, expectedNumPartitions = 3)
+    assert(df.collect().length === 3)
   }
 
   test("Partitioning via list-of-where-clauses API") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
-    assert(spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
-      .collect().length === 3)
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
+    checkNumPartitions(df, expectedNumPartitions = 2)
+    assert(df.collect().length === 3)
   }
 
   test("Partitioning on column that might have null values.") {
-    assert(
-      spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "theid", 0, 4, 3, new Properties())
-        .collect().length === 4)
-    assert(
-      spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "THEID", 0, 4, 3, new Properties())
-        .collect().length === 4)
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "theid", 0, 4, 3, new Properties())
+    checkNumPartitions(df, expectedNumPartitions = 3)
+    assert(df.collect().length === 4)
+
+    val df2 = spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "THEID", 0, 4, 3, new Properties())
+    checkNumPartitions(df2, expectedNumPartitions = 3)
+    assert(df2.collect().length === 4)
+
     // partitioning on a nullable quoted column
     assert(
       spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", """"Dept"""", 0, 4, 3, new Properties())
@@ -404,6 +427,7 @@ class JDBCSuite extends SparkFunSuite
       numPartitions = 0,
       connectionProperties = new Properties()
     )
+    checkNumPartitions(res, expectedNumPartitions = 1)
     assert(res.count() === 8)
   }
 
@@ -417,6 +441,7 @@ class JDBCSuite extends SparkFunSuite
       numPartitions = 10,
       connectionProperties = new Properties()
     )
+    checkNumPartitions(res, expectedNumPartitions = 4)
     assert(res.count() === 8)
   }
 
@@ -430,6 +455,7 @@ class JDBCSuite extends SparkFunSuite
       numPartitions = 4,
       connectionProperties = new Properties()
     )
+    checkNumPartitions(res, expectedNumPartitions = 1)
     assert(res.count() === 8)
   }
 
@@ -450,7 +476,9 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("SELECT * on partitioned table with a nullable partition column") {
-    assert(sql("SELECT * FROM nullparts").collect().size == 4)
+    val df = sql("SELECT * FROM nullparts")
+    checkNumPartitions(df, expectedNumPartitions = 3)
+    assert(df.collect().length == 4)
   }
 
   test("H2 integral types") {
@@ -619,6 +647,8 @@ class JDBCSuite extends SparkFunSuite
     assert(doCompileFilter(GreaterThan("col0", 3)) === "col0 > 3")
     assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === "col0 >= 3")
     assert(doCompileFilter(In("col1", Array("jkl"))) === "col1 IN ('jkl')")
+    assert(doCompileFilter(In("col1", Array.empty)) ===
+      "CASE WHEN col1 IS NULL THEN NULL ELSE FALSE END")
     assert(doCompileFilter(Not(In("col1", Array("mno", "pqr"))))
       === "(NOT (col1 IN ('mno', 'pqr')))")
     assert(doCompileFilter(IsNull("col1")) === "col1 IS NULL")
@@ -720,7 +750,8 @@ class JDBCSuite extends SparkFunSuite
     }
     // test the JdbcRelation toString output
     df.queryExecution.analyzed.collect {
-      case r: LogicalRelation => assert(r.relation.toString == "JDBCRelation(TEST.PEOPLE)")
+      case r: LogicalRelation =>
+        assert(r.relation.toString == "JDBCRelation(TEST.PEOPLE) [numPartitions=3]")
     }
   }
 
@@ -729,6 +760,38 @@ class JDBCSuite extends SparkFunSuite
     val explain = ExplainCommand(df.queryExecution.logical, extended = true)
     spark.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       r => assert(!List("testPass", "testUser").exists(r.toString.contains))
+    }
+  }
+
+  test("hide credentials in create and describe a persistent/temp table") {
+    val password = "testPass"
+    val tableName = "tab1"
+    Seq("TABLE", "TEMPORARY VIEW").foreach { tableType =>
+      withTable(tableName) {
+        val df = sql(
+          s"""
+             |CREATE $tableType $tableName
+             |USING org.apache.spark.sql.jdbc
+             |OPTIONS (
+             | url '$urlWithUserAndPass',
+             | dbtable 'TEST.PEOPLE',
+             | user 'testUser',
+             | password '$password')
+           """.stripMargin)
+
+        val explain = ExplainCommand(df.queryExecution.logical, extended = true)
+        spark.sessionState.executePlan(explain).executedPlan.executeCollect().foreach { r =>
+          assert(!r.toString.contains(password))
+        }
+
+        sql(s"DESC FORMATTED $tableName").collect().foreach { r =>
+          assert(!r.toString().contains(password))
+        }
+
+        sql(s"DESC EXTENDED $tableName").collect().foreach { r =>
+          assert(!r.toString().contains(password))
+        }
+      }
     }
   }
 
