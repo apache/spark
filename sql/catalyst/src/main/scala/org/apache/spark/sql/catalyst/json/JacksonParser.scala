@@ -119,7 +119,7 @@ class JacksonParser(
    * to a value according to a desired schema. This is a wrapper for the method
    * `makeConverter()` to handle a row wrapped with an array.
    */
-  def makeRootConverter(st: StructType): ValueConverter = {
+  private def makeRootConverter(st: StructType): ValueConverter = {
     val elementConverter = makeConverter(st)
     val fieldConverters = st.map(_.dataType).map(makeConverter)
     (parser: JsonParser) => parseJsonToken(parser, st) {
