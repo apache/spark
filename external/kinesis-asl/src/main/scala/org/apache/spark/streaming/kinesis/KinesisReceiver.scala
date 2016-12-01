@@ -221,6 +221,12 @@ private[kinesis] class KinesisReceiver[T](
     }
   }
 
+  /** Return the current rate limit defined in [[BlockGenerator]]. */
+  private[kinesis] def getCurrentLimit: Int = {
+    assert(blockGenerator != null)
+    math.min(blockGenerator.getCurrentLimit, Int.MaxValue).toInt
+  }
+
   /** Get the latest sequence number for the given shard that can be checkpointed through KCL */
   private[kinesis] def getLatestSeqNumToCheckpoint(shardId: String): Option[String] = {
     Option(shardIdToLatestStoredSeqNum.get(shardId))

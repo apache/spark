@@ -56,6 +56,38 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
     logInfo(s"Initialized workerId $workerId with shardId $shardId")
   }
 
+  private def addRecords(batch: List[Record], checkpointer: IRecordProcessorCheckpointer): Unit = {
+    receiver.addRecords(shardId, batch)
+    logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
+    receiver.setCheckpointer(shardId, checkpointer)
+  }
+
+  /**
+   * Limit the number of processed records from Kinesis stream. This is because the KCL cannot
+   * control the number of aggregated records to be fetched even if we set `MaxRecords`
+   * in `KinesisClientLibConfiguration`. For example, if we set 10 to the number of max records
+   * in a worker and a producer aggregates two records into one message, the worker possibly
+   * 20 records every callback function called.
+   */
+  private def processRecordsWithLimit(
+      batch: List[Record], checkpointer: IRecordProcessorCheckpointer): Unit = {
+    val maxRecords = receiver.getCurrentLimit
+    if (batch.size() <= maxRecords) {
+      addRecords(batch, checkpointer)
+    } else {
+      val numIter = batch.size / maxRecords
+      val rem = batch.size % maxRecords
+      for (idx <- 0 until numIter) {
+        val fromIdx = idx * maxRecords
+        val toIdx = fromIdx + maxRecords - 1
+        addRecords(batch.subList(fromIdx, toIdx), checkpointer)
+      }
+      if (rem > 0) {
+        addRecords(batch.subList(numIter * maxRecords, batch.size - 1), checkpointer)
+      }
+    }
+  }
+
   /**
    * This method is called by the KCL when a batch of records is pulled from the Kinesis stream.
    * This is the record-processing bridge between the KCL's IRecordProcessor.processRecords()
@@ -68,9 +100,7 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
   override def processRecords(batch: List[Record], checkpointer: IRecordProcessorCheckpointer) {
     if (!receiver.isStopped()) {
       try {
-        receiver.addRecords(shardId, batch)
-        logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
-        receiver.setCheckpointer(shardId, checkpointer)
+        processRecordsWithLimit(batch, checkpointer)
       } catch {
         case NonFatal(e) =>
           /*
