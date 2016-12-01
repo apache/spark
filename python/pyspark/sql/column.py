@@ -17,6 +17,7 @@
 
 import sys
 import warnings
+import json
 
 if sys.version >= '3':
     basestring = str
@@ -298,19 +299,31 @@ class Column(object):
     isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
 
     @since(1.3)
-    def alias(self, *alias):
+    def alias(self, *alias, metadata=None):
         """
         Returns this column aliased with a new name or names (in the case of expressions that
         return more than one column, such as explode).
 
+        Optional ``metadata`` can be passed when aliasing a single column.  It will be stored
+        in the ``metadata`` attribute of the corresponding ``StructField``.
+
         >>> df.select(df.age.alias("age2")).collect()
         [Row(age2=2), Row(age2=5)]
+        >>> df.select(df.age.alias("age3", metadata={'max': 99})).schema['age3'].metadata['max']
+        99
         """
 
+        sc = SparkContext._active_spark_context
         if len(alias) == 1:
-            return Column(getattr(self._jc, "as")(alias[0]))
+            if metadata:
+                jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(
+                    json.dumps(metadata))
+                return Column(getattr(self._jc, "as")(alias[0], jmeta))
+            else:
+                return Column(getattr(self._jc, "as")(alias[0]))
         else:
-            sc = SparkContext._active_spark_context
+            if metadata:
+                raise ValueError('metadata can only be provided for a single column')
             return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
     name = copy_func(alias, sinceversion=2.0, doc=":func:`name` is an alias for :func:`alias`.")
