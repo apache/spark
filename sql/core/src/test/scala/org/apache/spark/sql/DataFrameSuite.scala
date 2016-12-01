@@ -1719,16 +1719,18 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val rowRDD = sparkContext.makeRDD(Seq(Row(Row(1, "col1")), Row(Row(2, "col2"))))
     val df = spark.createDataFrame(rowRDD, schema)
 
-    checkAnswer(
-      df.as("df2").join(df.as("df1"), $"df1.col1.field1" === $"df2.col1.field1", "inner")
-        .select($"df1.col1.field1"),
-      Row(1) :: Row(2) :: Nil)
-
+    // Using join does not work for the nested fields
     val e = intercept[AnalysisException] {
       df.as("df2").join(df.as("df1"), "col1.field1")
     }.getMessage
     assert(e.contains("USING column `col1.field1` can not be resolved with the left join side, " +
       "the left output is: [col1]"))
+
+    // Nested fields can work well in join conditions.
+    checkAnswer(
+      df.as("df2").join(df.as("df1"), $"df1.col1.field1" === $"df2.col1.field1", "inner")
+        .select($"df1.col1.field1"),
+      Row(1) :: Row(2) :: Nil)
   }
 
   test("SPARK-17123: Performing set operations that combine non-scala native types") {
