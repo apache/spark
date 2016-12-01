@@ -46,7 +46,7 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
   test("params") {
     ParamsSuite.checkParams(new IDF)
-    val model = new IDFModel("idf", new OldIDFModel(Vectors.dense(1.0)))
+    val model = new IDFModel("idf", Vectors.dense(1.0))
     ParamsSuite.checkParams(model)
   }
 

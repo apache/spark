@@ -89,7 +89,7 @@ final class IDF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
       case Row(v: Vector) => OldVectors.fromML(v)
     }
-    val idf = new feature.IDF($(minDocFreq)).fit(input)
+    val idf = new feature.IDF($(minDocFreq)).fit(input).idf.asML
     copyValues(new IDFModel(uid, idf).setParent(this))
   }
 
@@ -131,8 +131,8 @@ class IDFModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val idf = udf { vec: Vector => IDFModel.transform(idf, vec) }
-    dataset.withColumn($(outputCol), idf(col($(inputCol))))
+    val idfUDF = udf { vec: Vector => IDFModel.transform(idf, vec) }
+    dataset.withColumn($(outputCol), idfUDF(col($(inputCol))))
   }
 
   @Since("1.4.0")
@@ -145,6 +145,8 @@ class IDFModel private[ml] (
     val copied = new IDFModel(uid, idf)
     copyValues(copied, extra).setParent(parent)
   }
+
+  def idfVector: Vector = idf
 
   @Since("1.6.0")
   override def write: MLWriter = new IDFModelWriter(this)
@@ -159,7 +161,7 @@ object IDFModel extends MLReadable[IDFModel] {
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.idf)
+      val data = Data(instance.idfVector)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -176,7 +178,7 @@ object IDFModel extends MLReadable[IDFModel] {
       val Row(idf: Vector) = MLUtils.convertVectorColumnsToML(data, "idf")
         .select("idf")
         .head()
-      val model = new IDFModel(metadata.uid, new feature.IDFModel(OldVectors.fromML(idf)))
+      val model = new IDFModel(metadata.uid, idf)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
