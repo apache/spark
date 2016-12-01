@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.scalatest.ShouldMatchers
+
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateMap, CreateNamedStruct, Expression, GetArrayItem, GetArrayStructFields, GetMapValue, GetStructField, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.plans.logical.Range
-import org.apache.spark.sql.types._
-import org.scalatest.ShouldMatchers
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+
 
 /**
 * Created by eyalf on 11/4/2016.
