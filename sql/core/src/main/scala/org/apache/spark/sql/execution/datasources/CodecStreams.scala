@@ -53,9 +53,9 @@ object CodecStreams {
     val fs = file.getFileSystem(context.getConfiguration)
     val outputStream: OutputStream = fs.create(file, false)
 
-    getCompressionCodec(context, Some(file)).fold(outputStream) { codec =>
-      codec.createOutputStream(outputStream)
-    }
+    getCompressionCodec(context, Some(file))
+      .map(codec => codec.createOutputStream(outputStream))
+      .getOrElse(outputStream)
   }
 
   def createOutputStreamWriter(
@@ -67,8 +67,8 @@ object CodecStreams {
 
   /** Returns the compression codec extension to be used in a file name, e.g. ".gzip"). */
   def getCompressionExtension(context: JobContext): String = {
-    getCompressionCodec(context).fold("") { code =>
-      code.getDefaultExtension
-    }
+    getCompressionCodec(context)
+      .map(_.getDefaultExtension)
+      .getOrElse("")
   }
 }
