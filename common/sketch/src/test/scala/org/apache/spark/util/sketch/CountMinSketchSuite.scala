@@ -25,9 +25,9 @@ import scala.util.Random
 import org.scalatest.FunSuite // scalastyle:ignore funsuite
 
 class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
-  private val epsOfTotalCount = 0.0001
+  private val epsOfTotalCount = 0.01
 
-  private val confidence = 0.98
+  private val confidence = 0.9
 
   private val seed = 42
 
