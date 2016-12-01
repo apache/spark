@@ -47,7 +47,6 @@ import org.apache.spark.util.{AccumulatorContext, LongAccumulator}
  *    data type is nullable.
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
-
   private def checkFilterPredicate(
       df: DataFrame,
       predicate: Predicate,
@@ -556,6 +555,18 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           }
         }
       }
+    }
+  }
+
+  test("SPARK-17213: Broken Parquet filter push-down for string columns") {
+    withTempPath { dir =>
+      import testImplicits._
+
+      val path = dir.getCanonicalPath
+      // scalastyle:off nonascii
+      Seq("a", "é").toDF("name").write.parquet(path)
+      // scalastyle:on nonascii
+      assert(spark.read.parquet(path).where("name > 'a'").count() == 1)
     }
   }
 }
