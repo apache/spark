@@ -64,6 +64,11 @@ and the migration guide below will explain all changes between releases.
 
 ### Breaking changes
 
+* [SPARK-18481](https://issues.apache.org/jira/browse/SPARK-18481):
+  * `RandomForestClassificationModel.getNumTrees` and `RandomForestRegressionModel.getNumTrees` were made final.
+  * `RandomForestClassificationModel.setFeatureSubsetStrategy` and `RandomForestRegressionModel.setFeatureSubsetStrategy` return the concrete class type,
+ rather than an arbitrary trait. This only affected Java compatibility, not Scala.
+ 
 **Deprecated methods removed**
 
 * `setLabelCol` in `feature.ChiSqSelectorModel`
@@ -71,26 +76,23 @@ and the migration guide below will explain all changes between releases.
 * `numTrees` in `regression.RandomForestRegressionModel` (This now refers to the Param called `numTrees`)
 * `model` in `regression.LinearRegressionSummary`
 * `validateParams` in `PipelineStage`
+* `validateParams` in `Evaluator`
 
 ### Deprecations and changes of behavior
 
 **Deprecations**
 
 * [SPARK-18592](https://issues.apache.org/jira/browse/SPARK-18592):
-  Deprecate all setter methods for `DecisionTreeClassificationModel`, `GBTClassificationModel`, `RandomForestClassificationModel`, `DecisionTreeRegressionModel`, `GBTRegressionModel` and `RandomForestRegressionModel`
+  Deprecate all Param setter methods except for input/output column Params for `DecisionTreeClassificationModel`, `GBTClassificationModel`, `RandomForestClassificationModel`, `DecisionTreeRegressionModel`, `GBTRegressionModel` and `RandomForestRegressionModel`
 
 **Changes of behavior**
 
 * [SPARK-17870](https://issues.apache.org/jira/browse/SPARK-17870):
- Fix a bug of `ChiSqSelector` which will likely change its result.
+ Fix a bug of `ChiSqSelector` which will likely change its result. Now `ChiSquareSelector` use pValue rather than raw statistic to select a fixed number of top features.
 * [SPARK-3261](https://issues.apache.org/jira/browse/SPARK-3261):
  `KMeans` returns potentially fewer than k cluster centers in cases where k distinct centroids aren't available or aren't selected.
 * [SPARK-17389](https://issues.apache.org/jira/browse/SPARK-17389):
  `KMeans` reduces the default number of steps from 5 to 2 for the k-means|| initialization mode.
-* [SPARK-18481](https://issues.apache.org/jira/browse/SPARK-18481):
-  * `RandomForestClassificationModel.getNumTrees` and `RandomForestRegressionModel.getNumTrees` were made final.
-  * `RandomForestClassificationModel.setFeatureSubsetStrategy` and `RandomForestRegressionModel.setFeatureSubsetStrategy` return the concrete class type,
- rather than an arbitrary trait. This only affected Java compatibility, not Scala.
 
 ## Previous Spark versions
 
