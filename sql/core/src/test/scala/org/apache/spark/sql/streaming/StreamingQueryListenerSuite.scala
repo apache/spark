@@ -192,8 +192,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     assert(queryQueryTerminated.exception === newQueryTerminated.exception)
   }
 
-  test("noDataReportInterval") {
-    withSQLConf(SQLConf.STREAMING_NO_DATA_REPORT_INTERVAL.key -> "100ms") {
+  test("only one progress event per interval when no data") {
+    // This test will start a query but not push any data, and then check if we push too many events
+    withSQLConf(SQLConf.STREAMING_NO_DATA_EVENT_INTERVAL.key -> "100ms") {
       @volatile var progressEventCount = 0
 
       val listener = new StreamingQueryListener {
@@ -220,13 +221,14 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         for (_ <- 1 to 100) {
           actions += AdvanceManualClock(10)
           actions += AssertOnQuery { _ =>
-            // Sleep so that if the config `noDataReportInterval` doesn't work, it has enough time
+            // Sleep so that if the config `noDataEventInterval` doesn't work, it has enough time
             // to report too many events.
             Thread.sleep(10)
             true
           }
         }
         testStream(MemoryStream[Int].toDS)(actions: _*)
+        // 11 is the max value of the possible numbers of events.
         assert(progressEventCount <= 11)
       } finally {
         spark.streams.removeListener(listener)
