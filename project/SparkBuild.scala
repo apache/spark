@@ -639,13 +639,13 @@ object PySparkAssembly {
     // Use a resource generator to copy all .py files from python/pyspark into a managed directory
     // to be included in the assembly. We can't just add "python/" to the assembly's resource dir
     // list since that will copy unneeded / unwanted files.
-    resourceGenerators in Compile <+= resourceManaged in Compile map { outDir: File =>
+    resourceGenerators in Compile += Def.macroValueI(resourceManaged in Compile map { outDir: File =>
       val src = new File(BuildCommons.sparkHome, "python/pyspark")
       val zipFile = new File(BuildCommons.sparkHome , "python/lib/pyspark.zip")
       zipFile.delete()
       zipRecursive(src, zipFile)
       Seq[File]()
-    }
+    }).value
   )
 
   private def zipRecursive(source: File, destZipFile: File) = {
@@ -862,7 +862,7 @@ object TestSettings {
     // Only allow one test at a time, even across projects, since they run in the same JVM
     parallelExecution in Test := false,
     // Make sure the test temp directory exists.
-    resourceGenerators in Test <+= resourceManaged in Test map { outDir: File =>
+    resourceGenerators in Test += Def.macroValueI(resourceManaged in Test map { outDir: File =>
       var dir = new File(testTempDir)
       if (!dir.isDirectory()) {
         // Because File.mkdirs() can fail if multiple callers are trying to create the same
@@ -880,7 +880,7 @@ object TestSettings {
         }
       }
       Seq[File]()
-    },
+    }).value,
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
     // Remove certain packages from Scaladoc
     scalacOptions in (Compile, doc) := Seq(
