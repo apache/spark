@@ -600,11 +600,14 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
             .asInstanceOf[JArrayList[Partition]]
         } catch {
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
-              !tryDirectSql =>
-            logWarning("Caught Hive MetaException attempting to get partition metadata by " +
-              "filter from Hive. Falling back to fetching all partition metadata, which will " +
-              "degrade performance. Modifying your Hive metastore configuration to set " +
-              s"${tryDirectSqlConfVar.varname} to true may resolve this problem.", ex)
+              (!tryDirectSql || ex.getCause.getMessage.contains(
+                "Filtering is supported only on partition keys of type string")) =>
+            if (!tryDirectSql) {
+              logWarning("Caught Hive MetaException attempting to get partition metadata by " +
+                "filter from Hive. Falling back to fetching all partition metadata, which will " +
+                "degrade performance. Modifying your Hive metastore configuration to set " +
+                s"${tryDirectSqlConfVar.varname} to true may resolve this problem.", ex)
+            }
             // HiveShim clients are expected to handle a superset of the requested partitions
             getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
