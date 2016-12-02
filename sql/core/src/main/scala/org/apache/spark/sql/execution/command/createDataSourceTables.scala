@@ -59,7 +59,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
     // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
     val pathOption = table.storage.locationUri.map("path" -> _)
     // Fill in some default table options from the session conf
-    val uncreatedTable = table.copy(
+    val tableWithDefaultOptions = table.copy(
       identifier = table.identifier.copy(
         database = Some(
           table.identifier.database.getOrElse(sessionState.catalog.getCurrentDatabase))),
@@ -72,7 +72,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         className = table.provider.get,
         bucketSpec = table.bucketSpec,
         options = table.storage.properties ++ pathOption,
-        catalogTable = Some(uncreatedTable)).resolveRelation()
+        catalogTable = Some(tableWithDefaultOptions)).resolveRelation()
 
     dataSource match {
       case fs: HadoopFsRelation =>
