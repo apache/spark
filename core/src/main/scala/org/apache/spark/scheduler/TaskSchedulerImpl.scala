@@ -719,7 +719,7 @@ private[spark] object TaskSchedulerImpl {
 
   private def maybeCreateBlacklistTracker(sc: SparkContext): Option[BlacklistTracker] = {
     if (BlacklistTracker.isBlacklistEnabled(sc.conf)) {
-      Some(new BlacklistTracker(sc))
+      Some(new BlacklistTracker(sc, scheduler))
     } else {
       None
     }

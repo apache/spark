@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -50,11 +50,11 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
 private[scheduler] class BlacklistTracker (
     private val listenerBus: LiveListenerBus,
     conf: SparkConf,
-    sc: Option[SparkContext],
+    scheduler: ExecutorAllocationClient,
     clock: Clock = new SystemClock()) extends Logging {
 
-  def this(sc: SparkContext) = {
-    this(sc.listenerBus, sc.conf)
+  def this(sc: SparkContext, scheduler: ExecutorAllocationClient) = {
+    this(sc.listenerBus, sc.getConf, scheduler)
   }
 
   BlacklistTracker.validateBlacklistConfs(conf)
@@ -187,7 +187,7 @@ private[scheduler] class BlacklistTracker (
             s"executors blacklisted: ${blacklistedExecsOnNode}")
           nodeIdToBlacklistExpiryTime.put(node, expiryTimeForNewBlacklists)
           // TODO Only do this if a config value is set.
-          sc.foreach(context => context.killExecutorsOnHost(node))
+          scheduler.killExecutorsOnHost(node)
           listenerBus.post(SparkListenerNodeBlacklisted(now, node, blacklistedExecsOnNode.size))
           _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
         }
