@@ -603,8 +603,8 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10L)
 
-  val STREAMING_NO_DATA_EVENT_INTERVAL =
-    SQLConfigBuilder("spark.sql.streaming.noDataEventInterval")
+  val STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL =
+    SQLConfigBuilder("spark.sql.streaming.noDataProgressEventInterval")
       .internal()
       .doc("How long to wait between two progress events when there is no data")
       .timeConf(TimeUnit.MILLISECONDS)
@@ -691,7 +691,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def streamingPollingDelay: Long = getConf(STREAMING_POLLING_DELAY)
 
-  def streamingNoDataEventInterval: Long = getConf(STREAMING_NO_DATA_EVENT_INTERVAL)
+  def streamingNoDataProgressEventInterval: Long =
+    getConf(STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL)
 
   def streamingMetricsEnabled: Boolean = getConf(STREAMING_METRICS_ENABLED)
 

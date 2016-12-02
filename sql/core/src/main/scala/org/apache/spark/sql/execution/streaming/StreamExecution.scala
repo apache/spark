@@ -63,7 +63,8 @@ class StreamExecution(
 
   private val pollingDelayMs = sparkSession.sessionState.conf.streamingPollingDelay
 
-  private val noDataEventInterval = sparkSession.sessionState.conf.streamingNoDataEventInterval
+  private val noDataProgressEventInterval =
+    sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
 
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
@@ -199,7 +200,7 @@ class StreamExecution(
       SparkSession.setActiveSession(sparkSession)
 
       // The timestamp we report an event that has no input data
-      var noDataEventTimestamp = Long.MinValue
+      var lastNoDataProgressEventTime = Long.MinValue
 
       triggerExecutor.execute(() => {
         startTrigger()
@@ -225,12 +226,12 @@ class StreamExecution(
             finishTrigger(dataAvailable)
             if (dataAvailable) {
               // Reset noDataEventTimestamp if we processed any data
-              noDataEventTimestamp = Long.MinValue
+              lastNoDataProgressEventTime = Long.MinValue
               postEvent(new QueryProgressEvent(lastProgress))
             } else {
               val now = triggerClock.getTimeMillis()
-              if (now - noDataEventInterval >= noDataEventTimestamp) {
-                noDataEventTimestamp = now
+              if (now - noDataProgressEventInterval >= lastNoDataProgressEventTime) {
+                lastNoDataProgressEventTime = now
                 postEvent(new QueryProgressEvent(lastProgress))
               }
             }

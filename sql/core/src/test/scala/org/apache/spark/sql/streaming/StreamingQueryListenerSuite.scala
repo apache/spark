@@ -195,7 +195,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   test("only one progress event per interval when no data") {
     // This test will start a query but not push any data, and then check if we push too many events
-    withSQLConf(SQLConf.STREAMING_NO_DATA_EVENT_INTERVAL.key -> "100ms") {
+    withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "100ms") {
       @volatile var numProgressEvent = 0
       val listener = new StreamingQueryListener {
         override def onQueryStarted(event: QueryStartedEvent): Unit = {}
@@ -228,7 +228,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         testStream(input.toDS)(actions: _*)
         spark.sparkContext.listenerBus.waitUntilEmpty(10000)
         // 11 is the max value of the possible numbers of events.
-        assert(numProgressEvent >= 1 && numProgressEvent <= 11)
+        assert(numProgressEvent > 1 && numProgressEvent <= 11)
       } finally {
         spark.streams.removeListener(listener)
       }
