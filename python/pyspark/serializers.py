@@ -316,19 +316,21 @@ class PairDeserializer(Serializer):
         self.key_ser = key_ser
         self.val_ser = val_ser
 
-    def prepare_keys_values(self, stream):
-        key_stream = self.key_ser._load_stream_without_unbatching(stream)
-        val_stream = self.val_ser._load_stream_without_unbatching(stream)
-        for (keys, vals) in zip(key_stream, val_stream):
-            yield (keys, vals)
+    def _load_stream_without_unbatching(self, stream):
+        key_batch_stream = self.key_ser._load_stream_without_unbatching(stream)
+        val_batch_stream = self.val_ser._load_stream_without_unbatching(stream)
+        for (key_batch, val_batch) in zip(key_batch_stream, val_batch_stream):
+            # We must put these batches in lists exactly once and
+            # in order since they are pulling from the same stream
+            key_list = list(key_batch)
+            val_list = list(val_batch)
+            if len(key_list) != len(val_list):
+                raise ValueError("Can not deserialize PairRDD with different number of items"
+                                 " in batches: (%d, %d)" % (len(key_list), len(val_list)))
+            yield zip(key_list, val_list)
 
     def load_stream(self, stream):
-        for (keys, vals) in self.prepare_keys_values(stream):
-            if len(keys) != len(vals):
-                raise ValueError("Can not deserialize RDD with different number of items"
-                                 " in pair: (%d, %d)" % (len(keys), len(vals)))
-            for pair in zip(keys, vals):
-                yield pair
+        return chain.from_iterable(self._load_stream_without_unbatching(stream))
 
     def __repr__(self):
         return "PairDeserializer(%s, %s)" % (str(self.key_ser), str(self.val_ser))
