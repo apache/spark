@@ -647,24 +647,24 @@ object StreamMetadata extends Logging {
   /** Read the metadata from file if it exists */
   def read(metadataFile: Path, hadoopConf: Configuration): Option[StreamMetadata] = {
     val fs = FileSystem.get(hadoopConf)
-      if (fs.exists(metadataFile)) {
-        var input: FSDataInputStream = null
-        try {
-          input = fs.open(metadataFile)
-          val reader = new InputStreamReader(input, StandardCharsets.UTF_8)
-          val metadata = Serialization.read[StreamMetadata](reader)
-          Some(metadata)
-        } catch {
-          case NonFatal(e) =>
-            logError(s"Error reading stream metadata from $metadataFile", e)
-            throw e
-        } finally {
-          IOUtils.closeQuietly(input)
-        }
-      } else None
+    if (fs.exists(metadataFile)) {
+      var input: FSDataInputStream = null
+      try {
+        input = fs.open(metadataFile)
+        val reader = new InputStreamReader(input, StandardCharsets.UTF_8)
+        val metadata = Serialization.read[StreamMetadata](reader)
+        Some(metadata)
+      } catch {
+        case NonFatal(e) =>
+          logError(s"Error reading stream metadata from $metadataFile", e)
+          throw e
+      } finally {
+        IOUtils.closeQuietly(input)
+      }
+    } else None
   }
 
-  /** Write metadata to file, overwrite if it exists */
+  /** Write metadata to file */
   def write(
       metadata: StreamMetadata,
       metadataFile: Path,
@@ -672,13 +672,13 @@ object StreamMetadata extends Logging {
     var output: FSDataOutputStream = null
     try {
       val fs = FileSystem.get(hadoopConf)
-      output = fs.create(metadataFile, true) // overwrite if exists
+      output = fs.create(metadataFile)
       val writer = new OutputStreamWriter(output)
       Serialization.write(metadata, writer)
       writer.close()
     } catch {
       case NonFatal(e) =>
-        logError(s"Error writing stream metedata $metadata to $metadataFile", e)
+        logError(s"Error writing stream metadata $metadata to $metadataFile", e)
         throw e
     } finally {
       IOUtils.closeQuietly(output)

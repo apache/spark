@@ -52,7 +52,7 @@ class StateOperatorProgress private[sql](
  *
  * @param id An unique query id that persists across restarts. See `StreamingQuery.id()`.
  * @param runId A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
- * @param name User-specified name of the query.
+ * @param name User-specified name of the query, null if not specified.
  * @param timestamp Timestamp (ms) of the beginning of the trigger.
  * @param batchId A unique id for the current batch of data being processed.  Note that in the
  *                case of retries after a failure a given batchId my be executed more than once.
