@@ -22,6 +22,7 @@ import static org.apache.parquet.filter2.compat.RowGroupFilter.filterRowGroups;
 import static org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER;
 import static org.apache.parquet.format.converter.ParquetMetadataConverter.range;
 import static org.apache.parquet.hadoop.ParquetFileReader.readFooter;
+import static org.apache.parquet.hadoop.ParquetInputFormat.DICTIONARY_FILTERING_ENABLED;
 import static org.apache.parquet.hadoop.ParquetInputFormat.getFilter;
 
 import com.google.common.collect.ImmutableList;
@@ -107,8 +108,14 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       footer = readFooter(configuration, file, range(split.getStart(), split.getEnd()));
       FilterCompat.Filter filter = getFilter(configuration);
       this.reader = ParquetFileReader.open(configuration, file, footer);
+      List<RowGroupFilter.FilterLevel> filterLevels =
+              ImmutableList.of(RowGroupFilter.FilterLevel.STATISTICS);
+      if (configuration.getBoolean(DICTIONARY_FILTERING_ENABLED, false)) {
+        filterLevels = ImmutableList.of(RowGroupFilter.FilterLevel.STATISTICS,
+                RowGroupFilter.FilterLevel.DICTIONARY);
+      }
       blocks = filterRowGroups(
-              ImmutableList.of(RowGroupFilter.FilterLevel.STATISTICS, RowGroupFilter.FilterLevel.DICTIONARY),
+              filterLevels,
               filter,
               footer.getBlocks(),
               reader);

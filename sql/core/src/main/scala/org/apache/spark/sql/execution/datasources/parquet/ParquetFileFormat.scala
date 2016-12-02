@@ -394,6 +394,11 @@ class ParquetFileFormat
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       int96AsTimestamp)
 
+    // By default, disable record level filtering.
+    if (hadoopConf.get(ParquetInputFormat.RECORD_FILTERING_ENABLED) == null) {
+      hadoopConf.setBoolean(ParquetInputFormat.RECORD_FILTERING_ENABLED, false)
+    }
+
     // Try to push down filters when filter push-down is enabled.
     val pushed =
       if (sparkSession.sessionState.conf.parquetFilterPushDown) {

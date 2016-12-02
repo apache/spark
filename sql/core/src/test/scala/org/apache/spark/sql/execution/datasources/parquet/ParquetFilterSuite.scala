@@ -24,6 +24,7 @@ import java.time.{LocalDate, ZoneId}
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
+import org.apache.parquet.hadoop.{ParquetInputFormat, ParquetOutputFormat}
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -111,7 +112,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
           maybeFilter.exists(_.getClass === filterClass)
         }
-        checker(stripSparkFilter(query), expected)
+        checker(query, expected)
       }
     }
   }
@@ -557,11 +558,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
           val df = spark.read.parquet(path).filter("a = 2")
 
-          // The result should be single row.
-          // When a filter is pushed to Parquet, Parquet can apply it to every row.
-          // So, we can check the number of rows returned from the Parquet
-          // to make sure our filter pushdown work.
-          assert(stripSparkFilter(df).count == 1)
+          assert(df.count == 1)
         }
       }
     }
@@ -676,16 +673,31 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           val path = s"${dir.getCanonicalPath}/table1"
           (1 to 5).map(i => (i.toFloat, i%3)).toDF("a", "b").write.parquet(path)
           val df = spark.read.parquet(path).where("b in (0,2)")
-          assert(stripSparkFilter(df).count == 3)
+          assert(df.count == 3)
           val df1 = spark.read.parquet(path).where("not (b in (1))")
-          assert(stripSparkFilter(df1).count == 3)
+          assert(df1.count == 3)
           val df2 = spark.read.parquet(path).where("not (b in (1,3) or a <= 2)")
-          assert(stripSparkFilter(df2).count == 2)
+          assert(df2.count == 2)
           val df3 = spark.read.parquet(path).where("not (b in (1,3) and a <= 2)")
-          assert(stripSparkFilter(df3).count == 4)
+          assert(df3.count == 4)
           val df4 = spark.read.parquet(path).where("not (a <= 2)")
-          assert(stripSparkFilter(df4).count == 3)
+          assert(df4.count == 3)
         }
+      }
+    }
+  }
+
+  test("Large In filters work with UDP") {
+    import testImplicits._
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      ParquetInputFormat.DICTIONARY_FILTERING_ENABLED -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/table1"
+        (1 to 1000).toDF().write.parquet(path)
+        val df = spark.read.parquet(path)
+        val filter = (1 to 499).map(i => i.toString).mkString(",")
+        assert(df.where(s"value in (${filter})").count() == 499)
+        assert(df.where(s"value not in (${filter})").count() == 501)
       }
     }
   }
