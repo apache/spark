@@ -69,7 +69,10 @@ class StreamingQuery(object):
     @property
     @since(2.0)
     def name(self):
-        """The name of the streaming query. This name is unique across all active queries.
+        """Returns the user-specified name of the query, or null if not specified.
+        This name can be specified in the `org.apache.spark.sql.streaming.DataStreamWriter`
+        as `dataframe.writeStream.queryName("query").start()`.
+        This name, if set, must be unique across all active queries.
         """
         return self._jsq.name()
 

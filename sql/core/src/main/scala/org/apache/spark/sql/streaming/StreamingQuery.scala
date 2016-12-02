@@ -32,9 +32,10 @@ import org.apache.spark.sql.SparkSession
 trait StreamingQuery {
 
   /**
-   * Returns the name of the query. This name is unique across all active queries. This can be
-   * set in the `org.apache.spark.sql.streaming.DataStreamWriter` as
-   * `dataframe.writeStream.queryName("query").start()`.
+   * Returns the user-specified name of the query, or null if not specified.
+   * This name can be specified in the `org.apache.spark.sql.streaming.DataStreamWriter`
+   * as `dataframe.writeStream.queryName("query").start()`.
+   * This name, if set, must be unique across all active queries.
    *
    * @since 2.0.0
    */
