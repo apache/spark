@@ -132,13 +132,27 @@ case class DataSource(
       }.toArray
       new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
     }
-    val partitionSchema = if (partitionColumns.isEmpty) {
+
+    val dataSchema = userSpecifiedSchema.map { schema =>
+      StructType(schema)
+    }.orElse {
+      val schema = format.inferSchema(
+        sparkSession,
+        caseInsensitiveOptions,
+        tempFileIndex.allFiles())
+      schema
+    }.getOrElse {
+      throw new AnalysisException(
+        s"Unable to infer schema for $format. It must be specified manually.")
+    }
+
+    val partitionSchema = if (partitionColumns.isEmpty && catalogTable.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
       // columns properly unless it is a Hive DataSource
       val resolved = tempFileIndex.partitionSchema.map { partitionField =>
         val equality = sparkSession.sessionState.conf.resolver
-        // SPARK-18510: try to get schema from userSpecifiedSchema, otherwise fallback to inferred
-        userSpecifiedSchema.flatMap(_.find(f => equality(f.name, partitionField.name))).getOrElse(
+        // SPARK-18510: try to get partition schema from data schema, otherwise fallback to inferred
+        dataSchema.find(f => equality(f.name, partitionField.name)).getOrElse(
           partitionField)
       }
       StructType(resolved)
@@ -174,22 +188,16 @@ case class DataSource(
         StructType(partitionFields)
       }
     }
+
     if (justPartitioning) {
-      return (null, partitionSchema)
-    }
-    val dataSchema = userSpecifiedSchema.map { schema =>
+      (null, partitionSchema)
+    } else if (userSpecifiedSchema.isDefined) {
       val equality = sparkSession.sessionState.conf.resolver
-      StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
-    }.orElse {
-      format.inferSchema(
-        sparkSession,
-        caseInsensitiveOptions,
-        tempFileIndex.allFiles())
-    }.getOrElse {
-      throw new AnalysisException(
-        s"Unable to infer schema for $format. It must be specified manually.")
+      (StructType(dataSchema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name)))),
+        partitionSchema)
+    } else {
+      (dataSchema, partitionSchema)
     }
-    (dataSchema, partitionSchema)
   }
 
   /** Returns the name and schema of the source that can be used to continually read data. */
