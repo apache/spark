@@ -89,7 +89,8 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     recordProcessor.processRecords(batch, checkpointerMock)
 
     verify(receiverMock, times(1)).isStopped()
-    verify(receiverMock, times(2)).addRecords(shardId, batch)
+    verify(receiverMock, times(1)).addRecords(shardId, batch.subList(0, 1))
+    verify(receiverMock, times(1)).addRecords(shardId, batch.subList(1, 2))
     verify(receiverMock, times(2)).setCheckpointer(shardId, checkpointerMock)
   }
 

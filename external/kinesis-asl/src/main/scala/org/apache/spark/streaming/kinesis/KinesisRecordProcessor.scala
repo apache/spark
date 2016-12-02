@@ -79,11 +79,11 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
       val rem = batch.size % maxRecords
       for (idx <- 0 until numIter) {
         val fromIdx = idx * maxRecords
-        val toIdx = fromIdx + maxRecords - 1
-        addRecords(batch.subList(fromIdx, toIdx), checkpointer)
+        val untilIdx = fromIdx + maxRecords
+        addRecords(batch.subList(fromIdx, untilIdx), checkpointer)
       }
       if (rem > 0) {
-        addRecords(batch.subList(numIter * maxRecords, batch.size - 1), checkpointer)
+        addRecords(batch.subList(numIter * maxRecords, batch.size), checkpointer)
       }
     }
   }
