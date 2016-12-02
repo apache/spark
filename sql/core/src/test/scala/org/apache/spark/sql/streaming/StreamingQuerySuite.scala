@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.streaming
 
-import scala.util.Random
-
 import org.apache.commons.lang3.RandomStringUtils
 import org.scalactic.TolerantNumerics
 import org.scalatest.concurrent.Eventually._
@@ -49,22 +47,31 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
   test("name unique in active queries") {
     withTempDir { dir =>
       def startQuery(name: Option[String]): StreamingQuery = {
-        val writer = MemoryStream[Int].toDS.groupBy().count().writeStream
+        val writer = MemoryStream[Int].toDS.writeStream
         name.foreach(writer.queryName)
         writer
-          .format("memory")
-          .outputMode("complete")
+          .foreach(new TestForeachWriter)
           .start()
       }
-      val q1 = startQuery(name = Some("q1"))
-      assert(q1.name === "q1")
-      val q2 = startQuery(name = Some("q2"))
-      assert(q2.name === "q2")
+
+      // No name by default, multiple active queries can have no name
+      val q1 = startQuery(name = None)
+      assert(q1.name === null)
+      val q2 = startQuery(name = None)
+      assert(q2.name === null)
+
+      // Can be set by user
+      val q3 = startQuery(name = Some("q3"))
+      assert(q3.name === "q3")
+
+      // Multiple active queries cannot have same name
       val e = intercept[IllegalArgumentException] {
-        startQuery(name = Some("q2"))
+        startQuery(name = Some("q3"))
       }
+
       q1.stop()
       q2.stop()
+      q3.stop()
     }
   }
 

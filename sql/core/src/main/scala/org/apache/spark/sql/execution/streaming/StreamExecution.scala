@@ -114,6 +114,13 @@ class StreamExecution(
 
   override val runId: UUID = UUID.randomUUID
 
+  /**
+   * Pretty identified string of printing in logs. Format is
+   * If name is set "queryName [id = xyz, runId = abc]" else "[id = xyz, runId = abc]"
+   */
+  private val prettyIdString =
+    Option(name).map(_ + " ").getOrElse("") + s"[id = $id, runId = $runId]"
+
   /** All stream sources present in the query plan. */
   protected val sources =
     logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
@@ -142,7 +149,8 @@ class StreamExecution(
   private val callSite = Utils.getCallSite()
 
   /** Used to report metrics to coda-hale. This uses id for easier tracking across restarts. */
-  lazy val streamMetrics = new MetricsReporter(this, s"spark.streaming.$id")
+  lazy val streamMetrics = new MetricsReporter(
+    this, s"spark.streaming.${Option(name).getOrElse(id)}")
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
@@ -150,7 +158,7 @@ class StreamExecution(
    * [[HDFSMetadataLog]]. See SPARK-14131 for more details.
    */
   val microBatchThread =
-    new StreamExecutionThread(s"stream execution thread for $name") {
+    new StreamExecutionThread(s"stream execution thread for $prettyIdString") {
       override def run(): Unit = {
         // To fix call site like "run at <unknown>:0", we bridge the call site from the caller
         // thread to this micro batch thread
@@ -261,10 +269,10 @@ class StreamExecution(
       case e: Throwable =>
         streamDeathCause = new StreamingQueryException(
           this,
-          s"Query $name terminated with exception: ${e.getMessage}",
+          s"Query $prettyIdString terminated with exception: ${e.getMessage}",
           e,
           Some(committedOffsets.toOffsetSeq(sources, offsetSeqMetadata)))
-        logError(s"Query $name terminated with error", e)
+        logError(s"Query $prettyIdString terminated with error", e)
         updateStatusMessage(s"Terminated with exception: ${e.getMessage}")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
         // handle them
@@ -502,7 +510,7 @@ class StreamExecution(
       microBatchThread.join()
     }
     uniqueSources.foreach(_.stop())
-    logInfo(s"Query $name was stopped")
+    logInfo(s"Query $prettyIdString was stopped")
   }
 
   /**
@@ -593,7 +601,7 @@ class StreamExecution(
   override def explain(): Unit = explain(extended = false)
 
   override def toString: String = {
-    s"Streaming Query - $name [state = $state]"
+    s"Streaming Query $prettyIdString [state = $state]"
   }
 
   def toDebugString: String = {
@@ -602,7 +610,7 @@ class StreamExecution(
     } else ""
     s"""
        |=== Streaming Query ===
-       |Name: $name
+       |Identifier: $prettyIdString
        |Current Offsets: $committedOffsets
        |
        |Current State: $state
