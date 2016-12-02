@@ -680,12 +680,21 @@ object JdbcUtils extends Logging {
   /**
    * Compute the schema string for this RDD.
    */
-  def schemaString(schema: StructType, url: String): String = {
+  def schemaString(
+      schema: StructType,
+      url: String,
+      createTableColumnTypes: Option[String] = None): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
+    val dbColumnTypeMetadata =
+      createTableColumnTypes.map(Metadata.fromJson).getOrElse(Metadata.empty)
     schema.fields foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
-      val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
+      val typ: String = if (dbColumnTypeMetadata.contains(field.name)) {
+        dbColumnTypeMetadata.getString(field.name)
+      } else {
+        getJdbcType(field.dataType, dialect).databaseTypeDefinition
+      }
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")
     }
@@ -728,9 +737,10 @@ object JdbcUtils extends Logging {
       conn: Connection,
       schema: StructType,
       options: JDBCOptions): Unit = {
-    val strSchema = schemaString(schema, options.url)
     val table = options.table
     val createTableOptions = options.createTableOptions
+    val createTableColumnTypes = options.createTableColumnTypes
+    val strSchema = schemaString(schema, options.url, createTableColumnTypes)
     // Create the table if the table does not exist.
     // To allow certain options to append when create a new table, which can be
     // table_options or partition_options.

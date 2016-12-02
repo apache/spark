@@ -1223,6 +1223,13 @@ the following case-insensitive options:
      This is a JDBC writer related option. If specified, this option allows setting of database-specific table and partition options when creating a table (e.g., <code>CREATE TABLE t (name string) ENGINE=InnoDB.</code>). This option applies only to writing.
    </td>
   </tr>
+  
+  <tr>
+    <td><code>createTableColumnTypes</code></td>
+    <td>
+     The database column data types to use instead of the defaults, when creating the table. Data type information should be specified as key(column name)-value(data type) pairs in JSON (e.g: <code>{"name":"varchar(128)", "comments":"clob(20k)"})</code>. You can use <code>org.apache.spark.sql.types.MetadataBuilder</code> to build the metadata and generate the JSON string required for this option. This option applies only to writing.
+    </td>
+  </tr>  
 </table>
 
 <div class="codetabs">
