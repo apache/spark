@@ -665,6 +665,23 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(numbers.count() == 8)
   }
 
+  test("Write and read empty data with the header as the schema") {
+    withTempPath { path =>
+      val emptyDf = spark.range(10).limit(0).toDF()
+      emptyDf.write
+        .format("csv")
+        .option("header", "true")
+        .save(path.getCanonicalPath)
+
+      val copyEmptyDf = spark.read
+        .format("csv")
+        .option("header", "true")
+        .load(path.getCanonicalPath)
+
+      checkAnswer(emptyDf, copyEmptyDf)
+    }
+  }
+
   test("error handling for unsupported data types.") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath

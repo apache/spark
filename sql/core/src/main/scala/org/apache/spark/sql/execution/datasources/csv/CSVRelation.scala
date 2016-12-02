@@ -192,6 +192,8 @@ private[csv] class CsvOutputWriter(
   // create the Generator without separator inserted between 2 records
   private[this] val text = new Text()
 
+  private val csvWriter = new LineCsvWriter(params, dataSchema.fieldNames.toSeq)
+
   // A `ValueConverter` is responsible for converting a value of an `InternalRow` to `String`.
   // When the value is null, this converter should not be called.
   private type ValueConverter = (InternalRow, Int) => String
@@ -201,16 +203,22 @@ private[csv] class CsvOutputWriter(
     dataSchema.map(_.dataType).map(makeConverter).toArray
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
-    new TextOutputFormat[NullWritable, Text]() {
+    val writer = new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
         new Path(path)
       }
     }.getRecordWriter(context)
+    // Write header even if `writeInternal()` is not called.
+    if (params.headerFlag) {
+      csvWriter.writeHeader()
+      text.set(csvWriter.flush())
+      writer.write(NullWritable.get(), text)
+    }
+    writer
   }
 
   private val FLUSH_BATCH_SIZE = 1024L
   private var records: Long = 0L
-  private val csvWriter = new LineCsvWriter(params, dataSchema.fieldNames.toSeq)
 
   private def rowToString(row: InternalRow): Seq[String] = {
     var i = 0
@@ -245,7 +253,7 @@ private[csv] class CsvOutputWriter(
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
-    csvWriter.writeRow(rowToString(row), records == 0L && params.headerFlag)
+    csvWriter.writeRow(rowToString(row))
     records += 1
     if (records % FLUSH_BATCH_SIZE == 0) {
       flush()
