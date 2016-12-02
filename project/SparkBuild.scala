@@ -512,9 +512,9 @@ object OldDeps {
 
   lazy val project = Project("oldDeps", file("dev"), settings = oldDepsSettings)
 
-  lazy val allPreviousArtifactKeys = Def.settingDyn[Seq[Option[ModuleID]]] {
+  lazy val allPreviousArtifactKeys = Def.settingDyn[Seq[Set[ModuleID]]] {
     SparkBuild.mimaProjects
-      .map { project => MimaKeys.previousArtifact in project }
+      .map { project => MimaKeys.mimaPreviousArtifacts in project }
       .map(k => Def.setting(k.value))
       .join
   }
