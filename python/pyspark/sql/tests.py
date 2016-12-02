@@ -1099,7 +1099,7 @@ class SQLTests(ReusedPySparkTestCase):
             q.stop()
             q2 = df.writeStream \
                 .start(path=out, format='parquet', checkpointLocation=chk)
-            self.assertTrue(q2.name == None)
+            self.assertTrue(q2.name is None)
             q2.stop()
         finally:
             for q in self.spark.streams.active:
