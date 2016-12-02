@@ -1672,23 +1672,6 @@ class SparkContext(config: SparkConf) extends Logging {
   def killExecutor(executorId: String): Boolean = killExecutors(Seq(executorId))
 
   /**
-   * :: DeveloperApi ::
-   * Request that the cluster manager kill all executors on the specified host.
-   *
-   * @return whether the request is received.
-   */
-  @DeveloperApi
-  def killExecutorsOnHost(host: String): Boolean = {
-    schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutorsOnHost(host).nonEmpty
-      case _ =>
-        logWarning("Killing executors is only supported in coarse-grained mode")
-        false
-    }
-  }
-
-  /**
    * Request that the cluster manager kill the specified executor without adjusting the
    * application resource requirements.
    *

@@ -176,6 +176,9 @@ private[scheduler] class BlacklistTracker (
                 case Some(scheduler) =>
                   logInfo(s"Killing blacklisted executor id: $exec" +
                           s"since spark.blacklist.kill is set.")
+                  // TODO Do this killing in the driver via an RPC message?
+                  // TODO Update the coarseGrainedSchedulerBackend's list of executors and hosts
+                  // TODO to fail fast and not attempt to allocate this executor?
                   scheduler.killExecutors(Seq(exec), true, true)
                 case None =>
                   logWarning(s"Not attempting to kill blacklisted executor id $exec" +
@@ -200,7 +203,6 @@ private[scheduler] class BlacklistTracker (
             !nodeIdToBlacklistExpiryTime.contains(node)) {
           logInfo(s"Blacklisting node $node because it has ${blacklistedExecsOnNode.size} " +
             s"executors blacklisted: ${blacklistedExecsOnNode}")
-          // TODO Prevent the scheduler from offering executors on this host.
           conf.get(config.BLACKLIST_ENABLED) match {
             case Some(enabled) =>
               if (enabled) {
@@ -208,6 +210,7 @@ private[scheduler] class BlacklistTracker (
                   case Some(scheduler) =>
                     logInfo(s"Killing blacklisted executor id: $exec" +
                       s"since spark.blacklist.kill is set.")
+                    // TODO Same as above.
                     scheduler.killExecutorsOnHost(node)
                   case None =>
                     logWarning(s"Not attempting to kill blacklisted executor id $exec" +

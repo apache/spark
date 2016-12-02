@@ -607,7 +607,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   final override def killExecutorsOnHost(host: String): Seq[String] = {
     logInfo(s"Requesting to kill any and all executors on host ${host}")
-    killExecutors(scheduler.getExecutorsAliveOnHost(host).get.toSeq, replace = true, force = true)
+    scheduler.getExecutorsAliveOnHost(host).foreach(exec =>
+      killExecutors(exec.toSeq, replace = true, force = true)
+    )
   }
 }
 
