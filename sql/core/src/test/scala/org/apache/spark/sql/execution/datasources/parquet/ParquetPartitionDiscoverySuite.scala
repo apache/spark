@@ -971,13 +971,23 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
   }
 
   test("SPARK-18108 Partition discovery fails with explicitly written long partitions") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = Seq((1L, 2.0)).toDF("a", "b")
+        // partition explicitly written
+        df.write.parquet(s"$path/a=1")
+        checkAnswer(spark.read.parquet(s"$path"), Seq(Row(1L, 2.0)))
+      }
+    }
+
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-
-      val df = Seq((1L, 2.0)).toDF("a", "b")
-      // partition explicitly written
-      df.write.parquet(s"$path/a=1")
-      checkAnswer(spark.read.parquet(s"$path"), Seq(Row(1L, 2.0)))
+      val df = Seq((1L, 2)).toDF("a", "b")
+      df.write.parquet(s"$path/a=1480617712537/")
+      df.printSchema()
+      df.collect()
+      checkAnswer(spark.read.parquet(s"$path"), Seq(Row(1L, 2)))
     }
   }
 }
