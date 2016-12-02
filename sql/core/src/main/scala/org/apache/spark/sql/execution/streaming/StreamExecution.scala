@@ -141,8 +141,8 @@ class StreamExecution(
   /* Get the call site in the caller thread; will pass this into the micro batch thread */
   private val callSite = Utils.getCallSite()
 
-  /** Used to report metrics to coda-hale. */
-  lazy val streamMetrics = new MetricsReporter(this, s"spark.streaming.$name")
+  /** Used to report metrics to coda-hale. This uses id for easier tracking across restarts. */
+  lazy val streamMetrics = new MetricsReporter(this, s"spark.streaming.$id")
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
@@ -443,7 +443,7 @@ class StreamExecution(
           cd.dataType)
     }
 
-    val executedPlan = reportTimeTaken("queryPlanning") {
+    reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
         sparkSession,
         triggerLogicalPlan,
