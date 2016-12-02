@@ -814,9 +814,21 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     spec.map { case (k, v) => k.toLowerCase -> v }
   }
 
+  // Build a map from lower-cased partition column names to exact column names for a given table
+  private def buildLowerCasePartColNameMap(table: CatalogTable): Map[String, String] = {
+    val actualPartColNames = table.partitionColumnNames
+    actualPartColNames.map(colName => (colName.toLowerCase, colName)).toMap
+  }
+
   // Hive metastore is not case preserving and the column names of the partition specification we
   // get from the metastore are always lower cased. We should restore them w.r.t. the actual table
   // partition columns.
+  private def restorePartitionSpec(
+      spec: TablePartitionSpec,
+      partColMap: Map[String, String]): TablePartitionSpec = {
+    spec.map { case (k, v) => partColMap(k.toLowerCase) -> v }
+  }
+
   private def restorePartitionSpec(
       spec: TablePartitionSpec,
       partCols: Seq[String]): TablePartitionSpec = {
@@ -934,14 +946,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       partialSpec: Option[TablePartitionSpec] = None): Seq[String] = withClient {
     val catalogTable = getTable(db, table)
-    val actualPartColNames = catalogTable.partitionColumnNames
+    val partColNameMap = buildLowerCasePartColNameMap(catalogTable).mapValues(escapePathName)
     val clientPartitionNames =
       client.getPartitionNames(catalogTable, partialSpec.map(lowerCasePartitionSpec))
     clientPartitionNames.map { partName =>
       val partSpec = PartitioningUtils.parsePathFragmentAsSeq(partName)
       partSpec.map { case (partName, partValue) =>
-        escapePathName(actualPartColNames.find(_.equalsIgnoreCase(partName)).get) + "=" +
-          escapePathName(partValue)
+        partColNameMap(partName.toLowerCase) + "=" + escapePathName(partValue)
       }.mkString("/")
     }
   }
@@ -953,9 +964,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       table: String,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = withClient {
-    val actualPartColNames = getTable(db, table).partitionColumnNames
+    val partColNameMap = buildLowerCasePartColNameMap(getTable(db, table))
     client.getPartitions(db, table, partialSpec.map(lowerCasePartitionSpec)).map { part =>
-      part.copy(spec = restorePartitionSpec(part.spec, actualPartColNames))
+      part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
     }
   }
 
@@ -976,10 +987,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
 
     val partitionSchema = catalogTable.partitionSchema
+    val partColNameMap = buildLowerCasePartColNameMap(getTable(db, table))
 
     if (predicates.nonEmpty) {
       val clientPrunedPartitions = client.getPartitionsByFilter(rawTable, predicates).map { part =>
-        part.copy(spec = restorePartitionSpec(part.spec, catalogTable.partitionColumnNames))
+        part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
       }
       val boundPredicate =
         InterpretedPredicate.create(predicates.reduce(And).transform {
@@ -990,7 +1002,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       clientPrunedPartitions.filter { p => boundPredicate(p.toRow(partitionSchema)) }
     } else {
       client.getPartitions(catalogTable).map { part =>
-        part.copy(spec = restorePartitionSpec(part.spec, catalogTable.partitionColumnNames))
+        part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
       }
     }
   }
