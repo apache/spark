@@ -1974,14 +1974,14 @@ class Analyzer(
       condition: Option[Expression]) = {
     val leftKeys = joinNames.map { keyName =>
       left.output.find(attr => resolver(attr.name, keyName)).getOrElse {
-        throw new AnalysisException(s"USING column `$keyName` can not be resolved with the " +
-          s"left join side, the left output is: [${left.output.map(_.name).mkString(", ")}]")
+        throw new AnalysisException(s"USING column `$keyName` cannot be resolved on the left " +
+          s"side of the join. The left-side columns: [${left.output.map(_.name).mkString(", ")}]")
       }
     }
     val rightKeys = joinNames.map { keyName =>
       right.output.find(attr => resolver(attr.name, keyName)).getOrElse {
-        throw new AnalysisException(s"USING column `$keyName` can not be resolved with the " +
-          s"right join side, the right output is: [${right.output.map(_.name).mkString(", ")}]")
+        throw new AnalysisException(s"USING column `$keyName` cannot be resolved on the right " +
+          s"side of the join. The right-side columns: [${right.output.map(_.name).mkString(", ")}]")
       }
     }
     val joinPairs = leftKeys.zip(rightKeys)
