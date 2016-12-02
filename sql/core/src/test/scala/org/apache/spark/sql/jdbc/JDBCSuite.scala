@@ -26,6 +26,7 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -889,5 +890,14 @@ class JDBCSuite extends SparkFunSuite
     assert(sql("SELECT * FROM mixedCaseCols WHERE Name NOT IN ('fred')").collect().size == 1)
     assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1 OR Name = 'mary'").collect().size == 2)
     assert(sql("SELECT * FROM mixedCaseCols WHERE Name = 'mary' AND Id = 2").collect().size == 1)
+  }
+
+  test("SPARK-18419: Fix `asConnectionProperties` to filter case-insensitively") {
+    val parameters = Map(
+      "url" -> "jdbc:mysql://localhost:3306/temp",
+      "dbtable" -> "t1",
+      "numPartitions" -> "10")
+    assert(new JDBCOptions(parameters).asConnectionProperties.isEmpty)
+    assert(new JDBCOptions(new CaseInsensitiveMap(parameters)).asConnectionProperties.isEmpty)
   }
 }

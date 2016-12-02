@@ -54,7 +54,6 @@ object JDBCRDD extends Logging {
   def resolveTable(options: JDBCOptions): StructType = {
     val url = options.url
     val table = options.table
-    val properties = options.asConnectionProperties
     val dialect = JdbcDialects.get(url)
     val conn: Connection = JdbcUtils.createConnectionFactory(options)()
     try {

@@ -131,7 +131,7 @@ private[sql] case class JDBCRelation(
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     val url = jdbcOptions.url
     val table = jdbcOptions.table
-    val properties = jdbcOptions.asConnectionProperties
+    val properties = jdbcOptions.asProperties
     data.write
       .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)
       .jdbc(url, table, properties)
