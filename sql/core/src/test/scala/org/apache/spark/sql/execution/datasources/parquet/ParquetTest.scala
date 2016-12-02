@@ -101,12 +101,6 @@ private[sql] trait ParquetTest extends SQLTestUtils {
   }
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
-      data: Seq[T], path: File, partitionColumn: Seq[String]): Unit = {
-    spark.createDataFrame(data).write.mode(SaveMode.Overwrite).partitionBy(partitionColumn: _*)
-      .parquet(path.getCanonicalPath)
-  }
-
-  protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
       df: DataFrame, path: File): Unit = {
     df.write.mode(SaveMode.Overwrite).parquet(path.getCanonicalPath)
   }
