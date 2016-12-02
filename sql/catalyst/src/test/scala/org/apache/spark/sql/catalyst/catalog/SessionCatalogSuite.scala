@@ -878,6 +878,31 @@ class SessionCatalogSuite extends SparkFunSuite {
       "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
   }
 
+  test("list partition names") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    val expectedPartitionNames = Seq("a=1/b=2", "a=3/b=4")
+    assert(catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2"))) ==
+      expectedPartitionNames)
+    // List partition names without explicitly specifying database
+    catalog.setCurrentDatabase("db2")
+    assert(catalog.listPartitionNames(TableIdentifier("tbl2")) == expectedPartitionNames)
+  }
+
+  test("list partition names with partial partition spec") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    assert(
+      catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")), Some(Map("a" -> "1"))) ==
+        Seq("a=1/b=2"))
+  }
+
+  test("list partition names with invalid partial partition spec") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    intercept[AnalysisException] {
+      catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
+        Some(Map("unknown" -> "unknown")))
+    }
+  }
+
   test("list partitions") {
     val catalog = new SessionCatalog(newBasicCatalog())
     assert(catalogPartitionsEqual(
@@ -885,6 +910,20 @@ class SessionCatalogSuite extends SparkFunSuite {
     // List partitions without explicitly specifying database
     catalog.setCurrentDatabase("db2")
     assert(catalogPartitionsEqual(catalog.listPartitions(TableIdentifier("tbl2")), part1, part2))
+  }
+
+  test("list partitions with partial partition spec") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    assert(catalogPartitionsEqual(
+      catalog.listPartitions(TableIdentifier("tbl2", Some("db2")), Some(Map("a" -> "1"))), part1))
+  }
+
+  test("list partitions with invalid partial partition spec") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    intercept[AnalysisException] {
+      catalog.listPartitions(
+        TableIdentifier("tbl2", Some("db2")), Some(Map("unknown" -> "unknown")))
+    }
   }
 
   test("list partitions when database/table does not exist") {
