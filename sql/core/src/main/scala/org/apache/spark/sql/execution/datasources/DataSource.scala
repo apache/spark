@@ -133,14 +133,11 @@ case class DataSource(
       new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
     }
 
-    val dataSchema = userSpecifiedSchema.map { schema =>
-      StructType(schema)
-    }.orElse {
-      val schema = format.inferSchema(
+    val dataSchema = userSpecifiedSchema.orElse {
+      format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,
         tempFileIndex.allFiles())
-      schema
     }.getOrElse {
       throw new AnalysisException(
         s"Unable to infer schema for $format. It must be specified manually.")
@@ -192,9 +189,11 @@ case class DataSource(
     if (justPartitioning) {
       (null, partitionSchema)
     } else if (userSpecifiedSchema.isDefined) {
-      val equality = sparkSession.sessionState.conf.resolver
-      (StructType(dataSchema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name)))),
-        partitionSchema)
+      val dataWithoutPartitions = dataSchema.filterNot { field =>
+        val equality = sparkSession.sessionState.conf.resolver
+        partitionSchema.exists(p => equality(p.name, field.name))
+      }
+      (StructType(dataWithoutPartitions), partitionSchema)
     } else {
       (dataSchema, partitionSchema)
     }
