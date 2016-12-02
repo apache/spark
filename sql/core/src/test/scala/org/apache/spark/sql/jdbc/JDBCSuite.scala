@@ -199,7 +199,7 @@ class JDBCSuite extends SparkFunSuite
          |CREATE TEMPORARY TABLE nullparts
          |USING org.apache.spark.sql.jdbc
          |OPTIONS (url '$url', dbtable 'TEST.EMP', user 'testUser', password 'testPass',
-         |partitionColumn '"Dept"', lowerBound '1', upperBound '4', numPartitions '4')
+         |partitionColumn '"Dept"', lowerBound '1', upperBound '4', numPartitions '3')
       """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement(
