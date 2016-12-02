@@ -65,7 +65,7 @@ sealed trait TaskFailedReason extends TaskEndReason {
 
 /**
  * :: DeveloperApi ::
- * A [[org.apache.spark.scheduler.ShuffleMapTask]] that completed successfully earlier, but we
+ * A `org.apache.spark.scheduler.ShuffleMapTask` that completed successfully earlier, but we
  * lost the executor before the stage completed. This means Spark needs to reschedule the task
  * to be re-executed on a different executor.
  */

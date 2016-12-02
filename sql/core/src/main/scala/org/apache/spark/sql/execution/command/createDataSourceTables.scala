@@ -212,7 +212,8 @@ case class CreateDataSourceTableAsSelectCommand(
       className = provider,
       partitionColumns = table.partitionColumnNames,
       bucketSpec = table.bucketSpec,
-      options = table.storage.properties ++ pathOption)
+      options = table.storage.properties ++ pathOption,
+      catalogTable = Some(table))
 
     val result = try {
       dataSource.write(mode, df)

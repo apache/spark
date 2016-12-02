@@ -56,8 +56,8 @@ private[clustering] trait BisectingKMeansParams extends Params
   def getK: Int = $(k)
 
   /**
-   * The minimum number of points (if &gt;= 1.0) or the minimum proportion
-   * of points (if &lt; 1.0) of a divisible cluster (default: 1.0).
+   * The minimum number of points (if greater than or equal to 1.0) or the minimum proportion
+   * of points (if less than 1.0) of a divisible cluster (default: 1.0).
    * @group expertParam
    */
   @Since("2.0.0")
@@ -81,13 +81,11 @@ private[clustering] trait BisectingKMeansParams extends Params
 }
 
 /**
- * :: Experimental ::
  * Model fitted by BisectingKMeans.
  *
  * @param parentModel a model trained by [[org.apache.spark.mllib.clustering.BisectingKMeans]].
  */
 @Since("2.0.0")
-@Experimental
 class BisectingKMeansModel private[ml] (
     @Since("2.0.0") override val uid: String,
     private val parentModel: MLlibBisectingKMeansModel
@@ -198,8 +196,6 @@ object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
 }
 
 /**
- * :: Experimental ::
- *
  * A bisecting k-means algorithm based on the paper "A comparison of document clustering techniques"
  * by Steinbach, Karypis, and Kumar, with modification to fit Spark.
  * The algorithm starts from a single cluster that contains all points.
@@ -214,7 +210,6 @@ object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
  * KDD Workshop on Text Mining, 2000.</a>
  */
 @Since("2.0.0")
-@Experimental
 class BisectingKMeans @Since("2.0.0") (
     @Since("2.0.0") override val uid: String)
   extends Estimator[BisectingKMeansModel] with BisectingKMeansParams with DefaultParamsWritable {

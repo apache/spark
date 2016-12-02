@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
 /**
  * Evaluator for ranking algorithms.
  *
- * Java users should use [[RankingMetrics$.of]] to create a [[RankingMetrics]] instance.
+ * Java users should use `RankingMetrics$.of` to create a [[RankingMetrics]] instance.
  *
  * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
  */
@@ -41,9 +41,9 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   /**
    * Compute the average precision of all the queries, truncated at ranking position k.
    *
-   * If for a query, the ranking algorithm returns n (n < k) results, the precision value will be
-   * computed as #(relevant items retrieved) / k. This formula also applies when the size of the
-   * ground truth set is less than k.
+   * If for a query, the ranking algorithm returns n (n is less than k) results, the precision
+   * value will be computed as #(relevant items retrieved) / k. This formula also applies when
+   * the size of the ground truth set is less than k.
    *
    * If a query has an empty ground truth set, zero will be used as precision together with
    * a log warning.

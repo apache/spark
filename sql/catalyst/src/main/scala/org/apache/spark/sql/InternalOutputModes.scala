@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
- * Internal helper class to generate objects representing various [[OutputMode]]s,
+ * Internal helper class to generate objects representing various `OutputMode`s,
  */
 private[sql] object InternalOutputModes {
 

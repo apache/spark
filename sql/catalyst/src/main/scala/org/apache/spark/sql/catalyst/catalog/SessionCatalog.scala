@@ -687,13 +687,14 @@ class SessionCatalog(
       tableName: TableIdentifier,
       specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit = {
+      purge: Boolean,
+      retainData: Boolean): Unit = {
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
     requirePartialMatchedPartitionSpec(specs, getTableMetadata(tableName))
-    externalCatalog.dropPartitions(db, table, specs, ignoreIfNotExists, purge)
+    externalCatalog.dropPartitions(db, table, specs, ignoreIfNotExists, purge, retainData)
   }
 
   /**
@@ -939,10 +940,7 @@ class SessionCatalog(
    */
   def isTemporaryFunction(name: FunctionIdentifier): Boolean = {
     // copied from HiveSessionCatalog
-    val hiveFunctions = Seq(
-      "hash",
-      "histogram_numeric",
-      "percentile")
+    val hiveFunctions = Seq("histogram_numeric")
 
     // A temporary function is a function that has been registered in functionRegistry
     // without a database name, and is neither a built-in function nor a Hive function

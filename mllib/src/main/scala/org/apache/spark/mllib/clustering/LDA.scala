@@ -120,11 +120,11 @@ class LDA private (
    *  - EM
    *     - Currently only supports symmetric distributions, so all values in the vector should be
    *       the same.
-   *     - Values should be &gt; 1.0
+   *     - Values should be greater than 1.0
    *     - default = uniformly (50 / k) + 1, where 50/k is common in LDA libraries and +1 follows
    *       from Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Values should be &gt;= 0
+   *     - Values should be greater than or equal to 0
    *     - default = uniformly (1.0 / k), following the implementation from
    *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    */
@@ -195,11 +195,11 @@ class LDA private (
    *
    * Optimizer-specific parameter settings:
    *  - EM
-   *     - Value should be &gt; 1.0
+   *     - Value should be greater than 1.0
    *     - default = 0.1 + 1, where 0.1 gives a small amount of smoothing and +1 follows
    *       Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Value should be &gt;= 0
+   *     - Value should be greater than or equal to 0
    *     - default = (1.0 / k), following the implementation from
    *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    */
@@ -216,7 +216,7 @@ class LDA private (
   def getBeta: Double = getTopicConcentration
 
   /**
-   * Alias for [[setTopicConcentration()]]
+   * Alias for `setTopicConcentration()`
    */
   @Since("1.3.0")
   def setBeta(beta: Double): this.type = setTopicConcentration(beta)
@@ -261,11 +261,11 @@ class LDA private (
   def getCheckpointInterval: Int = checkpointInterval
 
   /**
-   * Parameter for set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that
-   * the cache will get checkpointed every 10 iterations. Checkpointing helps with recovery
-   * (when nodes fail). It also helps with eliminating temporary shuffle files on disk, which can be
-   * important when LDA is run for many iterations. If the checkpoint directory is not set in
-   * [[org.apache.spark.SparkContext]], this setting is ignored. (default = 10)
+   * Parameter for set checkpoint interval (greater than or equal to 1) or disable checkpoint (-1).
+   * E.g. 10 means that the cache will get checkpointed every 10 iterations. Checkpointing helps
+   * with recovery (when nodes fail). It also helps with eliminating temporary shuffle files on
+   * disk, which can be important when LDA is run for many iterations. If the checkpoint directory
+   * is not set in [[org.apache.spark.SparkContext]], this setting is ignored. (default = 10)
    *
    * @see [[org.apache.spark.SparkContext#setCheckpointDir]]
    */
@@ -321,7 +321,7 @@ class LDA private (
    * @param documents  RDD of documents, which are term (word) count vectors paired with IDs.
    *                   The term count vectors are "bags of words" with a fixed-size vocabulary
    *                   (where the vocabulary size is the length of the vector).
-   *                   Document IDs must be unique and &gt;= 0.
+   *                   Document IDs must be unique and greater than or equal to 0.
    * @return  Inferred LDA model
    */
   @Since("1.3.0")
@@ -340,7 +340,7 @@ class LDA private (
   }
 
   /**
-   * Java-friendly version of [[run()]]
+   * Java-friendly version of `run()`
    */
   @Since("1.3.0")
   def run(documents: JavaPairRDD[java.lang.Long, Vector]): LDAModel = {

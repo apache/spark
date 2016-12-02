@@ -489,7 +489,7 @@ case class DescribeTableCommand(
     if (table.tableType == CatalogTableType.VIEW) describeViewInfo(table, buffer)
 
     if (DDLUtils.isDatasourceTable(table) && table.tracksPartitionsInCatalog) {
-      append(buffer, "Partition Provider:", "Hive", "")
+      append(buffer, "Partition Provider:", "Catalog", "")
     }
   }
 
@@ -503,7 +503,8 @@ case class DescribeTableCommand(
     describeBucketingInfo(metadata, buffer)
 
     append(buffer, "Storage Desc Parameters:", "", "")
-    metadata.storage.properties.foreach { case (key, value) =>
+    val maskedProperties = CatalogUtils.maskCredentials(metadata.storage.properties)
+    maskedProperties.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
     }
   }
@@ -589,18 +590,25 @@ case class DescribeTableCommand(
  * If a databaseName is not given, the current database will be used.
  * The syntax of using this command in SQL is:
  * {{{
- *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
+ *   SHOW TABLES [EXTENDED] [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
  * }}}
  */
 case class ShowTablesCommand(
     databaseName: Option[String],
-    tableIdentifierPattern: Option[String]) extends RunnableCommand {
+    tableIdentifierPattern: Option[String],
+    isExtended: Boolean = false) extends RunnableCommand {
 
-  // The result of SHOW TABLES has three columns: database, tableName and isTemporary.
+  // The result of SHOW TABLES has three basic columns: database, tableName and isTemporary.
+  // If `isExtended` is true, append column `information` to the output columns.
   override val output: Seq[Attribute] = {
+    val tableExtendedInfo = if (isExtended) {
+      AttributeReference("information", StringType, nullable = false)() :: Nil
+    } else {
+      Nil
+    }
     AttributeReference("database", StringType, nullable = false)() ::
       AttributeReference("tableName", StringType, nullable = false)() ::
-      AttributeReference("isTemporary", BooleanType, nullable = false)() :: Nil
+      AttributeReference("isTemporary", BooleanType, nullable = false)() :: tableExtendedInfo
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -611,8 +619,15 @@ case class ShowTablesCommand(
     val tables =
       tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
     tables.map { tableIdent =>
+      val database = tableIdent.database.getOrElse("")
+      val tableName = tableIdent.table
       val isTemp = catalog.isTemporaryTable(tableIdent)
-      Row(tableIdent.database.getOrElse(""), tableIdent.table, isTemp)
+      if (isExtended) {
+        val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).toString
+        Row(database, tableName, isTemp, s"${information}\n")
+      } else {
+        Row(database, tableName, isTemp)
+      }
     }
   }
 }
