@@ -25,7 +25,8 @@ import scala.collection.JavaConverters.propertiesAsScalaMapConverter
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -348,5 +349,42 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     }.getMessage
     assert(e.contains("Invalid value `0` for parameter `numPartitions` in table writing " +
       "via JDBC. The minimum value is 1."))
+  }
+
+  test("SPARK-10849: create table using user specified column type.") {
+    val data = Seq[Row](
+      Row(1, "dave", "Boston", "electric cars"),
+      Row(2, "mary", "boston", "building planes")
+    )
+    val nvarcharMd =
+      new MetadataBuilder().putString("createTableColumnType", "NVARCHAR(123)").build()
+    // Use H2 varchar_ignorecase type instead of TEXT to perform case-insensitive comparisions
+    val varcharIgnoreMd =
+      new MetadataBuilder().putString("createTableColumnType", "VARCHAR_IGNORECASE(20)").build()
+    val schema = StructType(
+      StructField("id", IntegerType) ::
+        StructField("name", StringType, metadata = nvarcharMd) ::
+        StructField("city", StringType, metadata = varcharIgnoreMd) ::
+        StructField("descr", StringType) ::
+        Nil)
+    val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+    assert(JdbcUtils.schemaString(df.schema, url1) ==
+      s""""id" INTEGER , "name" NVARCHAR(123) , "city" VARCHAR_IGNORECASE(20) , "descr" TEXT """)
+
+    // create the table with the user specified data types, and verify the data
+    df.write.jdbc(url1, "TEST.DBCOLTYPETEST", properties)
+    assert(spark.read.jdbc(url1,
+      """(select * from test.DBCOLTYPETEST where "city"='Boston')""", properties).count == 2)
+  }
+
+  test("SPARK-10849: createTableColumnType property with invalid data type") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    val invalidMd =
+      new MetadataBuilder().putString("createTableColumnType", "INVALID(123)").build()
+    val modifiedDf = df.withColumn("name", col("name"), invalidMd)
+    val msg = intercept[org.h2.jdbc.JdbcSQLException] {
+      modifiedDf.write.mode(SaveMode.Overwrite).jdbc(url1, "TEST.USERDBTYPETEST", properties)
+    }.getMessage()
+    assert(msg.contains("Unknown data type: \"INVALID\""))
   }
 }
