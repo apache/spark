@@ -97,12 +97,12 @@ class StreamExecution(
   protected var currentBatchId: Long = -1
 
   /** Metadata associated with the whole query */
-  protected val queryMetadata: StreamExecutionMetadata = {
+  protected val streamMetadata: StreamMetadata = {
     val metadataPath = new Path(checkpointFile("metadata"))
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
-    StreamExecutionMetadata.read(metadataPath, hadoopConf).getOrElse {
-      val newMetadata = new StreamExecutionMetadata(UUID.randomUUID.toString)
-      StreamExecutionMetadata.write(newMetadata, metadataPath, hadoopConf)
+    StreamMetadata.read(metadataPath, hadoopConf).getOrElse {
+      val newMetadata = new StreamMetadata(UUID.randomUUID.toString)
+      StreamMetadata.write(newMetadata, metadataPath, hadoopConf)
       newMetadata
     }
   }
@@ -110,7 +110,7 @@ class StreamExecution(
   /** Metadata associated with the offset seq of a batch in the query. */
   protected var offsetSeqMetadata = OffsetSeqMetadata()
 
-  override val id: UUID = UUID.fromString(queryMetadata.id)
+  override val id: UUID = UUID.fromString(streamMetadata.id)
 
   override val runId: UUID = UUID.randomUUID
 
@@ -637,22 +637,22 @@ class StreamExecution(
  *
  * @param id  unique id of the [[StreamingQuery]] that needs to be persisted across restarts
  */
-case class StreamExecutionMetadata(id: String) {
-  def json: String = Serialization.write(this)(StreamExecutionMetadata.format)
+case class StreamMetadata(id: String) {
+  def json: String = Serialization.write(this)(StreamMetadata.format)
 }
 
-object StreamExecutionMetadata extends Logging {
+object StreamMetadata extends Logging {
   implicit val format = Serialization.formats(NoTypeHints)
 
   /** Read the metadata from file if it exists */
-  def read(metadataFile: Path, hadoopConf: Configuration): Option[StreamExecutionMetadata] = {
+  def read(metadataFile: Path, hadoopConf: Configuration): Option[StreamMetadata] = {
     val fs = FileSystem.get(hadoopConf)
       if (fs.exists(metadataFile)) {
         var input: FSDataInputStream = null
         try {
           input = fs.open(metadataFile)
           val reader = new InputStreamReader(input, StandardCharsets.UTF_8)
-          val metadata = Serialization.read[StreamExecutionMetadata](reader)
+          val metadata = Serialization.read[StreamMetadata](reader)
           Some(metadata)
         } catch {
           case NonFatal(e) =>
@@ -666,7 +666,7 @@ object StreamExecutionMetadata extends Logging {
 
   /** Write metadata to file, overwrite if it exists */
   def write(
-      metadata: StreamExecutionMetadata,
+      metadata: StreamMetadata,
       metadataFile: Path,
       hadoopConf: Configuration): Unit = {
     var output: FSDataOutputStream = null

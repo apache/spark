@@ -176,7 +176,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   test("QueryProgressEvent serialization") {
     val event = new StreamingQueryListener.QueryProgressEvent(
-      StreamingQueryStatusAndProgressSuite.testProgress)
+      StreamingQueryStatusAndProgressSuite.testProgress2)
     val json = JsonProtocol.sparkEventToJson(event)
     val newEvent = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryProgressEvent]
