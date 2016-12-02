@@ -44,8 +44,6 @@ abstract class Collect extends ImperativeAggregate {
 
   override def dataType: DataType = ArrayType(child.dataType)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
-
   override def supportsPartial: Boolean = false
 
   override def aggBufferAttributes: Seq[AttributeReference] = Nil

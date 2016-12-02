@@ -44,7 +44,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   /**
    * Parameter for mapping continuous features into buckets. With n+1 splits, there are n buckets.
    * A bucket defined by splits x,y holds values in the range [x,y) except the last bucket, which
-   * also includes y. Splits should be of length >= 3 and strictly increasing.
+   * also includes y. Splits should be of length greater than or equal to 3 and strictly increasing.
    * Values at -inf, inf must be explicitly provided to cover all Double values;
    * otherwise, values outside the splits specified will be treated as errors.
    *
@@ -84,11 +84,12 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
    * Default: "error"
    * @group param
    */
+  // TODO: SPARK-18619 Make Bucketizer inherit from HasHandleInvalid.
   @Since("2.1.0")
-  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle" +
+  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
     "invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
-    ParamValidators.inArray(Bucketizer.supportedHandleInvalid))
+    ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
 
   /** @group getParam */
   @Since("2.1.0")
@@ -145,7 +146,7 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
   private[feature] val SKIP_INVALID: String = "skip"
   private[feature] val ERROR_INVALID: String = "error"
   private[feature] val KEEP_INVALID: String = "keep"
-  private[feature] val supportedHandleInvalid: Array[String] =
+  private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
 
   /**

@@ -69,15 +69,18 @@ import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan}
  * post-shuffle partition. Once we have size statistics of pre-shuffle partitions from stages
  * corresponding to the registered [[ShuffleExchange]]s, we will do a pass of those statistics and
  * pack pre-shuffle partitions with continuous indices to a single post-shuffle partition until
- * the size of a post-shuffle partition is equal or greater than the target size.
+ * adding another pre-shuffle partition would cause the size of a post-shuffle partition to be
+ * greater than the target size.
+ *
  * For example, we have two stages with the following pre-shuffle partition size statistics:
  * stage 1: [100 MB, 20 MB, 100 MB, 10MB, 30 MB]
  * stage 2: [10 MB,  10 MB, 70 MB,  5 MB, 5 MB]
  * assuming the target input size is 128 MB, we will have three post-shuffle partitions,
  * which are:
- *  - post-shuffle partition 0: pre-shuffle partition 0 and 1
- *  - post-shuffle partition 1: pre-shuffle partition 2
- *  - post-shuffle partition 2: pre-shuffle partition 3 and 4
+ *  - post-shuffle partition 0: pre-shuffle partition 0 (size 110 MB)
+ *  - post-shuffle partition 1: pre-shuffle partition 1 (size 30 MB)
+ *  - post-shuffle partition 2: pre-shuffle partition 2 (size 170 MB)
+ *  - post-shuffle partition 3: pre-shuffle partition 3 and 4 (size 50 MB)
  */
 class ExchangeCoordinator(
     numExchanges: Int,
@@ -164,25 +167,20 @@ class ExchangeCoordinator(
     while (i < numPreShufflePartitions) {
       // We calculate the total size of ith pre-shuffle partitions from all pre-shuffle stages.
       // Then, we add the total size to postShuffleInputSize.
+      var nextShuffleInputSize = 0L
       var j = 0
       while (j < mapOutputStatistics.length) {
-        postShuffleInputSize += mapOutputStatistics(j).bytesByPartitionId(i)
+        nextShuffleInputSize += mapOutputStatistics(j).bytesByPartitionId(i)
         j += 1
       }
 
-      // If the current postShuffleInputSize is equal or greater than the
-      // targetPostShuffleInputSize, We need to add a new element in partitionStartIndices.
-      if (postShuffleInputSize >= targetPostShuffleInputSize) {
-        if (i < numPreShufflePartitions - 1) {
-          // Next start index.
-          partitionStartIndices += i + 1
-        } else {
-          // This is the last element. So, we do not need to append the next start index to
-          // partitionStartIndices.
-        }
+      // If including the nextShuffleInputSize would exceed the target partition size, then start a
+      // new partition.
+      if (i > 0 && postShuffleInputSize + nextShuffleInputSize > targetPostShuffleInputSize) {
+        partitionStartIndices += i
         // reset postShuffleInputSize.
-        postShuffleInputSize = 0L
-      }
+        postShuffleInputSize = nextShuffleInputSize
+      } else postShuffleInputSize += nextShuffleInputSize
 
       i += 1
     }
