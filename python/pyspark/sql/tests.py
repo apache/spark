@@ -1082,6 +1082,30 @@ class SQLTests(ReusedPySparkTestCase):
             q.stop()
             shutil.rmtree(tmpPath)
 
+    def test_id_runid_name(self):
+        df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+        for q in self.spark._wrapped.streams.active:
+            q.stop()
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        out = os.path.join(tmpPath, 'out')
+        chk = os.path.join(tmpPath, 'chk')
+        try:
+            q = df.writeStream \
+                .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
+            self.assertTrue(any(x.id == q.id for x in self.spark.streams.active))
+            self.assertTrue(any(x.runId == q.runId for x in self.spark.streams.active))
+            self.assertTrue(any(x.name == 'this_query' for x in self.spark.streams.active))
+            q.stop()
+            q2 = df.writeStream \
+                .start(path=out, format='parquet', checkpointLocation=chk)
+            self.assertTrue(q2.name == None)
+            q2.stop()
+        finally:
+            for q in self.spark.streams.active:
+                q.stop()
+            shutil.rmtree(tmpPath)
+
     def test_stream_status_and_progress(self):
         df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
         for q in self.spark._wrapped.streams.active:

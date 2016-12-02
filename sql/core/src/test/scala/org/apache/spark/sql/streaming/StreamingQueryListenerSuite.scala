@@ -167,31 +167,40 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("QueryStartedEvent serialization") {
-    val queryStarted = new StreamingQueryListener.QueryStartedEvent(
-      UUID.randomUUID, UUID.randomUUID, "name")
-    val json = JsonProtocol.sparkEventToJson(queryStarted)
-    val newQueryStarted = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[StreamingQueryListener.QueryStartedEvent]
+    def testSerialization(event: QueryStartedEvent): Unit = {
+      val json = JsonProtocol.sparkEventToJson(event)
+      val newEvent = JsonProtocol.sparkEventFromJson(json).asInstanceOf[QueryStartedEvent]
+      assert(newEvent.id === event.id)
+      assert(newEvent.runId === event.runId)
+      assert(newEvent.name === event.name)
+    }
+
+    testSerialization(new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, "name"))
+    testSerialization(new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, null))
   }
 
   test("QueryProgressEvent serialization") {
-    val event = new StreamingQueryListener.QueryProgressEvent(
-      StreamingQueryStatusAndProgressSuite.testProgress2)
-    val json = JsonProtocol.sparkEventToJson(event)
-    val newEvent = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[StreamingQueryListener.QueryProgressEvent]
-    assert(event.progress.json === newEvent.progress.json)
+    def testSerialization(event: QueryProgressEvent): Unit = {
+      val json = JsonProtocol.sparkEventToJson(event)
+      val newEvent = JsonProtocol.sparkEventFromJson(json).asInstanceOf[QueryProgressEvent]
+      assert(newEvent.progress.json === event.progress.json)  // json as a proxy for equality
+    }
+    testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress1))
+    testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress2))
   }
 
   test("QueryTerminatedEvent serialization") {
+    def testSerialization(event: QueryTerminatedEvent): Unit = {
+      val json = JsonProtocol.sparkEventToJson(event)
+      val newEvent = JsonProtocol.sparkEventFromJson(json).asInstanceOf[QueryTerminatedEvent]
+      assert(newEvent.id === event.id)
+      assert(newEvent.runId === event.runId)
+      assert(newEvent.exception === event.exception)
+    }
+
     val exception = new RuntimeException("exception")
-    val queryQueryTerminated = new StreamingQueryListener.QueryTerminatedEvent(
-      UUID.randomUUID, UUID.randomUUID, Some(exception.getMessage))
-    val json = JsonProtocol.sparkEventToJson(queryQueryTerminated)
-    val newQueryTerminated = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[StreamingQueryListener.QueryTerminatedEvent]
-    assert(queryQueryTerminated.id === newQueryTerminated.id)
-    assert(queryQueryTerminated.exception === newQueryTerminated.exception)
+    testSerialization(
+      new QueryTerminatedEvent(UUID.randomUUID, UUID.randomUUID, Some(exception.getMessage)))
   }
 
   testQuietly("ReplayListenerBus should ignore broken event jsons generated in 2.0.0") {
