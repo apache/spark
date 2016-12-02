@@ -58,7 +58,7 @@ class ExecutorClassLoaderSuite
     super.beforeAll()
     tempDir1 = Utils.createTempDir()
     tempDir2 = Utils.createTempDir()
-    url1 = tempDir1.toURI.toString
+    url1 = tempDir1.toURI.toURL.toString
     urls2 = List(tempDir2.toURI.toURL).toArray
     childClassNames.foreach(TestUtils.createCompiledClass(_, tempDir1, "1"))
     parentResourceNames.foreach { x =>
