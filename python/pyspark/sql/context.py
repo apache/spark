@@ -23,6 +23,7 @@ if sys.version >= '3':
     basestring = unicode = str
 
 from pyspark import since
+from pyspark import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
@@ -72,8 +73,13 @@ class SQLContext(object):
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
+
         if sparkSession is None:
-            sparkSession = SparkSession(sparkContext)
+            if sparkContext is SparkContext._active_spark_context:
+                sparkSession = SparkSession.builder.getOrCreate()
+            else:
+                sparkSession = SparkSession(sparkContext)
+
         if jsqlContext is None:
             jsqlContext = sparkSession._jwrapped
         self.sparkSession = sparkSession
