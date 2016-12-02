@@ -495,7 +495,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", "bar")
-          } yield Row(i, pi, i.toString, ps))
+          } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
           sql("SELECT intField, pi FROM t"),
@@ -510,14 +510,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
-          } yield Row(i, 1, i.toString, ps))
+          } yield Row(i, i.toString, 1, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield Row(i, pi, i.toString, "foo"))
+          } yield Row(i, i.toString, pi, "foo"))
       }
     }
   }
@@ -584,14 +584,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", null.asInstanceOf[String])
-          } yield Row(i, pi, i.toString, ps))
+          } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield Row(i, pi, i.toString, null))
+          } yield Row(i, i.toString, pi, null))
       }
     }
   }
@@ -975,19 +975,11 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       withTempPath { dir =>
         val path = dir.getCanonicalPath
         val df = Seq((1L, 2.0)).toDF("a", "b")
-        // partition explicitly written
+        // Partition explicitly written
         df.write.parquet(s"$path/a=1")
-        checkAnswer(spark.read.parquet(s"$path"), Seq(Row(1L, 2.0)))
+        // Partition columns should go to the end
+        checkAnswer(spark.read.parquet(s"$path"), Seq(Row(2.0, 1L)))
       }
-    }
-
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      val df = Seq((1L, 2)).toDF("a", "b")
-      df.write.parquet(s"$path/a=1480617712537/")
-      df.printSchema()
-      df.collect()
-      checkAnswer(spark.read.parquet(s"$path"), Seq(Row(1L, 2)))
     }
   }
 }

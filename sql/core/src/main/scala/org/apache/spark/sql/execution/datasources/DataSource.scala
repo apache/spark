@@ -133,24 +133,15 @@ case class DataSource(
       new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
     }
 
-    val dataSchema = userSpecifiedSchema.orElse {
-      format.inferSchema(
-        sparkSession,
-        caseInsensitiveOptions,
-        tempFileIndex.allFiles())
-    }.getOrElse {
-      throw new AnalysisException(
-        s"Unable to infer schema for $format. It must be specified manually.")
-    }
+    val fieldEquality = sparkSession.sessionState.conf.resolver
 
     val partitionSchema = if (partitionColumns.isEmpty && catalogTable.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
       // columns properly unless it is a Hive DataSource
       val resolved = tempFileIndex.partitionSchema.map { partitionField =>
-        val equality = sparkSession.sessionState.conf.resolver
-        // SPARK-18510: try to get partition schema from data schema, otherwise fallback to inferred
-        dataSchema.find(f => equality(f.name, partitionField.name)).getOrElse(
-          partitionField)
+        // SPARK-18510: try to get schema from userSpecifiedSchema, otherwise fallback to inferred
+        userSpecifiedSchema.flatMap(_.find(f => fieldEquality(f.name, partitionField.name)))
+          .getOrElse(partitionField)
       }
       StructType(resolved)
     } else {
@@ -161,10 +152,9 @@ case class DataSource(
         inferredPartitions
       } else {
         val partitionFields = partitionColumns.map { partitionColumn =>
-          val equality = sparkSession.sessionState.conf.resolver
-          userSpecifiedSchema.flatMap(_.find(c => equality(c.name, partitionColumn))).orElse {
+          userSpecifiedSchema.flatMap(_.find(c => fieldEquality(c.name, partitionColumn))).orElse {
             val inferredPartitions = tempFileIndex.partitionSchema
-            val inferredOpt = inferredPartitions.find(p => equality(p.name, partitionColumn))
+            val inferredOpt = inferredPartitions.find(p => fieldEquality(p.name, partitionColumn))
             if (inferredOpt.isDefined) {
               logDebug(
                 s"""Type of partition column: $partitionColumn not found in specified schema
@@ -187,16 +177,27 @@ case class DataSource(
     }
 
     if (justPartitioning) {
-      (null, partitionSchema)
-    } else if (userSpecifiedSchema.isDefined) {
-      val dataWithoutPartitions = dataSchema.filterNot { field =>
-        val equality = sparkSession.sessionState.conf.resolver
-        partitionSchema.exists(p => equality(p.name, field.name))
-      }
-      (StructType(dataWithoutPartitions), partitionSchema)
-    } else {
-      (dataSchema, partitionSchema)
+      return (null, partitionSchema)
     }
+
+    val dataSchema = userSpecifiedSchema.orElse {
+      format.inferSchema(
+        sparkSession,
+        caseInsensitiveOptions,
+        tempFileIndex.allFiles())
+    }.getOrElse {
+      throw new AnalysisException(
+        s"Unable to infer schema for $format. It must be specified manually.")
+    }
+
+    // Override the fields of the partition schema if the data schema has the same field
+    val resolvedPartitionSchema = partitionSchema.map { partitionField =>
+      dataSchema.find(f => fieldEquality(f.name, partitionField.name)).getOrElse(partitionField)
+    }
+    val dataWithoutPartitions = dataSchema.filterNot { field =>
+      partitionSchema.exists(p => fieldEquality(p.name, field.name))
+    }
+    (StructType(dataWithoutPartitions), StructType(resolvedPartitionSchema))
   }
 
   /** Returns the name and schema of the source that can be used to continually read data. */
