@@ -100,7 +100,7 @@ class StreamingQueryProgress private[sql](
     }
 
     ("id" -> JString(id.toString)) ~
-    ("runId" -> JString(runId.toString))
+    ("runId" -> JString(runId.toString)) ~
     ("name" -> JString(name)) ~
     ("timestamp" -> JInt(timestamp)) ~
     ("numInputRows" -> JInt(numInputRows)) ~
