@@ -91,6 +91,12 @@ object HiveCatalogMetrics extends Source {
   val METRIC_HIVE_CLIENT_CALLS = metricRegistry.counter(MetricRegistry.name("hiveClientCalls"))
 
   /**
+   * Tracks the total number of Spark jobs launched for parallel file listing.
+   */
+  val METRIC_PARALLEL_LISTING_JOB_COUNT = metricRegistry.counter(
+    MetricRegistry.name("parallelListingJobCount"))
+
+  /**
    * Resets the values of all metrics to zero. This is useful in tests.
    */
   def reset(): Unit = {
@@ -98,6 +104,7 @@ object HiveCatalogMetrics extends Source {
     METRIC_FILES_DISCOVERED.dec(METRIC_FILES_DISCOVERED.getCount())
     METRIC_FILE_CACHE_HITS.dec(METRIC_FILE_CACHE_HITS.getCount())
     METRIC_HIVE_CLIENT_CALLS.dec(METRIC_HIVE_CLIENT_CALLS.getCount())
+    METRIC_PARALLEL_LISTING_JOB_COUNT.dec(METRIC_PARALLEL_LISTING_JOB_COUNT.getCount())
   }
 
   // clients can use these to avoid classloader issues with the codahale classes
@@ -105,4 +112,5 @@ object HiveCatalogMetrics extends Source {
   def incrementFilesDiscovered(n: Int): Unit = METRIC_FILES_DISCOVERED.inc(n)
   def incrementFileCacheHits(n: Int): Unit = METRIC_FILE_CACHE_HITS.inc(n)
   def incrementHiveClientCalls(n: Int): Unit = METRIC_HIVE_CLIENT_CALLS.inc(n)
+  def incrementParallelListingJobCount(n: Int): Unit = METRIC_PARALLEL_LISTING_JOB_COUNT.inc(n)
 }

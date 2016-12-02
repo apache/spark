@@ -249,12 +249,9 @@ abstract class PartitioningAwareFileIndex(
           pathsToFetch += path
       }
     }
-    val discovered = if (pathsToFetch.length >=
-        sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-      PartitioningAwareFileIndex.listLeafFilesInParallel(pathsToFetch, hadoopConf, sparkSession)
-    } else {
-      PartitioningAwareFileIndex.listLeafFilesInSerial(pathsToFetch, hadoopConf)
-    }
+    val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
+    val discovered = PartitioningAwareFileIndex.bulkListLeafFiles(
+      pathsToFetch, hadoopConf, filter, sparkSession)
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
@@ -286,31 +283,28 @@ object PartitioningAwareFileIndex extends Logging {
       blockLocations: Array[SerializableBlockLocation])
 
   /**
-   * List a collection of path recursively.
+   * Lists a collection of paths recursively. Picks the listing strategy adaptively depending
+   * on the number of paths to list.
+   *
+   * This may only be called on the driver.
+   *
+   * @return for each input path, the set of discovered files for the path
    */
-  private def listLeafFilesInSerial(
-      paths: Seq[Path],
-      hadoopConf: Configuration): Seq[(Path, Seq[FileStatus])] = {
-    // Dummy jobconf to get to the pathFilter defined in configuration
-    val jobConf = new JobConf(hadoopConf, this.getClass)
-    val filter = FileInputFormat.getInputPathFilter(jobConf)
-
-    paths.map { path =>
-      val fs = path.getFileSystem(hadoopConf)
-      (path, listLeafFiles0(fs, path, filter))
-    }
-  }
-
-  /**
-   * List a collection of path recursively in parallel (using Spark executors).
-   * Each task launched will use [[listLeafFilesInSerial]] to list.
-   */
-  private def listLeafFilesInParallel(
+  private def bulkListLeafFiles(
       paths: Seq[Path],
       hadoopConf: Configuration,
+      filter: PathFilter,
       sparkSession: SparkSession): Seq[(Path, Seq[FileStatus])] = {
-    assert(paths.size >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold)
+
+    // Short-circuits parallel listing when serial listing is likely to be faster.
+    if (paths.size < sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
+      return paths.map { path =>
+        (path, listLeafFiles(path, hadoopConf, filter, Some(sparkSession)))
+      }
+    }
+
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
+    HiveCatalogMetrics.incrementParallelListingJobCount(1)
 
     val sparkContext = sparkSession.sparkContext
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
@@ -324,9 +318,11 @@ object PartitioningAwareFileIndex extends Logging {
 
     val statusMap = sparkContext
       .parallelize(serializedPaths, numParallelism)
-      .mapPartitions { paths =>
+      .mapPartitions { pathStrings =>
         val hadoopConf = serializableConfiguration.value
-        listLeafFilesInSerial(paths.map(new Path(_)).toSeq, hadoopConf).iterator
+        pathStrings.map(new Path(_)).toSeq.map { path =>
+          (path, listLeafFiles(path, hadoopConf, filter, None))
+        }.iterator
       }.map { case (path, statuses) =>
         val serializableStatuses = statuses.map { status =>
           // Turn FileStatus into SerializableFileStatus so we can send it back to the driver
@@ -374,11 +370,20 @@ object PartitioningAwareFileIndex extends Logging {
   }
 
   /**
-   * List a single path, provided as a FileStatus, in serial.
+   * Lists a single filesystem path recursively. If a SparkSession object is specified, this
+   * function may launch Spark jobs to parallelize listing.
+   *
+   * If sessionOpt is None, this may be called on executors.
+   *
+   * @return all children of path that match the specified filter.
    */
-  private def listLeafFiles0(
-      fs: FileSystem, path: Path, filter: PathFilter): Seq[FileStatus] = {
+  private def listLeafFiles(
+      path: Path,
+      hadoopConf: Configuration,
+      filter: PathFilter,
+      sessionOpt: Option[SparkSession]): Seq[FileStatus] = {
     logTrace(s"Listing $path")
+    val fs = path.getFileSystem(hadoopConf)
     val name = path.getName.toLowerCase
     if (shouldFilterOut(name)) {
       Seq.empty[FileStatus]
@@ -393,9 +398,15 @@ object PartitioningAwareFileIndex extends Logging {
       }
 
       val allLeafStatuses = {
-        val (dirs, files) = statuses.partition(_.isDirectory)
-        val stats = files ++ dirs.flatMap(dir => listLeafFiles0(fs, dir.getPath, filter))
-        if (filter != null) stats.filter(f => filter.accept(f.getPath)) else stats
+        val (dirs, topLevelFiles) = statuses.partition(_.isDirectory)
+        val nestedFiles: Seq[FileStatus] = sessionOpt match {
+          case Some(session) =>
+            bulkListLeafFiles(dirs.map(_.getPath), hadoopConf, filter, session).flatMap(_._2)
+          case _ =>
+            dirs.flatMap(dir => listLeafFiles(dir.getPath, hadoopConf, filter, sessionOpt))
+        }
+        val allFiles = topLevelFiles ++ nestedFiles
+        if (filter != null) allFiles.filter(f => filter.accept(f.getPath)) else allFiles
       }
 
       allLeafStatuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
