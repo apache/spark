@@ -217,7 +217,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
             if (deletedPartitions.nonEmpty) {
               AlterTableDropPartitionCommand(
                 l.catalogTable.get.identifier, deletedPartitions.toSeq,
-                ifExists = true, purge = true,
+                ifExists = true, purge = false,
                 retainData = true /* already deleted */).run(t.sparkSession)
             }
           }
