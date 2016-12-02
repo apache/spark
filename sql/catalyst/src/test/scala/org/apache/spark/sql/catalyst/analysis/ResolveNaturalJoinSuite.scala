@@ -28,6 +28,7 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   lazy val a = 'a.string
   lazy val b = 'b.string
   lazy val c = 'c.string
+  lazy val d = 'd.struct('f1.int, 'f2.long)
   lazy val aNotNull = a.notNull
   lazy val bNotNull = b.notNull
   lazy val cNotNull = c.notNull
@@ -35,6 +36,8 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   lazy val r2 = LocalRelation(c, a)
   lazy val r3 = LocalRelation(aNotNull, bNotNull)
   lazy val r4 = LocalRelation(cNotNull, bNotNull)
+  lazy val r5 = LocalRelation(d)
+  lazy val r6 = LocalRelation(d)
 
   test("natural/using inner join") {
     val naturalPlan = r1.join(r2, NaturalJoin(Inner), None)
@@ -108,10 +111,10 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   test("using unresolved attribute") {
     assertAnalysisError(
       r1.join(r2, UsingJoin(Inner, Seq("d"))),
-      "USING column `d` can not be resolved with the left join side" :: Nil)
+      "USING column `d` cannot be resolved on the left side of the join" :: Nil)
     assertAnalysisError(
       r1.join(r2, UsingJoin(Inner, Seq("b"))),
-      "USING column `b` can not be resolved with the right join side" :: Nil)
+      "USING column `b` cannot be resolved on the right side of the join" :: Nil)
   }
 
   test("using join with a case sensitive analyzer") {
@@ -122,7 +125,14 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
 
     assertAnalysisError(
       r1.join(r2, UsingJoin(Inner, Seq("A"))),
-      "USING column `A` can not be resolved with the left join side" :: Nil)
+      "USING column `A` cannot be resolved on the left side of the join" :: Nil)
+  }
+
+  test("using join on nested fields") {
+    assertAnalysisError(
+      r5.join(r6, UsingJoin(Inner, Seq("d.f1"))),
+      "USING column `d.f1` cannot be resolved on the left side of the join. " +
+        "The left-side columns: [d]" :: Nil)
   }
 
   test("using join with a case insensitive analyzer") {
