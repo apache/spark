@@ -1022,6 +1022,33 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val options = new FileStreamOptions(Map("maxfilespertrigger" -> "1"))
     assert(options.maxFilesPerTrigger == Some(1))
   }
+
+  test("SPARK-18407: Prune inferred partition columns from execution if not specified in schema") {
+    withTempDirs { case (src, tmp) =>
+      spark.range(4).select('id, 'id % 4 as 'part).coalesce(1).write
+        .partitionBy("part")
+        .mode("overwrite")
+        .parquet(src.toString)
+      val sdf = spark.readStream
+        .schema(StructType(Seq(StructField("id", LongType)))) // omit 'part'
+        .format("parquet")
+        .load(src.toString)
+      try {
+        val sq = sdf.writeStream
+          .queryName("assertion_test")
+          .format("memory")
+          .start()
+        // used to throw an assertion error
+        sq.processAllAvailable()
+        checkAnswer(
+          spark.table("assertion_test"),
+          Row(0) :: Row(1) :: Row(2) :: Row(3) :: Nil
+        )
+      } finally {
+        spark.streams.active.foreach(_.stop())
+      }
+    }
+  }
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {

@@ -405,16 +405,38 @@ class StreamExecution(
       case StreamingExecutionRelation(source, output) =>
         newData.get(source).map { data =>
           val newPlan = data.logicalPlan
-          assert(output.size == newPlan.output.size,
-            s"Invalid batch: ${Utils.truncatedString(output, ",")} != " +
-            s"${Utils.truncatedString(newPlan.output, ",")}")
-          replacements ++= output.zip(newPlan.output)
+          val newPlanOutput = newPlan.output
+          output.foreach { out =>
+            val outputInNewPlan = newPlanOutput.find { newPlanOut =>
+              // we can't use semanticEquals here because `AttributeReference.semanticEquals`
+              // checks the equality of expression id's, but we're guaranteed that they will be
+              // different here
+              out.name.toLowerCase == newPlanOut.name.toLowerCase &&
+                // the line below means that we don't support schema evolution for now
+                out.dataType == newPlanOut.dataType
+            }.getOrElse {
+              val availableColumns = newPlan.output.map(a => s"${a.name} of ${a.dataType}")
+              throw new AnalysisException(
+                s"""
+                   |Batch does not have expected schema
+                   |Missing Column: ${out.name} of ${out.dataType}
+                   |Available Columns: ${availableColumns.mkString(", ")}
+                   |
+                   |== Original ==
+                   |$logicalPlan
+                   |
+                   |== Batch ==
+                   |$newPlan
+                 """.stripMargin
+              )
+            }
+            replacements += out -> outputInNewPlan
+          }
           newPlan
         }.getOrElse {
           LocalRelation(output)
         }
     }
-
     // Rewire the plan to use the new attributes that were returned by the source.
     val replacementMap = AttributeMap(replacements)
     val triggerLogicalPlan = withNewSources transformAllExpressions {
