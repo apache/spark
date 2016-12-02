@@ -63,11 +63,6 @@ and the migration guide below will explain all changes between releases.
 ## From 2.0 to 2.1
 
 ### Breaking changes
-
-* [SPARK-18481](https://issues.apache.org/jira/browse/SPARK-18481):
-  * `RandomForestClassificationModel.getNumTrees` and `RandomForestRegressionModel.getNumTrees` were made final.
-  * `RandomForestClassificationModel.setFeatureSubsetStrategy` and `RandomForestRegressionModel.setFeatureSubsetStrategy` return the concrete class type,
- rather than an arbitrary trait. This only affected Java compatibility, not Scala.
  
 **Deprecated methods removed**
 
