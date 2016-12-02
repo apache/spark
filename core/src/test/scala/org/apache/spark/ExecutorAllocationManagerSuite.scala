@@ -1147,8 +1147,6 @@ private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend
     }
   }
 
-  override def killExecutorsOnHost(host: String): Seq[String] = { Seq.empty[String] }
-
   override def start(): Unit = sb.start()
 
   override def stop(): Unit = sb.stop()
@@ -1156,4 +1154,11 @@ private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend
   override def reviveOffers(): Unit = sb.reviveOffers()
 
   override def defaultParallelism(): Int = sb.defaultParallelism()
+
+  // Unused.
+  override def killExecutorsOnHost(host: String): Seq[String] = { Seq.empty[String] }
+
+  // Unused.
+  override def killExecutors(executorIds: Seq[String], replace: Boolean, force: Boolean)
+  : Seq[String] = { Seq.empty[String] }
 }

@@ -50,10 +50,10 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
 private[scheduler] class BlacklistTracker (
     private val listenerBus: LiveListenerBus,
     conf: SparkConf,
-    scheduler: ExecutorAllocationClient,
+    scheduler: Option[ExecutorAllocationClient],
     clock: Clock = new SystemClock()) extends Logging {
 
-  def this(sc: SparkContext, scheduler: ExecutorAllocationClient) = {
+  def this(sc: SparkContext, scheduler: Option[ExecutorAllocationClient]) = {
     this(sc.listenerBus, sc.getConf, scheduler)
   }
 
@@ -169,6 +169,21 @@ private[scheduler] class BlacklistTracker (
       if (newTotal >= MAX_FAILURES_PER_EXEC && !executorIdToBlacklistStatus.contains(exec)) {
         logInfo(s"Blacklisting executor id: $exec because it has $newTotal" +
           s" task failures in successful task sets")
+        conf.get(config.BLACKLIST_ENABLED) match {
+          case Some(enabled) =>
+            if (enabled) {
+              scheduler match {
+                case Some(scheduler) =>
+                  logInfo(s"Killing blacklisted executor id: $exec" +
+                          s"since spark.blacklist.kill is set.")
+                  scheduler.killExecutors(Seq(exec), true, true)
+                case None =>
+                  logWarning(s"Not attempting to kill blacklisted executor id $exec" +
+                             s"since scheduler is not defined.")
+              }
+            }
+          case None =>
+        }
         val node = failuresInTaskSet.node
         executorIdToBlacklistStatus.put(exec, BlacklistedExecutor(node, expiryTimeForNewBlacklists))
         listenerBus.post(SparkListenerExecutorBlacklisted(now, exec, newTotal))
@@ -185,9 +200,23 @@ private[scheduler] class BlacklistTracker (
             !nodeIdToBlacklistExpiryTime.contains(node)) {
           logInfo(s"Blacklisting node $node because it has ${blacklistedExecsOnNode.size} " +
             s"executors blacklisted: ${blacklistedExecsOnNode}")
+          // TODO Prevent the scheduler from offering executors on this host.
+          conf.get(config.BLACKLIST_ENABLED) match {
+            case Some(enabled) =>
+              if (enabled) {
+                scheduler match {
+                  case Some(scheduler) =>
+                    logInfo(s"Killing blacklisted executor id: $exec" +
+                      s"since spark.blacklist.kill is set.")
+                    scheduler.killExecutorsOnHost(node)
+                  case None =>
+                    logWarning(s"Not attempting to kill blacklisted executor id $exec" +
+                      s"since scheduler is not defined.")
+                }
+              }
+            case None =>
+          }
           nodeIdToBlacklistExpiryTime.put(node, expiryTimeForNewBlacklists)
-          // TODO Only do this if a config value is set.
-          scheduler.killExecutorsOnHost(node)
           listenerBus.post(SparkListenerNodeBlacklisted(now, node, blacklistedExecsOnNode.size))
           _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
         }

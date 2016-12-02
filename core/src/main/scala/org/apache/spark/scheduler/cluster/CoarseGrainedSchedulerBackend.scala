@@ -544,7 +544,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @return whether the kill request is acknowledged. If list to kill is empty, it will return
    *         false.
    */
-  final def killExecutors(
+  final override def killExecutors(
       executorIds: Seq[String],
       replace: Boolean,
       force: Boolean): Seq[String] = {
