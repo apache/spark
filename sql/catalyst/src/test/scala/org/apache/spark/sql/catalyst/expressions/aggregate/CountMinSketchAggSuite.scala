@@ -108,6 +108,8 @@ class CountMinSketchAggSuite extends SparkFunSuite {
 
   testDataType[UTF8String](StringType, Seq.fill(100) { UTF8String.fromString(rand.nextString(1)) })
 
+  testDataType[Array[Byte]](BinaryType, Seq.fill(100) { rand.nextString(1).getBytes() })
+
   test("serialize and de-serialize") {
     // Check empty serialize and de-serialize
     val agg = cms(epsOfTotalCount, confidence, seed)
