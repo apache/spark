@@ -47,7 +47,6 @@ import org.apache.spark.util.{AccumulatorContext, LongAccumulator}
  *    data type is nullable.
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
-
   private def checkFilterPredicate(
       df: DataFrame,
       predicate: Predicate,
@@ -230,7 +229,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("filter pushdown - string") {
+  // See SPARK-17213: https://issues.apache.org/jira/browse/SPARK-17213
+  ignore("filter pushdown - string") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i.toString))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
       checkFilterPredicate(
@@ -258,7 +258,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("filter pushdown - binary") {
+  // See SPARK-17213: https://issues.apache.org/jira/browse/SPARK-17213
+  ignore("filter pushdown - binary") {
     implicit class IntToBinary(int: Int) {
       def b: Array[Byte] = int.toString.getBytes(StandardCharsets.UTF_8)
     }
@@ -556,6 +557,25 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           }
         }
       }
+    }
+  }
+
+  test("SPARK-17213: Broken Parquet filter push-down for string columns") {
+    withTempPath { dir =>
+      import testImplicits._
+
+      val path = dir.getCanonicalPath
+      // scalastyle:off nonascii
+      Seq("a", "é").toDF("name").write.parquet(path)
+      // scalastyle:on nonascii
+
+      assert(spark.read.parquet(path).where("name > 'a'").count() == 1)
+      assert(spark.read.parquet(path).where("name >= 'a'").count() == 2)
+
+      // scalastyle:off nonascii
+      assert(spark.read.parquet(path).where("name < 'é'").count() == 1)
+      assert(spark.read.parquet(path).where("name <= 'é'").count() == 2)
+      // scalastyle:on nonascii
     }
   }
 }
