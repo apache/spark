@@ -615,7 +615,8 @@ class DDLCommandSuite extends PlanTest {
         Map("dt" -> "2008-08-08", "country" -> "us"),
         Map("dt" -> "2009-09-09", "country" -> "uk")),
       ifExists = true,
-      purge = false)
+      purge = false,
+      retainData = false)
     val expected2_table = expected1_table.copy(ifExists = false)
     val expected1_purge = expected1_table.copy(purge = true)
 
