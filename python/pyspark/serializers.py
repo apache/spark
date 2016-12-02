@@ -292,15 +292,13 @@ class CartesianDeserializer(Serializer):
         key_batch_stream = self.key_ser._load_stream_without_unbatching(stream)
         val_batch_stream = self.val_ser._load_stream_without_unbatching(stream)
         for (key_batch, val_batch) in zip(key_batch_stream, val_batch_stream):
+            # We must put these batches in lists exactly once and in order since they are pulling from the same stream
             key_list = list(key_batch)
             val_list = list(val_batch)
-            p = list(product(key_list, val_list))
-            yield p
+            yield product(key_list, val_list)
 
     def load_stream(self, stream):
-        x = chain.from_iterable(self._load_stream_without_unbatching(stream))
-        xl = list(x)
-        return xl
+        return chain.from_iterable(self._load_stream_without_unbatching(stream))
 
     def __repr__(self):
         return "CartesianDeserializer(%s, %s)" % \
