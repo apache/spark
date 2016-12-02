@@ -578,20 +578,18 @@ class PairUDF extends GenericUDF {
 
 @UDFType(stateful = true)
 class StatefulUDF extends UDF {
-  private val result = new LongWritable()
-  result.set(0)
+  private val result = new LongWritable(0)
 
-  def  evaluate(): LongWritable = {
+  def evaluate(): LongWritable = {
     result.set(result.get() + 1)
     result
   }
 }
 
 class StatelessUDF extends UDF {
-  private val result = new LongWritable()
-  result.set(0)
+  private val result = new LongWritable(0)
 
-  def  evaluate(): LongWritable = {
+  def evaluate(): LongWritable = {
     result.set(result.get() + 1)
     result
   }
