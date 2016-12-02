@@ -24,14 +24,14 @@
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-cloud_2.11</artifactId>
+  <artifactId>spark-hadoop-cloud_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Cloud Integration</name>
   <description>
     Contains support for cloud infrastructures, specifically the Hadoop JARs and
     transitive dependencies needed to interact with the infrastructures.
 
-    Any project which explicitly depends upon the spark-cloud artifact will get the dependencies;
+    Any project which explicitly depends upon the spark-hadoop-cloud artifact will get the dependencies;
     the exact versions of which will depend upon the hadoop version Spark was compiled against.
 
     Hadoop 2.7:

@@ -228,14 +228,14 @@
     </profile>
 
     <!--
-     Pull in spark-cloud and its associated JARs,
+     Pull in spark-hadoop-cloud and its associated JARs,
     -->
     <profile>
       <id>cloud</id>
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-cloud_${scala.binary.version}</artifactId>
+          <artifactId>spark-hadoop-cloud_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>
