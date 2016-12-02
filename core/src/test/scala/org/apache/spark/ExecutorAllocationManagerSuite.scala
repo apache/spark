@@ -1160,5 +1160,5 @@ private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend
 
   // Unused.
   override def killExecutors(executorIds: Seq[String], replace: Boolean, force: Boolean)
-  : Seq[String] = { Seq.empty[String] }
+  : Unit = {}
 }

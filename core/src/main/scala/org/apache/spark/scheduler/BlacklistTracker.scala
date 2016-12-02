@@ -203,6 +203,14 @@ private[scheduler] class BlacklistTracker (
             !nodeIdToBlacklistExpiryTime.contains(node)) {
           logInfo(s"Blacklisting node $node because it has ${blacklistedExecsOnNode.size} " +
             s"executors blacklisted: ${blacklistedExecsOnNode}")
+          // TODO:
+          // As soon as this decision has been made, a couple of things need to happen.
+          // First, as quickly as possible, we need to tell the scheduler backend to:
+          // not create any additional executors on this host
+          // (attempt to) fail to create any executors being created.
+          // not schedule any additional tasks on the executors on this host.
+          //
+          // Then, we kill and re-create all the executors on this host.
           conf.get(config.BLACKLIST_ENABLED) match {
             case Some(enabled) =>
               if (enabled) {

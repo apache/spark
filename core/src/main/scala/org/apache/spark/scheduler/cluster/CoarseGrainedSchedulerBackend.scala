@@ -605,7 +605,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Request that the cluster manager kill all executors on a given host.
    * @return whether the kill request is acknowledged
    */
-  final override def killExecutorsOnHost(host: String): Seq[String] = {
+  final override def killExecutorsOnHost(host: String): Unit = {
     logInfo(s"Requesting to kill any and all executors on host ${host}")
     scheduler.getExecutorsAliveOnHost(host).foreach(exec =>
       killExecutors(exec.toSeq, replace = true, force = true)
