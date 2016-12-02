@@ -24,7 +24,7 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -300,6 +300,11 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   encodeDecodeTest(
     ReferenceValueClass(ReferenceValueClass.Container(1)), "reference value class")
 
+  encodeDecodeTest(Option(31), "option of int")
+  encodeDecodeTest(Option.empty[Int], "empty option of int")
+  encodeDecodeTest(Option("abc"), "option of string")
+  encodeDecodeTest(Option.empty[String], "empty option of string")
+
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
   test("nullable of encoder schema") {
@@ -336,6 +341,18 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
       assert(schema(1).dataType.asInstanceOf[StructType](0).nullable === true)
       assert(schema(1).dataType.asInstanceOf[StructType](1).nullable === false)
     }
+  }
+
+  test("nullable of encoder serializer") {
+    def checkNullable[T: Encoder](nullable: Boolean): Unit = {
+      assert(encoderFor[T].serializer.forall(_.nullable === nullable))
+    }
+
+    // test for flat encoders
+    checkNullable[Int](false)
+    checkNullable[Option[Int]](true)
+    checkNullable[java.lang.Integer](true)
+    checkNullable[String](true)
   }
 
   test("null check for map key") {
