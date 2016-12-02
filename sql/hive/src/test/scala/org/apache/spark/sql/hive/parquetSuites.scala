@@ -845,24 +845,23 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
 
     partitionedTableDirWithKey = Utils.createTempDir()
 
-    val df1 = (1 to 10).flatMap { p =>
-      (1 to 10).map(i => ParquetDataWithKey(p, i, s"part-$p"))
-    }.toDF()
-
-    df1.write.mode(SaveMode.Overwrite).partitionBy("p").parquet(
-      partitionedTableDirWithKey.getCanonicalPath)
+    (1 to 10).foreach { p =>
+      val partDir = new File(partitionedTableDirWithKey, s"p=$p")
+      sparkContext.makeRDD(1 to 10)
+        .map(i => ParquetDataWithKey(p, i, s"part-$p"))
+        .toDF()
+        .write.parquet(partDir.getCanonicalPath)
+    }
 
     partitionedTableDirWithKeyAndComplexTypes = Utils.createTempDir()
 
-    val df2 = (1 to 10).flatMap { p =>
-      (1 to 10).map { i =>
+    (1 to 10).foreach { p =>
+      val partDir = new File(partitionedTableDirWithKeyAndComplexTypes, s"p=$p")
+      sparkContext.makeRDD(1 to 10).map { i =>
         ParquetDataWithKeyAndComplexTypes(
           p, i, s"part-$p", StructContainer(i, f"${i}_string"), 1 to i)
-      }
-    }.toDF()
-
-    df2.write.mode(SaveMode.Overwrite).partitionBy("p").parquet(
-      partitionedTableDirWithKeyAndComplexTypes.getCanonicalPath)
+      }.toDF().write.parquet(partDir.getCanonicalPath)
+    }
 
     partitionedTableDirWithComplexTypes = Utils.createTempDir()
 
@@ -884,7 +883,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
 
   /**
    * Drop named tables if they exist
-   *
+ *
    * @param tableNames tables to drop
    */
   def dropTables(tableNames: String*): Unit = {

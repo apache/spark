@@ -52,12 +52,6 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
     data.toDF().write.mode("overwrite").orc(path.getCanonicalPath)
   }
 
-  def makeOrcFile[T <: Product: ClassTag: TypeTag](
-      data: Seq[T], path: File, partitionColumn: Seq[String]): Unit = {
-    data.toDF().write.mode(SaveMode.Overwrite).partitionBy(partitionColumn: _*)
-      .orc(path.getCanonicalPath)
-  }
-
 
   def makeOrcFile[T <: Product: ClassTag: TypeTag](
       df: DataFrame, path: File): Unit = {
@@ -134,13 +128,14 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
 
   test("read partitioned table - partition key included in orc file") {
     withTempDir { base =>
-      val orcData = for {
+      for {
         pi <- Seq(1, 2)
         ps <- Seq("foo", "bar")
-      } yield {
-        (1 to 10).map(i => OrcParDataWithKey(i, pi, i.toString, ps))
+      } {
+        makeOrcFile(
+          (1 to 10).map(i => OrcParDataWithKey(i, pi, i.toString, ps)),
+          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
-      makeOrcFile(orcData.flatten, base, "pi" :: "ps" :: Nil)
 
       read.orc(base.getCanonicalPath).createOrReplaceTempView("t")
 
@@ -151,7 +146,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", "bar")
-          } yield Row(i, i.toString, pi, ps))
+          } yield Row(i, pi, i.toString, ps))
 
         checkAnswer(
           sql("SELECT intField, pi FROM t"),
@@ -166,14 +161,14 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
-          } yield Row(i, i.toString, 1, ps))
+          } yield Row(i, 1, i.toString, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield Row(i, i.toString, pi, "foo"))
+          } yield Row(i, pi, i.toString, "foo"))
       }
     }
   }
@@ -224,13 +219,14 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
 
   test("read partitioned table - with nulls and partition keys are included in Orc file") {
     withTempDir { base =>
-      val orcData = for {
+      for {
         pi <- Seq(1, 2)
         ps <- Seq("foo", null.asInstanceOf[String])
-      } yield {
-        (1 to 10).map(i => OrcParDataWithKey(i, pi, i.toString, ps))
+      } {
+        makeOrcFile(
+          (1 to 10).map(i => OrcParDataWithKey(i, pi, i.toString, ps)),
+          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
-      makeOrcFile(orcData.flatten, base, "pi" :: "ps" :: Nil)
 
       read
         .option(ConfVars.DEFAULTPARTITIONNAME.varname, defaultPartitionName)
@@ -244,14 +240,14 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", null.asInstanceOf[String])
-          } yield Row(i, i.toString, pi, ps))
+          } yield Row(i, pi, i.toString, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield Row(i, i.toString, pi, null))
+          } yield Row(i, pi, i.toString, null))
       }
     }
   }
