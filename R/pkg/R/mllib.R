@@ -278,8 +278,10 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
 
 #' @param object a fitted generalized linear model.
 #' @return \code{summary} returns a summary object of the fitted model, a list of components
-#'         including at least the coefficients, null/residual deviance, null/residual degrees
-#'         of freedom, AIC and number of iterations IRLS takes.
+#'         including at least the coefficients matrix (which includes coefficients, standard error
+#'         of coefficients, t value and p value), null/residual deviance, null/residual degrees of
+#'         freedom, AIC and number of iterations IRLS takes. If there are collinear columns
+#'         in you data, the coefficients matrix only provides coefficients.
 #'
 #' @rdname spark.glm
 #' @export
@@ -303,9 +305,18 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             } else {
               dataFrame(callJMethod(jobj, "rDevianceResiduals"))
             }
-            coefficients <- matrix(coefficients, ncol = 4)
-            colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
-            rownames(coefficients) <- unlist(features)
+            # If the underlying WeightedLeastSquares using "normal" solver, we can provide
+            # coefficients, standard error of coefficients, t value and p value. Otherwise,
+            # it will be fitted by local "l-bfgs", we can only provide coefficients.
+            if (length(features) == length(coefficients)) {
+              coefficients <- matrix(coefficients, ncol = 1)
+              colnames(coefficients) <- c("Estimate")
+              rownames(coefficients) <- unlist(features)
+            } else {
+              coefficients <- matrix(coefficients, ncol = 4)
+              colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
+              rownames(coefficients) <- unlist(features)
+            }
             ans <- list(deviance.resid = deviance.resid, coefficients = coefficients,
                         dispersion = dispersion, null.deviance = null.deviance,
                         deviance = deviance, df.null = df.null, df.residual = df.residual,
@@ -701,7 +712,6 @@ setMethod("predict", signature(object = "KMeansModel"),
 #'                        of L1 and L2. Default is 0.0 which is an L2 penalty.
 #' @param maxIter maximum iteration number.
 #' @param tol convergence tolerance of iterations.
-#' @param fitIntercept whether to fit an intercept term.
 #' @param family the name of family which is a description of the label distribution to be used in the model.
 #'               Supported options:
 #'                 \itemize{
@@ -736,11 +746,11 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' \dontrun{
 #' sparkR.session()
 #' # binary logistic regression
-#' label <- c(1.0, 1.0, 1.0, 0.0, 0.0)
-#' feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
-#' binary_data <- as.data.frame(cbind(label, feature))
+#' label <- c(0.0, 0.0, 0.0, 1.0, 1.0)
+#' features <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
+#' binary_data <- as.data.frame(cbind(label, features))
 #' binary_df <- createDataFrame(binary_data)
-#' blr_model <- spark.logit(binary_df, label ~ feature, thresholds = 1.0)
+#' blr_model <- spark.logit(binary_df, label ~ features, thresholds = 1.0)
 #' blr_predict <- collect(select(predict(blr_model, binary_df), "prediction"))
 #'
 #' # summary of binary logistic regression
@@ -772,7 +782,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @note spark.logit since 2.1.0
 setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, elasticNetParam = 0.0, maxIter = 100,
-                   tol = 1E-6, fitIntercept = TRUE, family = "auto", standardization = TRUE,
+                   tol = 1E-6, family = "auto", standardization = TRUE,
                    thresholds = 0.5, weightCol = NULL, aggregationDepth = 2,
                    probabilityCol = "probability") {
             formula <- paste(deparse(formula), collapse = "")
@@ -784,10 +794,10 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
             jobj <- callJStatic("org.apache.spark.ml.r.LogisticRegressionWrapper", "fit",
                                 data@sdf, formula, as.numeric(regParam),
                                 as.numeric(elasticNetParam), as.integer(maxIter),
-                                as.numeric(tol), as.logical(fitIntercept),
-                                as.character(family), as.logical(standardization),
-                                as.array(thresholds), as.character(weightCol),
-                                as.integer(aggregationDepth), as.character(probabilityCol))
+                                as.numeric(tol), as.character(family),
+                                as.logical(standardization), as.array(thresholds),
+                                as.character(weightCol), as.integer(aggregationDepth),
+                                as.character(probabilityCol))
             new("LogisticRegressionModel", jobj = jobj)
           })
 

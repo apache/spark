@@ -440,9 +440,9 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         .. seealso:: `Wikipedia reference \
         <http://en.wikipedia.org/wiki/Receiver_operating_characteristic>`_
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LogisticRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LogisticRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("roc")
 
@@ -453,9 +453,9 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         Computes the area under the receiver operating characteristic
         (ROC) curve.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LogisticRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LogisticRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("areaUnderROC")
 
@@ -467,9 +467,9 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         containing two fields recall, precision with (0.0, 1.0) prepended
         to it.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LogisticRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LogisticRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("pr")
 
@@ -480,9 +480,9 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         Returns a dataframe with two fields (threshold, F-Measure) curve
         with beta = 1.0.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LogisticRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LogisticRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("fMeasureByThreshold")
 
@@ -494,9 +494,9 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         Every possible probability obtained in transforming the dataset
         are used as thresholds used in calculating the precision.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LogisticRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LogisticRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("precisionByThreshold")
 
@@ -508,9 +508,9 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         Every possible probability obtained in transforming the dataset
         are used as thresholds used in calculating the recall.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LogisticRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LogisticRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("recallByThreshold")
 
@@ -695,9 +695,9 @@ class DecisionTreeClassificationModel(DecisionTreeModel, JavaClassificationModel
             where gain is scaled by the number of instances passing through node
           - Normalize importances for tree to sum to 1.
 
-        Note: Feature importance for single decision trees can have high variance due to
-              correlated predictor variables. Consider using a :py:class:`RandomForestClassifier`
-              to determine feature importance instead.
+        .. note:: Feature importance for single decision trees can have high variance due to
+            correlated predictor variables. Consider using a :py:class:`RandomForestClassifier`
+            to determine feature importance instead.
         """
         return self._call_java("featureImportances")
 
@@ -839,7 +839,6 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for classification.
     It supports binary labels, as well as both continuous and categorical features.
-    Note: Multiclass labels are not currently supported.
 
     The implementation is based upon: J.H. Friedman. "Stochastic Gradient Boosting." 1999.
 
@@ -850,6 +849,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     based on the loss function, whereas the original gradient boosting method does not.
     - We expect to implement TreeBoost in the future:
     `SPARK-4240 <https://issues.apache.org/jira/browse/SPARK-4240>`_
+
+    .. note:: Multiclass labels are not currently supported.
 
     >>> from numpy import allclose
     >>> from pyspark.ml.linalg import Vectors
@@ -1137,8 +1138,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
                                      HasMaxIter, HasTol, HasSeed, HasStepSize, JavaMLWritable,
                                      JavaMLReadable):
     """
-    .. note:: Experimental
-
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
     Number of inputs has to be equal to the size of feature vectors.
@@ -1310,8 +1309,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
 class MultilayerPerceptronClassificationModel(JavaModel, JavaPredictionModel, JavaMLWritable,
                                               JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by MultilayerPerceptronClassifier.
 
     .. versionadded:: 1.6.0

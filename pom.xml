@@ -1770,6 +1770,10 @@
             <groupId>org.codehaus.janino</groupId>
             <artifactId>janino</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.janino</groupId>
+            <artifactId>commons-compiler</artifactId>
+          </exclusion>
           <!-- hsqldb interferes with the use of derby as the default db
             in hive's use of datanucleus.
           -->
@@ -1805,6 +1809,11 @@
       <dependency>
         <groupId>org.codehaus.janino</groupId>
         <artifactId>janino</artifactId>
+        <version>${janino.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.janino</groupId>
+        <artifactId>commons-compiler</artifactId>
         <version>${janino.version}</version>
       </dependency>
       <dependency>
@@ -2504,6 +2513,18 @@
                 </tag>
                 <tag>
                   <name>tparam</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>constructor</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>todo</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>groupname</name>
                   <placement>X</placement>
                 </tag>
               </tags>

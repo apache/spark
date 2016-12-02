@@ -282,7 +282,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           createFileStreamSourceAndGetSchema(
             format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
         }
-        assert("Unable to infer schema. It must be specified manually.;" === e.getMessage)
+        assert("Unable to infer schema for JSON. It must be specified manually.;" === e.getMessage)
       }
     }
   }
@@ -1006,9 +1006,13 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       testStream(input)(
         AddTextFileData("100", src, tmp),
         CheckAnswer("100"),
-        AssertOnLastQueryStatus { status =>
-          assert(status.triggerDetails.get("numRows.input.total") === "1")
-          assert(status.sourceStatuses(0).processingRate > 0.0)
+        AssertOnQuery { query =>
+          val actualProgress = query.recentProgresses
+              .find(_.numInputRows > 0)
+              .getOrElse(sys.error("Could not find records with data."))
+          assert(actualProgress.numInputRows === 1)
+          assert(actualProgress.sources(0).processedRowsPerSecond > 0.0)
+          true
         }
       )
     }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.UUID
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.SparkSession
 
@@ -31,27 +33,29 @@ trait StreamingQuery {
 
   /**
    * Returns the name of the query. This name is unique across all active queries. This can be
-   * set in the [[org.apache.spark.sql.DataStreamWriter DataStreamWriter]] as
+   * set in the `org.apache.spark.sql.streaming.DataStreamWriter` as
    * `dataframe.writeStream.queryName("query").start()`.
+   *
    * @since 2.0.0
    */
   def name: String
 
   /**
-   * Returns the unique id of this query. This id is automatically generated and is unique across
-   * all queries that have been started in the current process.
-   * @since 2.0.0
+   * Returns the unique id of this query.
+   * @since 2.1.0
    */
-  def id: Long
+  def id: UUID
 
   /**
-   * Returns the [[SparkSession]] associated with `this`.
+   * Returns the `SparkSession` associated with `this`.
+   *
    * @since 2.0.0
    */
   def sparkSession: SparkSession
 
   /**
-   * Whether the query is currently active or not
+   * Returns `true` if this query is actively running.
+   *
    * @since 2.0.0
    */
   def isActive: Boolean
@@ -64,23 +68,26 @@ trait StreamingQuery {
 
   /**
    * Returns the current status of the query.
+   *
    * @since 2.0.2
    */
   def status: StreamingQueryStatus
 
   /**
-   * Returns current status of all the sources.
-   * @since 2.0.0
+   * Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
+   * The number of progress updates retained for each stream is configured by Spark session
+   * configuration `spark.sql.streaming.numRecentProgresses`.
+   *
+   * @since 2.1.0
    */
-  @deprecated("use status.sourceStatuses", "2.0.2")
-  def sourceStatuses: Array[SourceStatus]
+  def recentProgresses: Array[StreamingQueryProgress]
 
   /**
-   * Returns current status of the sink.
-   * @since 2.0.0
+   * Returns the most recent [[StreamingQueryProgress]] update of this streaming query.
+   *
+   * @since 2.1.0
    */
-  @deprecated("use status.sinkStatus", "2.0.2")
-  def sinkStatus: SinkStatus
+  def lastProgress: StreamingQueryProgress
 
   /**
    * Waits for the termination of `this` query, either by `query.stop()` or by an exception.
@@ -90,10 +97,11 @@ trait StreamingQuery {
    * immediately (if the query was terminated by `stop()`), or throw the exception
    * immediately (if the query has terminated with exception).
    *
-   * @throws StreamingQueryException, if `this` query has terminated with an exception.
+   * @throws StreamingQueryException if the query has terminated with an exception.
    *
    * @since 2.0.0
    */
+  @throws[StreamingQueryException]
   def awaitTermination(): Unit
 
   /**
@@ -106,10 +114,11 @@ trait StreamingQuery {
    * `true` immediately (if the query was terminated by `stop()`), or throw the exception
    * immediately (if the query has terminated with exception).
    *
-   * @throws StreamingQueryException, if `this` query has terminated with an exception
+   * @throws StreamingQueryException if the query has terminated with an exception
    *
    * @since 2.0.0
    */
+  @throws[StreamingQueryException]
   def awaitTermination(timeoutMs: Long): Boolean
 
   /**

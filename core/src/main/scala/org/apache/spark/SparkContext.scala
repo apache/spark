@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.io._
 import java.lang.reflect.Constructor
-import java.net.{MalformedURLException, URI}
+import java.net.{URI}
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
@@ -422,10 +422,6 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     if (master == "yarn" && deployMode == "client") System.setProperty("SPARK_YARN_MODE", "true")
-    if (_conf.get(IO_ENCRYPTION_ENABLED) && !SparkHadoopUtil.get.isYarnMode()) {
-      throw new SparkException("IO encryption is only supported in YARN mode, please disable it " +
-        s"by setting ${IO_ENCRYPTION_ENABLED.key} to false")
-    }
 
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
     // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
@@ -645,7 +641,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Get a local property set in this thread, or null if it is missing. See
-   * [[org.apache.spark.SparkContext.setLocalProperty]].
+   * `org.apache.spark.SparkContext.setLocalProperty`.
    */
   def getLocalProperty(key: String): String =
     Option(localProperties.get).map(_.getProperty(key)).orNull
@@ -663,7 +659,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Application programmers can use this method to group all those jobs together and give a
    * group description. Once set, the Spark web UI will associate such jobs with this group.
    *
-   * The application can also use [[org.apache.spark.SparkContext.cancelJobGroup]] to cancel all
+   * The application can also use `org.apache.spark.SparkContext.cancelJobGroup` to cancel all
    * running jobs in this group. For example,
    * {{{
    * // In the main thread:
@@ -1384,7 +1380,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Create and register a [[CollectionAccumulator]], which starts with empty list and accumulates
+   * Create and register a `CollectionAccumulator`, which starts with empty list and accumulates
    * inputs by adding them into the list.
    */
   def collectionAccumulator[T]: CollectionAccumulator[T] = {
@@ -1394,7 +1390,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Create and register a [[CollectionAccumulator]], which starts with empty list and accumulates
+   * Create and register a `CollectionAccumulator`, which starts with empty list and accumulates
    * inputs by adding them into the list.
    */
   def collectionAccumulator[T](name: String): CollectionAccumulator[T] = {
@@ -2043,7 +2039,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Cancel active jobs for the specified group. See [[org.apache.spark.SparkContext.setJobGroup]]
+   * Cancel active jobs for the specified group. See `org.apache.spark.SparkContext.setJobGroup`
    * for more information.
    */
   def cancelJobGroup(groupId: String) {
@@ -2061,7 +2057,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel a given job if it's scheduled or running.
    *
    * @param jobId the job ID to cancel
-   * @throws InterruptedException if the cancel message cannot be sent
+   * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
   def cancelJob(jobId: Int) {
     dagScheduler.cancelJob(jobId)
@@ -2071,7 +2067,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel a given stage and all jobs associated with it.
    *
    * @param stageId the stage ID to cancel
-   * @throws InterruptedException if the cancel message cannot be sent
+   * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
   def cancelStage(stageId: Int) {
     dagScheduler.cancelStage(stageId)

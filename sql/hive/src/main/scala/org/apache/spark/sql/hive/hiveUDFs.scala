@@ -177,7 +177,7 @@ private[hive] case class HiveGenericUDF(
 
 /**
  * Converts a Hive Generic User Defined Table Generating Function (UDTF) to a
- * [[Generator]].  Note that the semantics of Generators do not allow
+ * `Generator`. Note that the semantics of Generators do not allow
  * Generators to maintain state in between input rows.  Thus UDTFs that rely on partitioning
  * dependent operations like calls to `close()` before producing output will not operate the same as
  * in Hive.  However, in practice this should not affect compatibility for most sane UDTFs
@@ -377,10 +377,6 @@ private[hive] case class HiveUDAFFunction(
 
   @transient
   private lazy val aggBufferSerDe: AggregationBufferSerDe = new AggregationBufferSerDe
-
-  // We rely on Hive to check the input data types, so use `AnyDataType` here to bypass our
-  // catalyst type checking framework.
-  override def inputTypes: Seq[AbstractDataType] = children.map(_ => AnyDataType)
 
   override def nullable: Boolean = true
 

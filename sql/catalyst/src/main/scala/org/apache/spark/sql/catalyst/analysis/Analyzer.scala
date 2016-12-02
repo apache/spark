@@ -1027,7 +1027,8 @@ class Analyzer(
       def failOnOuterReference(p: LogicalPlan): Unit = {
         if (p.expressions.exists(containsOuter)) {
           failAnalysis(
-            s"Correlated predicates are not supported outside of WHERE/HAVING clauses: $p")
+            "Expressions referencing the outer query are not supported outside of WHERE/HAVING " +
+              s"clauses: $p")
         }
       }
 
@@ -1076,6 +1077,10 @@ class Analyzer(
 
       // Simplify the predicates before pulling them out.
       val transformed = BooleanSimplification(sub) transformUp {
+        // WARNING:
+        // Only Filter can host correlated expressions at this time
+        // Anyone adding a new "case" below needs to add the call to
+        // "failOnOuterReference" to disallow correlated expressions in it.
         case f @ Filter(cond, child) =>
           // Find all predicates with an outer reference.
           val (correlated, local) = splitConjunctivePredicates(cond).partition(containsOuter)
@@ -1116,11 +1121,17 @@ class Analyzer(
             a
           }
         case w : Window =>
+          failOnOuterReference(w)
           failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, w)
           w
         case j @ Join(left, _, RightOuter, _) =>
           failOnOuterReference(j)
           failOnOuterReferenceInSubTree(left, "a RIGHT OUTER JOIN")
+          j
+        // SPARK-18578: Do not allow any correlated predicate
+        // in a Full (Outer) Join operator and its descendants
+        case j @ Join(_, _, FullOuter, _) =>
+          failOnOuterReferenceInSubTree(j, "a FULL OUTER JOIN")
           j
         case j @ Join(_, right, jt, _) if !jt.isInstanceOf[InnerLike] =>
           failOnOuterReference(j)
@@ -1241,9 +1252,6 @@ class Analyzer(
      */
     private def resolveSubQueries(plan: LogicalPlan, plans: Seq[LogicalPlan]): LogicalPlan = {
       plan transformExpressions {
-        case s @ ScalarSubquery(sub, conditions, exprId)
-            if sub.resolved && conditions.isEmpty && sub.output.size != 1 =>
-          failAnalysis(s"Scalar subquery must return only one column, but got ${sub.output.size}")
         case s @ ScalarSubquery(sub, _, exprId) if !sub.resolved =>
           resolveSubQuery(s, plans, 1)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, exprId) =>
@@ -1950,15 +1958,7 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case j @ Join(left, right, UsingJoin(joinType, usingCols), condition)
           if left.resolved && right.resolved && j.duplicateResolved =>
-        // Resolve the column names referenced in using clause from both the legs of join.
-        val lCols = usingCols.flatMap(col => left.resolveQuoted(col.name, resolver))
-        val rCols = usingCols.flatMap(col => right.resolveQuoted(col.name, resolver))
-        if ((lCols.length == usingCols.length) && (rCols.length == usingCols.length)) {
-          val joinNames = lCols.map(exp => exp.name)
-          commonNaturalJoinProcessing(left, right, joinType, joinNames, None)
-        } else {
-          j
-        }
+        commonNaturalJoinProcessing(left, right, joinType, usingCols, None)
       case j @ Join(left, right, NaturalJoin(joinType), condition) if j.resolvedExceptNatural =>
         // find common column names from both sides
         val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
@@ -1973,18 +1973,16 @@ class Analyzer(
       joinNames: Seq[String],
       condition: Option[Expression]) = {
     val leftKeys = joinNames.map { keyName =>
-      val joinColumn = left.output.find(attr => resolver(attr.name, keyName))
-      assert(
-        joinColumn.isDefined,
-        s"$keyName should exist in ${left.output.map(_.name).mkString(",")}")
-      joinColumn.get
+      left.output.find(attr => resolver(attr.name, keyName)).getOrElse {
+        throw new AnalysisException(s"USING column `$keyName` can not be resolved with the " +
+          s"left join side, the left output is: [${left.output.map(_.name).mkString(", ")}]")
+      }
     }
     val rightKeys = joinNames.map { keyName =>
-      val joinColumn = right.output.find(attr => resolver(attr.name, keyName))
-      assert(
-        joinColumn.isDefined,
-        s"$keyName should exist in ${right.output.map(_.name).mkString(",")}")
-      joinColumn.get
+      right.output.find(attr => resolver(attr.name, keyName)).getOrElse {
+        throw new AnalysisException(s"USING column `$keyName` can not be resolved with the " +
+          s"right join side, the right output is: [${right.output.map(_.name).mkString(", ")}]")
+      }
     }
     val joinPairs = leftKeys.zip(rightKeys)
 
