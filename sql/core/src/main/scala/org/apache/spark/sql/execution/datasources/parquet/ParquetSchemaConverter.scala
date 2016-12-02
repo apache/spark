@@ -158,6 +158,7 @@ private[parquet] class ParquetSchemaConverter(
           case INT_64 | null => LongType
           case DECIMAL => makeDecimalType(Decimal.MAX_LONG_DIGITS)
           case UINT_64 => typeNotSupported()
+          case TIMESTAMP_MICROS => TimestampType
           case TIMESTAMP_MILLIS => typeNotImplemented()
           case _ => illegalType()
         }
