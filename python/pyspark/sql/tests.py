@@ -1980,9 +1980,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         # Regression test for SPARK-17514: limit(n).collect() should the perform same as take(n)
         assert_runs_only_one_job_stage_and_task("collect_limit", lambda: df.limit(1).collect())
 
-
-    @unittest.skipIf(sys.version_info < (3, 3),
-                   "Unittest < 3.3 doesn't support mocking")
+    @unittest.skipIf(sys.version_info < (3, 3), "Unittest < 3.3 doesn't support mocking")
     def test_unbounded_frames(self):
         from unittest.mock import patch
         from pyspark.sql import functions as F
