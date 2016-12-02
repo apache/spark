@@ -252,9 +252,8 @@ object SparkBuild extends PomBuild {
     ),
     externalResolvers := resolvers.value,
     otherResolvers := SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))).value,
-    publishLocalConfiguration in MavenCompile := ((packagedArtifacts, deliverLocal, ivyLoggingLevel) map {
-      (arts, _, level) => new PublishConfiguration(None, "dotM2", arts, Seq(), level)
-    }).value,
+    publishLocalConfiguration in MavenCompile :=
+      new PublishConfiguration(None, "dotM2", packagedArtifacts.value, Seq(), ivyLoggingLevel.value),
     publishMavenStyle in MavenCompile := true,
     publishLocal in MavenCompile := publishTask(publishLocalConfiguration in MavenCompile, deliverLocal).value,
     publishLocalBoth := Seq(publishLocal in MavenCompile, publishLocal).dependOn.value,
@@ -608,20 +607,18 @@ object Assembly {
       sys.props.get("hadoop.version")
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
-    jarName in assembly := ((version, moduleName, hadoopVersion) map { (v, mName, hv) =>
-      if (mName.contains("streaming-flume-assembly")
-        || mName.contains("streaming-kafka-0-8-assembly")
-        || mName.contains("streaming-kafka-0-10-assembly")
-        || mName.contains("streaming-kinesis-asl-assembly")) {
+    jarName in assembly := {
+      if (moduleName.value.contains("streaming-flume-assembly")
+        || moduleName.value.contains("streaming-kafka-0-8-assembly")
+        || moduleName.value.contains("streaming-kafka-0-10-assembly")
+        || moduleName.value.contains("streaming-kinesis-asl-assembly")) {
         // This must match the same name used in maven (see external/kafka-0-8-assembly/pom.xml)
-        s"${mName}-${v}.jar"
+        s"${moduleName.value}-${version.value}.jar"
       } else {
-        s"${mName}-${v}-hadoop${hv}.jar"
+        s"${moduleName.value}-${version.value}-hadoop${hadoopVersion.value}.jar"
       }
-    }).value,
-    jarName in (Test, assembly) := ((version, moduleName, hadoopVersion) map { (v, mName, hv) =>
-      s"${mName}-test-${v}.jar"
-    }).value,
+    },
+    jarName in (Test, assembly) := s"${moduleName.value}-test-${version.value}.jar",
     mergeStrategy in assembly := {
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
       case m if m.toLowerCase.matches("meta-inf.*\\.sf$")      => MergeStrategy.discard
