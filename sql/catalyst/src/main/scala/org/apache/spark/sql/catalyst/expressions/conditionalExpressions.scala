@@ -112,10 +112,11 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     ev.copy(code = generatedCode)
   }
 
-  private def createAndAddFunction(ctx: CodegenContext,
-                                   ev: ExprCode,
-                                   dataType: DataType,
-                                   baseFuncName: String): (String, String, String) = {
+  private def createAndAddFunction(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      dataType: DataType,
+      baseFuncName: String): (String, String, String) = {
     val globalIsNull = ctx.freshName("isNull")
     ctx.addMutableState("boolean", globalIsNull, s"$globalIsNull = false;")
     val globalValue = ctx.freshName("value")

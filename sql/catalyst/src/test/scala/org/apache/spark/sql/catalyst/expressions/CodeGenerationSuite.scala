@@ -98,31 +98,20 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-18091: split large if expressions into blocks due to JVM code size limit") {
-    val row = create_row("afafFAFFsqcategory2dadDADcategory8sasasadscategory24", 0)
-    val inputStr = 'a.string.at(0)
-    val inputIdx = 'a.int.at(1)
+    val inStr = "StringForTesting"
+    val row = create_row(inStr)
+    val inputStrAttr = 'a.string.at(0)
 
-    val length = 10
-    val valuesToCompareTo = for (i <- 1 to (length + 1)) yield ("category" + i)
-
-    val initCondition = EqualTo(RegExpExtract(inputStr, Literal("category1"), inputIdx),
-      valuesToCompareTo(0))
-    var res: Expression = If(initCondition, Literal("category1"), Literal("NULL"))
-    var cummulativeCondition: Expression = Not(initCondition)
-    for (index <- 1 to length) {
-      val valueExtractedFromInput = RegExpExtract(inputStr,
-        Literal("category" + (index + 1).toString), inputIdx)
-      val currComparee = If(cummulativeCondition, valueExtractedFromInput, Literal("NULL"))
-      val currCondition = EqualTo(currComparee, valuesToCompareTo(index))
-      val combinedCond = And(cummulativeCondition, currCondition)
-      res = If(combinedCond, If(combinedCond, valueExtractedFromInput, Literal("NULL")), res)
-      cummulativeCondition = And(Not(currCondition), cummulativeCondition)
+    var strExpr: Expression = inputStrAttr
+    for (_ <- 1 to 13) {
+      strExpr = If(EqualTo(Decode(Encode(strExpr, "utf-8"), "utf-8"), inputStrAttr),
+        strExpr, strExpr)
     }
 
-    val expressions = Seq(res)
+    val expressions = Seq(strExpr)
     val plan = GenerateUnsafeProjection.generate(expressions, true)
     val actual = plan(row).toSeq(expressions.map(_.dataType))
-    val expected = Seq(UTF8String.fromString("category2"))
+    val expected = Seq(UTF8String.fromString(inStr))
 
     if (!checkResult(actual, expected)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
