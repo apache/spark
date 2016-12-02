@@ -21,13 +21,14 @@ import java.io.{DataInput, DataOutput, File, PrintWriter}
 import java.util.{ArrayList, Arrays, Properties}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.ql.udf.UDAFPercentile
+import org.apache.hadoop.hive.ql.exec.UDF
+import org.apache.hadoop.hive.ql.udf.{UDAFPercentile, UDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.io.Writable
+import org.apache.hadoop.io.{LongWritable, Writable}
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -487,6 +488,29 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     assert(count4 == 1)
     sql("DROP TABLE parquet_tmp")
   }
+
+  test("Hive Stateful UDF") {
+    sql(s"CREATE TEMPORARY FUNCTION statefulUDF AS '${classOf[StatefulUDF].getName}'")
+    sql(s"CREATE TEMPORARY FUNCTION statelessUDF AS '${classOf[StatelessUDF].getName}'")
+    val testData = spark.sparkContext.parallelize(
+      (0 until 10) map(x => IntegerCaseClass(1)), 2).toDF()
+    testData.createOrReplaceTempView("inputTable")
+    val max1 =
+      sql("SELECT MAX(s) FROM (" +
+        "SELECT statefulUDF() as s FROM (SELECT i from inputTable DISTRIBUTE by i) a" +
+        ") b").head().getLong(0)
+    assert(max1 == 10)
+    val max2 =
+      sql("SELECT MAX(s) FROM (" +
+        "SELECT statefulUDF() as s FROM (SELECT i from inputTable) a" +
+        ") b").head().getLong(0)
+    assert(max2 == 5)
+    val max3 =
+      sql("SELECT MAX(s) FROM (" +
+        "SELECT statelessUDF() as s FROM (SELECT i from inputTable DISTRIBUTE by i) a" +
+        ") b").head().getLong(0)
+    assert(max3 == 1)
+  }
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {
@@ -550,4 +574,25 @@ class PairUDF extends GenericUDF {
   }
 
   override def getDisplayString(p1: Array[String]): String = ""
+}
+
+@UDFType(stateful = true)
+class StatefulUDF extends UDF {
+  private val result = new LongWritable()
+  result.set(0)
+
+  def  evaluate(): LongWritable = {
+    result.set(result.get() + 1)
+    result
+  }
+}
+
+class StatelessUDF extends UDF {
+  private val result = new LongWritable()
+  result.set(0)
+
+  def  evaluate(): LongWritable = {
+    result.set(result.get() + 1)
+    result
+  }
 }
