@@ -430,7 +430,8 @@ object SparkBuild extends PomBuild {
       val packages :: className :: otherArgs = spaceDelimited("<group:artifact:version> <MainClass> [args]").parsed.toList
       val scalaRun = (runner in run).value
       val classpath = (fullClasspath in Runtime).value
-      val args = Seq("--packages", packages, "--class", className, (Keys.`package` in Compile in "core").value.getCanonicalPath) ++ otherArgs
+      val args = Seq("--packages", packages, "--class", className, (Keys.`package` in Compile in LocalProject("core"))
+        .value.getCanonicalPath) ++ otherArgs
       println(args)
       scalaRun.run("org.apache.spark.deploy.SparkSubmit", classpath.map(_.data), args, streams.value.log)
     },
@@ -442,7 +443,7 @@ object SparkBuild extends PomBuild {
     }
   ))(assembly)
 
-  enable(Seq(sparkShell := sparkShell in "assembly"))(spark)
+  enable(Seq(sparkShell := sparkShell in LocalProject("assembly")))(spark)
 
   // TODO: move this to its upstream project.
   override def projectDefinitions(baseDirectory: File): Seq[Project] = {
