@@ -29,6 +29,19 @@ class TaskContext(object):
     """
 
     _taskContext = None
+
+
+    def __new__(cls):
+        """Even if users construct TaskContext instead of using get, give them the singleton."""
+        taskContext = cls._taskContext
+        if taskContext is not None:
+            return taskContext
+        cls._taskContext = taskContext = object.__new__(cls)
+        return taskContext
+
+    def __init__(self):
+        """Construct a TaskContext, use get instead"""
+        pass
     
     @classmethod
     @since(2.2)
@@ -54,7 +67,7 @@ class TaskContext(object):
         .. note:: PipelinedRDD implementation in Python means this RDD id may be the same between
                   multiple transformations.
         """
-        return self._stageId
+        return self._rddId
 
     @since(2.2)
     def attemptNumber(self):

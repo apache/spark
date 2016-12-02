@@ -69,6 +69,7 @@ from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, 
 from pyspark.shuffle import Aggregator, ExternalMerger, ExternalSorter
 from pyspark import shuffle
 from pyspark.profiler import BasicProfiler
+from pyspark.taskcontext import TaskContext
 
 _have_scipy = False
 _have_numpy = False
@@ -477,6 +478,13 @@ class AddFileTests(PySparkTestCase):
 
         self.assertEqual(["My Server"], self.sc.parallelize(range(1)).map(func).collect())
 
+
+class TaskContextTests(ReusedPySparkTestCase):
+
+    def test_rdd_id(self):
+        rdd = self.sc.parallelize(range(10))
+        mapped = rdd.map(lambda x: TaskContext.get().rddId())
+        self.assertEqual(mapped.head(), mapped.id())
 
 class RDDTests(ReusedPySparkTestCase):
 
