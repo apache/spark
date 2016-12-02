@@ -772,7 +772,7 @@ object Unidoc {
 object CopyDependencies {
 
   val copyDeps = TaskKey[Unit]("copyDeps", "Copies needed dependencies to the build directory.")
-  val destPath = (crossTarget in Compile) / "jars"
+  val destPath = (crossTarget in Compile) { _ / "jars"}
 
   lazy val settings = Seq(
     copyDeps := {
