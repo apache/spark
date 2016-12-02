@@ -36,6 +36,7 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
       s"""
         |{
         |  "id" : "${testProgress.id.toString}",
+        |  "runId" : "${testProgress.runId.toString}",
         |  "name" : "name",
         |  "timestamp" : 1,
         |  "numInputRows" : 678,
@@ -95,7 +96,8 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
 
 object StreamingQueryStatusAndProgressSuite {
   val testProgress = new StreamingQueryProgress(
-    id = UUID.randomUUID(),
+    id = UUID.randomUUID,
+    runId = UUID.randomUUID,
     name = "name",
     timestamp = 1L,
     batchId = 2L,

@@ -41,10 +41,21 @@ trait StreamingQuery {
   def name: String
 
   /**
-   * Returns the unique id of this query.
+   * Returns the unique id of this query that persists across restarts from checkpoint data.
+   * That is, this id is generated when a query is started for the first time, and
+   * will be the same every time it is restarted from checkpoint data.
+   * There can only be one query with the same id active in a Spark cluster.
+   *
    * @since 2.1.0
    */
   def id: UUID
+
+  /**
+   * Returns the unique id of this run of the query. That is, every start/restart of a query will
+   * generated a unique runId. Therefore, every time a query is restarted from
+   * checkpoint, it will have the same [[id]] but different [[runId]]s.
+   */
+  def runId: UUID
 
   /**
    * Returns the `SparkSession` associated with `this`.

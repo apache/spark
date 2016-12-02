@@ -268,6 +268,14 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
         trigger,
         triggerClock,
         outputMode)
+
+      if (activeQueries.values.exists(_.id == query.id)) {
+        throw new IllegalStateException(
+          s"Cannot start query with id ${query.id} as another query with same id is " +
+            s"already active. Perhaps you are attempting to restart a query from checkpoint" +
+            s"that is already active.")
+      }
+
       query.start()
       activeQueries.put(query.id, query)
       query

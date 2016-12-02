@@ -67,6 +67,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         AssertOnQuery { query =>
           assert(listener.startEvent !== null)
           assert(listener.startEvent.id === query.id)
+          assert(listener.startEvent.runId === query.runId)
           assert(listener.startEvent.name === query.name)
           assert(listener.progressEvents.isEmpty)
           assert(listener.terminationEvent === null)
@@ -90,6 +91,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           eventually(Timeout(streamingTimeout)) {
             assert(listener.terminationEvent !== null)
             assert(listener.terminationEvent.id === query.id)
+            assert(listener.terminationEvent.runId === query.runId)
             assert(listener.terminationEvent.exception === None)
           }
           listener.checkAsyncErrors()
@@ -165,7 +167,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("QueryStartedEvent serialization") {
-    val queryStarted = new StreamingQueryListener.QueryStartedEvent(UUID.randomUUID(), "name")
+    val queryStarted = new StreamingQueryListener.QueryStartedEvent(
+      UUID.randomUUID, UUID.randomUUID, "name")
     val json = JsonProtocol.sparkEventToJson(queryStarted)
     val newQueryStarted = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryStartedEvent]
@@ -183,7 +186,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("QueryTerminatedEvent serialization") {
     val exception = new RuntimeException("exception")
     val queryQueryTerminated = new StreamingQueryListener.QueryTerminatedEvent(
-      UUID.randomUUID, Some(exception.getMessage))
+      UUID.randomUUID, UUID.randomUUID, Some(exception.getMessage))
     val json = JsonProtocol.sparkEventToJson(queryQueryTerminated)
     val newQueryTerminated = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryTerminatedEvent]
