@@ -194,4 +194,8 @@ private[sql] class JacksonGenerator(
       writeFields(row, schema, rootFieldWriters)
     }
   }
+
+  def writeLineEnding(): Unit = {
+    gen.writeRaw('\n')
+  }
 }

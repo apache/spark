@@ -17,14 +17,9 @@
 
 package org.apache.spark.sql.sources
 
-import java.text.NumberFormat
-import java.util.Locale
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{NullWritable, Text}
-import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.sql.{sources, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
@@ -125,29 +120,19 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
 class SimpleTextOutputWriter(path: String, context: TaskAttemptContext)
   extends OutputWriter {
 
-  private val recordWriter: RecordWriter[NullWritable, Text] =
-    new AppendingTextOutputFormat(path).getRecordWriter(context)
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
 
   override def write(row: Row): Unit = {
     val serialized = row.toSeq.map { v =>
       if (v == null) "" else v.toString
     }.mkString(",")
-    recordWriter.write(null, new Text(serialized))
+
+    writer.write(serialized)
+    writer.write('\n')
   }
 
   override def close(): Unit = {
-    recordWriter.close(context)
-  }
-}
-
-class AppendingTextOutputFormat(path: String) extends TextOutputFormat[NullWritable, Text] {
-
-  val numberFormat = NumberFormat.getInstance(Locale.US)
-  numberFormat.setMinimumIntegerDigits(5)
-  numberFormat.setGroupingUsed(false)
-
-  override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-    new Path(path)
+    writer.close()
   }
 }
 

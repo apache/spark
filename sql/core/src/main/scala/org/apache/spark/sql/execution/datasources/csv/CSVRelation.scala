@@ -20,10 +20,7 @@ package org.apache.spark.sql.execution.datasources.csv
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{NullWritable, Text}
-import org.apache.hadoop.mapreduce.RecordWriter
 import org.apache.hadoop.mapreduce.TaskAttemptContext
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -31,8 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile}
-import org.apache.spark.sql.execution.datasources.text.TextOutputWriter
+import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.types._
 
 object CSVRelation extends Logging {
@@ -179,7 +175,7 @@ private[csv] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWrit
   }
 
   override def getFileExtension(context: TaskAttemptContext): String = {
-    ".csv" + TextOutputWriter.getCompressionExtension(context)
+    ".csv" + CodecStreams.getCompressionExtension(context)
   }
 }
 
@@ -189,9 +185,6 @@ private[csv] class CsvOutputWriter(
     context: TaskAttemptContext,
     params: CSVOptions) extends OutputWriter with Logging {
 
-  // create the Generator without separator inserted between 2 records
-  private[this] val text = new Text()
-
   // A `ValueConverter` is responsible for converting a value of an `InternalRow` to `String`.
   // When the value is null, this converter should not be called.
   private type ValueConverter = (InternalRow, Int) => String
@@ -200,17 +193,9 @@ private[csv] class CsvOutputWriter(
   private val valueConverters: Array[ValueConverter] =
     dataSchema.map(_.dataType).map(makeConverter).toArray
 
-  private val recordWriter: RecordWriter[NullWritable, Text] = {
-    new TextOutputFormat[NullWritable, Text]() {
-      override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        new Path(path)
-      }
-    }.getRecordWriter(context)
-  }
-
-  private val FLUSH_BATCH_SIZE = 1024L
-  private var records: Long = 0L
-  private val csvWriter = new LineCsvWriter(params, dataSchema.fieldNames.toSeq)
+  private var printHeader: Boolean = params.headerFlag
+  private val writer = CodecStreams.createOutputStream(context, new Path(path))
+  private val csvWriter = new LineCsvWriter(params, dataSchema.fieldNames.toSeq, writer)
 
   private def rowToString(row: InternalRow): Seq[String] = {
     var i = 0
@@ -245,24 +230,12 @@ private[csv] class CsvOutputWriter(
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
-    csvWriter.writeRow(rowToString(row), records == 0L && params.headerFlag)
-    records += 1
-    if (records % FLUSH_BATCH_SIZE == 0) {
-      flush()
-    }
-  }
-
-  private def flush(): Unit = {
-    val lines = csvWriter.flush()
-    if (lines.nonEmpty) {
-      text.set(lines)
-      recordWriter.write(NullWritable.get(), text)
-    }
+    csvWriter.writeRow(rowToString(row), printHeader)
+    printHeader = false
   }
 
   override def close(): Unit = {
-    flush()
     csvWriter.close()
-    recordWriter.close(context)
+    writer.close()
   }
 }

@@ -21,9 +21,7 @@ import java.io.IOException
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{NullWritable, Text}
-import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.ml.feature.LabeledPoint
@@ -35,7 +33,6 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.text.TextOutputWriter
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -46,30 +43,21 @@ private[libsvm] class LibSVMOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter {
 
-  private[this] val buffer = new Text()
-
-  private val recordWriter: RecordWriter[NullWritable, Text] = {
-    new TextOutputFormat[NullWritable, Text]() {
-      override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        new Path(path)
-      }
-    }.getRecordWriter(context)
-  }
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
 
   override def write(row: Row): Unit = {
     val label = row.get(0)
     val vector = row.get(1).asInstanceOf[Vector]
-    val sb = new StringBuilder(label.toString)
+    writer.write(label.toString)
     vector.foreachActive { case (i, v) =>
-      sb += ' '
-      sb ++= s"${i + 1}:$v"
+      writer.write(s" ${i + 1}:$v")
     }
-    buffer.set(sb.mkString)
-    recordWriter.write(NullWritable.get(), buffer)
+
+    writer.write('\n')
   }
 
   override def close(): Unit = {
-    recordWriter.close(context)
+    writer.close()
   }
 }
 
@@ -136,7 +124,7 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {
-        ".libsvm" + TextOutputWriter.getCompressionExtension(context)
+        ".libsvm" + CodecStreams.getCompressionExtension(context)
       }
     }
   }
