@@ -202,6 +202,21 @@ class JDBCSuite extends SparkFunSuite
          |partitionColumn '"Dept"', lowerBound '1', upperBound '4', numPartitions '4')
       """.stripMargin.replaceAll("\n", " "))
 
+    conn.prepareStatement(
+      """create table test."mixedCaseCols" ("Name" TEXT(32), "Id" INTEGER NOT NULL)""")
+      .executeUpdate()
+    conn.prepareStatement("""insert into test."mixedCaseCols" values ('fred', 1)""").executeUpdate()
+    conn.prepareStatement("""insert into test."mixedCaseCols" values ('mary', 2)""").executeUpdate()
+    conn.prepareStatement("""insert into test."mixedCaseCols" values (null, 3)""").executeUpdate()
+    conn.commit()
+
+    sql(
+      s"""
+         |CREATE TEMPORARY TABLE mixedCaseCols
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', dbtable 'TEST."mixedCaseCols"', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
   }
 
@@ -632,30 +647,32 @@ class JDBCSuite extends SparkFunSuite
 
   test("compile filters") {
     val compileFilter = PrivateMethod[Option[String]]('compileFilter)
-    def doCompileFilter(f: Filter): String = JDBCRDD invokePrivate compileFilter(f) getOrElse("")
-    assert(doCompileFilter(EqualTo("col0", 3)) === "col0 = 3")
-    assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === "(NOT (col1 = 'abc'))")
+    def doCompileFilter(f: Filter): String =
+      JDBCRDD invokePrivate compileFilter(f, JdbcDialects.get("jdbc:")) getOrElse("")
+    assert(doCompileFilter(EqualTo("col0", 3)) === """"col0" = 3""")
+    assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === """(NOT ("col1" = 'abc'))""")
     assert(doCompileFilter(And(EqualTo("col0", 0), EqualTo("col1", "def")))
-      === "(col0 = 0) AND (col1 = 'def')")
+      === """("col0" = 0) AND ("col1" = 'def')""")
     assert(doCompileFilter(Or(EqualTo("col0", 2), EqualTo("col1", "ghi")))
-      === "(col0 = 2) OR (col1 = 'ghi')")
-    assert(doCompileFilter(LessThan("col0", 5)) === "col0 < 5")
+      === """("col0" = 2) OR ("col1" = 'ghi')""")
+    assert(doCompileFilter(LessThan("col0", 5)) === """"col0" < 5""")
     assert(doCompileFilter(LessThan("col3",
-      Timestamp.valueOf("1995-11-21 00:00:00.0"))) === "col3 < '1995-11-21 00:00:00.0'")
-    assert(doCompileFilter(LessThan("col4", Date.valueOf("1983-08-04"))) === "col4 < '1983-08-04'")
-    assert(doCompileFilter(LessThanOrEqual("col0", 5)) === "col0 <= 5")
-    assert(doCompileFilter(GreaterThan("col0", 3)) === "col0 > 3")
-    assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === "col0 >= 3")
-    assert(doCompileFilter(In("col1", Array("jkl"))) === "col1 IN ('jkl')")
+      Timestamp.valueOf("1995-11-21 00:00:00.0"))) === """"col3" < '1995-11-21 00:00:00.0'""")
+    assert(doCompileFilter(LessThan("col4", Date.valueOf("1983-08-04")))
+      === """"col4" < '1983-08-04'""")
+    assert(doCompileFilter(LessThanOrEqual("col0", 5)) === """"col0" <= 5""")
+    assert(doCompileFilter(GreaterThan("col0", 3)) === """"col0" > 3""")
+    assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === """"col0" >= 3""")
+    assert(doCompileFilter(In("col1", Array("jkl"))) === """"col1" IN ('jkl')""")
     assert(doCompileFilter(In("col1", Array.empty)) ===
-      "CASE WHEN col1 IS NULL THEN NULL ELSE FALSE END")
+      """CASE WHEN "col1" IS NULL THEN NULL ELSE FALSE END""")
     assert(doCompileFilter(Not(In("col1", Array("mno", "pqr"))))
-      === "(NOT (col1 IN ('mno', 'pqr')))")
-    assert(doCompileFilter(IsNull("col1")) === "col1 IS NULL")
-    assert(doCompileFilter(IsNotNull("col1")) === "col1 IS NOT NULL")
+      === """(NOT ("col1" IN ('mno', 'pqr')))""")
+    assert(doCompileFilter(IsNull("col1")) === """"col1" IS NULL""")
+    assert(doCompileFilter(IsNotNull("col1")) === """"col1" IS NOT NULL""")
     assert(doCompileFilter(And(EqualNullSafe("col0", "abc"), EqualTo("col1", "def")))
-      === "((NOT (col0 != 'abc' OR col0 IS NULL OR 'abc' IS NULL) "
-        + "OR (col0 IS NULL AND 'abc' IS NULL))) AND (col1 = 'def')")
+      === """((NOT ("col0" != 'abc' OR "col0" IS NULL OR 'abc' IS NULL) """
+        + """OR ("col0" IS NULL AND 'abc' IS NULL))) AND ("col1" = 'def')""")
   }
 
   test("Dialect unregister") {
@@ -852,5 +869,25 @@ class JDBCSuite extends SparkFunSuite
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
     val schema = JdbcUtils.schemaString(df.schema, "jdbc:mysql://localhost:3306/temp")
     assert(schema.contains("`order` TEXT"))
+  }
+
+  test("SPARK-18141: Predicates on quoted column names in the jdbc data source") {
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id < 1").collect().size == 0)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <= 1").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id > 1").collect().size == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id >= 1").collect().size == 3)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id != 2").collect().size == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <=> 2").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE 'fr%'").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%ed'").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%re%'").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NULL").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NOT NULL").collect().size == 2)
+    assert(sql("SELECT * FROM mixedCaseCols").filter($"Name".isin()).collect().size == 0)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IN ('mary', 'fred')").collect().size == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name NOT IN ('fred')").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1 OR Name = 'mary'").collect().size == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name = 'mary' AND Id = 2").collect().size == 1)
   }
 }
