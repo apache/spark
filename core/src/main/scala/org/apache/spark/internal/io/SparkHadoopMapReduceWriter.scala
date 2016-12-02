@@ -164,7 +164,10 @@ object SparkHadoopMapReduceWriter extends Logging {
             outputMetricsAndBytesWrittenCallback, recordsWritten)
           recordsWritten += 1
         }
-        writer.close(taskContext)
+        if (writer != null) {
+          writer.close(taskContext)
+          writer = null
+        }
         committer.commitTask(taskContext)
       }(catchBlock = {
         // If there is an error, release resource and then abort the task.
