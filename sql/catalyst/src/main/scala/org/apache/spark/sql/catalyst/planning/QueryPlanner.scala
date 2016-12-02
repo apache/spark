@@ -49,9 +49,6 @@ abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends L
  * of the remaining operators in the tree, it can call [[planLater]], which returns a placeholder
  * object that will be filled in using other available strategies.
  *
- * TODO: RIGHT NOW ONLY ONE PLAN IS RETURNED EVER...
- *       PLAN SPACE EXPLORATION WILL BE IMPLEMENTED LATER.
- *
  * @tparam PhysicalPlan The type of physical plan produced by this [[QueryPlanner]]
  */
 abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
