@@ -251,13 +251,13 @@ object SparkBuild extends PomBuild {
       Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
     ),
     externalResolvers := resolvers.value,
-    otherResolvers <<= SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))),
-    publishLocalConfiguration in MavenCompile <<= (packagedArtifacts, deliverLocal, ivyLoggingLevel) map {
+    otherResolvers := SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))).value,
+    publishLocalConfiguration in MavenCompile := ((packagedArtifacts, deliverLocal, ivyLoggingLevel) map {
       (arts, _, level) => new PublishConfiguration(None, "dotM2", arts, Seq(), level)
-    },
+    }).value,
     publishMavenStyle in MavenCompile := true,
-    publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
-    publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn,
+    publishLocal in MavenCompile := publishTask(publishLocalConfiguration in MavenCompile, deliverLocal).value,
+    publishLocalBoth := Seq(publishLocal in MavenCompile, publishLocal).dependOn.value,
 
     javacOptions in (Compile, doc) ++= {
       val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
@@ -568,9 +568,9 @@ object Hive {
     javaOptions in Test := (javaOptions in Test).value.filterNot(_ == "-ea"),
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
     // only for this subproject.
-    scalacOptions <<= scalacOptions map { currentOpts: Seq[String] =>
+    scalacOptions := (scalacOptions map { currentOpts: Seq[String] =>
       currentOpts.filterNot(_ == "-deprecation")
-    },
+    }).value,
     initialCommands in console :=
       """
         |import org.apache.spark.SparkContext
@@ -608,17 +608,20 @@ object Assembly {
       sys.props.get("hadoop.version")
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
-    jarName in assembly <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
-      if (mName.contains("streaming-flume-assembly") || mName.contains("streaming-kafka-0-8-assembly") || mName.contains("streaming-kafka-0-10-assembly") || mName.contains("streaming-kinesis-asl-assembly")) {
+    jarName in assembly := ((version, moduleName, hadoopVersion) map { (v, mName, hv) =>
+      if (mName.contains("streaming-flume-assembly")
+        || mName.contains("streaming-kafka-0-8-assembly")
+        || mName.contains("streaming-kafka-0-10-assembly")
+        || mName.contains("streaming-kinesis-asl-assembly")) {
         // This must match the same name used in maven (see external/kafka-0-8-assembly/pom.xml)
         s"${mName}-${v}.jar"
       } else {
         s"${mName}-${v}-hadoop${hv}.jar"
       }
-    },
-    jarName in (Test, assembly) <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
+    }).value,
+    jarName in (Test, assembly) := ((version, moduleName, hadoopVersion) map { (v, mName, hv) =>
       s"${mName}-test-${v}.jar"
-    },
+    }).value,
     mergeStrategy in assembly := {
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
       case m if m.toLowerCase.matches("meta-inf.*\\.sf$")      => MergeStrategy.discard
@@ -791,7 +794,7 @@ object CopyDependencies {
         }
     },
     crossTarget in (Compile, packageBin) := destPath.value,
-    packageBin in Compile <<= (packageBin in Compile).dependsOn(copyDeps)
+    packageBin in Compile := (packageBin in Compile).dependsOn(copyDeps).value
   )
 
 }
