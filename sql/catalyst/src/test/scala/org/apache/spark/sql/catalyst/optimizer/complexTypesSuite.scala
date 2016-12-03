@@ -18,10 +18,9 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.scalatest.Matchers
-
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateMap, CreateNamedStruct, Expression, GetArrayItem, GetArrayStructFields, GetMapValue, GetStructField, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Coalesce, CreateArray, CreateMap, CreateNamedStruct, Expression, GetArrayItem, GetArrayStructFields, GetMapValue, GetStructField, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.Range
@@ -352,6 +351,102 @@ class ComplexTypesSuite extends PlanTest with Matchers{
         ) as "a3",
         Literal.create(null, LongType ) as "a4"
       )
+    comparePlans( optimized, expected )
+  }
+
+  test("simplify map ops, constant lookup, dynamic keys" ) {
+    val rel = baseOptimizedPlan.select(
+      CreateMap(
+        idRef :: (idRef + 1L) ::
+        (idRef + 1L) :: (idRef + 2L) ::
+        (idRef + 2L) :: (idRef + 3L) ::
+        Literal(13L) :: idRef ::
+        (idRef + 3L) :: (idRef + 4L) ::
+        (idRef + 4L) :: (idRef + 5L)::
+        Nil
+      ).getMapValue( 13L ) as "a"
+    )
+    val optimized = Optimize execute rel
+    val expected = baseOptimizedPlan.select(
+      Coalesce(
+        CreateMap(
+          idRef :: (idRef + 1L) ::
+            (idRef + 1L) :: (idRef + 2L) ::
+            (idRef + 2L) :: (idRef + 3L) ::
+            Nil
+        ).getMapValue( 13L ) ::
+        idRef ::
+        Nil
+      ) as "a"
+    )
+    comparePlans( optimized, expected )
+  }
+
+  test("simplify map ops, dynamic lookup, dynamic keys, lookup is equivalent to one of the keys" ) {
+    val rel = baseOptimizedPlan.select(
+      CreateMap(
+        idRef :: (idRef + 1L) ::
+        (idRef + 1L) :: (idRef + 2L) ::
+        (idRef + 2L) :: (idRef + 3L) ::
+        (idRef + 3L) :: (idRef + 4L) ::
+        (idRef + 4L) :: (idRef + 5L)::
+        Nil
+      ).getMapValue( idRef + 3L ) as "a"
+    )
+    val optimized = Optimize execute rel
+    val expected = baseOptimizedPlan.select(
+      Coalesce(
+        CreateMap(
+          idRef :: (idRef + 1L) ::
+            (idRef + 1L) :: (idRef + 2L) ::
+            (idRef + 2L) :: (idRef + 3L) ::
+            Nil
+        ).getMapValue( idRef + 3L ) ::
+          (idRef + 4L) ::
+          Nil
+      ) as "a"
+    )
+    comparePlans( optimized, expected )
+  }
+  test("simplify map ops, no positive match" ) {
+    val rel = baseOptimizedPlan.select(
+      CreateMap(
+        idRef :: (idRef + 1L) ::
+        (idRef + 1L) :: (idRef + 2L) ::
+        (idRef + 2L) :: (idRef + 3L) ::
+        (idRef + 3L) :: (idRef + 4L) ::
+        (idRef + 4L) :: (idRef + 5L)::
+        Nil
+      ).getMapValue( idRef + 30L ) as "a"
+    )
+    val optimized = Optimize execute rel
+    val expected = rel
+    comparePlans( optimized, expected )
+  }
+
+  test("simplify map ops, constant lookup, mixed keys, eliminated constants" ) {
+    val rel = baseOptimizedPlan.select(
+      CreateMap(
+        idRef :: (idRef + 1L) ::
+        (idRef + 1L) :: (idRef + 2L) ::
+        (idRef + 2L) :: (idRef + 3L) ::
+        Literal(14L) :: idRef ::
+        (idRef + 3L) :: (idRef + 4L) ::
+        (idRef + 4L) :: (idRef + 5L)::
+        Nil
+      ).getMapValue( 13L ) as "a"
+    )
+    val optimized = Optimize execute rel
+    val expected = baseOptimizedPlan.select(
+      CreateMap(
+        idRef :: (idRef + 1L) ::
+          (idRef + 1L) :: (idRef + 2L) ::
+          (idRef + 2L) :: (idRef + 3L) ::
+          (idRef + 3L) :: (idRef + 4L) ::
+          (idRef + 4L) :: (idRef + 5L) ::
+          Nil
+      ).getMapValue( 13L ) as "a"
+    )
     comparePlans( optimized, expected )
   }
 }
