@@ -72,12 +72,8 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
   private def processRecordsWithLimit(
       batch: List[Record], checkpointer: IRecordProcessorCheckpointer): Unit = {
     val maxRecords = receiver.getCurrentLimit
-    if (batch.size() <= maxRecords) {
-      addRecords(batch, checkpointer)
-    } else {
-      for (start <- 0 until batch.size by maxRecords) {
-        addRecords(batch.subList(start, math.min(start + maxRecords, batch.size)), checkpointer)
-      }
+    for (start <- 0 until batch.size by maxRecords) {
+      addRecords(batch.subList(start, math.min(start + maxRecords, batch.size)), checkpointer)
     }
   }
 
