@@ -307,6 +307,9 @@ class Column(object):
         Optional ``metadata`` keyword argument can be passed when aliasing a single column.
         Its contents will be stored in the ``metadata`` attribute of the matching ``StructField``.
 
+        .. versionchanged:: 2.2
+           Added optional metadata argument.
+
         >>> df.select(df.age.alias("age2")).collect()
         [Row(age2=2), Row(age2=5)]
         >>> df.select(df.age.alias("age3", metadata={'max': 99})).schema['age3'].metadata['max']
