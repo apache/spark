@@ -25,10 +25,6 @@ import org.json4s.jackson.Serialization
  * An ordered collection of offsets, used to track the progress of processing data from one or more
  * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
  * vector clock that must progress linearly forward.
- *
- * @param offsets Sequence of Offsets
- * @param metadata Optional, metadata infomation as a Json string, generated from
- *                 [[OffsetSeqMetadata]]
  */
 case class OffsetSeq(offsets: Seq[Option[Offset]], metadata: Option[OffsetSeqMetadata] = None) {
 

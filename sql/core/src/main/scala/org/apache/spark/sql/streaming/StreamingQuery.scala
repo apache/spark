@@ -44,8 +44,7 @@ trait StreamingQuery {
   /**
    * Returns the unique id of this query that persists across restarts from checkpoint data.
    * That is, this id is generated when a query is started for the first time, and
-   * will be the same every time it is restarted from checkpoint data.
-   * There can only be one query with the same id active in a Spark cluster.
+   * will be the same every time it is restarted from checkpoint data. Also see [[runId]].
    *
    * @since 2.1.0
    */
