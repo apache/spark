@@ -19,8 +19,8 @@ package org.apache.spark.io
 
 import java.io._
 
-import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
-import net.jpountz.lz4.LZ4BlockOutputStream
+import com.ning.compress.lzf.{LZFDecoder, LZFEncoder, LZFInputStream, LZFOutputStream}
+import net.jpountz.lz4.{LZ4BlockOutputStream, LZ4Factory}
 import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.SparkConf
@@ -42,6 +42,11 @@ trait CompressionCodec {
   def compressedOutputStream(s: OutputStream): OutputStream
 
   def compressedInputStream(s: InputStream): InputStream
+
+  def compress(input: Array[Byte], inputLen: Int): Array[Byte]
+
+  def decompress(input: Array[Byte], inputOffset: Int, inputLen: Int,
+      outputLen: Int): Array[Byte]
 }
 
 private[spark] object CompressionCodec {
@@ -67,16 +72,32 @@ private[spark] object CompressionCodec {
   }
 
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
-    val codecClass = shortCompressionCodecNames.getOrElse(codecName.toLowerCase, codecName)
-    val codec = try {
-      val ctor = Utils.classForName(codecClass).getConstructor(classOf[SparkConf])
-      Some(ctor.newInstance(conf).asInstanceOf[CompressionCodec])
-    } catch {
-      case e: ClassNotFoundException => None
-      case e: IllegalArgumentException => None
+    codecCreator(conf, codecName)()
+  }
+
+  def codecCreator(conf: SparkConf, codecName: String): () => CompressionCodec = {
+    if (codecName == DEFAULT_COMPRESSION_CODEC) {
+      return () => new LZ4CompressionCodec(conf)
     }
-    codec.getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] is not available. " +
-      s"Consider setting $configKey=$FALLBACK_COMPRESSION_CODEC"))
+    val codecClass = shortCompressionCodecNames.getOrElse(codecName.toLowerCase, codecName)
+    try {
+      val ctor = Utils.classForName(codecClass).getConstructor(classOf[SparkConf])
+      () => {
+        try {
+          ctor.newInstance(conf).asInstanceOf[CompressionCodec]
+        } catch {
+          case e: IllegalArgumentException => throw fail(codecName)
+        }
+      }
+    } catch {
+      case e: ClassNotFoundException => throw fail(codecName)
+      case e: NoSuchMethodException => throw fail(codecName)
+    }
+  }
+
+  private def fail(codecName: String): IllegalArgumentException = {
+    new IllegalArgumentException(s"Codec [$codecName] is not available. " +
+        s"Consider setting $configKey=$FALLBACK_COMPRESSION_CODEC")
   }
 
   /**
@@ -116,6 +137,16 @@ class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
   }
 
   override def compressedInputStream(s: InputStream): InputStream = new LZ4BlockInputStream(s)
+
+  override def compress(input: Array[Byte], inputLen: Int): Array[Byte] = {
+    LZ4Factory.fastestInstance().fastCompressor().compress(input, 0, inputLen)
+  }
+
+  override def decompress(input: Array[Byte], inputOffset: Int, inputLen: Int,
+      outputLen: Int): Array[Byte] = {
+    LZ4Factory.fastestInstance().fastDecompressor().decompress(input,
+      inputOffset, outputLen)
+  }
 }
 
 
@@ -135,6 +166,17 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
   }
 
   override def compressedInputStream(s: InputStream): InputStream = new LZFInputStream(s)
+
+  override def compress(input: Array[Byte], inputLen: Int): Array[Byte] = {
+    LZFEncoder.encode(input, 0, inputLen)
+  }
+
+  override def decompress(input: Array[Byte], inputOffset: Int, inputLen: Int,
+      outputLen: Int): Array[Byte] = {
+    val output = new Array[Byte](outputLen)
+    LZFDecoder.decode(input, inputOffset, inputLen, output)
+    output
+  }
 }
 
 
@@ -157,6 +199,17 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
   }
 
   override def compressedInputStream(s: InputStream): InputStream = new SnappyInputStream(s)
+
+  override def compress(input: Array[Byte], inputLen: Int): Array[Byte] = {
+    Snappy.rawCompress(input, inputLen)
+  }
+
+  override def decompress(input: Array[Byte], inputOffset: Int,
+      inputLen: Int, outputLen: Int): Array[Byte] = {
+    val output = new Array[Byte](outputLen)
+    Snappy.uncompress(input, inputOffset, inputLen, output, 0)
+    output
+  }
 }
 
 /**

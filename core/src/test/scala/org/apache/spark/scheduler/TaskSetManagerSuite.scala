@@ -794,7 +794,6 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   private def createTaskResult(
       id: Int,
       accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty): DirectTaskResult[Int] = {
-    val valueSer = SparkEnv.get.serializer.newInstance()
-    new DirectTaskResult[Int](valueSer.serialize(id), accumUpdates)
+    new DirectTaskResult[Int](id, accumUpdates)
   }
 }

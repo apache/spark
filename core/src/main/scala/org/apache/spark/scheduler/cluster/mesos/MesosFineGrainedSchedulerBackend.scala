@@ -350,7 +350,8 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       .setExecutor(executorInfo)
       .setName(task.name)
       .addAllResources(cpuResources.asJava)
-      .setData(MesosTaskLaunchData(task.serializedTask, task.attemptNumber).toByteString)
+      .setData(MesosTaskLaunchData(task.serializedTask, task.taskData,
+        task.attemptNumber).toByteString)
       .build()
     (taskInfo, finalResources.asJava)
   }

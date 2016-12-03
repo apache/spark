@@ -140,9 +140,10 @@ private[spark] class Executor(
       taskId: Long,
       attemptNumber: Int,
       taskName: String,
-      serializedTask: ByteBuffer): Unit = {
-    val tr = new TaskRunner(context, taskId = taskId, attemptNumber = attemptNumber, taskName,
-      serializedTask)
+      serializedTask: ByteBuffer,
+      taskDataBytes: Array[Byte]): Unit = {
+    val tr = new TaskRunner(context, taskId = taskId, attemptNumber = attemptNumber,
+      taskName, serializedTask, taskDataBytes)
     runningTasks.put(taskId, tr)
     threadPool.execute(tr)
   }
@@ -189,7 +190,8 @@ private[spark] class Executor(
       val taskId: Long,
       val attemptNumber: Int,
       taskName: String,
-      serializedTask: ByteBuffer)
+      serializedTask: ByteBuffer,
+      taskDataBytes: Array[Byte])
     extends Runnable {
 
     /** Whether this task has been killed. */
@@ -251,6 +253,7 @@ private[spark] class Executor(
 
         updateDependencies(taskFiles, taskJars)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
+        task.taskDataBytes = taskDataBytes
         task.localProperties = taskProps
         task.setTaskMemoryManager(taskMemoryManager)
 
@@ -308,11 +311,6 @@ private[spark] class Executor(
           throw new TaskKilledException
         }
 
-        val resultSer = env.serializer.newInstance()
-        val beforeSerialization = System.nanoTime()
-        val valueBytes = resultSer.serialize(value)
-        val afterSerialization = System.nanoTime()
-
         // Deserialization happens in two parts: first, we deserialize a Task object, which
         // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
         task.metrics.setExecutorDeserializeTime(math.max(
@@ -321,13 +319,13 @@ private[spark] class Executor(
         task.metrics.setExecutorRunTime(math.max(
           taskFinish - taskStart - task.executorDeserializeTime, 0L) / 1000000.0)
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
-        task.metrics.setResultSerializationTime(math.max(
-          afterSerialization - beforeSerialization, 0L) / 1000000.0)
 
-        // Note: accumulator updates must be collected after TaskMetrics is updated
+        // Now resultSerializationTime is evaluated directly inside the
+        // serialization write methods and added to final serialized bytes
+        // to avoid double serialization of Task (for timing then TaskResult).
         val accumUpdates = task.collectAccumulatorUpdates()
-        // TODO: do not serialize value twice
-        val directResult = new DirectTaskResult(valueBytes, accumUpdates)
+        val directResult = new DirectTaskResult(value, accumUpdates,
+          Some(task.metrics.resultSerializationTimeMetric))
         val serializedDirectResult = ser.serialize(directResult)
         val resultSize = serializedDirectResult.limit
 

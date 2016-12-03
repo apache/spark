@@ -117,6 +117,7 @@ class TaskMetrics private[spark] () extends Serializable with KryoSerializable {
   private[spark] def setJvmGCTime(v: Long): Unit = _jvmGCTime.setValue(v)
   private[spark] def setResultSerializationTime(v: Double): Unit =
     _resultSerializationTime.setValue(v)
+  private[spark] def resultSerializationTimeMetric = _resultSerializationTime
   private[spark] def incMemoryBytesSpilled(v: Long): Unit = _memoryBytesSpilled.add(v)
   private[spark] def incDiskBytesSpilled(v: Long): Unit = _diskBytesSpilled.add(v)
   private[spark] def incPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.add(v)
@@ -316,7 +317,12 @@ private[spark] object TaskMetrics extends Logging {
       } else {
         tm.nameToAccums.get(name).foreach {
           case l: LongAccumulator => l.setValue(value.asInstanceOf[Long])
-          case d => d.asInstanceOf[DoubleAccumulator].setValue(value.asInstanceOf[Double])
+          case d: DoubleAccumulator => value match {
+            case v: Double => d.setValue(v)
+            case _ => d.setValue(value.asInstanceOf[Long])
+          }
+          case o => throw new UnsupportedOperationException(
+            s"Unexpected accumulator $o for TaskMetrics")
         }
       }
     }

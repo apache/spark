@@ -47,6 +47,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.Logging
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.{MemoryManager, StaticMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.netty.NettyBlockTransferService
@@ -93,6 +94,11 @@ class SparkEnv (
   private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
 
   private[spark] var driverTmpDir: Option[String] = None
+
+  private val codecCreator = CompressionCodec.codecCreator(conf,
+    CompressionCodec.getCodecName(conf))
+
+  def createCompressionCodec: CompressionCodec = codecCreator()
 
   private[spark] def stop() {
 

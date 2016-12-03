@@ -90,7 +90,7 @@ private[spark] class MesosExecutorBackend
     } else {
       SparkHadoopUtil.get.runAsSparkUser { () =>
         executor.launchTask(this, taskId = taskId, attemptNumber = taskData.attemptNumber,
-          taskInfo.getName, taskData.serializedTask)
+          taskInfo.getName, taskData.serializedTask, taskData.taskData.decompress())
       }
     }
   }

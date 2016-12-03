@@ -180,9 +180,7 @@ final class ShuffleBlockFetcherIterator(
               remainingBlocks -= blockId
               results.put(new SuccessFetchResult(BlockId(blockId), address, sizeMap(blockId), buf,
                 remainingBlocks.isEmpty))
-              if (isDebugEnabled) {
-                logDebug("remainingBlocks: " + remainingBlocks)
-              }
+              if (isDebugEnabled) logDebug("remainingBlocks: " + remainingBlocks)
             }
           }
           if (isTraceEnabled) logTrace("Got remote block " + blockId + " after " +

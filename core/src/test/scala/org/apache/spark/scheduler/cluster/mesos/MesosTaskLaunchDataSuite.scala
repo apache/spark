@@ -20,17 +20,21 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.nio.ByteBuffer
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.scheduler.TaskData
 
 class MesosTaskLaunchDataSuite extends SparkFunSuite {
   test("serialize and deserialize data must be same") {
     val serializedTask = ByteBuffer.allocate(40)
+    val taskBytes = Range(0, 100).map(_.toByte).toArray
+    val taskData = new TaskData(taskBytes, 200)
     (Range(100, 110).map(serializedTask.putInt(_)))
     serializedTask.rewind
     val attemptNumber = 100
-    val byteString = MesosTaskLaunchData(serializedTask, attemptNumber).toByteString
+    val byteString = MesosTaskLaunchData(serializedTask, taskData, attemptNumber).toByteString
     serializedTask.rewind
     val mesosTaskLaunchData = MesosTaskLaunchData.fromByteString(byteString)
     assert(mesosTaskLaunchData.attemptNumber == attemptNumber)
     assert(mesosTaskLaunchData.serializedTask.equals(serializedTask))
+    assert(mesosTaskLaunchData.taskData == taskData)
   }
 }

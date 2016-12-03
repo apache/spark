@@ -41,15 +41,15 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
-import scala.concurrent.duration.Duration
 
-import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
+import org.apache.spark.{ExecutorAllocationClient, SparkException, TaskState}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.ENDPOINT_NAME
-import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
+import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
+import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * A scheduler backend that waits for coarse-grained executors to connect.
@@ -115,11 +115,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Executors that have been lost, but for which we don't yet know the real exit reason.
     protected val executorsPendingLossReason = new HashSet[String]
-
-    // If this DriverEndpoint is changed to support multiple threads,
-    // then this may need to be changed so that we don't share the serializer
-    // instance across threads
-    private val ser = SparkEnv.get.closureSerializer.newInstance()
 
     protected val addressToExecutorId = new HashMap[RpcAddress, String]
 
@@ -268,32 +263,66 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         !executorsPendingLossReason.contains(executorId)
     }
 
-    // Launch tasks returned by a set of resource offers
-    private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
-      for (task <- tasks.flatten) {
-        val serializedTask = ser.serialize(task)
-        if (serializedTask.limit >= maxRpcMessageSize) {
-          scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
-            try {
-              var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
+    protected def checkTaskSizeLimit(task: TaskDescription, taskSize: Int): Boolean = {
+      if (taskSize > maxRpcMessageSize) {
+        scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
+          try {
+            var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
                 "spark.rpc.message.maxSize (%d bytes). Consider increasing " +
                 "spark.rpc.message.maxSize or using broadcast variables for large values."
-              msg = msg.format(task.taskId, task.index, serializedTask.limit, maxRpcMessageSize)
-              taskSetMgr.abort(msg)
-            } catch {
-              case e: Exception => logError("Exception in error callback", e)
-            }
+            msg = msg.format(task.taskId, task.index, taskSize, maxRpcMessageSize)
+            taskSetMgr.abort(msg)
+          } catch {
+            case e: Exception => logError("Exception in error callback", e)
           }
         }
-        else {
-          val executorData = executorDataMap(task.executorId)
-          executorData.freeCores -= scheduler.CPUS_PER_TASK
+        false
+      } else true
+    }
 
-          logInfo(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +
-            s"${executorData.executorHost}.")
+    // Launch tasks returned by a set of resource offers
+    protected def launchTasks(tasks: Seq[Seq[TaskDescription]]): Unit = {
+      val executorTaskGroupMap = new OpenHashMap[String, ExecutorTaskGroup](8)
+      for (taskSet <- tasks) {
+        for (task <- taskSet) {
+          val taskLimit = task.serializedTask.limit
+          val taskSize = taskLimit + task.taskData.compressedBytes.length
+          if (checkTaskSizeLimit(task, taskSize)) {
+            // group tasks per executor as long as message limit is not breached
+            executorTaskGroupMap.changeValue(task.executorId, {
+              val executorData = executorDataMap(task.executorId)
+              val executorTaskGroup = new ExecutorTaskGroup(executorData, taskSize)
+              executorTaskGroup.taskGroup += task
+              executorTaskGroup.taskDataList += task.taskData
+              // add reference to first index in taskDataList
+              task.taskData = TaskData(0)
+              executorTaskGroup
+            }, { executorTaskGroup =>
+              // group into existing if size fits in the max allowed
+              if (!executorTaskGroup.addTask(task, taskLimit, maxRpcMessageSize)) {
+                // send this task separately
+                val executorData = executorTaskGroup.executorData
+                executorData.freeCores -= scheduler.CPUS_PER_TASK
+                logInfo(s"Launching task ${task.taskId} on executor id: " +
+                    s"${task.executorId} hostname: ${executorData.executorHost}.")
 
-          executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
+                executorData.executorEndpoint.send(LaunchTask(task))
+              }
+              executorTaskGroup
+            })
+          }
         }
+      }
+      // send the accumulated task groups per executor
+      executorTaskGroupMap.foreach { case (executorId, executorTaskGroup) =>
+        val taskGroup = executorTaskGroup.taskGroup
+        val executorData = executorTaskGroup.executorData
+
+        executorData.freeCores -= (scheduler.CPUS_PER_TASK * taskGroup.length)
+        logDebug(s"Launching tasks ${taskGroup.map(_.taskId).mkString(",")} on " +
+            s"executor id: $executorId hostname: ${executorData.executorHost}.")
+        executorData.executorEndpoint.send(LaunchTasks(taskGroup,
+          executorTaskGroup.taskDataList))
       }
     }
 
@@ -625,4 +654,53 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
 private[spark] object CoarseGrainedSchedulerBackend {
   val ENDPOINT_NAME = "CoarseGrainedScheduler"
+}
+
+private[spark] final class ExecutorTaskGroup(
+    private[cluster] var executorData: ExecutorData,
+    private var groupSize: Int = 0) {
+
+  private[cluster] val taskGroup = new ArrayBuffer[TaskDescription](2)
+  // field to carry around common task data
+  private[cluster] val taskDataList = new ArrayBuffer[TaskData](2)
+
+  def addTask(task: TaskDescription, taskLimit: Int, limit: Int): Boolean = {
+    val newGroupSize = groupSize + taskLimit
+    if (newGroupSize > limit) return false
+
+    groupSize = newGroupSize
+    // linear search is best since there cannot be many different
+    // tasks in a single taskSet
+    if (task.taskData.uncompressedLen == 0 ||
+        findOrAddTaskData(task, taskDataList, limit)) {
+      taskGroup += task
+      true
+    } else {
+      // task rejected from group
+      groupSize -= taskLimit
+      false
+    }
+  }
+
+  private def findOrAddTaskData(task: TaskDescription,
+      taskDataList: ArrayBuffer[TaskData], limit: Int): Boolean = {
+    val data = task.taskData
+    val numData = taskDataList.length
+    var i = 0
+    while (i < numData) {
+      if (taskDataList(i) eq data) {
+        // add reference to index `i` in taskDataList
+        task.taskData = TaskData(i)
+        return true
+      }
+      i += 1
+    }
+    val newGroupSize = groupSize + data.compressedBytes.length
+    if (newGroupSize <= limit) {
+      groupSize = newGroupSize
+      taskDataList += data
+      task.taskData = TaskData(numData)
+      true
+    } else false
+  }
 }
