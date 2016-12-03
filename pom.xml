@@ -557,7 +557,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty</artifactId>
-        <version>3.8.0.Final</version>
+        <version>3.9.9.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
