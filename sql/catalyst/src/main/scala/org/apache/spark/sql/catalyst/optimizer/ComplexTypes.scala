@@ -77,33 +77,50 @@ object SimplifyCreateMapOps extends Rule[LogicalPlan]{
     }
   }
 
-  case class ClassifiedEntries(numUndetermined : Seq[Expression],
-                               firstPositive : Option[Expression])
-
-  def classifyEntries(mapEntries : Seq[(Expression, Expression)],
-                      requestedKey : Expression) : ClassifiedEntries = {
-    mapEntries.foldLeft(ClassifiedEntries(Seq.empty, None)) {
-      case (prev @ ClassifiedEntries(_, Some(_)), _) => prev
-      case (ClassifiedEntries(prev, None), (k, v)) =>
-        compareKeys(k, requestedKey) match {
-          case ComparisonResult.UnDetermined => ClassifiedEntries(prev ++ Seq(k, v), None)
-          case ComparisonResult.NegativeMatch => ClassifiedEntries(prev, None)
-          case ComparisonResult.PositiveMatch => ClassifiedEntries(prev, Some(v))
-        }
+  case class ClassifiedEntries(undetermined : Seq[Expression],
+                               nullable : Boolean,
+                               firstPositive : Option[Expression]) {
+    def normalize( k : Expression ) : ClassifiedEntries = this match {
+      /**
+      * when we have undetermined matches that might bproduce a null value,
+      * we can't separate a positive match and use [[Coalesce]] to choose the final result.
+      * so we 'hide' the positive match as an undetermined match.
+      */
+      case ClassifiedEntries( u, true, Some(p)) if u.nonEmpty =>
+        ClassifiedEntries(u ++ Seq(k, p), true, None)
+      case _ => this
     }
   }
 
+  def classifyEntries(mapEntries : Seq[(Expression, Expression)],
+                      requestedKey : Expression) : ClassifiedEntries = {
+    val res1 = mapEntries.foldLeft(ClassifiedEntries(Seq.empty, nullable = false, None)) {
+      case (prev @ ClassifiedEntries(_, _, Some(_)), _) => prev
+      case (ClassifiedEntries(prev, nullable, None), (k, v)) =>
+        compareKeys(k, requestedKey) match {
+          case ComparisonResult.UnDetermined =>
+            val vIsNullable = v.nullable
+            val nextNullbale = nullable || vIsNullable
+            ClassifiedEntries(prev ++ Seq(k, v), nullable = nextNullbale, None)
+          case ComparisonResult.NegativeMatch => ClassifiedEntries(prev, nullable, None)
+          case ComparisonResult.PositiveMatch => ClassifiedEntries(prev, nullable, Some(v))
+        }
+    }
+    val res = res1.normalize( requestedKey )
+    res
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transformExpressionsUp{
+    plan.transformExpressionsUp {
       // attempt to unfold 'constant' key extraction,
       // this enables other optimizations to take place.
       case gmv @ GetMapValue(cm @ CreateMap(elems), key) =>
         val kvs = cm.keys.zip(cm.values)
         val classifiedEntries = classifyEntries(kvs, key)
         classifiedEntries match {
-          case ClassifiedEntries(Seq(), None) => Literal.create(null, gmv.dataType)
-          case ClassifiedEntries(`elems`, None) => gmv
-          case ClassifiedEntries(newElems, optPos) =>
+          case ClassifiedEntries(Seq(), _, None) => Literal.create(null, gmv.dataType)
+          case ClassifiedEntries(`elems`, _, None) => gmv
+          case ClassifiedEntries(newElems, _, optPos) =>
             val getFromTrimmedMap = GetMapValue(CreateMap(newElems), key)
             optPos.map(pos => Coalesce(Seq(getFromTrimmedMap, pos)))
               .getOrElse(getFromTrimmedMap)
