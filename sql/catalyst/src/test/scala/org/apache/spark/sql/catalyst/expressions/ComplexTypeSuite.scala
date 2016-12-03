@@ -118,20 +118,23 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("CreateArray") {
-    // Array is required to pass Array[primitiveType] as type information for expected
-    val intArray = Array(5, 10, 15, 20, 25)
-    val longArray = intArray.map(_.toLong)
-    val strArray = intArray.map(_.toString)
-    checkEvaluation(CreateArray(intArray.map(Literal(_))), intArray, EmptyRow)
-    checkEvaluation(CreateArray(longArray.map(Literal(_))), longArray, EmptyRow)
-    checkEvaluation(CreateArray(strArray.map(Literal(_))), strArray, EmptyRow)
+    val intSeq = Seq(5, 10, 15, 20, 25)
+    val longSeq = intSeq.map(_.toLong)
+    val byteSeq = intSeq.map(_.toByte)
+    val strSeq = intSeq.map(_.toString)
+    checkEvaluation(CreateArray(intSeq.map(Literal(_))), intSeq, EmptyRow)
+    checkEvaluation(CreateArray(longSeq.map(Literal(_))), longSeq, EmptyRow)
+    checkEvaluation(CreateArray(byteSeq.map(Literal(_))), byteSeq, EmptyRow)
+    checkEvaluation(CreateArray(strSeq.map(Literal(_))), strSeq, EmptyRow)
 
-    val intWithNull = intArray.map(Literal(_)) :+ Literal.create(null, IntegerType)
-    val longWithNull = longArray.map(Literal(_)) :+ Literal.create(null, LongType)
-    val strWithNull = strArray.map(Literal(_)) :+ Literal.create(null, StringType)
-    checkEvaluation(CreateArray(intWithNull), intArray :+ null, EmptyRow)
-    checkEvaluation(CreateArray(longWithNull), longArray :+ null, EmptyRow)
-    checkEvaluation(CreateArray(strWithNull), strArray :+ null, EmptyRow)
+    val intWithNull = intSeq.map(Literal(_)) :+ Literal.create(null, IntegerType)
+    val longWithNull = longSeq.map(Literal(_)) :+ Literal.create(null, LongType)
+    val byteWithNull = byteSeq.map(Literal(_)) :+ Literal.create(null, ByteType)
+    val strWithNull = strSeq.map(Literal(_)) :+ Literal.create(null, StringType)
+    checkEvaluation(CreateArray(intWithNull), intSeq :+ null, EmptyRow)
+    checkEvaluation(CreateArray(longWithNull), longSeq :+ null, EmptyRow)
+    checkEvaluation(CreateArray(byteWithNull), byteSeq :+ null, EmptyRow)
+    checkEvaluation(CreateArray(strWithNull), strSeq :+ null, EmptyRow)
     checkEvaluation(CreateArray(Literal.create(null, IntegerType) :: Nil), null :: Nil)
   }
 
@@ -145,33 +148,32 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       scala.collection.immutable.ListMap(keys.zip(values): _*)
     }
 
-    // Array is required to pass Array[primitiveType] as type information
-    val intArray = Array(5, 10, 15, 20, 25)
-    val longArray = intArray.map(_.toLong)
-    val strArray = intArray.map(_.toString)
+    val intSeq = Seq(5, 10, 15, 20, 25)
+    val longSeq = intSeq.map(_.toLong)
+    val strSeq = intSeq.map(_.toString)
     checkEvaluation(CreateMap(Nil), Map.empty)
-    checkEvaluationMap(
-      CreateMap(interlace(intArray.map(Literal(_)), longArray.map(Literal(_)))),
-      createMap(intArray, longArray), intArray, longArray)
-    checkEvaluationMap(
-      CreateMap(interlace(strArray.map(Literal(_)), longArray.map(Literal(_)))),
-      createMap(strArray, longArray), strArray, longArray)
-    checkEvaluationMap(
-      CreateMap(interlace(longArray.map(Literal(_)), strArray.map(Literal(_)))),
-      createMap(longArray, strArray), longArray, strArray)
+    checkEvaluation(
+      CreateMap(interlace(intSeq.map(Literal(_)), longSeq.map(Literal(_)))),
+      createMap(intSeq, longSeq))
+    checkEvaluation(
+      CreateMap(interlace(strSeq.map(Literal(_)), longSeq.map(Literal(_)))),
+      createMap(strSeq, longSeq))
+    checkEvaluation(
+      CreateMap(interlace(longSeq.map(Literal(_)), strSeq.map(Literal(_)))),
+      createMap(longSeq, strSeq))
 
-    val strWithNull = strArray.drop(1).map(Literal(_)) :+ Literal.create(null, StringType)
-    checkEvaluationMap(
-      CreateMap(interlace(intArray.map(Literal(_)), strWithNull)),
-      createMap(intArray, strWithNull.map(_.value)), intArray, strWithNull.map(_.value))
+    val strWithNull = strSeq.drop(1).map(Literal(_)) :+ Literal.create(null, StringType)
+    checkEvaluation(
+      CreateMap(interlace(intSeq.map(Literal(_)), strWithNull)),
+      createMap(intSeq, strWithNull.map(_.value)))
     intercept[RuntimeException] {
       checkEvaluationWithoutCodegen(
-        CreateMap(interlace(strWithNull, intArray.map(Literal(_)))),
+        CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
         null, null)
     }
     intercept[RuntimeException] {
       checkEvalutionWithUnsafeProjection(
-        CreateMap(interlace(strWithNull, intArray.map(Literal(_)))),
+        CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
         null, null)
     }
   }
