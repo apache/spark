@@ -28,7 +28,7 @@ object SimplifyCreateStructOps extends Rule[LogicalPlan]{
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformExpressionsUp{
       // push down field extraction
-      case GetStructField( createNamedStructLike : CreateNamedStructLike, ordinal, _ ) =>
+      case GetStructField(createNamedStructLike : CreateNamedStructLike, ordinal, _) =>
         createNamedStructLike.valExprs(ordinal)
     }
   }
@@ -42,16 +42,16 @@ object SimplifyCreateArrayOps extends Rule[LogicalPlan]{
     plan.transformExpressionsUp{
       // push down field selection (array of structs)
       case GetArrayStructFields(CreateArray(elems), field, ordinal, numFields, containsNull) =>
-        def getStructField( elem : Expression ) = {
-          GetStructField( elem, ordinal, Some(field.name) )
+        def getStructField(elem : Expression) = {
+          GetStructField(elem, ordinal, Some(field.name))
         }
-        CreateArray( elems.map(getStructField) )
+        CreateArray(elems.map(getStructField))
       // push down item selection.
-      case ga @ GetArrayItem( CreateArray(elems), IntegerLiteral( idx ) ) =>
-        if ( idx >= 0 && idx < elems.size ) {
+      case ga @ GetArrayItem(CreateArray(elems), IntegerLiteral(idx)) =>
+        if (idx >= 0 && idx < elems.size) {
           elems(idx)
         } else {
-          Cast( Literal( null), ga.dataType )
+          Cast(Literal(null), ga.dataType)
         }
     }
   }
@@ -67,28 +67,28 @@ object SimplifyCreateMapOps extends Rule[LogicalPlan]{
     val UnDetermined = Value
   }
 
-  def compareKeys( k1 : Expression, k2 : Expression ) : ComparisonResult.Value = {
+  def compareKeys(k1 : Expression, k2 : Expression) : ComparisonResult.Value = {
     (k1, k2) match {
       case (x, y) if x.semanticEquals(y) => ComparisonResult.PositiveMatch
       // make surethis is null safe, especially when datatypes differ
       // is this even possible?
-      case ( _ : Literal, _ : Literal ) => ComparisonResult.NegativeMatch
+      case (_ : Literal, _ : Literal) => ComparisonResult.NegativeMatch
       case _ => ComparisonResult.UnDetermined
     }
   }
 
   case class ClassifiedEntries(numUndetermined : Seq[Expression],
-                               firstPositive : Option[Expression] )
+                               firstPositive : Option[Expression])
 
   def classifyEntries(mapEntries : Seq[(Expression, Expression)],
                       requestedKey : Expression) : ClassifiedEntries = {
-    mapEntries.foldLeft( ClassifiedEntries(Seq.empty, None) ) {
-      case ( prev @ ClassifiedEntries( _, Some(_)), _ ) => prev
-      case ( ClassifiedEntries( prev, None), (k, v) ) =>
-        compareKeys( k, requestedKey ) match {
-          case ComparisonResult.UnDetermined => ClassifiedEntries( prev ++ Seq(k, v), None)
-          case ComparisonResult.NegativeMatch => ClassifiedEntries( prev, None)
-          case ComparisonResult.PositiveMatch => ClassifiedEntries( prev, Some(v))
+    mapEntries.foldLeft(ClassifiedEntries(Seq.empty, None)) {
+      case (prev @ ClassifiedEntries(_, Some(_)), _) => prev
+      case (ClassifiedEntries(prev, None), (k, v)) =>
+        compareKeys(k, requestedKey) match {
+          case ComparisonResult.UnDetermined => ClassifiedEntries(prev ++ Seq(k, v), None)
+          case ComparisonResult.NegativeMatch => ClassifiedEntries(prev, None)
+          case ComparisonResult.PositiveMatch => ClassifiedEntries(prev, Some(v))
         }
     }
   }
@@ -99,14 +99,14 @@ object SimplifyCreateMapOps extends Rule[LogicalPlan]{
       // this enables other optimizations to take place.
       case gmv @ GetMapValue(cm @ CreateMap(elems), key) =>
         val kvs = cm.keys.zip(cm.values)
-        val classifiedEntries = classifyEntries( kvs, key )
+        val classifiedEntries = classifyEntries(kvs, key)
         classifiedEntries match {
-          case ClassifiedEntries( Seq(), None ) => Literal.create(null, gmv.dataType)
-          case ClassifiedEntries( `elems`, None ) => gmv
-          case ClassifiedEntries( newElems, optPos ) =>
-            val getFromTrimmedMap = GetMapValue( CreateMap(newElems), key)
-            optPos.map( pos => Coalesce( Seq(getFromTrimmedMap, pos )) )
-              .getOrElse( getFromTrimmedMap )
+          case ClassifiedEntries(Seq(), None) => Literal.create(null, gmv.dataType)
+          case ClassifiedEntries(`elems`, None) => gmv
+          case ClassifiedEntries(newElems, optPos) =>
+            val getFromTrimmedMap = GetMapValue(CreateMap(newElems), key)
+            optPos.map(pos => Coalesce(Seq(getFromTrimmedMap, pos)))
+              .getOrElse(getFromTrimmedMap)
         }
     }
   }
