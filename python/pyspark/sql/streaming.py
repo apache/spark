@@ -163,22 +163,6 @@ class StreamingQuery(object):
     def exception(self):
         """
         :return: the StreamingQueryException if the query was terminated by an exception, or None.
-
-        >>> sq = sdf.writeStream.format('memory').queryName('query_exception').start()
-        >>> str(sq.exception())
-        'None'
-        >>> sq.stop()
-        >>> from pyspark.sql.functions import col, udf
-        >>> bad_udf = udf(lambda x: x / 0)
-        >>> sq = sdf.select(bad_udf(col("value"))).writeStream.format('memory')\
-              .queryName('this_query').start()
-        >>> try:
-        ...     sq.processAllAvailable() # Process some data to fail the query
-        ... except:
-        ...     pass # Ignore the error as we want to test the "exception" method
-        >>> sq.exception()
-        StreamingQueryException()
-        >>> sq.stop()
         """
         if self._jsq.exception().isDefined():
             je = self._jsq.exception().get()
