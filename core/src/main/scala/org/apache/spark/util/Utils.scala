@@ -148,6 +148,40 @@ private[spark] object Utils extends Logging {
   /** Shorthand for calling truncatedString() without start or end strings. */
   def truncatedString[T](seq: Seq[T], sep: String): String = truncatedString(seq, "", sep, "")
 
+  def cloneProperties(properties: Properties,
+      withDefaults: Boolean = false): Properties = {
+    val newProperties = new Properties()
+    // first put the keys other than the ones only in defaults
+    var numStringKeys = 0
+    if (!properties.isEmpty) {
+      val entries = properties.entrySet().iterator()
+      while (entries.hasNext) {
+        val entry = entries.next
+        val key = entry.getKey
+        if (withDefaults && key.isInstanceOf[String]) {
+          numStringKeys += 1
+        }
+        newProperties.put(key, entry.getValue)
+      }
+    }
+    if (withDefaults) {
+      // list the string properties if there are any that are only in defaults
+      val stringKeys = properties.stringPropertyNames()
+      // check if any extra keys in defaults exist (only String keys are useful
+      //   since those are the only ones that can be queried from defaults)
+      if (stringKeys.size() > numStringKeys) {
+        val iterator = stringKeys.iterator()
+        while (iterator.hasNext) {
+          val key = iterator.next()
+          if (!newProperties.contains(key)) {
+            newProperties.setProperty(key, properties.getProperty(key))
+          }
+        }
+      }
+    }
+    newProperties
+  }
+
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()

@@ -785,12 +785,23 @@ abstract class GeneratedClass {
  */
 class CodeAndComment(val body: String, val comment: collection.Map[String, String])
   extends Serializable {
+
+  private[sql] var hash: Int = 0
+
   override def equals(that: Any): Boolean = that match {
     case t: CodeAndComment if t.body == body => true
     case _ => false
   }
 
-  override def hashCode(): Int = body.hashCode
+  // noinspection HashCodeUsesVar
+  override def hashCode(): Int = {
+    val h = hash
+    if (h != 0) h
+    else {
+      hash = body.hashCode
+      hash
+    }
+  }
 }
 
 /**

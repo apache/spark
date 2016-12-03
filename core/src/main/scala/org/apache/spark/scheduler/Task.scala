@@ -277,9 +277,17 @@ private[spark] object Task {
     }
 
     // Write the task properties separately so it is available before full task deserialization.
-    val propBytes = Utils.serialize(task.localProperties)
-    dataOut.writeInt(propBytes.length)
-    dataOut.write(propBytes)
+    val props = task.localProperties
+    val numProps = props.size()
+    dataOut.writeInt(numProps)
+    if (numProps > 0) {
+      val keys = props.keys()
+      while (keys.hasMoreElements) {
+        val key = keys.nextElement().asInstanceOf[String]
+        dataOut.writeUTF(key)
+        dataOut.writeUTF(props.getProperty(key))
+      }
+    }
 
     // Write the task itself and finish
     dataOut.flush()
@@ -316,10 +324,13 @@ private[spark] object Task {
       taskJars(dataIn.readUTF()) = dataIn.readLong()
     }
 
-    val propLength = dataIn.readInt()
-    val propBytes = new Array[Byte](propLength)
-    dataIn.readFully(propBytes, 0, propLength)
-    val taskProps = Utils.deserialize[Properties](propBytes)
+    val taskProps = new Properties
+    var numProps = dataIn.readInt()
+    while (numProps > 0) {
+      val key = dataIn.readUTF()
+      taskProps.setProperty(key, dataIn.readUTF())
+      numProps -= 1
+    }
 
     // Create a sub-buffer for the rest of the data, which is the serialized Task object
     val subBuffer = serializedTask.slice()  // ByteBufferInputStream will have read just up to task

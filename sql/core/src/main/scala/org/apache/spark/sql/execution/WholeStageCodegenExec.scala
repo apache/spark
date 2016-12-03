@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{broadcast, TaskContext}
-import org.apache.spark.rdd.RDD
+import com.esotericsoftware.kryo.io.{Input, Output}
+import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+
+import org.apache.spark.{Partition, SparkContext, TaskContext, broadcast}
+import org.apache.spark.rdd.{RDD, ZippedPartitionsBaseRDD, ZippedPartitionsPartition}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -26,9 +29,10 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 /**
@@ -359,38 +363,8 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     val durationMs = longMetric("pipelineTime")
 
     val rdds = child.asInstanceOf[CodegenSupport].inputRDDs()
-    assert(rdds.size <= 2, "Up to two input RDDs can be supported")
-    if (rdds.length == 1) {
-      rdds.head.mapPartitionsWithIndex { (index, iter) =>
-        val clazz = CodeGenerator.compile(cleanedSource)
-        val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-        buffer.init(index, Array(iter))
-        new Iterator[InternalRow] {
-          override def hasNext: Boolean = {
-            val v = buffer.hasNext
-            if (!v) durationMs += buffer.durationMs()
-            v
-          }
-          override def next: InternalRow = buffer.next()
-        }
-      }
-    } else {
-      // Right now, we support up to two input RDDs.
-      rdds.head.zipPartitions(rdds(1)) { (leftIter, rightIter) =>
-        val partitionIndex = TaskContext.getPartitionId()
-        val clazz = CodeGenerator.compile(cleanedSource)
-        val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-        buffer.init(partitionIndex, Array(leftIter, rightIter))
-        new Iterator[InternalRow] {
-          override def hasNext: Boolean = {
-            val v = buffer.hasNext
-            if (!v) durationMs += buffer.durationMs()
-            v
-          }
-          override def next: InternalRow = buffer.next()
-        }
-      }
-    }
+    new WholeStageCodegenRDD(sqlContext.sparkContext, cleanedSource,
+      references, durationMs, rdds)
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -495,5 +469,118 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
     } else {
       plan
     }
+  }
+}
+
+class WholeStageCodegenRDD(sc: SparkContext, var source: CodeAndComment,
+    var references: Array[Any], var durationMs: SQLMetric,
+    inputRDDs: Seq[RDD[InternalRow]])
+    extends ZippedPartitionsBaseRDD[InternalRow](sc, inputRDDs)
+        with Serializable with KryoSerializable {
+
+  override def getPartitions: Array[Partition] = {
+    if (rdds.length == 1) rdds.head.partitions
+    else super.getPartitions
+  }
+
+  override def getPreferredLocations(s: Partition): Seq[String] = {
+    if (rdds.length == 1) rdds.head.preferredLocations(s)
+    else s.asInstanceOf[ZippedPartitionsPartition].preferredLocations
+  }
+
+  override def compute(split: Partition,
+      context: TaskContext): Iterator[InternalRow] = {
+    val clazz = CodeGenerator.compile(source)
+    val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
+    if (rdds.length == 1) {
+      buffer.init(split.index, Array(rdds.head.iterator(split, context)
+          .asInstanceOf[Iterator[InternalRow]]))
+    } else {
+      val zippedPartition = split.asInstanceOf[ZippedPartitionsPartition]
+      val partitions = zippedPartition.partitions
+      val iterators = new Array[Iterator[InternalRow]](partitions.length)
+      for (i <- partitions.indices) {
+        iterators(i) = rdds(i).iterator(partitions(i), context)
+            .asInstanceOf[Iterator[InternalRow]]
+      }
+      buffer.init(zippedPartition.index, iterators)
+    }
+    new Iterator[InternalRow] {
+      override def hasNext: Boolean = {
+        val v = buffer.hasNext
+        if (!v) durationMs += buffer.durationMs()
+        v
+      }
+      override def next: InternalRow = buffer.next()
+    }
+  }
+
+  override def write(kryo: Kryo, output: Output): Unit = {
+    output.writeInt(_id)
+
+    // write CodeAndComment
+    output.writeInt(source.hashCode())
+    output.writeString(source.body)
+    val comment = source.comment
+    output.writeVarInt(comment.size, true)
+    for ((k, v) <- comment) {
+      output.writeString(k)
+      output.writeString(v)
+    }
+
+    val refsLen = if (references != null) references.length else 0
+    output.writeVarInt(refsLen, true)
+    var i = 0
+    while (i < refsLen) {
+      kryo.writeClassAndObject(output, references(i))
+      i += 1
+    }
+    durationMs.write(kryo, output)
+
+    output.writeVarInt(rdds.length, true)
+    for (rdd <- rdds) {
+      kryo.writeClassAndObject(output, rdd)
+    }
+  }
+
+  override def read(kryo: Kryo, input: Input): Unit = {
+    _id = input.readInt()
+    storageLevel = StorageLevel.NONE
+    checkpointData = None
+
+    val hash = input.readInt()
+    val body = input.readString()
+    var commentSize = input.readVarInt(true)
+    val comment = new scala.collection.mutable.HashMap[String, String]()
+    while (commentSize > 0) {
+      val k = input.readString()
+      val v = input.readString()
+      comment.put(k, v)
+      commentSize -= 1
+    }
+    source = new CodeAndComment(body, comment)
+    source.hash = hash
+
+    val refsLen = input.readVarInt(true)
+    if (refsLen > 0) {
+      references = new Array[Any](refsLen)
+      var i = 0
+      while (i < refsLen) {
+        references(i) = kryo.readClassAndObject(input)
+        i += 1
+      }
+    } else {
+      references = null
+    }
+    durationMs = new SQLMetric(null)
+    durationMs.read(kryo, input)
+
+    val rddsBuilder = IndexedSeq.newBuilder[RDD[InternalRow]]
+    var rddsLen = input.readVarInt(true)
+    while (rddsLen > 0) {
+      rddsBuilder += kryo.readClassAndObject(input).asInstanceOf[RDD[InternalRow]]
+      rddsLen -= 1
+    }
+    rdds = rddsBuilder.result()
   }
 }
