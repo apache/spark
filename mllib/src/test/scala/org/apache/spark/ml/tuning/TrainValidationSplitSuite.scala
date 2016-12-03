@@ -45,18 +45,19 @@ class TrainValidationSplitSuite
       .addGrid(lr.maxIter, Array(0, 10))
       .build()
     val eval = new BinaryClassificationEvaluator
-    val cv = new TrainValidationSplit()
+    val tv = new TrainValidationSplit()
       .setEstimator(lr)
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setTrainRatio(0.5)
       .setSeed(42L)
-    val cvModel = cv.fit(dataset)
-    val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
-    assert(cv.getTrainRatio === 0.5)
+    val tvModel = tv.fit(dataset)
+    val parent = tvModel.bestModel.parent.asInstanceOf[LogisticRegression]
+    assert(tv.getTrainRatio === 0.5)
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
-    assert(cvModel.validationMetrics.length === lrParamMaps.length)
+    assert(tvModel.validationMetrics.length === lrParamMaps.length)
+    assert(tvModel.summary.params === lrParamMaps)
   }
 
   test("train validation with linear regression") {

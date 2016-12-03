@@ -25,6 +25,7 @@ import scala.language.existentials
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
@@ -123,7 +124,10 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best train validation split metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
-    copyValues(new TrainValidationSplitModel(uid, bestModel, metrics).setParent(this))
+    val model = copyValues(new TrainValidationSplitModel(uid, bestModel, metrics).setParent(this))
+    val summary = new TuningSummary(bestModel.transform(dataset), epm, metrics, bestIndex)
+    model.setSummary(Some(summary))
+    model
   }
 
   @Since("1.5.0")
@@ -226,6 +230,29 @@ class TrainValidationSplitModel private[ml] (
 
   @Since("2.0.0")
   override def write: MLWriter = new TrainValidationSplitModel.TrainValidationSplitModelWriter(this)
+
+  private var trainingSummary: Option[TuningSummary] = None
+
+  private[tuning] def setSummary(summary: Option[TuningSummary]): this.type = {
+    this.trainingSummary = summary
+    this
+  }
+
+  /**
+   * Return true if there exists summary of model.
+   */
+  @Since("2.0.0")
+  def hasSummary: Boolean = trainingSummary.nonEmpty
+
+  /**
+   * Gets summary of model on training set. An exception is
+   * thrown if `trainingSummary == None`.
+   */
+  @Since("2.0.0")
+  def summary: TuningSummary = trainingSummary.getOrElse {
+    throw new SparkException(
+      s"No training summary available for the ${this.getClass.getSimpleName}")
+  }
 }
 
 @Since("2.0.0")
@@ -275,3 +302,4 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
     }
   }
 }
+

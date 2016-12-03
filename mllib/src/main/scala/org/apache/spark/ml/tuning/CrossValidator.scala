@@ -20,11 +20,10 @@ package org.apache.spark.ml.tuning
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
-
 import com.github.fommil.netlib.F2jBLAS
 import org.apache.hadoop.fs.Path
+import org.apache.spark.SparkException
 import org.json4s.DefaultFormats
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
@@ -127,7 +126,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
-    copyValues(new CrossValidatorModel(uid, bestModel, metrics).setParent(this))
+    val model = copyValues(new CrossValidatorModel(uid, bestModel, metrics).setParent(this))
+    val summary = new TuningSummary(bestModel.transform(dataset), epm, metrics, bestIndex)
+    model.setSummary(Some(summary))
+    model
   }
 
   @Since("1.4.0")
@@ -234,6 +236,29 @@ class CrossValidatorModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new CrossValidatorModel.CrossValidatorModelWriter(this)
+
+  private var trainingSummary: Option[TuningSummary] = None
+
+  private[tuning] def setSummary(summary: Option[TuningSummary]): this.type = {
+    this.trainingSummary = summary
+    this
+  }
+
+  /**
+    * Return true if there exists summary of model.
+    */
+  @Since("2.0.0")
+  def hasSummary: Boolean = trainingSummary.nonEmpty
+
+  /**
+    * Gets summary of model on training set. An exception is
+    * thrown if `trainingSummary == None`.
+    */
+  @Since("2.0.0")
+  def summary: TuningSummary = trainingSummary.getOrElse {
+    throw new SparkException(
+      s"No training summary available for the ${this.getClass.getSimpleName}")
+  }
 }
 
 @Since("1.6.0")
