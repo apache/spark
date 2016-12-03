@@ -182,7 +182,7 @@ class StreamingQuery(object):
         """
         if self._jsq.exception().isDefined():
             je = self._jsq.exception().get()
-            msg = je.toString().split(': ', 1)[1] # Drop the Java StreamingQueryException type info
+            msg = je.toString().split(': ', 1)[1]  # Drop the Java StreamingQueryException type info
             stackTrace = '\n\t at '.join(map(lambda x: x.toString(), je.getStackTrace()))
             return StreamingQueryException(msg, stackTrace)
         else:
