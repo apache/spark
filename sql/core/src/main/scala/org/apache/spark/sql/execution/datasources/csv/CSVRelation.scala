@@ -34,12 +34,12 @@ import org.apache.spark.sql.types._
 object CSVRelation extends Logging {
 
   def univocityTokenizer(
-      file: RDD[String],
+      file: Dataset[String],
       firstLine: String,
       params: CSVOptions): RDD[Array[String]] = {
     // If header is set, make sure firstLine is materialized before sending to executors.
     val commentPrefix = params.comment.toString
-    file.mapPartitions { iter =>
+    file.rdd.mapPartitions { iter =>
       val parser = new CsvReader(params)
       val filteredIter = iter.filter { line =>
         line.trim.nonEmpty && !line.startsWith(commentPrefix)
