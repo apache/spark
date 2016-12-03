@@ -1497,25 +1497,25 @@ In Spark, different LSH families are implemented in separate classes (e.g., `Min
 
 In LSH, we define a false positive as a pair of distant input features (with `$d(p,q) \geq r2$`) which are hashed into the same bucket, and we define a false negative as a pair of nearby features (with `$d(p,q) \leq r1$`) which are hashed into different buckets.
 
-## LSH operations
+## LSH Operations
 
 We describe the major types of operations which LSH can be used for.  A fitted LSH model has methods for each of these operations.
 
-### Feature transformation
+### Feature Transformation
 Feature transformation is the basic functionality to add hashed values as a new column. This can be useful for dimensionality reduction. Users can specify input and output column names by setting `inputCol` and `outputCol`.
 
 LSH also supports multiple LSH hash tables. Users can specify the number of hash tables by setting `numHashTables`. This is also used for [OR-amplification](https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Amplification) in approximate similarity join and approximate nearest neighbor. Increasing the number of hash tables will increase the accuracy but will also increase communication cost and running time.
 
 The type of `outputCol` is `Seq[Vector]` where the dimension of the array equals `numHashTables`, and the dimensions of the vectors are currently set to 1. In future releases, we will implement AND-amplification so that users can specify the dimensions of these vectors.
 
-### Approximate similarity join
+### Approximate Similarity Join
 Approximate similarity join takes two datasets and approximately returns pairs of rows in the datasets whose distance is smaller than a user-defined threshold. Approximate similarity join supports both joining two different datasets and self-joining. Self-joining will produce some duplicate pairs.
 
 Approximate similarity join accepts both transformed and untransformed datasets as input. If an untransformed dataset is used, it will be transformed automatically. In this case, the hash signature will be created as `outputCol`.
 
 In the joined dataset, the origin datasets can be queried in `datasetA` and `datasetB`. A distance column will be added to the output dataset to show the true distance between each pair of rows returned.
 
-### Approximate nearest neighbor search
+### Approximate Nearest Neighbor Search
 Approximate nearest neighbor search takes a dataset (of feature vectors) and a key (a single feature vector), and it approximately returns a specified number of rows in the dataset that are closest to the vector.
 
 Approximate nearest neighbor search accepts both transformed and untransformed datasets as input. If an untransformed dataset is used, it will be transformed automatically. In this case, the hash signature will be created as `outputCol`.
@@ -1524,7 +1524,7 @@ A distance column will be added to the output dataset to show the true distance 
 
 **Note:** Approximate nearest neighbor search will return fewer than `k` rows when there are not enough candidates in the hash bucket.
 
-## LSH algorithms
+## LSH Algorithms
 
 ### Bucketed Random Projection for Euclidean Distance
 
