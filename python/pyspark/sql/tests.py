@@ -1158,9 +1158,9 @@ class SQLTests(ReusedPySparkTestCase):
             # Process some data to fail the query
             sq.processAllAvailable()
             self.fail("bad udf should fail the query")
-        except StreamingQueryException:
-            # Ignore the error as we want to test the "exception" method
-            pass
+        except StreamingQueryException as e:
+            # This is expected
+            self.assertTrue("ZeroDivisionError" in e.desc)
         finally:
             sq.stop()
         self.assertTrue(type(sq.exception()) is StreamingQueryException)

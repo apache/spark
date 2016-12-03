@@ -46,11 +46,12 @@ class StreamingQueryException private(
       startOffset: String,
       endOffset: String) {
     this(
-      s"""
-         |${cause.getMessage} ${cause.getStackTrace.take(10).mkString("", "\n|\t", "\n")}
+      // scalastyle:off
+      s"""${classOf[StreamingQueryException].getName}: ${cause.getMessage} ${cause.getStackTrace.take(10).mkString("", "\n|\t", "\n")}
          |
          |${query.asInstanceOf[StreamExecution].toDebugString}
          """.stripMargin,
+      // scalastyle:on
       message,
       cause,
       startOffset,
