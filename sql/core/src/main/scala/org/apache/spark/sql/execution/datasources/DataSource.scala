@@ -135,7 +135,7 @@ case class DataSource(
 
     val fieldEquality = sparkSession.sessionState.conf.resolver
 
-    val partitionSchema = if (partitionColumns.isEmpty && catalogTable.isEmpty) {
+    val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
       // columns properly unless it is a Hive DataSource
       val resolved = tempFileIndex.partitionSchema.map { partitionField =>
@@ -190,14 +190,10 @@ case class DataSource(
         s"Unable to infer schema for $format. It must be specified manually.")
     }
 
-    // Override the fields of the partition schema if the data schema has the same field
-    val resolvedPartitionSchema = partitionSchema.map { partitionField =>
-      dataSchema.find(f => fieldEquality(f.name, partitionField.name)).getOrElse(partitionField)
-    }
     val dataWithoutPartitions = dataSchema.filterNot { field =>
       partitionSchema.exists(p => fieldEquality(p.name, field.name))
     }
-    (StructType(dataWithoutPartitions), StructType(resolvedPartitionSchema))
+    (StructType(dataWithoutPartitions), partitionSchema)
   }
 
   /** Returns the name and schema of the source that can be used to continually read data. */
