@@ -449,4 +449,33 @@ class ComplexTypesSuite extends PlanTest with Matchers{
    )
     comparePlans(optimized, expected)
   }
+
+  test("simplify map ops, potential dynamic match with null value + an absolute constant match") {
+    val rel = baseOptimizedPlan.select(
+      CreateMap(
+        idRef :: (idRef + 1L) ::
+          (idRef + 1L) :: (idRef + 2L) ::
+          (idRef + 2L) :: Literal.create(null, LongType) ::
+          Literal(2L) :: idRef ::
+          (idRef + 3L) :: (idRef + 4L) ::
+          (idRef + 4L) :: (idRef + 5L) ::
+          Nil
+      ).getMapValue( 2L ) as "a"
+    )
+    val optimized = Optimize execute rel
+    val expected = baseOptimizedPlan.select(
+      CreateMap(
+        idRef :: (idRef + 1L) ::
+          // these two are possible matches, we can't tell untill runtime
+          (idRef + 1L) :: (idRef + 2L) ::
+          (idRef + 2L) :: Literal.create(null, LongType) ::
+          // this is a definite match (two constants),
+          // but it cannot override a potential match with (idRef + 2L),
+          // which is exactly what [[Coalesce]] would do in this case.
+          Literal(2L) :: idRef ::
+          Nil
+      ).getMapValue( 2L ) as "a"
+    )
+    comparePlans(optimized, expected)
+  }
 }
