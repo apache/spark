@@ -22,7 +22,7 @@ import com.typesafe.tools.mima.core._
 import com.typesafe.tools.mima.core.MissingClassProblem
 import com.typesafe.tools.mima.core.MissingTypesProblem
 import com.typesafe.tools.mima.core.ProblemFilters._
-import com.typesafe.tools.mima.plugin.MimaKeys.{binaryIssueFilters, previousArtifact}
+import com.typesafe.tools.mima.plugin.MimaKeys.{mimaBinaryIssueFilters, mimaPreviousArtifacts}
 import com.typesafe.tools.mima.plugin.MimaPlugin.mimaDefaultSettings
 
 
@@ -92,8 +92,8 @@ object MimaBuild {
     val project = projectRef.project
     val fullId = "spark-" + project + "_2.11"
     mimaDefaultSettings ++
-    Seq(previousArtifact := Some(organization % fullId % previousSparkVersion),
-      binaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value))
+    Seq(mimaPreviousArtifacts := Set(organization % fullId % previousSparkVersion),
+      mimaBinaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value))
   }
 
 }
