@@ -542,7 +542,7 @@ class AnalysisErrorSuite extends AnalysisTest {
           Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))
       ),
       LocalRelation(a))
-    assertAnalysisError(plan4, "Accessing outer query column is not allowed in a LIMIT" :: Nil)
+    assertAnalysisError(plan4, "Accessing outer query column is not allowed in" :: Nil)
 
     val plan5 = Filter(
       Exists(
@@ -551,6 +551,6 @@ class AnalysisErrorSuite extends AnalysisTest {
       ),
       LocalRelation(a))
     assertAnalysisError(plan5,
-                        "Accessing outer query column is not allowed in a TABLESAMPLE" :: Nil)
+                        "Accessing outer query column is not allowed in" :: Nil)
   }
 }
