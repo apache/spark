@@ -187,7 +187,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
 
   test("read Spark 2.1.0 log format") {
     assert(readFromResource("file-sink-log-version-2.1.0") === Seq(
-      // SinkFileStatus("/a/b/0", 100, false, 100, 1, 100, FileStreamSinkLog.ADD_ACTION),
+      // SinkFileStatus("/a/b/0", 100, false, 100, 1, 100, FileStreamSinkLog.ADD_ACTION), -> deleted
       SinkFileStatus("/a/b/1", 100, false, 100, 1, 100, FileStreamSinkLog.ADD_ACTION),
       SinkFileStatus("/a/b/2", 200, false, 200, 1, 100, FileStreamSinkLog.ADD_ACTION),
       SinkFileStatus("/a/b/3", 300, false, 300, 1, 100, FileStreamSinkLog.ADD_ACTION),
@@ -224,7 +224,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
 
   private def readFromResource(dir: String): Seq[SinkFileStatus] = {
     val input = getClass.getResource(s"/structured-streaming/$dir")
-    val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark, input.toString)
-    sinkLog.allFiles()
+    val log = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark, input.toString)
+    log.allFiles()
   }
 }
