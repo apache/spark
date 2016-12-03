@@ -27,6 +27,7 @@ dependencies {
   compile project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
   compile project(subprojectBase + 'snappy-spark-streaming-kafka-0.8_' + scalaBinaryVersion)
   compile project(subprojectBase + 'snappy-spark-streaming-kafka-0.10_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-sql-kafka-0.10_' + scalaBinaryVersion)
   compile project(subprojectBase + 'snappy-spark-yarn_' + scalaBinaryVersion)
   compile project(subprojectBase + 'snappy-spark-mllib_' + scalaBinaryVersion)
   compile project(subprojectBase + 'snappy-spark-graphx_' + scalaBinaryVersion)

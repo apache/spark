@@ -55,6 +55,11 @@ final class SQLMetric(var metricType: String, initValue: Long = 0L)
 
   override def add(v: Long): Unit = _value += v
 
+  // avoid the runtime generic Object conversion of add(), value()
+  final def addLong(v: Long): Unit = _value += v
+
+  final def longValue: Long = _value
+
   def +=(v: Long): Unit = _value += v
 
   override def value: Long = _value

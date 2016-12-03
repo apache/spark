@@ -15,21 +15,19 @@
  * LICENSE file.
  */
 
-description = 'Spark Integration for Kafka 0.10'
+description = 'Kafka 0.10 Source for Structured Streaming'
 
 dependencies {
   compile project(subprojectBase + 'snappy-spark-tags_' + scalaBinaryVersion)
   provided project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
-  provided project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
+  provided project(subprojectBase + 'snappy-spark-catalyst_' + scalaBinaryVersion)
+  provided project(subprojectBase + 'snappy-spark-sql_' + scalaBinaryVersion)
 
-  compile(group: 'org.apache.kafka', name: 'kafka_' + scalaBinaryVersion, version: '0.10.0.1') {
-    exclude(group: 'com.sun.jmx', module: 'jmxri')
-    exclude(group: 'com.sun.jdmk ', module: 'jmxtools')
-    exclude(group: 'net.sf.jopt-simple', module: 'jopt-simple')
-    exclude(group: 'org.slf4j', module: 'slf4j-simple')
-    exclude(group: 'org.apache.zookeeper', module: 'zookeeper')
-  }
+  compile group: 'org.apache.kafka', name: 'kafka-clients', version: '0.10.0.1'
 
   testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile project(path: subprojectBase + 'snappy-spark-catalyst_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile project(path: subprojectBase + 'snappy-spark-sql_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile group: 'org.apache.kafka', name: 'kafka_' + scalaBinaryVersion, version: '0.10.0.1'
   testCompile group: 'net.sf.jopt-simple', name: 'jopt-simple', version: '3.2'
 }

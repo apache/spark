@@ -129,7 +129,7 @@ dependencies {
   }
   compile group: 'org.apache.ivy', name: 'ivy', version: '2.4.0'
   compile group: 'oro', name: 'oro', version: '2.0.8'
-  compile(group: 'net.razorvine', name: 'pyrolite', version: '4.9') {
+  compile(group: 'net.razorvine', name: 'pyrolite', version: '4.13') {
     exclude(group: 'net.razorvine', module: 'serpent')
   }
   compile group: 'net.sf.py4j', name: 'py4j', version: '0.10.1'
