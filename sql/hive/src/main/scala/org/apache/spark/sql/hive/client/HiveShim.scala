@@ -590,7 +590,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       } else {
         logDebug(s"Hive metastore filter is '$filter'.")
         val tryDirectSqlConfVar = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL
-        val tryDirectSql = hive.getMetaConf(tryDirectSqlConfVar.varname).toBoolean
+        val tryDirectSql = hive.getMSC.getMetaConf(tryDirectSqlConfVar.varname).toBoolean
         try {
           // Hive may throw an exception when calling this method in some circumstances, such as
           // when filtering on a non-string partition column when the hive config key
