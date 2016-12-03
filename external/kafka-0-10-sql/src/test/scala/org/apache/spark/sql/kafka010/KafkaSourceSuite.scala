@@ -855,6 +855,7 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
       .option("subscribePattern", "failOnDataLoss.*")
       .option("startingOffsets", "earliest")
       .option("failOnDataLoss", "false")
+      .option("fetchOffset.retryIntervalMs", "3000")
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .as[(String, String)]
