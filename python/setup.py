@@ -70,11 +70,12 @@ elif len(JARS_PATH) == 0 and not os.path.exists(TEMP_PATH):
 EXAMPLES_PATH = os.path.join(SPARK_HOME, "examples/src/main/python")
 SCRIPTS_PATH = os.path.join(SPARK_HOME, "bin")
 DATA_PATH = os.path.join(SPARK_HOME, "data")
+LICENSES_PATH = os.path.join(SPARK_HOME, "licenses")
+
 SCRIPTS_TARGET = os.path.join(TEMP_PATH, "bin")
 JARS_TARGET = os.path.join(TEMP_PATH, "jars")
 EXAMPLES_TARGET = os.path.join(TEMP_PATH, "examples")
 DATA_TARGET = os.path.join(TEMP_PATH, "data")
-LICENSES_PATH = os.path.join(SPARK_HOME, "licenses")
 LICENSES_TARGET = os.path.join(TEMP_PATH, "licenses")
 
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
