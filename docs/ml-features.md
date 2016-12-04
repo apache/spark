@@ -9,6 +9,7 @@ This section covers algorithms for working with features, roughly divided into t
 * Extraction: Extracting features from "raw" data
 * Transformation: Scaling, converting, or modifying features
 * Selection: Selecting a subset from a larger set of features
+* Locality Sensitive Hashing (LSH): This class of algorithms combines aspects of feature transformation with other algorithms.
 
 **Table of Contents**
 
@@ -1478,5 +1479,115 @@ Refer to the [ChiSqSelector Python docs](api/python/pyspark.ml.html#pyspark.ml.f
 for more details on the API.
 
 {% include_example python/ml/chisq_selector_example.py %}
+</div>
+</div>
+
+# Locality Sensitive Hashing
+[Locality Sensitive Hashing (LSH)](https://en.wikipedia.org/wiki/Locality-sensitive_hashing) is an important class of hashing techniques, which is commonly used in clustering, approximate nearest neighbor search and outlier detection with large datasets.
+
+The general idea of LSH is to use a family of functions ("LSH families") to hash data points into buckets, so that the data points which are close to each other are in the same buckets with high probability, while data points that are far away from each other are very likely in different buckets. An LSH family is formally defined as follows.
+
+In a metric space `(M, d)`, where `M` is a set and `d` is a distance function on `M`, an LSH family is a family of functions `h` that satisfy the following properties:
+`\[
+\forall p, q \in M,\\
+d(p,q) \leq r1 \Rightarrow Pr(h(p)=h(q)) \geq p1\\
+d(p,q) \geq r2 \Rightarrow Pr(h(p)=h(q)) \leq p2
+\]`
+This LSH family is called `(r1, r2, p1, p2)`-sensitive.
+
+In Spark, different LSH families are implemented in separate classes (e.g., `MinHash`), and APIs for feature transformation, approximate similarity join and approximate nearest neighbor are provided in each class.
+
+In LSH, we define a false positive as a pair of distant input features (with `$d(p,q) \geq r2$`) which are hashed into the same bucket, and we define a false negative as a pair of nearby features (with `$d(p,q) \leq r1$`) which are hashed into different buckets.
+
+## LSH Operations
+
+We describe the major types of operations which LSH can be used for.  A fitted LSH model has methods for each of these operations.
+
+### Feature Transformation
+Feature transformation is the basic functionality to add hashed values as a new column. This can be useful for dimensionality reduction. Users can specify input and output column names by setting `inputCol` and `outputCol`.
+
+LSH also supports multiple LSH hash tables. Users can specify the number of hash tables by setting `numHashTables`. This is also used for [OR-amplification](https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Amplification) in approximate similarity join and approximate nearest neighbor. Increasing the number of hash tables will increase the accuracy but will also increase communication cost and running time.
+
+The type of `outputCol` is `Seq[Vector]` where the dimension of the array equals `numHashTables`, and the dimensions of the vectors are currently set to 1. In future releases, we will implement AND-amplification so that users can specify the dimensions of these vectors.
+
+### Approximate Similarity Join
+Approximate similarity join takes two datasets and approximately returns pairs of rows in the datasets whose distance is smaller than a user-defined threshold. Approximate similarity join supports both joining two different datasets and self-joining. Self-joining will produce some duplicate pairs.
+
+Approximate similarity join accepts both transformed and untransformed datasets as input. If an untransformed dataset is used, it will be transformed automatically. In this case, the hash signature will be created as `outputCol`.
+
+In the joined dataset, the origin datasets can be queried in `datasetA` and `datasetB`. A distance column will be added to the output dataset to show the true distance between each pair of rows returned.
+
+### Approximate Nearest Neighbor Search
+Approximate nearest neighbor search takes a dataset (of feature vectors) and a key (a single feature vector), and it approximately returns a specified number of rows in the dataset that are closest to the vector.
+
+Approximate nearest neighbor search accepts both transformed and untransformed datasets as input. If an untransformed dataset is used, it will be transformed automatically. In this case, the hash signature will be created as `outputCol`.
+
+A distance column will be added to the output dataset to show the true distance between each output row and the searched key.
+
+**Note:** Approximate nearest neighbor search will return fewer than `k` rows when there are not enough candidates in the hash bucket.
+
+## LSH Algorithms
+
+### Bucketed Random Projection for Euclidean Distance
+
+[Bucketed Random Projection](https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions) is an LSH family for Euclidean distance. The Euclidean distance is defined as follows:
+`\[
+d(\mathbf{x}, \mathbf{y}) = \sqrt{\sum_i (x_i - y_i)^2}
+\]`
+Its LSH family projects feature vectors `$\mathbf{x}$` onto a random unit vector `$\mathbf{v}$` and portions the projected results into hash buckets:
+`\[
+h(\mathbf{x}) = \Big\lfloor \frac{\mathbf{x} \cdot \mathbf{v}}{r} \Big\rfloor
+\]`
+where `r` is a user-defined bucket length. The bucket length can be used to control the average size of hash buckets (and thus the number of buckets). A larger bucket length (i.e., fewer buckets) increases the probability of features being hashed to the same bucket (increasing the numbers of true and false positives).
+
+Bucketed Random Projection accepts arbitrary vectors as input features, and supports both sparse and dense vectors.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [BucketedRandomProjectionLSH Scala docs](api/scala/index.html#org.apache.spark.ml.feature.BucketedRandomProjectionLSH)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/BucketedRandomProjectionLSHExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [BucketedRandomProjectionLSH Java docs](api/java/org/apache/spark/ml/feature/BucketedRandomProjectionLSH.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaBucketedRandomProjectionLSHExample.java %}
+</div>
+</div>
+
+### MinHash for Jaccard Distance
+[MinHash](https://en.wikipedia.org/wiki/MinHash) is an LSH family for Jaccard distance where input features are sets of natural numbers. Jaccard distance of two sets is defined by the cardinality of their intersection and union:
+`\[
+d(\mathbf{A}, \mathbf{B}) = 1 - \frac{|\mathbf{A} \cap \mathbf{B}|}{|\mathbf{A} \cup \mathbf{B}|}
+\]`
+MinHash applies a random hash function `g` to each element in the set and take the minimum of all hashed values:
+`\[
+h(\mathbf{A}) = \min_{a \in \mathbf{A}}(g(a))
+\]`
+
+The input sets for MinHash are represented as binary vectors, where the vector indices represent the elements themselves and the non-zero values in the vector represent the presence of that element in the set. While both dense and sparse vectors are supported, typically sparse vectors are recommended for efficiency. For example, `Vectors.sparse(10, Array[(2, 1.0), (3, 1.0), (5, 1.0)])` means there are 10 elements in the space. This set contains elem 2, elem 3 and elem 5. All non-zero values are treated as binary "1" values.
+
+**Note:** Empty sets cannot be transformed by MinHash, which means any input vector must have at least 1 non-zero entry.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [MinHashLSH Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MinHashLSH)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/MinHashLSHExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [MinHashLSH Java docs](api/java/org/apache/spark/ml/feature/MinHashLSH.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaMinHashLSHExample.java %}
 </div>
 </div>
