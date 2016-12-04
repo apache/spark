@@ -21,6 +21,7 @@ import java.util.concurrent._
 import scala.util.control.NonFatal
 
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.CheckpointerShim
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 
 import org.apache.spark.internal.Logging
@@ -65,6 +66,16 @@ private[kinesis] class KinesisCheckpointer(
     synchronized {
       checkpointers.remove(shardId)
       checkpoint(shardId, checkpointer)
+      try {
+        // Try a checkpoint with `SHARD_END` to finish reading a shard of `shardId`
+        CheckpointerShim.shutdown(checkpointer)
+      } catch {
+        case NonFatal(e) =>
+          logError(s"Exception:  WorkerId $workerId encountered an exception while checkpointing" +
+            s"to finish reading a shard of $shardId.", e)
+          // Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor
+          throw e
+      }
     }
   }
 
