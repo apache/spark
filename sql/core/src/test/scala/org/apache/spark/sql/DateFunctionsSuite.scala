@@ -351,34 +351,77 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-07-30"))))
   }
 
+
+//  test("function to_timestamp") {
+//
+//  }
+
   test("function to_date") {
     val d1 = Date.valueOf("2015-07-22")
     val d2 = Date.valueOf("2015-07-01")
+    val d3 = Date.valueOf("2014-12-31")
     val t1 = Timestamp.valueOf("2015-07-22 10:00:00")
     val t2 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val t3 = Timestamp.valueOf("2014-12-31 23:59:59")
     val s1 = "2015-07-22 10:00:00"
     val s2 = "2014-12-31"
-    val df = Seq((d1, t1, s1), (d2, t2, s2)).toDF("d", "t", "s")
+    val s3 = "2014-31-12"
+    val df = Seq((d1, t1, s1), (d2, t2, s2), (d3, t3, s3)).toDF("d", "t", "s")
 
     checkAnswer(
       df.select(to_date(col("t"))),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"))))
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
+        Row(Date.valueOf("2014-12-31"))))
     checkAnswer(
       df.select(to_date(col("d"))),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01"))))
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
+        Row(Date.valueOf("2014-12-31"))))
     checkAnswer(
       df.select(to_date(col("s"))),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"))))
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
 
     checkAnswer(
       df.selectExpr("to_date(t)"),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"))))
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
+        Row(Date.valueOf("2014-12-31"))))
     checkAnswer(
       df.selectExpr("to_date(d)"),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01"))))
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
+        Row(Date.valueOf("2014-12-31"))))
     checkAnswer(
       df.selectExpr("to_date(s)"),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"))))
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
+
+      // Now with format
+    checkAnswer(
+      df.select(to_date(col("t"), "yyyy-MM-dd")),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
+        Row(Date.valueOf("2014-12-31"))))
+    checkAnswer(
+      df.select(to_date(col("d"), "yyyy-MM-dd")),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
+        Row(Date.valueOf("2014-12-31"))))
+    checkAnswer(
+      df.select(to_date(col("s"), "yyyy-MM-dd")),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
+
+//    checkAnswer(
+//      df.selectExpr("to_date(t, 'yyyy-MM-dd')"),
+//      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"), Row(null))))
+//    checkAnswer(
+//      df.selectExpr("to_date(d, 'yyyy-MM-dd')"),
+//      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01"), Row(null))))
+//    checkAnswer(
+//      df.selectExpr("to_date(s, 'yyyy-MM-dd')"),
+//      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"), Row(null))))
+    //  now switch format
+    checkAnswer(
+      df.select(to_date(col("s"), "yyyy-dd-MM")),
+      Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
+
+    checkAnswer(
+      df.selectExpr("to_date(s, 'yyyy-dd-MM')"),
+      Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
   }
 
   test("function trunc") {
