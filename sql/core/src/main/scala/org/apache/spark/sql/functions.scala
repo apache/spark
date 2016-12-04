@@ -2661,12 +2661,12 @@ object functions {
   def unix_timestamp(s: Column, p: String): Column = withExpr {UnixTimestamp(s.expr, Literal(p)) }
 
   /**
-    * Convert time string with given pattern
-    * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
-    * to Unix time stamp (in seconds), return null if fail.
-    * @group datetime_funcs
-    * @since 2.2.0
-    */
+   * Convert time string with given pattern
+   * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
+   * to Unix timestamp (in seconds) as a Spark Timestamp, return null if fail.
+   * @group datetime_funcs
+   * @since 2.2.0
+   */
   def to_timestamp(s: Column, p: String): Column = {
     withExpr {UnixTimestamp(s.expr, Literal(p)) }.cast("timestamp")
   }
