@@ -60,36 +60,52 @@ class PartitionedTablePerfStatsSuite
     setupPartitionedHiveTable(tableName, dir, 5)
   }
 
-  private def setupPartitionedHiveTable(tableName: String, dir: File, scale: Int): Unit = {
+  private def setupPartitionedHiveTable(
+      tableName: String, dir: File, scale: Int,
+      clearMetricsBeforeCreate: Boolean = false, repair: Boolean = true): Unit = {
     spark.range(scale).selectExpr("id as fieldOne", "id as partCol1", "id as partCol2").write
       .partitionBy("partCol1", "partCol2")
       .mode("overwrite")
       .parquet(dir.getAbsolutePath)
+
+    if (clearMetricsBeforeCreate) {
+      HiveCatalogMetrics.reset()
+    }
 
     spark.sql(s"""
       |create external table $tableName (fieldOne long)
       |partitioned by (partCol1 int, partCol2 int)
       |stored as parquet
       |location "${dir.getAbsolutePath}"""".stripMargin)
-    spark.sql(s"msck repair table $tableName")
+    if (repair) {
+      spark.sql(s"msck repair table $tableName")
+    }
   }
 
   private def setupPartitionedDatasourceTable(tableName: String, dir: File): Unit = {
     setupPartitionedDatasourceTable(tableName, dir, 5)
   }
 
-  private def setupPartitionedDatasourceTable(tableName: String, dir: File, scale: Int): Unit = {
+  private def setupPartitionedDatasourceTable(
+      tableName: String, dir: File, scale: Int,
+      clearMetricsBeforeCreate: Boolean = false, repair: Boolean = true): Unit = {
     spark.range(scale).selectExpr("id as fieldOne", "id as partCol1", "id as partCol2").write
       .partitionBy("partCol1", "partCol2")
       .mode("overwrite")
       .parquet(dir.getAbsolutePath)
+
+    if (clearMetricsBeforeCreate) {
+      HiveCatalogMetrics.reset()
+    }
 
     spark.sql(s"""
       |create table $tableName (fieldOne long, partCol1 int, partCol2 int)
       |using parquet
       |options (path "${dir.getAbsolutePath}")
       |partitioned by (partCol1, partCol2)""".stripMargin)
-    spark.sql(s"msck repair table $tableName")
+    if (repair) {
+      spark.sql(s"msck repair table $tableName")
+    }
   }
 
   genericTest("partitioned pruned table reports only selected files") { spec =>
@@ -244,6 +260,33 @@ class PartitionedTablePerfStatsSuite
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
           assert(spark.sql("select * from test").count() == 5)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 10)
+          assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
+        }
+      }
+    }
+  }
+
+  test("datasource table: table setup does not scan filesystem") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+      withTable("test") {
+        withTempDir { dir =>
+          setupPartitionedDatasourceTable(
+            "test", dir, scale = 10, clearMetricsBeforeCreate = true, repair = false)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
+          assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
+        }
+      }
+    }
+  }
+
+  test("hive table: table setup does not scan filesystem") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+      withTable("test") {
+        withTempDir { dir =>
+          HiveCatalogMetrics.reset()
+          setupPartitionedHiveTable(
+            "test", dir, scale = 10, clearMetricsBeforeCreate = true, repair = false)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
         }
       }
