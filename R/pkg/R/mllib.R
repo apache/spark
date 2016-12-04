@@ -754,7 +754,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #'
 #' # save fitted model to input path
 #' path <- "path/to/model"
-#' write.ml(blr_model, path)
+#' write.ml(model, path)
 #'
 #' # can also read back the saved model and predict
 #' # Note that summary deos not work on loaded model
