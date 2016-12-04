@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.io.{CharArrayWriter, StringReader}
+import java.io.{CharArrayWriter, OutputStream, StringReader}
+import java.nio.charset.StandardCharsets
 
 import com.univocity.parsers.csv._
 
@@ -64,7 +65,10 @@ private[csv] class CsvReader(params: CSVOptions) {
  * @param params Parameters object for configuration
  * @param headers headers for columns
  */
-private[csv] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) extends Logging {
+private[csv] class LineCsvWriter(
+    params: CSVOptions,
+    headers: Seq[String],
+    output: OutputStream) extends Logging {
   private val writerSettings = new CsvWriterSettings
   private val format = writerSettings.getFormat
 
@@ -80,21 +84,14 @@ private[csv] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) exten
   writerSettings.setHeaders(headers: _*)
   writerSettings.setQuoteEscapingEnabled(params.escapeQuotes)
 
-  private val buffer = new CharArrayWriter()
-  private val writer = new CsvWriter(buffer, writerSettings)
+  private val writer = new CsvWriter(output, StandardCharsets.UTF_8, writerSettings)
 
   def writeRow(row: Seq[String], includeHeader: Boolean): Unit = {
     if (includeHeader) {
       writer.writeHeaders()
     }
-    writer.writeRow(row.toArray: _*)
-  }
 
-  def flush(): String = {
-    writer.flush()
-    val lines = buffer.toString.stripLineEnd
-    buffer.reset()
-    lines
+    writer.writeRow(row: _*)
   }
 
   def close(): Unit = {
