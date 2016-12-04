@@ -77,8 +77,6 @@ DATA_TARGET = os.path.join(TEMP_PATH, "data")
 LICENSES_PATH = os.path.join(SPARK_HOME, "licenses")
 LICENSES_TARGET = os.path.join(TEMP_PATH, "licenses")
 
-data_files = glob.glob(os.path.join(LICENSES_PATH, "*"))
-
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
 # This is important because we only want to build the symlink farm while under Spark otherwise we
 # want to use the symlink farm. And if the symlink farm exists under while under Spark (e.g. a
@@ -189,7 +187,6 @@ try:
             'pyspark.data': ['*.txt', '*.data'],
             'pyspark.licenses': ['*.txt'],
             'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
-        data_files=[('', data_files)],
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
         install_requires=['py4j==0.10.4'],
