@@ -481,10 +481,11 @@ class AddFileTests(PySparkTestCase):
 
 class TaskContextTests(ReusedPySparkTestCase):
 
-    def test_rdd_id(self):
+    def test_stage_id(self):
         rdd = self.sc.parallelize(range(10))
-        mapped = rdd.map(lambda x: TaskContext.get().rddId())
-        self.assertEqual(mapped.head(), mapped.id())
+        stage1 = rdd.map(lambda x: TaskContext.get().stageId()).take(1)[0]
+        stage2 = rdd.map(lambda x: TaskContext.get().stageId()).take(1)[0]
+        self.assertEqual(stage1 + 1, stage2)
 
 class RDDTests(ReusedPySparkTestCase):
 
