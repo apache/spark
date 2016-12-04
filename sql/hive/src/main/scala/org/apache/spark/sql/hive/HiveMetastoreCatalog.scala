@@ -18,7 +18,10 @@
 package org.apache.spark.sql.hive
 
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import org.apache.hadoop.fs.Path
+import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
@@ -53,6 +56,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       tableIdent.table.toLowerCase)
   }
 
+  /** ReadWriteLock for each tables, protect the read and write cached */
+  protected[hive] val tableLockMap =
+    new ConcurrentHashMap[QualifiedTableName, ReentrantReadWriteLock]
+
   /** A cache of Spark SQL data source tables that have been accessed. */
   protected[hive] val cachedDataSourceTables: LoadingCache[QualifiedTableName, LogicalPlan] = {
     val cacheLoader = new CacheLoader[QualifiedTableName, LogicalPlan]() {
@@ -80,6 +87,34 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     CacheBuilder.newBuilder().maximumSize(1000).build(cacheLoader)
   }
 
+  /** Acquires a read lock on the table cache for the duration of `f`. */
+  protected[hive] def readLock[A](tableName: QualifiedTableName, f: => A): A = {
+    val lock = tableLockMap.getOrDefault(TableIdentifier, new ReentrantReadWriteLock).readLock()
+    lock.lock()
+    try f finally {
+      lock.unlock()
+    }
+  }
+
+  /** Acquires a write lock on the table cache for the duration of `f`. */
+  protected[hive] def writeLock[A](tableName: QualifiedTableName, f: => A): A = {
+    val lock = tableLockMap.getOrDefault(TableIdentifier, new ReentrantReadWriteLock).writeLock()
+    lock.lock()
+    try f finally {
+      lock.unlock()
+    }
+  }
+
+  protected[hive] def invalidateAllCache(): Unit = {
+    tableLockMap.entrySet().asScala.map(t => {
+      writeLock(
+        t.getKey, cachedDataSourceTables.invalidate(t.getKey))
+      tableLockMap.remove(t.getKey, t.getValue)
+    })
+    cachedDataSourceTables.invalidateAll()
+    tableLockMap.clear()
+  }
+
   def refreshTable(tableIdent: TableIdentifier): Unit = {
     // refreshTable does not eagerly reload the cache. It just invalidate the cache.
     // Next time when we use the table, it will be populated in the cache.
@@ -89,7 +124,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     // it is better at here to invalidate the cache to avoid confusing waring logs from the
     // cache loader (e.g. cannot find data source provider, which is only defined for
     // data source table.).
-    cachedDataSourceTables.invalidate(getQualifiedTableName(tableIdent))
+    writeLock(getQualifiedTableName(tableIdent), {
+      cachedDataSourceTables.invalidate(getQualifiedTableName(tableIdent))
+    })
   }
 
   def hiveDefaultTableFilePath(tableIdent: TableIdentifier): String = {
@@ -107,7 +144,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       qualifiedTableName.database, qualifiedTableName.name)
 
     if (DDLUtils.isDatasourceTable(table)) {
-      val dataSourceTable = cachedDataSourceTables(qualifiedTableName)
+      val dataSourceTable = readLock(qualifiedTableName,
+        cachedDataSourceTables(qualifiedTableName))
       val qualifiedTable = SubqueryAlias(qualifiedTableName.name, dataSourceTable, None)
       // Then, if alias is specified, wrap the table with a Subquery using the alias.
       // Otherwise, wrap the table with a Subquery using the table name.
@@ -135,7 +173,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       expectedBucketSpec: Option[BucketSpec],
       partitionSchema: Option[StructType]): Option[LogicalRelation] = {
 
-    cachedDataSourceTables.getIfPresent(tableIdentifier) match {
+    readLock(tableIdentifier, cachedDataSourceTables.getIfPresent(tableIdentifier)) match {
       case null => None // Cache miss
       case logical @ LogicalRelation(relation: HadoopFsRelation, _, _) =>
         val cachedRelationFileFormatClass = relation.fileFormat.getClass
@@ -154,7 +192,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
               Some(logical)
             } else {
               // If the cached relation is not updated, we invalidate it right away.
-              cachedDataSourceTables.invalidate(tableIdentifier)
+              writeLock(tableIdentifier, cachedDataSourceTables.invalidate(tableIdentifier))
+              tableLockMap.remove(tableIdentifier)
               None
             }
           case _ =>
@@ -163,7 +202,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 s"should be stored as $expectedFileFormat. However, we are getting " +
                 s"a ${relation.fileFormat} from the metastore cache. This cached " +
                 s"entry will be invalidated.")
-            cachedDataSourceTables.invalidate(tableIdentifier)
+            writeLock(tableIdentifier, cachedDataSourceTables.invalidate(tableIdentifier))
+            tableLockMap.remove(tableIdentifier)
             None
         }
       case other =>
@@ -171,7 +211,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} should be stored " +
             s"as $expectedFileFormat. However, we are getting a $other from the metastore cache. " +
             s"This cached entry will be invalidated.")
-        cachedDataSourceTables.invalidate(tableIdentifier)
+        writeLock(tableIdentifier, cachedDataSourceTables.invalidate(tableIdentifier))
+        tableLockMap.remove(tableIdentifier)
         None
     }
   }
@@ -218,7 +259,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         bucketSpec,
         Some(partitionSchema))
 
-      val logicalRelation = cached.getOrElse {
+      // Here we should protect all relation create operation with writeLock while big table's
+      // CatalogFileIndex will take some time, only lock cachedDataSourceTables.put will still
+      // cause driver memory waste. More detail see SPARK-18700.
+      val logicalRelation = cached.getOrElse(writeLock(tableIdentifier, {
         val sizeInBytes = metastoreRelation.statistics.sizeInBytes.toLong
         val fileCatalog = {
           val catalog = new CatalogFileIndex(
@@ -245,7 +289,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         val created = LogicalRelation(relation, catalogTable = Some(metastoreRelation.catalogTable))
         cachedDataSourceTables.put(tableIdentifier, created)
         created
-      }
+      }))
 
       logicalRelation
     } else {
@@ -258,7 +302,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         fileFormatClass,
         bucketSpec,
         None)
-      val logicalRelation = cached.getOrElse {
+      val logicalRelation = cached.getOrElse(writeLock(tableIdentifier, {
         val created =
           LogicalRelation(
             DataSource(
@@ -272,7 +316,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
         cachedDataSourceTables.put(tableIdentifier, created)
         created
-      }
+      }))
 
       logicalRelation
     }
