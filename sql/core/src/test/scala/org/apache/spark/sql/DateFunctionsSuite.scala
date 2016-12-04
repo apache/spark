@@ -404,6 +404,10 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-MM-dd")),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
+    // the above doesn't fail, but I think it should. It returns 2016-07-12
+    // this is because it just adds the months onto the end. Are there any correctness
+    // assumptions here that we should be validating? IE that a month number
+    // cannot be greater than 12?
 
 //    checkAnswer(
 //      df.selectExpr("to_date(t, 'yyyy-MM-dd')"),
