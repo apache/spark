@@ -121,6 +121,7 @@ class FileScanRDD(
         if (files.hasNext) {
           currentFile = files.next()
           logInfo(s"Reading File $currentFile")
+          // Sets InputFileBlockHolder for the file block's information
           InputFileBlockHolder.set(currentFile.filePath, currentFile.start, currentFile.length)
 
           try {

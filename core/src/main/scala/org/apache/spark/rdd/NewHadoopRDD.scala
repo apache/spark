@@ -139,7 +139,7 @@ class NewHadoopRDD[K, V](
       private val inputMetrics = context.taskMetrics().inputMetrics
       private val existingBytesRead = inputMetrics.bytesRead
 
-      // Sets the thread local variable for the file's name
+      // Sets InputFileBlockHolder for the file block's information
       split.serializableHadoopSplit.value match {
         case fs: FileSplit =>
           InputFileBlockHolder.set(fs.getPath.toString, fs.getStart, fs.getLength)
