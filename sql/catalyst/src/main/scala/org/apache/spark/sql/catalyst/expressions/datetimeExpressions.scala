@@ -1082,6 +1082,7 @@ case class ToDate(dateExp: Expression, format: Expression)
     } else {
       left.dataType match {
         case DateType =>
+          left
           ExprCode("", "true", "(UTF8String) null")
         // fix me!
         case TimestampType =>
@@ -1089,8 +1090,20 @@ case class ToDate(dateExp: Expression, format: Expression)
         // Fix me!
         case StringType if right.foldable =>
           val sdf = classOf[SimpleDateFormat].getName
-          // fix me!
-          ExprCode("", "true", "(UTF8String) null")
+          val formatterName = ctx.addReferenceObj("formatter", formatter, sdf)
+          val eval1 = left.genCode(ctx)
+          ev.copy(code =
+            s"""
+            ${eval1.code}
+            boolean ${ev.isNull} = ${eval1.isNull};
+            ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+            if (!${ev.isNull}) {
+              try {
+                ${ev.value} = $formatterName.parse(${eval1.value}.toString()).getDate();
+              } catch (java.text.ParseException e) {
+                ${ev.isNull} = true;
+              }
+            }""")
         case StringType =>
           val sdf = classOf[SimpleDateFormat].getName
           val formatterName = ctx.addReferenceObj("formatter", formatter, sdf)

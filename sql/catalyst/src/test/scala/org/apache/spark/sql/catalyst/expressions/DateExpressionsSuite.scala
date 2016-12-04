@@ -382,10 +382,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("function to_date") {
+    // literal string, should return the same string
     checkEvaluation(
       ToDate(Literal(Date.valueOf("2015-07-22")), Literal("yyyy-MM-dd")),
       DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-22")))
+    // null should return null
     checkEvaluation(ToDate(Literal.create(null, DateType), Literal("yyyy-MM-dd")), null)
+    // malformed should return null
+    checkEvaluation(ToDate(Literal.create("bill", StringType), Literal("yyyy-MM-dd")), null)
     // checkConsistencyBetweenInterpretedAndCodegen(ToDate, DateType)
   }
 
