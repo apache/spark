@@ -167,25 +167,26 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
   }
 
   test("Delete the temporary staging directory and files after each insert") {
-    withTable("tab") {
-      val tmpDir = Utils.createTempDir()
-      sql(
-        s"""
-           |CREATE TABLE tab(c1 string)
-           |location '${tmpDir.toURI.toString}'
-         """.stripMargin)
+    withTempDir { tmpDir =>
+      withTable("tab") {
+        sql(
+          s"""
+             |CREATE TABLE tab(c1 string)
+             |location '${tmpDir.toURI.toString}'
+           """.stripMargin)
 
-      (1 to 3).map { i =>
-        sql(s"INSERT OVERWRITE TABLE tab SELECT '$i'")
+        (1 to 3).map { i =>
+          sql(s"INSERT OVERWRITE TABLE tab SELECT '$i'")
+        }
+        def listFiles(path: File): List[String] = {
+          val dir = path.listFiles()
+          val folders = dir.filter(_.isDirectory).toList
+          val filePaths = dir.map(_.getName).toList
+          filePaths ::: folders.flatMap(listFiles)
+        }
+        val expectedFiles = ".part-00000.crc" :: "part-00000" :: Nil
+        assert(listFiles(tmpDir).sortBy(_.toString) == expectedFiles)
       }
-      def listFiles(path: File): List[String] = {
-        val dir = path.listFiles()
-        val folders = dir.filter(_.isDirectory).toList
-        val filePaths = dir.map(_.getName).toList
-        filePaths ::: folders.flatMap(listFiles)
-      }
-      val expectedFiles = ".part-00000.crc" :: "part-00000" :: Nil
-      assert(listFiles(tmpDir).sortBy(_.toString) == expectedFiles)
     }
   }
 
