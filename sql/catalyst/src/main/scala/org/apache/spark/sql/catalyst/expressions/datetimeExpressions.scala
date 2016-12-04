@@ -1029,83 +1029,18 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
       > SELECT _FUNC_('2009-07-30 04:17:52');
        2009-07-30
   """)
-case class ToDate(dateExp: Expression, format: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
-    // need to add timestamp potentially too
+  // Implicit casting of spark will accept string in both date and timestamp format, as
+  // well as TimestampType.
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
   override def dataType: DataType = DateType
-  override def nullable: Boolean = true
-  override def left: Expression = dateExp
-  override def right: Expression = format
 
-  private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
-  private lazy val formatter: SimpleDateFormat =
-    Try(new SimpleDateFormat(constFormat.toString, Locale.US)).getOrElse(null)
-
-  def this(time: Expression) = {
-    this(time, Literal("yyyy-MM-dd"))
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val d = left.eval(input)
-    if (d == null) {
-      null
-    } else {
-      left.dataType match {
-        case DateType =>
-          d// shouldn't it basically just return itself if date?
-        case TimestampType =>
-          DateTimeUtils.millisToDays(d.asInstanceOf[Long])
-        case StringType =>
-          if (constFormat == null || formatter == null) {
-            null
-          } else {
-            Try(formatter.parse(
-              d.asInstanceOf[UTF8String].toString).getDate).getOrElse(null)
-            // this is invalid code b/c this method is deprecated
-            // but I will change once all this stabilizes
-            // this is also just the wrong answer but I want some feedback on
-            // how to parse this with the whole Calendar Thing.
-          }
-      }
-    }
-  }
+  override def eval(input: InternalRow): Any = child.eval(input)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (formatter == null) {
-      ExprCode("", "true", "(UTF8String) null")
-      // I see conflicting points at which I put this, this is confusing to me
-    } else {
-      left.dataType match {
-        case DateType =>
-          left
-          ExprCode("", "true", "(UTF8String) null")
-        // fix me!
-        case TimestampType =>
-          ExprCode("", "true", "(UTF8String) null")
-        // Fix me!
-        case StringType =>
-          val sdf = classOf[SimpleDateFormat].getName
-          val formatterName = ctx.addReferenceObj("formatter", formatter, sdf)
-          val eval1 = left.genCode(ctx)
-          ev.copy(code =
-            s"""
-            ${eval1.code}
-            boolean ${ev.isNull} = ${eval1.isNull};
-            ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-            if (!${ev.isNull}) {
-              try {
-                ${ev.value} = $formatterName.parse(${eval1.value}.toString()).getTime() / 1000L;
-              } catch (java.text.ParseException e) {
-                ${ev.isNull} = true;
-              }
-            }""")
-      }
-    }
+    defineCodeGen(ctx, ev, d => d)
   }
 
   override def prettyName: String = "to_date"

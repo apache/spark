@@ -2663,7 +2663,7 @@ object functions {
   /**
    * Convert time string with given pattern
    * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
-   * to Unix timestamp (in seconds) as a Spark Timestamp, return null if fail.
+   * to Unix timestamp (in seconds), return null if fail.
    * @group datetime_funcs
    * @since 2.2.0
    */
@@ -2677,16 +2677,19 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def to_date(e: Column): Column = withExpr { ToDate(e.expr, Literal("yyyy-MM-dd")) }
+  def to_date(e: Column): Column = withExpr { ToDate(e.expr) }
 
   /**
-   * Converts the column into a DateType with a specified format.
+   * Converts the column into a DateType with a specified format
    * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
+   * return null if fail.
    *
    * @group datetime_funcs
    * @since 2.2.0
    */
-  def to_date(e: Column, fmt: String): Column = withExpr { ToDate(e.expr, Literal(fmt)) }
+  def to_date(e: Column, fmt: String): Column = withExpr {
+    ToDate(to_timestamp(e, fmt).expr)
+  }
 
   /**
    * Returns date truncated to the unit specified by the format.
