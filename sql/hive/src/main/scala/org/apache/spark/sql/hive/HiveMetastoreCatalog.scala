@@ -88,8 +88,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   }
 
   /** Acquires a read lock on the table cache for the duration of `f`. */
-  protected[hive] def readLock[A](tableName: QualifiedTableName, f: => A): A = {
-    val lock = tableLockMap.getOrDefault(TableIdentifier, new ReentrantReadWriteLock).readLock()
+  protected[hive] def readLock[A](tableName: QualifiedTableName, f: => A): A = synchronized {
+    var rwLock = tableLockMap.get(tableName)
+    if (rwLock == null) {
+      rwLock = new ReentrantReadWriteLock
+      tableLockMap.put(tableName, rwLock)
+    }
+    val lock = rwLock.readLock()
     lock.lock()
     try f finally {
       lock.unlock()
@@ -97,8 +102,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   }
 
   /** Acquires a write lock on the table cache for the duration of `f`. */
-  protected[hive] def writeLock[A](tableName: QualifiedTableName, f: => A): A = {
-    val lock = tableLockMap.getOrDefault(TableIdentifier, new ReentrantReadWriteLock).writeLock()
+  protected[hive] def writeLock[A](tableName: QualifiedTableName, f: => A): A = synchronized {
+    var rwLock = tableLockMap.get(tableName)
+    if (rwLock == null) {
+      rwLock = new ReentrantReadWriteLock
+      tableLockMap.put(tableName, rwLock)
+    }
+    val lock = rwLock.writeLock()
     lock.lock()
     try f finally {
       lock.unlock()
