@@ -2684,8 +2684,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.2.0
    */
-  def to_date(e: Column, fmt: String): Column = withExpr { ToDate(e.expr, Literal(fmt))
-  }
+  def to_date(e: Column, fmt: String): Column = withExpr { ToDate(e.expr, Literal(fmt)) }
 
   /**
    * Returns date truncated to the unit specified by the format.
