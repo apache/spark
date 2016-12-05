@@ -34,6 +34,7 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 2.2.x
   lazy val v22excludes = v21excludes ++ Seq(
     // [SPARK-18663][SQL] Simplify CountMinSketch aggregate implementation
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.util.sketch.CountMinSketch.toByteArray")
@@ -918,7 +919,7 @@ object MimaExcludes {
 
   def excludes(version: String) = version match {
     case v if v.startsWith("2.2") => v22excludes
-    case v if v.startsWith("2.1") => v22excludes  // TODO: Update this when we bump version to 2.2
+    case v if v.startsWith("2.1") => v21excludes
     case v if v.startsWith("2.0") => v20excludes
     case _ => Seq()
   }
