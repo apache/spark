@@ -27,6 +27,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
 
 /**
@@ -55,6 +56,7 @@ trait ProgressReporter extends Logging {
   protected def streamExecutionMetadata: StreamExecutionMetadata
   protected def currentBatchId: Long
   protected def sparkSession: SparkSession
+  protected def postEvent(event: StreamingQueryListener.Event): Unit
 
   // Local timestamps and counters.
   private var currentTriggerStartTimestamp = -1L
@@ -68,6 +70,12 @@ trait ProgressReporter extends Logging {
 
   /** Holds the most recent query progress updates.  Accesses must lock on the queue itself. */
   private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
+
+  private val noDataProgressEventInterval =
+    sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
+
+  // The timestamp we report an event that has no input data
+  private var lastNoDataProgressEventTime = Long.MinValue
 
   @volatile
   protected var currentStatus: StreamingQueryStatus = {
@@ -97,6 +105,16 @@ trait ProgressReporter extends Logging {
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
     currentStatus = currentStatus.copy(isTriggerActive = true)
     currentDurationsMs.clear()
+  }
+
+  private def updateProgress(newProgress: StreamingQueryProgress): Unit = {
+    progressBuffer.synchronized {
+      progressBuffer += newProgress
+      while (progressBuffer.length >= sparkSession.sqlContext.conf.streamingProgressRetention) {
+        progressBuffer.dequeue()
+      }
+    }
+    postEvent(new QueryProgressEvent(newProgress))
   }
 
   /** Finalizes the query progress and adds it to list of recent status updates. */
@@ -143,10 +161,15 @@ trait ProgressReporter extends Logging {
       sources = sourceProgress.toArray,
       sink = sinkProgress)
 
-    progressBuffer.synchronized {
-      progressBuffer += newProgress
-      while (progressBuffer.length >= sparkSession.sqlContext.conf.streamingProgressRetention) {
-        progressBuffer.dequeue()
+    if (hasNewData) {
+      // Reset noDataEventTimestamp if we processed any data
+      lastNoDataProgressEventTime = Long.MinValue
+      updateProgress(newProgress)
+    } else {
+      val now = triggerClock.getTimeMillis()
+      if (now - noDataProgressEventInterval >= lastNoDataProgressEventTime) {
+        lastNoDataProgressEventTime = now
+        updateProgress(newProgress)
       }
     }
 

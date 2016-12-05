@@ -63,9 +63,6 @@ class StreamExecution(
 
   private val pollingDelayMs = sparkSession.sessionState.conf.streamingPollingDelay
 
-  private val noDataProgressEventInterval =
-    sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
-
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
    */
@@ -199,9 +196,6 @@ class StreamExecution(
       // While active, repeatedly attempt to run batches.
       SparkSession.setActiveSession(sparkSession)
 
-      // The timestamp we report an event that has no input data
-      var lastNoDataProgressEventTime = Long.MinValue
-
       triggerExecutor.execute(() => {
         startTrigger()
 
@@ -224,18 +218,6 @@ class StreamExecution(
 
             // Report trigger as finished and construct progress object.
             finishTrigger(dataAvailable)
-            if (dataAvailable) {
-              // Reset noDataEventTimestamp if we processed any data
-              lastNoDataProgressEventTime = Long.MinValue
-              postEvent(new QueryProgressEvent(lastProgress))
-            } else {
-              val now = triggerClock.getTimeMillis()
-              if (now - noDataProgressEventInterval >= lastNoDataProgressEventTime) {
-                lastNoDataProgressEventTime = now
-                postEvent(new QueryProgressEvent(lastProgress))
-              }
-            }
-
             if (dataAvailable) {
               // We'll increase currentBatchId after we complete processing current batch's data
               currentBatchId += 1
@@ -486,7 +468,7 @@ class StreamExecution(
     }
   }
 
-  private def postEvent(event: StreamingQueryListener.Event) {
+  override protected def postEvent(event: StreamingQueryListener.Event): Unit = {
     sparkSession.streams.postListenerEvent(event)
   }
 
