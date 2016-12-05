@@ -490,40 +490,42 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("Hive Stateful UDF") {
-    sql(s"CREATE TEMPORARY FUNCTION statefulUDF AS '${classOf[StatefulUDF].getName}'")
-    sql(s"CREATE TEMPORARY FUNCTION statelessUDF AS '${classOf[StatelessUDF].getName}'")
-    val testData = spark.sparkContext.parallelize(
-      (0 until 10) map(x => IntegerCaseClass(1)), 2).toDF()
-    testData.createOrReplaceTempView("inputTable")
-    checkAnswer(
-      sql(
-        """
-          |SELECT MAX(s) FROM
-          |  (SELECT statefulUDF() as s FROM
-          |    (SELECT i from inputTable DISTRIBUTE by i) a
-          |    ) b
-         """.stripMargin),
-      Row(10))
+    withUserDefinedFunction("statefulUDF" -> true, "statelessUDF" -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION statefulUDF AS '${classOf[StatefulUDF].getName}'")
+      sql(s"CREATE TEMPORARY FUNCTION statelessUDF AS '${classOf[StatelessUDF].getName}'")
+      val testData = spark.sparkContext.parallelize(
+        (0 until 10) map (x => IntegerCaseClass(1)), 2).toDF()
+      testData.createOrReplaceTempView("inputTable")
+      checkAnswer(
+        sql(
+          """
+            |SELECT MAX(s) FROM
+            |  (SELECT statefulUDF() as s FROM
+            |    (SELECT i from inputTable DISTRIBUTE by i) a
+            |    ) b
+          """.stripMargin),
+        Row(10))
 
-    checkAnswer(
-      sql(
-        """
-          |SELECT MAX(s) FROM
-          |  (SELECT statefulUDF() as s FROM
-          |    (SELECT i from inputTable) a
-          |    ) b
-        """.stripMargin),
+      checkAnswer(
+        sql(
+          """
+            |SELECT MAX(s) FROM
+            |  (SELECT statefulUDF() as s FROM
+            |    (SELECT i from inputTable) a
+            |    ) b
+          """.stripMargin),
         Row(5))
 
-    checkAnswer(
-      sql(
-        """
-          |SELECT MAX(s) FROM
-          |  (SELECT statelessUDF() as s FROM
-          |    (SELECT i from inputTable DISTRIBUTE by i) a
-          |    ) b
-        """.stripMargin),
-      Row(1))
+      checkAnswer(
+        sql(
+          """
+            |SELECT MAX(s) FROM
+            |  (SELECT statelessUDF() as s FROM
+            |    (SELECT i from inputTable DISTRIBUTE by i) a
+            |    ) b
+          """.stripMargin),
+        Row(1))
+    }
   }
 }
 
