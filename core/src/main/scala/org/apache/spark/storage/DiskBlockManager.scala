@@ -61,7 +61,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
         .asInstanceOf[FileAllocator])
     } catch {
       case e: ClassNotFoundException => None
-      case e: NoSuchMethodException => None
+      case e: IllegalArgumentException => None
     }
     if (allocator.isDefined && allocator.get.support) {
       logInfo(s"fileAllocator($allocatorClass) is enabled.")

@@ -20,7 +20,6 @@ package org.apache.spark.storage
 import java.io.{File, IOException}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -31,7 +30,8 @@ private[storage] abstract class FileAllocator(
   extends Logging {
   // The content of subDirs is immutable but the content of subDirs(i) is mutable. And the content
   // of subDirs(i) is protected by the lock of subDirs(i)
-  val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
+  val subDirs: Array[Array[File]] =
+      Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
   def support: Boolean = true
 
@@ -87,16 +87,15 @@ private[storage] class TieredAllocator(
     conf,
     localDirs,
     subDirsPerLocalDir) {
-  val tiersEnvConf = conf.getenv("SPARK_DIRS_TIERS")
-  val threshold = conf.getDouble("spark.diskStore.tiered.threshold", 0.15)
+  private val tiersEnvConf = conf.getenv("SPARK_DIRS_TIERS")
+  private val threshold = conf.getDouble("spark.diskStore.tiered.threshold", 0.15)
 
-  val tiersIDs = tiersEnvConf.trim.split("")
-  if (localDirs.length != tiersIDs.length) {
-    logError(s"Incorrect SPARK_DIRS_TIERS setting, SPARK_DIRS_TIERS = '$tiersEnvConf'.")
-    System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_BUILD_TIERED_STORAGE)
-  }
+  require(tiersEnvConf != null, "SPARK_DIRS_TIERS is not set.")
+  private val tiersIDs = tiersEnvConf.trim.split("")
 
-  val tieredDirs: Seq[Array[File]] = (localDirs zip tiersIDs).
+  require(localDirs.length == tiersIDs.length,
+    s"Incorrect SPARK_DIRS_TIERS setting, SPARK_DIRS_TIERS = '$tiersEnvConf'.")
+  private val tieredDirs: Seq[Array[File]] = (localDirs zip tiersIDs).
     groupBy(_._2).mapValues(_.map(_._1)).toSeq.sortBy(_._1).map(_._2)
   tieredDirs.zipWithIndex.foreach {
     case (dirs, index) =>
@@ -105,9 +104,8 @@ private[storage] class TieredAllocator(
   }
 
   override def support: Boolean = {
-    tiersEnvConf != null &&
-      // TODO: tiered allocation for external shuffle service will be supported in another PR
-      !conf.getBoolean("spark.shuffle.service.enabled", false)
+    // TODO: tiered allocation for external shuffle service will be supported in another PR
+    !conf.getBoolean("spark.shuffle.service.enabled", defaultValue = false)
   }
 
   def hasEnoughSpace(file: File): Boolean = {
