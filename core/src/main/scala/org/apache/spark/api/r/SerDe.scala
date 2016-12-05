@@ -84,7 +84,7 @@ private[spark] object SerDe {
       case 'l' => readList(dis, jvmObjectTracker)
       case 'D' => readDate(dis)
       case 't' => readTime(dis)
-      case 'j' => JVMObjectId(readString(dis))
+      case 'j' => jvmObjectTracker.get(JVMObjectId(readString(dis)))
       case _ =>
         if (sqlReadObject == null) {
           throw new IllegalArgumentException (s"Invalid type $dataType")
