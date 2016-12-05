@@ -143,7 +143,6 @@ private[ui] class StreamingPage(parent: StreamingTab)
   import StreamingPage._
 
   private val listener = parent.listener
-  private val startTime = System.currentTimeMillis()
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -171,7 +170,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
   /** Generate basic information of the streaming program */
   private def generateBasicInfo(): Seq[Node] = {
-    val timeSinceStart = System.currentTimeMillis() - startTime
+    val timeSinceStart = System.currentTimeMillis() - listener.startTime
     <div>Running batches of
       <strong>
         {SparkUIUtils.formatDurationVerbose(listener.batchDuration)}
@@ -182,7 +181,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       </strong>
       since
       <strong>
-        {SparkUIUtils.formatDate(startTime)}
+        {SparkUIUtils.formatDate(listener.startTime)}
       </strong>
       (<strong>{listener.numTotalCompletedBatches}</strong>
       completed batches, <strong>{listener.numTotalReceivedRecords}</strong> records)
@@ -212,8 +211,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val batches = listener.retainedBatches
 
     val batchTimes = batches.map(_.batchTime.milliseconds)
-    val minBatchTime = if (batchTimes.isEmpty) startTime else batchTimes.min
-    val maxBatchTime = if (batchTimes.isEmpty) startTime else batchTimes.max
+    val minBatchTime = if (batchTimes.isEmpty) listener.startTime else batchTimes.min
+    val maxBatchTime = if (batchTimes.isEmpty) listener.startTime else batchTimes.max
 
     val recordRateForAllStreams = new RecordRateUIData(batches.map { batchInfo =>
       (batchInfo.batchTime.milliseconds, batchInfo.numRecords * 1000.0 / listener.batchDuration)

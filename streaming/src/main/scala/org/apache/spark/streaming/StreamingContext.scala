@@ -45,7 +45,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.streaming.scheduler.{ExecutorAllocationManager, JobScheduler, StreamingListener}
+import org.apache.spark.streaming.scheduler.{ExecutorAllocationManager, JobScheduler, StreamingListener, StreamingListenerStreamingStarted}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
 import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
 
@@ -65,6 +65,8 @@ class StreamingContext private[streaming] (
     _cp: Checkpoint,
     _batchDur: Duration
   ) extends Logging {
+
+  val startTime = System.currentTimeMillis()
 
   /**
    * Create a StreamingContext using an existing SparkContext.
@@ -583,6 +585,7 @@ class StreamingContext private[streaming] (
               scheduler.start()
             }
             state = StreamingContextState.ACTIVE
+            scheduler.listenerBus.post(new StreamingListenerStreamingStarted(startTime))
           } catch {
             case NonFatal(e) =>
               logError("Error starting the context, marking it as stopped", e)
