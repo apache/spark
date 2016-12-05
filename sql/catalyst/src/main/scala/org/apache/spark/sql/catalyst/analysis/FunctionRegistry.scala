@@ -371,6 +371,8 @@ object FunctionRegistry {
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
+    expression[InputFileBlockStart]("input_file_block_start"),
+    expression[InputFileBlockLength]("input_file_block_length"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
     expression[CurrentDatabase]("current_database"),
     expression[CallMethodViaReflection]("reflect"),
