@@ -495,21 +495,35 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     val testData = spark.sparkContext.parallelize(
       (0 until 10) map(x => IntegerCaseClass(1)), 2).toDF()
     testData.createOrReplaceTempView("inputTable")
-    val max1 =
-      sql("SELECT MAX(s) FROM (" +
-        "SELECT statefulUDF() as s FROM (SELECT i from inputTable DISTRIBUTE by i) a" +
-        ") b").head().getLong(0)
-    assert(max1 == 10)
-    val max2 =
-      sql("SELECT MAX(s) FROM (" +
-        "SELECT statefulUDF() as s FROM (SELECT i from inputTable) a" +
-        ") b").head().getLong(0)
-    assert(max2 == 5)
-    val max3 =
-      sql("SELECT MAX(s) FROM (" +
-        "SELECT statelessUDF() as s FROM (SELECT i from inputTable DISTRIBUTE by i) a" +
-        ") b").head().getLong(0)
-    assert(max3 == 1)
+    checkAnswer(
+      sql(
+        """
+          |SELECT MAX(s) FROM
+          |  (SELECT statefulUDF() as s FROM
+          |    (SELECT i from inputTable DISTRIBUTE by i) a
+          |    ) b
+         """.stripMargin),
+      Row(10))
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT MAX(s) FROM
+          |  (SELECT statefulUDF() as s FROM
+          |    (SELECT i from inputTable) a
+          |    ) b
+        """.stripMargin),
+        Row(5))
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT MAX(s) FROM
+          |  (SELECT statelessUDF() as s FROM
+          |    (SELECT i from inputTable DISTRIBUTE by i) a
+          |    ) b
+        """.stripMargin),
+      Row(1))
   }
 }
 
