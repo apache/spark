@@ -45,7 +45,7 @@ class StopWordsRemoverSuite
       .setOutputCol("filtered")
     val dataSet = Seq(
       (Seq("test", "test"), Seq("test", "test")),
-      (Seq("a", "b", "c", "d"), Seq("b", "c")),
+      (Seq("a", "b", "c", "d"), Seq("b", "c", "d")),
       (Seq("a", "the", "an"), Seq()),
       (Seq("A", "The", "AN"), Seq()),
       (Seq(null), Seq(null)),
