@@ -40,7 +40,9 @@ sparkR.session()
 You can also start SparkR from RStudio. You can connect your R program to a Spark cluster from
 RStudio, R shell, Rscript or other R IDEs. To start, make sure SPARK_HOME is set in environment
 (you can check [Sys.getenv](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Sys.getenv.html)),
-load the SparkR package, and call `sparkR.session` as below. In addition to calling `sparkR.session`,
+load the SparkR package, and call `sparkR.session` as below. It will check for the Spark installation, and, if not found, it will be downloaded and cached automatically. Alternatively, you can also run `install.spark` manually.
+
+In addition to calling `sparkR.session`,
  you could also specify certain Spark driver properties. Normally these
 [Application properties](configuration.html#application-properties) and
 [Runtime Environment](configuration.html#runtime-environment) cannot be set programmatically, as the
