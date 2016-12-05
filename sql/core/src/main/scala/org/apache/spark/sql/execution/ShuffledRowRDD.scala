@@ -33,10 +33,6 @@ private final class ShuffledRowRDDPartition(
     val startPreShufflePartitionIndex: Int,
     val endPreShufflePartitionIndex: Int) extends Partition {
   override val index: Int = postShufflePartitionIndex
-
-  override def hashCode(): Int = postShufflePartitionIndex
-
-  override def equals(other: Any): Boolean = super.equals(other)
 }
 
 /**
@@ -117,7 +113,7 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
 class ShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
     specifiedPartitionStartIndices: Option[Array[Int]] = None)
-  extends RDD[InternalRow](dependency.rdd.context, Nil) {
+  extends RDD[InternalRow](dependency.rdd.context, Seq(dependency)) {
 
   private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions
 
@@ -131,8 +127,6 @@ class ShuffledRowRDD(
 
   private[this] val part: Partitioner =
     new CoalescedPartitioner(dependency.partitioner, partitionStartIndices)
-
-  override def getDependencies: Seq[Dependency[_]] = List(dependency)
 
   override val partitioner: Option[Partitioner] = Some(part)
 
