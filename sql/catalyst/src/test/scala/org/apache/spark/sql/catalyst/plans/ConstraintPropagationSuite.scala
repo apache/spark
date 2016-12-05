@@ -351,6 +351,15 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         IsNotNull(IsNotNull(resolveColumn(tr, "b"))),
         IsNotNull(resolveColumn(tr, "a")),
         IsNotNull(resolveColumn(tr, "c")))))
+
+    verifyConstraints(
+      tr.where('a.attr === 1 && IsNotNull(resolveColumn(tr, "b")) &&
+        IsNotNull(resolveColumn(tr, "c"))).analyze.constraints,
+      ExpressionSet(Seq(
+        resolveColumn(tr, "a") === 1,
+        IsNotNull(resolveColumn(tr, "c")),
+        IsNotNull(resolveColumn(tr, "a")),
+        IsNotNull(resolveColumn(tr, "b")))))
   }
 
   test("infer IsNotNull constraints from non-nullable attributes") {

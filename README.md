@@ -30,8 +30,7 @@ You can build Spark using more than one thread by using the -T option with Maven
 More detailed documentation is available from the project site, at
 ["Building Spark"](http://spark.apache.org/docs/latest/building-spark.html).
 
-For general development tips, including info on developing Spark using an IDE, see 
-[http://spark.apache.org/developer-tools.html](the Useful Developer Tools page).
+For general development tips, including info on developing Spark using an IDE, see ["Useful Developer Tools"](http://spark.apache.org/developer-tools.html).
 
 ## Interactive Scala Shell
 
