@@ -322,6 +322,9 @@ sparkRHive.init <- function(jsc = NULL) {
 #' SparkSession or initializes a new SparkSession.
 #' Additional Spark properties can be set in \code{...}, and these named parameters take priority
 #' over values in \code{master}, \code{appName}, named lists of \code{sparkConfig}.
+#' When called in an interactive session, this checks for the Spark installation, and, if not
+#' found, it will be downloaded and cached automatically. Alternatively, \code{install.spark} can
+#' be called manually.
 #'
 #' For details on how to initialize and use SparkR, refer to SparkR programming guide at
 #' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession}.
