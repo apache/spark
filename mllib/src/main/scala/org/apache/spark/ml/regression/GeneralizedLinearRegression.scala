@@ -479,7 +479,12 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         numInstances: Double,
         weightSum: Double): Double = {
       -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
-        weight * dist.Binomial(1, mu).logProbabilityOf(math.round(y).toInt)
+        val wt = math.round(weight).toInt
+        if (wt == 0) {
+          0.0
+        } else {
+          dist.Binomial(wt, mu).logProbabilityOf(math.round(y * weight).toInt)
+        }
       }.sum()
     }
 
