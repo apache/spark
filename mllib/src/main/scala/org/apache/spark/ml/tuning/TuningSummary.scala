@@ -37,9 +37,12 @@ class TuningSummary private[tuning](
     val metrics: Array[Double],
     val bestIndex: Int) {
 
+  /**
+   * Summary of grid search tuning in the format of DataFrame.
+   */
   def trainingMetrics: DataFrame = {
     require(params.nonEmpty, "estimator param maps should not be empty")
-    require(params.length == metrics.length, "estimator param maps numner should match metrics")
+    require(params.length == metrics.length, "estimator param maps number should match metrics")
     val sqlContext = predictions.sqlContext
     val sc = sqlContext.sparkContext
     val fields = params(0).toSeq.sortBy(_.param.name).map(_.param.name) ++ Seq("metrics")
