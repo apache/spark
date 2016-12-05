@@ -157,8 +157,8 @@ public class SparkLauncherSuite {
 
   @Test
   public void testChildProcLauncher() throws Exception {
-    // This test is failed on Windows due to the failure of initiating executors by the path length
-    // limitation. See SPARK-18666.
+    // This test is failed on Windows due to the failure of initiating executors
+    // by the path length limitation. See SPARK-18718.
     assumeTrue(!Utils.isWindows());
 
     SparkSubmitOptionParser opts = new SparkSubmitOptionParser();
