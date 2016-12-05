@@ -1087,23 +1087,6 @@ Apart from these, the following properties are also available, and may be useful
     mapping has high overhead for blocks close to or below the page size of the operating system.
   </td>
 </tr>
-<tr>
-  <td><code>spark.diskStore.hierarchy</code></td>
-  <td>(none)</td>
-  <td>
-     Store blocks in different speed storage devices by hierarchy way.<br />
-     For example:<br />
-     <code>ram_disk 1GB, ssd 20GB</code><br />
-     It means the fastest storage is ram_disk (threshold 40GB), the next level is ssd (threshold 20GB), all the rest
-     are the last level storage. The threshold means when the device's usable space is less than it, falling into the
-     next level storage.<br />
-     And also, you need configure ram_disk and ssd location in the local dirs. It is easy, just put "ram_disk" and
-     "ssd" into the dir string.<br />
-     For example in Standalone, Mesos: <br />
-     <code>spark.local.dir=/mnt/ram_disk1,/mnt/ssd1,/mnt/ssd2,/mnt/others</code><br />
-     In Yarn, refer to the its document to configure yarn.nodemanager.local-dirs<br />
-  </td>
-</tr>
 </table>
 
 #### Networking
