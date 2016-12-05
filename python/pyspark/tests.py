@@ -479,13 +479,57 @@ class AddFileTests(PySparkTestCase):
         self.assertEqual(["My Server"], self.sc.parallelize(range(1)).map(func).collect())
 
 
-class TaskContextTests(ReusedPySparkTestCase):
+class TaskContextTests(PySparkTestCase):
+
+    def setUp(self):
+        self._old_sys_path = list(sys.path)
+        class_name = self.__class__.__name__
+        # Allow retries even though they are normally disabled in local mode
+        self.sc = SparkContext('local[4, 2]', class_name)
 
     def test_stage_id(self):
         rdd = self.sc.parallelize(range(10))
         stage1 = rdd.map(lambda x: TaskContext.get().stageId()).take(1)[0]
         stage2 = rdd.map(lambda x: TaskContext.get().stageId()).take(1)[0]
         self.assertEqual(stage1 + 1, stage2)
+
+    def test_partition_id(self):
+        rdd1 = self.sc.parallelize(range(10), 1)
+        rdd2 = self.sc.parallelize(range(10), 2)
+        pids1 = rdd1.map(lambda x: TaskContext.get().partitionId()).collect()
+        pids2 = rdd2.map(lambda x: TaskContext.get().partitionId()).collect()
+        self.assertEqual(0, pids1[0])
+        self.assertEqual(0, pids1[9])
+        self.assertEqual(0, pids2[0])
+        self.assertEqual(1, pids2[9])
+
+    def test_attempt_number(self):
+        rdd = self.sc.parallelize(range(10))
+        attemptNumbers = rdd.map(lambda x: TaskContext.get().attemptNumber())
+        self.assertEqual(0, attemptNumbers.take(1)[0])
+        def fail_on_first(x):
+            """Fail on the first attempt so we get a positive attempt number"""
+            tc = TaskContext.get()
+            attempt_number = tc.attemptNumber()
+            partition_id = tc.partitionId()
+            attempt_id = tc.taskAttemptId()
+            if attempt_number == 0 and partition_id == 0:
+                raise Exception("Failing on first attempt")
+            else:
+                return (x, partition_id, attempt_number, attempt_id)
+        result = rdd.map(fail_on_first).collect()
+        # We should re-submit the first partition to it but other partitions should be attempt 0
+        self.assertEqual([0, 0, 1], result[0][0:3])
+        self.assertEqual([9, 3, 0], result[9][0:3])
+        # The task attempt id should be different
+        self.assertTrue(result[0][4] != result[9][4])
+
+    def verify_tc_not_serializable(self):
+        """Verify that passing a TaskContext from the driver to the worker will throw an error."""
+        rdd = self.sc.parallelize(range(10))
+        tc = TaskContext.get()
+        self.assertRaises(Exception, rdd.map(tc.stageId()).collect())
+
 
 class RDDTests(ReusedPySparkTestCase):
 

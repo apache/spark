@@ -17,19 +17,23 @@
 
 from __future__ import print_function
 
-from pyspark import since
-
 
 class TaskContext(object):
 
     """
+    .. note:: Experimental.
+
     Contextual information about a task which can be read or mutated during
     execution. To access the TaskContext for a running task, use:
-    TaskContext.get()
+    L{TaskContext.get()}.
     """
 
     _taskContext = None
 
+    _attemptNumber = None
+    _partitionId = None
+    _stageId = None
+    _taskAttemptId = None
 
     def __new__(cls):
         """Even if users construct TaskContext instead of using get, give them the singleton."""
@@ -44,34 +48,27 @@ class TaskContext(object):
         pass
     
     @classmethod
-    @since(2.2)
     def get(cls):
         """
         Return the currently active TaskContext. This can be called inside of
         user functions to access contextual information about running tasks.
+
+        .. note:: Must be called on the worker, not the driver.
         """
         if cls._taskContext is None:
             cls._taskContext = TaskContext()
         return cls._taskContext
 
-    @since(2.2)
     def stageId(self):
         """The ID of the stage that this task belong to."""
         return self._stageId
 
-    @since(2.2)
     def partitionId(self):
         """
         The ID of the RDD partition that is computed by this task.
-
-        >>>  rdd = sc.parallelize(xrange(4), 2)
-        >>>  result = rdd.map(lambda x: TaskContext.get().partitionId())
-        >>>  result.collect()
-        [ 1, 1, 2, 3 ]
         """
         return self._partitionId
 
-    @since(2.2)
     def attemptNumber(self):
         """"
         How many times this task has been attempted.  The first task attempt will be assigned
@@ -79,23 +76,9 @@ class TaskContext(object):
         """
         return self._attemptNumber
 
-    @since(2.2)
     def taskAttemptId(self):
         """
         An ID that is unique to this task attempt (within the same SparkContext, no two task attempts
         will share the same attempt ID).  This is roughly equivalent to Hadoop's TaskAttemptID.
         """
         return self._taskAttemptId
-
-def _test():
-    import doctest
-    globs = globals().copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest')
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
-    if failure_count:
-        exit(-1)
-
-
-if __name__ == "__main__":
-    _test()

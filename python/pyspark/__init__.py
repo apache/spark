@@ -34,6 +34,8 @@ Public classes:
       Access files shipped with jobs.
   - :class:`StorageLevel`:
       Finer-grained cache persistence levels.
+  - :class:`TaskContext`:
+      Information about the current running task, avaialble on the workers and experimental.
 
 """
 
@@ -49,6 +51,7 @@ from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, PickleSerializer
 from pyspark.status import *
+from pyspark.taskcontext import TaskContext
 from pyspark.profiler import Profiler, BasicProfiler
 from pyspark.version import __version__
 
@@ -106,5 +109,5 @@ from pyspark.sql import SQLContext, HiveContext, Row
 __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
-    "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler",
+    "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler", "TaskContext",
 ]
