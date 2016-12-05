@@ -72,11 +72,12 @@ private[feature] trait QuantileDiscretizerBase extends Params
    * Default: "error"
    * @group param
    */
+  // TODO: SPARK-18619 Make QuantileDiscretizer inherit from HasHandleInvalid.
   @Since("2.1.0")
-  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle" +
+  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
     "invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
-    ParamValidators.inArray(Bucketizer.supportedHandleInvalid))
+    ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
   setDefault(handleInvalid, Bucketizer.ERROR_INVALID)
 
   /** @group getParam */
@@ -91,8 +92,10 @@ private[feature] trait QuantileDiscretizerBase extends Params
  * possible that the number of buckets used will be smaller than this value, for example, if there
  * are too few distinct values of the input to create enough distinct quantiles.
  *
- * NaN handling: Note also that
- * QuantileDiscretizer will raise an error when it finds NaN values in the dataset, but the user can
+ * NaN handling:
+ * NaN values will be removed from the column during `QuantileDiscretizer` fitting. This will
+ * produce a `Bucketizer` model for making predictions. During the transformation,
+ * `Bucketizer` will raise an error when it finds NaN values in the dataset, but the user can
  * also choose to either keep or remove NaN values within the dataset by setting `handleInvalid`.
  * If the user chooses to keep NaN values, they will be handled specially and placed into their own
  * bucket, for example, if 4 buckets are used, then non-NaN data will be put into buckets[0-3],

@@ -678,7 +678,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Check that state associated with the lost task attempt is cleaned up:
     assert(taskScheduler.taskIdToExecutorId.isEmpty)
     assert(taskScheduler.taskIdToTaskSetManager.isEmpty)
-    assert(taskScheduler.runningTasksByExecutors().get("executor0").isEmpty)
+    assert(taskScheduler.runningTasksByExecutors.get("executor0").isEmpty)
   }
 
   test("if a task finishes with TaskState.LOST its executor is marked as dead") {
@@ -709,7 +709,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Check that state associated with the lost task attempt is cleaned up:
     assert(taskScheduler.taskIdToExecutorId.isEmpty)
     assert(taskScheduler.taskIdToTaskSetManager.isEmpty)
-    assert(taskScheduler.runningTasksByExecutors().get("executor0").isEmpty)
+    assert(taskScheduler.runningTasksByExecutors.get("executor0").isEmpty)
 
     // Check that the executor has been marked as dead
     assert(!taskScheduler.isExecutorAlive("executor0"))

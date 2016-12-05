@@ -74,7 +74,7 @@ case class ReferenceToExpressions(result: Expression, children: Seq[Expression])
         ctx.addMutableState("boolean", classChildVarIsNull, "")
 
         val classChildVar =
-          LambdaVariable(classChildVarName, classChildVarIsNull, child.dataType)
+          LambdaVariable(classChildVarName, classChildVarIsNull, child.dataType, child.nullable)
 
         val initCode = s"${classChildVar.value} = ${childGen.value};\n" +
           s"${classChildVar.isNull} = ${childGen.isNull};"

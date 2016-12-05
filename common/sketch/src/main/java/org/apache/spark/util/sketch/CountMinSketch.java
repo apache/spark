@@ -17,12 +17,13 @@
 
 package org.apache.spark.util.sketch;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
 /**
- * A Count-min sketch is a probabilistic data structure used for summarizing streams of data in
+ * A Count-min sketch is a probabilistic data structure used for cardinality estimation using
  * sub-linear space.  Currently, supported data types include:
  * <ul>
  *   <li>{@link Byte}</li>
@@ -30,10 +31,6 @@ import java.io.OutputStream;
  *   <li>{@link Integer}</li>
  *   <li>{@link Long}</li>
  *   <li>{@link String}</li>
- *   <li>{@link Float}</li>
- *   <li>{@link Double}</li>
- *   <li>{@link java.math.BigDecimal}</li>
- *   <li>{@link Boolean}</li>
  * </ul>
  * A {@link CountMinSketch} is initialized with a random seed, and a pair of parameters:
  * <ol>
@@ -178,11 +175,26 @@ public abstract class CountMinSketch {
   public abstract void writeTo(OutputStream out) throws IOException;
 
   /**
+   * Serializes this {@link CountMinSketch} and returns the serialized form.
+   */
+  public abstract byte[] toByteArray() throws IOException;
+
+  /**
    * Reads in a {@link CountMinSketch} from an input stream. It is the caller's responsibility to
    * close the stream.
    */
   public static CountMinSketch readFrom(InputStream in) throws IOException {
     return CountMinSketchImpl.readFrom(in);
+  }
+
+  /**
+   * Reads in a {@link CountMinSketch} from a byte array.
+   */
+  public static CountMinSketch readFrom(byte[] bytes) throws IOException {
+    InputStream in = new ByteArrayInputStream(bytes);
+    CountMinSketch cms = readFrom(in);
+    in.close();
+    return cms;
   }
 
   /**
