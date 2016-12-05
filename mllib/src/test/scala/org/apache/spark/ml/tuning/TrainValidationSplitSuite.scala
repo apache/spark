@@ -58,6 +58,8 @@ class TrainValidationSplitSuite
     assert(parent.getMaxIter === 10)
     assert(tvModel.validationMetrics.length === lrParamMaps.length)
     assert(tvModel.summary.params === lrParamMaps)
+    assert(tvModel.summary.trainingMetrics.count() === lrParamMaps.length)
+    assert(tvModel.summary.trainingMetrics.columns === Array("maxIter", "regParam", "metrics"))
   }
 
   test("train validation with linear regression") {

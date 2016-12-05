@@ -44,7 +44,6 @@ class TuningSummary private[tuning](
     val sc = sqlContext.sparkContext
     val fields = params(0).toSeq.sortBy(_.param.name).map(_.param.name) ++ Seq("metrics")
     val schema = new StructType(fields.map(name => StructField(name, StringType)).toArray)
-    
     val rows = sc.parallelize(params.zip(metrics)).map { case (param, metric) =>
       val values = param.toSeq.sortBy(_.param.name).map(_.value.toString) ++ Seq(metric.toString)
       Row.fromSeq(values)
