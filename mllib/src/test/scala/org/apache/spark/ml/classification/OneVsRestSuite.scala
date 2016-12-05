@@ -145,9 +145,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     ovaModel.setPredictionCol("pred")
     val transformedDataset = ovaModel.transform(dataset2)
     val outputFields = transformedDataset.schema.fieldNames.toSet
-    assert(outputFields.contains("y"))
-    assert(outputFields.contains("fea"))
-    assert(outputFields.contains("pred"))
+    assert(outputFields === Set("y", "fea", "pred"))
   }
 
   test("SPARK-8049: OneVsRest shouldn't output temp columns") {

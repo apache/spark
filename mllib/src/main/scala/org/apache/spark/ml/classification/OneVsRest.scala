@@ -184,7 +184,6 @@ final class OneVsRestModel private[ml] (
           predictions + ((index, prediction(1)))
         }
         model.setFeaturesCol($(featuresCol))
-        model.setPredictionCol($(predictionCol))
         val transformedDataset = model.transform(df).select(columns: _*)
         val updatedDataset = transformedDataset
           .withColumn(tmpColName, updateUDF(col(accColName), col(rawPredictionCol)))
