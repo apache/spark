@@ -794,6 +794,19 @@ class DDLCommandSuite extends PlanTest {
       """.stripMargin)
   }
 
+  test("alter table: change column name/type/position/comment (not allowed)") {
+    assertUnsupported("ALTER TABLE table_name CHANGE col_old_name col_new_name INT")
+    assertUnsupported(
+      """
+       |ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT
+       |COMMENT 'col_comment' FIRST CASCADE
+      """.stripMargin)
+    assertUnsupported("""
+       |ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT
+       |COMMENT 'col_comment' AFTER column_name RESTRICT
+      """.stripMargin)
+  }
+
   test("show databases") {
     val sql1 = "SHOW DATABASES"
     val sql2 = "SHOW DATABASES LIKE 'defau*'"

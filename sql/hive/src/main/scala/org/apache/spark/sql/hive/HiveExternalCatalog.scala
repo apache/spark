@@ -540,11 +540,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     } else {
       val oldTableDef = getRawTable(db, withStatsProps.identifier.table)
 
-      val (tableSchema, schemaChange) = if (oldTableDef.schema.equals(withStatsProps.schema)) {
-        (oldTableDef.schema, false)
-      } else {
-        (withStatsProps.schema, true)
-      }
+      val (tableSchema, schemaChange) =
+        if (getSchemaFromTableProperties(oldTableDef).equals(withStatsProps.schema)) {
+          // The table properties keep the original case-sensitiviy for column names
+          // so we use the schema derived from the old table's table properties for the
+          // comparison
+          (oldTableDef.schema, false)
+        } else {
+          (withStatsProps.schema, true)
+        }
 
       val newStorage = if (DDLUtils.isHiveTable(tableDefinition)) {
         tableDefinition.storage
