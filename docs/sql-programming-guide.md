@@ -1851,7 +1851,8 @@ You can access them by doing
   <td> The value type in Scala of the data type of this field
   (For example, Int for a StructField with the data type IntegerType) </td>
   <td>
-  StructField(<i>name</i>, <i>dataType</i>, <i>nullable</i>)
+  StructField(<i>name</i>, <i>dataType</i>, [<i>nullable</i>])<br />
+  <b>Note:</b> The default value of <i>nullable</i> is <i>true</i>.
   </td>
 </tr>
 </table>
@@ -2139,7 +2140,8 @@ from pyspark.sql.types import *
   <td> The value type in Python of the data type of this field
   (For example, Int for a StructField with the data type IntegerType) </td>
   <td>
-  StructField(<i>name</i>, <i>dataType</i>, <i>nullable</i>)
+  StructField(<i>name</i>, <i>dataType</i>, [<i>nullable</i>])<br />
+  <b>Note:</b> The default value of <i>nullable</i> is <i>True</i>.
   </td>
 </tr>
 </table>
@@ -2260,7 +2262,7 @@ from pyspark.sql.types import *
   <td> vector or list </td>
   <td>
   list(type="array", elementType=<i>elementType</i>, containsNull=[<i>containsNull</i>])<br />
-  <b>Note:</b> The default value of <i>containsNull</i> is <i>True</i>.
+  <b>Note:</b> The default value of <i>containsNull</i> is <i>TRUE</i>.
   </td>
 </tr>
 <tr>
@@ -2268,7 +2270,7 @@ from pyspark.sql.types import *
   <td> environment </td>
   <td>
   list(type="map", keyType=<i>keyType</i>, valueType=<i>valueType</i>, valueContainsNull=[<i>valueContainsNull</i>])<br />
-  <b>Note:</b> The default value of <i>valueContainsNull</i> is <i>True</i>.
+  <b>Note:</b> The default value of <i>valueContainsNull</i> is <i>TRUE</i>.
   </td>
 </tr>
 <tr>
@@ -2285,7 +2287,8 @@ from pyspark.sql.types import *
   <td> The value type in R of the data type of this field
   (For example, integer for a StructField with the data type IntegerType) </td>
   <td>
-  list(name=<i>name</i>, type=<i>dataType</i>, nullable=<i>nullable</i>)
+  list(name=<i>name</i>, type=<i>dataType</i>, nullable=[<i>nullable</i>])<br />
+  <b>Note:</b> The default value of <i>nullable</i> is <i>TRUE</i>.
   </td>
 </tr>
 </table>
