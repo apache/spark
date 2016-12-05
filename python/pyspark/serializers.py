@@ -292,11 +292,7 @@ class CartesianDeserializer(Serializer):
         key_batch_stream = self.key_ser._load_stream_without_unbatching(stream)
         val_batch_stream = self.val_ser._load_stream_without_unbatching(stream)
         for (key_batch, val_batch) in zip(key_batch_stream, val_batch_stream):
-            # We must put these batches in lists exactly once and
-            # in order since they are pulling from the same stream
-            key_list = list(key_batch)
-            val_list = list(val_batch)
-            yield product(key_list, val_list)
+            yield product(key_batch, val_batch)
 
     def load_stream(self, stream):
         return chain.from_iterable(self._load_stream_without_unbatching(stream))
@@ -320,14 +316,10 @@ class PairDeserializer(Serializer):
         key_batch_stream = self.key_ser._load_stream_without_unbatching(stream)
         val_batch_stream = self.val_ser._load_stream_without_unbatching(stream)
         for (key_batch, val_batch) in zip(key_batch_stream, val_batch_stream):
-            # We must put these batches in lists exactly once and
-            # in order since they are pulling from the same stream
-            key_list = list(key_batch)
-            val_list = list(val_batch)
-            if len(key_list) != len(val_list):
+            if len(key_batch) != len(val_batch):
                 raise ValueError("Can not deserialize PairRDD with different number of items"
-                                 " in batches: (%d, %d)" % (len(key_list), len(val_list)))
-            yield zip(key_list, val_list)
+                                 " in batches: (%d, %d)" % (len(key_batch), len(val_batch)))
+            yield zip(key_batch, val_batch)
 
     def load_stream(self, stream):
         return chain.from_iterable(self._load_stream_without_unbatching(stream))
