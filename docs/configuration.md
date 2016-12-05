@@ -700,6 +700,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.showConsoleProgress</code></td>
+  <td>true</td>
+  <td>
+    Show the progress bar in the console. The progress bar shows the progress of stages
+    that run for longer than 500ms. If multiple stages run at the same time, multiple
+    progress bars will be displayed on the same line.
+  </td>
+</tr>
+<tr>
   <td><code>spark.worker.ui.retainedExecutors</code></td>
   <td>1000</td>
   <td>
