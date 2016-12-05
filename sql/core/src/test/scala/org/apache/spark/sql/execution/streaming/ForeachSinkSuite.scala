@@ -253,6 +253,21 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
       query.stop()
     }
   }
+
+  test("foreach sink should support metrics") {
+    val inputData = MemoryStream[Int]
+    val query = inputData.toDS()
+      .writeStream
+      .foreach(new TestForeachWriter())
+      .start()
+    try {
+      inputData.addData(10, 11, 12)
+      query.processAllAvailable()
+      assert(query.lastProgress.numInputRows === 3)
+    } finally {
+      query.stop()
+    }
+  }
 }
 
 /** A global object to collect events in the executor */
