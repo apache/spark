@@ -498,8 +498,7 @@ object ScalaReflection extends ScalaReflection {
           dataTypeFor(keyType),
           serializerFor(_, keyType, keyPath),
           dataTypeFor(valueType),
-          serializerFor(_, valueType, valuePath),
-          valueNullable = !valueType.typeSymbol.asClass.isPrimitive)
+          serializerFor(_, valueType, valuePath))
 
       case t if t <:< localTypeOf[String] =>
         StaticInvoke(
@@ -591,9 +590,7 @@ object ScalaReflection extends ScalaReflection {
               "cannot be used as field name\n" + walkedTypePath.mkString("\n"))
           }
 
-          val fieldValue = Invoke(
-            AssertNotNull(inputObject, walkedTypePath), fieldName, dataTypeFor(fieldType),
-            returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
+          val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType))
           val clsName = getClassNameFromType(fieldType)
           val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
           expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType, newPath) :: Nil

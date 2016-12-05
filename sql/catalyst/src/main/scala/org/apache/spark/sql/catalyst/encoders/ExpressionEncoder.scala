@@ -60,7 +60,7 @@ object ExpressionEncoder {
     val cls = mirror.runtimeClass(tpe)
     val flat = !ScalaReflection.definedByConstructorParams(tpe)
 
-    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = !cls.isPrimitive)
+    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = true)
     val nullSafeInput = if (flat) {
       inputObject
     } else {
@@ -71,7 +71,10 @@ object ExpressionEncoder {
     val serializer = ScalaReflection.serializerFor[T](nullSafeInput)
     val deserializer = ScalaReflection.deserializerFor[T]
 
-    val schema = serializer.dataType
+    val schema = ScalaReflection.schemaFor[T] match {
+      case ScalaReflection.Schema(s: StructType, _) => s
+      case ScalaReflection.Schema(dt, nullable) => new StructType().add("value", dt, nullable)
+    }
 
     new ExpressionEncoder[T](
       schema,
