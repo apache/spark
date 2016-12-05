@@ -64,7 +64,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       data.write.parquet(dir.getCanonicalPath)
       spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("test_table")
       val answer = sql("select input_file_name() from test_table").head().getString(0)
-      assert(answer.contains(dir.getCanonicalPath))
+      assert(answer.contains(dir.toURI.getPath))
       assert(sql("select input_file_name() from test_table").distinct().collect().length >= 2)
       spark.catalog.dropTempView("test_table")
     }
