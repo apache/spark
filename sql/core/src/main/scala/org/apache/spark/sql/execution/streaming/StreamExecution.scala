@@ -93,7 +93,7 @@ class StreamExecution(
    * once, since the field's value may change at any time.
    */
   @volatile
-  protected var availableOffsets = new StreamProgress
+  var availableOffsets = new StreamProgress
 
   /** The current batchId or -1 if execution has not yet been initialized. */
   protected var currentBatchId: Long = -1
@@ -263,7 +263,8 @@ class StreamExecution(
           this,
           s"Query $name terminated with exception: ${e.getMessage}",
           e,
-          Some(committedOffsets.toOffsetSeq(sources, streamExecutionMetadata.json)))
+          committedOffsets.toOffsetSeq(sources, streamExecutionMetadata.json).toString,
+          availableOffsets.toOffsetSeq(sources, streamExecutionMetadata.json).toString)
         logError(s"Query $name terminated with error", e)
         updateStatusMessage(s"Terminated with exception: ${e.getMessage}")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to

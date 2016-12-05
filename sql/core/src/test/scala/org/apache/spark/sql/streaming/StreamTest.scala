@@ -412,8 +412,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
               eventually("microbatch thread not stopped after termination with failure") {
                 assert(!currentStream.microBatchThread.isAlive)
               }
-              verify(thrownException.query.eq(currentStream),
-                s"incorrect query reference in exception")
               verify(currentStream.exception === Some(thrownException),
                 s"incorrect exception returned by query.exception()")
 
