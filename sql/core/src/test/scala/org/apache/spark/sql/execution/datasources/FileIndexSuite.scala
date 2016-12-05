@@ -25,6 +25,7 @@ import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 
+import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -78,6 +79,58 @@ class FileIndexSuite extends SharedSQLContext {
         spark, Seq(new Path(deletedFolder.getCanonicalPath)), Map.empty, None)
       // doesn't throw an exception
       assert(catalog1.listLeafFiles(catalog1.rootPaths).isEmpty)
+    }
+  }
+
+  test("PartitioningAwareFileIndex listing parallelized with many top level dirs") {
+    for ((scale, expectedNumPar) <- Seq((10, 0), (50, 1))) {
+      withTempDir { dir =>
+        val topLevelDirs = (1 to scale).map { i =>
+          val tmp = new File(dir, s"foo=$i.txt")
+          tmp.mkdir()
+          new Path(tmp.getCanonicalPath)
+        }
+        HiveCatalogMetrics.reset()
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+        new InMemoryFileIndex(spark, topLevelDirs, Map.empty, None)
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == expectedNumPar)
+      }
+    }
+  }
+
+  test("PartitioningAwareFileIndex listing parallelized with large child dirs") {
+    for ((scale, expectedNumPar) <- Seq((10, 0), (50, 1))) {
+      withTempDir { dir =>
+        for (i <- 1 to scale) {
+          new File(dir, s"foo=$i.txt").mkdir()
+        }
+        HiveCatalogMetrics.reset()
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+        new InMemoryFileIndex(spark, Seq(new Path(dir.getCanonicalPath)), Map.empty, None)
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == expectedNumPar)
+      }
+    }
+  }
+
+  test("PartitioningAwareFileIndex listing parallelized with large, deeply nested child dirs") {
+    for ((scale, expectedNumPar) <- Seq((10, 0), (50, 4))) {
+      withTempDir { dir =>
+        for (i <- 1 to 2) {
+          val subdirA = new File(dir, s"a=$i")
+          subdirA.mkdir()
+          for (j <- 1 to 2) {
+            val subdirB = new File(subdirA, s"b=$j")
+            subdirB.mkdir()
+            for (k <- 1 to scale) {
+              new File(subdirB, s"foo=$k.txt").mkdir()
+            }
+          }
+        }
+        HiveCatalogMetrics.reset()
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+        new InMemoryFileIndex(spark, Seq(new Path(dir.getCanonicalPath)), Map.empty, None)
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == expectedNumPar)
+      }
     }
   }
 

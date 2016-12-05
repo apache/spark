@@ -58,6 +58,9 @@ class StreamExecution(
 
   private val pollingDelayMs = sparkSession.sessionState.conf.streamingPollingDelay
 
+  private val noDataProgressEventInterval =
+    sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
+
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
    */
@@ -85,7 +88,7 @@ class StreamExecution(
    * once, since the field's value may change at any time.
    */
   @volatile
-  protected var availableOffsets = new StreamProgress
+  var availableOffsets = new StreamProgress
 
   /** The current batchId or -1 if execution has not yet been initialized. */
   protected var currentBatchId: Long = -1
@@ -214,6 +217,9 @@ class StreamExecution(
       // While active, repeatedly attempt to run batches.
       SparkSession.setActiveSession(sparkSession)
 
+      // The timestamp we report an event that has no input data
+      var lastNoDataProgressEventTime = Long.MinValue
+
       triggerExecutor.execute(() => {
         startTrigger()
 
@@ -236,7 +242,17 @@ class StreamExecution(
 
             // Report trigger as finished and construct progress object.
             finishTrigger(dataAvailable)
-            postEvent(new QueryProgressEvent(lastProgress))
+            if (dataAvailable) {
+              // Reset noDataEventTimestamp if we processed any data
+              lastNoDataProgressEventTime = Long.MinValue
+              postEvent(new QueryProgressEvent(lastProgress))
+            } else {
+              val now = triggerClock.getTimeMillis()
+              if (now - noDataProgressEventInterval >= lastNoDataProgressEventTime) {
+                lastNoDataProgressEventTime = now
+                postEvent(new QueryProgressEvent(lastProgress))
+              }
+            }
 
             if (dataAvailable) {
               // We'll increase currentBatchId after we complete processing current batch's data
@@ -265,8 +281,9 @@ class StreamExecution(
           this,
           s"Query $prettyIdString terminated with exception: ${e.getMessage}",
           e,
-          Some(committedOffsets.toOffsetSeq(sources, offsetSeqMetadata)))
-        logError(s"Query $prettyIdString terminated with error", e)
+          committedOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString,
+          availableOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString)
+        logError(s"Query $name terminated with error", e)
         updateStatusMessage(s"Terminated with exception: ${e.getMessage}")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
         // handle them

@@ -17,15 +17,7 @@
 
 package org.apache.spark.util.sketch;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.OutputStream;
-import java.io.Serializable;
-import java.math.BigDecimal;
+import java.io.*;
 import java.util.Arrays;
 import java.util.Random;
 
@@ -153,16 +145,8 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
   public void add(Object item, long count) {
     if (item instanceof String) {
       addString((String) item, count);
-    } else if (item instanceof BigDecimal) {
-      addString(((BigDecimal) item).toString(), count);
     } else if (item instanceof byte[]) {
       addBinary((byte[]) item, count);
-    } else if (item instanceof Float) {
-      addLong(Float.floatToIntBits((Float) item), count);
-    } else if (item instanceof Double) {
-      addLong(Double.doubleToLongBits((Double) item), count);
-    } else if (item instanceof Boolean) {
-      addLong(((Boolean) item) ? 1L : 0L, count);
     } else {
       addLong(Utils.integralToLong(item), count);
     }
@@ -227,6 +211,10 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
     return ((int) hash) % width;
   }
 
+  private static int[] getHashBuckets(String key, int hashCount, int max) {
+    return getHashBuckets(Utils.getBytesFromUTF8String(key), hashCount, max);
+  }
+
   private static int[] getHashBuckets(byte[] b, int hashCount, int max) {
     int[] result = new int[hashCount];
     int hash1 = Murmur3_x86_32.hashUnsafeBytes(b, Platform.BYTE_ARRAY_OFFSET, b.length, 0);
@@ -240,18 +228,9 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
   @Override
   public long estimateCount(Object item) {
     if (item instanceof String) {
-      return estimateCountForBinaryItem(Utils.getBytesFromUTF8String((String) item));
-    } else if (item instanceof BigDecimal) {
-      return estimateCountForBinaryItem(
-        Utils.getBytesFromUTF8String(((BigDecimal) item).toString()));
+      return estimateCountForStringItem((String) item);
     } else if (item instanceof byte[]) {
       return estimateCountForBinaryItem((byte[]) item);
-    } else if (item instanceof Float) {
-      return estimateCountForLongItem(Float.floatToIntBits((Float) item));
-    } else if (item instanceof Double) {
-      return estimateCountForLongItem(Double.doubleToLongBits((Double) item));
-    } else if (item instanceof Boolean) {
-      return estimateCountForLongItem(((Boolean) item) ? 1L : 0L);
     } else {
       return estimateCountForLongItem(Utils.integralToLong(item));
     }
@@ -261,6 +240,15 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
     long res = Long.MAX_VALUE;
     for (int i = 0; i < depth; ++i) {
       res = Math.min(res, table[i][hash(item, i)]);
+    }
+    return res;
+  }
+
+  private long estimateCountForStringItem(String item) {
+    long res = Long.MAX_VALUE;
+    int[] buckets = getHashBuckets(item, depth, width);
+    for (int i = 0; i < depth; ++i) {
+      res = Math.min(res, table[i][buckets[i]]);
     }
     return res;
   }
@@ -330,6 +318,14 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
         dos.writeLong(table[i][j]);
       }
     }
+  }
+
+  @Override
+  public byte[] toByteArray() throws IOException {
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    writeTo(out);
+    out.close();
+    return out.toByteArray();
   }
 
   public static CountMinSketchImpl readFrom(InputStream in) throws IOException {

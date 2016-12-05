@@ -1137,6 +1137,35 @@ class SQLTests(ReusedPySparkTestCase):
             q.stop()
             shutil.rmtree(tmpPath)
 
+    def test_stream_exception(self):
+        sdf = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+        sq = sdf.writeStream.format('memory').queryName('query_explain').start()
+        try:
+            sq.processAllAvailable()
+            self.assertEqual(sq.exception(), None)
+        finally:
+            sq.stop()
+
+        from pyspark.sql.functions import col, udf
+        from pyspark.sql.utils import StreamingQueryException
+        bad_udf = udf(lambda x: 1 / 0)
+        sq = sdf.select(bad_udf(col("value")))\
+            .writeStream\
+            .format('memory')\
+            .queryName('this_query')\
+            .start()
+        try:
+            # Process some data to fail the query
+            sq.processAllAvailable()
+            self.fail("bad udf should fail the query")
+        except StreamingQueryException as e:
+            # This is expected
+            self.assertTrue("ZeroDivisionError" in e.desc)
+        finally:
+            sq.stop()
+        self.assertTrue(type(sq.exception()) is StreamingQueryException)
+        self.assertTrue("ZeroDivisionError" in sq.exception().desc)
+
     def test_query_manager_await_termination(self):
         df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
         for q in self.spark._wrapped.streams.active:
@@ -1980,6 +2009,41 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         # Regression test for SPARK-17514: limit(n).collect() should the perform same as take(n)
         assert_runs_only_one_job_stage_and_task("collect_limit", lambda: df.limit(1).collect())
 
+    @unittest.skipIf(sys.version_info < (3, 3), "Unittest < 3.3 doesn't support mocking")
+    def test_unbounded_frames(self):
+        from unittest.mock import patch
+        from pyspark.sql import functions as F
+        from pyspark.sql import window
+        import importlib
+
+        df = self.spark.range(0, 3)
+
+        def rows_frame_match():
+            return "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING" in df.select(
+                F.count("*").over(window.Window.rowsBetween(-sys.maxsize, sys.maxsize))
+            ).columns[0]
+
+        def range_frame_match():
+            return "RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING" in df.select(
+                F.count("*").over(window.Window.rangeBetween(-sys.maxsize, sys.maxsize))
+            ).columns[0]
+
+        with patch("sys.maxsize", 2 ** 31 - 1):
+            importlib.reload(window)
+            self.assertTrue(rows_frame_match())
+            self.assertTrue(range_frame_match())
+
+        with patch("sys.maxsize", 2 ** 63 - 1):
+            importlib.reload(window)
+            self.assertTrue(rows_frame_match())
+            self.assertTrue(range_frame_match())
+
+        with patch("sys.maxsize", 2 ** 127 - 1):
+            importlib.reload(window)
+            self.assertTrue(rows_frame_match())
+            self.assertTrue(range_frame_match())
+
+        importlib.reload(window)
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *
