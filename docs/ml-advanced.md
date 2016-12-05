@@ -65,7 +65,7 @@ where $\lambda$ is the regularization parameter, $\delta$ is the population stan
 and $\sigma_j$ is the population standard deviation of the j-th feature column.
 
 This objective function has an analytic solution and it requires only one pass over the data to collect necessary statistics to solve. For an
-$n \times m$ data matrix, these statistics require only $O(m^2)$ storage and so can be stored on a single machine when $n$ (the number of features) is
+$n \times m$ data matrix, these statistics require only $O(m^2)$ storage and so can be stored on a single machine when $m$ (the number of features) is
 relatively small. We can then solve the normal equations on a single machine using local methods like direct Cholesky factorization or iterative optimization programs.
 
 Spark ML currently supports two types of solvers for the normal equations: Cholesky factorization and Quasi-Newton methods (L-BFGS/OWL-QN). Cholesky factorization
