@@ -46,7 +46,7 @@ class TaskContext(object):
     def __init__(self):
         """Construct a TaskContext, use get instead"""
         pass
-    
+
     @classmethod
     def get(cls):
         """
@@ -78,7 +78,8 @@ class TaskContext(object):
 
     def taskAttemptId(self):
         """
-        An ID that is unique to this task attempt (within the same SparkContext, no two task attempts
-        will share the same attempt ID).  This is roughly equivalent to Hadoop's TaskAttemptID.
+        An ID that is unique to this task attempt (within the same SparkContext, no two task
+        attempts will share the same attempt ID).  This is roughly equivalent to Hadoop's
+        TaskAttemptID.
         """
         return self._taskAttemptId

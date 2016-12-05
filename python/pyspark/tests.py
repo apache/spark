@@ -507,6 +507,7 @@ class TaskContextTests(PySparkTestCase):
         rdd = self.sc.parallelize(range(10))
         attemptNumbers = rdd.map(lambda x: TaskContext.get().attemptNumber())
         self.assertEqual(0, attemptNumbers.take(1)[0])
+
         def fail_on_first(x):
             """Fail on the first attempt so we get a positive attempt number"""
             tc = TaskContext.get()
