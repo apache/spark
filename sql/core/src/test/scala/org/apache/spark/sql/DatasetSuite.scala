@@ -1110,7 +1110,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
     assert(e.getMessage.contains("Cannot create encoder for Option of Product type"))
   }
+
+  test("SPARK-18717: code generation works for both scala.collection.Map" +
+    " and scala.collection.imutable.Map") {
+    val ds = Seq(WithImmutableMap("hi", Map(42L -> "foo"))).toDS
+    checkDataset(ds.map(t => t), WithImmutableMap("hi", Map(42L -> "foo")))
+
+    val ds2 = Seq(WithMap("hi", Map(42L -> "foo"))).toDS
+    checkDataset(ds2.map(t => t), WithMap("hi", Map(42L -> "foo")))
+  }
 }
+
+case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map[Long, String])
+case class WithMap(id: String, map_test: scala.collection.Map[Long, String])
 
 case class Generic[T](id: T, value: Double)
 
