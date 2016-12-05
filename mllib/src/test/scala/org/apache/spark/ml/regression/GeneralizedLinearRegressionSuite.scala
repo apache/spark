@@ -95,16 +95,7 @@ class GeneralizedLinearRegressionSuite
       LabeledPoint(0.0, Vectors.dense(15, 0.0)),
       LabeledPoint(0.0, Vectors.dense(13, 2.0)),
       LabeledPoint(0.0, Vectors.dense(15, 1.0)),
-      LabeledPoint(1.0, Vectors.dense(16, 1.0)),
-      LabeledPoint(0.0, Vectors.dense(10, 0.0)),
-      LabeledPoint(0.0, Vectors.dense(15, 0.0)),
-      LabeledPoint(0.0, Vectors.dense(12, 2.0)),
-      LabeledPoint(0.0, Vectors.dense(13, 0.0)),
-      LabeledPoint(1.0, Vectors.dense(15, 0.0)),
-      LabeledPoint(1.0, Vectors.dense(15, 0.0)),
-      LabeledPoint(0.0, Vectors.dense(15, 0.0)),
-      LabeledPoint(0.0, Vectors.dense(12, 2.0)),
-      LabeledPoint(1.0, Vectors.dense(12, 2.0))
+      LabeledPoint(1.0, Vectors.dense(16, 1.0))
     ).toDF()
 
     datasetPoissonIdentity = generateGeneralizedLinearRegressionInput(
@@ -492,12 +483,12 @@ class GeneralizedLinearRegressionSuite
          model <- glm(formula, family="poisson", data=data)
          print(as.vector(coef(model)))
        }
-       [1] -0.0666978 -0.2369600
-       [1] -1.2464752   0.0194581  -0.1853699
+       [1] -0.0457441 -0.6833928
+       [1] 1.8121235  -0.1747493  -0.5815417
      */
     val expected = Seq(
-      Vectors.dense(0.0, -0.0666978, -0.2369600),
-      Vectors.dense(-1.2464752, 0.0194581, -0.1853699))
+      Vectors.dense(0.0, -0.0457441, -0.6833928),
+      Vectors.dense(1.8121235, -0.1747493, -0.5815417))
 
     import GeneralizedLinearRegression._
 
@@ -509,6 +500,7 @@ class GeneralizedLinearRegressionSuite
         .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
       val model = trainer.fit(dataset)
       val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
+      println("coeff is " + actual)
       assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with poisson family, " +
         s"$link link and fitIntercept = $fitIntercept (with zero values).")
       idx += 1
