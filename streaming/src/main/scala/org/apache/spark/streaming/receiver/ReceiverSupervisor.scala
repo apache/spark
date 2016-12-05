@@ -22,6 +22,7 @@ import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent._
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
@@ -33,8 +34,8 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * Abstract class that is responsible for supervising a Receiver in the worker.
  * It provides all the necessary interfaces for handling the data received by the receiver.
  */
-private[streaming] abstract class ReceiverSupervisor(
-    receiver: Receiver[_],
+private[streaming] abstract class ReceiverSupervisor[T: ClassTag](
+    receiver: Receiver[T],
     conf: SparkConf
   ) extends Logging {
 
@@ -70,7 +71,7 @@ private[streaming] abstract class ReceiverSupervisor(
   @volatile private[streaming] var receiverState = Initialized
 
   /** Push a single data item to backend data store. */
-  def pushSingle(data: Any): Unit
+  def pushSingle(data: T): Unit
 
   /** Store the bytes of received data as a data block into Spark's memory. */
   def pushBytes(
@@ -81,14 +82,14 @@ private[streaming] abstract class ReceiverSupervisor(
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def pushIterator(
-      iterator: Iterator[_],
+      iterator: Iterator[T],
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
     ): Unit
 
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def pushArrayBuffer(
-      arrayBuffer: ArrayBuffer[_],
+      arrayBuffer: ArrayBuffer[T],
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
     ): Unit
@@ -100,7 +101,7 @@ private[streaming] abstract class ReceiverSupervisor(
    * Note: Do not explicitly start or stop the `BlockGenerator`, the `ReceiverSupervisorImpl`
    * will take care of it.
    */
-  def createBlockGenerator(blockGeneratorListener: BlockGeneratorListener): BlockGenerator
+  def createBlockGenerator(blockGeneratorListener: BlockGeneratorListener[T]): BlockGenerator[T]
 
   /** Report errors. */
   def reportError(message: String, throwable: Throwable): Unit

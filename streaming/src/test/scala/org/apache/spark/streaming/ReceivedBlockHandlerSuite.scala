@@ -20,6 +20,7 @@ package org.apache.spark.streaming
 import java.io.File
 import java.nio.ByteBuffer
 
+import scala.collection.immutable.Range
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -111,8 +112,9 @@ class ReceivedBlockHandlerSuite
   }
 
   test("BlockManagerBasedBlockHandler - store blocks") {
-    withBlockManagerBasedBlockHandler { handler =>
-      testBlockStoring(handler) { case (data, blockIds, storeResults) =>
+    withBlockManagerBasedBlockHandler[String] { handler =>
+      val data = Seq.tabulate(100) { _.toString }
+      testBlockStoring(handler, data) { case (data, blockIds, storeResults) =>
         // Verify the data in block manager is correct
         val storedData = blockIds.flatMap { blockId =>
           blockManager
@@ -132,14 +134,16 @@ class ReceivedBlockHandlerSuite
   }
 
   test("BlockManagerBasedBlockHandler - handle errors in storing block") {
-    withBlockManagerBasedBlockHandler { handler =>
-      testErrorHandling(handler)
+    withBlockManagerBasedBlockHandler[Int] { handler =>
+      val iterator = (10 to (-10, -1)).toIterator.map { _ / 0 }
+      testErrorHandling(handler, iterator)
     }
   }
 
   test("WriteAheadLogBasedBlockHandler - store blocks") {
-    withWriteAheadLogBasedBlockHandler { handler =>
-      testBlockStoring(handler) { case (data, blockIds, storeResults) =>
+    withWriteAheadLogBasedBlockHandler[String] { handler =>
+      val data = Seq.tabulate(100) { _.toString }
+      testBlockStoring(handler, data) { case (data, blockIds, storeResults) =>
         // Verify the data in block manager is correct
         val storedData = blockIds.flatMap { blockId =>
           blockManager
@@ -172,13 +176,14 @@ class ReceivedBlockHandlerSuite
   }
 
   test("WriteAheadLogBasedBlockHandler - handle errors in storing block") {
-    withWriteAheadLogBasedBlockHandler { handler =>
-      testErrorHandling(handler)
+    withWriteAheadLogBasedBlockHandler[Int] { handler =>
+      val iterator = (10 to (-10, -1)).toIterator.map { _ / 0 }
+      testErrorHandling(handler, iterator)
     }
   }
 
   test("WriteAheadLogBasedBlockHandler - clean old blocks") {
-    withWriteAheadLogBasedBlockHandler { handler =>
+    withWriteAheadLogBasedBlockHandler[Range.Inclusive] { handler =>
       val blocks = Seq.tabulate(10) { i => IteratorBlock(Iterator(1 to i)) }
       storeBlocks(handler, blocks)
 
@@ -227,7 +232,7 @@ class ReceivedBlockHandlerSuite
     // BlockManager will not be able to unroll this block
     // and hence it will not tryToPut this block, resulting the SparkException
     storageLevel = StorageLevel.MEMORY_ONLY
-    withBlockManagerBasedBlockHandler { handler =>
+    withBlockManagerBasedBlockHandler[Array[Byte]] { handler =>
       val thrown = intercept[SparkException] {
         storeSingleBlock(handler, IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator))
       }
@@ -285,9 +290,9 @@ class ReceivedBlockHandlerSuite
    * Test storing of data using different types of Handler, StorageLevel and ReceivedBlocks
    * and verify the correct record count
    */
-  private def testRecordcount(isBlockManagedBasedBlockHandler: Boolean,
+  private def testRecordcount[T: ClassTag](isBlockManagedBasedBlockHandler: Boolean,
       sLevel: StorageLevel,
-      receivedBlock: ReceivedBlock,
+      receivedBlock: ReceivedBlock[T],
       bManager: BlockManager,
       expectedNumRecords: Option[Long]
       ) {
@@ -297,7 +302,7 @@ class ReceivedBlockHandlerSuite
     try {
       if (isBlockManagedBasedBlockHandler) {
         // test received block with BlockManager based handler
-        withBlockManagerBasedBlockHandler { handler =>
+        withBlockManagerBasedBlockHandler[T] { handler =>
           val (blockId, blockStoreResult) = storeSingleBlock(handler, receivedBlock)
           bId = blockId
           assert(blockStoreResult.numRecords === expectedNumRecords,
@@ -307,7 +312,7 @@ class ReceivedBlockHandlerSuite
        }
       } else {
         // test received block with WAL based handler
-        withWriteAheadLogBasedBlockHandler { handler =>
+        withWriteAheadLogBasedBlockHandler[T] { handler =>
           val (blockId, blockStoreResult) = storeSingleBlock(handler, receivedBlock)
           bId = blockId
           assert(blockStoreResult.numRecords === expectedNumRecords,
@@ -326,11 +331,12 @@ class ReceivedBlockHandlerSuite
    * Test storing of data using different forms of ReceivedBlocks and verify that they succeeded
    * using the given verification function
    */
-  private def testBlockStoring(receivedBlockHandler: ReceivedBlockHandler)
-      (verifyFunc: (Seq[String], Seq[StreamBlockId], Seq[ReceivedBlockStoreResult]) => Unit) {
-    val data = Seq.tabulate(100) { _.toString }
+  private def testBlockStoring[T: ClassTag](
+      receivedBlockHandler: ReceivedBlockHandler[T],
+      data: Seq[T])
+      (verifyFunc: (Seq[T], Seq[StreamBlockId], Seq[ReceivedBlockStoreResult]) => Unit) {
 
-    def storeAndVerify(blocks: Seq[ReceivedBlock]) {
+    def storeAndVerify(blocks: Seq[ReceivedBlock[T]]) {
       blocks should not be empty
       val (blockIds, storeResults) = storeBlocks(receivedBlockHandler, blocks)
       withClue(s"Testing with ${blocks.head.getClass.getSimpleName}s:") {
@@ -342,21 +348,21 @@ class ReceivedBlockHandlerSuite
       }
     }
 
-    def dataToByteBuffer(b: Seq[String]) =
+    def dataToByteBuffer(b: Seq[T]) =
       serializerManager.dataSerialize(generateBlockId, b.iterator)
 
     val blocks = data.grouped(10).toSeq
 
     storeAndVerify(blocks.map { b => IteratorBlock(b.toIterator) })
     storeAndVerify(blocks.map { b => ArrayBufferBlock(new ArrayBuffer ++= b) })
-    storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b).toByteBuffer) })
+    storeAndVerify(blocks.map { b => ByteBufferBlock[T](dataToByteBuffer(b).toByteBuffer) })
   }
 
   /** Test error handling when blocks that cannot be stored */
-  private def testErrorHandling(receivedBlockHandler: ReceivedBlockHandler) {
+  private def testErrorHandling[T: ClassTag](receivedBlockHandler: ReceivedBlockHandler[T],
+      iterator: Iterator[T]) {
     // Handle error in iterator (e.g. divide-by-zero error)
     intercept[Exception] {
-      val iterator = (10 to (-10, -1)).toIterator.map { _ / 0 }
       receivedBlockHandler.storeBlock(StreamBlockId(1, 1), IteratorBlock(iterator))
     }
 
@@ -368,15 +374,17 @@ class ReceivedBlockHandlerSuite
   }
 
   /** Instantiate a BlockManagerBasedBlockHandler and run a code with it */
-  private def withBlockManagerBasedBlockHandler(body: BlockManagerBasedBlockHandler => Unit) {
+  private def withBlockManagerBasedBlockHandler[T: ClassTag]
+      (body: BlockManagerBasedBlockHandler[T] => Unit) {
     body(new BlockManagerBasedBlockHandler(blockManager, storageLevel))
   }
 
   /** Instantiate a WriteAheadLogBasedBlockHandler and run a code with it */
-  private def withWriteAheadLogBasedBlockHandler(body: WriteAheadLogBasedBlockHandler => Unit) {
+  private def withWriteAheadLogBasedBlockHandler[T: ClassTag]
+      (body: WriteAheadLogBasedBlockHandler[T] => Unit) {
     require(WriteAheadLogUtils.getRollingIntervalSecs(conf, isDriver = false) === 1)
-    val receivedBlockHandler = new WriteAheadLogBasedBlockHandler(blockManager, serializerManager,
-      1, storageLevel, conf, hadoopConf, tempDirectory.toString, manualClock)
+    val receivedBlockHandler = new WriteAheadLogBasedBlockHandler[T](blockManager,
+      serializerManager, 1, storageLevel, conf, hadoopConf, tempDirectory.toString, manualClock)
     try {
       body(receivedBlockHandler)
     } finally {
@@ -385,9 +393,9 @@ class ReceivedBlockHandlerSuite
   }
 
   /** Store blocks using a handler */
-  private def storeBlocks(
-      receivedBlockHandler: ReceivedBlockHandler,
-      blocks: Seq[ReceivedBlock]
+  private def storeBlocks[T: ClassTag](
+      receivedBlockHandler: ReceivedBlockHandler[T],
+      blocks: Seq[ReceivedBlock[T]]
     ): (Seq[StreamBlockId], Seq[ReceivedBlockStoreResult]) = {
     val blockIds = Seq.fill(blocks.size)(generateBlockId())
     val storeResults = blocks.zip(blockIds).map {
@@ -401,9 +409,9 @@ class ReceivedBlockHandlerSuite
   }
 
   /** Store single block using a handler */
-  private def storeSingleBlock(
-      handler: ReceivedBlockHandler,
-      block: ReceivedBlock
+  private def storeSingleBlock[T: ClassTag](
+      handler: ReceivedBlockHandler[T],
+      block: ReceivedBlock[T]
     ): (StreamBlockId, ReceivedBlockStoreResult) = {
     val blockId = generateBlockId
     val blockStoreResult = handler.storeBlock(blockId, block)

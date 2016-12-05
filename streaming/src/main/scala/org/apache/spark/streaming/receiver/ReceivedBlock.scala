@@ -21,15 +21,19 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
+import scala.reflect.ClassTag
 
 /** Trait representing a received block */
-private[streaming] sealed trait ReceivedBlock
+private[streaming] abstract class ReceivedBlock[T: ClassTag]
 
 /** class representing a block received as an ArrayBuffer */
-private[streaming] case class ArrayBufferBlock(arrayBuffer: ArrayBuffer[_]) extends ReceivedBlock
+private[streaming] case class ArrayBufferBlock[T: ClassTag](arrayBuffer: ArrayBuffer[T])
+  extends ReceivedBlock[T]
 
 /** class representing a block received as an Iterator */
-private[streaming] case class IteratorBlock(iterator: Iterator[_]) extends ReceivedBlock
+private[streaming] case class IteratorBlock[T: ClassTag](iterator: Iterator[T])
+  extends ReceivedBlock[T]
 
 /** class representing a block received as a ByteBuffer */
-private[streaming] case class ByteBufferBlock(byteBuffer: ByteBuffer) extends ReceivedBlock
+private[streaming] case class ByteBufferBlock[T: ClassTag](byteBuffer: ByteBuffer)
+  extends ReceivedBlock[T]

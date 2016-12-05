@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
 import com.google.common.base.Throwables
 import org.apache.hadoop.conf.Configuration
@@ -42,8 +43,8 @@ import org.apache.spark.util.RpcUtils
  * the receiver. Specifically, it creates a [[org.apache.spark.streaming.receiver.BlockGenerator]]
  * object that is used to divide the received data stream into blocks of data.
  */
-private[streaming] class ReceiverSupervisorImpl(
-    receiver: Receiver[_],
+private[streaming] class ReceiverSupervisorImpl[T: ClassTag](
+    receiver: Receiver[T],
     env: SparkEnv,
     hadoopConf: Configuration,
     checkpointDirOption: Option[String]
@@ -52,7 +53,7 @@ private[streaming] class ReceiverSupervisorImpl(
   private val host = SparkEnv.get.blockManager.blockManagerId.host
   private val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
 
-  private val receivedBlockHandler: ReceivedBlockHandler = {
+  private val receivedBlockHandler: ReceivedBlockHandler[T] = {
     if (WriteAheadLogUtils.enableReceiverLog(env.conf)) {
       if (checkpointDirOption.isEmpty) {
         throw new SparkException(
@@ -94,11 +95,13 @@ private[streaming] class ReceiverSupervisorImpl(
   /** Unique block ids if one wants to add blocks directly */
   private val newBlockId = new AtomicLong(System.currentTimeMillis())
 
-  private val registeredBlockGenerators = new ConcurrentLinkedQueue[BlockGenerator]()
+  private val registeredBlockGenerators = new ConcurrentLinkedQueue[BlockGenerator[T]]()
 
   /** Divides received data records into data blocks for pushing in BlockManager. */
-  private val defaultBlockGeneratorListener = new BlockGeneratorListener {
-    def onAddData(data: Any, metadata: Any): Unit = { }
+  private val defaultBlockGeneratorListener = new BlockGeneratorListener[T] {
+    def onAddData(data: T, metadata: Any): Unit = { }
+
+    def onAddData(data: ArrayBuffer[T], metadata: Any): Unit = {}
 
     def onGenerateBlock(blockId: StreamBlockId): Unit = { }
 
@@ -106,7 +109,7 @@ private[streaming] class ReceiverSupervisorImpl(
       reportError(message, throwable)
     }
 
-    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]) {
+    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[T]) {
       pushArrayBuffer(arrayBuffer, None, Some(blockId))
     }
   }
@@ -116,13 +119,13 @@ private[streaming] class ReceiverSupervisorImpl(
   override private[streaming] def getCurrentRateLimit: Long = defaultBlockGenerator.getCurrentLimit
 
   /** Push a single record of received data into block generator. */
-  def pushSingle(data: Any) {
+  def pushSingle(data: T) {
     defaultBlockGenerator.addData(data)
   }
 
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def pushArrayBuffer(
-      arrayBuffer: ArrayBuffer[_],
+      arrayBuffer: ArrayBuffer[T],
       metadataOption: Option[Any],
       blockIdOption: Option[StreamBlockId]
     ) {
@@ -131,7 +134,7 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def pushIterator(
-      iterator: Iterator[_],
+      iterator: Iterator[T],
       metadataOption: Option[Any],
       blockIdOption: Option[StreamBlockId]
     ) {
@@ -149,7 +152,7 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Store block and report it to driver */
   def pushAndReportBlock(
-      receivedBlock: ReceivedBlock,
+      receivedBlock: ReceivedBlock[T],
       metadataOption: Option[Any],
       blockIdOption: Option[StreamBlockId]
     ) {
@@ -193,7 +196,7 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
   override def createBlockGenerator(
-      blockGeneratorListener: BlockGeneratorListener): BlockGenerator = {
+      blockGeneratorListener: BlockGeneratorListener[T]): BlockGenerator[T] = {
     // Cleanup BlockGenerators that have already been stopped
     val stoppedGenerators = registeredBlockGenerators.asScala.filter{ _.isStopped() }
     stoppedGenerators.foreach(registeredBlockGenerators.remove(_))

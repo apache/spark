@@ -103,7 +103,7 @@ public class JavaReceiverAPISuite implements Serializable {
     private int port = -1;
 
     JavaSocketReceiver(String host_ , int port_) {
-      super(StorageLevel.MEMORY_AND_DISK());
+      super(String.class, StorageLevel.MEMORY_AND_DISK());
       host = host_;
       port = port_;
     }

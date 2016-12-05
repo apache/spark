@@ -21,13 +21,15 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.language.reflectiveCalls
+import scala.reflect.ClassTag
 
-import org.scalatest.BeforeAndAfter
-import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.time.SpanSugar._
+import org.scalatest.BeforeAndAfter
+import org.scalatest.Matchers._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.storage.StreamBlockId
@@ -37,7 +39,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val blockIntervalMs = 10
   private val conf = new SparkConf().set("spark.streaming.blockInterval", s"${blockIntervalMs}ms")
-  @volatile private var blockGenerator: BlockGenerator = null
+  @volatile private var blockGenerator: BlockGenerator[Int] = null
 
   after {
     if (blockGenerator != null) {
@@ -46,7 +48,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("block generation and data callbacks") {
-    val listener = new TestBlockGeneratorListener
+    val listener = new TestBlockGeneratorListener[Int]
     val clock = new ManualClock()
 
     require(blockIntervalMs > 5)
@@ -141,7 +143,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("stop ensures correct shutdown") {
-    val listener = new TestBlockGeneratorListener
+    val listener = new TestBlockGeneratorListener[Int]
     val clock = new ManualClock()
     blockGenerator = new BlockGenerator(listener, 0, conf, clock)
     require(listener.onGenerateBlockCalled === false)
@@ -201,10 +203,10 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("block push errors are reported") {
-    val listener = new TestBlockGeneratorListener {
+    val listener = new TestBlockGeneratorListener[Int] {
       @volatile var errorReported = false
       override def onPushBlock(
-          blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
+          blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[Int]): Unit = {
         throw new SparkException("test")
       }
       override def onError(message: String, throwable: Throwable): Unit = {
@@ -225,7 +227,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
    * Helper method to stop the block generator with manual clock in a different thread,
    * so that the main thread can advance the clock that allows the stopping to proceed.
    */
-  private def stopBlockGenerator(blockGenerator: BlockGenerator): Thread = {
+  private def stopBlockGenerator[T: ClassTag](blockGenerator: BlockGenerator[T]): Thread = {
     val thread = new Thread() {
       override def run(): Unit = {
         blockGenerator.stop()
@@ -236,15 +238,15 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   /** A listener for BlockGenerator that records the data in the callbacks */
-  private class TestBlockGeneratorListener extends BlockGeneratorListener {
-    val pushedData = new ConcurrentLinkedQueue[Any]
-    val addedData = new ConcurrentLinkedQueue[Any]
+  private class TestBlockGeneratorListener[T: ClassTag] extends BlockGeneratorListener[T] {
+    val pushedData = new ConcurrentLinkedQueue[T]
+    val addedData = new ConcurrentLinkedQueue[T]
     val addedMetadata = new ConcurrentLinkedQueue[Any]
     @volatile var onGenerateBlockCalled = false
     @volatile var onAddDataCalled = false
     @volatile var onPushBlockCalled = false
 
-    override def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
+    override def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[T]): Unit = {
       pushedData.addAll(arrayBuffer.asJava)
       onPushBlockCalled = true
     }
@@ -252,8 +254,13 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
     override def onGenerateBlock(blockId: StreamBlockId): Unit = {
       onGenerateBlockCalled = true
     }
-    override def onAddData(data: Any, metadata: Any): Unit = {
+    override def onAddData(data: T, metadata: Any): Unit = {
       addedData.add(data)
+      addedMetadata.add(metadata)
+      onAddDataCalled = true
+    }
+    def onAddData(data: ArrayBuffer[T], metadata: Any): Unit = {
+      data.foreach(data => addedData.add(data))
       addedMetadata.add(metadata)
       onAddDataCalled = true
     }

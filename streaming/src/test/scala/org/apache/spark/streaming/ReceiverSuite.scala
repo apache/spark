@@ -23,6 +23,7 @@ import java.util.concurrent.Semaphore
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts
@@ -130,7 +131,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
   }
 
   ignore("block generator throttling") {
-    val blockGeneratorListener = new FakeBlockGeneratorListener
+    val blockGeneratorListener = new FakeBlockGeneratorListener[Int]
     val blockIntervalMs = 100
     val maxRate = 1001
     val conf = new SparkConf().set("spark.streaming.blockInterval", s"${blockIntervalMs}ms").
@@ -278,8 +279,8 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
    * Instead of storing the data in the BlockManager, it stores all the data in a local buffer
    * that can used for verifying that the data has been forwarded correctly.
    */
-  class FakeReceiverSupervisor(receiver: FakeReceiver)
-    extends ReceiverSupervisor(receiver, new SparkConf()) {
+  class FakeReceiverSupervisor[T: ClassTag](receiver: FakeReceiver)
+    extends ReceiverSupervisor[T](receiver.asInstanceOf[Receiver[T]], new SparkConf()) {
     val singles = new ArrayBuffer[Any]
     val byteBuffers = new ArrayBuffer[ByteBuffer]
     val iterators = new ArrayBuffer[Iterator[_]]
@@ -292,7 +293,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
         arrayBuffers.isEmpty && errors.isEmpty
     }
 
-    def pushSingle(data: Any) {
+    def pushSingle(data: T) {
       singles += data
     }
 
@@ -304,14 +305,14 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     }
 
     def pushIterator(
-        iterator: Iterator[_],
+        iterator: Iterator[T],
         optionalMetadata: Option[Any],
         optionalBlockId: Option[StreamBlockId]) {
       iterators += iterator
     }
 
     def pushArrayBuffer(
-        arrayBuffer: ArrayBuffer[_],
+        arrayBuffer: ArrayBuffer[T],
         optionalMetadata: Option[Any],
         optionalBlockId: Option[StreamBlockId]) {
       arrayBuffers +=  arrayBuffer
@@ -324,7 +325,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     override protected def onReceiverStart(): Boolean = true
 
     override def createBlockGenerator(
-        blockGeneratorListener: BlockGeneratorListener): BlockGenerator = {
+        blockGeneratorListener: BlockGeneratorListener[T]): BlockGenerator[T] = {
       null
     }
   }
@@ -332,16 +333,19 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
   /**
    * An implementation of BlockGeneratorListener that is used to test the BlockGenerator.
    */
-  class FakeBlockGeneratorListener(pushDelay: Long = 0) extends BlockGeneratorListener {
+  class FakeBlockGeneratorListener[T: ClassTag](pushDelay: Long = 0)
+      extends BlockGeneratorListener[T] {
     // buffer of data received as ArrayBuffers
     val arrayBuffers = new ArrayBuffer[ArrayBuffer[Int]]
     val errors = new ArrayBuffer[Throwable]
 
-    def onAddData(data: Any, metadata: Any) { }
+    def onAddData(data: T, metadata: Any) { }
+
+    def onAddData(data: ArrayBuffer[T], metadata: Any) { }
 
     def onGenerateBlock(blockId: StreamBlockId) { }
 
-    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]) {
+    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[T]) {
       val bufferOfInts = arrayBuffer.map(_.asInstanceOf[Int])
       arrayBuffers += bufferOfInts
       Thread.sleep(0)

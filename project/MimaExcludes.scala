@@ -106,7 +106,13 @@ object MimaExcludes {
       ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasAggregationDepth.org$apache$spark$ml$param$shared$HasAggregationDepth$_setter_$aggregationDepth_="),
 
       // [SPARK-18236] Reduce duplicate objects in Spark UI and HistoryServer
-      ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.scheduler.TaskInfo.accumulables")
+      ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.scheduler.TaskInfo.accumulables"),
+
+      // [SPARK-18560] Receiver data can not be dataSerialized properly.
+      ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.streaming.receiver.BlockGeneratorListener"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.streaming.receiver.Receiver.this"),
+      ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.streaming.receiver.ReceivedBlockHandler"),
+      ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.streaming.receiver.ReceivedBlock")
     )
   }
 
