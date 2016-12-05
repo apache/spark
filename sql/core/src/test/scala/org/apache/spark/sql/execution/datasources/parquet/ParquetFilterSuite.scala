@@ -634,6 +634,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
           checkAnswer(readDf2.filter("c is null and a < 2"),
             Row(1, "abc", null) :: Nil)
+
+          readDf2.filter("c is null and a < 2").explain(true)
         }
       }
     }

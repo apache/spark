@@ -112,6 +112,9 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       } catch (IllegalArgumentException e) {
         // In the case where a particular parquet files does not contain
         // the column(s) in the filter, we don't do filtering at this level
+        // PARQUET-389 will resolve this issue in Parquet 1.9, which may be used
+        // by future Spark versions. This is a workaround for current Spark version.
+        // Also the assumption here is that the predicates will be applied later
         blocks = footer.getBlocks();
       }
     } else {
