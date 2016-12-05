@@ -198,7 +198,7 @@ package object config {
     .createWithDefault(0)
 
   private[spark] val DRIVER_BLOCK_MANAGER_PORT = ConfigBuilder("spark.driver.blockManager.port")
-    .doc("Port to use for the block managed on the driver.")
+    .doc("Port to use for the block manager on the driver.")
     .fallbackConf(BLOCK_MANAGER_PORT)
 
   private[spark] val IGNORE_CORRUPT_FILES = ConfigBuilder("spark.files.ignoreCorruptFiles")

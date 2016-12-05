@@ -292,7 +292,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val executorEnvs = HashMap[String, String]()
 
   // Set SPARK_USER for user who is running SparkContext.
-  val sparkUser = Utils.getCurrentUserName()
+  val sparkUser: String = Utils.getCurrentUserName()
 
   private[spark] def schedulerBackend: SchedulerBackend = _schedulerBackend
 
@@ -2570,8 +2570,8 @@ object SparkContext extends Logging {
     val serviceLoaders =
       ServiceLoader.load(classOf[ExternalClusterManager], loader).asScala.filter(_.canCreate(url))
     if (serviceLoaders.size > 1) {
-      throw new SparkException(s"Multiple Cluster Managers ($serviceLoaders) registered " +
-          s"for the url $url:")
+      throw new SparkException(
+        s"Multiple external cluster managers registered for the url $url: $serviceLoaders")
     }
     serviceLoaders.headOption
   }
