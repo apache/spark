@@ -123,7 +123,7 @@ object JdbcUtils extends Logging {
         if (nameMap.isDefinedAt(x.name)) {
           dialect.quoteIdentifier(x.name)
         } else if (lowercaseNameMap.isDefinedAt(x.name.toLowerCase)) {
-          dialect.quoteIdentifier(nameMap(x.name.toLowerCase))
+          dialect.quoteIdentifier(lowercaseNameMap(x.name.toLowerCase))
         } else {
           throw new SQLException(s"""Column "${x.name}" not found""")
         }
