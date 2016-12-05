@@ -63,24 +63,25 @@ private[spark] object SerDe {
     dis.readByte().toChar
   }
 
-  def readObject(dis: DataInputStream): Object = {
+  def readObject(dis: DataInputStream, jvmObjectTracker: JVMObjectTracker): Object = {
     val dataType = readObjectType(dis)
-    readTypedObject(dis, dataType)
+    readTypedObject(dis, dataType, jvmObjectTracker)
   }
 
   def readTypedObject(
       dis: DataInputStream,
-      dataType: Char): Object = {
+      dataType: Char,
+      jvmObjectTracker: JVMObjectTracker): Object = {
     dataType match {
       case 'n' => null
       case 'i' => new java.lang.Integer(readInt(dis))
       case 'd' => new java.lang.Double(readDouble(dis))
       case 'b' => new java.lang.Boolean(readBoolean(dis))
       case 'c' => readString(dis)
-      case 'e' => readMap(dis)
+      case 'e' => readMap(dis, jvmObjectTracker)
       case 'r' => readBytes(dis)
-      case 'a' => readArray(dis)
-      case 'l' => readList(dis)
+      case 'a' => readArray(dis, jvmObjectTracker)
+      case 'l' => readList(dis, jvmObjectTracker)
       case 'D' => readDate(dis)
       case 't' => readTime(dis)
       case 'j' => JVMObjectId(readString(dis))
@@ -188,21 +189,21 @@ private[spark] object SerDe {
   }
 
   // All elements of an array must be of the same type
-  def readArray(dis: DataInputStream): Array[_] = {
+  def readArray(dis: DataInputStream, jvmObjectTracker: JVMObjectTracker): Array[_] = {
     val arrType = readObjectType(dis)
     arrType match {
       case 'i' => readIntArr(dis)
       case 'c' => readStringArr(dis)
       case 'd' => readDoubleArr(dis)
       case 'b' => readBooleanArr(dis)
-      case 'j' => readStringArr(dis).map(x => JVMObjectId(x))
+      case 'j' => readStringArr(dis).map(x => jvmObjectTracker.get(JVMObjectId(x)))
       case 'r' => readBytesArr(dis)
       case 'a' =>
         val len = readInt(dis)
-        (0 until len).map(_ => readArray(dis)).toArray
+        (0 until len).map(_ => readArray(dis, jvmObjectTracker)).toArray
       case 'l' =>
         val len = readInt(dis)
-        (0 until len).map(_ => readList(dis)).toArray
+        (0 until len).map(_ => readList(dis, jvmObjectTracker)).toArray
       case _ =>
         if (sqlReadObject == null) {
           throw new IllegalArgumentException (s"Invalid array type $arrType")
@@ -222,17 +223,19 @@ private[spark] object SerDe {
 
   // Each element of a list can be of different type. They are all represented
   // as Object on JVM side
-  def readList(dis: DataInputStream): Array[Object] = {
+  def readList(dis: DataInputStream, jvmObjectTracker: JVMObjectTracker): Array[Object] = {
     val len = readInt(dis)
-    (0 until len).map(_ => readObject(dis)).toArray
+    (0 until len).map(_ => readObject(dis, jvmObjectTracker)).toArray
   }
 
-  def readMap(in: DataInputStream): java.util.Map[Object, Object] = {
+  def readMap(
+      in: DataInputStream,
+      jvmObjectTracker: JVMObjectTracker): java.util.Map[Object, Object] = {
     val len = readInt(in)
     if (len > 0) {
       // Keys is an array of String
-      val keys = readArray(in).asInstanceOf[Array[Object]]
-      val values = readList(in)
+      val keys = readArray(in, jvmObjectTracker).asInstanceOf[Array[Object]]
+      val values = readList(in, jvmObjectTracker)
 
       keys.zip(values).toMap.asJava
     } else {

@@ -158,7 +158,7 @@ private[sql] object SQLUtils extends Logging {
     val dis = new DataInputStream(bis)
     val num = SerDe.readInt(dis)
     Row.fromSeq((0 until num).map { i =>
-      doConversion(SerDe.readObject(dis), schema.fields(i).dataType)
+      doConversion(SerDe.readObject(dis, jvmObjectTracker = null), schema.fields(i).dataType)
     })
   }
 
@@ -247,7 +247,7 @@ private[sql] object SQLUtils extends Logging {
     dataType match {
       case 's' =>
         // Read StructType for DataFrame
-        val fields = SerDe.readList(dis).asInstanceOf[Array[Object]]
+        val fields = SerDe.readList(dis, jvmObjectTracker = null).asInstanceOf[Array[Object]]
         Row.fromSeq(fields)
       case _ => null
     }
