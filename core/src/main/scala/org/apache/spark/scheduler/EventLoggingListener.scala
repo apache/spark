@@ -334,13 +334,13 @@ private[spark] object EventLoggingListener extends Logging {
   }
 
   /**
-    * Clean invalid job history files based on `spark.history.fs.cleaner.cleanType`:
-    * 1. age (default): Job history files older than `spark.history.fs.cleaner.maxAge` will be
-    * deleted.
-    * 2. space: Job history files can only use `space.history.fs.cleaner.maxSpace` size of
-    * external storage space. The excess part of job history files will be deleted, oldest file
-    * first.
-    */
+   * Clean invalid job history files based on `spark.history.fs.cleaner.cleanType`:
+   * 1. age (default): Job history files older than `spark.history.fs.cleaner.maxAge` will be
+   * deleted.
+   * 2. space: Job history files can only use `space.history.fs.cleaner.maxSpace` size of
+   * external storage space. The excess part of job history files will be deleted, oldest file
+   * first.
+   */
   private[spark] def cleanRedundantLogFiles(
       sparkConf: SparkConf,
       fileSystem: FileSystem,
