@@ -60,14 +60,18 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
       Some(ctor.newInstance(conf, localDirs, new Integer(subDirsPerLocalDir))
         .asInstanceOf[FileAllocator])
     } catch {
-      case e: ClassNotFoundException => None
-      case e: IllegalArgumentException => None
+      case _: ClassNotFoundException =>
+        logWarning(s"Could not find class for fileAllocator($allocatorClass).")
+        None
+      case _: Exception =>
+        logWarning(s"Fail to initialize fileAllocator($allocatorClass).")
+        None
     }
     if (allocator.isDefined && allocator.get.support) {
       logInfo(s"fileAllocator($allocatorClass) is enabled.")
       allocator.get
     } else {
-      logInfo("default fileAllocator(HashAllocator) is enabled.")
+      logWarning("Default fileAllocator(HashAllocator) is enabled instead.")
       new HashAllocator(conf, localDirs, subDirsPerLocalDir)
     }
   }

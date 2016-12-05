@@ -90,11 +90,15 @@ private[storage] class TieredAllocator(
   private val tiersEnvConf = conf.getenv("SPARK_DIRS_TIERS")
   private val threshold = conf.getDouble("spark.diskStore.tiered.threshold", 0.15)
 
-  require(tiersEnvConf != null, "SPARK_DIRS_TIERS is not set.")
+  if (tiersEnvConf == null) {
+    logAndThrowException("SPARK_DIRS_TIERS is not set.")
+  }
   private val tiersIDs = tiersEnvConf.trim.split("")
 
-  require(localDirs.length == tiersIDs.length,
-    s"Incorrect SPARK_DIRS_TIERS setting, SPARK_DIRS_TIERS = '$tiersEnvConf'.")
+  if(localDirs.length != tiersIDs.length) {
+    logAndThrowException(s"Incorrect SPARK_DIRS_TIERS setting, " +
+      s"SPARK_DIRS_TIERS = '$tiersEnvConf'.")
+  }
   private val tieredDirs: Seq[Array[File]] = (localDirs zip tiersIDs).
     groupBy(_._2).mapValues(_.map(_._1)).toSeq.sortBy(_._1).map(_._2)
   tieredDirs.zipWithIndex.foreach {
@@ -124,5 +128,10 @@ private[storage] class TieredAllocator(
       }
     }
     Option(availableFile).getOrElse(file)
+  }
+
+  private def logAndThrowException(msg: String) = {
+    logWarning(msg)
+    throw new IllegalArgumentException(msg)
   }
 }
