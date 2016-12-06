@@ -69,4 +69,20 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
         Array(0 -> batch0Serialized, 1 -> batch1Serialized))
     }
   }
+
+  test("read Spark 2.1.0 log format") {
+    val (batchId, offsetSeq) = readFromResource("offset-log-version-2.1.0")
+    assert(batchId === 0)
+    assert(offsetSeq.offsets === Seq(
+      Some(SerializedOffset("0")),
+      Some(SerializedOffset("""{"topic-0":{"0":1}}"""))
+    ))
+    assert(offsetSeq.metadata === Some(OffsetSeqMetadata(0L, 1480981499528L)))
+  }
+
+  private def readFromResource(dir: String): (Long, OffsetSeq) = {
+    val input = getClass.getResource(s"/structured-streaming/$dir")
+    val log = new OffsetSeqLog(spark, input.toString)
+    log.getLatest().get
+  }
 }
