@@ -438,7 +438,7 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case Cast(e @ StringType(), t: IntegralType) =>
+      case Cast(e @ StringType(), t: IntegralType, _) =>
         Cast(Cast(e, DecimalType.forType(LongType)), t)
     }
   }
