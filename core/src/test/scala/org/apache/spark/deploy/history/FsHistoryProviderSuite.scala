@@ -299,6 +299,70 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     assert(!log2.exists())
   }
 
+  test("log cleaner for inProgress files") {
+    val firstFileModifiedTime = TimeUnit.SECONDS.toMillis(10)
+    val secondFileModifiedTime = TimeUnit.SECONDS.toMillis(20)
+    val inProgressMaxAge = TimeUnit.SECONDS.toMillis(40)
+    val clock = new ManualClock(0)
+    val provider = new FsHistoryProvider(
+      createTestConf()
+        .set("spark.history.fs.cleaner.inProgress.files", "true")
+        .set("spark.history.fs.cleaner.inProgress.maxAge", s"${inProgressMaxAge}ms"),
+      clock)
+
+    val log1 = newLogFile("app1", None, inProgress = true)
+    writeFile(log1, true, None,
+      SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt1"))
+    )
+    log1.setLastModified(firstFileModifiedTime)
+
+    val log2 = newLogFile("app2", None, inProgress = true)
+    writeFile(log2, true, None,
+      SparkListenerApplicationStart("app2", Some("app2"), 23L, "test2", Some("attempt2"))
+    )
+    log2.setLastModified(secondFileModifiedTime)
+
+    updateAndCheck(provider)(list => list.size should be (2))
+
+    // Move the clock forward little bit, this should not trigget any cleanup
+    clock.setTime(firstFileModifiedTime)
+    updateAndCheck(provider)(list => list.size should be (2))
+
+    // Should trigger cleanup for first file but not second one
+    clock.setTime(firstFileModifiedTime + inProgressMaxAge + 1)
+    updateAndCheck(provider) (list => list.size should be (1))
+    assert(!log1.exists())
+    assert(log2.exists())
+
+    // Should cleanup the second file as well.
+    clock.setTime(secondFileModifiedTime + inProgressMaxAge + 1)
+    updateAndCheck(provider)(list => list.size should be (0))
+    assert(!log1.exists())
+    assert(!log2.exists())
+  }
+
+  test("disable log cleaner for inProgress files") {
+    val fileModifiedTime = TimeUnit.SECONDS.toMillis(10)
+    val inProgressMaxAge = TimeUnit.SECONDS.toMillis(40)
+    val clock = new ManualClock(0)
+    val provider = new FsHistoryProvider(
+      createTestConf()
+        .set("spark.history.fs.cleaner.inProgress.files", "false")
+        .set("spark.history.fs.cleaner.inProgress.maxAge", s"${inProgressMaxAge}ms"),
+      clock)
+
+    val log1 = newLogFile("app1", None, inProgress = true)
+    writeFile(log1, true, None,
+      SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt1"))
+    )
+    log1.setLastModified(fileModifiedTime)
+
+    // Should not trigget clean up
+    clock.setTime(fileModifiedTime + inProgressMaxAge + 1)
+    updateAndCheck(provider)(list => list.size should be (1))
+    assert(log1.exists())
+  }
+
   test("Event log copy") {
     val provider = new FsHistoryProvider(createTestConf())
     val logs = (1 to 2).map { i =>
