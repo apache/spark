@@ -50,6 +50,44 @@ trait MesosSchedulerUtils extends Logging {
   protected var mesosDriver: SchedulerDriver = null
 
   /**
+   * Returns the configured set of roles that an offer can be selected from
+   * @param conf Spark configuration
+   */
+  protected def getAcceptedResourceRoles(conf: SparkConf): Set[String] = {
+    getAcceptedResourceRoles(
+      conf.getBoolean("spark.mesos.ignoreDefaultRoleResources", false),
+      conf.getOption("spark.mesos.role"))
+  }
+  /**
+   * Returns the configured set of roles that an offer can be selected from
+   * @param props Mesos driver description schedulerProperties map
+   */
+  protected def getAcceptedResourceRoles(props: Map[String, String]): Set[String] = {
+    getAcceptedResourceRoles(
+      props.get("spark.mesos.ignoreDefaultRoleResources") match {
+        case Some(truth) => truth.toBoolean
+        case None => false
+      },
+      props.get("spark.mesos.role"))
+  }
+  /**
+   * Internal version of getAcceptedResourceRoles
+   * @param ignoreDefaultRoleResources user specified property
+   * @param role user specified property
+   */
+  private def getAcceptedResourceRoles(
+      ignoreDefaultRoleResources: Boolean,
+      role: Option[String]) = {
+    val roles = ignoreDefaultRoleResources match {
+      case true if role.isDefined => Set(role)
+      case _ => Set(Some("*"), role)
+    }
+    val acceptedRoles = roles.flatten
+    logDebug(s"Accepting resources from role(s): ${acceptedRoles.mkString(",")}")
+    acceptedRoles
+  }
+
+  /**
    * Creates a new MesosSchedulerDriver that communicates to the Mesos master.
    *
    * @param masterUrl The url to connect to Mesos master
