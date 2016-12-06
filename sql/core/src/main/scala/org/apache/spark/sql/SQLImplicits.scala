@@ -74,6 +74,9 @@ abstract class SQLImplicits {
   /** @since 1.6.0 */
   implicit def newStringEncoder: Encoder[String] = Encoders.STRING
 
+  /** @since 2.2.0 */
+  implicit def newDecimalEncoder: Encoder[java.math.BigDecimal] = Encoders.DECIMAL
+
   // Boxed primitives
 
   /** @since 2.0.0 */
