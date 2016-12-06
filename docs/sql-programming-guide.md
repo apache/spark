@@ -526,6 +526,8 @@ By default `saveAsTable` will create a "managed table", meaning that the locatio
 be controlled by the metastore. Managed tables will also have their data deleted automatically
 when a table is dropped.
 
+hello this should work
+
 ## Parquet Files
 
 [Parquet](http://parquet.io) is a columnar format that is supported by many other data processing systems.
