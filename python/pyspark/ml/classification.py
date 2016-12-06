@@ -18,7 +18,7 @@
 import operator
 
 from pyspark import since, keyword_only
-from pyspark.ml import Estimator, Model
+from pyspark.ml import Estimator
 from pyspark.ml.param.shared import *
 from pyspark.ml.regression import DecisionTreeModel, DecisionTreeRegressionModel, \
     RandomForestParams, TreeEnsembleModel, TreeEnsembleParams
@@ -1540,6 +1540,8 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
     >>> ovr = OneVsRest(classifier=lr)
     >>> model = ovr.fit(df)
+    >>> model.setFeaturesCol("features")
+    >>> model.setPredictionCol("prediction")
     >>> [x.coefficients for x in model.models]
     [DenseVector([3.3925, 1.8785]), DenseVector([-4.3016, -6.3163]), DenseVector([-4.5855, 6.1785])]
     >>> [x.intercept for x in model.models]
@@ -1646,6 +1648,22 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
         self.write().save(path)
 
+    @since("2.2.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of featuresCol.
+        """
+        self._call_java("setFeaturesCol", value)
+        return self
+
+    @since("2.2.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of predictionCol.
+        """
+        self._call_java("setPredictionCol", value)
+        return self
+
     @classmethod
     @since("2.0.0")
     def read(cls):
@@ -1682,7 +1700,7 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         return _java_obj
 
 
-class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
+class OneVsRestModel(JavaModel, OneVsRestParams, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
