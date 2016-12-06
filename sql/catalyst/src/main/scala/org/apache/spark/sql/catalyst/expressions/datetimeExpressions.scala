@@ -30,6 +30,20 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
+ * Common base class for time zone aware expressions.
+ */
+trait TimeZoneAwareExpression extends Expression {
+
+  def zoneId: String
+
+  def timeZoneResolved: Boolean = zoneId != null
+
+  def withTimeZone(zoneId: String): TimeZoneAwareExpression
+
+  def timeZone: TimeZone = TimeZone.getTimeZone(zoneId)
+}
+
+/**
  * Returns the current date at the start of query evaluation.
  * All calls of current_date within the same query return the same value.
  *

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.TimeZone
+
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
@@ -104,6 +106,7 @@ class Analyzer(
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables ::
+      ResolveTimeZone ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
@@ -2209,6 +2212,18 @@ class Analyzer(
           case _ => Cast(child, dataType.asNullable)
         }
       }
+    }
+  }
+
+  /**
+   * Replace [[TimeZoneAwareExpression]] without [[TimeZone]] by its copy with session local
+   * time zone.
+   */
+  object ResolveTimeZone extends Rule[LogicalPlan] {
+
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
+      case e: TimeZoneAwareExpression if !e.timeZoneResolved =>
+        e.withTimeZone(conf.sessionLocalTimeZone)
     }
   }
 }
