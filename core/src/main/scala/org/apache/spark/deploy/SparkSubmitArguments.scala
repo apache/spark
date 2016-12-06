@@ -71,6 +71,12 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var principal: String = null
   var keytab: String = null
 
+  // Kubernetes only
+  var kubernetesMaster: String = null
+  var kubernetesNamespace: String = null
+  var kubernetesUploadJars: String = null
+  var kubernetesUploadDriverExtraClasspath: String = null
+
   // Standalone cluster mode only
   var supervise: Boolean = false
   var driverCores: String = null
@@ -186,6 +192,18 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
     keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
     principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
+    kubernetesMaster = Option(kubernetesMaster)
+      .orElse(sparkProperties.get("spark.kubernetes.master"))
+      .orNull
+    kubernetesNamespace = Option(kubernetesNamespace)
+      .orElse(sparkProperties.get("spark.kubernetes.namespace"))
+      .orNull
+    kubernetesUploadJars = Option(kubernetesUploadJars)
+      .orElse(sparkProperties.get("spark.kubernetes.driver.uploads.jars"))
+      .orNull
+    kubernetesUploadDriverExtraClasspath = Option(kubernetesUploadDriverExtraClasspath)
+      .orElse(sparkProperties.get("spark.kubernetes.driver.uploads.driverExtraClasspath"))
+      .orNull
 
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && !isR && primaryResource != null) {
@@ -423,6 +441,18 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case KEYTAB =>
         keytab = value
+
+      case KUBERNETES_MASTER =>
+        kubernetesMaster = value
+
+      case KUBERNETES_NAMESPACE =>
+        kubernetesNamespace = value
+
+      case KUBERNETES_UPLOAD_JARS =>
+        kubernetesUploadJars = value
+
+      case KUBERNETES_UPLOAD_DRIVER_EXTRA_CLASSPATH =>
+        kubernetesUploadDriverExtraClasspath = value
 
       case HELP =>
         printUsageAndExit(0)
