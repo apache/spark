@@ -596,19 +596,17 @@ object Hive {
 }
 
 object Assembly {
-  import sbtassembly.AssemblyUtils._
-  import sbtassembly.Plugin._
-  import AssemblyKeys._
+  import sbtassembly.AssemblyPlugin.autoImport._
 
   val hadoopVersion = taskKey[String]("The version of hadoop that spark is compiled against.")
 
-  lazy val settings = assemblySettings ++ Seq(
+  lazy val settings = Seq(
     test in assembly := {},
     hadoopVersion := {
       sys.props.get("hadoop.version")
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
-    jarName in assembly := {
+    assemblyJarName in assembly := {
       if (moduleName.value.contains("streaming-flume-assembly")
         || moduleName.value.contains("streaming-kafka-0-8-assembly")
         || moduleName.value.contains("streaming-kafka-0-10-assembly")
@@ -619,8 +617,8 @@ object Assembly {
         s"${moduleName.value}-${version.value}-hadoop${hadoopVersion.value}.jar"
       }
     },
-    jarName in (Test, assembly) := s"${moduleName.value}-test-${version.value}.jar",
-    mergeStrategy in assembly := {
+    assemblyJarName in (Test, assembly) := s"${moduleName.value}-test-${version.value}.jar",
+    assemblyMergeStrategy in assembly := {
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
       case m if m.toLowerCase.matches("meta-inf.*\\.sf$")      => MergeStrategy.discard
       case "log4j.properties"                                  => MergeStrategy.discard
@@ -632,8 +630,7 @@ object Assembly {
 }
 
 object PySparkAssembly {
-  import sbtassembly.Plugin._
-  import AssemblyKeys._
+  import sbtassembly.AssemblyPlugin.autoImport._
   import java.util.zip.{ZipOutputStream, ZipEntry}
 
   lazy val settings = Seq(
