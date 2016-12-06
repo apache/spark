@@ -25,8 +25,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
@@ -57,9 +55,6 @@ class StreamExecution(
   extends StreamingQuery with ProgressReporter with Logging {
 
   import org.apache.spark.sql.streaming.StreamingQueryListener._
-
-  // TODO: restore this from the checkpoint directory.
-  override val id: UUID = UUID.randomUUID()
 
   private val pollingDelayMs = sparkSession.sessionState.conf.streamingPollingDelay
 
@@ -98,8 +93,30 @@ class StreamExecution(
   /** The current batchId or -1 if execution has not yet been initialized. */
   protected var currentBatchId: Long = -1
 
-  /** Stream execution metadata */
-  protected var streamExecutionMetadata = StreamExecutionMetadata()
+  /** Metadata associated with the whole query */
+  protected val streamMetadata: StreamMetadata = {
+    val metadataPath = new Path(checkpointFile("metadata"))
+    val hadoopConf = sparkSession.sessionState.newHadoopConf()
+    StreamMetadata.read(metadataPath, hadoopConf).getOrElse {
+      val newMetadata = new StreamMetadata(UUID.randomUUID.toString)
+      StreamMetadata.write(newMetadata, metadataPath, hadoopConf)
+      newMetadata
+    }
+  }
+
+  /** Metadata associated with the offset seq of a batch in the query. */
+  protected var offsetSeqMetadata = OffsetSeqMetadata()
+
+  override val id: UUID = UUID.fromString(streamMetadata.id)
+
+  override val runId: UUID = UUID.randomUUID
+
+  /**
+   * Pretty identified string of printing in logs. Format is
+   * If name is set "queryName [id = xyz, runId = abc]" else "[id = xyz, runId = abc]"
+   */
+  private val prettyIdString =
+    Option(name).map(_ + " ").getOrElse("") + s"[id = $id, runId = $runId]"
 
   /** All stream sources present in the query plan. */
   protected val sources =
@@ -128,8 +145,9 @@ class StreamExecution(
   /* Get the call site in the caller thread; will pass this into the micro batch thread */
   private val callSite = Utils.getCallSite()
 
-  /** Used to report metrics to coda-hale. */
-  lazy val streamMetrics = new MetricsReporter(this, s"spark.streaming.$name")
+  /** Used to report metrics to coda-hale. This uses id for easier tracking across restarts. */
+  lazy val streamMetrics = new MetricsReporter(
+    this, s"spark.streaming.${Option(name).getOrElse(id)}")
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
@@ -137,7 +155,7 @@ class StreamExecution(
    * [[HDFSMetadataLog]]. See SPARK-14131 for more details.
    */
   val microBatchThread =
-    new StreamExecutionThread(s"stream execution thread for $name") {
+    new StreamExecutionThread(s"stream execution thread for $prettyIdString") {
       override def run(): Unit = {
         // To fix call site like "run at <unknown>:0", we bridge the call site from the caller
         // thread to this micro batch thread
@@ -191,7 +209,7 @@ class StreamExecution(
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
 
-      postEvent(new QueryStartedEvent(id, name)) // Assumption: Does not throw exception.
+      postEvent(new QueryStartedEvent(id, runId, name)) // Assumption: Does not throw exception.
 
       // Unblock starting thread
       startLatch.countDown()
@@ -261,10 +279,10 @@ class StreamExecution(
       case e: Throwable =>
         streamDeathCause = new StreamingQueryException(
           this,
-          s"Query $name terminated with exception: ${e.getMessage}",
+          s"Query $prettyIdString terminated with exception: ${e.getMessage}",
           e,
-          committedOffsets.toOffsetSeq(sources, streamExecutionMetadata.json).toString,
-          availableOffsets.toOffsetSeq(sources, streamExecutionMetadata.json).toString)
+          committedOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString,
+          availableOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString)
         logError(s"Query $name terminated with error", e)
         updateStatusMessage(s"Terminated with exception: ${e.getMessage}")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
@@ -282,7 +300,7 @@ class StreamExecution(
       // Notify others
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
       postEvent(
-       new QueryTerminatedEvent(id, exception.map(_.cause).map(Utils.exceptionString)))
+       new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString)))
       terminationLatch.countDown()
     }
   }
@@ -301,9 +319,9 @@ class StreamExecution(
         logInfo(s"Resuming streaming query, starting with batch $batchId")
         currentBatchId = batchId
         availableOffsets = nextOffsets.toStreamProgress(sources)
-        streamExecutionMetadata = StreamExecutionMetadata(nextOffsets.metadata.getOrElse("{}"))
+        offsetSeqMetadata = nextOffsets.metadata.getOrElse(OffsetSeqMetadata())
         logDebug(s"Found possibly unprocessed offsets $availableOffsets " +
-          s"at batch timestamp ${streamExecutionMetadata.batchTimestampMs}")
+          s"at batch timestamp ${offsetSeqMetadata.batchTimestampMs}")
 
         offsetLog.get(batchId - 1).foreach {
           case lastOffsets =>
@@ -359,15 +377,15 @@ class StreamExecution(
     }
     if (hasNewData) {
       // Current batch timestamp in milliseconds
-      streamExecutionMetadata.batchTimestampMs = triggerClock.getTimeMillis()
+      offsetSeqMetadata.batchTimestampMs = triggerClock.getTimeMillis()
       updateStatusMessage("Writing offsets to log")
       reportTimeTaken("walCommit") {
         assert(offsetLog.add(
           currentBatchId,
-          availableOffsets.toOffsetSeq(sources, streamExecutionMetadata.json)),
+          availableOffsets.toOffsetSeq(sources, offsetSeqMetadata)),
           s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
         logInfo(s"Committed offsets for batch $currentBatchId. " +
-          s"Metadata ${streamExecutionMetadata.toString}")
+          s"Metadata ${offsetSeqMetadata.toString}")
 
         // NOTE: The following code is correct because runBatches() processes exactly one
         // batch at a time. If we add pipeline parallelism (multiple batches in flight at
@@ -437,21 +455,21 @@ class StreamExecution(
     val triggerLogicalPlan = withNewSources transformAllExpressions {
       case a: Attribute if replacementMap.contains(a) => replacementMap(a)
       case ct: CurrentTimestamp =>
-        CurrentBatchTimestamp(streamExecutionMetadata.batchTimestampMs,
+        CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           ct.dataType)
       case cd: CurrentDate =>
-        CurrentBatchTimestamp(streamExecutionMetadata.batchTimestampMs,
+        CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           cd.dataType)
     }
 
-    val executedPlan = reportTimeTaken("queryPlanning") {
+    reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
         sparkSession,
         triggerLogicalPlan,
         outputMode,
         checkpointFile("state"),
         currentBatchId,
-        streamExecutionMetadata.batchWatermarkMs)
+        offsetSeqMetadata.batchWatermarkMs)
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
@@ -468,12 +486,12 @@ class StreamExecution(
         logTrace(s"Maximum observed eventTime: ${e.maxEventTime.value}")
         (e.maxEventTime.value / 1000) - e.delay.milliseconds()
     }.headOption.foreach { newWatermark =>
-      if (newWatermark > streamExecutionMetadata.batchWatermarkMs) {
+      if (newWatermark > offsetSeqMetadata.batchWatermarkMs) {
         logInfo(s"Updating eventTime watermark to: $newWatermark ms")
-        streamExecutionMetadata.batchWatermarkMs = newWatermark
+        offsetSeqMetadata.batchWatermarkMs = newWatermark
       } else {
         logTrace(s"Event time didn't move: $newWatermark < " +
-          s"$streamExecutionMetadata.currentEventTimeWatermark")
+          s"$offsetSeqMetadata.currentEventTimeWatermark")
       }
     }
 
@@ -503,7 +521,7 @@ class StreamExecution(
       microBatchThread.join()
     }
     uniqueSources.foreach(_.stop())
-    logInfo(s"Query $name was stopped")
+    logInfo(s"Query $prettyIdString was stopped")
   }
 
   /**
@@ -594,7 +612,7 @@ class StreamExecution(
   override def explain(): Unit = explain(extended = false)
 
   override def toString: String = {
-    s"Streaming Query - $name [state = $state]"
+    s"Streaming Query $prettyIdString [state = $state]"
   }
 
   def toDebugString: String = {
@@ -603,7 +621,7 @@ class StreamExecution(
     } else ""
     s"""
        |=== Streaming Query ===
-       |Name: $name
+       |Identifier: $prettyIdString
        |Current Offsets: $committedOffsets
        |
        |Current State: $state
@@ -622,33 +640,6 @@ class StreamExecution(
   case object TERMINATED extends State
 }
 
-/**
- * Contains metadata associated with a stream execution. This information is
- * persisted to the offset log via the OffsetSeq metadata field. Current
- * information contained in this object includes:
- *
- * @param batchWatermarkMs: The current eventTime watermark, used to
- * bound the lateness of data that will processed. Time unit: milliseconds
- * @param batchTimestampMs: The current batch processing timestamp.
- * Time unit: milliseconds
- */
-case class StreamExecutionMetadata(
-    var batchWatermarkMs: Long = 0,
-    var batchTimestampMs: Long = 0) {
-  private implicit val formats = StreamExecutionMetadata.formats
-
-  /**
-   * JSON string representation of this object.
-   */
-  def json: String = Serialization.write(this)
-}
-
-object StreamExecutionMetadata {
-  private implicit val formats = Serialization.formats(NoTypeHints)
-
-  def apply(json: String): StreamExecutionMetadata =
-    Serialization.read[StreamExecutionMetadata](json)
-}
 
 /**
  * A special thread to run the stream query. Some codes require to run in the StreamExecutionThread
