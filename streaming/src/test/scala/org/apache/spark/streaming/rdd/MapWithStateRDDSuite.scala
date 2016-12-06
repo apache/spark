@@ -22,32 +22,24 @@ import java.io.File
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{State, Time}
+import org.apache.spark.streaming.{ReuseableSparkContext, State, Time}
 import org.apache.spark.streaming.util.OpenHashMapBasedStateMap
 import org.apache.spark.util.Utils
 
-class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with BeforeAndAfterAll {
+class MapWithStateRDDSuite extends ReuseableSparkContext with RDDCheckpointTester {
 
-  private var sc: SparkContext = null
   private var checkpointDir: File = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sc = new SparkContext(
-      new SparkConf().setMaster("local").setAppName("MapWithStateRDDSuite"))
     checkpointDir = Utils.createTempDir()
     sc.setCheckpointDir(checkpointDir.toString)
   }
 
   override def afterAll(): Unit = {
     try {
-      if (sc != null) {
-        sc.stop()
-      }
       Utils.deleteRecursively(checkpointDir)
     } finally {
       super.afterAll()

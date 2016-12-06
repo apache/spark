@@ -211,6 +211,8 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
 class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
   with ResetSystemProperties {
 
+  override val reuseContext: Boolean = false
+
   var ssc: StreamingContext = null
 
   override def batchDuration: Duration = Milliseconds(500)
@@ -237,8 +239,6 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
   test("basic rdd checkpoints + dstream graph checkpoint recovery") {
 
     assert(batchDuration === Milliseconds(500), "batchDuration for this test must be 1 second")
-
-    conf.set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
 
     val stateStreamCheckpointInterval = Seconds(1)
     val fs = FileSystem.getLocal(new Configuration())
@@ -571,7 +571,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
   }
 
   test("recovery maintains rate controller") {
-    ssc = new StreamingContext(conf, batchDuration)
+    ssc = new StreamingContext(sc, batchDuration)
     ssc.checkpoint(checkpointDir)
 
     val dstream = new RateTestInputDStream(ssc) {
@@ -635,7 +635,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     try {
       // This is a var because it's re-assigned when we restart from a checkpoint
       var clock: ManualClock = null
-      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+      withStreamingContext(batchDuration) { ssc =>
         ssc.checkpoint(checkpointDir)
         clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         val batchCounter = new BatchCounter(ssc)
@@ -760,7 +760,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
   }
 
   test("DStreamCheckpointData.restore invoking times") {
-    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+    withStreamingContext { ssc =>
       ssc.checkpoint(checkpointDir)
       val inputDStream = new CheckpointInputDStream(ssc)
       val checkpointData = inputDStream.checkpointData
@@ -822,7 +822,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     val jobGenerator = mock(classOf[JobGenerator])
     val checkpointDir = Utils.createTempDir().toString
     val checkpointWriter =
-      new CheckpointWriter(jobGenerator, conf, checkpointDir, new Configuration())
+      new CheckpointWriter(jobGenerator, sc.conf, checkpointDir, new Configuration())
     val bytes1 = Array.fill[Byte](10)(1)
     new checkpointWriter.CheckpointWriteHandler(
       Time(2000), bytes1, clearCheckpointDataLater = false).run()
@@ -869,6 +869,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     // Therefore SPARK-6847 introduces "spark.checkpoint.checkpointAllMarked" to force checkpointing
     // all marked RDDs in the DAG to resolve this issue. (For the previous example, it will break
     // connections between layer 2 and layer 3)
+    stopActiveContext()
     ssc = new StreamingContext(master, framework, batchDuration)
     val batchCounter = new BatchCounter(ssc)
     ssc.checkpoint(checkpointDir)

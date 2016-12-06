@@ -37,6 +37,8 @@ class UISeleniumSuite
 
   implicit var webDriver: WebDriver = _
 
+  override val reuseContext: Boolean = false
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     webDriver = new HtmlUnitDriver {

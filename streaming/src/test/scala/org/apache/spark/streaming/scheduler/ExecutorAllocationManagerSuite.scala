@@ -24,7 +24,7 @@ import org.scalatest.concurrent.Eventually.{eventually, timeout}
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkFunSuite}
+import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext}
 import org.apache.spark.util.{ManualClock, Utils}
 
@@ -41,6 +41,12 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
   before {
     allocationClient = mock[ExecutorAllocationClient]
     clock = new ManualClock()
+    SparkContext.stopActiveContext()
+  }
+
+  protected override def afterAll(): Unit = {
+    SparkContext.stopActiveContext()
+    super.afterAll()
   }
 
   test("basic functionality") {

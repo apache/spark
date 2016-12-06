@@ -28,7 +28,7 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver._
@@ -194,6 +194,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
    * WALs should be cleaned later.
    */
   test("write ahead log - generating and cleaning") {
+    SparkContext.getActiveContext().foreach(_.stop())
     val sparkConf = new SparkConf()
       .setMaster("local[4]")  // must be at least 3 as we are going to start 2 receivers
       .setAppName(framework)

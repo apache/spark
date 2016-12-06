@@ -23,19 +23,20 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.PrivateMethodTester._
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.streaming.dstream.{DStream, InternalMapWithStateDStream, MapWithStateDStream, MapWithStateDStreamImpl}
 import org.apache.spark.util.{ManualClock, Utils}
 
-class MapWithStateSuite extends SparkFunSuite
-  with DStreamCheckpointTester with BeforeAndAfterAll with BeforeAndAfter {
+class MapWithStateSuite extends ReuseableSparkContext with DStreamCheckpointTester {
 
-  private var sc: SparkContext = null
   protected var checkpointDir: File = null
   protected val batchDuration = Seconds(1)
+
+  override def extraSparkConf: Map[String, String] = {
+    // Use a manual clock
+    super.extraSparkConf ++ Map("spark.streaming.clock" -> "org.apache.spark.util.ManualClock")
+  }
 
   before {
     StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
@@ -46,23 +47,6 @@ class MapWithStateSuite extends SparkFunSuite
     StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
     if (checkpointDir != null) {
       Utils.deleteRecursively(checkpointDir)
-    }
-  }
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    val conf = new SparkConf().setMaster("local").setAppName("MapWithStateSuite")
-    conf.set("spark.streaming.clock", classOf[ManualClock].getName())
-    sc = new SparkContext(conf)
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      if (sc != null) {
-        sc.stop()
-      }
-    } finally {
-      super.afterAll()
     }
   }
 

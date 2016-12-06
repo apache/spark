@@ -18,6 +18,7 @@
 package org.apache.spark.streaming;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext$;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.junit.After;
 import org.junit.Before;
@@ -28,6 +29,7 @@ public abstract class LocalJavaStreamingContext {
 
     @Before
     public void setUp() {
+        SparkContext$.MODULE$.stopActiveContext();
         SparkConf conf = new SparkConf()
             .setMaster("local[2]")
             .setAppName("test")

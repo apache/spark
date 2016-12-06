@@ -30,20 +30,23 @@ import org.apache.spark.util.ManualClock
 /**
  * Tests whether scope information is passed from DStream operations to RDDs correctly.
  */
-class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterAll {
-  private var ssc: StreamingContext = null
-  private val batchDuration: Duration = Seconds(1)
+class DStreamScopeSuite extends ReuseableSparkContext {
+  private var ssc: StreamingContext = _
+
+  // Configurations to add to a new or existing spark context.
+  override def extraSparkConf: Map[String, String] = {
+    // Use a manual clock
+    super.extraSparkConf ++ Map("spark.streaming.clock" -> "org.apache.spark.util.ManualClock")
+  }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val conf = new SparkConf().setMaster("local").setAppName("test")
-    conf.set("spark.streaming.clock", classOf[ManualClock].getName())
-    ssc = new StreamingContext(new SparkContext(conf), batchDuration)
+    ssc = new StreamingContext(sc, Seconds(1))
   }
 
   override def afterAll(): Unit = {
     try {
-      ssc.stop(stopSparkContext = true)
+      ssc.stop()
     } finally {
       super.afterAll()
     }

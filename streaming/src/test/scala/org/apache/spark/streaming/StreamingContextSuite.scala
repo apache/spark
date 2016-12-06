@@ -53,6 +53,10 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
   var sc: SparkContext = null
   var ssc: StreamingContext = null
 
+  before {
+    SparkContext.getActiveContext().foreach(_.stop())
+  }
+
   after {
     if (ssc != null) {
       ssc.stop()

@@ -38,6 +38,8 @@ import org.apache.spark.streaming.scheduler._
 
 class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
+  override val reuseContext: Boolean = false
+
   val input = (1 to 4).map(Seq(_)).toSeq
   val operation = (d: DStream[Int]) => d.map(x => x)
 

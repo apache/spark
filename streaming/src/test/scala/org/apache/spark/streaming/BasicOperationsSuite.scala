@@ -620,7 +620,7 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
 
   test("slice") {
-    withStreamingContext(new StreamingContext(conf, Seconds(1))) { ssc =>
+    withStreamingContext(Seconds(1)) { ssc =>
       val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
       val stream = new TestInputStream[Int](ssc, input, 2)
       stream.foreachRDD(_ => {})  // Dummy output stream
@@ -637,7 +637,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     }
   }
   test("slice - has not been initialized") {
-    withStreamingContext(new StreamingContext(conf, Seconds(1))) { ssc =>
+    withStreamingContext(Seconds(1)) { ssc =>
       val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
       val stream = new TestInputStream[Int](ssc, input, 2)
       val thrown = intercept[SparkException] {
@@ -657,7 +657,7 @@ class BasicOperationsSuite extends TestSuiteBase {
        .window(Seconds(4), Seconds(2))
     }
 
-    val operatedStream = runCleanupTest(conf, operation _,
+    val operatedStream = runCleanupTest(operation _,
       numExpectedOutput = cleanupTestInput.size / 2, rememberDuration = Seconds(3))
     val windowedStream2 = operatedStream.asInstanceOf[WindowedDStream[_]]
     val windowedStream1 = windowedStream2.dependencies.head.asInstanceOf[WindowedDStream[_]]
@@ -694,7 +694,7 @@ class BasicOperationsSuite extends TestSuiteBase {
       Some(values.sum + state.getOrElse(0))
     }
     val stateStream = runCleanupTest(
-      conf, _.map(_ -> 1).updateStateByKey(updateFunc).checkpoint(Seconds(3)))
+      _.map(_ -> 1).updateStateByKey(updateFunc).checkpoint(Seconds(3)))
 
     assert(stateStream.rememberDuration === stateStream.checkpointDuration * 2)
     assert(stateStream.generatedRDDs.contains(Time(10000)))
@@ -705,7 +705,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     // Actually receive data over through receiver to create BlockRDDs
 
     withTestServer(new TestServer()) { testServer =>
-      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+      withStreamingContext { ssc =>
         testServer.start()
 
         val batchCounter = new BatchCounter(ssc)
@@ -781,7 +781,6 @@ class BasicOperationsSuite extends TestSuiteBase {
 
   /** Test cleanup of RDDs in DStream metadata */
   def runCleanupTest[T: ClassTag](
-      conf2: SparkConf,
       operation: DStream[Int] => DStream[T],
       numExpectedOutput: Int = cleanupTestInput.size,
       rememberDuration: Duration = null

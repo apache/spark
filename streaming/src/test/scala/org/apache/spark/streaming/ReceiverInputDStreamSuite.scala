@@ -21,7 +21,7 @@ import scala.util.Random
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.SparkEnv
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
@@ -31,6 +31,8 @@ import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.streaming.util.{WriteAheadLogRecordHandle, WriteAheadLogUtils}
 
 class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
+
+  override def master: String = "local[4]"
 
   override def afterAll(): Unit = {
     try {
@@ -123,16 +125,18 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
   }
 
   private def runTest(enableWAL: Boolean, body: ReceiverInputDStream[_] => Unit): Unit = {
-    val conf = new SparkConf()
-    conf.setMaster("local[4]").setAppName("ReceiverInputDStreamSuite")
-    conf.set(WriteAheadLogUtils.RECEIVER_WAL_ENABLE_CONF_KEY, enableWAL.toString)
-    require(WriteAheadLogUtils.enableReceiverLog(conf) === enableWAL)
-    val ssc = new StreamingContext(conf, Seconds(1))
-    val receiverStream = new ReceiverInputDStream[Int](ssc) {
-      override def getReceiver(): Receiver[Int] = null
-    }
-    withStreamingContext(ssc) { ssc =>
-      body(receiverStream)
+    try {
+      sc.conf.set(WriteAheadLogUtils.RECEIVER_WAL_ENABLE_CONF_KEY, enableWAL.toString)
+      assert(WriteAheadLogUtils.enableReceiverLog(sc.conf) === enableWAL)
+      val ssc = new StreamingContext(sc, Seconds(1))
+      val receiverStream = new ReceiverInputDStream[Int](ssc) {
+        override def getReceiver(): Receiver[Int] = null
+      }
+      withStreamingContext(ssc) { ssc =>
+        body(receiverStream)
+      }
+    } finally {
+      sc.conf.remove(WriteAheadLogUtils.RECEIVER_WAL_ENABLE_CONF_KEY)
     }
   }
 
