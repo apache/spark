@@ -156,6 +156,16 @@ private[hive] trait HiveClient {
     }
   }
 
+  /**
+   * Returns the partition names for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   *
+   * The returned sequence is sorted as strings.
+   */
+  def getPartitionNames(
+      table: CatalogTable,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String]
+
   /** Returns the specified partition or None if it does not exist. */
   final def getPartitionOption(
       db: String,
