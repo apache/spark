@@ -115,7 +115,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      */
     private def canBroadcast(plan: LogicalPlan): Boolean = {
       plan.statistics.isBroadcastable ||
-        plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold
+        (plan.statistics.sizeInBytes >= 0 &&
+          plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold)
     }
 
     /**

@@ -1110,6 +1110,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
     assert(e.getMessage.contains("Cannot create encoder for Option of Product type"))
   }
+
+
+  test ("SPARK-17460: the sizeInBytes in Statistics shouldn't overflow") {
+    val ds = (0 to 10000).map( i =>
+      (i, Seq((i, Seq((i, "This is really not that long of a string")))))).toDS()
+    val sizeInBytes = ds.logicalPlan.statistics.sizeInBytes
+    assert(sizeInBytes > 0)
+  }
 }
 
 case class Generic[T](id: T, value: Double)
