@@ -1047,6 +1047,28 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
 }
 
 /**
+ * Parses a column with a format to a timestamp.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(timestamp, fmt) - Parses the `timestamp` expression with the `fmt` expression.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
+       1483142400
+  """)
+case class ToTimestamp(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(left: Expression, right: Expression) = {
+  this(left, right, UnixTimestamp(left, right))
+}
+
+  override def dataType: DataType = TimestampType
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+}
+
+/**
  * Returns date truncated to the unit specified by the format.
  */
 // scalastyle:off line.size.limit

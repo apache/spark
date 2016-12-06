@@ -2667,9 +2667,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.2.0
    */
-  def to_timestamp(s: Column, p: String): Column = {
-    withExpr {UnixTimestamp(s.expr, Literal(p)) }.cast("timestamp")
-  }
+  def to_timestamp(s: Column, p: String): Column = withExpr {ToTimestamp(s.expr, Literal(p)) }
 
   /**
    * Converts the column into DateType.
