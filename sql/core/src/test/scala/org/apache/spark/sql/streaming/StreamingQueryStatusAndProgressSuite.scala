@@ -38,7 +38,7 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
         |  "id" : "${testProgress1.id.toString}",
         |  "runId" : "${testProgress1.runId.toString}",
         |  "name" : "myName",
-        |  "timestamp" : 1,
+        |  "timestamp" : "2016-12-05T20:54:20.827Z",
         |  "numInputRows" : 678,
         |  "inputRowsPerSecond" : 10.0,
         |  "durationMs" : {
@@ -71,7 +71,7 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
          |  "id" : "${testProgress2.id.toString}",
          |  "runId" : "${testProgress2.runId.toString}",
          |  "name" : null,
-         |  "timestamp" : 1,
+         |  "timestamp" : "2016-12-05T20:54:20.827Z",
          |  "numInputRows" : 678,
          |  "durationMs" : {
          |    "total" : 0
@@ -131,7 +131,7 @@ object StreamingQueryStatusAndProgressSuite {
     id = UUID.randomUUID,
     runId = UUID.randomUUID,
     name = "myName",
-    timestamp = 1L,
+    timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
     durationMs = Map("total" -> 0L).mapValues(long2Long).asJava,
     currentWatermark = 3L,
@@ -153,7 +153,7 @@ object StreamingQueryStatusAndProgressSuite {
     id = UUID.randomUUID,
     runId = UUID.randomUUID,
     name = null, // should not be present in the json
-    timestamp = 1L,
+    timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
     durationMs = Map("total" -> 0L).mapValues(long2Long).asJava,
     currentWatermark = 3L,
