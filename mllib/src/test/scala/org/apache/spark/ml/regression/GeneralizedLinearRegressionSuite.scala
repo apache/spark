@@ -500,7 +500,6 @@ class GeneralizedLinearRegressionSuite
         .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
       val model = trainer.fit(dataset)
       val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
-      println("coeff is " + actual)
       assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with poisson family, " +
         s"$link link and fitIntercept = $fitIntercept (with zero values).")
       idx += 1
