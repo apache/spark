@@ -93,7 +93,7 @@ case class Generate(
 
   override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)
 
-  val qualifiedGeneratorOutput: Seq[Attribute] = qualifier.map { q =>
+  def qualifiedGeneratorOutput: Seq[Attribute] = qualifier.map { q =>
     // prepend the new qualifier to the existed one
     generatorOutput.map(a => a.withQualifier(Some(q)))
   }.getOrElse(generatorOutput)
