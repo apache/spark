@@ -77,8 +77,7 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
       Some(SerializedOffset("0")),
       Some(SerializedOffset("""{"topic-0":{"0":1}}"""))
     ))
-    assert(offsetSeq.metadata ===
-      Some("""{"batchWatermarkMs":0,"batchTimestampMs":1480981499528}"""))
+    assert(offsetSeq.metadata === Some(OffsetSeqMetadata(0L, 1480981499528L)))
   }
 
   private def readFromResource(dir: String): (Long, OffsetSeq) = {
