@@ -278,10 +278,10 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
 
 #' @param object a fitted generalized linear model.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list of components includes at least the coefficients matrix (which includes
+#'         The list of components includes at least the \code{coefficients} (coefficients matrix, which includes
 #'         coefficients, standard error of coefficients, t value and p value),
-#'         null/residual deviance, null/residual degrees of freedom, AIC and number of
-#'         iterations IRLS takes. If there are collinear columns in the data,
+#'         \code{null.deviance} (null/residual degrees of freedom), \code{aic} (AIC)
+#'         and \code{iter} (number of iterations IRLS takes). If there are collinear columns in the data,
 #'         the coefficients matrix only provides coefficients.
 #' @rdname spark.glm
 #' @export
@@ -567,7 +567,8 @@ setMethod("predict", signature(object = "IsotonicRegressionModel"),
 #  Get the summary of an IsotonicRegressionModel model
 
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list includes model's boundaries and prediction.
+#'         The list includes model's \code{boundaries} (boundaries in increasing order)
+#'         and \code{predictions} (predictions associated with the boundaries at the same index).
 #' @rdname spark.isoreg
 #' @aliases summary,IsotonicRegressionModel-method
 #' @export
@@ -665,7 +666,9 @@ setMethod("fitted", signature(object = "KMeansModel"),
 
 #' @param object a fitted k-means model.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list includes the model's features, coefficients, k, size and cluster.
+#'         The list includes the model's \code{coefficients} (model cluster centers),
+#'         \code{size} (number of data points in each cluster), and \code{cluster}
+#'         (cluster centers of the transformed data).
 #' @rdname spark.kmeans
 #' @export
 #' @note summary(KMeansModel) since 2.0.0
@@ -926,10 +929,11 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 
 #' @param object a Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list includes \code{numOfInputs}, \code{numOfOutputs},
-#'         \code{layers}, and \code{weights}. For \code{weights}, it is a numeric vector with
-#'         length equal to the expected given the architecture (i.e., for 8-10-2 network,
-#'         112 connection weights).
+#'         The list includes \code{numOfInputs} (number of inputs), \code{numOfOutputs}
+#'         (number of outputs), \code{layers} (array of layer sizes including input
+#'         and output layers), and \code{weights} (the weights of layers).
+#'         For \code{weights}, it is a numeric vector with length equal to the expected
+#'         given the architecture (i.e., for 8-10-2 network, 112 connection weights).
 #' @rdname spark.mlp
 #' @export
 #' @aliases summary,MultilayerPerceptronClassificationModel-method
@@ -1279,8 +1283,8 @@ setMethod("spark.lda", signature(data = "SparkDataFrame"),
 
 #' @param object a fitted AFT survival regression model.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list includes the model's features, coefficients,
-#'         intercept and log(scale).
+#'         The list includes the model's \code{coefficients} (features, coefficients,
+#'         intercept and log(scale)).
 #' @rdname spark.survreg
 #' @export
 #' @note summary(AFTSurvivalRegressionModel) since 2.0.0
@@ -1368,7 +1372,8 @@ setMethod("spark.gaussianMixture", signature(data = "SparkDataFrame", formula = 
 
 #' @param object a fitted gaussian mixture model.
 #' @return \code{summary} returns summary of the fitted model, which is a list.
-#'         The list includes the model's lambda, mu, sigma, k, dim and posterior.
+#'         The list includes the model's \code{lambda} (lambda), \code{mu} (mu),
+#'         \code{sigma} (sigma), and \code{posterior} (posterior).
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @rdname spark.gaussianMixture
 #' @export
@@ -1503,9 +1508,10 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
 
 #' @param object a fitted ALS model.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list includes the names of the user column,
-#'         the item column and the rating column, the estimated user and item factors,
-#'         rank, regularization parameter and maximum number of iterations used in training.
+#'         The list includes \code{user} (the names of the user column),
+#'         \code{item} (the item column), \code{rating} (the rating column), \code{userFactors}
+#'         (the estimated user factors), \code{itemFactors} (the estimated item factors),
+#'         and \code{rank} (rank of the matrix factorization model).
 #' @rdname spark.als
 #' @aliases summary,ALSModel-method
 #' @export
@@ -1619,10 +1625,9 @@ setMethod("spark.kstest", signature(data = "SparkDataFrame"),
 #  Get the summary of Kolmogorov-Smirnov (KS) Test.
 #' @param object test result object of KSTest by \code{spark.kstest}.
 #' @return \code{summary} returns summary information of KSTest object, which is a list.
-#'         The list includes the p-value, test statistic computed for the
-#'         test, the null hypothesis with its parameters tested against
-#'         and degrees of freedom of the test.
-#' @rdname spark.kstest
+#'         The list includes the \code{p.value} (p-value), \code{statistic} (test statistic
+#'         computed for the test), \code{nullHypothesis} (the null hypothesis with its
+#'         parameters tested against) and \code{degreesOfFreedom} (degrees of freedom of the test).
 #' @aliases summary,KSTest-method
 #' @export
 #' @note summary(KSTest) since 2.1.0
@@ -1834,8 +1839,8 @@ summary.treeEnsemble <- function(model) {
 #  Get the summary of a Random Forest Regression Model
 
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list of components includes formula, number of features, list of features,
-#'         feature importances, number of trees, and tree weights.
+#'         The list of components includes \code{ans} (formula, number of features, list of features,
+#'         feature importances, number of trees, and tree weights).
 #' @rdname spark.randomForest
 #' @aliases summary,RandomForestRegressionModel-method
 #' @export
@@ -2058,8 +2063,8 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #  Get the summary of a Gradient Boosted Tree Regression Model
 
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list of components includes formula, number of features, list of features,
-#'         feature importances, number of trees, and tree weights.
+#'         The list of components includes \code{ans} (formula, number of features, list of features,
+#'         feature importances, number of trees, and tree weights).
 #' @rdname spark.gbt
 #' @aliases summary,GBTRegressionModel-method
 #' @export
