@@ -31,7 +31,7 @@ training <- df
 test <- df
 
 # Fit a latent dirichlet allocation model with spark.lda
-model <- spark.lda(training, k=10, maxIter=10)
+model <- spark.lda(training, k = 10, maxIter = 10)
 
 # Model summary
 summary(model)

@@ -24,13 +24,15 @@ library(SparkR)
 # Initialize SparkSession
 sparkR.session(appName = "SparkR-ML-logit-example")
 
-# $example on$
+# Binomial logistic regression
+
+# $example on:binomial$
 # Load training data
 df <- read.df("data/mllib/sample_libsvm_data.txt", source = "libsvm")
 training <- df
 test <- df
 
-# Fit an logistic regression model with spark.logit
+# Fit an binomial logistic regression model with spark.logit
 model <- spark.logit(training, label ~ features, maxIter = 10, regParam = 0.3, elasticNetParam = 0.8)
 
 # Model summary
@@ -39,4 +41,23 @@ summary(model)
 # Prediction
 predictions <- predict(model, test)
 showDF(predictions)
-# $example off$
+# $example off:binomial$
+
+# Multinomial logistic regression
+
+# $example on:multinomial$
+# Load training data
+df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
+training <- df
+test <- df
+
+# Fit a multinomial logistic regression model with spark.logit
+model <- spark.logit(training, label ~ features, maxIter = 10, regParam = 0.3, elasticNetParam = 0.8)
+
+# Model summary
+summary(model)
+
+# Prediction
+predictions <- predict(model, test)
+showDF(predictions)
+# $example off:multinomial$

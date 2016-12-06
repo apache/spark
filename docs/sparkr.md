@@ -516,19 +516,19 @@ head(teenagers)
 
 SparkR supports the following machine learning algorithms currently:
 
-* `spark.glm` or `glm`: `Generalized Linear Model`
-* `spark.survreg`: `Accelerated Failure Time (AFT) Survival Regressio Model`
-* `spark.naiveBayes`: `Naive Bayes Model`
-* `spark.kmeans`: `KMeans Model`
-* `spark.logit`: `Logistic Regression Model`
-* `spark.isoreg`: `Isotonic Regression Model`
-* `spark.gaussianMixture`: `Gaussian Mixture Model`
-* `spark.lda`: `Latent Dirichlet Allocation (LDA) Model`
-* `spark.mlp`: `Multilayer Perceptron Classification Model`
-* `spark.gbt`: `Gradient Boosted Tree Model for Regression and Classification`
-* `spark.randomForest`: `Random Forest Model for Regression and Classification`
-* `spark.als`: `Alternating Least Squares (ALS) matrix factorization Model`
-* `spark.kstest`: `Kolmogorov-Smirnov Test`
+* [`spark.glm`](api/R/spark.glm.html) or [`glm`](api/R/glm.html): [`Generalized Linear Model`](ml-classification-regression.html#generalized-linear-regression)
+* [`spark.survreg`](api/R/spark.survreg.html): [`Accelerated Failure Time (AFT) Survival Regression Model`](ml-classification-regression.html#survival-regression)
+* [`spark.naiveBayes`](api/R/spark.naiveBayes.html): [`Naive Bayes Model`](ml-classification-regression.html#naive-bayes)
+* [`spark.kmeans`](api/R/spark.kmeans.html): [`KMeans Model`](ml-clustering.html#k-means)
+* [`spark.logit`](api/R/spark.logit.html): [`Logistic Regression Model`](ml-classification-regression.html#logistic-regression)
+* [`spark.isoreg`](api/R/spark.isoreg.html): [`Isotonic Regression Model`](ml-classification-regression.html#isotonic-regression)
+* [`spark.gaussianMixture`](api/R/spark.gaussianMixture.html): [`Gaussian Mixture Model`](ml-clustering.html#gaussian-mixture-model-gmm)
+* [`spark.lda`](api/R/spark.lda.html): [`Latent Dirichlet Allocation (LDA) Model`](ml-clustering.html#latent-dirichlet-allocation-lda)
+* [`spark.mlp`](api/R/spark.mlp.html): [`Multilayer Perceptron Classification Model`](ml-classification-regression.html#multilayer-perceptron-classifier)
+* [`spark.gbt`](api/R/spark.gbt.html): `Gradient Boosted Tree Model for` [`Regression`](ml-classification-regression.html#gradient-boosted-tree-regression) `and` [`Classification`](ml-classification-regression.html#gradient-boosted-tree-classifier)
+* [`spark.randomForest`](api/R/spark.randomForest.html): `Random Forest Model for` [`Regression`](ml-classification-regression.html#random-forest-regression) `and` [`Classification`](ml-classification-regression.html#random-forest-classifier)
+* [`spark.als`](api/R/spark.als.html): [`Alternating Least Squares (ALS) matrix factorization Model`](ml-collaborative-filtering.html#collaborative-filtering)
+* [`spark.kstest`](api/R/spark.kstest.html): `Kolmogorov-Smirnov Test`
 
 Under the hood, SparkR uses MLlib to train the model. Please refer to the corresponding section of MLlib user guide for example code.
 Users can call `summary` to print a summary of the fitted model, [predict](api/R/predict.html) to make predictions on new data, and [write.ml](api/R/write.ml.html)/[read.ml](api/R/read.ml.html) to save/load fitted models.

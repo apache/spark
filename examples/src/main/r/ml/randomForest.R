@@ -33,7 +33,7 @@ training <- df
 test <- df
 
 # Fit a random forest classification model with spark.randomForest
-model <- spark.randomForest(training, label ~ features, "classification", numTrees=10)
+model <- spark.randomForest(training, label ~ features, "classification", numTrees = 10)
 
 # Model summary
 summary(model)
@@ -52,7 +52,7 @@ training <- df
 test <- df
 
 # Fit a random forest regression model with spark.randomForest
-model <- spark.randomForest(training, label ~ features, "regression", numTrees=10)
+model <- spark.randomForest(training, label ~ features, "regression", numTrees = 10)
 
 # Model summary
 summary(model)

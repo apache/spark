@@ -79,7 +79,7 @@ More details on parameters can be found in the [Python API documentation](api/py
 
 More details on parameters can be found in the [R API documentation](api/R/spark.logit.html).
 
-{% include_example r/ml/logit.R %}
+{% include_example binomial r/ml/logit.R %}
 </div>
 
 </div>
@@ -170,6 +170,13 @@ model with elastic net regularization.
 
 <div data-lang="python" markdown="1">
 {% include_example python/ml/multiclass_logistic_regression_with_elastic_net.py %}
+</div>
+
+<div data-lang="r" markdown="1">
+
+More details on parameters can be found in the [R API documentation](api/R/spark.logit.html).
+
+{% include_example multinomial r/ml/logit.R %}
 </div>
 
 </div>

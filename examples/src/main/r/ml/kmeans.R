@@ -30,7 +30,7 @@ irisDF <- suppressWarnings(createDataFrame(iris))
 kmeansDF <- irisDF
 kmeansTestDF <- irisDF
 kmeansModel <- spark.kmeans(kmeansDF, ~ Sepal_Length + Sepal_Width + Petal_Length + Petal_Width,
-k = 3)
+                            k = 3)
 
 # Model summary
 summary(kmeansModel)

@@ -59,6 +59,5 @@ model.summaries <- spark.lapply(families, train)
 # Print the summary of each model
 print(model.summaries)
 
-
 # Stop the SparkSession now
 sparkR.session.stop()
