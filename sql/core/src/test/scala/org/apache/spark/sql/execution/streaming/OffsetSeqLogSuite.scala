@@ -27,10 +27,19 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
   /** test string offset type */
   case class StringOffset(override val json: String) extends Offset
 
-  testWithUninterruptibleThread("serialization - deserialization") {
+  test("OffsetSeqMetadata - deserialization") {
+    assert(OffsetSeqMetadata(0, 0) === OffsetSeqMetadata("""{}"""))
+    assert(OffsetSeqMetadata(1, 0) === OffsetSeqMetadata("""{"batchWatermarkMs":1}"""))
+    assert(OffsetSeqMetadata(0, 2) === OffsetSeqMetadata("""{"batchTimestampMs":2}"""))
+    assert(
+      OffsetSeqMetadata(1, 2) ===
+        OffsetSeqMetadata("""{"batchWatermarkMs":1,"batchTimestampMs":2}"""))
+  }
+
+  testWithUninterruptibleThread("OffsetSeqLog - serialization - deserialization") {
     withTempDir { temp =>
       val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
-    val metadataLog = new OffsetSeqLog(spark, dir.getAbsolutePath)
+      val metadataLog = new OffsetSeqLog(spark, dir.getAbsolutePath)
       val batch0 = OffsetSeq.fill(LongOffset(0), LongOffset(1), LongOffset(2))
       val batch1 = OffsetSeq.fill(StringOffset("one"), StringOffset("two"), StringOffset("three"))
 

@@ -86,6 +86,14 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.
 
 {% include_example python/ml/kmeans_example.py %}
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.kmeans.html) for more details.
+
+{% include_example kmeans r/ml.R %}
+</div>
+
 </div>
 
 ## Latent Dirichlet allocation (LDA)

@@ -389,6 +389,14 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 
 {% include_example python/ml/naive_bayes_example.py %}
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.naiveBayes.html) for more details.
+
+{% include_example naiveBayes r/ml.R %}
+</div>
+
 </div>
 
 
@@ -564,6 +572,13 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/Generalized
 Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.GeneralizedLinearRegression) for more details.
 
 {% include_example python/ml/generalized_linear_regression_example.py %}
+</div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.glm.html) for more details.
+
+{% include_example glm r/ml.R %}
 </div>
 
 </div>
@@ -753,6 +768,13 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/AFTSurvival
 Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.AFTSurvivalRegression) for more details.
 
 {% include_example python/ml/aft_survival_regression.py %}
+</div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.survreg.html) for more details.
+
+{% include_example survreg r/ml.R %}
 </div>
 
 </div>
