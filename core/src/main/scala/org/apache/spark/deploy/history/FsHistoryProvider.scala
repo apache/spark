@@ -540,23 +540,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private[history] def cleanLogs(): Unit = {
     try {
-      val maxAge = conf.getTimeAsMs("spark.history.fs.cleaner.maxAge", "7d")
-
-      val cleanInProgressFiles =
-        conf.getBoolean("spark.history.fs.cleaner.inProgress.files", false)
-      val inProgressMaxAge =
-        conf.getTimeAsMs("spark.history.fs.cleaner.inProgress.maxAge", "28d")
+      val maxAge = conf.getTimeAsSeconds("spark.history.fs.cleaner.maxAge", "7d") * 1000
 
       val now = clock.getTimeMillis()
       val appsToRetain = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
 
       def shouldClean(attempt: FsApplicationAttemptInfo): Boolean = {
-        if (attempt.completed) {
-          now - attempt.lastUpdated > maxAge
-        } else {
-          cleanInProgressFiles &&
-            now - attempt.lastUpdated > inProgressMaxAge
-        }
+        now - attempt.lastUpdated > maxAge
       }
 
       // Scan all logs from the log directory.
