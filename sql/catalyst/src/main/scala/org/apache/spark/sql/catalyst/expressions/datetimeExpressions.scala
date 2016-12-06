@@ -1054,7 +1054,7 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
   extended = """
     Examples:
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
-       1483142400
+       2016-12-31 00:00:00.0
   """)
 case class ToTimestamp(left: Expression, right: Expression, child: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
