@@ -89,4 +89,16 @@ class KafkaSourceOffsetSuite extends OffsetSuite with SharedSQLContext {
         Array(0 -> batch0Serialized, 1 -> batch1Serialized))
     }
   }
+
+  test("read Spark 2.1.0 log format") {
+    val offset = readFromResource("kafka-source-offset-version-2.1.0.txt")
+    assert(KafkaSourceOffset(offset) ===
+      KafkaSourceOffset(("topic1", 0, 456L), ("topic1", 1, 789L), ("topic2", 0, 0L)))
+  }
+
+  private def readFromResource(file: String): SerializedOffset = {
+    import scala.io.Source
+    val str = Source.fromFile(getClass.getResource(s"/structured-streaming/$file").toURI).mkString
+    SerializedOffset(str)
+  }
 }
