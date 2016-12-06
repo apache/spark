@@ -256,6 +256,9 @@ private[hive] class SparkExecuteStatementOperation(
         logError(s"Error executing query, currentState $currentState, ", e)
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, SparkUtils.exceptionString(e))
+        if (statementId != null) {
+          sqlContext.sparkContext.cancelJobGroup(statementId)
+        }
         getStatus().getState() match {
           case OperationState.INITIALIZED =>
             setState(OperationState.CLOSED)
