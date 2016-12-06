@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import scala.collection.Map
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkException
@@ -287,7 +288,7 @@ object RowEncoder {
 
       StaticInvoke(
         ArrayBasedMapData.getClass,
-        ObjectType(classOf[scala.collection.immutable.Map[_, _]]),
+        ObjectType(classOf[Map[_, _]]),
         "toScalaMap",
         keyData :: valueData :: Nil)
 
