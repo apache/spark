@@ -1022,7 +1022,12 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     assert(options.maxFilesPerTrigger == Some(1))
   }
 
-  test("read Spark 2.1.0 log format") {
+  test("FileStreamSource offset - read Spark 2.1.0 log format") {
+    val offset = readOffsetFromResource("file-source-offset-version-2.1.0.txt")
+    assert(LongOffset.convert(offset) === Some(LongOffset(345)))
+  }
+
+  test("FileStreamSourceLog - read Spark 2.1.0 log format") {
     assert(readLogFromResource("file-source-log-version-2.1.0") === Seq(
       FileEntry("/a/b/0", 1480730949000L, 0L),
       FileEntry("/a/b/1", 1480730950000L, 1L),
@@ -1036,6 +1041,12 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val input = getClass.getResource(s"/structured-streaming/$dir")
     val log = new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, input.toString)
     log.allFiles()
+  }
+
+  private def readOffsetFromResource(file: String): SerializedOffset = {
+    import scala.io.Source
+    val str = Source.fromFile(getClass.getResource(s"/structured-streaming/$file").toURI).mkString
+    SerializedOffset(str.trim)
   }
 }
 
