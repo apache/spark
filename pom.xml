@@ -136,6 +136,7 @@
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.8.1</parquet.version>
     <hive.parquet.version>1.6.0</hive.parquet.version>
+    <feign.version>8.18.0</feign.version>
     <jetty.version>9.2.16.v20160414</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.8.0</chill.version>
@@ -303,6 +304,33 @@
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
       </dependency>
+
+      <dependency>
+        <groupId>com.netflix.feign</groupId>
+        <artifactId>feign-core</artifactId>
+        <version>${feign.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.netflix.feign</groupId>
+        <artifactId>feign-okhttp</artifactId>
+        <version>${feign.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.netflix.feign</groupId>
+        <artifactId>feign-jackson</artifactId>
+        <version>${feign.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.netflix.feign</groupId>
+        <artifactId>feign-jaxrs</artifactId>
+        <version>${feign.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.okhttp3</groupId>
+        <artifactId>okhttp</artifactId>
+        <version>3.4.1</version>
+      </dependency>
+
       <!-- This artifact is a shaded version of ASM 5.0.4. The POM that was used to produce this
            is at https://github.com/apache/geronimo-xbean/tree/xbean-4.4/xbean-asm5-shaded
            For context on why we shade ASM, see SPARK-782 and SPARK-6152. -->
@@ -615,6 +643,11 @@
       <dependency>
         <groupId>com.fasterxml.jackson.module</groupId>
         <artifactId>jackson-module-jaxb-annotations</artifactId>
+        <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.jaxrs</groupId>
+        <artifactId>jackson-jaxrs-json-provider</artifactId>
         <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
@@ -2590,6 +2623,22 @@
       <modules>
         <module>mesos</module>
       </modules>
+    </profile>
+
+    <profile>
+      <id>kubernetes</id>
+      <modules>
+        <module>kubernetes/core</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>kubernetes-integration-tests</id>
+      <modules>
+        <module>kubernetes/docker-minimal-bundle</module>
+        <module>kubernetes/integration-tests</module>
+        <module>kubernetes/integration-tests-spark-jobs</module>
+      </modules>  
     </profile>
 
     <profile>

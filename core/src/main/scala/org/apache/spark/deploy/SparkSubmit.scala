@@ -70,7 +70,8 @@ object SparkSubmit {
   private val STANDALONE = 2
   private val MESOS = 4
   private val LOCAL = 8
-  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL
+  private val KUBERNETES = 16
+  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | KUBERNETES | LOCAL
 
   // Deploy modes
   private val CLIENT = 1
@@ -239,6 +240,7 @@ object SparkSubmit {
         YARN
       case m if m.startsWith("spark") => STANDALONE
       case m if m.startsWith("mesos") => MESOS
+      case m if m.startsWith("kubernetes") => KUBERNETES
       case m if m.startsWith("local") => LOCAL
       case _ =>
         printErrorAndExit("Master must either be yarn or start with spark, mesos, local")
@@ -284,6 +286,7 @@ object SparkSubmit {
     }
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
+    val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
 
     // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
     // too for packages that include Python code
@@ -330,6 +333,10 @@ object SparkSubmit {
 
     // The following modes are not supported or applicable
     (clusterManager, deployMode) match {
+      case (KUBERNETES, CLIENT) =>
+        printErrorAndExit("Client mode is currently not supported for Kubernetes.")
+      case (KUBERNETES, CLUSTER) if args.isPython || args.isR =>
+        printErrorAndExit("Kubernetes does not currently support python or R applications.")
       case (STANDALONE, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python " +
           "applications on standalone clusters.")
@@ -463,7 +470,17 @@ object SparkSubmit {
       OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.principal"),
       OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.keytab"),
 
-      // Other options
+      // Kubernetes only
+      OptionAssigner(args.kubernetesMaster, KUBERNETES, ALL_DEPLOY_MODES,
+        sysProp = "spark.kubernetes.master"),
+      OptionAssigner(args.kubernetesNamespace, KUBERNETES, ALL_DEPLOY_MODES,
+        sysProp = "spark.kubernetes.namespace"),
+      OptionAssigner(args.kubernetesUploadJars, KUBERNETES, CLUSTER,
+        sysProp = "spark.kubernetes.driver.uploads.jars"),
+      OptionAssigner(args.kubernetesUploadDriverExtraClasspath, KUBERNETES, CLUSTER,
+        sysProp = "spark.kubernetes.driver.uploads.driverExtraClasspath"),
+
+        // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.cores"),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
@@ -506,8 +523,9 @@ object SparkSubmit {
 
     // Add the application jar automatically so the user doesn't have to call sc.addJar
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
+    // In Kubernetes cluster mode, the jar will be uploaded by the client separately.
     // For python and R files, the primary resource is already distributed as a regular file
-    if (!isYarnCluster && !args.isPython && !args.isR) {
+    if (!isYarnCluster && !isKubernetesCluster && !args.isPython && !args.isR) {
       var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
       if (isUserJar(args.primaryResource)) {
         jars = jars ++ Seq(args.primaryResource)
@@ -604,6 +622,13 @@ object SparkSubmit {
       if (args.childArgs != null) {
         childArgs ++= args.childArgs
       }
+    }
+
+    if (isKubernetesCluster) {
+      childMainClass = "org.apache.spark.deploy.kubernetes.Client"
+      childArgs += args.primaryResource
+      childArgs += args.mainClass
+      childArgs ++= args.childArgs
     }
 
     // Load any properties specified through --conf and the default properties file
@@ -829,6 +854,7 @@ private[spark] object SparkSubmitUtils {
 
   /**
    * Represents a Maven Coordinate
+   *
    * @param groupId the groupId of the coordinate
    * @param artifactId the artifactId of the coordinate
    * @param version the version of the coordinate
@@ -840,6 +866,7 @@ private[spark] object SparkSubmitUtils {
 /**
  * Extracts maven coordinates from a comma-delimited string. Coordinates should be provided
  * in the format `groupId:artifactId:version` or `groupId/artifactId:version`.
+ *
  * @param coordinates Comma-delimited string of maven coordinates
  * @return Sequence of Maven coordinates
  */
@@ -870,6 +897,7 @@ private[spark] object SparkSubmitUtils {
 
   /**
    * Extracts maven coordinates from a comma-delimited string
+   *
    * @param remoteRepos Comma-delimited string of remote repositories
    * @param ivySettings The Ivy settings for this session
    * @return A ChainResolver used by Ivy to search for and resolve dependencies.
@@ -934,6 +962,7 @@ private[spark] object SparkSubmitUtils {
   /**
    * Output a comma-delimited list of paths for the downloaded jars to be added to the classpath
    * (will append to jars in SparkSubmit).
+   *
    * @param artifacts Sequence of dependencies that were resolved and retrieved
    * @param cacheDirectory directory where jars are cached
    * @return a comma-delimited list of paths for the dependencies
@@ -990,6 +1019,7 @@ private[spark] object SparkSubmitUtils {
 
   /**
    * Resolves any dependencies that were supplied through maven coordinates
+   *
    * @param coordinates Comma-delimited string of maven coordinates
    * @param remoteRepos Comma-delimited string of remote repositories other than maven central
    * @param ivyPath The path to the local ivy repository

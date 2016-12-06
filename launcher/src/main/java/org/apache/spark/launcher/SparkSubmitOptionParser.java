@@ -76,6 +76,12 @@ class SparkSubmitOptionParser {
   protected final String PRINCIPAL = "--principal";
   protected final String QUEUE = "--queue";
 
+  // Kubernetes-only options.
+  protected final String KUBERNETES_MASTER = "--kubernetes-master";
+  protected final String KUBERNETES_NAMESPACE = "--kubernetes-namespace";
+  protected final String KUBERNETES_UPLOAD_JARS = "--upload-jars";
+  protected final String KUBERNETES_UPLOAD_DRIVER_EXTRA_CLASSPATH = "--upload-driver-extra-classpath";
+
   /**
    * This is the canonical list of spark-submit options. Each entry in the array contains the
    * different aliases for the same option; the first element of each entry is the "official"
@@ -115,6 +121,10 @@ class SparkSubmitOptionParser {
     { REPOSITORIES },
     { STATUS },
     { TOTAL_EXECUTOR_CORES },
+    { KUBERNETES_MASTER },
+    { KUBERNETES_NAMESPACE },
+    { KUBERNETES_UPLOAD_JARS },
+    { KUBERNETES_UPLOAD_DRIVER_EXTRA_CLASSPATH }
   };
 
   /**
