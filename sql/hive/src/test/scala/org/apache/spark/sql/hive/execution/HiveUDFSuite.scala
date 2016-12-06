@@ -31,6 +31,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.io.{LongWritable, Writable}
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.functions.max
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
@@ -493,45 +494,21 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     withUserDefinedFunction("statefulUDF" -> true, "statelessUDF" -> true) {
       sql(s"CREATE TEMPORARY FUNCTION statefulUDF AS '${classOf[StatefulUDF].getName}'")
       sql(s"CREATE TEMPORARY FUNCTION statelessUDF AS '${classOf[StatelessUDF].getName}'")
-      withTempView("inputTable") {
-        val testData = spark.sparkContext.parallelize(
-          (0 until 10) map (x => IntegerCaseClass(1)), 2).toDF()
-        testData.createOrReplaceTempView("inputTable")
-        // Distribute all rows to one partition (all rows have the same content),
-        // and expected Max(s) is 10 as statefulUDF returns the sequence number starting from 1.
-        checkAnswer(
-          sql(
-            """
-            |SELECT MAX(s) FROM
-            |  (SELECT statefulUDF() as s FROM
-            |    (SELECT i from inputTable DISTRIBUTE by i) a
-            |    ) b
-          """.stripMargin),
-          Row(10))
+      val testData = spark.range(10).repartition(1)
+      val testData1 = spark.range(10).repartition(2)
 
-        // Expected Max(s) is 5, as there are 2 partitions with 5 rows each, and statefulUDF
-        // returns the sequence number of the rows in the partition starting from 1.
-        checkAnswer(
-          sql(
-            """
-              |SELECT MAX(s) FROM
-              |  (SELECT statefulUDF() as s FROM
-              |    (SELECT i from inputTable) a
-              |    ) b
-            """.stripMargin),
-          Row(5))
+      // Expected Max(s) is 10 as statefulUDF returns the sequence number starting from 1.
+      checkAnswer(testData.selectExpr("statefulUDF() as s").agg(max($"s")), Row(10))
 
-        // Expected Max(s) is 1, as stateless UDF is deterministic and replaced by constant 1.
-        checkAnswer(
-          sql(
-            """
-              |SELECT MAX(s) FROM
-              |  (SELECT statelessUDF() as s FROM
-              |    (SELECT i from inputTable DISTRIBUTE by i) a
-              |    ) b
-            """.stripMargin),
-          Row(1))
-      }
+      // Expected Max(s) is 10 as statefulUDF returns the sequence number starting from 1.
+      // Note that testData.union(testData) will have Row(20) because internally it is converted
+      // to PartitionerAwareUnionRDD with 1 partition as they are having same partitioning.
+      checkAnswer(testData.union(testData1)
+        .selectExpr("statefulUDF() as s").agg(max($"s")), Row(10))
+
+      // Expected Max(s) is 1, as stateless UDF is deterministic and foldable and replaced
+      // by constant 1 by ConstantFolding optimizer.
+      checkAnswer(testData.selectExpr("statelessUDF() as s").agg(max($"s")), Row(1))
     }
   }
 }
