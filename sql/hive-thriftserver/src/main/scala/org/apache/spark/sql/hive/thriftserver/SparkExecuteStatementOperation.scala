@@ -261,6 +261,7 @@ private[hive] class SparkExecuteStatementOperation(
             setState(OperationState.CLOSED)
           case OperationState.CANCELED =>
           case OperationState.FINISHED =>
+          case OperationState.CLOSED =>
           case _ =>
             setState(OperationState.ERROR)
         }
