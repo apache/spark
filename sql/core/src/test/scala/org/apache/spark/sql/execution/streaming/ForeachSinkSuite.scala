@@ -263,7 +263,9 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
     try {
       inputData.addData(10, 11, 12)
       query.processAllAvailable()
-      assert(query.lastProgress.numInputRows === 3)
+      val recentProgress = query.recentProgresses.filter(_.numInputRows != 0).headOption
+      assert(recentProgress.isDefined && recentProgress.get.numInputRows === 3,
+        s"recentProgresses[${query.recentProgresses.toList}] doesn't contain correct metrics")
     } finally {
       query.stop()
     }
