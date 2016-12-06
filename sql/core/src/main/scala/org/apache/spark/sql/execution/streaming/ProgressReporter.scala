@@ -173,7 +173,7 @@ trait ProgressReporter extends Logging {
       }
     }
 
-    logInfo(s"Streaming query made progress: $newProgress")
+    logDebug(s"Streaming query made progress: $newProgress")
     currentStatus = currentStatus.copy(isTriggerActive = false)
   }
 
