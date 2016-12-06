@@ -69,7 +69,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
   val backpressureInitialRate: Long =
     _ssc.sparkContext.conf.getLong("spark.streaming.backpressure.initialRate",
-      1 + _ssc.sparkContext.conf.getLong("spark.streaming.kafka.maxRatePerPartition", 1000L) / 10)
+      _ssc.sparkContext.conf.getDouble("spark.streaming.backpressure.pid.minRate", 100).round)
 
   protected var currentOffsets = Map[TopicPartition, Long]()
 
@@ -147,13 +147,13 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
         lagPerPartition.map { case (tp, lag) =>
           val maxRateLimitPerPartition = ppc.maxRatePerPartition(tp)
+          val effectiveRate = if (rate >= 0) rate else backpressureInitialRate
+          val estimateRate = Math.round(lag / totalLag.toFloat * effectiveRate)
           val backpressureRate =
-            if (rate >= 0) {
-              val estimateRate = Math.round(lag / totalLag.toFloat * rate)
-              if (estimateRate > maxRateLimitPerPartition && maxRateLimitPerPartition > 0) {
-                maxRateLimitPerPartition
-              } else estimateRate
-            } else math.min(backpressureInitialRate, maxRateLimitPerPartition)
+            if (estimateRate > maxRateLimitPerPartition && maxRateLimitPerPartition > 0) {
+              maxRateLimitPerPartition
+            }
+            else estimateRate
           tp -> backpressureRate
         }
       case None => offsets.map { case (tp, offset) => tp -> ppc.maxRatePerPartition(tp) }
