@@ -1065,9 +1065,10 @@ case class ParseToDate(left: Expression, right: Expression, child: Expression)
   }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
-  override def dataType: DataType = DateType
   override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+
+  override def prettyName: String = "to_date"
 }
 
 /**
@@ -1088,9 +1089,10 @@ case class ParseToTimestamp(left: Expression, right: Expression, child: Expressi
 }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
-  override def dataType: DataType = TimestampType
   override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+
+  override def prettyName: String = "to_timestamp"
 }
 
 /**
