@@ -744,7 +744,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' \dontrun{
 #' sparkR.session()
 #' # binary logistic regression
-#' df <- suppressWarnings(createDataFrame(iris))
+#' df <- createDataFrame(iris)
 #' training <- df[df$Species %in% c("versicolor", "virginica"), ]
 #' model <- spark.logit(training, Species ~ ., regParam = 0.5)
 #' summary <- summary(model)
@@ -763,7 +763,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #'
 #' # multinomial logistic regression
 #'
-#' df <- suppressWarnings(createDataFrame(iris))
+#' df <- createDataFrame(iris)
 #' model <- spark.logit(df, Species ~ ., regParam = 0.5)
 #' summary <- summary(model)
 #'
