@@ -293,29 +293,43 @@ class KafkaTestUtils extends Logging {
       servers: Seq[KafkaServer]) {
     import ZkUtils._
     val topicAndPartitions = (0 until numPartitions).map(TopicAndPartition(topic, _))
-    def isDeleted(): Boolean = {
+    def assertTopicDeleted(): Unit = {
       // wait until admin path for delete topic is deleted, signaling completion of topic deletion
-      val deletePath = !zkUtils.pathExists(getDeleteTopicPath(topic))
-      val topicPath = !zkUtils.pathExists(getTopicPath(topic))
+      assert(
+        !zkUtils.pathExists(getDeleteTopicPath(topic)),
+        s"${getDeleteTopicPath(topic)} still exists")
+      assert(!zkUtils.pathExists(getTopicPath(topic)), s"${getTopicPath(topic)} still exists")
       // ensure that the topic-partition has been deleted from all brokers' replica managers
-      val replicaManager = servers.forall(server => topicAndPartitions.forall(tp =>
-        server.replicaManager.getPartition(tp.topic, tp.partition) == None))
+      assert(servers.forall(server => topicAndPartitions.forall(tp =>
+        server.replicaManager.getPartition(tp.topic, tp.partition) == None)),
+        s"topic $topic still exists in the replica manager")
       // ensure that logs from all replicas are deleted if delete topic is marked successful
-      val logManager = servers.forall(server => topicAndPartitions.forall(tp =>
-        server.getLogManager().getLog(tp).isEmpty))
+      assert(servers.forall(server => topicAndPartitions.forall(tp =>
+        server.getLogManager().getLog(tp).isEmpty)),
+        s"topic $topic still exists in log mananger")
       // ensure that topic is removed from all cleaner offsets
-      val cleaner = servers.forall(server => topicAndPartitions.forall { tp =>
+      assert(servers.forall(server => topicAndPartitions.forall { tp =>
         val checkpoints = server.getLogManager().logDirs.map { logDir =>
           new OffsetCheckpoint(new File(logDir, "cleaner-offset-checkpoint")).read()
         }
         checkpoints.forall(checkpointsPerLogDir => !checkpointsPerLogDir.contains(tp))
-      })
+      }), s"checkpoint for topic $topic still exists")
       // ensure the topic is gone
-      val deleted = !zkUtils.getAllTopics().contains(topic)
-      deletePath && topicPath && replicaManager && logManager && cleaner && deleted
+      assert(
+        !zkUtils.getAllTopics().contains(topic),
+        s"topic $topic still exists on zookeeper")
     }
-    eventually(timeout(60.seconds)) {
-      assert(isDeleted, s"$topic not deleted after timeout")
+    eventually(timeout(60.seconds), interval(200.millis)) {
+      try {
+        assertTopicDeleted()
+      } catch {
+        case e: Throwable =>
+          // As pushing messages into Kafka updates Zookeeper asynchronously, there is a small
+          // chance that a topic will be recreated after deletion due to the asynchronous update.
+          // Hence, delete the topic and retry.
+          AdminUtils.deleteTopic(zkUtils, topic)
+          throw e
+      }
     }
   }
 
@@ -331,7 +345,7 @@ class KafkaTestUtils extends Logging {
       case _ =>
         false
     }
-    eventually(timeout(10.seconds)) {
+    eventually(timeout(60.seconds)) {
       assert(isPropagated, s"Partition [$topic, $partition] metadata not propagated after timeout")
     }
   }
