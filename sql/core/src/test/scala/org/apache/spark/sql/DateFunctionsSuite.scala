@@ -507,6 +507,33 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
   }
 
+
+  test("to_timestamp") {
+    val date1 = Date.valueOf("2015-07-24")
+    val date2 = Date.valueOf("2015-07-25")
+    val ts1 = Timestamp.valueOf("2015-07-24 10:00:00.3")
+    val ts2 = Timestamp.valueOf("2015-07-25 02:02:02.2")
+    val s1 = "2015/07/24 10:00:00.5"
+    val s2 = "2015/07/25 02:02:02.6"
+    val ss1 = "2015-07-24 10:00:00"
+    val ss2 = "2015-07-25 02:02:02"
+    val fmt = "yyyy/MM/dd HH:mm:ss.S"
+    val df = Seq((date1, ts1, s1, ss1), (date2, ts2, s2, ss2)).toDF("d", "ts", "s", "ss")
+
+    checkAnswer(df.select(to_timestamp(col("ss"))),
+      df.select(unix_timestamp(col("ss")).cast("timestamp")))
+//    checkAnswer(df.select(to_timestamp(col("ss"))), Seq(
+//      Row(ts1), Row(ts2)))
+//    checkAnswer(df.select(to_timestamp(col("d"), fmt)), Seq(
+//      Row(date1.getTime, Row(date2.getTime)))
+    checkAnswer(df.select(to_timestamp(col("s"), fmt)), Seq(
+      Row(ts1, Row(ts2))))
+
+    //    val now = sql("select to_timestamp()").collect().head.getLong(0)
+//    checkAnswer(sql(s"select cast ($now as timestamp)"), Row(new java.util.Date(now * 1000)))
+
+  }
+
   test("datediff") {
     val df = Seq(
       (Date.valueOf("2015-07-24"), Timestamp.valueOf("2015-07-24 01:00:00"),

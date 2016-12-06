@@ -1057,12 +1057,13 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
        1483142400
   """)
 case class ToTimestamp(left: Expression, right: Expression, child: Expression)
-  extends RuntimeReplaceable {
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
 
-  def this(left: Expression, right: Expression) = {
-  this(left, right, UnixTimestamp(left, right))
+  def this(left: Expression, format: Expression) = {
+  this(left, format, Cast(UnixTimestamp(left, format), TimestampType))
 }
 
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
   override def dataType: DataType = TimestampType
   override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"

@@ -2667,7 +2667,18 @@ object functions {
    * @group datetime_funcs
    * @since 2.2.0
    */
-  def to_timestamp(s: Column, p: String): Column = withExpr {ToTimestamp(s.expr, Literal(p)) }
+  def to_timestamp(s: Column): Column = withExpr {
+    new ToTimestamp(s.expr, Literal("yyyy-MM-dd HH:mm:ss"))
+  }
+
+  /**
+   * Convert time string with given pattern
+   * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
+   * to Unix timestamp (in seconds), return null if fail.
+   * @group datetime_funcs
+   * @since 2.2.0
+   */
+  def to_timestamp(s: Column, p: String): Column = withExpr { new ToTimestamp(s.expr, Literal(p)) }
 
   /**
    * Converts the column into DateType.
@@ -2686,7 +2697,7 @@ object functions {
    * @since 2.2.0
    */
   def to_date(e: Column, fmt: String): Column = withExpr {
-    ToDate(to_timestamp(e, fmt).expr)
+    ToDate(new ToTimestamp(e.expr, Literal(fmt)))
   }
 
   /**
