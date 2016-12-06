@@ -31,7 +31,7 @@ training <- df
 test <- df
 
 # Fit a gaussian mixture clustering model with spark.gaussianMixture
-model <- spark.gaussianMixture(training, label ~ features, k = 2)
+model <- spark.gaussianMixture(training, ~ features, k = 2)
 
 # Model summary
 summary(model)
