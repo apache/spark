@@ -316,7 +316,8 @@ case class InsertIntoHiveTable(
             partitionSpec,
             isOverwrite = doHiveOverwrite,
             holdDDLTime = holdDDLTime,
-            inheritTableSpecs = inheritTableSpecs)
+            inheritTableSpecs = inheritTableSpecs,
+            isSrcLocal = false)
         }
       }
     } else {
@@ -325,7 +326,8 @@ case class InsertIntoHiveTable(
         table.catalogTable.identifier.table,
         outputPath.toString, // TODO: URI
         overwrite,
-        holdDDLTime)
+        holdDDLTime,
+        isSrcLocal = false)
     }
 
     // Invalidate the cache.
