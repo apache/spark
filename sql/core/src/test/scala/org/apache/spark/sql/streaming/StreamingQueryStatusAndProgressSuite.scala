@@ -31,12 +31,13 @@ import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
 class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
 
   test("StreamingQueryProgress - prettyJson") {
-    val json = testProgress.prettyJson
-    assert(json ===
+    val json1 = testProgress1.prettyJson
+    assert(json1 ===
       s"""
         |{
-        |  "id" : "${testProgress.id.toString}",
-        |  "name" : "name",
+        |  "id" : "${testProgress1.id.toString}",
+        |  "runId" : "${testProgress1.runId.toString}",
+        |  "name" : "myName",
         |  "timestamp" : 1,
         |  "numInputRows" : 678,
         |  "inputRowsPerSecond" : 10.0,
@@ -60,16 +61,48 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
         |  }
         |}
       """.stripMargin.trim)
-    assert(compact(parse(json)) === testProgress.json)
+    assert(compact(parse(json1)) === testProgress1.json)
 
+    val json2 = testProgress2.prettyJson
+    assert(
+      json2 ===
+        s"""
+         |{
+         |  "id" : "${testProgress2.id.toString}",
+         |  "runId" : "${testProgress2.runId.toString}",
+         |  "name" : null,
+         |  "timestamp" : 1,
+         |  "numInputRows" : 678,
+         |  "durationMs" : {
+         |    "total" : 0
+         |  },
+         |  "currentWatermark" : 3,
+         |  "stateOperators" : [ {
+         |    "numRowsTotal" : 0,
+         |    "numRowsUpdated" : 1
+         |  } ],
+         |  "sources" : [ {
+         |    "description" : "source",
+         |    "startOffset" : 123,
+         |    "endOffset" : 456,
+         |    "numInputRows" : 678
+         |  } ],
+         |  "sink" : {
+         |    "description" : "sink"
+         |  }
+         |}
+      """.stripMargin.trim)
+    assert(compact(parse(json2)) === testProgress2.json)
   }
 
   test("StreamingQueryProgress - json") {
-    assert(compact(parse(testProgress.json)) === testProgress.json)
+    assert(compact(parse(testProgress1.json)) === testProgress1.json)
+    assert(compact(parse(testProgress2.json)) === testProgress2.json)
   }
 
   test("StreamingQueryProgress - toString") {
-    assert(testProgress.toString === testProgress.prettyJson)
+    assert(testProgress1.toString === testProgress1.prettyJson)
+    assert(testProgress2.toString === testProgress2.prettyJson)
   }
 
   test("StreamingQueryStatus - prettyJson") {
@@ -94,9 +127,10 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
 }
 
 object StreamingQueryStatusAndProgressSuite {
-  val testProgress = new StreamingQueryProgress(
-    id = UUID.randomUUID(),
-    name = "name",
+  val testProgress1 = new StreamingQueryProgress(
+    id = UUID.randomUUID,
+    runId = UUID.randomUUID,
+    name = "myName",
     timestamp = 1L,
     batchId = 2L,
     durationMs = Map("total" -> 0L).mapValues(long2Long).asJava,
@@ -110,6 +144,28 @@ object StreamingQueryStatusAndProgressSuite {
         numInputRows = 678,
         inputRowsPerSecond = 10.0,
         processedRowsPerSecond = Double.PositiveInfinity  // should not be present in the json
+      )
+    ),
+    sink = new SinkProgress("sink")
+  )
+
+  val testProgress2 = new StreamingQueryProgress(
+    id = UUID.randomUUID,
+    runId = UUID.randomUUID,
+    name = null, // should not be present in the json
+    timestamp = 1L,
+    batchId = 2L,
+    durationMs = Map("total" -> 0L).mapValues(long2Long).asJava,
+    currentWatermark = 3L,
+    stateOperators = Array(new StateOperatorProgress(numRowsTotal = 0, numRowsUpdated = 1)),
+    sources = Array(
+      new SourceProgress(
+        description = "source",
+        startOffset = "123",
+        endOffset = "456",
+        numInputRows = 678,
+        inputRowsPerSecond = Double.NaN, // should not be present in the json
+        processedRowsPerSecond = Double.NegativeInfinity // should not be present in the json
       )
     ),
     sink = new SinkProgress("sink")

@@ -86,7 +86,10 @@ object StreamingQueryListener {
    * @since 2.1.0
    */
   @Experimental
-  class QueryStartedEvent private[sql](val id: UUID, val name: String) extends Event
+  class QueryStartedEvent private[sql](
+      val id: UUID,
+      val runId: UUID,
+      val name: String) extends Event
 
   /**
    * :: Experimental ::
@@ -106,5 +109,8 @@ object StreamingQueryListener {
    * @since 2.1.0
    */
   @Experimental
-  class QueryTerminatedEvent private[sql](val id: UUID, val exception: Option[String]) extends Event
+  class QueryTerminatedEvent private[sql](
+      val id: UUID,
+      val runId: UUID,
+      val exception: Option[String]) extends Event
 }

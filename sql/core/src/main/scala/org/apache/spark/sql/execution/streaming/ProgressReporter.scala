@@ -43,6 +43,7 @@ trait ProgressReporter extends Logging {
 
   // Internal state of the stream, required for computing metrics.
   protected def id: UUID
+  protected def runId: UUID
   protected def name: String
   protected def triggerClock: Clock
   protected def logicalPlan: LogicalPlan
@@ -52,7 +53,7 @@ trait ProgressReporter extends Logging {
   protected def committedOffsets: StreamProgress
   protected def sources: Seq[Source]
   protected def sink: Sink
-  protected def streamExecutionMetadata: StreamExecutionMetadata
+  protected def offsetSeqMetadata: OffsetSeqMetadata
   protected def currentBatchId: Long
   protected def sparkSession: SparkSession
 
@@ -134,11 +135,12 @@ trait ProgressReporter extends Logging {
 
     val newProgress = new StreamingQueryProgress(
       id = id,
+      runId = runId,
       name = name,
       timestamp = currentTriggerStartTimestamp,
       batchId = currentBatchId,
       durationMs = currentDurationsMs.toMap.mapValues(long2Long).asJava,
-      currentWatermark = streamExecutionMetadata.batchWatermarkMs,
+      currentWatermark = offsetSeqMetadata.batchWatermarkMs,
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
       sink = sinkProgress)

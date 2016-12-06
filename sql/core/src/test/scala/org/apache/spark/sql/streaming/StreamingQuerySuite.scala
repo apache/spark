@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
+import org.apache.commons.lang3.RandomStringUtils
 import org.scalactic.TolerantNumerics
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.BeforeAndAfter
@@ -28,7 +29,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
-import org.apache.spark.util.{ManualClock, Utils}
+import org.apache.spark.util.ManualClock
 
 
 class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
@@ -43,38 +44,77 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
     sqlContext.streams.active.foreach(_.stop())
   }
 
-  test("names unique across active queries, ids unique across all started queries") {
+  test("name unique in active queries") {
+    withTempDir { dir =>
+      def startQuery(name: Option[String]): StreamingQuery = {
+        val writer = MemoryStream[Int].toDS.writeStream
+        name.foreach(writer.queryName)
+        writer
+          .foreach(new TestForeachWriter)
+          .start()
+      }
+
+      // No name by default, multiple active queries can have no name
+      val q1 = startQuery(name = None)
+      assert(q1.name === null)
+      val q2 = startQuery(name = None)
+      assert(q2.name === null)
+
+      // Can be set by user
+      val q3 = startQuery(name = Some("q3"))
+      assert(q3.name === "q3")
+
+      // Multiple active queries cannot have same name
+      val e = intercept[IllegalArgumentException] {
+        startQuery(name = Some("q3"))
+      }
+
+      q1.stop()
+      q2.stop()
+      q3.stop()
+    }
+  }
+
+  test(
+    "id unique in active queries + persists across restarts, runId unique across start/restarts") {
     val inputData = MemoryStream[Int]
-    val mapped = inputData.toDS().map { 6 / _}
+    withTempDir { dir =>
+      var cpDir: String = null
 
-    def startQuery(queryName: String): StreamingQuery = {
-      val metadataRoot = Utils.createTempDir(namePrefix = "streaming.checkpoint").getCanonicalPath
-      val writer = mapped.writeStream
-      writer
-        .queryName(queryName)
-        .format("memory")
-        .option("checkpointLocation", metadataRoot)
-        .start()
+      def startQuery(restart: Boolean): StreamingQuery = {
+        if (cpDir == null || !restart) cpDir = s"$dir/${RandomStringUtils.randomAlphabetic(10)}"
+        MemoryStream[Int].toDS().groupBy().count()
+          .writeStream
+          .format("memory")
+          .outputMode("complete")
+          .queryName(s"name${RandomStringUtils.randomAlphabetic(10)}")
+          .option("checkpointLocation", cpDir)
+          .start()
+      }
+
+      // id and runId unique for new queries
+      val q1 = startQuery(restart = false)
+      val q2 = startQuery(restart = false)
+      assert(q1.id !== q2.id)
+      assert(q1.runId !== q2.runId)
+      q1.stop()
+      q2.stop()
+
+      // id persists across restarts, runId unique across restarts
+      val q3 = startQuery(restart = false)
+      q3.stop()
+
+      val q4 = startQuery(restart = true)
+      q4.stop()
+      assert(q3.id === q3.id)
+      assert(q3.runId !== q4.runId)
+
+      // Only one query with same id can be active
+      val q5 = startQuery(restart = false)
+      val e = intercept[IllegalStateException] {
+        startQuery(restart = true)
+      }
     }
-
-    val q1 = startQuery("q1")
-    assert(q1.name === "q1")
-
-    // Verify that another query with same name cannot be started
-    val e1 = intercept[IllegalArgumentException] {
-      startQuery("q1")
-    }
-    Seq("q1", "already active").foreach { s => assert(e1.getMessage.contains(s)) }
-
-    // Verify q1 was unaffected by the above exception and stop it
-    assert(q1.isActive)
-    q1.stop()
-
-    // Verify another query can be started with name q1, but will have different id
-    val q2 = startQuery("q1")
-    assert(q2.name === "q1")
-    assert(q2.id !== q1.id)
-    q2.stop()
   }
 
   testQuietly("isActive, exception, and awaitTermination") {
@@ -105,9 +145,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       TestAwaitTermination(ExpectException[SparkException], timeoutMs = 10),
       AssertOnQuery(q => {
         q.exception.get.startOffset ===
-          q.committedOffsets.toOffsetSeq(Seq(inputData), "{}").toString &&
+          q.committedOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString &&
           q.exception.get.endOffset ===
-            q.availableOffsets.toOffsetSeq(Seq(inputData), "{}").toString
+            q.availableOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString
       }, "incorrect start offset or end offset on exception")
     )
   }
@@ -274,7 +314,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
 
     /** Whether metrics of a query is registered for reporting */
     def isMetricsRegistered(query: StreamingQuery): Boolean = {
-      val sourceName = s"spark.streaming.${query.name}"
+      val sourceName = s"spark.streaming.${query.id}"
       val sources = spark.sparkContext.env.metricsSystem.getSourcesByName(sourceName)
       require(sources.size <= 1)
       sources.nonEmpty

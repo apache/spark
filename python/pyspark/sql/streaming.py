@@ -51,14 +51,29 @@ class StreamingQuery(object):
     @property
     @since(2.0)
     def id(self):
-        """The id of the streaming query.
+        """Returns the unique id of this query that persists across restarts from checkpoint data.
+        That is, this id is generated when a query is started for the first time, and
+        will be the same every time it is restarted from checkpoint data.
+        There can only be one query with the same id active in a Spark cluster.
+        Also see, `runId`.
         """
         return self._jsq.id().toString()
 
     @property
+    @since(2.1)
+    def runId(self):
+        """Returns the unique id of this query that does not persist across restarts. That is, every
+        query that is started (or restarted from checkpoint) will have a different runId.
+        """
+        return self._jsq.runId().toString()
+
+    @property
     @since(2.0)
     def name(self):
-        """The name of the streaming query. This name is unique across all active queries.
+        """Returns the user-specified name of the query, or null if not specified.
+        This name can be specified in the `org.apache.spark.sql.streaming.DataStreamWriter`
+        as `dataframe.writeStream.queryName("query").start()`.
+        This name, if set, must be unique across all active queries.
         """
         return self._jsq.name()
 
