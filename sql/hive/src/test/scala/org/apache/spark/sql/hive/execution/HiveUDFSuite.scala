@@ -493,38 +493,45 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     withUserDefinedFunction("statefulUDF" -> true, "statelessUDF" -> true) {
       sql(s"CREATE TEMPORARY FUNCTION statefulUDF AS '${classOf[StatefulUDF].getName}'")
       sql(s"CREATE TEMPORARY FUNCTION statelessUDF AS '${classOf[StatelessUDF].getName}'")
-      val testData = spark.sparkContext.parallelize(
-        (0 until 10) map (x => IntegerCaseClass(1)), 2).toDF()
-      testData.createOrReplaceTempView("inputTable")
-      checkAnswer(
-        sql(
-          """
+      withTempView("inputTable") {
+        val testData = spark.sparkContext.parallelize(
+          (0 until 10) map (x => IntegerCaseClass(1)), 2).toDF()
+        testData.createOrReplaceTempView("inputTable")
+        // Distribute all row to one partition (all row has the same content),
+        // and expected Max(s) is 10 as statefulUDF returns the sequence number starting from 1.
+        checkAnswer(
+          sql(
+            """
             |SELECT MAX(s) FROM
             |  (SELECT statefulUDF() as s FROM
             |    (SELECT i from inputTable DISTRIBUTE by i) a
             |    ) b
           """.stripMargin),
-        Row(10))
+          Row(10))
 
-      checkAnswer(
-        sql(
-          """
-            |SELECT MAX(s) FROM
-            |  (SELECT statefulUDF() as s FROM
-            |    (SELECT i from inputTable) a
-            |    ) b
-          """.stripMargin),
-        Row(5))
+        // Expected Max(s) is 5, as there are 2 partitions with 5 rows each, and statefulUDF
+        // returns the sequence number of the row in the partition starting from 1.
+        checkAnswer(
+          sql(
+            """
+              |SELECT MAX(s) FROM
+              |  (SELECT statefulUDF() as s FROM
+              |    (SELECT i from inputTable) a
+              |    ) b
+            """.stripMargin),
+          Row(5))
 
-      checkAnswer(
-        sql(
-          """
-            |SELECT MAX(s) FROM
-            |  (SELECT statelessUDF() as s FROM
-            |    (SELECT i from inputTable DISTRIBUTE by i) a
-            |    ) b
-          """.stripMargin),
-        Row(1))
+        // Expected Max(s) is 1, as stateless UDF is deterministic and replaced by constant 1.
+        checkAnswer(
+          sql(
+            """
+              |SELECT MAX(s) FROM
+              |  (SELECT statelessUDF() as s FROM
+              |    (SELECT i from inputTable DISTRIBUTE by i) a
+              |    ) b
+            """.stripMargin),
+          Row(1))
+      }
     }
   }
 }
