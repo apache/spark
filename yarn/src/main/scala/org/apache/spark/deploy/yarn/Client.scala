@@ -1065,6 +1065,10 @@ private[spark] class Client(
             logError(s"Application $appId not found.")
             cleanupStagingDir(appId)
             return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
+          case e: Exception if (e.isInstanceOf[InterruptedException]
+            || e.getCause.isInstanceOf[InterruptedException]) =>
+            logInfo("The reporter thread is interrupted, we assume app is finished.")
+            return (YarnApplicationState.FINISHED, FinalApplicationStatus.SUCCEEDED)
           case NonFatal(e) =>
             logError(s"Failed to contact YARN for application $appId.", e)
             // Don't necessarily clean up staging dir because status is unknown
