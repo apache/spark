@@ -59,38 +59,28 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
    * Check the equality between result of expression and expected value, it will handle
    * Array[Byte], Spread[Double], and MapData.
    */
-  protected def checkResult(result: Any, expected: Any, expr: Any = null): Boolean = {
+  protected def checkResult(result: Any, expected: Any, dataType: DataType): Boolean = {
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
       case (result: Double, expected: Spread[Double @unchecked]) =>
         expected.asInstanceOf[Spread[Double]].isWithin(result)
-      case (result: UnsafeArrayData, expected: GenericArrayData) =>
-        val dataType = if (expr.isInstanceOf[DataType]) expr.asInstanceOf[DataType]
-          else expr.asInstanceOf[Expression].dataType
-        dataType match {
-          case ArrayType(BooleanType, false) =>
-            result == UnsafeArrayData.fromPrimitiveArray(expected.toBooleanArray())
-          case ArrayType(ByteType, false) =>
-            result == UnsafeArrayData.fromPrimitiveArray(expected.toByteArray())
-          case ArrayType(ShortType, false) =>
-            result == UnsafeArrayData.fromPrimitiveArray(expected.toShortArray())
-          case ArrayType(IntegerType, false) =>
-            result == UnsafeArrayData.fromPrimitiveArray(expected.toIntArray())
-          case ArrayType(LongType, false) =>
-            result == UnsafeArrayData.fromPrimitiveArray(expected.toLongArray())
-          case ArrayType(FloatType, false) =>
-            result == UnsafeArrayData.fromPrimitiveArray(expected.toFloatArray())
-          case ArrayType(DoubleType, false) =>
-            result == UnsafeArrayData.fromPrimitiveArray(expected.toDoubleArray())
-          case _ => result == expected
+      case (result: ArrayData, expected: ArrayData) =>
+        result.numElements == expected.numElements && {
+          val et = dataType.asInstanceOf[ArrayType].elementType
+          var isSame = true
+          var i = 0
+          while (isSame && i < result.numElements) {
+            isSame = checkResult(result.get(i, et), expected.get(i, et), et)
+            i += 1
+          }
+          isSame
         }
-      case (result: ArrayBasedMapData, expected: ArrayBasedMapData) =>
-        val MapType(keyType, valueType, containsNull) = expr.asInstanceOf[Expression].dataType
-        checkResult(result.keyArray, expected.keyArray, ArrayType(keyType, false)) &&
-          checkResult(result.valueArray, expected.valueArray, ArrayType(valueType, containsNull))
       case (result: MapData, expected: MapData) =>
-        result.keyArray() == expected.keyArray() && result.valueArray() == expected.valueArray()
+        val kt = dataType.asInstanceOf[MapType].keyType
+        val vt = dataType.asInstanceOf[MapType].valueType
+        checkResult(result.keyArray, expected.keyArray, ArrayType(kt)) &&
+          checkResult(result.valueArray, expected.valueArray, ArrayType(vt))
       case (result: Double, expected: Double) =>
         if (expected.isNaN) result.isNaN else expected == result
       case (result: Float, expected: Float) =>
@@ -132,7 +122,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     val actual = try evaluate(expression, inputRow) catch {
       case e: Exception => fail(s"Exception evaluating $expression", e)
     }
-    if (!checkResult(actual, expected, expression)) {
+    if (!checkResult(actual, expected, expression.dataType)) {
       val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect evaluation (codegen off): $expression, " +
         s"actual: $actual, " +
@@ -151,7 +141,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     plan.initialize(0)
 
     val actual = plan(inputRow).get(0, expression.dataType)
-    if (!checkResult(actual, expected, expression)) {
+    if (!checkResult(actual, expected, expression.dataType)) {
       val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect evaluation: $expression, actual: $actual, expected: $expected$input")
     }
@@ -212,7 +202,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       expression)
     plan.initialize(0)
     var actual = plan(inputRow).get(0, expression.dataType)
-    assert(checkResult(actual, expected, expression))
+    assert(checkResult(actual, expected, expression.dataType))
 
     plan = generateProject(
       GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
@@ -220,7 +210,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     plan.initialize(0)
     actual = FromUnsafeProjection(expression.dataType :: Nil)(
       plan(inputRow)).get(0, expression.dataType)
-    assert(checkResult(actual, expected, expression))
+    assert(checkResult(actual, expected, expression.dataType))
   }
 
   /**

@@ -43,7 +43,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function array")
 
-  override def dataType: DataType = {
+  override def dataType: ArrayType = {
     ArrayType(
       children.headOption.map(_.dataType).getOrElse(NullType),
       containsNull = children.exists(_.nullable))
@@ -56,49 +56,37 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val unsafeArrayClass = classOf[UnsafeArrayData].getName
-    val arrayClass = classOf[GenericArrayData].getName
     val values = ctx.freshName("values")
 
-    val ArrayType(dt, _) = dataType
+    val et = dataType.elementType
     val evals = children.map(e => e.genCode(ctx))
-    val isPrimitiveArray = ctx.isPrimitiveType(dt) && children.forall(!_.nullable)
-    if (!isPrimitiveArray) {
-      ctx.addMutableState("Object[]", values, s"this.$values = null;")
-      ev.copy(code = s"""
-       final boolean ${ev.isNull} = false;
-       this.$values = new Object[${children.size}];""" +
-        ctx.splitExpressions(
-          ctx.INPUT_ROW,
-          evals.zipWithIndex.map { case (eval, i) =>
-            eval.code + s"""
-            if (${eval.isNull}) {
-              $values[$i] = null;
-            } else {
-              $values[$i] = ${eval.value};
-            }
-          """
-          }) +
-        s"""
-         final ArrayData ${ev.value} = new $arrayClass($values);
-         this.$values = null;
-       """)
+    val isPrimitiveArray = ctx.isPrimitiveType(et) && children.forall(!_.nullable)
+    val (assigns, allocate) = if (!isPrimitiveArray) {
+      val arrayClass = classOf[GenericArrayData].getName
+      ctx.addMutableState("Object[]", values,
+        s"this.$values = new Object[${children.size}];")
+      (evals.zipWithIndex.map { case (eval, i) =>
+         eval.code + s"""
+          if (${eval.isNull}) {
+            $values[$i] = null;
+          } else {
+            $values[$i] = ${eval.value};
+          }
+        """
+       },
+       s"final ArrayData ${ev.value} = new $arrayClass($values);")
     } else {
-      val javaDataType = ctx.javaType(dt)
+      val unsafeArrayClass = classOf[UnsafeArrayData].getName
+      val javaDataType = ctx.javaType(et)
       ctx.addMutableState(s"${javaDataType}[]", values,
-      s"this.$values = new ${javaDataType}[${children.size}];")
-      ev.copy(code =
-        ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        evals.zipWithIndex.map { case (eval, i) =>
-          eval.code +
-          s"\n$values[$i] = ${eval.value};"
-        }) +
-        s"""
-         final ArrayData ${ev.value} = $unsafeArrayClass.fromPrimitiveArray($values);
-       """,
-        isNull = "false")
+        s"this.$values = new ${javaDataType}[${children.size}];")
+      (evals.zipWithIndex.map { case (eval, i) =>
+         eval.code +
+           s"\n$values[$i] = ${eval.value};"
+       },
+       s"final ArrayData ${ev.value} = $unsafeArrayClass.fromPrimitiveArray($values);")
     }
+    ev.copy(code = ctx.splitExpressions(ctx.INPUT_ROW, assigns) + allocate, isNull = "false")
   }
 
   override def prettyName: String = "array"
@@ -153,19 +141,25 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     new ArrayBasedMapData(new GenericArrayData(keyArray), new GenericArrayData(valueArray))
   }
 
-  private def getAccessors(ctx: CodegenContext, dt: DataType, array: String,
-      isPrimitive : Boolean, size: Int): (String, String, String) = {
+  // This function returns Java code pieces based on DataType and isPrimitive
+  // for allocation of ArrayData class
+  private def getArrayData(
+      ctx: CodegenContext,
+      dt: DataType,
+      array: String,
+      isPrimitive : Boolean,
+      size: Int): String = {
     if (!isPrimitive) {
       val arrayClass = classOf[GenericArrayData].getName
-      ctx.addMutableState("Object[]", array, s"this.$array = null;")
-      (s"new $arrayClass($array)",
-        s"$array = new Object[${size}];", s"this.$array = null;")
+      ctx.addMutableState("Object[]", array,
+        s"this.$array = new Object[${size}];")
+      s"new $arrayClass($array)"
     } else {
       val unsafeArrayClass = classOf[UnsafeArrayData].getName
       val javaDataType = ctx.javaType(dt)
       ctx.addMutableState(s"${javaDataType}[]", array,
         s"this.$array = new ${javaDataType}[${size}];")
-      (s"$unsafeArrayClass.fromPrimitiveArray($array)", "", "")
+      s"$unsafeArrayClass.fromPrimitiveArray($array)"
     }
   }
 
@@ -181,15 +175,10 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val evalValues = values.map(e => e.genCode(ctx))
     val isPrimitiveArrayValue =
       ctx.isPrimitiveType(valueDt) && values.forall(!_.nullable)
-    val (keyData, keyArrayAllocate, keyArrayNullify) =
-      getAccessors(ctx, keyDt, keyArray, isPrimitiveArrayKey, keys.size)
-    val (valueData, valueArrayAllocate, valueArrayNullify) =
-      getAccessors(ctx, valueDt, valueArray, isPrimitiveArrayValue, values.size)
+    val keyData = getArrayData(ctx, keyDt, keyArray, isPrimitiveArrayKey, keys.size)
+    val valueData = getArrayData(ctx, valueDt, valueArray, isPrimitiveArrayValue, values.size)
 
-    ev.copy(code = s"""
-      final boolean ${ev.isNull} = false;
-      $keyArrayAllocate
-      $valueArrayAllocate""" +
+    ev.copy(code = s"final boolean ${ev.isNull} = false;" +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
         evalKeys.zipWithIndex.map { case (eval, i) =>
@@ -222,11 +211,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
               """
              })
         }) +
-      s"""
-        final MapData ${ev.value} = new $mapClass($keyData, $valueData);
-        $keyArrayNullify
-        $valueArrayNullify;
-      """)
+      s"final MapData ${ev.value} = new $mapClass($keyData, $valueData);")
   }
 
   override def prettyName: String = "map"
