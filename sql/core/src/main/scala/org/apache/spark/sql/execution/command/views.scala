@@ -20,13 +20,13 @@ package org.apache.spark.sql.execution.command
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.{SQLBuilder, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 
 
 /**
@@ -64,9 +64,8 @@ object PersistedView extends ViewType
 
 
 /**
- * Create or replace a view with given query plan. This command will convert the query plan to
- * canonicalized SQL string, and store it as view text in metastore, if we need to create a
- * permanent view.
+ * Create or replace a view with given query plan. This command will store the originalText as
+ * view text in metastore, if we need to create a permanent view.
  *
  * @param name the name of this view.
  * @param userSpecifiedColumns the output column names and optional comments specified by users,
@@ -75,8 +74,7 @@ object PersistedView extends ViewType
  * @param properties the properties of this view.
  * @param originalText the original SQL text of this view, can be None if this view is created via
  *                     Dataset API.
- * @param child the logical plan that represents the view; this is used to generate a canonicalized
- *              version of the SQL that can be saved in the catalog.
+ * @param child the logical plan that represents the view.
  * @param allowExisting if true, and if the view already exists, noop; if false, and if the view
  *                already exists, throws analysis exception.
  * @param replace if true, and if the view already exists, updates it; if false, and if the view
@@ -207,31 +205,56 @@ case class CreateViewCommand(
   }
 
   /**
-   * Returns a [[CatalogTable]] that can be used to save in the catalog. This comment canonicalize
-   * SQL based on the analyzed plan, and also creates the proper schema for the view.
+   * Returns a [[CatalogTable]] that can be used to save in the catalog. This stores the following
+   * properties for a view:
+   * 1. The `viewText` which is used to generate a logical plan when we resolve a view;
+   * 2. The `currentDatabase` which sets the current database on Analyze stage;
+   * 3. The `schema` which ensure we generate the correct output.
    */
   private def prepareTable(sparkSession: SparkSession, aliasedPlan: LogicalPlan): CatalogTable = {
-    val viewSQL: String = new SQLBuilder(aliasedPlan).toSQL
+    val currentDatabase = sparkSession.sessionState.catalog.getCurrentDatabase
 
-    // Validate the view SQL - make sure we can parse it and analyze it.
-    // If we cannot analyze the generated query, there is probably a bug in SQL generation.
-    try {
-      sparkSession.sql(viewSQL).queryExecution.assertAnalyzed()
-    } catch {
-      case NonFatal(e) =>
-        throw new RuntimeException(s"Failed to analyze the canonicalized SQL: $viewSQL", e)
+    if (originalText.isDefined) {
+      val viewSQL = originalText.get
+
+      // Validate the view SQL - make sure we can resolve it with currentDatabase.
+      val originalSchema = try {
+        val unresolvedPlan = sparkSession.sessionState.sqlParser.parsePlan(viewSQL)
+        val resolvedPlan = sparkSession.sessionState.analyzer.execute(unresolvedPlan)
+        sparkSession.sessionState.analyzer.checkAnalysis(resolvedPlan)
+
+        resolvedPlan.schema
+      } catch {
+        case NonFatal(e) =>
+          throw new RuntimeException(s"Failed to analyze the canonicalized SQL: $viewSQL", e)
+      }
+
+      CatalogTable(
+        identifier = name,
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = aliasedPlan.schema,
+        originalSchema = Some(originalSchema),
+        properties = properties,
+        viewOriginalText = originalText,
+        viewText = Some(viewSQL),
+        currentDatabase = Some(currentDatabase),
+        comment = comment
+      )
+    } else {
+      CatalogTable(
+        identifier = name,
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = aliasedPlan.schema,
+        originalSchema = None,
+        properties = properties,
+        viewOriginalText = None,
+        viewText = None,
+        currentDatabase = Some(currentDatabase),
+        comment = comment
+      )
     }
-
-    CatalogTable(
-      identifier = name,
-      tableType = CatalogTableType.VIEW,
-      storage = CatalogStorageFormat.empty,
-      schema = aliasedPlan.schema,
-      properties = properties,
-      viewOriginalText = originalText,
-      viewText = Some(viewSQL),
-      comment = comment
-    )
   }
 }
 
@@ -244,8 +267,7 @@ case class CreateViewCommand(
  * @param name the name of this view.
  * @param originalText the original SQL text of this view. Note that we can only alter a view by
  *                     SQL API, which means we always have originalText.
- * @param query the logical plan that represents the view; this is used to generate a canonicalized
- *              version of the SQL that can be saved in the catalog.
+ * @param query the logical plan that represents the view.
  */
 case class AlterViewAsCommand(
     name: TableIdentifier,
@@ -275,20 +297,26 @@ case class AlterViewAsCommand(
       throw new AnalysisException(s"${viewMeta.identifier} is not a view.")
     }
 
-    val viewSQL: String = new SQLBuilder(analyzedPlan).toSQL
-    // Validate the view SQL - make sure we can parse it and analyze it.
-    // If we cannot analyze the generated query, there is probably a bug in SQL generation.
-    try {
-      session.sql(viewSQL).queryExecution.assertAnalyzed()
+    val currentDatabase = session.sessionState.catalog.getCurrentDatabase
+
+    // Validate the view SQL - make sure we can resolve it with currentDatabase.
+    val originalSchema = try {
+      val unresolvedPlan = session.sessionState.sqlParser.parsePlan(originalText)
+      val resolvedPlan = session.sessionState.analyzer.execute(unresolvedPlan)
+      session.sessionState.analyzer.checkAnalysis(resolvedPlan)
+
+      resolvedPlan.schema
     } catch {
       case NonFatal(e) =>
-        throw new RuntimeException(s"Failed to analyze the canonicalized SQL: $viewSQL", e)
+        throw new RuntimeException(s"Failed to analyze the canonicalized SQL: $originalText", e)
     }
 
     val updatedViewMeta = viewMeta.copy(
       schema = analyzedPlan.schema,
+      originalSchema = Some(originalSchema),
       viewOriginalText = Some(originalText),
-      viewText = Some(viewSQL))
+      viewText = Some(originalText),
+      currentDatabase = Some(currentDatabase))
 
     session.sessionState.catalog.alterTable(updatedViewMeta)
   }

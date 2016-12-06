@@ -20,8 +20,10 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.StructType
 
 /**
  * A suite for testing view related functionality.
@@ -31,7 +33,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   override def beforeAll(): Unit = {
     // Create a simple table with two columns: id and id1
-    spark.range(1, 10).selectExpr("id", "id id1").write.format("json").saveAsTable("jt")
+    (1 until 10).map(i => i -> i).toDF("id", "id1").write.format("json").saveAsTable("jt")
   }
 
   override def afterAll(): Unit = {
@@ -78,6 +80,31 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }.getMessage
       assert(e.contains(s"Not allowed to create a permanent view `jtv1` by referencing " +
         s"a temporary view `global_temp`.`global_temp_jtv1`"))
+    }
+  }
+
+  test("create views in chain") {
+    withView("v1", "v2") {
+      sql("CREATE VIEW v1 AS SELECT * FROM src")
+      sql("CREATE VIEW v2 AS SELECT * FROM v1")
+      checkAnswer(sql("SELECT * FROM v1"), sql("SELECT * FROM src"))
+      checkAnswer(sql("SELECT * FROM v2"), sql("SELECT * FROM src"))
+    }
+  }
+
+  test("create views in chain with switch database") {
+    withTempDatabase { db =>
+      withView("default.v1", s"$db.v2") {
+        sql("CREATE VIEW v1 AS SELECT * FROM src")
+        activateDatabase(db) {
+          sql("CREATE VIEW v2 AS SELECT * FROM default.v1")
+          // Should look up table `src` in database `default`.
+          checkAnswer(sql("SELECT * FROM v2"), sql("SELECT * FROM default.src"))
+
+          // Should be able to look up `default.v1` while current database is `db_xxxx`.
+          checkAnswer(sql("SELECT * FROM default.v1"), sql("SELECT * FROM default.src"))
+        }
+      }
     }
   }
 
@@ -220,13 +247,14 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("correctly parse CREATE VIEW statement") {
-    sql(
-      """CREATE VIEW IF NOT EXISTS
-        |default.testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
-        |TBLPROPERTIES ('a' = 'b')
-        |AS SELECT * FROM jt""".stripMargin)
-    checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))
-    sql("DROP VIEW testView")
+    withView("default.testView") {
+      sql(
+        """CREATE VIEW IF NOT EXISTS
+          |default.testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
+          |TBLPROPERTIES ('a' = 'b')
+          |AS SELECT * FROM jt""".stripMargin)
+      checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))
+    }
   }
 
   test("correctly parse CREATE TEMPORARY VIEW statement") {
@@ -448,19 +476,105 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("Using view after change the origin view") {
+    withView("v1", "v2") {
+      sql("CREATE VIEW v1 AS SELECT id FROM jt")
+      sql("CREATE VIEW v2 AS SELECT * FROM v1")
+      withTable("jt2", "jt3") {
+        // Don't change the view schema
+        val df2 = (1 until 10).map(i => i + i).toDF("id")
+        df2.write.format("json").saveAsTable("jt2")
+        sql("ALTER VIEW v1 AS SELECT * FROM jt2")
+        // the view v2 should have the same output with the view v1
+        checkAnswer(sql("SELECT * FROM v2"), sql("SELECT * FROM v1"))
+        // the view v2 should have the same output with the table jt2
+        checkAnswer(sql("SELECT * FROM v2"), sql("SELECT * FROM jt2"))
+
+        // Change the view schema
+        val df3 = (1 until 10).map(i => i -> i).toDF("i", "j")
+        df3.write.format("json").saveAsTable("jt3")
+        sql("ALTER VIEW v1 AS SELECT * FROM jt3")
+        val e = intercept[AnalysisException] {
+          sql("SELECT * FROM v2")
+        }
+        assert(e.message.contains(
+          "The underlying schema doesn't match the original schema, expected " +
+            "STRUCT<`id`: INT> but got STRUCT<`i`: INT, `j`: INT>"))
+      }
+    }
+  }
+
+  test("Using view after drop the origin view") {
+    withView("v1", "v2") {
+      sql("CREATE VIEW v1 AS SELECT id FROM jt")
+      sql("CREATE VIEW v2 AS SELECT * FROM v1")
+      // Drop the referenced view
+      sql("DROP VIEW v1")
+      val e = intercept[RuntimeException] {
+        sql("SELECT * FROM v2")
+      }
+      assert(e.getMessage.contains(
+        "Failed to analyze the canonicalized SQL"))
+    }
+  }
+
+  test("Using view after change the origin table") {
+    withTable("tab1") {
+      val df = (1 until 10).map(i => i).toDF("i")
+      df.write.format("json").saveAsTable("tab1")
+      withView("v1", "v2") {
+        sql("CREATE VIEW v1 AS SELECT * FROM tab1")
+        sql("CREATE VIEW v2 AS SELECT * FROM v1")
+        // Don't change the table schema
+        val df2 = (1 until 10).map(i => i * i).toDF("i")
+        df2.write.format("json").mode("overwrite").saveAsTable("tab1")
+        // the view v2 should have the same output with the view v1
+        checkAnswer(sql("SELECT * FROM v2"), sql("SELECT * FROM v1"))
+        // the view v2 should have the same output with the table testTable
+        checkAnswer(sql("SELECT * FROM v2"), sql("SELECT * FROM tab1"))
+
+        // Change the table schema
+        val df3 = (1 until 10).map(i => i -> i).toDF("a", "b")
+        df3.write.format("json").mode("overwrite").saveAsTable("tab1")
+        val e = intercept[RuntimeException] {
+          sql("SELECT * FROM v2")
+        }
+        assert(e.getMessage.contains(
+          "Failed to analyze the canonicalized SQL"))
+      }
+    }
+  }
+
+  test("Using view after drop the origin table") {
+    withTable("tab1") {
+      val df = (1 until 10).map(i => i).toDF("i")
+      df.write.format("json").saveAsTable("tab1")
+      withView("v1") {
+        sql("CREATE VIEW v1 AS SELECT * FROM tab1")
+        // Drop the referenced table
+        sql("DROP TABLE tab1")
+        val e = intercept[RuntimeException] {
+          sql("SELECT * FROM v1")
+        }
+        assert(e.getMessage.contains(
+          "Failed to analyze the canonicalized SQL"))
+      }
+    }
+  }
+
   test("create hive view for joined tables") {
     // make sure the new flag can handle some complex cases like join and schema change.
     withTable("jt1", "jt2") {
-      spark.range(1, 10).toDF("id1").write.format("json").saveAsTable("jt1")
-      spark.range(1, 10).toDF("id2").write.format("json").saveAsTable("jt2")
-      sql("CREATE VIEW testView AS SELECT * FROM jt1 JOIN jt2 ON id1 == id2")
-      checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
+      (1 until 10).map(i => i).toDF("id1").write.format("json").saveAsTable("jt1")
+      (1 until 10).map(i => i).toDF("id2").write.format("json").saveAsTable("jt2")
+      withView("testView") {
+        sql("CREATE VIEW testView AS SELECT * FROM jt1 JOIN jt2 ON id1 == id2")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
 
-      val df = (1 until 10).map(i => i -> i).toDF("id1", "newCol")
-      df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("jt1")
-      checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
-
-      sql("DROP VIEW testView")
+        val df = (1 until 10).map(i => i -> i).toDF("id1", "newCol")
+        df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("jt1")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
+      }
     }
   }
 
@@ -539,6 +653,42 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           }.getMessage
           assert(e.contains("Not allowed to create a permanent view `view1` by referencing " +
             s"a temporary function `$tempFunctionName`"))
+        }
+      }
+    }
+  }
+
+  // TODO: Resolve the cyclic view reference issue.
+  ignore("cyclic view reference") {
+    withView("v1", "v2") {
+      sql("CREATE VIEW v1 AS SELECT id FROM jt")
+      sql("CREATE VIEW v2 AS SELECT * FROM v1")
+      // create a cyclic view reference
+      sql("ALTER VIEW v1 AS SELECT * FROM v2")
+      val e = intercept[AnalysisException] {
+        sql("SELECT * FROM v1")
+      }
+      assert(e.message.contains(
+        "Detected cyclic view reference."))
+    }
+  }
+
+  test("correctly resolve a view created by older versions of SPARK") {
+    withTempDatabase { db =>
+      withView(s"$db.oldView") {
+        val old_view = CatalogTable(
+          identifier = TableIdentifier("oldView", Some(s"$db")),
+          tableType = CatalogTableType.VIEW,
+          storage = CatalogStorageFormat.empty,
+          schema = new StructType().add("id", "int").add("id1", "int"),
+          provider = Some("parquet"),
+          viewOriginalText = Some("SELECT * FROM jt"),
+          viewText = Some("SELECT `gen_attr_0` AS `id`, `gen_attr_1` AS `id1` FROM (" +
+            "SELECT `gen_attr_0`, `gen_attr_1` FROM (SELECT `id` AS `gen_attr_0`, " +
+            "`id1` AS `gen_attr_1` FROM `default`.`jt`) AS gen_subquery_0) AS jt"))
+        activateDatabase(db) {
+          hiveContext.sessionState.catalog.createTable(old_view, ignoreIfExists = false)
+          checkAnswer(sql("SELECT * FROM oldView ORDER BY id"), (1 to 9).map(i => Row(i, i)))
         }
       }
     }
