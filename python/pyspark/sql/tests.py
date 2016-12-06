@@ -384,6 +384,26 @@ class SQLTests(ReusedPySparkTestCase):
         row = df.select(explode(f(*df))).groupBy().sum().first()
         self.assertEqual(row[0], 10)
 
+        df = self.spark.range(3)
+        res = df.select("id", explode(f(df.id))).collect()
+        self.assertEqual(res[0][0], 1)
+        self.assertEqual(res[0][1], 0)
+        self.assertEqual(res[1][0], 2)
+        self.assertEqual(res[1][1], 0)
+        self.assertEqual(res[2][0], 2)
+        self.assertEqual(res[2][1], 1)
+
+        range_udf = udf(lambda value: list(range(value - 1, value + 1)), ArrayType(IntegerType()))
+        res = df.select("id", explode(range_udf(df.id))).collect()
+        self.assertEqual(res[0][0], 0)
+        self.assertEqual(res[0][1], -1)
+        self.assertEqual(res[1][0], 0)
+        self.assertEqual(res[1][1], 0)
+        self.assertEqual(res[2][0], 1)
+        self.assertEqual(res[2][1], 0)
+        self.assertEqual(res[3][0], 1)
+        self.assertEqual(res[3][1], 1)
+
     def test_udf_with_order_by_and_limit(self):
         from pyspark.sql.functions import udf
         my_copy = udf(lambda x: x, IntegerType())
