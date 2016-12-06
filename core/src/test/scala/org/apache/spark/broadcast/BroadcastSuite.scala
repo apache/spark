@@ -23,6 +23,8 @@ import scala.collection.immutable.HashMap
 import scala.reflect.ClassTag
 import scala.util.Random
 
+import org.scalatest.Assertions
+
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.SnappyCompressionCodec
@@ -30,7 +32,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
-import org.scalatest.Assertions
 
 
 // Dummy class that creates a broadcast variable but doesn't use it
@@ -64,9 +65,7 @@ class UserDefineBroadcast[T: ClassTag](obj: T, id: Long)
     }
   }
 
-  override protected def getValue() = {
-    _value
-  }
+  override protected def getValue() = _value
 
   override protected def doUnpersist(blocking: Boolean) = {}
 

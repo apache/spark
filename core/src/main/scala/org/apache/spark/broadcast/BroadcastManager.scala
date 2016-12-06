@@ -20,8 +20,9 @@ package org.apache.spark.broadcast
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.ClassTag
-import org.apache.spark.{SecurityManager, SparkConf}
+
 import org.apache.spark.internal.Logging
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
 
 private[spark] class BroadcastManager(
