@@ -115,6 +115,7 @@ trait ProgressReporter extends Logging {
       }
     }
     postEvent(new QueryProgressEvent(newProgress))
+    logInfo(s"Streaming query made progress: $newProgress")
   }
 
   /** Finalizes the query progress and adds it to list of recent status updates. */
@@ -173,7 +174,6 @@ trait ProgressReporter extends Logging {
       }
     }
 
-    logDebug(s"Streaming query made progress: $newProgress")
     currentStatus = currentStatus.copy(isTriggerActive = false)
   }
 
