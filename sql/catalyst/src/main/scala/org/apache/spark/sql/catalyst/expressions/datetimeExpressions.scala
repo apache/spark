@@ -1050,13 +1050,37 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
  * Parses a column with a format to a timestamp.
  */
 @ExpressionDescription(
+  usage = "_FUNC_(timestamp_str, fmt) - Parses the `timestamp` expression " +
+    "with the `fmt` expression.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
+       2016-12-31
+             """)
+case class ParseToDate(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
+
+  def this(left: Expression, format: Expression) = {
+    this(left, format, Cast(Cast(UnixTimestamp(left, format), TimestampType), DateType))
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+  override def dataType: DataType = DateType
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+}
+
+/**
+ * Parses a column with a format to a timestamp.
+ */
+@ExpressionDescription(
   usage = "_FUNC_(timestamp, fmt) - Parses the `timestamp` expression with the `fmt` expression.",
   extended = """
     Examples:
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31 00:00:00.0
   """)
-case class ToTimestamp(left: Expression, right: Expression, child: Expression)
+case class ParseToTimestamp(left: Expression, right: Expression, child: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
 
   def this(left: Expression, format: Expression) = {

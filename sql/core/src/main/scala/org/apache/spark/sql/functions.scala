@@ -2668,7 +2668,7 @@ object functions {
    * @since 2.2.0
    */
   def to_timestamp(s: Column): Column = withExpr {
-    new ToTimestamp(s.expr, Literal("yyyy-MM-dd HH:mm:ss"))
+    new ParseToTimestamp(s.expr, Literal("yyyy-MM-dd HH:mm:ss"))
   }
 
   /**
@@ -2678,7 +2678,9 @@ object functions {
    * @group datetime_funcs
    * @since 2.2.0
    */
-  def to_timestamp(s: Column, p: String): Column = withExpr { new ToTimestamp(s.expr, Literal(p)) }
+  def to_timestamp(s: Column, p: String): Column = withExpr {
+    new ParseToTimestamp(s.expr, Literal(p))
+  }
 
   /**
    * Converts the column into DateType.
@@ -2697,7 +2699,7 @@ object functions {
    * @since 2.2.0
    */
   def to_date(e: Column, fmt: String): Column = withExpr {
-    ToDate(new ToTimestamp(e.expr, Literal(fmt)))
+    new ParseToDate(e.expr, Literal(fmt))
   }
 
   /**
