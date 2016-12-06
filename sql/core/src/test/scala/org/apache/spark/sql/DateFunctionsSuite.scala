@@ -403,29 +403,14 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Date.valueOf("2014-12-31"))))
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-MM-dd")),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
-    // the above doesn't fail, but I think it should. It returns 2016-07-12
-    // this is because it just adds the months onto the end. Are there any correctness
-    // assumptions here that we should be validating? IE that a month number
-    // cannot be greater than 12?
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
+        Row(Date.valueOf("2016-07-12"))))
 
-//    checkAnswer(
-//      df.selectExpr("to_date(t, 'yyyy-MM-dd')"),
-//      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"), Row(null))))
-//    checkAnswer(
-//      df.selectExpr("to_date(d, 'yyyy-MM-dd')"),
-//      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01"), Row(null))))
-//    checkAnswer(
-//      df.selectExpr("to_date(s, 'yyyy-MM-dd')"),
-//      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"), Row(null))))
     //  now switch format
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-dd-MM")),
-      Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
-
-    checkAnswer(
-      df.selectExpr("to_date(s, 'yyyy-dd-MM')"),
-      Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
+      Seq(Row(Date.valueOf("2016-10-07")), Row(Date.valueOf("2016-07-12")),
+        Row(Date.valueOf("2014-12-31"))))
   }
 
   test("function trunc") {
