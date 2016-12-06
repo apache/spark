@@ -497,7 +497,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         val testData = spark.sparkContext.parallelize(
           (0 until 10) map (x => IntegerCaseClass(1)), 2).toDF()
         testData.createOrReplaceTempView("inputTable")
-        // Distribute all row to one partition (all row has the same content),
+        // Distribute all rows to one partition (all rows have the same content),
         // and expected Max(s) is 10 as statefulUDF returns the sequence number starting from 1.
         checkAnswer(
           sql(
@@ -510,7 +510,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           Row(10))
 
         // Expected Max(s) is 5, as there are 2 partitions with 5 rows each, and statefulUDF
-        // returns the sequence number of the row in the partition starting from 1.
+        // returns the sequence number of the rows in the partition starting from 1.
         checkAnswer(
           sql(
             """
