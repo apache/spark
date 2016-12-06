@@ -346,6 +346,31 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(new Path(partitionLocation) == defaultPartitionLocation)
   }
 
+  test("list partition names") {
+    val catalog = newBasicCatalog()
+    val newPart = CatalogTablePartition(Map("a" -> "1", "b" -> "%="), storageFormat)
+    catalog.createPartitions("db2", "tbl2", Seq(newPart), ignoreIfExists = false)
+
+    val partitionNames = catalog.listPartitionNames("db2", "tbl2")
+    assert(partitionNames == Seq("a=1/b=%25%3D", "a=1/b=2", "a=3/b=4"))
+  }
+
+  test("list partition names with partial partition spec") {
+    val catalog = newBasicCatalog()
+    val newPart = CatalogTablePartition(Map("a" -> "1", "b" -> "%="), storageFormat)
+    catalog.createPartitions("db2", "tbl2", Seq(newPart), ignoreIfExists = false)
+
+    val partitionNames1 = catalog.listPartitionNames("db2", "tbl2", Some(Map("a" -> "1")))
+    assert(partitionNames1 == Seq("a=1/b=%25%3D", "a=1/b=2"))
+
+    // Partial partition specs including "weird" partition values should use the unescaped values
+    val partitionNames2 = catalog.listPartitionNames("db2", "tbl2", Some(Map("b" -> "%=")))
+    assert(partitionNames2 == Seq("a=1/b=%25%3D"))
+
+    val partitionNames3 = catalog.listPartitionNames("db2", "tbl2", Some(Map("b" -> "%25%3D")))
+    assert(partitionNames3.isEmpty)
+  }
+
   test("list partitions with partial partition spec") {
     val catalog = newBasicCatalog()
     val parts = catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "1")))
