@@ -192,7 +192,8 @@ private[yarn] class ExecutorRunnable(
     */
 
     // For log4j configuration to reference
-    javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
+    javaOpts += ("-Dspark.yarn.app.container.log.dir=" 
+          + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
     YarnCommandBuilderUtils.addPermGenSizeOpt(javaOpts)
 
     val userClassPath = Client.getUserClasspath(sparkConf).flatMap { uri =>
@@ -206,8 +207,14 @@ private[yarn] class ExecutorRunnable(
     }.toSeq
 
     YarnSparkHadoopUtil.addOutOfMemoryErrorArgument(javaOpts)
+
+    // Add support for extra executor prefix.
+    val executorCommandPrefix = (if (sys.env.contains("SPARK_EXECUTOR_LAUNCH_PREFIX"))
+    	sys.env.get("SPARK_EXECUTOR_LAUNCH_PREFIX") else "");
+
     val commands = prefixEnv ++ Seq(
-      YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java",
+      executorCommandPrefix + " " + YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) +
+        "/bin/java",
       "-server") ++
       javaOpts ++
       Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
