@@ -262,14 +262,24 @@ private[hive] class SparkExecuteStatementOperation(
           case OperationState.CANCELED =>
           case OperationState.FINISHED =>
           case OperationState.CLOSED =>
+          case OperationState.ERROR =>
           case _ =>
             setState(OperationState.ERROR)
         }
 
         throw new HiveSQLException(e.toString)
     }
-    setState(OperationState.FINISHED)
     HiveThriftServer2.listener.onStatementFinish(statementId)
+    getStatus().getState() match {
+      case OperationState.INITIALIZED =>
+        setState(OperationState.CLOSED)
+      case OperationState.CANCELED =>
+      case OperationState.FINISHED =>
+      case OperationState.CLOSED =>
+      case OperationState.ERROR =>
+      case _ =>
+        setState(OperationState.FINISHED)
+    }
   }
 
   override def cancel(): Unit = {
