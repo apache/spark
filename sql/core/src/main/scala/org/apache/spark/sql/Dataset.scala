@@ -1871,21 +1871,7 @@ class Dataset[T] private[sql](
    * Returns a new Dataset by adding a column with metadata.
    */
   private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val output = queryExecution.analyzed.output
-    val shouldReplace = output.exists(f => resolver(f.name, colName))
-    if (shouldReplace) {
-      val columns = output.map { field =>
-        if (resolver(field.name, colName)) {
-          col.as(colName, metadata)
-        } else {
-          Column(field)
-        }
-      }
-      select(columns : _*)
-    } else {
-      select(Column("*"), col.as(colName, metadata))
-    }
+    withColumn(colName, col.as(colName, metadata))
   }
 
   /**
