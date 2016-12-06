@@ -237,6 +237,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           }
           true
         }
+        // `recentProgresses` should not receive too many no data events
+        actions += AssertOnQuery { q =>
+          q.recentProgresses.size > 1 && q.recentProgresses.size <= 11
+        }
         testStream(input.toDS)(actions: _*)
         spark.sparkContext.listenerBus.waitUntilEmpty(10000)
         // 11 is the max value of the possible numbers of events.
