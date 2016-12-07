@@ -552,7 +552,7 @@ class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         return self
 
     @since("2.2.0")
-    def getFeatureIndex(self, value):
+    def getFeatureIndex(self):
         """
         Gets the index of the feature if featuresCol is a vector column.
         """
