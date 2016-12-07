@@ -43,6 +43,7 @@ gaussianGLM2 <- glm(Sepal_Length ~ Sepal_Width + Species, gaussianDF, family = "
 summary(gaussianGLM2)
 
 # Fit a generalized linear model of family "binomial" with spark.glm
+# Note: Filter out "setosa" from label column (two labels left) to match "binomial" family.
 binomialDF <- filter(irisDF, irisDF$Species != "setosa")
 binomialTestDF <- binomialDF
 binomialGLM <- spark.glm(binomialDF, Species ~ Sepal_Length + Sepal_Width, family = "binomial")

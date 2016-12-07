@@ -519,7 +519,7 @@ SparkR supports the following machine learning algorithms currently:
 * [`spark.glm`](api/R/spark.glm.html) or [`glm`](api/R/glm.html): [`Generalized Linear Model`](ml-classification-regression.html#generalized-linear-regression)
 * [`spark.survreg`](api/R/spark.survreg.html): [`Accelerated Failure Time (AFT) Survival Regression Model`](ml-classification-regression.html#survival-regression)
 * [`spark.naiveBayes`](api/R/spark.naiveBayes.html): [`Naive Bayes Model`](ml-classification-regression.html#naive-bayes)
-* [`spark.kmeans`](api/R/spark.kmeans.html): [`KMeans Model`](ml-clustering.html#k-means)
+* [`spark.kmeans`](api/R/spark.kmeans.html): [`K-Means Model`](ml-clustering.html#k-means)
 * [`spark.logit`](api/R/spark.logit.html): [`Logistic Regression Model`](ml-classification-regression.html#logistic-regression)
 * [`spark.isoreg`](api/R/spark.isoreg.html): [`Isotonic Regression Model`](ml-classification-regression.html#isotonic-regression)
 * [`spark.gaussianMixture`](api/R/spark.gaussianMixture.html): [`Gaussian Mixture Model`](ml-clustering.html#gaussian-mixture-model-gmm)
