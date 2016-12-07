@@ -44,7 +44,13 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
 
   /**
    * RunIds of active queries whose events are supposed to be forwarded by this ListenerBus
-   * to registered `StreamingQueryListeners`. Note that this list needs to be maintained separately
+   * to registered `StreamingQueryListeners`.
+   *
+   * Note 1: We need to track runIds instead of ids because the runId is unique for every started
+   * query, even it its a restart. So even if a query is restarted, this bus will identify them
+   * separately and correctly account for the restart.
+   *
+   * Note 2: This list needs to be maintained separately
    * from the `StreamingQueryManager.activeQueries` because a terminated query is cleared from
    * `StreamingQueryManager.activeQueries` as soon as it is stopped, but the this ListenerBus must
    * clear a query only after the termination event of that query has been posted.
