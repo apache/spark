@@ -505,7 +505,11 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     override def initialize(y: Double, weight: Double): Double = {
       require(y >= 0.0, "The response variable of Poisson family " +
         s"should be non-negative, but got $y")
-      y
+      /*
+        Force Poisson mean > 0 to avoid numerical instability in IRLS.
+        R uses y + 0.1 for initialization. See poisson()$initialize.
+       */
+      math.max(y, 0.1)
     }
 
     override def variance(mu: Double): Double = mu
