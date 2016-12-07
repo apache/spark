@@ -1346,7 +1346,7 @@ MapReduce) or sums. Spark natively supports accumulators of numeric types, and p
 can add support for new types.
 
 If accumulators are created with a name, they will be
-displayed in Spark's UI. This can be useful for understanding the progress of
+displayed in Spark's UI, they will show up inside of the stage that operates on the accumulators themselves. This can be useful for understanding the progress of
 running stages (NOTE: this is not yet supported in Python).
 
 <p style="text-align: center;">
