@@ -463,14 +463,15 @@ class Analyzer(
               .toAggregateExpression()
             , "__pivot_" + a.sql)()
           }
-          val secondAgg = Aggregate(groupByExprs, groupByExprs ++ pivotAggs, firstAgg)
+          val groupByExprsAttr = groupByExprs.map(_.toAttribute)
+          val secondAgg = Aggregate(groupByExprsAttr, groupByExprsAttr ++ pivotAggs, firstAgg)
           val pivotAggAttribute = pivotAggs.map(_.toAttribute)
           val pivotOutputs = pivotValues.zipWithIndex.flatMap { case (value, i) =>
             aggregates.zip(pivotAggAttribute).map { case (aggregate, pivotAtt) =>
               Alias(ExtractValue(pivotAtt, Literal(i), resolver), outputName(value, aggregate))()
             }
           }
-          Project(groupByExprs ++ pivotOutputs, secondAgg)
+          Project(groupByExprsAttr ++ pivotOutputs, secondAgg)
         } else {
           val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
             def ifExpr(expr: Expression) = {
