@@ -66,8 +66,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("Parse application logs") {
-    val now = 12345678
-    val provider = new FsHistoryProvider(createTestConf(), new ManualClock(now))
+    val clock = new ManualClock(12345678)
+    val provider = new FsHistoryProvider(createTestConf(), clock)
 
     // Write a new-style application log.
     val newAppComplete = newLogFile("new1", None, inProgress = false)
@@ -110,12 +110,15 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
           List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed)))
       }
 
+      // For completed files, lastUpdated would be lastModified time.
       list(0) should be (makeAppInfo("new-app-complete", newAppComplete.getName(), 1L, 5L,
-        now, "test", true))
-      list(1) should be (makeAppInfo("new-complete-lzf", newAppCompressedComplete.getName(), 1L, 4L,
-        now, "test", true))
+        newAppComplete.lastModified(), "test", true))
+      list(1) should be (makeAppInfo("new-complete-lzf", newAppCompressedComplete.getName(),
+        1L, 4L, newAppCompressedComplete.lastModified(), "test", true))
+
+      // For Inprogress files, lastUpdated would be current loading time.
       list(2) should be (makeAppInfo("new-incomplete", newAppIncomplete.getName(), 1L, -1L,
-        now, "test", false))
+        clock.getTimeMillis(), "test", false))
 
       // Make sure the UI can be rendered.
       list.foreach { case info =>
@@ -258,7 +261,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
   test("log cleaner") {
     val maxAge = TimeUnit.SECONDS.toMillis(10)
-    val clock = new ManualClock(0)
+    val clock = new ManualClock(maxAge / 2)
     val provider = new FsHistoryProvider(
       createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms"), clock)
 
@@ -267,16 +270,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
       SparkListenerApplicationEnd(2L)
       )
-
-    // Check for logs so lastModifiedTime will be stored before setting the clock
-    provider.checkForLogs()
-    clock.setTime(maxAge / 2)
+    log1.setLastModified(0L)
 
     val log2 = newLogFile("app1", Some("attempt2"), inProgress = false)
     writeFile(log2, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt2")),
       SparkListenerApplicationEnd(4L)
       )
+    log2.setLastModified(clock.getTimeMillis())
 
     updateAndCheck(provider) { list =>
       list.size should be (1)

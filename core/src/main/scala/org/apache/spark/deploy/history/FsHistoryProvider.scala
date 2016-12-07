@@ -446,8 +446,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
 
       val logPath = fileStatus.getPath()
-
       val appCompleted = isApplicationCompleted(fileStatus)
+
+      // Use loading time as lastUpdated since some filesystems don't update modifiedTime
+      // each time file is updated. However use modifiedTime for completed jobs so lastUpdated
+      // won't change whenever HistoryServer restarts and reloads the file.
+      val lastUpdated = if (appCompleted) fileStatus.getModificationTime else clock.getTimeMillis()
 
       val appListener = replay(fileStatus, appCompleted, new ReplayListenerBus(), eventsFilter)
 
@@ -461,7 +465,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           appListener.appAttemptId,
           appListener.startTime.getOrElse(-1L),
           appListener.endTime.getOrElse(-1L),
-          clock.getTimeMillis(),
+          lastUpdated,
           appListener.sparkUser.getOrElse(NOT_STARTED),
           appCompleted,
           fileStatus.getLen()
