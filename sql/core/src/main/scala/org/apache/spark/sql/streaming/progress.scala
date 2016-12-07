@@ -29,6 +29,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
 /**
  * :: Experimental ::
@@ -76,7 +77,7 @@ class StreamingQueryProgress private[sql](
   val id: UUID,
   val runId: UUID,
   val name: String,
-  val timestamp: Long,
+  val timestamp: String,
   val batchId: Long,
   val durationMs: ju.Map[String, java.lang.Long],
   val currentWatermark: Long,
@@ -109,7 +110,7 @@ class StreamingQueryProgress private[sql](
     ("id" -> JString(id.toString)) ~
     ("runId" -> JString(runId.toString)) ~
     ("name" -> JString(name)) ~
-    ("timestamp" -> JInt(timestamp)) ~
+    ("timestamp" -> JString(timestamp)) ~
     ("numInputRows" -> JInt(numInputRows)) ~
     ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
     ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
@@ -121,7 +122,6 @@ class StreamingQueryProgress private[sql](
     ("stateOperators" -> JArray(stateOperators.map(_.jsonValue).toList)) ~
     ("sources" -> JArray(sources.map(_.jsonValue).toList)) ~
     ("sink" -> sink.jsonValue)
-
   }
 }
 

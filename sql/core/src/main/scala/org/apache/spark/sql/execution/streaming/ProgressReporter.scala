@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.util.UUID
+import java.text.SimpleDateFormat
+import java.util.{Date, TimeZone, UUID}
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
@@ -77,6 +78,9 @@ trait ProgressReporter extends Logging {
 
   // The timestamp we report an event that has no input data
   private var lastNoDataProgressEventTime = Long.MinValue
+
+  private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
+  timestampFormat.setTimeZone(TimeZone.getTimeZone("UTC"))
 
   @volatile
   protected var currentStatus: StreamingQueryStatus = {
@@ -156,7 +160,7 @@ trait ProgressReporter extends Logging {
       id = id,
       runId = runId,
       name = name,
-      timestamp = currentTriggerStartTimestamp,
+      timestamp = timestampFormat.format(new Date(currentTriggerStartTimestamp)),
       batchId = currentBatchId,
       durationMs = currentDurationsMs.toMap.mapValues(long2Long).asJava,
       currentWatermark = offsetSeqMetadata.batchWatermarkMs,
