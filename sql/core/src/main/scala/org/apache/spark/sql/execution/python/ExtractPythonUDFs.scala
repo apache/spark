@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{FilterExec, SparkPlan}
 
 
 /**
@@ -111,7 +111,15 @@ object ExtractPythonUDFs extends Rule[SparkPlan] {
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan transformUp {
-    case plan: SparkPlan => extract(plan)
+    case plan: SparkPlan =>
+      val newPlan = extract(plan)
+      if (newPlan != plan) {
+        // Found and build BatchEvalPythonExec, and then push FilterExec
+        // through BatchEvalPythonExec
+        PushPredicateThroughBatchEvalPython.apply(newPlan)
+      } else {
+        plan
+      }
   }
 
   /**
@@ -163,6 +171,43 @@ object ExtractPythonUDFs extends Rule[SparkPlan] {
       } else {
         newPlan
       }
+    }
+  }
+}
+
+// This rule is to push deterministic predicates through BatchEvalPythonExec
+object PushPredicateThroughBatchEvalPython extends Rule[SparkPlan] with PredicateHelper {
+  def apply(plan: SparkPlan): SparkPlan = plan transform {
+    case filter @ FilterExec(_, child: BatchEvalPythonExec)
+        if child.expressions.forall(_.deterministic) =>
+      pushDownPredicate(filter, child.child) { predicate =>
+        child.withNewChildren(Seq(FilterExec(predicate, child.child)))
+      }
+  }
+
+  private def pushDownPredicate(
+      filter: FilterExec,
+      grandchild: SparkPlan)(insertFilter: Expression => SparkPlan): SparkPlan = {
+    // Only push down the predicates that is deterministic and all the referenced attributes
+    // come from grandchild.
+    val (candidates, containingNonDeterministic) =
+    splitConjunctivePredicates(filter.condition).span(_.deterministic)
+
+    val (pushDown, rest) = candidates.partition { cond =>
+      cond.references.subsetOf(grandchild.outputSet)
+    }
+
+    val stayUp = rest ++ containingNonDeterministic
+
+    if (pushDown.nonEmpty) {
+      val newChild = insertFilter(pushDown.reduceLeft(And))
+      if (stayUp.nonEmpty) {
+        FilterExec(stayUp.reduceLeft(And), newChild)
+      } else {
+        newChild
+      }
+    } else {
+      filter
     }
   }
 }
