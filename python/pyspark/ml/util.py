@@ -263,35 +263,3 @@ class JavaMLReadable(MLReadable):
     def read(cls):
         """Returns an MLReader instance for this class."""
         return JavaMLReader(cls)
-
-
-@inherit_doc
-class JavaPredictionModel():
-    """
-    (Private) Java Model for prediction tasks (regression and classification).
-    To be mixed in with class:`pyspark.ml.JavaModel`
-    """
-
-    @property
-    @since("2.1.0")
-    def numFeatures(self):
-        """
-        Returns the number of features the model was trained on. If unknown, returns -1
-        """
-        return self._call_java("numFeatures")
-
-    @since("2.2.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of featuresCol.
-        """
-        self._call_java("setFeaturesCol", value)
-        return self
-
-    @since("2.2.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of predictionCol.
-        """
-        self._call_java("setPredictionCol", value)
-        return self

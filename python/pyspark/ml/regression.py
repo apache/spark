@@ -20,7 +20,7 @@ import warnings
 from pyspark import since, keyword_only
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
 
@@ -74,8 +74,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     ...     (0.0, 2.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
     >>> lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight")
     >>> model = lr.fit(df)
-    >>> model.setFeaturesCol("features")
-    >>> model.setPredictionCol("prediction")
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> abs(model.transform(test0).head().prediction - (-1.0)) < 0.001
     True
@@ -436,9 +435,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> ir = IsotonicRegression()
     >>> model = ir.fit(df)
-    >>> model.setFeaturesCol("features")
-    >>> model.setPredictionCol("prediction")
-    >>> model.setFeatureIndex(0)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction").setFeatureIndex(0)
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -547,28 +544,19 @@ class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         return self._call_java("predictions")
 
     @since("2.2.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of featuresCol.
-        """
-        self._call_java("setFeaturesCol", value)
-        return self
-
-    @since("2.2.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of predictionCol.
-        """
-        self._call_java("setPredictionCol", value)
-        return self
-
-    @since("2.2.0")
     def setFeatureIndex(self, value):
         """
         Sets the index of the feature if featuresCol is a vector column.
         """
         self._call_java("setFeatureIndex", value)
         return self
+
+    @since("2.2.0")
+    def getFeatureIndex(self, value):
+        """
+        Gets the index of the feature if featuresCol is a vector column.
+        """
+        return self._call_java("getFeatureIndex")
 
 
 class TreeEnsembleParams(DecisionTreeParams):
@@ -695,8 +683,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> dt = DecisionTreeRegressor(maxDepth=2, varianceCol="variance")
     >>> model = dt.fit(df)
-    >>> model.setFeaturesCol("features")
-    >>> model.setPredictionCol("prediction")
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> model.depth
     1
     >>> model.numNodes
@@ -887,8 +874,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2, seed=42)
     >>> model = rf.fit(df)
-    >>> model.setFeaturesCol("features")
-    >>> model.setPredictionCol("prediction")
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0])
@@ -1012,8 +998,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> print(gbt.getImpurity())
     variance
     >>> model = gbt.fit(df)
-    >>> model.setFeaturesCol("features")
-    >>> model.setPredictionCol("prediction")
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> model.numFeatures
@@ -1156,8 +1141,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (0.0, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
     >>> aftsr = AFTSurvivalRegression()
     >>> model = aftsr.fit(df)
-    >>> model.setFeaturesCol("features")
-    >>> model.setPredictionCol("prediction")
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> model.predict(Vectors.dense(6.3))
     1.0
     >>> model.predictQuantiles(Vectors.dense(6.3))
@@ -1283,7 +1267,8 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return self.getOrDefault(self.quantilesCol)
 
 
-class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class AFTSurvivalRegressionModel(JavaModel, HasFeaturesCol, HasPredictionCol,
+                                 JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -1331,28 +1316,19 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         return self._call_java("predict", features)
 
     @since("2.2.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of featuresCol.
-        """
-        self._call_java("setFeaturesCol", value)
-        return self
-
-    @since("2.2.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of predictionCol.
-        """
-        self._call_java("setPredictionCol", value)
-        return self
-
-    @since("2.2.0")
     def setQuantilesCol(self, value):
         """
         Sets the value of quantilesColumn.
         """
         self._call_java("setQuantilesCol", value)
         return self
+
+    @since("2.2.0")
+    def getQuantilesCol(self):
+        """
+        Gets the value of quantilesColumn.
+        """
+        return self._call_java("getQuantilesCol")
 
 
 @inherit_doc
@@ -1387,8 +1363,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     ...     (2.0, Vectors.dense(1.0, 1.0)),], ["label", "features"])
     >>> glr = GeneralizedLinearRegression(family="gaussian", link="identity", linkPredictionCol="p")
     >>> model = glr.fit(df)
-    >>> model.setFeaturesCol("features")
-    >>> model.setPredictionCol("prediction")
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> transformed = model.transform(df)
     >>> abs(transformed.head().prediction - 1.5) < 0.001
     True

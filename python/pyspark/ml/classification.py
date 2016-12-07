@@ -23,7 +23,7 @@ from pyspark.ml.param.shared import *
 from pyspark.ml.regression import DecisionTreeModel, DecisionTreeRegressionModel, \
     RandomForestParams, TreeEnsembleModel, TreeEnsembleParams
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaPredictionModel
 from pyspark.ml.wrapper import JavaWrapper
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
@@ -44,7 +44,7 @@ __all__ = ['LinearSVC', 'LinearSVCModel',
 
 
 @inherit_doc
-class JavaClassificationModel(JavaPredictionModel):
+class JavaClassificationModel(JavaPredictionModel, HasRawPredictionCol):
     """
     (Private) Java Model produced by a ``Classifier``.
     Classes are indexed {0, 1, ..., numClasses - 1}.
@@ -59,17 +59,9 @@ class JavaClassificationModel(JavaPredictionModel):
         """
         return self._call_java("numClasses")
 
-    @since("2.2.0")
-    def setRawPredictionCol(self, value):
-        """
-        Sets the value of rawPredictionCol.
-        """
-        self._call_java("setRawPredictionCol", value)
-        return self
-
 
 @inherit_doc
-class JavaProbabilisticClassificationModel(JavaClassificationModel):
+class JavaProbabilisticClassificationModel(JavaClassificationModel, HasProbabilityCol):
     """
     (Private) Java Model produced by a ``ProbabilisticClassifier``.
     Classes are indexed {0, 1, ..., numClasses - 1}.
@@ -77,14 +69,7 @@ class JavaProbabilisticClassificationModel(JavaClassificationModel):
 
     .. versionadded:: 2.2.0
     """
-
-    @since("2.2.0")
-    def setProbabilityCol(self, value):
-        """
-        Sets the value of probabilityCol.
-        """
-        self._call_java("setProbabilityCol", value)
-        return self
+    pass
 
 
 @inherit_doc
@@ -216,6 +201,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], []))]).toDF()
     >>> blor = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
     >>> blorModel = blor.fit(bdf)
+    >>> blorModel = blorModel.setFeaturesCol("features").setPredictionCol("prediction") \
+            .setProbabilityCol("probability").setRawPredictionCol("rawPrediction")
     >>> blorModel.coefficients
     DenseVector([5.5...])
     >>> blorModel.intercept
@@ -234,10 +221,6 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> mlorModel.interceptVector
     DenseVector([2.0..., 0.8..., -2.8...])
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
-    >>> blorModel.setFeaturesCol("features")
-    >>> blorModel.setPredictionCol("prediction")
-    >>> blorModel.setProbabilityCol("probability")
-    >>> blorModel.setRawPredictionCol("rawPrediction")
     >>> result = blorModel.transform(test0).head()
     >>> result.prediction
     0.0
@@ -735,6 +718,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> td = si_model.transform(df)
     >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed")
     >>> model = dt.fit(td)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> model.numNodes
     3
     >>> model.depth
@@ -748,10 +732,6 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> print(model.toDebugString)
     DecisionTreeClassificationModel (uid=...) of depth 1 with 3 nodes...
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.setFeaturesCol("features")
-    >>> model.setPredictionCol("prediction")
-    >>> model.setProbabilityCol("probability")
-    >>> model.setRawPredictionCol("rawPrediction")
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -875,15 +855,13 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> td = si_model.transform(df)
     >>> rf = RandomForestClassifier(numTrees=3, maxDepth=2, labelCol="indexed", seed=42)
     >>> model = rf.fit(td)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction") \
+            .setProbabilityCol("probability").setRawPredictionCol("rawPrediction")
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0, 1.0])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.setFeaturesCol("features")
-    >>> model.setPredictionCol("prediction")
-    >>> model.setProbabilityCol("probability")
-    >>> model.setRawPredictionCol("rawPrediction")
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -1021,13 +999,12 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> td = si_model.transform(df)
     >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed", seed=42)
     >>> model = gbt.fit(td)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.setFeaturesCol("features")
-    >>> model.setPredictionCol("prediction")
     >>> model.transform(test0).head().prediction
     0.0
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
@@ -1165,16 +1142,14 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     ...     Row(label=1.0, weight=1.0, features=Vectors.dense([1.0, 0.0]))])
     >>> nb = NaiveBayes(smoothing=1.0, modelType="multinomial", weightCol="weight")
     >>> model = nb.fit(df)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction") \
+        .setProbabilityCol("probability").setRawPredictionCol("rawPrediction")
     >>> model.pi
     DenseVector([-0.81..., -0.58...])
     >>> model.theta
     DenseMatrix(2, 2, [-0.91..., -0.51..., -0.40..., -1.09...], 1)
     >>> test0 = sc.parallelize([Row(features=Vectors.dense([1.0, 0.0]))]).toDF()
     >>> result = model.transform(test0).head()
-    >>> model.setFeaturesCol("features")
-    >>> model.setPredictionCol("prediction")
-    >>> model.setProbabilityCol("probability")
-    >>> model.setRawPredictionCol("rawPrediction")
     >>> result.prediction
     1.0
     >>> result.probability
@@ -1316,6 +1291,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     ...     (0.0, Vectors.dense([1.0, 1.0]))], ["label", "features"])
     >>> mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[2, 2, 2], blockSize=1, seed=123)
     >>> model = mlp.fit(df)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> model.layers
     [2, 2, 2]
     >>> model.weights.size
@@ -1323,8 +1299,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     >>> testDF = spark.createDataFrame([
     ...     (Vectors.dense([1.0, 0.0]),),
     ...     (Vectors.dense([0.0, 0.0]),)], ["features"])
-    >>> model.setFeaturesCol("features")
-    >>> model.setPredictionCol("prediction")
     >>> model.transform(testDF).show()
     +---------+----------+
     | features|prediction|
@@ -1542,8 +1516,7 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
     >>> ovr = OneVsRest(classifier=lr)
     >>> model = ovr.fit(df)
-    >>> model.setFeaturesCol("features")
-    >>> model.setPredictionCol("prediction")
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> [x.coefficients for x in model.models]
     [DenseVector([3.3925, 1.8785]), DenseVector([-4.3016, -6.3163]), DenseVector([-4.5855, 6.1785])]
     >>> [x.intercept for x in model.models]
@@ -1650,22 +1623,6 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
         self.write().save(path)
 
-    @since("2.2.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of featuresCol.
-        """
-        self._call_java("setFeaturesCol", value)
-        return self
-
-    @since("2.2.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of predictionCol.
-        """
-        self._call_java("setPredictionCol", value)
-        return self
-
     @classmethod
     @since("2.0.0")
     def read(cls):
@@ -1702,7 +1659,8 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         return _java_obj
 
 
-class OneVsRestModel(JavaModel, OneVsRestParams, MLReadable, MLWritable):
+class OneVsRestModel(JavaModel, OneVsRestParams, HasFeaturesCol, HasPredictionCol,
+                     MLReadable, MLWritable):
     """
     .. note:: Experimental
 
