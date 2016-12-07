@@ -811,7 +811,8 @@ setMethod("predict", signature(object = "LogisticRegressionModel"),
 #  Get the summary of an LogisticRegressionModel
 
 #' @param object an LogisticRegressionModel fitted by \code{spark.logit}.
-#' @return \code{summary} returns coefficients matrix of the fitted model
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'         The list includes \code{coefficients} (coefficients matrix of the fitted model).
 #' @rdname spark.logit
 #' @aliases summary,LogisticRegressionModel-method
 #' @export
@@ -1840,8 +1841,10 @@ summary.treeEnsemble <- function(model) {
 #  Get the summary of a Random Forest Regression Model
 
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list of components includes \code{ans} (formula, number of features, list of features,
-#'         feature importances, number of trees, and tree weights).
+#'         The list of components includes \code{formula} (formula),
+#'         \code{numFeatures} (number of features), \code{features} (list of features),
+#'         \code{featureImportances} (feature importances), \code{numTrees} (number of trees),
+#'         and \code{treeWeights} (tree weights).
 #' @rdname spark.randomForest
 #' @aliases summary,RandomForestRegressionModel-method
 #' @export
@@ -2064,8 +2067,10 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #  Get the summary of a Gradient Boosted Tree Regression Model
 
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list of components includes \code{ans} (formula, number of features, list of features,
-#'         feature importances, number of trees, and tree weights).
+#'         The list of components includes \code{formula} (formula),
+#'         \code{numFeatures} (number of features), \code{features} (list of features),
+#'         \code{featureImportances} (feature importances), \code{numTrees} (number of trees),
+#'         and \code{treeWeights} (tree weights).
 #' @rdname spark.gbt
 #' @aliases summary,GBTRegressionModel-method
 #' @export
