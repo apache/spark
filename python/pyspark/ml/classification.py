@@ -870,7 +870,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> numpy.argmax(result.rawPrediction)
     0
     >>> result.rawPrediction
-    DenseVector([3.0, 0.0])
+    DenseVector([2.0, 0.0])
     >>> result.probability
     DenseVector([1.0, 0.0])
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
