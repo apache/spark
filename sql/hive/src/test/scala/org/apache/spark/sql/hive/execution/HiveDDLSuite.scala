@@ -1962,7 +1962,7 @@ class HiveDDLSuite
     }
   }
 
-  test("alter table add columns -- not datasource table") {
+  test("alter table add columns -- not support datasource table") {
     withTempDir { dir =>
       withTable("t_ds") {
         sql(s"create table t_ds (c1 int, c2 int) using parquet options(path '$dir')")
