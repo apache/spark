@@ -519,7 +519,8 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         return self.getOrDefault(self.featureIndex)
 
 
-class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class IsotonicRegressionModel(JavaModel, HasFeaturesCol, HasPredictionCol,
+                              JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`IsotonicRegression`.
 
