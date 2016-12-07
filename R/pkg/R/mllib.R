@@ -328,7 +328,7 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
 #  Prints the summary of GeneralizedLinearRegressionModel
 
 #' @rdname spark.glm
-#' @param x summary object of fitted generalized linear model returned by \code{summary} function
+#' @param x summary object of fitted generalized linear model returned by \code{summary} function.
 #' @export
 #' @note print.summary.GeneralizedLinearRegressionModel since 2.0.0
 print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
@@ -410,7 +410,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 
 # Returns posterior probabilities from a Latent Dirichlet Allocation model produced by spark.lda()
 
-#' @param newData A SparkDataFrame for testing
+#' @param newData A SparkDataFrame for testing.
 #' @return \code{spark.posterior} returns a SparkDataFrame containing posterior probabilities
 #'         vectors named "topicDistribution".
 #' @rdname spark.lda
@@ -478,7 +478,7 @@ setMethod("spark.perplexity", signature(object = "LDAModel", data = "SparkDataFr
 
 # Saves the Latent Dirichlet Allocation model to the input path.
 
-#' @param path The directory where the model is saved
+#' @param path The directory where the model is saved.
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
@@ -497,13 +497,13 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #' Fits an Isotonic Regression model against a Spark DataFrame, similarly to R's isoreg().
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
-#' @param data SparkDataFrame for training
+#' @param data SparkDataFrame for training.
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param isotonic Whether the output sequence should be isotonic/increasing (TRUE) or
-#'                 antitonic/decreasing (FALSE)
+#'                 antitonic/decreasing (FALSE).
 #' @param featureIndex The index of the feature if \code{featuresCol} is a vector column
-#'                     (default: 0), no effect otherwise
+#'                     (default: 0), no effect otherwise.
 #' @param weightCol The weight column name.
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.isoreg} returns a fitted Isotonic Regression model.
@@ -552,8 +552,8 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
 
 #  Predicted values based on an isotonicRegression model
 
-#' @param object a fitted IsotonicRegressionModel
-#' @param newData SparkDataFrame for testing
+#' @param object a fitted IsotonicRegressionModel.
+#' @param newData SparkDataFrame for testing.
 #' @return \code{predict} returns a SparkDataFrame containing predicted values.
 #' @rdname spark.isoreg
 #' @aliases predict,IsotonicRegressionModel,SparkDataFrame-method
@@ -710,7 +710,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' with pivoting; "multinomial": Multinomial logistic (softmax) regression without pivoting, similar to glmnet.
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
-#' @param data SparkDataFrame for training
+#' @param data SparkDataFrame for training.
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param regParam the regularization parameter.
@@ -810,7 +810,7 @@ setMethod("predict", signature(object = "LogisticRegressionModel"),
 
 #  Get the summary of an LogisticRegressionModel
 
-#' @param object an LogisticRegressionModel fitted by \code{spark.logit}
+#' @param object an LogisticRegressionModel fitted by \code{spark.logit}.
 #' @return \code{summary} returns coefficients matrix of the fitted model
 #' @rdname spark.logit
 #' @aliases summary,LogisticRegressionModel-method
@@ -850,7 +850,7 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param blockSize blockSize parameter.
-#' @param layers integer vector containing the number of nodes for each layer
+#' @param layers integer vector containing the number of nodes for each layer.
 #' @param solver solver parameter, supported options: "gd" (minibatch gradient descent) or "l-bfgs".
 #' @param maxIter maximum iteration number.
 #' @param tol convergence tolerance of iterations.
@@ -998,7 +998,7 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
 
 # Saves the Bernoulli naive Bayes model to the input path.
 
-#' @param path the directory where the model is saved
+#' @param path the directory where the model is saved.
 #' @param overwrite overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
@@ -1072,7 +1072,7 @@ setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationMode
 
 #  Save fitted IsotonicRegressionModel to the input path
 
-#' @param path The directory where the model is saved
+#' @param path The directory where the model is saved.
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
@@ -1087,7 +1087,7 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 
 #  Save fitted LogisticRegressionModel to the input path
 
-#' @param path The directory where the model is saved
+#' @param path The directory where the model is saved.
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
@@ -1214,7 +1214,7 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' posterior probabilities on new data, \code{spark.perplexity} to compute log perplexity on new
 #' data and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
-#' @param data A SparkDataFrame for training
+#' @param data A SparkDataFrame for training.
 #' @param features Features column name. Either libSVM-format column or character-format column is
 #'        valid.
 #' @param k Number of topics.
@@ -1795,8 +1795,8 @@ setMethod("predict", signature(object = "RandomForestClassificationModel"),
 
 # Save the Random Forest Regression or Classification model to the input path.
 
-#' @param object A fitted Random Forest regression model or classification model
-#' @param path The directory where the model is saved
+#' @param object A fitted Random Forest regression model or classification model.
+#' @param path The directory where the model is saved.
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
@@ -2038,8 +2038,8 @@ setMethod("predict", signature(object = "GBTClassificationModel"),
 
 # Save the Gradient Boosted Tree Regression or Classification model to the input path.
 
-#' @param object A fitted Gradient Boosted Tree regression model or classification model
-#' @param path The directory where the model is saved
+#' @param object A fitted Gradient Boosted Tree regression model or classification model.
+#' @param path The directory where the model is saved.
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #' @aliases write.ml,GBTRegressionModel,character-method
