@@ -259,7 +259,9 @@ class HadoopRDD[K, V](
         try {
           finished = !reader.next(key, value)
         } catch {
-          case e: IOException if ignoreCorruptFiles => finished = true
+          case e: IOException if ignoreCorruptFiles =>
+            logWarning(s"Skipped the rest content in the corrupted file: ${split.inputSplit}", e)
+            finished = true
         }
         if (!finished) {
           inputMetrics.incRecordsRead(1)

@@ -189,7 +189,11 @@ class NewHadoopRDD[K, V](
           try {
             finished = !reader.nextKeyValue
           } catch {
-            case e: IOException if ignoreCorruptFiles => finished = true
+            case e: IOException if ignoreCorruptFiles =>
+              logWarning(
+                s"Skipped the rest content in the corrupted file: ${split.serializableHadoopSplit}",
+                e)
+              finished = true
           }
           if (finished) {
             // Close and release the reader here; close() will also be called when the task
