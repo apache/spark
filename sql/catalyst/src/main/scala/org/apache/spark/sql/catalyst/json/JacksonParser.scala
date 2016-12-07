@@ -155,6 +155,17 @@ class JacksonParser(
     case _ => makeConverter(dataType)
   }
 
+  private object SpecialDouble {
+    def unapply(value: String): Option[Double] = {
+      value.toLowerCase match {
+        case "nan" => Some(Double.NaN)
+        case "infinity" | "+infinity" | "inf" | "+inf" => Some(Double.PositiveInfinity)
+        case "-infinity" | "-inf" => Some(Double.NegativeInfinity)
+        case _ => None
+      }
+    }
+  }
+
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema.
@@ -193,16 +204,10 @@ class JacksonParser(
 
         case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
-          val value = parser.getText
-          val lowerCaseValue = value.toLowerCase
-          if (lowerCaseValue.equals("nan") ||
-            lowerCaseValue.equals("infinity") ||
-            lowerCaseValue.equals("-infinity") ||
-            lowerCaseValue.equals("inf") ||
-            lowerCaseValue.equals("-inf")) {
-            value.toFloat
-          } else {
-            throw new SparkSQLJsonProcessingException(s"Cannot parse $value as FloatType.")
+          parser.getText match {
+            case SpecialDouble(value) => value.toFloat
+            case _ => throw new SparkSQLJsonProcessingException(
+              s"Cannot parse ${parser.getText} as FloatType.")
           }
       }
 
@@ -213,16 +218,10 @@ class JacksonParser(
 
         case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
-          val value = parser.getText
-          val lowerCaseValue = value.toLowerCase
-          if (lowerCaseValue.equals("nan") ||
-            lowerCaseValue.equals("infinity") ||
-            lowerCaseValue.equals("-infinity") ||
-            lowerCaseValue.equals("inf") ||
-            lowerCaseValue.equals("-inf")) {
-            value.toDouble
-          } else {
-            throw new SparkSQLJsonProcessingException(s"Cannot parse $value as DoubleType.")
+          parser.getText match {
+            case SpecialDouble(value) => value
+            case _ => throw new SparkSQLJsonProcessingException(
+              s"Cannot parse ${parser.getText} as DoubleType.")
           }
       }
 
