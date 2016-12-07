@@ -1347,7 +1347,7 @@ can add support for new types.
 
 As a user, you can create `Accumulators` that are both named and unnamed. Named accumulators will display in Spark's UI along with their running totals during execution. As seen in the image below, an accumulator named `counter` will display
 in the web UI for the stage that modifies that accumulator.
-Running totals of the accumulator for each task in the relevant stage will display in the "Tasks" table on this same page.
+Spark will keep a running total for each accumulator for each task in the relevant stage and will display this value in the "Tasks" table on this same page.
 
 <p style="text-align: center;">
   <img src="img/spark-webui-accumulators.png" title="Accumulators in the Spark UI" alt="Accumulators in the Spark UI" />
