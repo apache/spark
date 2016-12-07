@@ -495,16 +495,14 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql(s"CREATE TEMPORARY FUNCTION statefulUDF AS '${classOf[StatefulUDF].getName}'")
       sql(s"CREATE TEMPORARY FUNCTION statelessUDF AS '${classOf[StatelessUDF].getName}'")
       val testData = spark.range(10).repartition(1)
-      val testData1 = spark.range(10).repartition(2)
 
       // Expected Max(s) is 10 as statefulUDF returns the sequence number starting from 1.
       checkAnswer(testData.selectExpr("statefulUDF() as s").agg(max($"s")), Row(10))
 
-      // Expected Max(s) is 10 as statefulUDF returns the sequence number starting from 1.
-      // Note that testData.union(testData) will have Row(20) because internally it is converted
-      // to PartitionerAwareUnionRDD with 1 partition as they are having same partitioning.
-      checkAnswer(testData.union(testData1)
-        .selectExpr("statefulUDF() as s").agg(max($"s")), Row(10))
+      // Expected Max(s) is 5 as statefulUDF returns the sequence number starting from 1,
+      // and the data is evenly distributed into 2 partitions.
+      checkAnswer(testData.repartition(2)
+        .selectExpr("statefulUDF() as s").agg(max($"s")), Row(5))
 
       // Expected Max(s) is 1, as stateless UDF is deterministic and foldable and replaced
       // by constant 1 by ConstantFolding optimizer.
