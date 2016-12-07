@@ -1769,7 +1769,13 @@ class SparkContext(config: SparkConf) extends Logging {
       setDaemon(true)
 
       override def run(): Unit = {
-        SparkContext.this.stop()
+        try {
+          SparkContext.this.stop()
+        } catch {
+          case e: Throwable =>
+            logError(e.getMessage, e)
+            throw e
+        }
       }
     }.start()
   }
