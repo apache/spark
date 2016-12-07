@@ -21,7 +21,6 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
-import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
@@ -280,13 +279,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
             s"already active. Perhaps you are attempting to restart a query from checkpoint" +
             s"that is already active.")
       }
-      listenerBus.addQuery(query.runId)
-      try {
-        query.start()
-      } catch {
-        case NonFatal(e) =>
-          listenerBus.removeQuery(query.runId)
-      }
+
+      query.start()
       activeQueries.put(query.id, query)
       query
     }

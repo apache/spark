@@ -32,8 +32,8 @@ import org.apache.spark.util.ListenerBus
  * to StreamingQueryListeners.
  *
  * Note that each bus and its registered listeners are associated with a single SparkSession
- * and StreamingQueryManager. So this bus will dispatch events for only those queries that were
- * started in the associated SparkSession.
+ * and StreamingQueryManager. So this bus will dispatch events to registered listeners for only
+ * those queries that were started in the associated SparkSession.
  */
 class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
   extends SparkListener with ListenerBus[StreamingQueryListener, StreamingQueryListener.Event] {
@@ -44,33 +44,29 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
 
   /**
    * RunIds of active queries whose events are supposed to be forwarded by this ListenerBus
-   * to registered StreamingQueryListeners.
+   * to registered `StreamingQueryListeners`. Note that this list needs to be maintained separately
+   * from the `StreamingQueryManager.activeQueries` because a terminated query is cleared from
+   * `StreamingQueryManager.activeQueries` as soon as it is stopped, but the this ListenerBus must
+   * clear a query only after the termination event of that query has been posted.
    */
   private val activeQueryRunIds = new mutable.HashSet[UUID]
 
   /**
-   * Post a StreamingQueryListener event to the Spark listener bus asynchronously. This event will
-   * be dispatched to all StreamingQueryListener in the thread of the Spark listener bus.
+   * Post a StreamingQueryListener event to the added StreamingQueryListeners.
+   * Note that only the QueryStarted event is posted to the listener synchronously. Other events
+   * are dispatched to Spark listener bus. This method is guaranteed to be called by queries in
+   * the same SparkSession as this listener.
    */
   def post(event: StreamingQueryListener.Event) {
     event match {
       case s: QueryStartedEvent =>
+        activeQueryRunIds.synchronized { activeQueryRunIds += s.runId }
         sparkListenerBus.post(s)
         // post to local listeners to trigger callbacks
         postToAll(s)
       case _ =>
         sparkListenerBus.post(event)
     }
-  }
-
-  /** Add the runId of active queries whose events are to be handled by this ListenerBus */
-  def addQuery(queryRunId: UUID): Unit = activeQueryRunIds.synchronized {
-    activeQueryRunIds += queryRunId
-  }
-
-  /** Remove the runId of active queries whose events are to be handled by this ListenerBus */
-  def removeQuery(queryRunId: UUID): Unit = activeQueryRunIds.synchronized {
-    activeQueryRunIds -= queryRunId
   }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
@@ -107,7 +103,7 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
       case queryTerminated: QueryTerminatedEvent =>
         if (runIdsToReportTo.contains(queryTerminated.runId)) {
           listener.onQueryTerminated(queryTerminated)
-          removeQuery(queryTerminated.runId)
+          activeQueryRunIds.synchronized { activeQueryRunIds -= queryTerminated.runId }
         }
       case _ =>
     }
