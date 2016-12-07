@@ -286,8 +286,8 @@ class KafkaTestUtils extends Logging {
     props
   }
 
-  /** Assert topic is deleted in all places, e.g, brokers, zookeeper. */
-  private def assertTopicDeleted(
+  /** Verify topic is deleted in all places, e.g, brokers, zookeeper. */
+  private def verifyTopicDeletion(
       topic: String,
       numPartitions: Int,
       servers: Seq[KafkaServer]): Unit = {
@@ -320,14 +320,15 @@ class KafkaTestUtils extends Logging {
       s"topic $topic still exists on zookeeper")
   }
 
-  private def verifyTopicDeletion(
+  /** Verify topic is deleted. Retry to delete the topic if not. */
+  private def verifyTopicDeletionWithRetries(
       zkUtils: ZkUtils,
       topic: String,
       numPartitions: Int,
       servers: Seq[KafkaServer]) {
     eventually(timeout(60.seconds), interval(200.millis)) {
       try {
-        assertTopicDeleted(topic, numPartitions, servers)
+        verifyTopicDeletion(topic, numPartitions, servers)
       } catch {
         case e: Throwable =>
           // As pushing messages into Kafka updates Zookeeper asynchronously, there is a small
