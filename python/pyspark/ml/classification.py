@@ -74,6 +74,8 @@ class JavaProbabilisticClassificationModel(JavaClassificationModel):
     (Private) Java Model produced by a ``ProbabilisticClassifier``.
     Classes are indexed {0, 1, ..., numClasses - 1}.
     To be mixed in with class:`pyspark.ml.JavaModel`
+
+    .. versionadded:: 2.2.0
     """
 
     @since("2.2.0")
