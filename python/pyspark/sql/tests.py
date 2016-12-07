@@ -1885,7 +1885,6 @@ class HiveSparkSubmitTests(SparkSubmitTests):
         self.assertIn("default", out.decode('utf-8'))
         self.assertTrue(os.path.exists(metastore_path))
 
-
     def test_hivecontext_create_dataframe(self):
         # https://issues.apache.org/jira/browse/SPARK-18687
         #
@@ -1950,6 +1949,7 @@ class HiveSparkSubmitTests(SparkSubmitTests):
         self.assertTrue(os.path.exists(metastore_path))
         self.assertEqual(0, proc.returncode)
         self.assertIn("Franklin", out.decode('utf-8'))
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
