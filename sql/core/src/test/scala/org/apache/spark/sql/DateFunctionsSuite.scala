@@ -511,8 +511,8 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
   test("to_timestamp") {
     val date1 = Date.valueOf("2015-07-24")
     val date2 = Date.valueOf("2015-07-25")
-    val ts1 = Timestamp.valueOf("2015-07-24 10:00:00.3")
-    val ts2 = Timestamp.valueOf("2015-07-25 02:02:02.2")
+    val ts1 = Timestamp.valueOf("2015-07-24 10:00:00")
+    val ts2 = Timestamp.valueOf("2015-07-25 02:02:02")
     val s1 = "2015/07/24 10:00:00.5"
     val s2 = "2015/07/25 02:02:02.6"
     val ss1 = "2015-07-24 10:00:00"
@@ -522,15 +522,10 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(df.select(to_timestamp(col("ss"))),
       df.select(unix_timestamp(col("ss")).cast("timestamp")))
-//    checkAnswer(df.select(to_timestamp(col("ss"))), Seq(
-//      Row(ts1), Row(ts2)))
-//    checkAnswer(df.select(to_timestamp(col("d"), fmt)), Seq(
-//      Row(date1.getTime, Row(date2.getTime)))
+    checkAnswer(df.select(to_timestamp(col("ss"))), Seq(
+      Row(ts1), Row(ts2)))
     checkAnswer(df.select(to_timestamp(col("s"), fmt)), Seq(
-      Row(ts1, Row(ts2))))
-
-    //    val now = sql("select to_timestamp()").collect().head.getLong(0)
-//    checkAnswer(sql(s"select cast ($now as timestamp)"), Row(new java.util.Date(now * 1000)))
+      Row(ts1), Row(ts2)))
 
   }
 
