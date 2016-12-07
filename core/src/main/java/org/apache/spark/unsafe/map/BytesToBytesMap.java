@@ -169,6 +169,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   private long peakMemoryUsedBytes = 0L;
 
+  private final int initialCapacity;
+
   private final BlockManager blockManager;
   private final SerializerManager serializerManager;
   private volatile MapIterator destructiveIterator = null;
@@ -201,6 +203,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       throw new IllegalArgumentException("Page size " + pageSizeBytes + " cannot exceed " +
         TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES);
     }
+    this.initialCapacity = initialCapacity;
     allocate(initialCapacity);
   }
 
@@ -897,12 +900,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
   public void reset() {
     numKeys = 0;
     numValues = 0;
-    longArray.zeroOut();
-
+    freeArray(longArray);
     while (dataPages.size() > 0) {
       MemoryBlock dataPage = dataPages.removeLast();
       freePage(dataPage);
     }
+    allocate(initialCapacity);
     currentPage = null;
     pageCursor = 0;
   }
