@@ -1061,7 +1061,7 @@ case class ParseToDate(left: Expression, right: Expression, child: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
 
   def this(left: Expression, format: Expression) = {
-    this(left, format, ToDate(new ParseToTimestamp(left, format)))
+    this(left, format, Cast(new ParseToTimestamp(left, format), DateType))
   }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
