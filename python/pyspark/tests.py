@@ -505,8 +505,9 @@ class TaskContextTests(PySparkTestCase):
 
     def test_attempt_number(self):
         rdd = self.sc.parallelize(range(10))
-        attemptNumbers = rdd.map(lambda x: TaskContext.get().attemptNumber())
-        self.assertEqual(0, attemptNumbers.take(1)[0])
+        # Verify a simple job with no failures
+        attempt_numbers = rdd.map(lambda x: TaskContext.get().attemptNumber()).collect()
+        map(lambda attempt: self.assertEqual(0, attempt), attempt_numbers)
 
         def fail_on_first(x):
             """Fail on the first attempt so we get a positive attempt number"""
@@ -517,13 +518,17 @@ class TaskContextTests(PySparkTestCase):
             if attempt_number == 0 and partition_id == 0:
                 raise Exception("Failing on first attempt")
             else:
-                return (x, partition_id, attempt_number, attempt_id)
+                return [x, partition_id, attempt_number, attempt_id]
         result = rdd.map(fail_on_first).collect()
         # We should re-submit the first partition to it but other partitions should be attempt 0
         self.assertEqual([0, 0, 1], result[0][0:3])
         self.assertEqual([9, 3, 0], result[9][0:3])
+        first_partition = filter(lambda x: x[1] == 0, result)
+        map(lambda x: self.assertEqual(1, x[2]), first_partition)
+        other_partitions = filter(lambda x: x[1] != 0, result)
+        map(lambda x: self.assertEqual(0, x[2]), other_partitions)
         # The task attempt id should be different
-        self.assertTrue(result[0][4] != result[9][4])
+        self.assertTrue(result[0][3] != result[9][3])
 
     def verify_tc_not_serializable(self):
         """Verify that passing a TaskContext from the driver to the worker will throw an error."""
