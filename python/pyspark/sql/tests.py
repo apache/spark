@@ -1886,6 +1886,71 @@ class HiveSparkSubmitTests(SparkSubmitTests):
         self.assertTrue(os.path.exists(metastore_path))
 
 
+    def test_hivecontext_create_dataframe(self):
+        # https://issues.apache.org/jira/browse/SPARK-18687
+        #
+        # A pyspark env with Hive enabled and Derby (default) as the hive
+        # metastore receives a default HiveContext/SparkSession bootstrapped
+        # by shell.py. Once this context is already accessing the metastore
+        # db, construct a second SQLContext based on the currently active
+        # sparkContext. Use the new SQLContext to create a dataframe.
+        #
+        # If the new SQLContext tries to open a new connection to metastore
+        # db, a Derby error will occur and dataframe creation shall fail.
+        #
+        # If the new SQLContext shares the metastore db connection already
+        # established by the bootstrapped HiveContext/SparkSession there is no
+        # error and the test passes.
+        #
+        # This usecase does not result in an error/failure in Spark 1.6.
+        #
+        # For backward compatibility, ensure this usecase works in Spark 2.0+
+        #
+        metastore_path = os.path.join(tempfile.mkdtemp(), "spark18687_metastore_db")
+        metastore_URL = "jdbc:derby:;databaseName=" + metastore_path + ";create=true"
+        hive_site_dir = os.path.join(self.programDir, "conf")
+        hive_site_file = self.createTempFile("hive-site.xml", ("""
+            |<configuration>
+            |  <property>
+            |  <name>javax.jdo.option.ConnectionURL</name>
+            |  <value>%s</value>
+            |  </property>
+            |</configuration>
+            """ % metastore_URL).lstrip(), "conf")
+        script = self.createTempFile("test.py", """
+            |import os
+            |import py4j
+            |from pyspark.conf import SparkConf
+            |from pyspark.context import SparkContext
+            |from pyspark.sql import HiveContext, SQLContext, Row
+            |
+            |conf = SparkConf()
+            |sc = SparkContext(conf=conf)
+            |hive_context = HiveContext(sc)
+            |
+            |peopleRDD = sc.parallelize(["Michael,30", "Andy,12", "Justin,19"]) \\
+            |    .map(lambda p: p.split(",")) \\
+            |    .map(lambda p: Row(name=p[0], age=int(p[1])))
+            |peopleDF = hive_context.createDataFrame(peopleRDD)
+            |print(peopleDF.first())
+            |
+            |sqlContext2 = SQLContext(sc)
+            |peopleRDD2 = sc.parallelize(["Franklin,22", "Trevor,42", "Michael,40"]) \\
+            |    .map(lambda l: l.split(",")) \\
+            |    .map(lambda p: Row(fname=p[0], age=int(p[1])))
+            |
+            |peopleDF2 = sqlContext2.createDataFrame(peopleRDD2)
+            |print(peopleDF2.first())
+            """)
+        proc = subprocess.Popen(
+            [self.sparkSubmit, "--master", "local-cluster[1,1,1024]",
+             "--driver-class-path", hive_site_dir, script],
+            stdout=subprocess.PIPE)
+        out, err = proc.communicate()
+        self.assertTrue(os.path.exists(metastore_path))
+        self.assertEqual(0, proc.returncode)
+        self.assertIn("Franklin", out.decode('utf-8'))
+
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
     @classmethod
