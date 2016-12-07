@@ -1345,7 +1345,7 @@ therefore be efficiently supported in parallel. They can be used to implement co
 MapReduce) or sums. Spark natively supports accumulators of numeric types, and programmers
 can add support for new types.
 
-As a user, you can create `Accumulators` that are both named and unnamed. Named accumulators will display in Spark's UI along with their running totals during execution. As seen in the image below, an accumulator named `counter` will display
+As a user, you can create `Accumulators` that are both named and unnamed. Named accumulators will display in Spark's UI along with their running totals during execution. As seen in the image below, a named accumulator (in this instance `counter`) will display
 in the web UI for the stage that modifies that accumulator.
 Spark will keep a running total for each accumulator for each task in the relevant stage and will display this value in the "Tasks" table on this same page.
 
