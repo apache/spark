@@ -191,7 +191,7 @@ object PushPredicateThroughBatchEvalPython extends Rule[SparkPlan] with Predicat
     // Only push down the predicates that is deterministic and all the referenced attributes
     // come from grandchild.
     val (candidates, containingNonDeterministic) =
-    splitConjunctivePredicates(filter.condition).span(_.deterministic)
+      splitConjunctivePredicates(filter.condition).span(_.deterministic)
 
     val (pushDown, rest) = candidates.partition { cond =>
       cond.references.subsetOf(grandchild.outputSet)

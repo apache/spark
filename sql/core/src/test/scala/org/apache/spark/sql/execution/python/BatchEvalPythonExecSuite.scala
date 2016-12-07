@@ -27,8 +27,8 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.BooleanType
 
 class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
-    import testImplicits.newProductEncoder
-    import testImplicits.localSeqToDatasetHolder
+  import testImplicits.newProductEncoder
+  import testImplicits.localSeqToDatasetHolder
 
   override def beforeAll(): Unit = {
     super.beforeAll()
