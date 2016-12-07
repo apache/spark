@@ -455,7 +455,7 @@ private[spark] class Executor(
       while (!taskRunner.isFinished && elapsedTimeMs < killTimeoutMs) {
         taskRunner.kill(interruptThread = interruptThread)
         taskRunner.synchronized {
-          Thread.sleep(killPollingFrequencyMs)
+          wait(killPollingFrequencyMs)
         }
         if (!taskRunner.isFinished) {
           logWarning(s"Killed task ${taskRunner.taskId} is still running after $elapsedTimeMs ms")
