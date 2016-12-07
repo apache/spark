@@ -807,6 +807,14 @@ class DDLCommandSuite extends PlanTest {
       """.stripMargin)
   }
 
+  test("alter table: replace columns (not allowed)") {
+    assertUnsupported(
+      """
+       |ALTER TABLE table_name REPLACE COLUMNS (new_col1 INT
+       |COMMENT 'test_comment', new_col2 LONG COMMENT 'test_comment2') RESTRICT
+      """.stripMargin)
+  }
+
   test("show databases") {
     val sql1 = "SHOW DATABASES"
     val sql2 = "SHOW DATABASES LIKE 'defau*'"
