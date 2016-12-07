@@ -187,8 +187,7 @@ private[deploy] class Worker(
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
 
-    val scheme = if (webUi.sslOptions.enabled) "https" else "http"
-    workerWebUiUrl = s"$scheme://$publicAddress:${webUi.boundPort}"
+    workerWebUiUrl = s"http://$publicAddress:${webUi.boundPort}"
     registerWithMaster()
 
     metricsSystem.registerSource(workerSource)
