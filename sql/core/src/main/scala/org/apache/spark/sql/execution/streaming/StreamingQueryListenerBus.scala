@@ -90,7 +90,7 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
   override protected def doPostEvent(
       listener: StreamingQueryListener,
       event: StreamingQueryListener.Event): Unit = {
-    val runIdsToReportTo = activeQueryRunIds.synchronized { activeQueryRunIds }
+    val runIdsToReportTo = activeQueryRunIds.synchronized { activeQueryRunIds.toSet }
     event match {
       case queryStarted: QueryStartedEvent =>
         if (runIdsToReportTo.contains(queryStarted.runId)) {
