@@ -1069,6 +1069,7 @@ case class ParseToDate(left: Expression, right: Expression, child: Expression)
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
 
   override def prettyName: String = "to_date"
+  override def dataType: DataType = DateType
 }
 
 /**
@@ -1093,6 +1094,7 @@ case class ParseToTimestamp(left: Expression, right: Expression, child: Expressi
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
 
   override def prettyName: String = "to_timestamp"
+  override def dataType: DataType = TimestampType
 }
 
 /**
