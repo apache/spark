@@ -116,6 +116,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       .set("spark.kubernetes.submit.clientKeyFile", clientConfig.getClientKeyFile)
       .set("spark.kubernetes.submit.clientCertFile", clientConfig.getClientCertFile)
       .set("spark.kubernetes.namespace", NAMESPACE)
+      .set("spark.kubernetes.driver.docker.image", "spark-driver:latest")
       .set("spark.kubernetes.executor.docker.image", "spark-executor:latest")
       .set("spark.executor.memory", "500m")
       .set("spark.executor.cores", "1")
@@ -148,6 +149,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
       "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
       "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
+      "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
       EXAMPLES_JAR)
     SparkSubmit.main(args)
     val sparkMetricsService = Minikube.getService[SparkRestApiV1](
