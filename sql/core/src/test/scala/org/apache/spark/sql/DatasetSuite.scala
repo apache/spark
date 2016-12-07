@@ -1112,12 +1112,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
 
-  test ("SPARK-17460: If the sizeInBytes in Statistics exceeds the limit of an Int, " +
-    "it should convert to a BigInt instead of overflowing to a negative number") {
+  test ("SPARK-17460: the sizeInBytes in Statistics shouldn't overflow to a negative number") {
+    // If the sizeInBytes in Statistics exceeds the limit of an Int,
+    // it should convert to a BigInt instead of overflowing to a negative number
     val ds = (0 to 10000).map( i =>
       (i, Seq((i, Seq((i, "This is really not that long of a string")))))).toDS()
     val sizeInBytes = ds.logicalPlan.statistics.sizeInBytes
-    // sizeInBytes is 2404280404, before the fix, it will overflow to a negative number
+    // sizeInBytes is 2404280404, before the fix, it overflows to a negative number
     assert(sizeInBytes > 0)
   }
 }
