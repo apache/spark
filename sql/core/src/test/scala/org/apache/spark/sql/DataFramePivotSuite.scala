@@ -197,4 +197,13 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
         Row(2013, Seq(48000.0, 7.0), Seq(30000.0, 7.0)) :: Nil
     )
   }
+
+  test("pivot with column definition in groupby") {
+    checkAnswer(
+      courseSales.groupBy(substring(col("course"), 0, 1).as("foo"))
+        .pivot("year", Seq(2012, 2013))
+        .sum("earnings"),
+      Row("d", 15000.0, 48000.0) :: Row("J", 20000.0, 30000.0) :: Nil
+    )
+  }
 }
