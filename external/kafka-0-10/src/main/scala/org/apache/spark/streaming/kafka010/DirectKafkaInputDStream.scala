@@ -153,7 +153,9 @@ private[spark] class DirectKafkaInputDStream[K, V](
             if (estimateRate > maxRateLimitPerPartition && maxRateLimitPerPartition > 0) {
               maxRateLimitPerPartition
             }
-            else estimateRate
+            else {
+              estimateRate
+            }
           tp -> backpressureRate
         }
       case None => offsets.map { case (tp, offset) => tp -> ppc.maxRatePerPartition(tp) }
