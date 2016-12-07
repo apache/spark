@@ -50,10 +50,10 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
    * query, even it its a restart. So even if a query is restarted, this bus will identify them
    * separately and correctly account for the restart.
    *
-   * Note 2: This list needs to be maintained separately
-   * from the `StreamingQueryManager.activeQueries` because a terminated query is cleared from
-   * `StreamingQueryManager.activeQueries` as soon as it is stopped, but the this ListenerBus must
-   * clear a query only after the termination event of that query has been posted.
+   * Note 2: This list needs to be maintained separately from the
+   * `StreamingQueryManager.activeQueries` because a terminated query is cleared from
+   * `StreamingQueryManager.activeQueries` as soon as it is stopped, but the this ListenerBus
+   * must clear a query only after the termination event of that query has been posted.
    */
   private val activeQueryRunIds = new mutable.HashSet[UUID]
 
