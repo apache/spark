@@ -1116,11 +1116,11 @@ class SQLTests(ReusedPySparkTestCase):
         try:
             q.processAllAvailable()
             lastProgress = q.lastProgress
-            recentProgresses = q.recentProgresses
+            recentProgress = q.recentProgress
             status = q.status
             self.assertEqual(lastProgress['name'], q.name)
             self.assertEqual(lastProgress['id'], q.id)
-            self.assertTrue(any(p == lastProgress for p in recentProgresses))
+            self.assertTrue(any(p == lastProgress for p in recentProgress))
             self.assertTrue(
                 "message" in status and
                 "isDataAvailable" in status and

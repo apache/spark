@@ -94,7 +94,7 @@ trait ProgressReporter extends Logging {
   def status: StreamingQueryStatus = currentStatus
 
   /** Returns an array containing the most recent query progress updates. */
-  def recentProgresses: Array[StreamingQueryProgress] = progressBuffer.synchronized {
+  def recentProgress: Array[StreamingQueryProgress] = progressBuffer.synchronized {
     progressBuffer.toArray
   }
 

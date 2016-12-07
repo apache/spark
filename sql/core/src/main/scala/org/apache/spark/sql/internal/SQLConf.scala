@@ -617,7 +617,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val STREAMING_PROGRESS_RETENTION =
-    SQLConfigBuilder("spark.sql.streaming.numRecentProgresses")
+    SQLConfigBuilder("spark.sql.streaming.numRecentProgressUpdates")
       .doc("The number of progress updates to retain for a streaming query")
       .intConf
       .createWithDefault(100)
