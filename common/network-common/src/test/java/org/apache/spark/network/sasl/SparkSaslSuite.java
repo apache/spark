@@ -60,7 +60,7 @@ import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.JavaUtils;
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -225,7 +225,7 @@ public class SparkSaslSuite {
   public void testEncryptedMessageChunking() throws Exception {
     File file = File.createTempFile("sasltest", ".txt");
     try {
-      TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+      TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
 
       byte[] data = new byte[8 * 1024];
       new Random().nextBytes(data);
@@ -260,7 +260,7 @@ public class SparkSaslSuite {
     final File file = File.createTempFile("sasltest", ".txt");
     SaslTestCtx ctx = null;
     try {
-      final TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+      final TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
       StreamManager sm = mock(StreamManager.class);
       when(sm.getChunk(anyLong(), anyInt())).thenAnswer(new Answer<ManagedBuffer>() {
           @Override
@@ -381,7 +381,7 @@ public class SparkSaslSuite {
     final File file = File.createTempFile("sasltest", ".txt");
     SaslTestCtx ctx = null;
     try {
-      final TransportConf conf = new TransportConf("rpc", new SystemPropertyConfigProvider());
+      final TransportConf conf = new TransportConf("rpc", MapConfigProvider.EMPTY);
       final TransportConf spyConf = spy(conf);
       doReturn(true).when(spyConf).aesEncryptionEnabled();
 
@@ -454,7 +454,7 @@ public class SparkSaslSuite {
         boolean aesEnable)
       throws Exception {
 
-      TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+      TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
 
       if (aesEnable) {
         conf = spy(conf);
