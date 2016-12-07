@@ -708,16 +708,17 @@ class GeneralizedLinearRegressionSuite
        R code:
 
        A <- matrix(c(0, 1, 2, 3, 5, 2, 1, 3), 4, 2)
-       b <- c(1, 0, 1, 0)
+       b <- c(1, 0.5, 1, 0)
        w <- c(1, 2, 3, 4)
        df <- as.data.frame(cbind(A, b))
      */
     val datasetWithWeight = Seq(
       Instance(1.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
-      Instance(0.0, 2.0, Vectors.dense(1.0, 2.0)),
+      Instance(0.5, 2.0, Vectors.dense(1.0, 2.0)),
       Instance(1.0, 3.0, Vectors.dense(2.0, 1.0)),
       Instance(0.0, 4.0, Vectors.dense(3.0, 3.0))
     ).toDF()
+
     /*
        R code:
 
@@ -725,34 +726,32 @@ class GeneralizedLinearRegressionSuite
        summary(model)
 
        Deviance Residuals:
-           1       2       3       4
-       1.273  -1.437   2.533  -1.556
+              1         2         3         4
+        0.96447   0.09609   2.48431  -1.77960
 
        Coefficients:
           Estimate Std. Error z value Pr(>|z|)
-       V1 -0.30217    0.46242  -0.653    0.513
-       V2 -0.04452    0.37124  -0.120    0.905
+       V1  -0.3455     0.4598  -0.751    0.452
+       V2   0.1048     0.3791   0.276    0.782
 
        (Dispersion parameter for binomial family taken to be 1)
 
-           Null deviance: 13.863  on 4  degrees of freedom
-       Residual deviance: 12.524  on 2  degrees of freedom
-       AIC: 16.524
-
-       Number of Fisher Scoring iterations: 5
+           Null deviance: 11.090  on 4  degrees of freedom
+       Residual deviance: 10.278  on 2  degrees of freedom
+       AIC: 15.665
 
        residuals(model, type="pearson")
               1         2         3         4
-       1.117731 -1.162962  2.395838 -1.189005
+       0.76953169  0.09620122  2.32201281 -1.39381800
 
        residuals(model, type="working")
               1         2         3         4
-       2.249324 -1.676240  2.913346 -1.353433
+       1.5921790  0.1363635  2.7972478 -1.4856822
 
        residuals(model, type="response")
                1          2          3          4
-       0.5554219 -0.4034267  0.6567520 -0.2611382
-     */
+       0.37192992  0.03393385  0.64250576 -0.32690852
+    */
     val trainer = new GeneralizedLinearRegression()
       .setFamily("binomial")
       .setWeightCol("weight")
@@ -760,21 +759,21 @@ class GeneralizedLinearRegressionSuite
 
     val model = trainer.fit(datasetWithWeight)
 
-    val coefficientsR = Vectors.dense(Array(-0.30217, -0.04452))
+    val coefficientsR = Vectors.dense(Array(-0.3455229, 0.1047893))
     val interceptR = 0.0
-    val devianceResidualsR = Array(1.273, -1.437, 2.533, -1.556)
-    val pearsonResidualsR = Array(1.117731, -1.162962, 2.395838, -1.189005)
-    val workingResidualsR = Array(2.249324, -1.676240, 2.913346, -1.353433)
-    val responseResidualsR = Array(0.5554219, -0.4034267, 0.6567520, -0.2611382)
-    val seCoefR = Array(0.46242, 0.37124)
-    val tValsR = Array(-0.653, -0.120)
-    val pValsR = Array(0.513, 0.905)
+    val devianceResidualsR = Array(0.96447, 0.09609, 2.48431, -1.77960)
+    val pearsonResidualsR = Array(0.76953169, 0.09620122, 2.32201281, -1.39381800)
+    val workingResidualsR = Array(1.5921790, 0.1363635, 2.7972478, -1.4856822)
+    val responseResidualsR = Array(0.37192992, 0.03393385, 0.64250576, -0.32690852)
+    val seCoefR = Array(0.45983, 0.3791)
+    val tValsR = Array(-0.75141, 0.27641)
+    val pValsR = Array(0.45241, 0.78223)
     val dispersionR = 1.0
-    val nullDevianceR = 13.863
-    val residualDevianceR = 12.524
+    val nullDevianceR = 11.090
+    val residualDevianceR = 10.278
     val residualDegreeOfFreedomNullR = 4
     val residualDegreeOfFreedomR = 2
-    val aicR = 16.524
+    val aicR = 15.665
 
     val summary = model.summary
     val devianceResiduals = summary.residuals()
