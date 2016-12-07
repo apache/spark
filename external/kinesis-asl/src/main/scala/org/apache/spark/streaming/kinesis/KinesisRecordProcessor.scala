@@ -18,7 +18,6 @@ package org.apache.spark.streaming.kinesis
 
 import java.util.List
 
-import scala.collection.JavaConverters._
 import scala.util.Random
 import scala.util.control.NonFatal
 
@@ -74,11 +73,13 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
         // in `KinesisClientLibConfiguration`. For example, if we set 10 to the number of max
         // records in a worker and a producer aggregates two records into one message, the worker
         // possibly 20 records every callback function called.
-        batch.asScala.grouped(receiver.getCurrentLimit).foreach { batch =>
-          receiver.addRecords(shardId, batch.asJava)
-          logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
-          receiver.setCheckpointer(shardId, checkpointer)
+        val maxRecords = receiver.getCurrentLimit
+        for (start <- 0 until batch.size by maxRecords) {
+          val miniBatch = batch.subList(start, math.min(start + maxRecords, batch.size))
+          receiver.addRecords(shardId, miniBatch)
         }
+        logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
+        receiver.setCheckpointer(shardId, checkpointer)
       } catch {
         case NonFatal(e) =>
           /*

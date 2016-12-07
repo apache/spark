@@ -91,7 +91,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     verify(receiverMock, times(1)).isStopped()
     verify(receiverMock, times(1)).addRecords(shardId, batch.subList(0, 1))
     verify(receiverMock, times(1)).addRecords(shardId, batch.subList(1, 2))
-    verify(receiverMock, times(2)).setCheckpointer(shardId, checkpointerMock)
+    verify(receiverMock, times(1)).setCheckpointer(shardId, checkpointerMock)
   }
 
   test("shouldn't store and update checkpointer when receiver is stopped") {
