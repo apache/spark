@@ -243,7 +243,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
         assert(progress.id === query.id)
         assert(progress.name === query.name)
         assert(progress.batchId === 0)
-        assert(progress.timestamp === 100)
+        assert(progress.timestamp === "1970-01-01T00:00:00.100Z") // 100 ms in UTC
         assert(progress.numInputRows === 2)
         assert(progress.processedRowsPerSecond === 2.0)
 
