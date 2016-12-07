@@ -88,6 +88,17 @@ class JacksonParser(
     }
   }
 
+  private object SpecialDouble {
+    def unapply(value: String): Option[Double] = {
+      value.toLowerCase match {
+        case "nan" => Some(Double.NaN)
+        case "infinity" | "+infinity" | "inf" | "+inf" => Some(Double.PositiveInfinity)
+        case "-infinity" | "-inf" => Some(Double.NegativeInfinity)
+        case _ => None
+      }
+    }
+  }
+
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema.

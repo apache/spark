@@ -1986,6 +1986,37 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .collect
       }.getMessage
       assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
+
+  test("SPARK-18772: Special floats") {
+    val records = sparkContext
+      .parallelize(
+        """{"a": "NaN"}""" ::
+          """{"a": "nAn"}""" ::
+          """{"a": "-iNf"}""" ::
+          """{"a": "inF"}""" ::
+          """{"a": "+Inf"}""" ::
+          """{"a": "-iNfInity"}""" ::
+          """{"a": "InFiNiTy"}""" ::
+          """{"a": "+InfiNitY"}""" ::
+          """{"a": "+Infi"}""" ::
+          Nil)
+
+    for (dt <- Seq(FloatType, DoubleType)) {
+      val res = spark.read
+        .schema(StructType(Seq(StructField("a", dt))))
+        .json(records)
+        .select($"a".cast(DoubleType).as[java.lang.Double])
+        .collect()
+      assert(res.length === 9)
+      assert(res(0).isNaN)
+      assert(res(1).isNaN)
+      assert(res(2).toDouble.isNegInfinity)
+      assert(res(3).toDouble.isPosInfinity)
+      assert(res(4).toDouble.isPosInfinity)
+      assert(res(5).toDouble.isNegInfinity)
+      assert(res(6).toDouble.isPosInfinity)
+      assert(res(7).toDouble.isPosInfinity)
+      assert(res(8) eq null)
     }
   }
 }
