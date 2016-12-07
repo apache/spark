@@ -635,68 +635,141 @@ test_that("spark.isotonicRegression", {
 })
 
 test_that("spark.logit", {
-  # test binary logistic regression
-  label <- c(0.0, 0.0, 0.0, 1.0, 1.0)
-  feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
-  binary_data <- as.data.frame(cbind(label, feature))
-  binary_df <- createDataFrame(binary_data)
+  # R code to reproduce the result.
+  # nolint start
+  #' library(glmnet)
+  #' iris.x = as.matrix(iris[, 1:4])
+  #' iris.y = as.factor(as.character(iris[, 5]))
+  #' logit = glmnet(iris.x, iris.y, family="multinomial", alpha=0, lambda=0.5)
+  #' coef(logit)
+  #
+  # $setosa
+  # 5 x 1 sparse Matrix of class "dgCMatrix"
+  # s0
+  #               1.0981324
+  # Sepal.Length -0.2909860
+  # Sepal.Width   0.5510907
+  # Petal.Length -0.1915217
+  # Petal.Width  -0.4211946
+  #
+  # $versicolor
+  # 5 x 1 sparse Matrix of class "dgCMatrix"
+  # s0
+  #               1.520061e+00
+  # Sepal.Length  2.524501e-02
+  # Sepal.Width  -5.310313e-01
+  # Petal.Length  3.656543e-02
+  # Petal.Width  -3.144464e-05
+  #
+  # $virginica
+  # 5 x 1 sparse Matrix of class "dgCMatrix"
+  # s0
+  #              -2.61819385
+  # Sepal.Length  0.26574097
+  # Sepal.Width  -0.02005932
+  # Petal.Length  0.15495629
+  # Petal.Width   0.42122607
+  # nolint end
 
-  blr_model <- spark.logit(binary_df, label ~ feature, thresholds = 1.0)
-  blr_predict <- collect(select(predict(blr_model, binary_df), "prediction"))
-  expect_equal(blr_predict$prediction, c("0.0", "0.0", "0.0", "0.0", "0.0"))
-  blr_model1 <- spark.logit(binary_df, label ~ feature, thresholds = 0.0)
-  blr_predict1 <- collect(select(predict(blr_model1, binary_df), "prediction"))
-  expect_equal(blr_predict1$prediction, c("1.0", "1.0", "1.0", "1.0", "1.0"))
+  # Test multinomial logistic regression againt three classes
+  df <- suppressWarnings(createDataFrame(iris))
+  model <- spark.logit(df, Species ~ ., regParam = 0.5)
+  summary <- summary(model)
+  versicolorCoefsR <- c(1.52, 0.03, -0.53, 0.04, 0.00)
+  virginicaCoefsR <- c(-2.62, 0.27, -0.02, 0.16, 0.42)
+  setosaCoefsR <- c(1.10, -0.29, 0.55, -0.19, -0.42)
+  versicolorCoefs <- unlist(summary$coefficients[, "versicolor"])
+  virginicaCoefs <- unlist(summary$coefficients[, "virginica"])
+  setosaCoefs <- unlist(summary$coefficients[, "setosa"])
+  expect_true(all(abs(versicolorCoefsR - versicolorCoefs) < 0.1))
+  expect_true(all(abs(virginicaCoefsR - virginicaCoefs) < 0.1))
+  expect_true(all(abs(setosaCoefs - setosaCoefs) < 0.1))
 
-  # test summary of binary logistic regression
-  blr_summary <- summary(blr_model)
-  blr_fmeasure <- collect(select(blr_summary$fMeasureByThreshold, "threshold", "F-Measure"))
-  expect_equal(blr_fmeasure$threshold, c(0.6565513, 0.6214563, 0.3325291, 0.2115995, 0.1778653),
-               tolerance = 1e-4)
-  expect_equal(blr_fmeasure$"F-Measure", c(0.6666667, 0.5000000, 0.8000000, 0.6666667, 0.5714286),
-               tolerance = 1e-4)
-  blr_precision <- collect(select(blr_summary$precisionByThreshold, "threshold", "precision"))
-  expect_equal(blr_precision$precision, c(1.0000000, 0.5000000, 0.6666667, 0.5000000, 0.4000000),
-               tolerance = 1e-4)
-  blr_recall <- collect(select(blr_summary$recallByThreshold, "threshold", "recall"))
-  expect_equal(blr_recall$recall, c(0.5000000, 0.5000000, 1.0000000, 1.0000000, 1.0000000),
-               tolerance = 1e-4)
-
-  # test model save and read
-  modelPath <- tempfile(pattern = "spark-logisticRegression", fileext = ".tmp")
-  write.ml(blr_model, modelPath)
-  expect_error(write.ml(blr_model, modelPath))
-  write.ml(blr_model, modelPath, overwrite = TRUE)
-  blr_model2 <- read.ml(modelPath)
-  blr_predict2 <- collect(select(predict(blr_model2, binary_df), "prediction"))
-  expect_equal(blr_predict$prediction, blr_predict2$prediction)
-  expect_error(summary(blr_model2))
+  # Test model save and load
+  modelPath <- tempfile(pattern = "spark-logit", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  coefs <- summary(model)$coefficients
+  coefs2 <- summary(model2)$coefficients
+  expect_equal(coefs, coefs2)
   unlink(modelPath)
 
-  # test prediction label as text
-  training <- suppressWarnings(createDataFrame(iris))
-  binomial_training <- training[training$Species %in% c("versicolor", "virginica"), ]
-  binomial_model <- spark.logit(binomial_training, Species ~ Sepal_Length + Sepal_Width)
-  prediction <- predict(binomial_model, binomial_training)
+  # R code to reproduce the result.
+  # nolint start
+  #' library(glmnet)
+  #' iris2 <- iris[iris$Species %in% c("versicolor", "virginica"), ]
+  #' iris.x = as.matrix(iris2[, 1:4])
+  #' iris.y = as.factor(as.character(iris2[, 5]))
+  #' logit = glmnet(iris.x, iris.y, family="multinomial", alpha=0, lambda=0.5)
+  #' coef(logit)
+  #
+  # $versicolor
+  # 5 x 1 sparse Matrix of class "dgCMatrix"
+  # s0
+  #               3.93844796
+  # Sepal.Length -0.13538675
+  # Sepal.Width  -0.02386443
+  # Petal.Length -0.35076451
+  # Petal.Width  -0.77971954
+  #
+  # $virginica
+  # 5 x 1 sparse Matrix of class "dgCMatrix"
+  # s0
+  #              -3.93844796
+  # Sepal.Length  0.13538675
+  # Sepal.Width   0.02386443
+  # Petal.Length  0.35076451
+  # Petal.Width   0.77971954
+  #
+  #' logit = glmnet(iris.x, iris.y, family="binomial", alpha=0, lambda=0.5)
+  #' coef(logit)
+  #
+  # 5 x 1 sparse Matrix of class "dgCMatrix"
+  # s0
+  # (Intercept)  -6.0824412
+  # Sepal.Length  0.2458260
+  # Sepal.Width   0.1642093
+  # Petal.Length  0.4759487
+  # Petal.Width   1.0383948
+  #
+  # nolint end
+
+  # Test multinomial logistic regression againt two classes
+  df <- suppressWarnings(createDataFrame(iris))
+  training <- df[df$Species %in% c("versicolor", "virginica"), ]
+  model <- spark.logit(training, Species ~ ., regParam = 0.5, family = "multinomial")
+  summary <- summary(model)
+  versicolorCoefsR <- c(3.94, -0.16, -0.02, -0.35, -0.78)
+  virginicaCoefsR <- c(-3.94, 0.16, -0.02, 0.35, 0.78)
+  versicolorCoefs <- unlist(summary$coefficients[, "versicolor"])
+  virginicaCoefs <- unlist(summary$coefficients[, "virginica"])
+  expect_true(all(abs(versicolorCoefsR - versicolorCoefs) < 0.1))
+  expect_true(all(abs(virginicaCoefsR - virginicaCoefs) < 0.1))
+
+  # Test binomial logistic regression againt two classes
+  model <- spark.logit(training, Species ~ ., regParam = 0.5)
+  summary <- summary(model)
+  coefsR <- c(-6.08, 0.25, 0.16, 0.48, 1.04)
+  coefs <- unlist(summary$coefficients[, "Estimate"])
+  expect_true(all(abs(coefsR - coefs) < 0.1))
+
+  # Test prediction with string label
+  prediction <- predict(model, training)
   expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "character")
-  expected <- c("virginica", "virginica", "virginica", "versicolor", "virginica",
-                "versicolor", "virginica", "versicolor", "virginica", "versicolor")
+  expected <- c("versicolor", "versicolor", "virginica", "versicolor", "versicolor",
+                "versicolor", "versicolor", "versicolor", "versicolor", "versicolor")
   expect_equal(as.list(take(select(prediction, "prediction"), 10))[[1]], expected)
 
-  # test multinomial logistic regression
-  label <- c(0.0, 1.0, 2.0, 0.0, 0.0)
-  feature1 <- c(4.845940, 5.64480, 7.430381, 6.464263, 5.555667)
-  feature2 <- c(2.941319, 2.614812, 2.162451, 3.339474, 2.970987)
-  feature3 <- c(1.322733, 1.348044, 3.861237, 9.686976, 3.447130)
-  feature4 <- c(1.3246388, 0.5510444, 0.9225810, 1.2147881, 1.6020842)
-  data <- as.data.frame(cbind(label, feature1, feature2, feature3, feature4))
+  # Test prediction with numeric label
+  label <- c(0.0, 0.0, 0.0, 1.0, 1.0)
+  feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
+  data <- as.data.frame(cbind(label, feature))
   df <- createDataFrame(data)
-
-  model <- spark.logit(df, label ~., family = "multinomial", thresholds = c(0, 1, 1))
-  predict1 <- collect(select(predict(model, df), "prediction"))
-  expect_equal(predict1$prediction, c("0.0", "0.0", "0.0", "0.0", "0.0"))
-  # Summary of multinomial logistic regression is not implemented yet
-  expect_error(summary(model))
+  model <- spark.logit(df, label ~ feature)
+  prediction <- collect(select(predict(model, df), "prediction"))
+  expect_equal(prediction$prediction, c("0.0", "0.0", "1.0", "1.0", "0.0"))
 })
 
 test_that("spark.gaussianMixture", {
