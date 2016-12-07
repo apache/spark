@@ -1628,6 +1628,7 @@ setMethod("spark.kstest", signature(data = "SparkDataFrame"),
 #'         The list includes the \code{p.value} (p-value), \code{statistic} (test statistic
 #'         computed for the test), \code{nullHypothesis} (the null hypothesis with its
 #'         parameters tested against) and \code{degreesOfFreedom} (degrees of freedom of the test).
+#' @rdname spark.kstest
 #' @aliases summary,KSTest-method
 #' @export
 #' @note summary(KSTest) since 2.1.0
