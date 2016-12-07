@@ -1503,7 +1503,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         return self.getOrDefault(self.link)
 
 
-class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable,
+class GeneralizedLinearRegressionModel(JavaModel, JavaRegressionModel, JavaMLWritable,
                                        JavaMLReadable):
     """
     .. note:: Experimental
