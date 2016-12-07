@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
+
+import com.google.common.io.Files
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
@@ -232,17 +236,20 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         sql("""LOAD DATA LOCAL INPATH "/non-existing/data.txt" INTO TABLE non_part_table""")
       }
 
-      val testData = hiveContext.getHiveFile("data/files/employee.dat").getCanonicalPath
+      val testData = hiveContext.getHiveFile("data/files/employee.dat")
 
       // Non-local inpath: without URI Scheme and Authority
-      sql(s"""LOAD DATA INPATH "$testData" INTO TABLE non_part_table""")
+      withCopy(testData) { tmp =>
+        sql(s"""LOAD DATA INPATH "${tmp.getCanonicalPath()}" INTO TABLE non_part_table""")
+      }
+
       checkAnswer(
         sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
         Row(16, "john") :: Nil)
 
       // Use URI as LOCAL inpath:
       // file:/path/to/data/files/employee.dat
-      val uri = "file:" + testData
+      val uri = "file:" + testData.getCanonicalPath()
       sql(s"""LOAD DATA LOCAL INPATH "$uri" INTO TABLE non_part_table""")
 
       checkAnswer(
@@ -250,13 +257,19 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         Row(16, "john") :: Row(16, "john") :: Nil)
 
       // Use URI as non-LOCAL inpath
-      sql(s"""LOAD DATA INPATH "$uri" INTO TABLE non_part_table""")
+      withCopy(testData) { tmp =>
+        val tmpUri = "file:" + tmp.getCanonicalPath()
+        sql(s"""LOAD DATA INPATH "$tmpUri" INTO TABLE non_part_table""")
+      }
 
       checkAnswer(
         sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
         Row(16, "john") :: Row(16, "john") :: Row(16, "john") :: Nil)
 
-      sql(s"""LOAD DATA INPATH "$uri" OVERWRITE INTO TABLE non_part_table""")
+      withCopy(testData) { tmp =>
+        val tmpUri = "file:" + tmp.getCanonicalPath()
+        sql(s"""LOAD DATA INPATH "$tmpUri" OVERWRITE INTO TABLE non_part_table""")
+      }
 
       checkAnswer(
         sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
@@ -416,6 +429,21 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         .saveAsTable("part_datasrc")
 
       assert(sql("SHOW PARTITIONS part_datasrc").count() == 3)
+    }
+  }
+
+  /**
+   * Run a function with a copy of the input file. Use this for tests that use "LOAD DATA"
+   * (instead of "LOAD DATA LOCAL") since, according to Hive's semantics, files are moved
+   * into the target location in that case, and we need the original file to be preserved.
+   */
+  private def withCopy(source: File)(fn: File => Unit): Unit = {
+    val tmp = File.createTempFile(source.getName(), ".tmp")
+    Files.copy(source, tmp)
+    try {
+      fn(tmp)
+    } finally {
+      tmp.delete()
     }
   }
 }
