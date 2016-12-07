@@ -1007,10 +1007,11 @@ test_that("spark.randomForest", {
   model <- spark.randomForest(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16,
                               numTrees = 20, seed = 123)
   predictions <- collect(predict(model, data))
-  expect_equal(predictions$prediction, c(60.379, 61.096, 60.636, 62.258,
-                                         63.736, 64.296, 64.868, 64.300,
-                                         66.709, 67.697, 67.966, 67.252,
-                                         68.866, 69.593, 69.195, 69.658),
+  expect_equal(predictions$prediction, c(60.32820, 61.22315, 60.69025, 62.11070,
+                                         63.53160, 64.05470, 65.12710, 64.30450,
+                                         66.70910, 67.86125, 68.08700, 67.21865,
+                                         68.89275, 69.53180, 69.39640, 69.68250),
+
                tolerance = 1e-4)
   stats <- summary(model)
   expect_equal(stats$numTrees, 20)
