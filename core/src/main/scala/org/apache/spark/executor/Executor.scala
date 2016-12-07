@@ -457,7 +457,7 @@ private[spark] class Executor(
       val startTimeMs = System.currentTimeMillis()
       def elapsedTimeMs = System.currentTimeMillis() - startTimeMs
 
-      while (!taskRunner.isFinished && elapsedTimeMs < killTimeoutMs) {
+      while (!taskRunner.isFinished && (elapsedTimeMs < killTimeoutMs || killTimeoutMs <= 0)) {
         taskRunner.kill(interruptThread = interruptThread)
         taskRunner.synchronized {
           wait(killPollingFrequencyMs)
