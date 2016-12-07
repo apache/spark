@@ -102,7 +102,7 @@ private[kafka010] case class KafkaSource(
     sourceOptions.getOrElse("fetchOffset.numRetries", "3").toInt
 
   private val offsetFetchAttemptIntervalMs =
-    sourceOptions.getOrElse("fetchOffset.retryIntervalMs", "10").toLong
+    sourceOptions.getOrElse("fetchOffset.retryIntervalMs", "1000").toLong
 
   private val maxOffsetsPerTrigger =
     sourceOptions.get("maxOffsetsPerTrigger").map(_.toLong)
