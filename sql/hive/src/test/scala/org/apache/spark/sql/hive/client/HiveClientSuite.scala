@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.client
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.metadata.Hive
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.catalog._
@@ -30,9 +29,9 @@ import org.apache.spark.sql.types.IntegerType
 class HiveClientSuite extends SparkFunSuite {
   private val clientBuilder = new HiveClientBuilder
 
-  private val tryDirectSqlConfVar = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL
+  private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
 
-  test(s"getPartitionsByFilter returns all partitions when ${tryDirectSqlConfVar.varname}=false") {
+  test(s"getPartitionsByFilter returns all partitions when $tryDirectSqlKey=false") {
     val testPartitionCount = 5
 
     val storageFormat = CatalogStorageFormat(
@@ -44,7 +43,7 @@ class HiveClientSuite extends SparkFunSuite {
       properties = Map.empty)
 
     val hadoopConf = new Configuration()
-    hadoopConf.setBoolean(tryDirectSqlConfVar.varname, false)
+    hadoopConf.setBoolean(tryDirectSqlKey, false)
     val client = clientBuilder.buildClient(HiveUtils.hiveExecutionVersion, hadoopConf)
     client.runSqlHive("CREATE TABLE test (value INT) PARTITIONED BY (part INT)")
 
@@ -58,21 +57,5 @@ class HiveClientSuite extends SparkFunSuite {
       Seq(EqualTo(AttributeReference("part", IntegerType)(), Literal(3))))
 
     assert(filteredPartitions.size == testPartitionCount)
-  }
-
-  test("Get configure value from the local and the metaStore may be not equality") {
-    // Only set the metaStore to false, local is default.
-    // The local should be true and the metaStore should be false.
-    val conf = new HiveConf()
-    val hive = Hive.get(conf)
-    hive.getMSC.setMetaConf(tryDirectSqlConfVar.varname, false.toString)
-    val clientSide = hive.getConf.getBoolean(tryDirectSqlConfVar.varname,
-      tryDirectSqlConfVar.defaultBoolVal)
-    val metaStoreSide = hive.getMSC.getConfigValue(tryDirectSqlConfVar.varname,
-      tryDirectSqlConfVar.defaultBoolVal.toString).toBoolean
-    //  Hive may throw an exception (SPARK-18681) if get config value from the local.
-    assert(clientSide)
-    assert(!metaStoreSide)
-    assert(clientSide != metaStoreSide)
   }
 }
