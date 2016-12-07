@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.scalatest.Matchers
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, CreateArray, CreateMap, CreateNamedStruct, Expression, GetArrayItem, GetArrayStructFields, GetMapValue, GetStructField, Literal}
