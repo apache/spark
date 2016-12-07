@@ -84,6 +84,8 @@ private[spark] class Executor(
   // Start worker thread pool
   private val threadPool = ThreadUtils.newDaemonCachedThreadPool("Executor task launch worker")
   private val executorSource = new ExecutorSource(threadPool, executorId)
+  // Pool used for threads that supervise task killing / cancellation
+  private val taskReaperPool = ThreadUtils.newDaemonCachedThreadPool("Task reaper")
 
   if (!isLocal) {
     env.metricsSystem.registerSource(executorSource)
@@ -150,7 +152,7 @@ private[spark] class Executor(
   def killTask(taskId: Long, interruptThread: Boolean): Unit = {
     val tr = runningTasks.get(taskId)
     if (tr != null) {
-      tr.kill(interruptThread)
+      taskReaperPool.execute(new TaskReaper(tr, interruptThread = interruptThread))
     }
   }
 
@@ -161,12 +163,7 @@ private[spark] class Executor(
    * @param interruptThread whether to interrupt the task thread
    */
   def killAllTasks(interruptThread: Boolean) : Unit = {
-    // kill all the running tasks
-    for (taskRunner <- runningTasks.values().asScala) {
-      if (taskRunner != null) {
-        taskRunner.kill(interruptThread)
-      }
-    }
+    runningTasks.keys().asScala.foreach(t => killTask(t, interruptThread = interruptThread))
   }
 
   def stop(): Unit = {
@@ -192,12 +189,16 @@ private[spark] class Executor(
       serializedTask: ByteBuffer)
     extends Runnable {
 
+    val threadName = s"Executor task launch worker for task $taskId"
+
     /** Whether this task has been killed. */
     @volatile private var killed = false
 
     /** Whether this task has been finished. */
     @GuardedBy("TaskRunner.this")
     private var finished = false
+
+    def isFinished: Boolean = synchronized { finished }
 
     /** How much the JVM process has spent in GC when the task starts to run. */
     @volatile var startGCTime: Long = _
@@ -229,9 +230,11 @@ private[spark] class Executor(
       // ClosedByInterruptException during execBackend.statusUpdate which causes
       // Executor to crash
       Thread.interrupted()
+      notifyAll()
     }
 
     override def run(): Unit = {
+      Thread.currentThread().setName(threadName)
       val threadMXBean = ManagementFactory.getThreadMXBean
       val taskMemoryManager = new TaskMemoryManager(env.memoryManager, taskId)
       val deserializeStartTime = System.currentTimeMillis()
@@ -427,6 +430,57 @@ private[spark] class Executor(
 
       } finally {
         runningTasks.remove(taskId)
+      }
+    }
+  }
+
+  /**
+   * Supervises the killing / cancellation of a task by sending the interrupted flag, optionally
+   * sending a Thread.interrupt(), and monitoring the task until it finishes.
+   */
+  private class TaskReaper(taskRunner: TaskRunner, interruptThread: Boolean) extends Runnable {
+
+    private[this] val killPollingFrequencyMs: Long =
+      conf.getTimeAsMs("spark.task.killPollingFrequency", "10s")
+
+    private[this] val killTimeoutMs: Long = conf.getTimeAsMs("spark.task.killTimeout", "2m")
+
+    private[this] val takeThreadDump: Boolean =
+      conf.getBoolean("spark.task.threadDumpKilledTasks", true)
+
+    override def run(): Unit = {
+      val startTimeMs = System.currentTimeMillis()
+      def elapsedTimeMs = System.currentTimeMillis() - startTimeMs
+
+      while (!taskRunner.isFinished && elapsedTimeMs < killTimeoutMs) {
+        taskRunner.kill(interruptThread = interruptThread)
+        taskRunner.synchronized {
+          Thread.sleep(killPollingFrequencyMs)
+        }
+        if (!taskRunner.isFinished) {
+          logWarning(s"Killed task ${taskRunner.taskId} is still running after $elapsedTimeMs ms")
+          if (takeThreadDump) {
+            try {
+              val threads = Utils.getThreadDump()
+              threads.find(_.threadName == taskRunner.threadName).foreach { thread =>
+                logWarning(s"Thread dump from task ${taskRunner.taskId}:\n${thread.stackTrace}")
+              }
+            } catch {
+              case NonFatal(e) =>
+                logWarning("Exception thrown while obtaining thread dump: ", e)
+            }
+          }
+        }
+      }
+      if (!taskRunner.isFinished && killTimeoutMs > 0 && elapsedTimeMs > killTimeoutMs) {
+        if (isLocal) {
+          logError(s"Killed task ${taskRunner.taskId} could not be stopped within " +
+            s"$killPollingFrequencyMs; not killing JVM because we are running in local mode")
+        } else {
+          throw new SparkException(
+            s"Killing executor JVM because killed task ${taskRunner.taskId} could not be" +
+              s" stopped within $killTimeoutMs ms")
+        }
       }
     }
   }
