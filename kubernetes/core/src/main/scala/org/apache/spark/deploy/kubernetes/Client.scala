@@ -34,7 +34,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.DurationInt
 import scala.util.Success
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.deploy.rest.{AppResource, KubernetesCreateSubmissionRequest, RemoteAppResource, UploadedAppResource}
 import org.apache.spark.deploy.rest.kubernetes._
 import org.apache.spark.internal.Logging
@@ -60,9 +60,8 @@ private[spark] class Client(
 
   private val secretName = s"spark-submission-server-secret-$kubernetesAppId"
   private val driverLauncherSelectorValue = s"driver-launcher-$launchTime"
-  // TODO set precise version by default
   private val driverDockerImage = sparkConf.get(
-    "spark.kubernetes.driver.docker.image", "spark-driver:latest")
+    "spark.kubernetes.driver.docker.image", s"spark-driver:$SPARK_VERSION")
   private val uploadedDriverExtraClasspath = sparkConf
     .getOption("spark.kubernetes.driver.uploads.driverExtraClasspath")
   private val uploadedJars = sparkConf.getOption("spark.kubernetes.driver.uploads.jars")
@@ -291,14 +290,14 @@ private[spark] class Client(
   def getFileContents(maybeFilePaths: Option[String]): Array[(String, String)] = {
     maybeFilePaths
       .map(_.split(",").map(filePath => {
-        val driverExtraClasspathFile = new File(filePath)
-        if (!driverExtraClasspathFile.isFile) {
+        val fileToUpload = new File(filePath)
+        if (!fileToUpload.isFile) {
           throw new IllegalStateException("Provided file to upload for driver extra classpath" +
             s" does not exist or is not a file: $filePath")
         } else {
-          val fileBytes = Files.toByteArray(driverExtraClasspathFile)
+          val fileBytes = Files.toByteArray(fileToUpload)
           val fileBase64 = Base64.encodeBase64String(fileBytes)
-          (driverExtraClasspathFile.getName, fileBase64)
+          (fileToUpload.getName, fileBase64)
         }
       })).getOrElse(Array.empty[(String, String)])
   }
