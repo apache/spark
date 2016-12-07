@@ -799,6 +799,11 @@ class GeneralizedLinearRegressionModel private[ml] (
     new GeneralizedLinearRegressionModel.GeneralizedLinearRegressionModelWriter(this)
 
   override val numFeatures: Int = coefficients.size
+
+  @Since("2.1.0")
+  override def toString: String = {
+    s"GeneralizedLinearRegressionModel (uid=$uid) of family ${$(family)}"
+  }
 }
 
 @Since("2.0.0")

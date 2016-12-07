@@ -369,6 +369,11 @@ class AFTSurvivalRegressionModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter =
     new AFTSurvivalRegressionModel.AFTSurvivalRegressionModelWriter(this)
+
+  @Since("2.1.0")
+  override def toString: String = {
+    s"AFTSurvivalRegressionModel (uid=$uid)"
+  }
 }
 
 @Since("1.6.0")

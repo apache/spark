@@ -173,6 +173,11 @@ class PCAModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new PCAModelWriter(this)
+
+  @Since("2.1.0")
+  override def toString: String = {
+    s"PCAModel (uid=$uid) with k ${$(k)}"
+  }
 }
 
 @Since("1.6.0")

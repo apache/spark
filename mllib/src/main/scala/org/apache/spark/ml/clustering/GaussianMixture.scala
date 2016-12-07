@@ -178,6 +178,11 @@ class GaussianMixtureModel private[ml] (
     throw new RuntimeException(
       s"No training summary available for the ${this.getClass.getSimpleName}")
   }
+
+  @Since("2.1.0")
+  override def toString: String = {
+    s"GaussianMixtureModel (uid=$uid) with ${$(k)} centers"
+  }
 }
 
 @Since("2.0.0")

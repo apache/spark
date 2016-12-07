@@ -138,6 +138,11 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   override def copy(extra: ParamMap): Bucketizer = {
     defaultCopy[Bucketizer](extra).setParent(parent)
   }
+
+  @Since("2.1.0")
+  override def toString: String = {
+    s"Bucketizer (uid=$uid) with ${$(splits).size} splits"
+  }
 }
 
 @Since("1.6.0")

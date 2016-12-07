@@ -183,6 +183,11 @@ class KMeansModel private[ml] (
     throw new SparkException(
       s"No training summary available for the ${this.getClass.getSimpleName}")
   }
+
+  @Since("2.1.0")
+  override def toString: String = {
+    s"KMeansModel (uid=$uid) with ${$(k)} centers"
+  }
 }
 
 @Since("1.6.0")

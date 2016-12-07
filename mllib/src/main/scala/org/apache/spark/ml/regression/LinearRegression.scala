@@ -484,7 +484,6 @@ class LinearRegressionModel private[ml] (
     }
   }
 
-
   override protected def predict(features: Vector): Double = {
     dot(features, coefficients) + intercept
   }
@@ -505,6 +504,11 @@ class LinearRegressionModel private[ml] (
    */
   @Since("1.6.0")
   override def write: MLWriter = new LinearRegressionModel.LinearRegressionModelWriter(this)
+
+  @Since("2.1.0")
+  override def toString: String = {
+    s"LinearRegressionModel (uid=$uid)"
+  }
 }
 
 @Since("1.6.0")

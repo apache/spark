@@ -182,6 +182,11 @@ class StandardScalerModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new StandardScalerModelWriter(this)
+
+  @Since("2.1.0")
+  override def toString: String = {
+    s"StandardScalerModel (uid=$uid)"
+  }
 }
 
 @Since("1.6.0")

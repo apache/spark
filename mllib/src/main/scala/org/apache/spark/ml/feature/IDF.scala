@@ -153,6 +153,11 @@ class IDFModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new IDFModelWriter(this)
+
+  @Since("2.1.0")
+  override def toString: String = {
+    s"IDFModel (uid=$uid)"
+  }
 }
 
 @Since("1.6.0")
