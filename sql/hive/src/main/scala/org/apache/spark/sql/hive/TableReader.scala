@@ -115,7 +115,8 @@ class HadoopTableReader(
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
     val skipHeaderLineCount =
       tableDesc.getProperties.getProperty("skip.header.line.count", "0").toInt
-    val isTextInputFormatTable = hiveTable.getInputFormatClass == classOf[TextInputFormat]
+    val isTextInputFormatTable =
+      classOf[TextInputFormat].isAssignableFrom(hiveTable.getInputFormatClass)
 
     // logDebug("Table input: %s".format(tablePath))
     val ifc = hiveTable.getInputFormatClass
