@@ -194,6 +194,10 @@ private[spark] class Executor(
     /** Whether this task has been killed. */
     @volatile private var killed = false
 
+    @volatile private var threadId: Long = -1
+
+    def getThreadId: Long = threadId
+
     /** Whether this task has been finished. */
     @GuardedBy("TaskRunner.this")
     private var finished = false
@@ -234,7 +238,8 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
-      Thread.currentThread().setName(threadName)
+      threadId = Thread.currentThread.getId
+      Thread.currentThread.setName(threadName)
       val threadMXBean = ManagementFactory.getThreadMXBean
       val taskMemoryManager = new TaskMemoryManager(env.memoryManager, taskId)
       val deserializeStartTime = System.currentTimeMillis()
@@ -461,9 +466,10 @@ private[spark] class Executor(
           logWarning(s"Killed task ${taskRunner.taskId} is still running after $elapsedTimeMs ms")
           if (takeThreadDump) {
             try {
-              val threads = Utils.getThreadDump()
-              threads.find(_.threadName == taskRunner.threadName).foreach { thread =>
-                logWarning(s"Thread dump from task ${taskRunner.taskId}:\n${thread.stackTrace}")
+              Utils.getThreadDumpForThread(taskRunner.getThreadId).foreach { thread =>
+                if (thread.threadName == taskRunner.threadName) {
+                  logWarning(s"Thread dump from task ${taskRunner.taskId}:\n${thread.stackTrace}")
+                }
               }
             } catch {
               case NonFatal(e) =>
