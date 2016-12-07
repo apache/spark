@@ -1345,13 +1345,16 @@ therefore be efficiently supported in parallel. They can be used to implement co
 MapReduce) or sums. Spark natively supports accumulators of numeric types, and programmers
 can add support for new types.
 
-If accumulators are created with a name, they will be
-displayed in Spark's UI, they will show up inside of the stage that operates on the accumulators themselves. This can be useful for understanding the progress of
-running stages (NOTE: this is not yet supported in Python).
+As a user, you can create `Accumulators` that are both named and unnamed. Named accumulators will display in Spark's UI along with their running totals during execution. As seen in the image below, an accumulator named `counter` will display
+in the web UI for the stage that modifies that accumulator.
+Running totals of the accumulator for each task in the relevant stage will display in the "Tasks" table on this same page.
 
 <p style="text-align: center;">
   <img src="img/spark-webui-accumulators.png" title="Accumulators in the Spark UI" alt="Accumulators in the Spark UI" />
 </p>
+
+Accumulators can be useful for understanding the progress of 
+running stages (NOTE: this is not yet supported in Python).
 
 <div class="codetabs">
 
