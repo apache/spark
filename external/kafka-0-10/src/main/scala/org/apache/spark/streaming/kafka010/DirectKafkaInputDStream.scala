@@ -68,8 +68,8 @@ private[spark] class DirectKafkaInputDStream[K, V](
   }
 
   val backpressureInitialRate: Long =
-    _ssc.sparkContext.conf.getLong("spark.streaming.backpressure.initialRate",
-      _ssc.sparkContext.conf.getDouble("spark.streaming.backpressure.pid.minRate", 100).round)
+    ssc.sparkContext.conf.getLong("spark.streaming.backpressure.initialRate",
+      ssc.sparkContext.conf.getDouble("spark.streaming.backpressure.pid.minRate", 100).round)
 
   protected var currentOffsets = Map[TopicPartition, Long]()
 
