@@ -461,7 +461,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           appListener.appAttemptId,
           appListener.startTime.getOrElse(-1L),
           appListener.endTime.getOrElse(-1L),
-          fileStatus.getModificationTime(),
+          clock.getTimeMillis(),
           appListener.sparkUser.getOrElse(NOT_STARTED),
           appCompleted,
           fileStatus.getLen()
