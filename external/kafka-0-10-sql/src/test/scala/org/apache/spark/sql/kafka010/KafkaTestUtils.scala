@@ -184,7 +184,7 @@ class KafkaTestUtils extends Logging {
   def deleteTopic(topic: String): Unit = {
     val partitions = zkUtils.getPartitionsForTopics(Seq(topic))(topic).size
     AdminUtils.deleteTopic(zkUtils, topic)
-    verifyTopicDeletion(zkUtils, topic, partitions, List(this.server))
+    verifyTopicDeletionWithRetries(zkUtils, topic, partitions, List(this.server))
   }
 
   /** Add new paritions to a Kafka topic */
