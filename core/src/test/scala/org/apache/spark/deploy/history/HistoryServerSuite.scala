@@ -347,6 +347,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       quit()
     }
 
+  }
+
   /**
    * Verify that the security manager needed for the history server can be instantiated
    * even if spark.authenticate is set
