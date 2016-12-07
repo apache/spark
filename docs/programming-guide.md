@@ -1353,7 +1353,7 @@ Spark will keep a running total for each accumulator for each task in the releva
   <img src="img/spark-webui-accumulators.png" title="Accumulators in the Spark UI" alt="Accumulators in the Spark UI" />
 </p>
 
-Accumulators can be useful for understanding the progress of 
+Tracking accumulators in the UI can be useful for understanding the progress of 
 running stages (NOTE: this is not yet supported in Python).
 
 <div class="codetabs">
