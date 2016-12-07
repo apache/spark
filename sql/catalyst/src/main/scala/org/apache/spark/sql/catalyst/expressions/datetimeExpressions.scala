@@ -24,6 +24,7 @@ import java.util.{Calendar, Locale, TimeZone}
 import scala.util.Try
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -1057,15 +1058,22 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31
              """)
-case class ParseToDate(left: Expression, right: Expression, child: Expression)
+case class ParseToDate(left: Expression, format: Expression, child: Expression)
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
     this(left, format, Cast(new ParseToTimestamp(left, format), DateType))
   }
 
-  override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+//  override def checkInputDataTypes(): TypeCheckResult = {
+//    if (left.dataType != StringType || format.dataType != StringType) {
+//      TypeCheckResult.TypeCheckFailure(s"TO_TIMESTAMP requires both inputs to be strings")
+//    }
+//    TypeCheckResult.TypeCheckSuccess
+//  }
+
+  override def flatArguments: Iterator[Any] = Iterator(left, format)
+  override def sql: String = s"$prettyName(${left.sql}, ${format.sql})"
 
   override def prettyName: String = "to_date"
   override def dataType: DataType = DateType
@@ -1081,15 +1089,22 @@ case class ParseToDate(left: Expression, right: Expression, child: Expression)
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31 00:00:00.0
   """)
-case class ParseToTimestamp(left: Expression, right: Expression, child: Expression)
+case class ParseToTimestamp(left: Expression, format: Expression, child: Expression)
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
   this(left, format, Cast(UnixTimestamp(left, format), TimestampType))
 }
 
-  override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+//  override def checkInputDataTypes(): TypeCheckResult = {
+//    if (left.dataType != StringType) {
+//      TypeCheckResult.TypeCheckFailure(s"TO_TIMESTAMP requires both inputs to be strings")
+//    }
+//    TypeCheckResult.TypeCheckSuccess
+//  }
+
+  override def flatArguments: Iterator[Any] = Iterator(left, format)
+  override def sql: String = s"$prettyName(${left.sql}, ${format.sql})"
 
   override def prettyName: String = "to_timestamp"
   override def dataType: DataType = TimestampType
