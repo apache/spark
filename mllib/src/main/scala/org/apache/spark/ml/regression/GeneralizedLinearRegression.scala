@@ -215,6 +215,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    * Sets the value of param [[weightCol]].
    * If this is not set or empty, we treat all instance weights as 1.0.
    * Default is not set, so all instances have weight one.
+   * In the Binomial model, weights correspond to number of trials.
    *
    * @group setParam
    */
@@ -468,11 +469,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     override def variance(mu: Double): Double = mu * (1.0 - mu)
 
     private def ylogy(y: Double, mu: Double): Double = {
-      if (y == 0) {
-        0.0
-      } else {
-        y * math.log(y / mu)
-      }
+      if (y == 0) 0.0 else y * math.log(y / mu)
     }
 
     override def deviance(y: Double, mu: Double, weight: Double): Double = {
@@ -485,6 +482,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         numInstances: Double,
         weightSum: Double): Double = {
       -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
+        // weights for Binomial distribution correspond to number of trials
         val wt = math.round(weight).toInt
         if (wt == 0) {
           0.0
