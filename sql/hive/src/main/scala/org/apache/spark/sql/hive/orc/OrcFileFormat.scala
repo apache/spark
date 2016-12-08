@@ -143,12 +143,16 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
         // SPARK-16628: an Orc table created by Hive may not store column name correctly in the
         // Orc files. So the physical schema can mismatch required schema which comes from
-        // metastore schema. We assume `dataSchema` matches with `physicalSchema`.
+        // metastore schema and reading Orc files will fail.
+        // To fix this, we assume the metastore schema `dataSchema` can match to `physicalSchema`
+        // by each column disregarding the column names. If not, we throw an exception that
+        // suggests users to disable the conversion of Hive Orc tables.
         val physicalRequiredSchema =
           if (convertHiveOrc && OrcRelation.isMismatchSchema(physicalSchema, requiredSchema)) {
             require(physicalSchema.length == dataSchema.length,
-              "physical schema in Orc file doesn't match metastore schema, please disable " +
-                "spark.sql.hive.convertMetastoreOrc to work around this problem.")
+              s"physical schema $physicalSchema in Orc file doesn't match metastore schema " +
+                s"$dataSchema, please disable spark.sql.hive.convertMetastoreOrc to work around " +
+                "this problem.")
             physicalSchema.fields.zip(dataSchema.fields).map { case (pf, df) =>
               require(pf.dataType == df.dataType,
                 s"Column $pf in Orc file doesn't match column $df in metastore schema, " +
