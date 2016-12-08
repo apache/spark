@@ -533,11 +533,10 @@ class TaskContextTests(PySparkTestCase):
         # The task attempt id should be different
         self.assertTrue(result[0][3] != result[9][3])
 
-    def test_tc_not_serializable(self):
-        """Verify that passing a TaskContext from the driver to the worker will throw an error."""
-        rdd = self.sc.parallelize(range(10))
+    def test_tc_on_driver(self):
+        """Verify that getting the TaskContext on the driver returns None."""
         tc = TaskContext.get()
-        self.assertRaises(Exception, rdd.map(tc.stageId()).collect())
+        self.assertTrue(tc is None)
 
 
 class RDDTests(ReusedPySparkTestCase):

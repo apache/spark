@@ -126,7 +126,7 @@ def main(infile, outfile):
                             ("%d.%d" % sys.version_info[:2], version))
 
         # initialize global state
-        taskContext = TaskContext.get()
+        taskContext = TaskContext._getOrCreate()
         taskContext._stageId = read_int(infile)
         taskContext._partitionId = read_int(infile)
         taskContext._attemptNumber = read_int(infile)

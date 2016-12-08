@@ -48,15 +48,20 @@ class TaskContext(object):
         pass
 
     @classmethod
+    def _getOrCreate(cls):
+        """Internal function to get or create global TaskContext."""
+        if cls._taskContext is None:
+            cls._taskContext = TaskContext()
+        return cls._taskContext
+
+    @classmethod
     def get(cls):
         """
         Return the currently active TaskContext. This can be called inside of
         user functions to access contextual information about running tasks.
 
-        .. note:: Must be called on the worker, not the driver.
+        .. note:: Must be called on the worker, not the driver. Returns None if not initialized.
         """
-        if cls._taskContext is None:
-            cls._taskContext = TaskContext()
         return cls._taskContext
 
     def stageId(self):
