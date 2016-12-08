@@ -231,11 +231,6 @@ object FileFormatWriter extends Logging {
     private[this] var currentWriter: OutputWriter = _
 
     private def newOutputWriter(fileCounter: Int): Unit = {
-      // Close the old one
-      if (currentWriter != null) {
-        currentWriter.close()
-      }
-
       val ext = description.outputWriterFactory.getFileExtension(taskAttemptContext)
       val tmpFilePath = committer.newTaskTempFile(
         taskAttemptContext,
@@ -257,6 +252,7 @@ object FileFormatWriter extends Logging {
         if (description.maxRecordsPerFile > 0 && recordsInFile == description.maxRecordsPerFile) {
           fileCounter += 1
           recordsInFile = 0
+          releaseResources()
           newOutputWriter(fileCounter)
         }
 
@@ -330,11 +326,6 @@ object FileFormatWriter extends Logging {
      */
     private def newOutputWriter(
         key: InternalRow, partString: UnsafeProjection, fileCounter: Int): Unit = {
-      if (currentWriter != null) {
-        currentWriter.close()
-        currentWriter = null
-      }
-
       val partDir =
         if (description.partitionColumns.isEmpty) None else Option(partString(key).getString(0))
 
@@ -344,7 +335,9 @@ object FileFormatWriter extends Logging {
       } else {
         ""
       }
-      val ext = f"$bucketId-c$fileCounter%03d" +
+
+      // This must be in a form that matches our bucketing format. See BucketingUtils.
+      val ext = f"$bucketId.c$fileCounter%03d" +
         description.outputWriterFactory.getFileExtension(taskAttemptContext)
 
       val customPath = partDir match {
@@ -426,6 +419,7 @@ object FileFormatWriter extends Logging {
           recordsInFile = 0
           fileCounter = 0
 
+          releaseResources()
           newOutputWriter(currentKey, getPartitionStringFunc, fileCounter)
           val partitionPath = getPartitionStringFunc(currentKey).getString(0)
           if (partitionPath.nonEmpty) {
@@ -437,6 +431,7 @@ object FileFormatWriter extends Logging {
           // Create a new file by increasing the file counter.
           recordsInFile = 0
           fileCounter += 1
+          releaseResources()
           newOutputWriter(currentKey, getPartitionStringFunc, fileCounter)
         }
 
