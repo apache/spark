@@ -21,7 +21,7 @@ from __future__ import print_function
 class TaskContext(object):
 
     """
-    .. note:: Experimental.
+    .. note:: Experimental
 
     Contextual information about a task which can be read or mutated during
     execution. To access the TaskContext for a running task, use:
