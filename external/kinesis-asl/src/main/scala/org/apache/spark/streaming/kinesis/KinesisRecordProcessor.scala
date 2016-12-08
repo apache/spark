@@ -77,8 +77,9 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
         for (start <- 0 until batch.size by maxRecords) {
           val miniBatch = batch.subList(start, math.min(start + maxRecords, batch.size))
           receiver.addRecords(shardId, miniBatch)
+          logDebug(s"Stored: Worker $workerId stored ${miniBatch.size} records " +
+            s"for shardId $shardId")
         }
-        logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
         receiver.setCheckpointer(shardId, checkpointer)
       } catch {
         case NonFatal(e) =>
