@@ -46,7 +46,7 @@ if [ ! -z "$R_HOME" ]
     fi
     R_SCRIPT_PATH="$(dirname $(which R))"
 fi
-echo "USING R_HOME = $R_HOME"
+echo "Using R_SCRIPT_PATH = ${R_SCRIPT_PATH}"
 
 # Generate Rd files if devtools is installed
 "$R_SCRIPT_PATH/"Rscript -e ' if("devtools" %in% rownames(installed.packages())) { library(devtools); devtools::document(pkg="./pkg", roclets=c("rd")) }'
