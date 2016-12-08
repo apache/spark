@@ -24,11 +24,9 @@ private[streaming] class StateStoreConf(@transient private val conf: SQLConf) ex
 
   def this() = this(new SQLConf)
 
-  import SQLConf._
+  val minDeltasForSnapshot = conf.stateStoreMinDeltasForSnapshot
 
-  val minDeltasForSnapshot = conf.getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
-
-  val minVersionsToRetain = conf.getConf(STATE_STORE_MIN_VERSIONS_TO_RETAIN)
+  val minVersionsToRetain = conf.stateStoreMinVersionsToRetain
 }
 
 private[streaming] object StateStoreConf {

@@ -24,7 +24,7 @@ import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
@@ -55,6 +55,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * @groupname Ungrouped Support functions for language integrated queries
  * @since 1.0.0
  */
+@InterfaceStability.Stable
 class SQLContext private[sql](val sparkSession: SparkSession)
   extends Logging with Serializable {
 
@@ -83,7 +84,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Returns a [[SQLContext]] as new session, with separated SQL configurations, temporary
-   * tables, registered functions, but sharing the same [[SparkContext]], cached data and
+   * tables, registered functions, but sharing the same `SparkContext`, cached data and
    * other things.
    *
    * @since 1.6.0
@@ -95,6 +96,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * that listen for execution metrics.
    */
   @Experimental
+  @InterfaceStability.Evolving
   def listenerManager: ExecutionListenerManager = sparkSession.listenerManager
 
   /**
@@ -166,10 +168,11 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    */
   @Experimental
   @transient
+  @InterfaceStability.Unstable
   def experimental: ExperimentalMethods = sparkSession.experimental
 
   /**
-   * Returns a [[DataFrame]] with no rows or columns.
+   * Returns a `DataFrame` with no rows or columns.
    *
    * @group basic
    * @since 1.3.0
@@ -178,9 +181,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
-   * Note that the user-defined functions must be deterministic. Due to optimization,
-   * duplicate invocations may be eliminated or the function may even be invoked more times than
-   * it is present in the query.
    *
    * The following example registers a Scala closure as UDF:
    * {{{
@@ -204,6 +204,10 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    *       (Integer arg1, String arg2) -> arg2 + arg1,
    *       DataTypes.StringType);
    * }}}
+   *
+   * @note The user-defined functions must be deterministic. Due to optimization,
+   * duplicate invocations may be eliminated or the function may even be invoked more times than
+   * it is present in the query.
    *
    * @group basic
    * @since 1.3.0
@@ -250,7 +254,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   /**
    * :: Experimental ::
    * (Scala-specific) Implicit methods available in Scala for converting
-   * common Scala objects into [[DataFrame]]s.
+   * common Scala objects into `DataFrame`s.
    *
    * {{{
    *   val sqlContext = new SQLContext(sc)
@@ -261,6 +265,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   object implicits extends SQLImplicits with Serializable {
     protected override def _sqlContext: SQLContext = self
   }
@@ -274,6 +279,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     sparkSession.createDataFrame(rdd)
   }
@@ -286,12 +292,13 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
     sparkSession.createDataFrame(data)
   }
 
   /**
-   * Convert a [[BaseRelation]] created for external data sources into a [[DataFrame]].
+   * Convert a [[BaseRelation]] created for external data sources into a `DataFrame`.
    *
    * @group dataframes
    * @since 1.3.0
@@ -302,7 +309,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from an [[RDD]] containing [[Row]]s using the given schema.
+   * Creates a `DataFrame` from an [[RDD]] containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
    * the provided schema. Otherwise, there will be runtime exception.
    * Example:
@@ -333,6 +340,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @DeveloperApi
+  @InterfaceStability.Evolving
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rowRDD, schema)
   }
@@ -376,6 +384,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataset
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
@@ -413,6 +422,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataset
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
@@ -428,7 +438,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from a [[JavaRDD]] containing [[Row]]s using the given schema.
+   * Creates a `DataFrame` from a [[JavaRDD]] containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
@@ -436,13 +446,14 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @DeveloperApi
+  @InterfaceStability.Evolving
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rowRDD, schema)
   }
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from a [[java.util.List]] containing [[Row]]s using the given schema.
+   * Creates a `DataFrame` from a [[java.util.List]] containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided List matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
@@ -450,6 +461,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.6.0
    */
   @DeveloperApi
+  @InterfaceStability.Evolving
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rows, schema)
   }
@@ -492,7 +504,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
-   * [[DataFrame]].
+   * `DataFrame`.
    * {{{
    *   sqlContext.read.parquet("/path/to/file.parquet")
    *   sqlContext.read.schema(schema).json("/path/to/file.json")
@@ -506,7 +518,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * :: Experimental ::
-   * Returns a [[DataStreamReader]] that can be used to read streaming data in as a [[DataFrame]].
+   * Returns a [[DataStreamReader]] that can be used to read streaming data in as a `DataFrame`.
    * {{{
    *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
    *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
@@ -515,6 +527,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def readStream: DataStreamReader = sparkSession.readStream
 
 
@@ -604,7 +617,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Registers the given [[DataFrame]] as a temporary table in the catalog. Temporary tables exist
+   * Registers the given `DataFrame` as a temporary table in the catalog. Temporary tables exist
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
@@ -625,42 +638,45 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a `DataFrame` with a single [[LongType]] column named `id`, containing elements
    * in a range from 0 to `end` (exclusive) with step value 1.
    *
    * @since 1.4.1
    * @group dataframe
    */
   @Experimental
+  @InterfaceStability.Evolving
   def range(end: Long): DataFrame = sparkSession.range(end).toDF()
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a `DataFrame` with a single [[LongType]] column named `id`, containing elements
    * in a range from `start` to `end` (exclusive) with step value 1.
    *
    * @since 1.4.0
    * @group dataframe
    */
   @Experimental
+  @InterfaceStability.Evolving
   def range(start: Long, end: Long): DataFrame = sparkSession.range(start, end).toDF()
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a `DataFrame` with a single [[LongType]] column named `id`, containing elements
    * in a range from `start` to `end` (exclusive) with a step value.
    *
    * @since 2.0.0
    * @group dataframe
    */
   @Experimental
+  @InterfaceStability.Evolving
   def range(start: Long, end: Long, step: Long): DataFrame = {
     sparkSession.range(start, end, step).toDF()
   }
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a `DataFrame` with a single [[LongType]] column named `id`, containing elements
    * in an range from `start` to `end` (exclusive) with an step value, with partition number
    * specified.
    *
@@ -668,12 +684,13 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataframe
    */
   @Experimental
+  @InterfaceStability.Evolving
   def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
     sparkSession.range(start, end, step, numPartitions).toDF()
   }
 
   /**
-   * Executes a SQL query using Spark, returning the result as a [[DataFrame]]. The dialect that is
+   * Executes a SQL query using Spark, returning the result as a `DataFrame`. The dialect that is
    * used for SQL parsing can be configured with 'spark.sql.dialect'.
    *
    * @group basic
@@ -682,7 +699,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   def sql(sqlText: String): DataFrame = sparkSession.sql(sqlText)
 
   /**
-   * Returns the specified table as a [[DataFrame]].
+   * Returns the specified table as a `DataFrame`.
    *
    * @group ddl_ops
    * @since 1.3.0
@@ -692,7 +709,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Returns a [[DataFrame]] containing names of existing tables in the current database.
+   * Returns a `DataFrame` containing names of existing tables in the current database.
    * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
    * indicating if a table is a temporary one or not).
    *
@@ -704,7 +721,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Returns a [[DataFrame]] containing names of existing tables in the given database.
+   * Returns a `DataFrame` containing names of existing tables in the given database.
    * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
    * indicating if a table is a temporary one or not).
    *
@@ -741,16 +758,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    */
   def tableNames(databaseName: String): Array[String] = {
     sparkSession.catalog.listTables(databaseName).collect().map(_.name)
-  }
-
-  /**
-   * Parses the data type in our internal string representation. The data type string should
-   * have the same format as the one generated by `toString` in scala.
-   * It is only used by PySpark.
-   */
-  // TODO: Remove this function (would require updating PySpark).
-  private[sql] def parseDataType(dataTypeString: String): DataType = {
-    DataType.fromJson(dataTypeString)
   }
 
   ////////////////////////////////////////////////////////////////////////////
@@ -792,8 +799,8 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
-   * [[DataFrame]] if no paths are passed in.
+   * Loads a Parquet file, returning the result as a `DataFrame`. This function returns an empty
+   * `DataFrame` if no paths are passed in.
    *
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().parquet()`.
@@ -809,7 +816,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Loads a JSON file (one object per line), returning the result as a [[DataFrame]].
+   * Loads a JSON file (one object per line), returning the result as a `DataFrame`.
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
@@ -822,7 +829,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Loads a JSON file (one object per line) and applies the given schema,
-   * returning the result as a [[DataFrame]].
+   * returning the result as a `DataFrame`.
    *
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`.
@@ -843,7 +850,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
-   * [[DataFrame]].
+   * `DataFrame`.
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
@@ -854,7 +861,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
-   * [[DataFrame]].
+   * `DataFrame`.
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
@@ -865,7 +872,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
-   * returning the result as a [[DataFrame]].
+   * returning the result as a `DataFrame`.
    *
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`.
@@ -876,8 +883,8 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Loads an JavaRDD<String> storing JSON objects (one object per record) and applies the given
-   * schema, returning the result as a [[DataFrame]].
+   * Loads an JavaRDD[String] storing JSON objects (one object per record) and applies the given
+   * schema, returning the result as a `DataFrame`.
    *
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`.
@@ -889,7 +896,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Loads an RDD[String] storing JSON objects (one object per record) inferring the
-   * schema, returning the result as a [[DataFrame]].
+   * schema, returning the result as a `DataFrame`.
    *
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`.
@@ -901,7 +908,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Loads a JavaRDD[String] storing JSON objects (one object per record) inferring the
-   * schema, returning the result as a [[DataFrame]].
+   * schema, returning the result as a `DataFrame`.
    *
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`.
@@ -988,7 +995,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * Construct a `DataFrame` representing the database table accessible via JDBC URL
    * url named table.
    *
    * @group specificdata
@@ -1000,7 +1007,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * Construct a `DataFrame` representing the database table accessible via JDBC URL
    * url named table.  Partitions of the table will be retrieved in parallel based on the parameters
    * passed to this function.
    *
@@ -1024,10 +1031,10 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * Construct a `DataFrame` representing the database table accessible via JDBC URL
    * url named table. The theParts parameter gives a list expressions
    * suitable for inclusion in WHERE clauses; each one defines one partition
-   * of the [[DataFrame]].
+   * of the `DataFrame`.
    *
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
@@ -1103,7 +1110,7 @@ object SQLContext {
     }
     data.map{ element =>
       new GenericInternalRow(
-        methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }.toArray[Any]
+        methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }
       ): InternalRow
     }
   }

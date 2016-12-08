@@ -87,7 +87,7 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
   def ->(value: T): ParamPair[T] = ParamPair(this, value)
   // scalastyle:on
 
-  /** Encodes a param value into JSON, which can be decoded by [[jsonDecode()]]. */
+  /** Encodes a param value into JSON, which can be decoded by `jsonDecode()`. */
   def jsonEncode(value: T): String = {
     value match {
       case x: String =>
@@ -140,7 +140,7 @@ private[ml] object Param {
 
 /**
  * :: DeveloperApi ::
- * Factory methods for common validation functions for [[Param.isValid]].
+ * Factory methods for common validation functions for `Param.isValid`.
  * The numerical methods only support Int, Long, Float, and Double.
  */
 @DeveloperApi
@@ -165,32 +165,39 @@ object ParamValidators {
         s" of unexpected input type: ${value.getClass}")
   }
 
-  /** Check if value > lowerBound */
+  /**
+   * Check if value is greater than lowerBound
+   */
   def gt[T](lowerBound: Double): T => Boolean = { (value: T) =>
     getDouble(value) > lowerBound
   }
 
-  /** Check if value >= lowerBound */
+  /**
+   * Check if value is greater than or equal to lowerBound
+   */
   def gtEq[T](lowerBound: Double): T => Boolean = { (value: T) =>
     getDouble(value) >= lowerBound
   }
 
-  /** Check if value < upperBound */
+  /**
+   * Check if value is less than upperBound
+   */
   def lt[T](upperBound: Double): T => Boolean = { (value: T) =>
     getDouble(value) < upperBound
   }
 
-  /** Check if value <= upperBound */
+  /**
+   * Check if value is less than or equal to upperBound
+   */
   def ltEq[T](upperBound: Double): T => Boolean = { (value: T) =>
     getDouble(value) <= upperBound
   }
 
   /**
    * Check for value in range lowerBound to upperBound.
-   * @param lowerInclusive  If true, check for value >= lowerBound.
-   *                        If false, check for value > lowerBound.
-   * @param upperInclusive  If true, check for value <= upperBound.
-   *                        If false, check for value < upperBound.
+   *
+   * @param lowerInclusive if true, range includes value = lowerBound
+   * @param upperInclusive if true, range includes value = upperBound
    */
   def inRange[T](
       lowerBound: Double,
@@ -203,7 +210,7 @@ object ParamValidators {
     lowerValid && upperValid
   }
 
-  /** Version of [[inRange()]] which uses inclusive be default: [lowerBound, upperBound] */
+  /** Version of `inRange()` which uses inclusive be default: [lowerBound, upperBound] */
   def inRange[T](lowerBound: Double, upperBound: Double): T => Boolean = {
     inRange[T](lowerBound, upperBound, lowerInclusive = true, upperInclusive = true)
   }
@@ -228,7 +235,7 @@ object ParamValidators {
 
 /**
  * :: DeveloperApi ::
- * Specialized version of [[Param[Double]]] for Java.
+ * Specialized version of `Param[Double]` for Java.
  */
 @DeveloperApi
 class DoubleParam(parent: String, name: String, doc: String, isValid: Double => Boolean)
@@ -288,7 +295,7 @@ private[param] object DoubleParam {
 
 /**
  * :: DeveloperApi ::
- * Specialized version of [[Param[Int]]] for Java.
+ * Specialized version of `Param[Int]` for Java.
  */
 @DeveloperApi
 class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolean)
@@ -317,7 +324,7 @@ class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolea
 
 /**
  * :: DeveloperApi ::
- * Specialized version of [[Param[Float]]] for Java.
+ * Specialized version of `Param[Float]` for Java.
  */
 @DeveloperApi
 class FloatParam(parent: String, name: String, doc: String, isValid: Float => Boolean)
@@ -378,7 +385,7 @@ private object FloatParam {
 
 /**
  * :: DeveloperApi ::
- * Specialized version of [[Param[Long]]] for Java.
+ * Specialized version of `Param[Long]` for Java.
  */
 @DeveloperApi
 class LongParam(parent: String, name: String, doc: String, isValid: Long => Boolean)
@@ -407,7 +414,7 @@ class LongParam(parent: String, name: String, doc: String, isValid: Long => Bool
 
 /**
  * :: DeveloperApi ::
- * Specialized version of [[Param[Boolean]]] for Java.
+ * Specialized version of `Param[Boolean]` for Java.
  */
 @DeveloperApi
 class BooleanParam(parent: String, name: String, doc: String) // No need for isValid
@@ -430,7 +437,7 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
 
 /**
  * :: DeveloperApi ::
- * Specialized version of [[Param[Array[String]]]] for Java.
+ * Specialized version of `Param[Array[String]]` for Java.
  */
 @DeveloperApi
 class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array[String] => Boolean)
@@ -455,7 +462,7 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
 
 /**
  * :: DeveloperApi ::
- * Specialized version of [[Param[Array[Double]]]] for Java.
+ * Specialized version of `Param[Array[Double]]` for Java.
  */
 @DeveloperApi
 class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array[Double] => Boolean)
@@ -485,7 +492,7 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
 
 /**
  * :: DeveloperApi ::
- * Specialized version of [[Param[Array[Int]]]] for Java.
+ * Specialized version of `Param[Array[Int]]` for Java.
  */
 @DeveloperApi
 class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[Int] => Boolean)
@@ -533,7 +540,7 @@ trait Params extends Identifiable with Serializable {
    * Returns all params sorted by their names. The default implementation uses Java reflection to
    * list all public methods that have no arguments and return [[Param]].
    *
-   * Note: Developer should not use this method in constructor because we cannot guarantee that
+   * @note Developer should not use this method in constructor because we cannot guarantee that
    * this variable gets initialized before other params.
    */
   lazy val params: Array[Param[_]] = {
@@ -544,21 +551,6 @@ trait Params extends Identifiable with Serializable {
           m.getParameterTypes.isEmpty
       }.sortBy(_.getName)
       .map(m => m.invoke(this).asInstanceOf[Param[_]])
-  }
-
-  /**
-   * Validates parameter values stored internally.
-   * Raise an exception if any parameter value is invalid.
-   *
-   * This only needs to check for interactions between parameters.
-   * Parameter value checks which do not depend on other parameters are handled by
-   * `Param.validate()`. This method does not handle input/output column parameters;
-   * those are checked during schema validation.
-   * @deprecated Will be removed in 2.1.0. All the checks should be merged into transformSchema
-   */
-  @deprecated("Will be removed in 2.1.0. Checks should be merged into transformSchema.", "2.0.0")
-  def validateParams(): Unit = {
-    // Do nothing by default.  Override to handle Param interactions.
   }
 
   /**

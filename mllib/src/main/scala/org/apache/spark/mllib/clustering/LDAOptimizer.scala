@@ -38,7 +38,7 @@ import org.apache.spark.storage.StorageLevel
  */
 @Since("1.4.0")
 @DeveloperApi
-sealed trait LDAOptimizer {
+trait LDAOptimizer {
 
   /*
     DEVELOPERS NOTE:
@@ -93,9 +93,11 @@ final class EMLDAOptimizer extends LDAOptimizer {
   /**
    * If using checkpointing, this indicates whether to keep the last checkpoint (vs clean up).
    * Deleting the checkpoint can cause failures if a data partition is lost, so set this bit with
-   * care.  Note that checkpoints will be cleaned up via reference counting, regardless.
+   * care.
    *
    * Default: true
+   *
+   * @note Checkpoints will be cleaned up via reference counting, regardless.
    */
   @Since("2.0.0")
   def setKeepLastCheckpoint(keepLastCheckpoint: Boolean): this.type = {
@@ -348,9 +350,9 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
    * Mini-batch fraction in (0, 1], which sets the fraction of document sampled and used in
    * each iteration.
    *
-   * Note that this should be adjusted in synch with [[LDA.setMaxIterations()]]
+   * @note This should be adjusted in synch with `LDA.setMaxIterations()`
    * so the entire corpus is used.  Specifically, set both so that
-   * maxIterations * miniBatchFraction >= 1.
+   * maxIterations * miniBatchFraction is at least 1.
    *
    * Default: 0.05, i.e., 5% of total documents.
    */
@@ -561,7 +563,7 @@ private[clustering] object OnlineLDAOptimizer {
    *
    * An optimization (Lee, Seung: Algorithms for non-negative matrix factorization, NIPS 2001)
    * avoids explicit computation of variational parameter `phi`.
-   * @see [[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.31.7566]]
+   * @see <a href="http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.31.7566">here</a>
    *
    * @return Returns a tuple of `gammad` - estimate of gamma, the topic distribution, `sstatsd` -
    *         statistics for updating lambda and `ids` - list of termCounts vector indices.

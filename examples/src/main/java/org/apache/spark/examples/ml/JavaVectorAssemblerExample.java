@@ -29,7 +29,6 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.*;
-
 import static org.apache.spark.sql.types.DataTypes.*;
 // $example off$
 
@@ -56,8 +55,11 @@ public class JavaVectorAssemblerExample {
       .setOutputCol("features");
 
     Dataset<Row> output = assembler.transform(dataset);
-    System.out.println(output.select("features", "clicked").first());
+    System.out.println("Assembled columns 'hour', 'mobile', 'userFeatures' to vector column " +
+        "'features'");
+    output.select("features", "clicked").show(false);
     // $example off$
+
     spark.stop();
   }
 }

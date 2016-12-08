@@ -23,7 +23,6 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-import scala.language.postfixOps
 
 import com.codahale.metrics.Counter
 import com.google.common.cache.LoadingCache

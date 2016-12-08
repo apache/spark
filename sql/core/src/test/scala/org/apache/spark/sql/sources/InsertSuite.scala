@@ -65,6 +65,26 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     )
   }
 
+  test("insert into a temp view that does not point to an insertable data source") {
+    import testImplicits._
+    withTempView("t1", "t2") {
+      sql(
+        """
+          |CREATE TEMPORARY VIEW t1
+          |USING org.apache.spark.sql.sources.SimpleScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10')
+        """.stripMargin)
+      sparkContext.parallelize(1 to 10).toDF("a").createOrReplaceTempView("t2")
+
+      val message = intercept[AnalysisException] {
+        sql("INSERT INTO TABLE t1 SELECT a FROM t2")
+      }.getMessage
+      assert(message.contains("does not allow insertion"))
+    }
+  }
+
   test("PreInsert casting and renaming") {
     sql(
       s"""
@@ -163,6 +183,48 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       sql("SELECT a, b FROM jsonTable"),
       sql("SELECT a, b FROM jt UNION ALL SELECT a, b FROM jt").collect()
     )
+  }
+
+  test("INSERT INTO TABLE with Comment in columns") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      sql(
+        s"""
+           |CREATE TABLE $tabName(col1 int COMMENT 'a', col2 int)
+           |USING parquet
+         """.stripMargin)
+      sql(s"INSERT INTO TABLE $tabName SELECT 1, 2")
+
+      checkAnswer(
+        sql(s"SELECT col1, col2 FROM $tabName"),
+        Row(1, 2) :: Nil
+      )
+    }
+  }
+
+  test("INSERT INTO TABLE - complex type but different names") {
+    val tab1 = "tab1"
+    val tab2 = "tab2"
+    withTable(tab1, tab2) {
+      sql(
+        s"""
+           |CREATE TABLE $tab1 (s struct<a: string, b: string>)
+           |USING parquet
+         """.stripMargin)
+      sql(s"INSERT INTO TABLE $tab1 SELECT named_struct('col1','1','col2','2')")
+
+      sql(
+        s"""
+           |CREATE TABLE $tab2 (p struct<c: string, d: string>)
+           |USING parquet
+         """.stripMargin)
+      sql(s"INSERT INTO TABLE $tab2 SELECT * FROM $tab1")
+
+      checkAnswer(
+        spark.table(tab1),
+        spark.table(tab2)
+      )
+    }
   }
 
   test("it is not allowed to write to a table while querying it.") {

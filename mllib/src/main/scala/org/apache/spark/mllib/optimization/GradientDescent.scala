@@ -88,11 +88,11 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
    * convergenceTol is a condition which decides iteration termination.
    * The end of iteration is decided based on below logic.
    *
-   *  - If the norm of the new solution vector is >1, the diff of solution vectors
+   *  - If the norm of the new solution vector is greater than 1, the diff of solution vectors
    *    is compared to relative tolerance which means normalizing by the norm of
    *    the new solution vector.
-   *  - If the norm of the new solution vector is <=1, the diff of solution vectors
-   *    is compared to absolute tolerance which is not normalizing.
+   *  - If the norm of the new solution vector is less than or equal to 1, the diff of solution
+   *    vectors is compared to absolute tolerance which is not normalizing.
    *
    * Must be between 0.0 and 1.0 inclusively.
    */
@@ -252,7 +252,7 @@ object GradientDescent extends Logging {
          * lossSum is computed using the weights from the previous iteration
          * and regVal is the regularization value computed in the previous iteration as well.
          */
-        stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
+        stochasticLossHistory += lossSum / miniBatchSize + regVal
         val update = updater.compute(
           weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble),
           stepSize, i, regParam)

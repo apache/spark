@@ -27,7 +27,6 @@ import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.streaming.Duration
 
 /**
  * Kinesis-specific implementation of the Kinesis Client Library (KCL) IRecordProcessor.
@@ -102,27 +101,32 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
    * @param checkpointer used to perform a Kinesis checkpoint for ShutdownReason.TERMINATE
    * @param reason for shutdown (ShutdownReason.TERMINATE or ShutdownReason.ZOMBIE)
    */
-  override def shutdown(checkpointer: IRecordProcessorCheckpointer, reason: ShutdownReason) {
+  override def shutdown(
+      checkpointer: IRecordProcessorCheckpointer,
+      reason: ShutdownReason): Unit = {
     logInfo(s"Shutdown:  Shutting down workerId $workerId with reason $reason")
-    reason match {
-      /*
-       * TERMINATE Use Case.  Checkpoint.
-       * Checkpoint to indicate that all records from the shard have been drained and processed.
-       * It's now OK to read from the new shards that resulted from a resharding event.
-       */
-      case ShutdownReason.TERMINATE =>
-        receiver.removeCheckpointer(shardId, checkpointer)
+    // null if not initialized before shutdown:
+    if (shardId == null) {
+      logWarning(s"No shardId for workerId $workerId?")
+    } else {
+      reason match {
+        /*
+         * TERMINATE Use Case.  Checkpoint.
+         * Checkpoint to indicate that all records from the shard have been drained and processed.
+         * It's now OK to read from the new shards that resulted from a resharding event.
+         */
+        case ShutdownReason.TERMINATE => receiver.removeCheckpointer(shardId, checkpointer)
 
-      /*
-       * ZOMBIE Use Case or Unknown reason.  NoOp.
-       * No checkpoint because other workers may have taken over and already started processing
-       *    the same records.
-       * This may lead to records being processed more than once.
-       */
-      case _ =>
-        receiver.removeCheckpointer(shardId, null) // return null so that we don't checkpoint
+        /*
+         * ZOMBIE Use Case or Unknown reason.  NoOp.
+         * No checkpoint because other workers may have taken over and already started processing
+         *    the same records.
+         * This may lead to records being processed more than once.
+         * Return null so that we don't checkpoint
+         */
+        case _ => receiver.removeCheckpointer(shardId, null)
+      }
     }
-
   }
 }
 

@@ -60,6 +60,13 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
+    case Some((key @ SetCommand.VariableName(name), Some(value))) =>
+      val runFunc = (sparkSession: SparkSession) => {
+        sparkSession.conf.set(name, value)
+        Seq(Row(key, value))
+      }
+      (keyValueOutput, runFunc)
+
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
@@ -117,6 +124,10 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
 
 }
 
+object SetCommand {
+  val VariableName = """hivevar:([^=]+)""".r
+}
+
 /**
  * This command is for resetting SQLConf to the default values. Command that runs
  * {{{
@@ -129,6 +140,4 @@ case object ResetCommand extends RunnableCommand with Logging {
     sparkSession.sessionState.conf.clear()
     Seq.empty[Row]
   }
-
-  override val output: Seq[Attribute] = Seq.empty
 }

@@ -19,23 +19,25 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SimpleCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition, SimpleCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.DataSourceScanExec.PUSHED_FILTERS
-import org.apache.spark.sql.execution.command.{CreateDataSourceTableUtils, DDLUtils, ExecutedCommandExec}
+import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -44,18 +46,12 @@ import org.apache.spark.unsafe.types.UTF8String
  * Replaces generic operations with specific variants that are designed to work with Spark
  * SQL Data Sources.
  */
-private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
+case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
-  def resolver: Resolver = {
-    if (conf.caseSensitiveAnalysis) {
-      caseSensitiveResolution
-    } else {
-      caseInsensitiveResolution
-    }
-  }
+  def resolver: Resolver = conf.resolver
 
-  // The access modifier is used to expose this method to tests.
-  private[sql] def convertStaticPartitions(
+  // Visible for testing.
+  def convertStaticPartitions(
       sourceAttributes: Seq[Attribute],
       providedPartitions: Map[String, Option[String]],
       targetAttributes: Seq[Attribute],
@@ -165,36 +161,120 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
       insert.copy(partition = parts.map(p => (p._1, None)), child = Project(projectList, query))
 
 
-    case i @ logical.InsertIntoTable(
-           l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false)
-        if query.resolved && t.schema.asNullable == query.schema.asNullable =>
+    case logical.InsertIntoTable(
+      l @ LogicalRelation(t: HadoopFsRelation, _, table), _, query, overwrite, false)
+        if query.resolved && t.schema.sameType(query.schema) =>
 
       // Sanity checks
-      if (t.location.paths.size != 1) {
+      if (t.location.rootPaths.size != 1) {
         throw new AnalysisException(
           "Can only write data to relations with a single path.")
       }
 
-      val outputPath = t.location.paths.head
+      val outputPath = t.location.rootPaths.head
       val inputPaths = query.collect {
-        case LogicalRelation(r: HadoopFsRelation, _, _) => r.location.paths
+        case LogicalRelation(r: HadoopFsRelation, _, _) => r.location.rootPaths
       }.flatten
 
-      val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
-      if (overwrite && inputPaths.contains(outputPath)) {
+      val mode = if (overwrite.enabled) SaveMode.Overwrite else SaveMode.Append
+      if (overwrite.enabled && inputPaths.contains(outputPath)) {
         throw new AnalysisException(
           "Cannot overwrite a path that is also being read from.")
       }
 
-      InsertIntoHadoopFsRelationCommand(
+      val partitionSchema = query.resolve(
+        t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
+      val partitionsTrackedByCatalog =
+        t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
+        l.catalogTable.isDefined && l.catalogTable.get.partitionColumnNames.nonEmpty &&
+        l.catalogTable.get.tracksPartitionsInCatalog
+
+      var initialMatchingPartitions: Seq[TablePartitionSpec] = Nil
+      var customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty
+
+      val staticPartitionKeys: TablePartitionSpec = if (overwrite.enabled) {
+        overwrite.staticPartitionKeys.map { case (k, v) =>
+          (partitionSchema.map(_.name).find(_.equalsIgnoreCase(k)).get, v)
+        }
+      } else {
+        Map.empty
+      }
+
+      // When partitions are tracked by the catalog, compute all custom partition locations that
+      // may be relevant to the insertion job.
+      if (partitionsTrackedByCatalog) {
+        val matchingPartitions = t.sparkSession.sessionState.catalog.listPartitions(
+          l.catalogTable.get.identifier, Some(staticPartitionKeys))
+        initialMatchingPartitions = matchingPartitions.map(_.spec)
+        customPartitionLocations = getCustomPartitionLocations(
+          t.sparkSession, l.catalogTable.get, outputPath, matchingPartitions)
+      }
+
+      // Callback for updating metastore partition metadata after the insertion job completes.
+      // TODO(ekl) consider moving this into InsertIntoHadoopFsRelationCommand
+      def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
+        if (partitionsTrackedByCatalog) {
+          val newPartitions = updatedPartitions.toSet -- initialMatchingPartitions
+          if (newPartitions.nonEmpty) {
+            AlterTableAddPartitionCommand(
+              l.catalogTable.get.identifier, newPartitions.toSeq.map(p => (p, None)),
+              ifNotExists = true).run(t.sparkSession)
+          }
+          if (overwrite.enabled) {
+            val deletedPartitions = initialMatchingPartitions.toSet -- updatedPartitions
+            if (deletedPartitions.nonEmpty) {
+              AlterTableDropPartitionCommand(
+                l.catalogTable.get.identifier, deletedPartitions.toSeq,
+                ifExists = true, purge = false,
+                retainData = true /* already deleted */).run(t.sparkSession)
+            }
+          }
+        }
+        t.location.refresh()
+      }
+
+      val insertCmd = InsertIntoHadoopFsRelationCommand(
         outputPath,
-        t.partitionSchema.fields.map(_.name).map(UnresolvedAttribute(_)),
+        staticPartitionKeys,
+        customPartitionLocations,
+        partitionSchema,
         t.bucketSpec,
         t.fileFormat,
-        () => t.refresh(),
+        refreshPartitionsCallback,
         t.options,
         query,
-        mode)
+        mode,
+        table)
+
+      insertCmd
+  }
+
+  /**
+   * Given a set of input partitions, returns those that have locations that differ from the
+   * Hive default (e.g. /k1=v1/k2=v2). These partitions were manually assigned locations by
+   * the user.
+   *
+   * @return a mapping from partition specs to their custom locations
+   */
+  private def getCustomPartitionLocations(
+      spark: SparkSession,
+      table: CatalogTable,
+      basePath: Path,
+      partitions: Seq[CatalogTablePartition]): Map[TablePartitionSpec, String] = {
+    val hadoopConf = spark.sessionState.newHadoopConf
+    val fs = basePath.getFileSystem(hadoopConf)
+    val qualifiedBasePath = basePath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    partitions.flatMap { p =>
+      val defaultLocation = qualifiedBasePath.suffix(
+        "/" + PartitioningUtils.getPathFragment(p.spec, table.partitionSchema)).toString
+      val catalogLocation = new Path(p.location).makeQualified(
+        fs.getUri, fs.getWorkingDirectory).toString
+      if (catalogLocation != defaultLocation) {
+        Some(p.spec -> catalogLocation)
+      } else {
+        None
+      }
+    }.toMap
   }
 }
 
@@ -203,39 +283,34 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
  * Replaces [[SimpleCatalogRelation]] with data source table if its table property contains data
  * source information.
  */
-private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private def readDataSourceTable(sparkSession: SparkSession, table: CatalogTable): LogicalPlan = {
-    val schema = DDLUtils.getSchemaFromTableProperties(table)
-
-    // We only need names at here since userSpecifiedSchema we loaded from the metastore
-    // contains partition columns. We can always get datatypes of partitioning columns
-    // from userSpecifiedSchema.
-    val partitionColumns = DDLUtils.getPartitionColumnsFromTableProperties(table)
-
-    val bucketSpec = DDLUtils.getBucketSpecFromTableProperties(table)
-
-    val options = table.storage.properties
+class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  private def readDataSourceTable(
+      sparkSession: SparkSession,
+      simpleCatalogRelation: SimpleCatalogRelation): LogicalPlan = {
+    val table = simpleCatalogRelation.catalogTable
+    val pathOption = table.storage.locationUri.map("path" -> _)
     val dataSource =
       DataSource(
         sparkSession,
-        userSpecifiedSchema = Some(schema),
-        partitionColumns = partitionColumns,
-        bucketSpec = bucketSpec,
-        className = table.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER),
-        options = options)
+        userSpecifiedSchema = Some(table.schema),
+        partitionColumns = table.partitionColumnNames,
+        bucketSpec = table.bucketSpec,
+        className = table.provider.get,
+        options = table.storage.properties ++ pathOption)
 
     LogicalRelation(
       dataSource.resolveRelation(),
-      metastoreTableIdentifier = Some(table.identifier))
+      expectedOutputAttributes = Some(simpleCatalogRelation.output),
+      catalogTable = Some(table))
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case i @ logical.InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _)
         if DDLUtils.isDatasourceTable(s.metadata) =>
-      i.copy(table = readDataSourceTable(sparkSession, s.metadata))
+      i.copy(table = readDataSourceTable(sparkSession, s))
 
     case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
-      readDataSourceTable(sparkSession, s.metadata)
+      readDataSourceTable(sparkSession, s)
   }
 }
 
@@ -243,7 +318,7 @@ private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
-private[sql] object DataSourceStrategy extends Strategy with Logging {
+object DataSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _)) =>
       pruneFilterProjectRaw(
@@ -286,7 +361,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
   // Get the bucket ID based on the bucketing values.
   // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
   def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
-    val mutableRow = new SpecificMutableRow(Seq(bucketColumn.dataType))
+    val mutableRow = new SpecificInternalRow(Seq(bucketColumn.dataType))
     mutableRow(0) = Cast(Literal(value), bucketColumn.dataType).eval(null)
     val bucketIdGeneration = UnsafeProjection.create(
       HashPartitioning(bucketColumn :: Nil, numBuckets).partitionIdExpression :: Nil,
@@ -353,6 +428,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // `Filter`s or cannot be handled by `relation`.
     val filterCondition = unhandledPredicates.reduceLeftOption(expressions.And)
 
+    // These metadata values make scan plans uniquely identifiable for equality checking.
+    // TODO(SPARK-17701) using strings for equality checking is brittle
     val metadata: Map[String, String] = {
       val pairs = ArrayBuffer.empty[(String, String)]
 
@@ -361,8 +438,10 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         val markedFilters = for (filter <- pushedFilters) yield {
             if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
         }
-        pairs += (PUSHED_FILTERS -> markedFilters.mkString("[", ", ", "]"))
+        pairs += ("PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
       }
+      pairs += ("ReadSchema" ->
+        StructType.fromAttributes(projects.map(_.toAttribute)).catalogString)
       pairs.toMap
     }
 
@@ -383,7 +462,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val scan = RowDataSourceScanExec(
         projects.map(_.toAttribute),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, UnknownPartitioning(0), metadata, relation.metastoreTableIdentifier)
+        relation.relation, UnknownPartitioning(0), metadata,
+        relation.catalogTable.map(_.identifier))
       filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan)
     } else {
       // Don't request columns that are only referenced by pushed filters.
@@ -393,7 +473,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val scan = RowDataSourceScanExec(
         requestedColumns,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, UnknownPartitioning(0), metadata, relation.metastoreTableIdentifier)
+        relation.relation, UnknownPartitioning(0), metadata,
+        relation.catalogTable.map(_.identifier))
       execution.ProjectExec(
         projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))
     }

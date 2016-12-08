@@ -197,6 +197,22 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       runSlowJob(sc)
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        goToUi(sc, "/jobs")
+        assert(hasKillLink)
+      }
+    }
+
+    withSpark(newSparkContext(killEnabled = false)) { sc =>
+      runSlowJob(sc)
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        goToUi(sc, "/jobs")
+        assert(!hasKillLink)
+      }
+    }
+
+    withSpark(newSparkContext(killEnabled = true)) { sc =>
+      runSlowJob(sc)
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/stages")
         assert(hasKillLink)
       }
@@ -453,20 +469,24 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   }
 
   test("kill stage POST/GET response is correct") {
-    def getResponseCode(url: URL, method: String): Int = {
-      val connection = url.openConnection().asInstanceOf[HttpURLConnection]
-      connection.setRequestMethod(method)
-      connection.connect()
-      val code = connection.getResponseCode()
-      connection.disconnect()
-      code
-    }
-
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         val url = new URL(
-          sc.ui.get.appUIAddress.stripSuffix("/") + "/stages/stage/kill/?id=0&terminate=true")
+          sc.ui.get.webUrl.stripSuffix("/") + "/stages/stage/kill/?id=0")
+        // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
+        getResponseCode(url, "GET") should be (200)
+        getResponseCode(url, "POST") should be (200)
+      }
+    }
+  }
+
+  test("kill job POST/GET response is correct") {
+    withSpark(newSparkContext(killEnabled = true)) { sc =>
+      sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        val url = new URL(
+          sc.ui.get.webUrl.stripSuffix("/") + "/jobs/job/kill/?id=0")
         // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
         getResponseCode(url, "GET") should be (200)
         getResponseCode(url, "POST") should be (200)
@@ -600,7 +620,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   test("live UI json application list") {
     withSpark(newSparkContext()) { sc =>
       val appListRawJson = HistoryServerSuite.getUrl(new URL(
-        sc.ui.get.appUIAddress + "/api/v1/applications"))
+        sc.ui.get.webUrl + "/api/v1/applications"))
       val appListJsonAst = JsonMethods.parse(appListRawJson)
       appListJsonAst.children.length should be (1)
       val attempts = (appListJsonAst \ "attempts").children
@@ -620,7 +640,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         sc.parallelize(Seq(1, 2, 3)).map(identity).groupBy(identity).map(identity).groupBy(identity)
       rdd.count()
 
-      val stage0 = Source.fromURL(sc.ui.get.appUIAddress +
+      val stage0 = Source.fromURL(sc.ui.get.webUrl +
         "/stages/stage/?id=0&attempt=0&expandDagViz=true").mkString
       assert(stage0.contains("digraph G {\n  subgraph clusterstage_0 {\n    " +
         "label=&quot;Stage 0&quot;;\n    subgraph "))
@@ -631,7 +651,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       assert(stage0.contains("{\n      label=&quot;groupBy&quot;;\n      " +
         "2 [label=&quot;MapPartitionsRDD [2]"))
 
-      val stage1 = Source.fromURL(sc.ui.get.appUIAddress +
+      val stage1 = Source.fromURL(sc.ui.get.webUrl +
         "/stages/stage/?id=1&attempt=0&expandDagViz=true").mkString
       assert(stage1.contains("digraph G {\n  subgraph clusterstage_1 {\n    " +
         "label=&quot;Stage 1&quot;;\n    subgraph "))
@@ -642,7 +662,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
         "5 [label=&quot;MapPartitionsRDD [5]"))
 
-      val stage2 = Source.fromURL(sc.ui.get.appUIAddress +
+      val stage2 = Source.fromURL(sc.ui.get.webUrl +
         "/stages/stage/?id=2&attempt=0&expandDagViz=true").mkString
       assert(stage2.contains("digraph G {\n  subgraph clusterstage_2 {\n    " +
         "label=&quot;Stage 2&quot;;\n    subgraph "))
@@ -651,12 +671,23 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     }
   }
 
+  def getResponseCode(url: URL, method: String): Int = {
+    val connection = url.openConnection().asInstanceOf[HttpURLConnection]
+    connection.setRequestMethod(method)
+    try {
+      connection.connect()
+      connection.getResponseCode()
+    } finally {
+      connection.disconnect()
+    }
+  }
+
   def goToUi(sc: SparkContext, path: String): Unit = {
     goToUi(sc.ui.get, path)
   }
 
   def goToUi(ui: SparkUI, path: String): Unit = {
-    go to (ui.appUIAddress.stripSuffix("/") + path)
+    go to (ui.webUrl.stripSuffix("/") + path)
   }
 
   def parseDate(json: JValue): Long = {
@@ -668,6 +699,6 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   }
 
   def apiUrl(ui: SparkUI, path: String): URL = {
-    new URL(ui.appUIAddress + "/api/v1/applications/" + ui.sc.get.applicationId + "/" + path)
+    new URL(ui.webUrl + "/api/v1/applications/" + ui.sc.get.applicationId + "/" + path)
   }
 }

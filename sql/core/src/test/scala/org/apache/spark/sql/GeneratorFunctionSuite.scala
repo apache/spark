@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Expression, Generator}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -201,5 +205,35 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("array(struct(a), named_struct('a', b))").selectExpr("inline(*)"),
       Row(1) :: Row(2) :: Nil)
+  }
+
+  test("SPARK-14986: Outer lateral view with empty generate expression") {
+    checkAnswer(
+      sql("select nil from values 1 lateral view outer explode(array()) n as nil"),
+      Row(null) :: Nil
+    )
+  }
+
+  test("outer explode()") {
+    checkAnswer(
+      sql("select * from values 1, 2 lateral view outer explode(array()) a as b"),
+      Row(1, null) :: Row(2, null) :: Nil)
+  }
+
+  test("outer generator()") {
+    spark.sessionState.functionRegistry.registerFunction("empty_gen", _ => EmptyGenerator())
+    checkAnswer(
+      sql("select * from values 1, 2 lateral view outer empty_gen() a as b"),
+      Row(1, null) :: Row(2, null) :: Nil)
+  }
+}
+
+case class EmptyGenerator() extends Generator {
+  override def children: Seq[Expression] = Nil
+  override def elementSchema: StructType = new StructType().add("id", IntegerType)
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = Seq.empty
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val iteratorClass = classOf[Iterator[_]].getName
+    ev.copy(code = s"$iteratorClass<InternalRow> ${ev.value} = $iteratorClass$$.MODULE$$.empty();")
   }
 }

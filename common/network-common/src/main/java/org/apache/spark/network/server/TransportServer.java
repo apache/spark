@@ -44,7 +44,7 @@ import org.apache.spark.network.util.TransportConf;
  * Server for the efficient, low-level streaming service.
  */
 public class TransportServer implements Closeable {
-  private final Logger logger = LoggerFactory.getLogger(TransportServer.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportServer.class);
 
   private final TransportContext context;
   private final TransportConf conf;
@@ -130,7 +130,7 @@ public class TransportServer implements Closeable {
     channelFuture.syncUninterruptibly();
 
     port = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
-    logger.debug("Shuffle server started on port :" + port);
+    logger.debug("Shuffle server started on port: {}", port);
   }
 
   @Override

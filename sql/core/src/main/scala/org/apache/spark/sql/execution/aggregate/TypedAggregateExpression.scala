@@ -47,6 +47,8 @@ object TypedAggregateExpression {
     new TypedAggregateExpression(
       aggregator.asInstanceOf[Aggregator[Any, Any, Any]],
       None,
+      None,
+      None,
       bufferSerializer,
       bufferDeserializer,
       outputEncoder.serializer,
@@ -62,6 +64,8 @@ object TypedAggregateExpression {
 case class TypedAggregateExpression(
     aggregator: Aggregator[Any, Any, Any],
     inputDeserializer: Option[Expression],
+    inputClass: Option[Class[_]],
+    inputSchema: Option[StructType],
     bufferSerializer: Seq[NamedExpression],
     bufferDeserializer: Expression,
     outputSerializer: Seq[Expression],
@@ -76,8 +80,6 @@ case class TypedAggregateExpression(
   override lazy val resolved: Boolean = inputDeserializer.isDefined && childrenResolved
 
   override def references: AttributeSet = AttributeSet(inputDeserializer.toSeq)
-
-  override def inputTypes: Seq[AbstractDataType] = Nil
 
   private def aggregatorLiteral =
     Literal.create(aggregator, ObjectType(classOf[Aggregator[Any, Any, Any]]))

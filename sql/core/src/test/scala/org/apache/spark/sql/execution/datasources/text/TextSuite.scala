@@ -66,7 +66,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
 
   test("reading partitioned data using read.textFile()") {
     val partitionedData = Thread.currentThread().getContextClassLoader
-      .getResource("text-partitioned").toString
+      .getResource("test-data/text-partitioned").toString
     val ds = spark.read.textFile(partitionedData)
     val data = ds.collect()
 
@@ -76,7 +76,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
 
   test("support for partitioned reading using read.text()") {
     val partitionedData = Thread.currentThread().getContextClassLoader
-      .getResource("text-partitioned").toString
+      .getResource("test-data/text-partitioned").toString
     val df = spark.read.text(partitionedData)
     val data = df.filter("year = '2015'").select("value").collect()
 
@@ -155,7 +155,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
   }
 
   private def testFile: String = {
-    Thread.currentThread().getContextClassLoader.getResource("text-suite.txt").toString
+    Thread.currentThread().getContextClassLoader.getResource("test-data/text-suite.txt").toString
   }
 
   /** Verifies data and schema. */

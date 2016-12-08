@@ -30,7 +30,6 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -39,7 +38,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SharedState, SQLConf}
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
@@ -108,13 +108,13 @@ class TestHiveContext(
  * A [[SparkSession]] used in [[TestHiveContext]].
  *
  * @param sc SparkContext
- * @param existingSharedState optional [[HiveSharedState]]
+ * @param existingSharedState optional [[SharedState]]
  * @param loadTestTables if true, load the test tables. They can only be loaded when running
  *                       in the JVM, i.e when calling from Python this flag has to be false.
  */
 private[hive] class TestHiveSparkSession(
     @transient private val sc: SparkContext,
-    @transient private val existingSharedState: Option[HiveSharedState],
+    @transient private val existingSharedState: Option[SharedState],
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
 
@@ -139,14 +139,13 @@ private[hive] class TestHiveSparkSession(
 
   assume(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
 
-  // TODO: Let's remove HiveSharedState and TestHiveSessionState. Otherwise,
-  // we are not really testing the reflection logic based on the setting of
-  // CATALOG_IMPLEMENTATION.
   @transient
-  override lazy val sharedState: HiveSharedState = {
-    existingSharedState.getOrElse(new HiveSharedState(sc))
+  override lazy val sharedState: SharedState = {
+    existingSharedState.getOrElse(new SharedState(sc))
   }
 
+  // TODO: Let's remove TestHiveSessionState. Otherwise, we are not really testing the reflection
+  // logic based on the setting of CATALOG_IMPLEMENTATION.
   @transient
   override lazy val sessionState: TestHiveSessionState =
     new TestHiveSessionState(self)
@@ -191,6 +190,12 @@ private[hive] class TestHiveSparkSession(
     new File(Thread.currentThread().getContextClassLoader.getResource(path).getFile)
   }
 
+  private def quoteHiveFile(path : String) = if (Utils.isWindows) {
+    getHiveFile(path).getPath.replace('\\', '/')
+  } else {
+    getHiveFile(path).getPath
+  }
+
   def getWarehousePath(): String = {
     val tempConf = new SQLConf
     sc.conf.getAll.foreach { case (k, v) => tempConf.setConfString(k, v) }
@@ -226,16 +231,16 @@ private[hive] class TestHiveSparkSession(
     val hiveQTestUtilTables: Seq[TestTable] = Seq(
       TestTable("src",
         "CREATE TABLE src (key INT, value STRING)".cmd,
-        s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}' INTO TABLE src".cmd),
+        s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}' INTO TABLE src".cmd),
       TestTable("src1",
         "CREATE TABLE src1 (key INT, value STRING)".cmd,
-        s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
+        s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
       TestTable("srcpart", () => {
         sql(
           "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)")
         for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
           sql(
-            s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}'
+            s"""LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}'
                |OVERWRITE INTO TABLE srcpart PARTITION (ds='$ds',hr='$hr')
              """.stripMargin)
         }
@@ -245,7 +250,7 @@ private[hive] class TestHiveSparkSession(
           "CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)")
         for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- 11 to 12) {
           sql(
-            s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}'
+            s"""LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}'
                |OVERWRITE INTO TABLE srcpart1 PARTITION (ds='$ds',hr='$hr')
              """.stripMargin)
         }
@@ -270,7 +275,7 @@ private[hive] class TestHiveSparkSession(
 
         sql(
           s"""
-             |LOAD DATA LOCAL INPATH '${getHiveFile("data/files/complex.seq")}'
+             |LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/complex.seq")}'
              |INTO TABLE src_thrift
            """.stripMargin)
       }),
@@ -309,7 +314,7 @@ private[hive] class TestHiveSparkSession(
            |)
          """.stripMargin.cmd,
         s"""
-           |LOAD DATA LOCAL INPATH '${getHiveFile("data/files/episodes.avro")}'
+           |LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/episodes.avro")}'
            |INTO TABLE episodes
          """.stripMargin.cmd
       ),
@@ -380,7 +385,7 @@ private[hive] class TestHiveSparkSession(
       TestTable("src_json",
         s"""CREATE TABLE src_json (json STRING) STORED AS TEXTFILE
          """.stripMargin.cmd,
-        s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/json.txt")}' INTO TABLE src_json".cmd)
+        s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/json.txt")}' INTO TABLE src_json".cmd)
     )
 
     hiveQTestUtilTables.foreach(registerTestTable)
@@ -487,24 +492,6 @@ private[hive] class TestHiveQueryExecution(
   }
 }
 
-
-private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
-
-  private val removedFunctions =
-    collection.mutable.ArrayBuffer.empty[(String, (ExpressionInfo, FunctionBuilder))]
-
-  def unregisterFunction(name: String): Unit = synchronized {
-    functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
-  }
-
-  def restore(): Unit = synchronized {
-    removedFunctions.foreach {
-      case (name, (info, builder)) => registerFunction(name, info, builder)
-    }
-  }
-}
-
-
 private[hive] class TestHiveSessionState(
     sparkSession: TestHiveSparkSession)
   extends HiveSessionState(sparkSession) { self =>
@@ -518,16 +505,6 @@ private[hive] class TestHiveSessionState(
         TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }
       }
     }
-  }
-
-  override lazy val functionRegistry: TestHiveFunctionRegistry = {
-    // We use TestHiveFunctionRegistry at here to track functions that have been explicitly
-    // unregistered (through TestHiveFunctionRegistry.unregisterFunction method).
-    val fr = new TestHiveFunctionRegistry
-    org.apache.spark.sql.catalyst.analysis.FunctionRegistry.expressions.foreach {
-      case (name, (info, builder)) => fr.registerFunction(name, info, builder)
-    }
-    fr
   }
 
   override def executePlan(plan: LogicalPlan): TestHiveQueryExecution = {

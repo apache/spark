@@ -67,10 +67,16 @@ private[spark] class SortShuffleWriter[K, V, C](
     // (see SPARK-3570).
     val output = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
     val tmp = Utils.tempFileWith(output)
-    val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
-    val partitionLengths = sorter.writePartitionedFile(blockId, tmp)
-    shuffleBlockResolver.writeIndexFileAndCommit(dep.shuffleId, mapId, partitionLengths, tmp)
-    mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
+    try {
+      val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
+      val partitionLengths = sorter.writePartitionedFile(blockId, tmp)
+      shuffleBlockResolver.writeIndexFileAndCommit(dep.shuffleId, mapId, partitionLengths, tmp)
+      mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
+    } finally {
+      if (tmp.exists() && !tmp.delete()) {
+        logError(s"Error while deleting temp file ${tmp.getAbsolutePath}")
+      }
+    }
   }
 
   /** Close this writer, passing along whether the map completed */
@@ -83,8 +89,6 @@ private[spark] class SortShuffleWriter[K, V, C](
       if (success) {
         return Option(mapStatus)
       } else {
-        // The map task failed, so delete our output data.
-        shuffleBlockResolver.removeDataByMap(dep.shuffleId, mapId)
         return None
       }
     } finally {

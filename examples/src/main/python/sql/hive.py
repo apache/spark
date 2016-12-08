@@ -34,7 +34,7 @@ Run with:
 if __name__ == "__main__":
     # $example on:spark_hive$
     # warehouse_location points to the default location for managed databases and tables
-    warehouse_location = 'file:${system:user.dir}/spark-warehouse'
+    warehouse_location = 'spark-warehouse'
 
     spark = SparkSession \
         .builder \
@@ -79,7 +79,7 @@ if __name__ == "__main__":
 
     # You can also use DataFrames to create temporary views within a SparkSession.
     Record = Row("key", "value")
-    recordsDF = spark.createDataFrame(map(lambda i: Record(i, "val_" + str(i)), range(1, 101)))
+    recordsDF = spark.createDataFrame([Record(i, "val_" + str(i)) for i in range(1, 101)])
     recordsDF.createOrReplaceTempView("records")
 
     # Queries can then join DataFrame data with data stored in Hive.

@@ -176,7 +176,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private def workerRow(worker: WorkerInfo): Seq[Node] = {
     <tr>
       <td>
-        <a href={worker.webUiAddress}>{worker.id}</a>
+          <a href={UIUtils.makeHref(parent.master.reverseProxy,
+            worker.id, worker.webUiAddress)}>{worker.id}</a>
       </td>
       <td>{worker.host}:{worker.port}</td>
       <td>{worker.state}</td>
@@ -210,7 +211,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           if (app.isFinished) {
             app.desc.name
           } else {
-            <a href={app.desc.appUiUrl}>{app.desc.name}</a>
+            <a href={UIUtils.makeHref(parent.master.reverseProxy,
+              app.id, app.desc.appUiUrl)}>{app.desc.name}</a>
           }
         }
       </td>
@@ -244,7 +246,11 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     <tr>
       <td>{driver.id} {killLink}</td>
       <td>{driver.submitDate}</td>
-      <td>{driver.worker.map(w => <a href={w.webUiAddress}>{w.id.toString}</a>).getOrElse("None")}
+      <td>{driver.worker.map(w =>
+        <a href=
+          {UIUtils.makeHref(parent.master.reverseProxy, w.id, w.webUiAddress)}>
+          {w.id.toString}</a>
+        ).getOrElse("None")}
       </td>
       <td>{driver.state}</td>
       <td sorttable_customkey={driver.desc.cores.toString}>

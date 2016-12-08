@@ -29,9 +29,10 @@ object BinarizerExample {
       .builder
       .appName("BinarizerExample")
       .getOrCreate()
+
     // $example on$
     val data = Array((0, 0.1), (1, 0.8), (2, 0.2))
-    val dataFrame = spark.createDataFrame(data).toDF("label", "feature")
+    val dataFrame = spark.createDataFrame(data).toDF("id", "feature")
 
     val binarizer: Binarizer = new Binarizer()
       .setInputCol("feature")
@@ -39,8 +40,9 @@ object BinarizerExample {
       .setThreshold(0.5)
 
     val binarizedDataFrame = binarizer.transform(dataFrame)
-    val binarizedFeatures = binarizedDataFrame.select("binarized_feature")
-    binarizedFeatures.collect().foreach(println)
+
+    println(s"Binarizer output with Threshold = ${binarizer.getThreshold}")
+    binarizedDataFrame.show()
     // $example off$
 
     spark.stop()

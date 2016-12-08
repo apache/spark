@@ -150,6 +150,41 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("Generic UDAF aggregates") {
+
+    checkAnswer(sql(
+     """
+       |SELECT percentile_approx(2, 0.99999),
+       |       sum(distinct 1),
+       |       count(distinct 1,2,3,4) FROM src LIMIT 1
+     """.stripMargin), sql("SELECT 2, 1, 1 FROM src LIMIT 1").collect().toSeq)
+
+    checkAnswer(sql(
+      """
+        |SELECT ceiling(percentile_approx(distinct key, 0.99999)),
+        |       count(distinct key),
+        |       sum(distinct key),
+        |       count(distinct 1),
+        |       sum(distinct 1),
+        |       sum(1) FROM src LIMIT 1
+      """.stripMargin),
+      sql(
+        """
+          |SELECT max(key),
+          |       count(distinct key),
+          |       sum(distinct key),
+          |       1, 1, sum(1) FROM src LIMIT 1
+        """.stripMargin).collect().toSeq)
+
+    checkAnswer(sql(
+      """
+        |SELECT ceiling(percentile_approx(distinct key, 0.9 + 0.09999)),
+        |       count(distinct key), sum(distinct key),
+        |       count(distinct 1), sum(distinct 1),
+        |       sum(1) FROM src LIMIT 1
+      """.stripMargin),
+      sql("SELECT max(key), count(distinct key), sum(distinct key), 1, 1, sum(1) FROM src LIMIT 1")
+        .collect().toSeq)
+
     checkAnswer(sql("SELECT ceiling(percentile_approx(key, 0.99999D)) FROM src LIMIT 1"),
       sql("SELECT max(key) FROM src LIMIT 1").collect().toSeq)
 

@@ -26,22 +26,23 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.types.DoubleType
 
 class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
+
   test("params") {
     ParamsSuite.checkParams(new RFormula())
   }
 
   test("transform numeric data") {
     val formula = new RFormula().setFormula("id ~ v1 + v2")
-    val original = spark.createDataFrame(
-      Seq((0, 1.0, 3.0), (2, 2.0, 5.0))).toDF("id", "v1", "v2")
+    val original = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
     val model = formula.fit(original)
     val result = model.transform(original)
     val resultSchema = model.transformSchema(original.schema)
-    val expected = spark.createDataFrame(
-      Seq(
-        (0, 1.0, 3.0, Vectors.dense(1.0, 3.0), 0.0),
-        (2, 2.0, 5.0, Vectors.dense(2.0, 5.0), 2.0))
-      ).toDF("id", "v1", "v2", "features", "label")
+    val expected = Seq(
+      (0, 1.0, 3.0, Vectors.dense(1.0, 3.0), 0.0),
+      (2, 2.0, 5.0, Vectors.dense(2.0, 5.0), 2.0)
+    ).toDF("id", "v1", "v2", "features", "label")
     // TODO(ekl) make schema comparisons ignore metadata, to avoid .toString
     assert(result.schema.toString == resultSchema.toString)
     assert(resultSchema == expected.schema)
@@ -50,27 +51,32 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("features column already exists") {
     val formula = new RFormula().setFormula("y ~ x").setFeaturesCol("x")
-    val original = spark.createDataFrame(Seq((0, 1.0), (2, 2.0))).toDF("x", "y")
-    intercept[IllegalArgumentException] {
-      formula.fit(original)
-    }
+    val original = Seq((0, 1.0), (2, 2.0)).toDF("x", "y")
     intercept[IllegalArgumentException] {
       formula.fit(original)
     }
   }
 
-  test("label column already exists") {
+  test("label column already exists and forceIndexLabel was set with false") {
     val formula = new RFormula().setFormula("y ~ x").setLabelCol("y")
-    val original = spark.createDataFrame(Seq((0, 1.0), (2, 2.0))).toDF("x", "y")
+    val original = Seq((0, 1.0), (2, 2.0)).toDF("x", "y")
     val model = formula.fit(original)
     val resultSchema = model.transformSchema(original.schema)
     assert(resultSchema.length == 3)
     assert(resultSchema.toString == model.transform(original).schema.toString)
   }
 
+  test("label column already exists but forceIndexLabel was set with true") {
+    val formula = new RFormula().setFormula("y ~ x").setLabelCol("y").setForceIndexLabel(true)
+    val original = spark.createDataFrame(Seq((0, 1.0), (2, 2.0))).toDF("x", "y")
+    intercept[IllegalArgumentException] {
+      formula.fit(original)
+    }
+  }
+
   test("label column already exists but is not numeric type") {
     val formula = new RFormula().setFormula("y ~ x").setLabelCol("y")
-    val original = spark.createDataFrame(Seq((0, true), (2, false))).toDF("x", "y")
+    val original = Seq((0, true), (2, false)).toDF("x", "y")
     val model = formula.fit(original)
     intercept[IllegalArgumentException] {
       model.transformSchema(original.schema)
@@ -82,7 +88,7 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("allow missing label column for test datasets") {
     val formula = new RFormula().setFormula("y ~ x").setLabelCol("label")
-    val original = spark.createDataFrame(Seq((0, 1.0), (2, 2.0))).toDF("x", "_not_y")
+    val original = Seq((0, 1.0), (2, 2.0)).toDF("x", "_not_y")
     val model = formula.fit(original)
     val resultSchema = model.transformSchema(original.schema)
     assert(resultSchema.length == 3)
@@ -91,37 +97,32 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   }
 
   test("allow empty label") {
-    val original = spark.createDataFrame(
-      Seq((1, 2.0, 3.0), (4, 5.0, 6.0), (7, 8.0, 9.0))
-    ).toDF("id", "a", "b")
+    val original = Seq((1, 2.0, 3.0), (4, 5.0, 6.0), (7, 8.0, 9.0)).toDF("id", "a", "b")
     val formula = new RFormula().setFormula("~ a + b")
     val model = formula.fit(original)
     val result = model.transform(original)
     val resultSchema = model.transformSchema(original.schema)
-    val expected = spark.createDataFrame(
-      Seq(
-        (1, 2.0, 3.0, Vectors.dense(2.0, 3.0)),
-        (4, 5.0, 6.0, Vectors.dense(5.0, 6.0)),
-        (7, 8.0, 9.0, Vectors.dense(8.0, 9.0)))
-      ).toDF("id", "a", "b", "features")
+    val expected = Seq(
+      (1, 2.0, 3.0, Vectors.dense(2.0, 3.0)),
+      (4, 5.0, 6.0, Vectors.dense(5.0, 6.0)),
+      (7, 8.0, 9.0, Vectors.dense(8.0, 9.0))
+    ).toDF("id", "a", "b", "features")
     assert(result.schema.toString == resultSchema.toString)
     assert(result.collect() === expected.collect())
   }
 
   test("encodes string terms") {
     val formula = new RFormula().setFormula("id ~ a + b")
-    val original = spark.createDataFrame(
-      Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5))
-    ).toDF("id", "a", "b")
+    val original = Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5))
+      .toDF("id", "a", "b")
     val model = formula.fit(original)
     val result = model.transform(original)
     val resultSchema = model.transformSchema(original.schema)
-    val expected = spark.createDataFrame(
-      Seq(
+    val expected = Seq(
         (1, "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 1.0),
         (2, "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 2.0),
         (3, "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 3.0),
-        (4, "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 4.0))
+        (4, "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 4.0)
       ).toDF("id", "a", "b", "features", "label")
     assert(result.schema.toString == resultSchema.toString)
     assert(result.collect() === expected.collect())
@@ -129,27 +130,42 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("index string label") {
     val formula = new RFormula().setFormula("id ~ a + b")
-    val original = spark.createDataFrame(
+    val original =
       Seq(("male", "foo", 4), ("female", "bar", 4), ("female", "bar", 5), ("male", "baz", 5))
-    ).toDF("id", "a", "b")
+        .toDF("id", "a", "b")
     val model = formula.fit(original)
     val result = model.transform(original)
-    val expected = spark.createDataFrame(
-      Seq(
+    val expected = Seq(
         ("male", "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 1.0),
         ("female", "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 0.0),
         ("female", "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 0.0),
-        ("male", "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 1.0))
+        ("male", "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 1.0)
     ).toDF("id", "a", "b", "features", "label")
     // assert(result.schema.toString == resultSchema.toString)
     assert(result.collect() === expected.collect())
   }
 
+  test("force to index label even it is numeric type") {
+    val formula = new RFormula().setFormula("id ~ a + b").setForceIndexLabel(true)
+    val original = spark.createDataFrame(
+      Seq((1.0, "foo", 4), (1.0, "bar", 4), (0.0, "bar", 5), (1.0, "baz", 5))
+    ).toDF("id", "a", "b")
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val expected = spark.createDataFrame(
+      Seq(
+        (1.0, "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 0.0),
+        (1.0, "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 0.0),
+        (0.0, "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 1.0),
+        (1.0, "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 0.0))
+    ).toDF("id", "a", "b", "features", "label")
+    assert(result.collect() === expected.collect())
+  }
+
   test("attribute generation") {
     val formula = new RFormula().setFormula("id ~ a + b")
-    val original = spark.createDataFrame(
-      Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5))
-    ).toDF("id", "a", "b")
+    val original = Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5))
+      .toDF("id", "a", "b")
     val model = formula.fit(original)
     val result = model.transform(original)
     val attrs = AttributeGroup.fromStructField(result.schema("features"))
@@ -164,9 +180,8 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("vector attribute generation") {
     val formula = new RFormula().setFormula("id ~ vec")
-    val original = spark.createDataFrame(
-      Seq((1, Vectors.dense(0.0, 1.0)), (2, Vectors.dense(1.0, 2.0)))
-    ).toDF("id", "vec")
+    val original = Seq((1, Vectors.dense(0.0, 1.0)), (2, Vectors.dense(1.0, 2.0)))
+      .toDF("id", "vec")
     val model = formula.fit(original)
     val result = model.transform(original)
     val attrs = AttributeGroup.fromStructField(result.schema("features"))
@@ -180,9 +195,8 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("vector attribute generation with unnamed input attrs") {
     val formula = new RFormula().setFormula("id ~ vec2")
-    val base = spark.createDataFrame(
-      Seq((1, Vectors.dense(0.0, 1.0)), (2, Vectors.dense(1.0, 2.0)))
-    ).toDF("id", "vec")
+    val base = Seq((1, Vectors.dense(0.0, 1.0)), (2, Vectors.dense(1.0, 2.0)))
+      .toDF("id", "vec")
     val metadata = new AttributeGroup(
       "vec2",
       Array[Attribute](
@@ -202,16 +216,13 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("numeric interaction") {
     val formula = new RFormula().setFormula("a ~ b:c:d")
-    val original = spark.createDataFrame(
-      Seq((1, 2, 4, 2), (2, 3, 4, 1))
-    ).toDF("a", "b", "c", "d")
+    val original = Seq((1, 2, 4, 2), (2, 3, 4, 1)).toDF("a", "b", "c", "d")
     val model = formula.fit(original)
     val result = model.transform(original)
-    val expected = spark.createDataFrame(
-      Seq(
-        (1, 2, 4, 2, Vectors.dense(16.0), 1.0),
-        (2, 3, 4, 1, Vectors.dense(12.0), 2.0))
-      ).toDF("a", "b", "c", "d", "features", "label")
+    val expected = Seq(
+      (1, 2, 4, 2, Vectors.dense(16.0), 1.0),
+      (2, 3, 4, 1, Vectors.dense(12.0), 2.0)
+    ).toDF("a", "b", "c", "d", "features", "label")
     assert(result.collect() === expected.collect())
     val attrs = AttributeGroup.fromStructField(result.schema("features"))
     val expectedAttrs = new AttributeGroup(
@@ -222,20 +233,19 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("factor numeric interaction") {
     val formula = new RFormula().setFormula("id ~ a:b")
-    val original = spark.createDataFrame(
+    val original =
       Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5), (4, "baz", 5), (4, "baz", 5))
-    ).toDF("id", "a", "b")
+        .toDF("id", "a", "b")
     val model = formula.fit(original)
     val result = model.transform(original)
-    val expected = spark.createDataFrame(
-      Seq(
-        (1, "foo", 4, Vectors.dense(0.0, 0.0, 4.0), 1.0),
-        (2, "bar", 4, Vectors.dense(0.0, 4.0, 0.0), 2.0),
-        (3, "bar", 5, Vectors.dense(0.0, 5.0, 0.0), 3.0),
-        (4, "baz", 5, Vectors.dense(5.0, 0.0, 0.0), 4.0),
-        (4, "baz", 5, Vectors.dense(5.0, 0.0, 0.0), 4.0),
-        (4, "baz", 5, Vectors.dense(5.0, 0.0, 0.0), 4.0))
-      ).toDF("id", "a", "b", "features", "label")
+    val expected = Seq(
+      (1, "foo", 4, Vectors.dense(0.0, 0.0, 4.0), 1.0),
+      (2, "bar", 4, Vectors.dense(0.0, 4.0, 0.0), 2.0),
+      (3, "bar", 5, Vectors.dense(0.0, 5.0, 0.0), 3.0),
+      (4, "baz", 5, Vectors.dense(5.0, 0.0, 0.0), 4.0),
+      (4, "baz", 5, Vectors.dense(5.0, 0.0, 0.0), 4.0),
+      (4, "baz", 5, Vectors.dense(5.0, 0.0, 0.0), 4.0)
+    ).toDF("id", "a", "b", "features", "label")
     assert(result.collect() === expected.collect())
     val attrs = AttributeGroup.fromStructField(result.schema("features"))
     val expectedAttrs = new AttributeGroup(
@@ -249,17 +259,15 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("factor factor interaction") {
     val formula = new RFormula().setFormula("id ~ a:b")
-    val original = spark.createDataFrame(
-      Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zz"))
-    ).toDF("id", "a", "b")
+    val original =
+      Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zz")).toDF("id", "a", "b")
     val model = formula.fit(original)
     val result = model.transform(original)
-    val expected = spark.createDataFrame(
-      Seq(
-        (1, "foo", "zq", Vectors.dense(0.0, 0.0, 1.0, 0.0), 1.0),
-        (2, "bar", "zq", Vectors.dense(1.0, 0.0, 0.0, 0.0), 2.0),
-        (3, "bar", "zz", Vectors.dense(0.0, 1.0, 0.0, 0.0), 3.0))
-      ).toDF("id", "a", "b", "features", "label")
+    val expected = Seq(
+      (1, "foo", "zq", Vectors.dense(0.0, 0.0, 1.0, 0.0), 1.0),
+      (2, "bar", "zq", Vectors.dense(1.0, 0.0, 0.0, 0.0), 2.0),
+      (3, "bar", "zz", Vectors.dense(0.0, 1.0, 0.0, 0.0), 3.0)
+    ).toDF("id", "a", "b", "features", "label")
     assert(result.collect() === expected.collect())
     val attrs = AttributeGroup.fromStructField(result.schema("features"))
     val expectedAttrs = new AttributeGroup(
@@ -298,9 +306,7 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       }
     }
 
-    val dataset = spark.createDataFrame(
-      Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zz"))
-    ).toDF("id", "a", "b")
+    val dataset = Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zz")).toDF("id", "a", "b")
 
     val rFormula = new RFormula().setFormula("id ~ a:b")
 
