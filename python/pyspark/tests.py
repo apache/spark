@@ -488,12 +488,14 @@ class TaskContextTests(PySparkTestCase):
         self.sc = SparkContext('local[4, 2]', class_name)
 
     def test_stage_id(self):
+        """Test the stage ids are available and incrementing as expected."""
         rdd = self.sc.parallelize(range(10))
         stage1 = rdd.map(lambda x: TaskContext.get().stageId()).take(1)[0]
         stage2 = rdd.map(lambda x: TaskContext.get().stageId()).take(1)[0]
         self.assertEqual(stage1 + 1, stage2)
 
     def test_partition_id(self):
+        """Test the partition id."""
         rdd1 = self.sc.parallelize(range(10), 1)
         rdd2 = self.sc.parallelize(range(10), 2)
         pids1 = rdd1.map(lambda x: TaskContext.get().partitionId()).collect()
@@ -504,6 +506,7 @@ class TaskContextTests(PySparkTestCase):
         self.assertEqual(1, pids2[9])
 
     def test_attempt_number(self):
+        """Verify the attempt numbers are correctly reported."""
         rdd = self.sc.parallelize(range(10))
         # Verify a simple job with no failures
         attempt_numbers = rdd.map(lambda x: TaskContext.get().attemptNumber()).collect()
@@ -530,7 +533,7 @@ class TaskContextTests(PySparkTestCase):
         # The task attempt id should be different
         self.assertTrue(result[0][3] != result[9][3])
 
-    def verify_tc_not_serializable(self):
+    def test_tc_not_serializable(self):
         """Verify that passing a TaskContext from the driver to the worker will throw an error."""
         rdd = self.sc.parallelize(range(10))
         tc = TaskContext.get()
