@@ -1477,7 +1477,7 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
               stop("rank should be a positive number.")
             }
             if (!is.numeric(regParam) || regParam < 0) {
-              stop("reg should be a nonnegative number.")
+              stop("regParam should be a nonnegative number.")
             }
             if (!is.numeric(maxIter) || maxIter <= 0) {
               stop("maxIter should be a positive number.")
