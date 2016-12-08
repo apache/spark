@@ -62,6 +62,14 @@ final class ShuffleBlockFetcherIterator(
 
   import ShuffleBlockFetcherIterator._
 
+  val conf = blockManager.conf
+
+  /**
+   *  Get the configuration of nvme over fabrics.
+   */
+    // TODO(lxy): Set the default as false.
+  val nvmeEnabled: Boolean = conf.get("spark.shuffle.nvme.enabled", "true").toBoolean
+
   /**
    * Total number of blocks to fetch. This can be smaller than the total number of blocks
    * in [[blocksByAddress]] because we filter out zero-sized blocks in [[initialize]].
@@ -208,7 +216,11 @@ final class ShuffleBlockFetcherIterator(
     var totalBlocks = 0
     for ((address, blockInfos) <- blocksByAddress) {
       totalBlocks += blockInfos.size
-      if (address.executorId == blockManager.blockManagerId.executorId) {
+
+      /**
+       *  If the `NVMe over fabrics` is enabled, all the block are looks as local.
+       */
+      if (nvmeEnabled || address.executorId == blockManager.blockManagerId.executorId) {
         // Filter out zero-sized blocks
         localBlocks ++= blockInfos.filter(_._2 != 0).map(_._1)
         numBlocksToFetch += localBlocks.size
@@ -313,6 +325,7 @@ final class ShuffleBlockFetcherIterator(
 
     result match {
       case SuccessFetchResult(_, address, size, buf, isNetworkReqDone) =>
+        // TODO(lxy): If there needs to modify because of the enabled of `NVMe Over Fabrics`.
         if (address != blockManager.blockManagerId) {
           shuffleMetrics.incRemoteBytesRead(buf.size)
           shuffleMetrics.incRemoteBlocksFetched(1)
