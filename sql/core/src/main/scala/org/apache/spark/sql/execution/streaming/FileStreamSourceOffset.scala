@@ -20,7 +20,11 @@ package org.apache.spark.sql.execution.streaming
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
-case class FileStreamSourceOffset(batchId: Long) extends Offset {
+/**
+ * Offset for the [[FileStreamSource]].
+ * @param logOffset  Position in the [[FileStreamSourceLog]]
+ */
+case class FileStreamSourceOffset(logOffset: Long) extends Offset {
   override def json: String = {
     Serialization.write(this)(FileStreamSourceOffset.format)
   }

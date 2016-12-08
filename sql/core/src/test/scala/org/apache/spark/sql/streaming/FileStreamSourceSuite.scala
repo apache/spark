@@ -60,7 +60,7 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext with Private
       val source = sources.head
       val newOffset = source.withBatchingLocked {
         addData(source)
-        new FileStreamSourceOffset(source.currentBatchId + 1)
+        new FileStreamSourceOffset(source.currentLogOffset + 1)
       }
       logInfo(s"Added file to $source at offset $newOffset")
       (source, newOffset)

@@ -1,1 +1,1 @@
-{ "batchId": 345 }
+{"logOffset":345}

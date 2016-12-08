@@ -57,7 +57,7 @@ class FileStreamSource(
 
   private val metadataLog =
     new FileStreamSourceLog(FileStreamSourceLog.VERSION, sparkSession, metadataPath)
-  private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
+  private var metadataLogCurrentOffset = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
   /** Maximum number of new files to be considered in each batch */
   private val maxFilesPerBatch = sourceOptions.maxFilesPerTrigger
@@ -104,14 +104,14 @@ class FileStreamSource(
        """.stripMargin)
 
     if (batchFiles.nonEmpty) {
-      maxBatchId += 1
-      metadataLog.add(maxBatchId, batchFiles.map { case (path, timestamp) =>
-        FileEntry(path = path, timestamp = timestamp, batchId = maxBatchId)
+      metadataLogCurrentOffset += 1
+      metadataLog.add(metadataLogCurrentOffset, batchFiles.map { case (p, timestamp) =>
+        FileEntry(path = p, timestamp = timestamp, batchId = metadataLogCurrentOffset)
       }.toArray)
-      logInfo(s"Max batch id increased to $maxBatchId with ${batchFiles.size} new files")
+      logInfo(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files")
     }
 
-    FileStreamSourceOffset(maxBatchId)
+    FileStreamSourceOffset(metadataLogCurrentOffset)
   }
 
   /**
@@ -122,19 +122,19 @@ class FileStreamSource(
     func
   }
 
-  /** Return the latest offset in the source */
-  def currentBatchId: Long = synchronized { maxBatchId }
+  /** Return the latest offset in the [[FileStreamSourceLog]] */
+  def currentLogOffset: Long = synchronized { metadataLogCurrentOffset }
 
   /**
    * Returns the data that is between the offsets (`start`, `end`].
    */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-    val startId = start.map(FileStreamSourceOffset(_).batchId).getOrElse(-1L)
-    val endId = FileStreamSourceOffset(end).batchId
+    val startOffset = start.map(FileStreamSourceOffset(_).logOffset).getOrElse(-1L)
+    val endOffset = FileStreamSourceOffset(end).logOffset
 
-    assert(startId <= endId)
-    val files = metadataLog.get(Some(startId + 1), Some(endId)).flatMap(_._2)
-    logInfo(s"Processing ${files.length} files from ${startId + 1}:$endId")
+    assert(startOffset <= endOffset)
+    val files = metadataLog.get(Some(startOffset + 1), Some(endOffset)).flatMap(_._2)
+    logInfo(s"Processing ${files.length} files from ${startOffset + 1}:$endOffset")
     logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
     val newDataSource =
       DataSource(
@@ -170,7 +170,7 @@ class FileStreamSource(
     files
   }
 
-  override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.batchId == -1)
+  override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.logOffset == -1)
 
   override def toString: String = s"FileStreamSource[$qualifiedBasePath]"
 
