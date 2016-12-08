@@ -203,7 +203,8 @@ package object config {
 
   private[spark] val IGNORE_CORRUPT_FILES = ConfigBuilder("spark.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
-      "encountering corrupt files and contents that have been read will still be returned.")
+      "encountering corrupted or non-existing files and contents that have been read will still " +
+      "be returned.")
     .booleanConf
     .createWithDefault(false)
 

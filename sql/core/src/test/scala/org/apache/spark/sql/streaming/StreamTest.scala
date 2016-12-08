@@ -231,8 +231,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       outputMode: OutputMode = OutputMode.Append)(actions: StreamAction*): Unit = {
 
     val stream = _stream.toDF()
+    val sparkSession = stream.sparkSession  // use the session in DF, not the default session
     var pos = 0
-    var currentPlan: LogicalPlan = stream.logicalPlan
     var currentStream: StreamExecution = null
     var lastStream: StreamExecution = null
     val awaiting = new mutable.HashMap[Int, Offset]() // source index -> offset to wait for
@@ -319,7 +319,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
          """.stripMargin)
     }
 
-    val testThread = Thread.currentThread()
     val metadataRoot = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     var manualClockExpectedTime = -1L
     try {
@@ -337,14 +336,16 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
             additionalConfs.foreach(pair => {
               val value =
-                if (spark.conf.contains(pair._1)) Some(spark.conf.get(pair._1)) else None
+                if (sparkSession.conf.contains(pair._1)) {
+                  Some(sparkSession.conf.get(pair._1))
+                } else None
               resetConfValues(pair._1) = value
-              spark.conf.set(pair._1, pair._2)
+              sparkSession.conf.set(pair._1, pair._2)
             })
 
             lastStream = currentStream
             currentStream =
-              spark
+              sparkSession
                 .streams
                 .startQuery(
                   None,
@@ -518,8 +519,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
       // Rollback prev configuration values
       resetConfValues.foreach {
-        case (key, Some(value)) => spark.conf.set(key, value)
-        case (key, None) => spark.conf.unset(key)
+        case (key, Some(value)) => sparkSession.conf.set(key, value)
+        case (key, None) => sparkSession.conf.unset(key)
       }
     }
   }

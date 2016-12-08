@@ -468,7 +468,8 @@ object SQLConf {
 
   val IGNORE_CORRUPT_FILES = SQLConfigBuilder("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
-      "encountering corrupt files and contents that have been read will still be returned.")
+      "encountering corrupted or non-existing and contents that have been read will still be " +
+      "returned.")
     .booleanConf
     .createWithDefault(false)
 
@@ -629,7 +630,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val STREAMING_PROGRESS_RETENTION =
-    SQLConfigBuilder("spark.sql.streaming.numRecentProgresses")
+    SQLConfigBuilder("spark.sql.streaming.numRecentProgressUpdates")
       .doc("The number of progress updates to retain for a streaming query")
       .intConf
       .createWithDefault(100)
