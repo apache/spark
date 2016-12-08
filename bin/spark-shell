@@ -50,11 +50,11 @@ function main() {
     # (see https://github.com/sbt/sbt/issues/562).
     stty -icanon min 1 -echo > /dev/null 2>&1
     export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Djline.terminal=unix"
-    "${SPARK_HOME}"/bin/spark-submit --class org.apache.spark.repl.Main --name "Spark shell" "$@"
+    "${SPARK_HOME}"/bin/spark-submit --class org.apache.spark.repl.Main -usejavacp --name "Spark shell" "$@"
     stty icanon echo > /dev/null 2>&1
   else
     export SPARK_SUBMIT_OPTS
-    "${SPARK_HOME}"/bin/spark-submit --class org.apache.spark.repl.Main --name "Spark shell" "$@"
+    "${SPARK_HOME}"/bin/spark-submit --class org.apache.spark.repl.Main -usejavacp --name "Spark shell" "$@"
   fi
 }
 
