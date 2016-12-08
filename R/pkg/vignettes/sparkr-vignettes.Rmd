@@ -768,6 +768,109 @@ newDF <- createDataFrame(data.frame(x = c(1.5, 3.2)))
 head(predict(isoregModel, newDF))
 ```
 
+### Logistic Regression Model
+
+(Coming in 2.1.0)
+
+`spark.logit` fits an [Logistic Regression Model](https://en.wikipedia.org/wiki/Logistic_regression) against a Spark DataFrame.
+Logistic regression is a widely-used model when the response is categorical. It can be seen as a special case of the [Generalized Linear Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
+`spark.logit` can be used to predict a binary outcome by using binomial logistic regression, or it can be used to predict
+a multiclass outcome by using multinomial logistic regression. The `family` parameter can be used to select between the
+two algorithms, or leave it unset and Spark will infer the correct variant.
+
+#### Binomial logistic regression
+
+For the binomial model, suppose the response variable takes value in
+
+$$\mathbb{G} = \{1,2\}$$
+
+Denote
+
+$$y_i = I(g_i = 1)$$
+
+We model
+
+$$\mathbf{Pr}(\mathbf{G} = 2 | \mathbf{X} = x) + \frac{e^{\beta_0+\beta^Tx }}{1 + e^{\beta_0+\beta^Tx }}$$
+
+which can be written in the following form
+
+$$log(\frac{\mathbf{Pr}(\mathbf{G}=2|X=x)}{\mathbf{Pr}(\mathbf{G}=1|X=x)}) = \beta_0+\beta^Tx$$
+
+the so-called “logistic” or log-odds transformation.
+
+The objective function for the penalized logistic regression uses the negative binomial log-likelihood, and is
+
+$$\min_{(\beta_0, \beta) \in \mathfrak{R}^{p+1}}-[\frac{1}{N}\sum_{i=1}^N y_i \cdot (\beta_0 + \beta^Tx) - log(1+e^{\beta_0+x_i^T\beta})] + \lambda [\frac{1}{2}(1-\alpha)\left \| \beta \right \|_2^2 +\alpha \left \| \beta \right \|_1]$$
+
+#### Multinomial logistic regression
+
+Multiclass classification is supported via multinomial logistic (softmax) regression. In multinomial logistic regression,
+the algorithm produces $K$ sets of coefficients, or a matrix of dimension $K \times J$ where $K$ is is the number of outcome classes
+and $J$ is the number of features. If the algorithm is fit with an intercept term then a length $K$  vector of intercepts is available.
+
+The conditional probabilities of the outcome classes $k \in 1,2, ..., \mathbf{K}$ are modeled using the softmax function:
+
+$$Pr(Y=k|\mathbf{X, \beta_k, \beta_{0k}}) = \frac{e^{\beta_k\cdot \mathbf{X} + \beta_{0k}}}{\sum_{{k}'=0}^{K-1}e^{\beta_{{k}'}\cdot \mathbf{X}+\beta_{0{k}'}}}$$
+
+We minimize the weighted negative log-likelihood, using a multinomial response model, with elastic-net penalty to control for overfitting.
+
+$$\min_{(\beta_0, \beta) \in \mathfrak{R}^{p+1}}-[\frac{1}{N}\sum_{i=1}^N w_i \cdot logPr(Y=y_i|\mathbf{x_i})] + \lambda [\frac{1}{2}(1-\alpha)\left \| \beta \right \|_2^2 +\alpha \left \| \beta \right \|_1]$$
+
+For a detailed derivation please see [here](https://en.wikipedia.org/wiki/Multinomial_logistic_regression#As_a_log-linear_model).
+
+There are several parameters `spark.logit` takes for fitting the model.
+
+* `regParam`: the regularization parameter.
+
+* `elasticNetParam`: the ElasticNet mixing parameter. For alpha = 0.0, the penalty is an L2 penalty.
+For alpha = 1.0, it is an L1 penalty. For 0.0 < alpha < 1.0, the penalty is a combination of L1 and L2.
+Default is 0.0 which is an L2 penalty.
+
+* `maxIter`: maximum iteration number.
+
+* `tol`: convergence tolerance of iterations.
+
+* `family`: the name of family which is a description of the label distribution to be used in the model. Supported options:
+"auto": Automatically select the family based on the number of classes: If number of classes == 1 || number of classes == 2, set to "binomial".
+Else, set to "multinomial".} "binomial": Binary logistic regression with pivoting. "multinomial": Multinomial logistic (softmax) regression without pivoting.
+
+* `standardization`: whether to standardize the training features before fitting the model. The coefficients
+of models will be always returned on the original scale, so it will be transparent for users. Note that with/without standardization,
+the models should be always converged to the same solution when no regularization is applied. Default is TRUE, same as glmnet.
+
+* `thresholds`: in binary classification, in range [0, 1]. If the estimated probability of class label 1 is > threshold,
+then predict 1, else 0. A high threshold encourages the model to predict 0 more often; a low threshold encourages
+the model to predict 1 more often. Note: Setting this with threshold p is equivalent to setting thresholds c(1-p, p).
+In multiclass (or binary) classification to adjust the probability of predicting each class. Array must have length
+equal to the number of classes, with values > 0, excepting that at most one value may be 0. The class with largest value
+p/t is predicted, where p is the original probability of that class and t is the class's threshold.
+
+* `weightCol`: the weight column name.
+
+Let us look at an artificial example.
+
+Binomial logistic regression
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+training <- df[df$Species %in% c("versicolor", "virginica"), ]
+model <- spark.logit(training, Species ~ ., regParam = 0.5)
+summary <- summary(model)
+head(summary)
+```
+
+Fitted values on training data
+```{r}
+fitted <- predict(model, training)
+```
+
+Multinomial logistic regression
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+model <- spark.logit(df, Species ~ ., regParam = 0.5)
+summary <- summary(model)
+head(summary)
+```
+
 #### What's More?
 We also expect Decision Tree, Random Forest, Kolmogorov-Smirnov Test coming in the next version 2.1.0.
 
