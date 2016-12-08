@@ -222,11 +222,14 @@ fi
 # Make R package - this is used for both CRAN release and packing R layout into distribution
 if [ "$MAKE_R" == "true" ]; then
   echo "Building R source package"
+  R_PACKAGE_VERSION=`grep Version $SPARK_HOME/R/pkg/DESCRIPTION | awk '{print $NF}'`
   pushd "$SPARK_HOME/R" > /dev/null
   # Build source package and run full checks
   # Install source package to get it to generate vignettes, etc.
   # Do not source the check-cran.sh - it should be run from where it is for it to set SPARK_HOME
   NO_TESTS=1 CLEAN_INSTALL=1 "$SPARK_HOME/"R/check-cran.sh
+  # Make a copy of R source package matchin the Spark release version.
+  cp $SPARK_HOME/R/SparkR_"$R_PACKAGE_VERSION".tar.gz $SPARK_HOME/R/SparkR_"$VERSION".tar.gz
   popd > /dev/null
 else
   echo "Skipping building R source package"
