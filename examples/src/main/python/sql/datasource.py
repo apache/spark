@@ -174,7 +174,7 @@ def jdbc_dataset_example(spark):
     jdbcDF.write \
         .option("createTableColumnTypes", "{\"name\":\"VARCHAR(128)\"}") \
         .jdbc("jdbc:postgresql:dbserver", "schema.tablename",
-             properties={"user": "username", "password": "password"})
+              properties={"user": "username", "password": "password"})
     # $example off:jdbc_dataset$
 
 
