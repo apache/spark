@@ -412,6 +412,14 @@ class SQLTests(ReusedPySparkTestCase):
         res.explain(True)
         self.assertEqual(res.collect(), [Row(id=0, copy=0)])
 
+    def test_udf_with_input_file_name(self):
+        from pyspark.sql.functions import udf, input_file_name
+        from pyspark.sql.types import StringType
+        sourceFile = udf(lambda path: path, StringType())
+        filePath = "python/test_support/sql/people1.json"
+        row = self.spark.read.json(filePath).select(sourceFile(input_file_name())).first()
+        self.assertTrue(row[0].find("people1.json") != -1)
+
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
         df = self.spark.read.json(rdd)
