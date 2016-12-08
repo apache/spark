@@ -142,7 +142,7 @@ private[r] class RBackendHandler(server: RBackend)
       val cls = if (isStatic) {
         Utils.classForName(objId)
       } else {
-        obj = server.jvmObjectTracker.get(JVMObjectId(objId))
+        obj = server.jvmObjectTracker(JVMObjectId(objId))
         obj.getClass
       }
 

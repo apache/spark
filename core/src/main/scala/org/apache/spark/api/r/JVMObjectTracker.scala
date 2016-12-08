@@ -21,7 +21,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.ConcurrentHashMap
 
 /** JVM object ID wrapper */
-private[r] case class JVMObjectId(id: String)
+private[r] case class JVMObjectId(id: String) {
+  require(id != null, "Object ID cannot be null.")
+}
 
 /**
  * Counter that tracks JVM objects returned to R.
@@ -33,11 +35,25 @@ private[r] class JVMObjectTracker {
   private[this] val objCounter = new AtomicInteger()
 
   /**
-   * Returns the JVM object associated with the input key.
-   * Returns null if the key does not exist or has been removed.
+   * Returns the JVM object associated with the input key or None if not found.
    */
-  @throws[NullPointerException]("if key is null")
-  final def get(id: JVMObjectId): Object = objMap.get(id)
+  final def get(id: JVMObjectId): Option[Object] = this.synchronized {
+    if (objMap.containsKey(id)) {
+      Some(objMap.get(id))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Returns the JVM object associated with the input key or throws an exception if not found.
+   */
+  @throws[NoSuchElementException]("if key does not exist.")
+  final def apply(id: JVMObjectId): Object = {
+    get(id).getOrElse(
+      throw new NoSuchElementException(s"$id does not exist.")
+    )
+  }
 
   /**
    * Adds a JVM object to track and returns assigned ID, which is unique within this tracker.
@@ -49,9 +65,15 @@ private[r] class JVMObjectTracker {
   }
 
   /**
-   * Removes a JVM object with the specific ID from the tracker.
+   * Removes and returns a JVM object with the specific ID from the tracker, or None if not found.
    */
-  final def remove(id: JVMObjectId): Object = objMap.remove(id)
+  final def remove(id: JVMObjectId): Option[Object] = this.synchronized {
+    if (objMap.containsKey(id)) {
+      Some(objMap.remove(id))
+    } else {
+      None
+    }
+  }
 
   /**
    * Number of JVM objects being tracked.
