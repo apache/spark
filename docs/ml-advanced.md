@@ -69,7 +69,7 @@ $n \times m$ data matrix, these statistics require only $O(m^2)$ storage and so 
 relatively small. We can then solve the normal equations on a single machine using local methods like direct Cholesky factorization or iterative optimization programs.
 
 Spark MLlib currently supports two types of solvers for the normal equations: Cholesky factorization and Quasi-Newton methods (L-BFGS/OWL-QN). Cholesky factorization
-depends on a positive definite covariance matrix (e.g. columns of the data matrix must be linearly independent) and will fail if this condition is violated. Quasi-Newton methods
+depends on a positive definite covariance matrix (i.e. columns of the data matrix must be linearly independent) and will fail if this condition is violated. Quasi-Newton methods
 are still capable of providing a reasonable solution even when the covariance matrix is not positive definite, so the normal equation solver can also fall back to 
 Quasi-Newton methods in this case. This fallback is currently always enabled for the `LinearRegression` and `GeneralizedLinearRegression` estimators.
 
