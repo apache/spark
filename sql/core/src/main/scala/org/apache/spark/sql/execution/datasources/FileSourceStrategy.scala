@@ -18,17 +18,13 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.types.StructType
 
 /**
  * A strategy for planning scans over collections of files that might be partitioned or bucketed
@@ -53,7 +49,7 @@ import org.apache.spark.sql.types.StructType
  *     is under the threshold with the addition of the next file, add it.  If not, open a new bucket
  *     and add it.  Proceed to the next file.
  */
-private[sql] object FileSourceStrategy extends Strategy with Logging {
+object FileSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(projects, filters,
       l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table)) =>
@@ -83,22 +79,11 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
         ExpressionSet(normalizedFilters.filter(_.references.subsetOf(partitionSet)))
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
-      // Transform data schema to the schema in catalog if any.
-      val relationSchema = StructType(fsRelation.dataSchema.flatMap { field =>
-        fsRelation.lookForFieldFromDataField(field)
-      })
-
-      val dataColumns = if (relationSchema.length != fsRelation.dataSchema.length) {
+      val dataColumns =
         l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
-      } else {
-        l.resolve(relationSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
-      }
 
       // Partition keys are not available in the statistics of the files.
-      // Data filters are based on the schema stored in files which might be different with the
-      // relation's output schema. We need to transform the filters.
       val dataFilters = normalizedFilters.filter(_.references.intersect(partitionSet).isEmpty)
-        .map (filter => fsRelation.transformExpressionToUseDataSchema(filter))
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
       val afterScanFilters = filterSet -- partitionKeyFilters
@@ -112,9 +97,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
         dataColumns
           .filter(requiredAttributes.contains)
           .filterNot(partitionColumns.contains)
-      val outputSchema = StructType(readDataColumns.toStructType.map { field =>
-        fsRelation.lookForFieldFromCatalogField(field).getOrElse(field)
-      })
+      val outputSchema = readDataColumns.toStructType
       logInfo(s"Output Data Schema: ${outputSchema.simpleString(5)}")
 
       val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
@@ -129,7 +112,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           outputSchema,
           partitionKeyFilters.toSeq,
           pushedDownFilters,
-          table)
+          table.map(_.identifier))
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
       val withFilter = afterScanFilter.map(execution.FilterExec(_, scan)).getOrElse(scan)
