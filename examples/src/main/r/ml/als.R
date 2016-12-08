@@ -33,7 +33,7 @@ training <- df
 test <- df
 
 # Fit a recommendation model using ALS with spark.als
-model <- spark.als(training, maxIter = 5, reg = 0.01, userCol = "userId",
+model <- spark.als(training, maxIter = 5, regParam = 0.01, userCol = "userId",
                    itemCol = "movieId", ratingCol = "rating")
 
 # Model summary
