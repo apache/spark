@@ -119,47 +119,33 @@ class JacksonParser(
    * to a value according to a desired schema. This is a wrapper for the method
    * `makeConverter()` to handle a row wrapped with an array.
    */
-  def makeRootConverter(dataType: DataType): ValueConverter = dataType match {
-    case st: StructType =>
-      val elementConverter = makeConverter(st)
-      val fieldConverters = st.map(_.dataType).map(makeConverter)
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
-        case START_OBJECT => convertObject(parser, st, fieldConverters)
-          // SPARK-3308: support reading top level JSON arrays and take every element
-          // in such an array as a row
-          //
-          // For example, we support, the JSON data as below:
-          //
-          // [{"a":"str_a_1"}]
-          // [{"a":"str_a_2"}, {"b":"str_b_3"}]
-          //
-          // resulting in:
-          //
-          // List([str_a_1,null])
-          // List([str_a_2,null], [null,str_b_3])
-          //
-        case START_ARRAY => convertArray(parser, elementConverter)
-      }
-
-    case ArrayType(st: StructType, _) =>
-      val elementConverter = makeConverter(st)
-      val fieldConverters = st.map(_.dataType).map(makeConverter)
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
-        // the business end of SPARK-3308:
-        // when an object is found but an array is requested just wrap it in a list.
-        // This is being wrapped in `JacksonParser.parse`.
-        case START_OBJECT => convertObject(parser, st, fieldConverters)
-        case START_ARRAY => convertArray(parser, elementConverter)
-      }
-
-    case _ => makeConverter(dataType)
+  private def makeRootConverter(st: StructType): ValueConverter = {
+    val elementConverter = makeConverter(st)
+    val fieldConverters = st.map(_.dataType).map(makeConverter)
+    (parser: JsonParser) => parseJsonToken(parser, st) {
+      case START_OBJECT => convertObject(parser, st, fieldConverters)
+        // SPARK-3308: support reading top level JSON arrays and take every element
+        // in such an array as a row
+        //
+        // For example, we support, the JSON data as below:
+        //
+        // [{"a":"str_a_1"}]
+        // [{"a":"str_a_2"}, {"b":"str_b_3"}]
+        //
+        // resulting in:
+        //
+        // List([str_a_1,null])
+        // List([str_a_2,null], [null,str_b_3])
+        //
+      case START_ARRAY => convertArray(parser, elementConverter)
+    }
   }
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema.
    */
-  private def makeConverter(dataType: DataType): ValueConverter = dataType match {
+  private[sql] def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case BooleanType =>
       (parser: JsonParser) => parseJsonToken(parser, dataType) {
         case VALUE_TRUE => true
