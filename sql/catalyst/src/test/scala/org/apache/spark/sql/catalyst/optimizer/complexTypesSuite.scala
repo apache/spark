@@ -21,7 +21,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Coalesce, CreateArray, CreateMap, CreateNamedStruct, Expression, GetArrayItem, GetArrayStructFields, GetMapValue, GetStructField, Literal}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.Range
@@ -56,10 +56,6 @@ class ComplexTypesSuite extends PlanTest with Matchers{
 
   val idRef = baseOptimizedPlan.output.head
 
-
-//  val idRefColumn = Column("id")
-//  val struct1RefColumn = Column("struct1")
-
   implicit class ComplexTypeDslSupport(e : Expression) {
     def getStructField(f : String): GetStructField = {
       e should be ('resolved)
@@ -69,6 +65,7 @@ class ComplexTypesSuite extends PlanTest with Matchers{
       ord shouldNot be (-1)
       GetStructField(e, ord, Some(f))
     }
+
     def getArrayStructField(f : String) : Expression = {
       e should be ('resolved)
       e.dataType should be (a[ArrayType])
@@ -79,11 +76,13 @@ class ComplexTypesSuite extends PlanTest with Matchers{
       ord shouldNot be (-1)
       GetArrayStructFields(e, structType(ord), ord, 1, arrType.containsNull)
     }
+
     def getArrayItem(i : Int) : GetArrayItem = {
       e should be ('resolved)
       e.dataType should be (a[ArrayType])
       GetArrayItem(e, Literal(i))
     }
+
     def getMapValue(k : Expression) : Expression = {
       e should be ('resolved)
       e.dataType should be (a[MapType])
@@ -409,6 +408,7 @@ class ComplexTypesSuite extends PlanTest with Matchers{
    )
     comparePlans(optimized, expected)
   }
+
   test("simplify map ops, no positive match") {
     val rel = baseOptimizedPlan.select(
       CreateMap(

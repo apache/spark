@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, Coalesce, CreateArray, CreateMap, CreateNamedStructLike, Expression, GetArrayItem, GetArrayStructFields, GetMapValue, GetStructField, IntegerLiteral, Literal}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
 * push down operations into [[CreateNamedStructLike]].
 */
-object SimplifyCreateStructOps extends Rule[LogicalPlan]{
+object SimplifyCreateStructOps extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transformExpressionsUp{
+    plan.transformExpressionsUp {
       // push down field extraction
       case GetStructField(createNamedStructLike : CreateNamedStructLike, ordinal, _) =>
         createNamedStructLike.valExprs(ordinal)
@@ -37,15 +37,12 @@ object SimplifyCreateStructOps extends Rule[LogicalPlan]{
 /**
 * push down operations into [[CreateArray]].
 */
-object SimplifyCreateArrayOps extends Rule[LogicalPlan]{
+object SimplifyCreateArrayOps extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transformExpressionsUp{
+    plan.transformExpressionsUp {
       // push down field selection (array of structs)
       case GetArrayStructFields(CreateArray(elems), field, ordinal, numFields, containsNull) =>
-        def getStructField(elem : Expression) = {
-          GetStructField(elem, ordinal, Some(field.name))
-        }
-        CreateArray(elems.map(getStructField))
+        CreateArray(elems.map(GetStructField(_, ordinal, Some(field.name))))
       // push down item selection.
       case ga @ GetArrayItem(CreateArray(elems), IntegerLiteral(idx)) =>
         if (idx >= 0 && idx < elems.size) {
@@ -60,7 +57,7 @@ object SimplifyCreateArrayOps extends Rule[LogicalPlan]{
 /**
 * push down operations into [[CreateMap]].
 */
-object SimplifyCreateMapOps extends Rule[LogicalPlan]{
+object SimplifyCreateMapOps extends Rule[LogicalPlan] {
   object ComparisonResult extends Enumeration {
     val PositiveMatch = Value
     val NegativeMatch = Value
@@ -77,16 +74,17 @@ object SimplifyCreateMapOps extends Rule[LogicalPlan]{
     }
   }
 
-  case class ClassifiedEntries(undetermined : Seq[Expression],
-                               nullable : Boolean,
-                               firstPositive : Option[Expression]) {
-    def normalize( k : Expression ) : ClassifiedEntries = this match {
+  case class ClassifiedEntries(
+    undetermined : Seq[Expression],
+    nullable : Boolean,
+    firstPositive : Option[Expression]) {
+    def normalize(k : Expression) : ClassifiedEntries = this match {
       /**
       * when we have undetermined matches that might bproduce a null value,
       * we can't separate a positive match and use [[Coalesce]] to choose the final result.
       * so we 'hide' the positive match as an undetermined match.
       */
-      case ClassifiedEntries( u, true, Some(p)) if u.nonEmpty =>
+      case ClassifiedEntries(u, true, Some(p)) if u.nonEmpty =>
         ClassifiedEntries(u ++ Seq(k, p), true, None)
       case _ => this
     }
@@ -106,8 +104,7 @@ object SimplifyCreateMapOps extends Rule[LogicalPlan]{
           case ComparisonResult.PositiveMatch => ClassifiedEntries(prev, nullable, Some(v))
         }
     }
-    val res = res1.normalize( requestedKey )
-    res
+    res1.normalize(requestedKey)
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
