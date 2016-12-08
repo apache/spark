@@ -512,39 +512,33 @@ head(teenagers)
 
 # Machine Learning
 
-SparkR supports the following machine learning algorithms currently: `Generalized Linear Model`, `Accelerated Failure Time (AFT) Survival Regression Model`, `Naive Bayes Model` and `KMeans Model`.
-Under the hood, SparkR uses MLlib to train the model.
+## Algorithms
+
+SparkR supports the following machine learning algorithms currently:
+
+* [`spark.glm`](api/R/spark.glm.html) or [`glm`](api/R/glm.html): [`Generalized Linear Model`](ml-classification-regression.html#generalized-linear-regression)
+* [`spark.survreg`](api/R/spark.survreg.html): [`Accelerated Failure Time (AFT) Survival Regression Model`](ml-classification-regression.html#survival-regression)
+* [`spark.naiveBayes`](api/R/spark.naiveBayes.html): [`Naive Bayes Model`](ml-classification-regression.html#naive-bayes)
+* [`spark.kmeans`](api/R/spark.kmeans.html): [`K-Means Model`](ml-clustering.html#k-means)
+* [`spark.logit`](api/R/spark.logit.html): [`Logistic Regression Model`](ml-classification-regression.html#logistic-regression)
+* [`spark.isoreg`](api/R/spark.isoreg.html): [`Isotonic Regression Model`](ml-classification-regression.html#isotonic-regression)
+* [`spark.gaussianMixture`](api/R/spark.gaussianMixture.html): [`Gaussian Mixture Model`](ml-clustering.html#gaussian-mixture-model-gmm)
+* [`spark.lda`](api/R/spark.lda.html): [`Latent Dirichlet Allocation (LDA) Model`](ml-clustering.html#latent-dirichlet-allocation-lda)
+* [`spark.mlp`](api/R/spark.mlp.html): [`Multilayer Perceptron Classification Model`](ml-classification-regression.html#multilayer-perceptron-classifier)
+* [`spark.gbt`](api/R/spark.gbt.html): `Gradient Boosted Tree Model for` [`Regression`](ml-classification-regression.html#gradient-boosted-tree-regression) `and` [`Classification`](ml-classification-regression.html#gradient-boosted-tree-classifier)
+* [`spark.randomForest`](api/R/spark.randomForest.html): `Random Forest Model for` [`Regression`](ml-classification-regression.html#random-forest-regression) `and` [`Classification`](ml-classification-regression.html#random-forest-classifier)
+* [`spark.als`](api/R/spark.als.html): [`Alternating Least Squares (ALS) matrix factorization Model`](ml-collaborative-filtering.html#collaborative-filtering)
+* [`spark.kstest`](api/R/spark.kstest.html): `Kolmogorov-Smirnov Test`
+
+Under the hood, SparkR uses MLlib to train the model. Please refer to the corresponding section of MLlib user guide for example code.
 Users can call `summary` to print a summary of the fitted model, [predict](api/R/predict.html) to make predictions on new data, and [write.ml](api/R/write.ml.html)/[read.ml](api/R/read.ml.html) to save/load fitted models.
 SparkR supports a subset of the available R formula operators for model fitting, including ‘~’, ‘.’, ‘:’, ‘+’, and ‘-‘.
 
-## Algorithms
-
-### Generalized Linear Model
-
-[spark.glm()](api/R/spark.glm.html) or [glm()](api/R/glm.html) fits generalized linear model against a Spark DataFrame.
-Currently "gaussian", "binomial", "poisson" and "gamma" families are supported.
-{% include_example glm r/ml.R %}
-
-### Accelerated Failure Time (AFT) Survival Regression Model
-
-[spark.survreg()](api/R/spark.survreg.html) fits an accelerated failure time (AFT) survival regression model on a SparkDataFrame.
-Note that the formula of [spark.survreg()](api/R/spark.survreg.html) does not support operator '.' currently.
-{% include_example survreg r/ml.R %}
-
-### Naive Bayes Model
-
-[spark.naiveBayes()](api/R/spark.naiveBayes.html) fits a Bernoulli naive Bayes model against a SparkDataFrame. Only categorical data is supported.
-{% include_example naiveBayes r/ml.R %}
-
-### KMeans Model
-
-[spark.kmeans()](api/R/spark.kmeans.html) fits a k-means clustering model against a Spark DataFrame, similarly to R's kmeans().
-{% include_example kmeans r/ml.R %}
 
 ## Model persistence
 
 The following example shows how to save/load a MLlib model by SparkR.
-{% include_example read_write r/ml.R %}
+{% include_example read_write r/ml/ml.R %}
 
 # R Function Name Conflicts
 
