@@ -16,7 +16,7 @@
 #
 
 # To run this example use
-# ./bin/spark-submit examples/src/main/r/ml.R
+# ./bin/spark-submit examples/src/main/r/ml/ml.R
 
 # Load SparkR library into your R session
 library(SparkR)
@@ -46,15 +46,17 @@ showDF(gaussianPredictions)
 
 unlink(modelPath)
 # $example off:read_write$
-############################ fit models with spark.lapply #####################################
 
+############################ fit models with spark.lapply #####################################
 # Perform distributed training of multiple models with spark.lapply
-families <- c("gaussian", "poisson")
-train <- function(family) {
-  model <- glm(Sepal.Length ~ Sepal.Width + Species, iris, family = family)
+costs <- exp(seq(from = log(1), to = log(1000), length.out = 5))
+train <- function(cost) {
+  stopifnot(requireNamespace("e1071", quietly = TRUE))
+  model <- e1071::svm(Species ~ ., data = iris, cost = cost)
   summary(model)
 }
-model.summaries <- spark.lapply(families, train)
+
+model.summaries <- spark.lapply(costs, train)
 
 # Print the summary of each model
 print(model.summaries)
