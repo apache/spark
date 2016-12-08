@@ -291,26 +291,17 @@ object HistoryServer extends Logging {
 
   /**
    * Create a security manager.
-   * This includes any fixup of the configurations needed to produce a security manager
-   * capable of starting the History Server.
+   * This turns off security in the SecurityManager, so that the the History Server can start
+   * in a Spark cluster where security is enabled.
    * @param config configuration for the SecurityManager constructor
-   * @return
+   * @return the security manager for use in constructing the History Server.
    */
   private[history] def createSecurityManager(config: SparkConf): SecurityManager = {
-    patchSecuritySettings(config)
-    new SecurityManager(config)
-  }
-
-  /**
-   * Fix up the configuration of a spark configuration so that the security manager will
-   * always start.
-   * @param config configuration to be used in a SecurityManager constructor
-   */
-  private def patchSecuritySettings(config: SparkConf): Unit = {
     if (config.getBoolean(SecurityManager.SPARK_AUTH_CONF, false)) {
       logDebug(s"Clearing ${SecurityManager.SPARK_AUTH_CONF}")
       config.set(SecurityManager.SPARK_AUTH_CONF, "false")
     }
+    new SecurityManager(config)
   }
 
   def initSecurity() {

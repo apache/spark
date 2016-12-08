@@ -351,12 +351,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
   /**
    * Verify that the security manager needed for the history server can be instantiated
-   * even if spark.authenticate is set
-   */
+   * when `spark.authenticate` is `true`, rather than raise an `IllegalArgumentException`.
+   **/
   test("SecurityManagerStartsWithSecureShuffle") {
     val conf = new SparkConf()
-        .set("spark.testing", "true")
-        .set(SecurityManager.SPARK_AUTH_CONF, "true")
+      .set("spark.testing", "true")
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
     HistoryServer.createSecurityManager(conf)
   }
 
@@ -379,7 +379,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set("spark.history.cache.window", "250ms")
       .remove("spark.testing")
     val provider = new FsHistoryProvider(myConf)
-    val securityManager = new SecurityManager(myConf)
+    val securityManager = HistoryServer.createSecurityManager(myConf)
 
     sc = new SparkContext("local", "test", myConf)
     val logDirUri = logDir.toURI
