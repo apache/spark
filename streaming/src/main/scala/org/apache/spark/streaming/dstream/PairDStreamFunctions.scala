@@ -46,6 +46,16 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
   }
 
   /**
+   * Return a DStream with the keys of each tuple.
+   */
+  def keys: DStream[K] = self.map(_._1)
+
+  /**
+   * Return a DStream with the values of each tuple.
+   */
+  def values: DStream[V] = self.map(_._2)
+      
+  /**
    * Return a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
    * generate the RDDs with Spark's default number of partitions.
    */
