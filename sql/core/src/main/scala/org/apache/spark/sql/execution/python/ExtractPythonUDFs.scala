@@ -90,7 +90,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  * This has the limitation that the input to the Python UDF is not allowed include attributes from
  * multiple child operators.
  */
-object ExtractPythonUDFs extends Rule[SparkPlan] {
+object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
 
   private def hasPythonUDF(e: Expression): Boolean = {
     e.find(_.isInstanceOf[PythonUDF]).isDefined
@@ -111,15 +111,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] {
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan transformUp {
-    case plan: SparkPlan =>
-      val newPlan = extract(plan)
-      if (newPlan != plan) {
-        // Found and build BatchEvalPythonExec, and then push FilterExec
-        // through BatchEvalPythonExec
-        PushPredicateThroughBatchEvalPython.apply(newPlan)
-      } else {
-        plan
-      }
+    case plan: SparkPlan => extract(plan)
   }
 
   /**
@@ -134,8 +126,10 @@ object ExtractPythonUDFs extends Rule[SparkPlan] {
       plan
     } else {
       val attributeMap = mutable.HashMap[PythonUDF, Expression]()
+      val splittedFilter = trySplitFilter(plan)
       // Rewrite the child that has the input required for the UDF
-      val newChildren = plan.children.map { child =>
+      val newChildren =
+        splittedFilter.children.map { child =>
         // Pick the UDF we are going to evaluate
         val validUdfs = udfs.filter { case udf =>
           // Check to make sure that the UDF can be evaluated with only the input of this child.
@@ -158,7 +152,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] {
         sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
       }
 
-      val rewritten = plan.withNewChildren(newChildren).transformExpressions {
+      val rewritten = splittedFilter.withNewChildren(newChildren).transformExpressions {
         case p: PythonUDF if attributeMap.contains(p) =>
           attributeMap(p)
       }
@@ -173,41 +167,31 @@ object ExtractPythonUDFs extends Rule[SparkPlan] {
       }
     }
   }
-}
 
-// This rule is to push deterministic predicates through BatchEvalPythonExec
-object PushPredicateThroughBatchEvalPython extends Rule[SparkPlan] with PredicateHelper {
-  def apply(plan: SparkPlan): SparkPlan = plan transform {
-    case filter @ FilterExec(_, child: BatchEvalPythonExec)
-        if child.expressions.forall(_.deterministic) =>
-      pushDownPredicate(filter, child.child) { predicate =>
-        child.withNewChildren(Seq(FilterExec(predicate, child.child)))
-      }
-  }
+  // Split the original FilterExec to two FilterExecs. The upper FilterExec only contains
+  // Python UDF and non-deterministic predicates.
+  private def trySplitFilter(plan: SparkPlan): SparkPlan = {
+    plan match {
+      case filter: FilterExec =>
+        // Only push down the predicates that is deterministic and all the referenced attributes
+        // come from child.
+        val (candidates, containingNonDeterministic) =
+          splitConjunctivePredicates(filter.condition).span(_.deterministic)
+        val (pushDown, rest) = candidates.partition(!hasPythonUDF(_))
+        val stayUp = rest ++ containingNonDeterministic
 
-  private def pushDownPredicate(
-      filter: FilterExec,
-      grandchild: SparkPlan)(insertFilter: Expression => SparkPlan): SparkPlan = {
-    // Only push down the predicates that is deterministic and all the referenced attributes
-    // come from grandchild.
-    val (candidates, containingNonDeterministic) =
-      splitConjunctivePredicates(filter.condition).span(_.deterministic)
+        if (pushDown.nonEmpty) {
+          val newChild = FilterExec(pushDown.reduceLeft(And), filter.child)
+          if (stayUp.nonEmpty) {
+            FilterExec(stayUp.reduceLeft(And), newChild)
+          } else {
+            newChild
+          }
+        } else {
+          filter
+        }
 
-    val (pushDown, rest) = candidates.partition { cond =>
-      cond.references.subsetOf(grandchild.outputSet)
-    }
-
-    val stayUp = rest ++ containingNonDeterministic
-
-    if (pushDown.nonEmpty) {
-      val newChild = insertFilter(pushDown.reduceLeft(And))
-      if (stayUp.nonEmpty) {
-        FilterExec(stayUp.reduceLeft(And), newChild)
-      } else {
-        newChild
-      }
-    } else {
-      filter
+      case o => o
     }
   }
 }
