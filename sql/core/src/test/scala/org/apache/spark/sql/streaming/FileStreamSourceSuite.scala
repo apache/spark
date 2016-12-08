@@ -1027,8 +1027,13 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     assert(options.maxFilesPerTrigger == Some(1))
   }
 
-  test("FileStreamSource offset - read Spark 2.1.0 log format") {
-    val offset = readOffsetFromResource("file-source-offset-version-2.1.0.txt")
+  test("FileStreamSource offset - read Spark 2.1.0 offset json format") {
+    val offset = readOffsetFromResource("file-source-offset-version-2.1.0-json.txt")
+    assert(FileStreamSourceOffset(offset) === FileStreamSourceOffset(345))
+  }
+
+  test("FileStreamSource offset - read Spark 2.1.0 offset long format") {
+    val offset = readOffsetFromResource("file-source-offset-version-2.1.0-long.txt")
     assert(FileStreamSourceOffset(offset) === FileStreamSourceOffset(345))
   }
 
@@ -1051,7 +1056,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   private def readOffsetFromResource(file: String): SerializedOffset = {
     import scala.io.Source
     val str = Source.fromFile(getClass.getResource(s"/structured-streaming/$file").toURI).mkString
-    SerializedOffset(str)
+    SerializedOffset(str.trim)
   }
 }
 

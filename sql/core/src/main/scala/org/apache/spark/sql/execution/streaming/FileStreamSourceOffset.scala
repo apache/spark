@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import scala.util.control.Exception._
+
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
@@ -36,8 +38,12 @@ object FileStreamSourceOffset {
   def apply(offset: Offset): FileStreamSourceOffset = {
     offset match {
       case f: FileStreamSourceOffset => f
-      case s: SerializedOffset =>
-        Serialization.read[FileStreamSourceOffset](s.json)
+      case SerializedOffset(str) =>
+        catching(classOf[NumberFormatException]).opt {
+          FileStreamSourceOffset(str.toLong)
+        }.getOrElse {
+          Serialization.read[FileStreamSourceOffset](str)
+        }
       case _ =>
         throw new IllegalArgumentException(
           s"Invalid conversion from offset of ${offset.getClass} to FileStreamSourceOffset")
