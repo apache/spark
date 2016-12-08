@@ -79,7 +79,7 @@ class FileStreamSource(
    * `synchronized` on this method is for solving race conditions in tests. In the normal usage,
    * there is no race here, so the cost of `synchronized` should be rare.
    */
-  private def fetchMaxOffset(): LongOffset = synchronized {
+  private def fetchMaxOffset(): FileStreamSourceOffset = synchronized {
     // All the new files found - ignore aged files and files that we have seen.
     val newFiles = fetchAllFiles().filter {
       case (path, timestamp) => seenFiles.isNewFile(path, timestamp)
@@ -111,7 +111,7 @@ class FileStreamSource(
       logInfo(s"Max batch id increased to $maxBatchId with ${batchFiles.size} new files")
     }
 
-    new LongOffset(maxBatchId)
+    FileStreamSourceOffset(maxBatchId)
   }
 
   /**
@@ -123,16 +123,14 @@ class FileStreamSource(
   }
 
   /** Return the latest offset in the source */
-  def currentOffset: LongOffset = synchronized {
-    new LongOffset(maxBatchId)
-  }
+  def currentBatchId: Long = synchronized { maxBatchId }
 
   /**
    * Returns the data that is between the offsets (`start`, `end`].
    */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-    val startId = start.flatMap(LongOffset.convert(_)).getOrElse(LongOffset(-1L)).offset
-    val endId = LongOffset.convert(end).getOrElse(LongOffset(0)).offset
+    val startId = start.map(FileStreamSourceOffset(_).batchId).getOrElse(-1L)
+    val endId = FileStreamSourceOffset(end).batchId
 
     assert(startId <= endId)
     val files = metadataLog.get(Some(startId + 1), Some(endId)).flatMap(_._2)
@@ -172,7 +170,7 @@ class FileStreamSource(
     files
   }
 
-  override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.offset == -1)
+  override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.batchId == -1)
 
   override def toString: String = s"FileStreamSource[$qualifiedBasePath]"
 
