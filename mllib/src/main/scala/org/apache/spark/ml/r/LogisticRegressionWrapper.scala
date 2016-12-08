@@ -96,8 +96,7 @@ private[r] object LogisticRegressionWrapper
       family: String,
       standardization: Boolean,
       thresholds: Array[Double],
-      weightCol: String,
-      probabilityCol: String
+      weightCol: String
       ): LogisticRegressionWrapper = {
 
     val rFormula = new RFormula()
@@ -123,7 +122,6 @@ private[r] object LogisticRegressionWrapper
       .setWeightCol(weightCol)
       .setFeaturesCol(rFormula.getFeaturesCol)
       .setLabelCol(rFormula.getLabelCol)
-      .setProbabilityCol(probabilityCol)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
 
     if (thresholds.length > 1) {
