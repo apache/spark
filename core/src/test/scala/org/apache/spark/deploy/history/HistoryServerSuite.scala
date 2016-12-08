@@ -352,7 +352,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   /**
    * Verify that the security manager needed for the history server can be instantiated
    * when `spark.authenticate` is `true`, rather than raise an `IllegalArgumentException`.
-   **/
+   */
   test("SecurityManagerStartsWithSecureShuffle") {
     val conf = new SparkConf()
       .set("spark.testing", "true")
