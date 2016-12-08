@@ -492,7 +492,11 @@ class TaskContextTests(PySparkTestCase):
         rdd = self.sc.parallelize(range(10))
         stage1 = rdd.map(lambda x: TaskContext.get().stageId()).take(1)[0]
         stage2 = rdd.map(lambda x: TaskContext.get().stageId()).take(1)[0]
+        # Test using the constructor directly rather than the get()
+        stage3 = rdd.map(lambda x: TaskContext().stageId()).take(1)[0]
         self.assertEqual(stage1 + 1, stage2)
+        self.assertEqual(stage1 + 2, stage3)
+        self.assertEqual(stage2 + 1, stage3)
 
     def test_partition_id(self):
         """Test the partition id."""
