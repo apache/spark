@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -41,13 +43,16 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
  */
 object ComputeCurrentTime extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val dateExpr = CurrentDate()
+    val currentDates = mutable.Map.empty[String, Literal]
     val timeExpr = CurrentTimestamp()
-    val currentDate = Literal.create(dateExpr.eval(EmptyRow), dateExpr.dataType)
     val currentTime = Literal.create(timeExpr.eval(EmptyRow), timeExpr.dataType)
 
     plan transformAllExpressions {
-      case CurrentDate() => currentDate
+      case CurrentDate(tz) =>
+        currentDates.getOrElseUpdate(tz, {
+          val dateExpr = CurrentDate(tz)
+          Literal.create(dateExpr.eval(EmptyRow), dateExpr.dataType)
+        })
       case CurrentTimestamp() => currentTime
     }
   }

@@ -51,14 +51,21 @@ trait TimeZoneAwareExpression extends Expression {
  */
 @ExpressionDescription(
   usage = "_FUNC_() - Returns the current date at the start of query evaluation.")
-case class CurrentDate() extends LeafExpression with CodegenFallback {
+case class CurrentDate(zoneId: String = null)
+  extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
+
   override def foldable: Boolean = true
   override def nullable: Boolean = false
 
   override def dataType: DataType = DateType
 
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
+
+  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+
   override def eval(input: InternalRow): Any = {
-    DateTimeUtils.millisToDays(System.currentTimeMillis())
+    DateTimeUtils.millisToDays(System.currentTimeMillis(), timeZone)
   }
 
   override def prettyName: String = "current_date"
@@ -186,19 +193,26 @@ case class DateSub(startDate: Expression, days: Expression)
       > SELECT _FUNC_('2009-07-30 12:58:59');
        12
   """)
-case class Hour(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Hour(child: Expression, zoneId: String = null)
+  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
 
   override def dataType: DataType = IntegerType
 
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
+
+  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+
   override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getHours(timestamp.asInstanceOf[Long])
+    DateTimeUtils.getHours(timestamp.asInstanceOf[Long], timeZone)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getHours($c)")
+    defineCodeGen(ctx, ev, c => s"$dtu.getHours($c, $tz)")
   }
 }
 
@@ -209,19 +223,26 @@ case class Hour(child: Expression) extends UnaryExpression with ImplicitCastInpu
       > SELECT _FUNC_('2009-07-30 12:58:59');
        58
   """)
-case class Minute(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Minute(child: Expression, zoneId: String = null)
+  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
 
   override def dataType: DataType = IntegerType
 
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
+
+  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+
   override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getMinutes(timestamp.asInstanceOf[Long])
+    DateTimeUtils.getMinutes(timestamp.asInstanceOf[Long], timeZone)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getMinutes($c)")
+    defineCodeGen(ctx, ev, c => s"$dtu.getMinutes($c, $tz)")
   }
 }
 
@@ -232,19 +253,26 @@ case class Minute(child: Expression) extends UnaryExpression with ImplicitCastIn
       > SELECT _FUNC_('2009-07-30 12:58:59');
        59
   """)
-case class Second(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Second(child: Expression, zoneId: String = null)
+  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
 
   override def dataType: DataType = IntegerType
 
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
+
+  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+
   override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getSeconds(timestamp.asInstanceOf[Long])
+    DateTimeUtils.getSeconds(timestamp.asInstanceOf[Long], timeZone)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getSeconds($c)")
+    defineCodeGen(ctx, ev, c => s"$dtu.getSeconds($c, $tz)")
   }
 }
 
@@ -415,23 +443,34 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
        2016
   """)
 // scalastyle:on line.size.limit
-case class DateFormatClass(left: Expression, right: Expression) extends BinaryExpression
-  with ImplicitCastInputTypes {
+case class DateFormatClass(left: Expression, right: Expression, zoneId: String = null)
+  extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
 
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
+
+  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
     val sdf = new SimpleDateFormat(format.toString, Locale.US)
+    sdf.setTimeZone(timeZone)
     UTF8String.fromString(sdf.format(new java.util.Date(timestamp.asInstanceOf[Long] / 1000)))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val sdf = classOf[SimpleDateFormat].getName
-    defineCodeGen(ctx, ev, (timestamp, format) => {
-      s"""UTF8String.fromString((new $sdf($format.toString()))
-          .format(new java.util.Date($timestamp / 1000)))"""
+    nullSafeCodeGen(ctx, ev, (timestamp, format) => {
+      val tz = ctx.addReferenceObj("timeZone", timeZone)
+      val s = ctx.freshName("sdf")
+      s"""
+        $sdf $s = new $sdf($format.toString(), java.util.Locale.US);
+        $s.setTimeZone($tz);
+        ${ev.value} = UTF8String.fromString($s.format(new java.util.Date($timestamp / 1000)));
+      """
     })
   }
 
@@ -449,9 +488,13 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
        1460041200
   """)
-case class ToUnixTimestamp(timeExp: Expression, format: Expression) extends UnixTime {
+case class ToUnixTimestamp(timeExp: Expression, format: Expression, zoneId: String = null)
+  extends UnixTime {
+
   override def left: Expression = timeExp
   override def right: Expression = format
+
+  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
 
   def this(time: Expression) = {
     this(time, Literal("yyyy-MM-dd HH:mm:ss"))
@@ -479,9 +522,13 @@ case class ToUnixTimestamp(timeExp: Expression, format: Expression) extends Unix
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
        1460041200
   """)
-case class UnixTimestamp(timeExp: Expression, format: Expression) extends UnixTime {
+case class UnixTimestamp(timeExp: Expression, format: Expression, zoneId: String = null)
+  extends UnixTime {
+
   override def left: Expression = timeExp
   override def right: Expression = format
+
+  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
 
   def this(time: Expression) = {
     this(time, Literal("yyyy-MM-dd HH:mm:ss"))
@@ -494,7 +541,8 @@ case class UnixTimestamp(timeExp: Expression, format: Expression) extends UnixTi
   override def prettyName: String = "unix_timestamp"
 }
 
-abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
+abstract class UnixTime
+  extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
@@ -502,9 +550,24 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
   override def dataType: DataType = LongType
   override def nullable: Boolean = true
 
+  private def needTimeZone: Boolean = left.dataType match {
+    case TimestampType => false
+    case _ => true
+  }
+
+  override def timeZoneResolved: Boolean =
+    (!(childrenResolved && needTimeZone)) || super.timeZoneResolved
+
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
+
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: SimpleDateFormat =
-    Try(new SimpleDateFormat(constFormat.toString, Locale.US)).getOrElse(null)
+    Try {
+      val sdf = new SimpleDateFormat(constFormat.toString, Locale.US)
+      sdf.setTimeZone(timeZone)
+      sdf
+    }.getOrElse(null)
 
   override def eval(input: InternalRow): Any = {
     val t = left.eval(input)
@@ -513,7 +576,7 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
     } else {
       left.dataType match {
         case DateType =>
-          DateTimeUtils.daysToMillis(t.asInstanceOf[Int]) / 1000L
+          DateTimeUtils.daysToMillis(t.asInstanceOf[Int], timeZone) / 1000L
         case TimestampType =>
           t.asInstanceOf[Long] / 1000000L
         case StringType if right.foldable =>
@@ -529,8 +592,11 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
             null
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
-            Try(new SimpleDateFormat(formatString, Locale.US).parse(
-              t.asInstanceOf[UTF8String].toString).getTime / 1000L).getOrElse(null)
+            Try {
+              val sdf = new SimpleDateFormat(formatString, Locale.US)
+              sdf.setTimeZone(timeZone)
+              sdf.parse(t.asInstanceOf[UTF8String].toString).getTime / 1000L
+            }.getOrElse(null)
           }
       }
     }
@@ -558,12 +624,15 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
             }""")
         }
       case StringType =>
+        val tz = ctx.addReferenceObj("timeZone", timeZone)
         val sdf = classOf[SimpleDateFormat].getName
+        val formatterName = ctx.freshName("formatter")
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
             try {
-              ${ev.value} =
-                (new $sdf($format.toString())).parse($string.toString()).getTime() / 1000L;
+              $sdf $formatterName = new $sdf($format.toString(), java.util.Locale.US);
+              $formatterName.setTimeZone($tz);
+              ${ev.value} = $formatterName.parse($string.toString()).getTime() / 1000L;
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
             } catch (java.text.ParseException e) {
@@ -581,6 +650,7 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
             ${ev.value} = ${eval1.value} / 1000000L;
           }""")
       case DateType =>
+        val tz = ctx.addReferenceObj("timeZone", timeZone)
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val eval1 = left.genCode(ctx)
         ev.copy(code = s"""
@@ -588,7 +658,7 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
           boolean ${ev.isNull} = ${eval1.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $dtu.daysToMillis(${eval1.value}) / 1000L;
+            ${ev.value} = $dtu.daysToMillis(${eval1.value}, $tz) / 1000L;
           }""")
     }
   }
@@ -607,8 +677,8 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
       > SELECT _FUNC_(0, 'yyyy-MM-dd HH:mm:ss');
        1970-01-01 00:00:00
   """)
-case class FromUnixTime(sec: Expression, format: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+case class FromUnixTime(sec: Expression, format: Expression, zoneId: String = null)
+  extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
   override def left: Expression = sec
   override def right: Expression = format
@@ -624,9 +694,18 @@ case class FromUnixTime(sec: Expression, format: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType, StringType)
 
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
+
+  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: SimpleDateFormat =
-    Try(new SimpleDateFormat(constFormat.toString, Locale.US)).getOrElse(null)
+    Try {
+      val sdf = new SimpleDateFormat(constFormat.toString, Locale.US)
+      sdf.setTimeZone(timeZone)
+      sdf
+    }.getOrElse(null)
 
   override def eval(input: InternalRow): Any = {
     val time = left.eval(input)
@@ -645,10 +724,11 @@ case class FromUnixTime(sec: Expression, format: Expression)
         if (f == null) {
           null
         } else {
-          Try(
-            UTF8String.fromString(new SimpleDateFormat(f.toString, Locale.US).
-              format(new java.util.Date(time.asInstanceOf[Long] * 1000L)))
-          ).getOrElse(null)
+          Try {
+            val sdf = new SimpleDateFormat(f.toString, Locale.US)
+            sdf.setTimeZone(timeZone)
+            UTF8String.fromString(sdf.format(new java.util.Date(time.asInstanceOf[Long] * 1000L)))
+          }.getOrElse(null)
         }
       }
     }
@@ -676,14 +756,18 @@ case class FromUnixTime(sec: Expression, format: Expression)
           }""")
       }
     } else {
+      val tz = ctx.addReferenceObj("timeZone", timeZone)
+      val formatterName = ctx.freshName("formatter")
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
         s"""
         try {
-          ${ev.value} = UTF8String.fromString((new $sdf($f.toString())).format(
+          $sdf $formatterName = new $sdf($f.toString(), java.util.Locale.US);
+          $formatterName.setTimeZone($tz);
+          ${ev.value} = UTF8String.fromString($formatterName.format(
             new java.util.Date($seconds * 1000L)));
         } catch (java.lang.IllegalArgumentException e) {
           ${ev.isNull} = true;
-        }""".stripMargin
+        }"""
       })
     }
   }
