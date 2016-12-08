@@ -114,9 +114,15 @@ Continuing the earlier example:
 {% include_example java/org/apache/spark/examples/ml/JavaLogisticRegressionSummaryExample.java %}
 </div>
 
-<!--- TODO: Add python model summaries once implemented -->
 <div data-lang="python" markdown="1">
-Logistic regression model summary is not yet supported in Python.
+[`LogisticRegressionTrainingSummary`](api/python/pyspark.ml.html#pyspark.ml.classification.LogisticRegressionSummary)
+provides a summary for a
+[`LogisticRegressionModel`](api/python/pyspark.ml.html#pyspark.ml.classification.LogisticRegressionModel).
+Currently, only binary classification is supported. Support for multiclass model summaries will be added in the future.
+
+Continuing the earlier example:
+
+{% include_example python/ml/logistic_regression_summary_example.py %}
 </div>
 
 </div>
