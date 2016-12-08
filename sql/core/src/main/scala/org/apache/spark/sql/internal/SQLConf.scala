@@ -480,17 +480,16 @@ object SQLConf {
       .intConf
       .createWithDefault(10)
 
-  val STATE_STORE_MIN_VERSIONS_TO_RETAIN =
-    SQLConfigBuilder("spark.sql.streaming.stateStore.minBatchesToRetain")
-      .internal()
-      .doc("Minimum number of versions of a state store's data to retain after cleaning.")
-      .intConf
-      .createWithDefault(2)
-
   val CHECKPOINT_LOCATION = SQLConfigBuilder("spark.sql.streaming.checkpointLocation")
     .doc("The default location for storing checkpoint data for streaming queries.")
     .stringConf
     .createOptional
+
+  val MIN_BATCHES_TO_RETAIN = SQLConfigBuilder("spark.sql.streaming.minBatchesToRetain")
+    .internal()
+    .doc("The minimum number of batches that must be retained and made recoverable.")
+    .intConf
+    .createWithDefault(100)
 
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     SQLConfigBuilder("spark.sql.streaming.unsupportedOperationCheck")
@@ -668,8 +667,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
-  def stateStoreMinVersionsToRetain: Int = getConf(STATE_STORE_MIN_VERSIONS_TO_RETAIN)
-
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
@@ -722,6 +719,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def minNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
+
+  def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
