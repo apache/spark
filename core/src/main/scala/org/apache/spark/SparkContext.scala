@@ -1760,25 +1760,30 @@ class SparkContext(config: SparkConf) extends Logging {
   def listJars(): Seq[String] = addedJars.keySet.toSeq
 
   /**
+   * When stopping SparkContext inside Spark components, it's easy to cause dead-lock since Spark
+   * may wait for some internal threads to finish. It's better to use this method to stop
+   * SparkContext instead.
+   */
+  private[spark] def stopInNewThread(): Unit = {
+    new Thread("stop-spark-context") {
+      setDaemon(true)
+
+      override def run(): Unit = {
+        try {
+          SparkContext.this.stop()
+        } catch {
+          case e: Throwable =>
+            logError(e.getMessage, e)
+            throw e
+        }
+      }
+    }.start()
+  }
+
+  /**
    * Shut down the SparkContext.
    */
   def stop(): Unit = {
-    if (env.rpcEnv.isInRPCThread) {
-      // `stop` will block until all RPC threads exit, so we cannot call stop inside a RPC thread.
-      // We should launch a new thread to call `stop` to avoid dead-lock.
-      new Thread("stop-spark-context") {
-        setDaemon(true)
-
-        override def run(): Unit = {
-          _stop()
-        }
-      }.start()
-    } else {
-      _stop()
-    }
-  }
-
-  private def _stop() {
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(
         s"Cannot stop SparkContext within listener thread of ${LiveListenerBus.name}")
