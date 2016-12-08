@@ -19,20 +19,20 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
-import scala.collection.mutable
-
 import org.scalatest.PrivateMethodTester
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.FileStreamSource.FileEntry
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class FileStreamSourceTest extends StreamTest with SharedSQLContext with PrivateMethodTester {
+abstract class FileStreamSourceTest
+  extends StreamTest with SharedSQLContext with PrivateMethodTester {
 
   import testImplicits._
 
@@ -849,13 +849,13 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val explainWithoutExtended = q.explainInternal(false)
         // `extended = false` only displays the physical plan.
         assert("Relation.*text".r.findAllMatchIn(explainWithoutExtended).size === 0)
-        assert("TextFileFormat".r.findAllMatchIn(explainWithoutExtended).size === 1)
+        assert(": Text".r.findAllMatchIn(explainWithoutExtended).size === 1)
 
         val explainWithExtended = q.explainInternal(true)
         // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
         // plan.
         assert("Relation.*text".r.findAllMatchIn(explainWithExtended).size === 3)
-        assert("TextFileFormat".r.findAllMatchIn(explainWithExtended).size === 1)
+        assert(": Text".r.findAllMatchIn(explainWithExtended).size === 1)
       } finally {
         q.stop()
       }
@@ -1006,9 +1006,13 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       testStream(input)(
         AddTextFileData("100", src, tmp),
         CheckAnswer("100"),
-        AssertOnLastQueryStatus { status =>
-          assert(status.triggerDetails.get("numRows.input.total") === "1")
-          assert(status.sourceStatuses(0).processingRate > 0.0)
+        AssertOnQuery { query =>
+          val actualProgress = query.recentProgress
+              .find(_.numInputRows > 0)
+              .getOrElse(sys.error("Could not find records with data."))
+          assert(actualProgress.numInputRows === 1)
+          assert(actualProgress.sources(0).processedRowsPerSecond > 0.0)
+          true
         }
       )
     }
@@ -1017,6 +1021,33 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
     val options = new FileStreamOptions(Map("maxfilespertrigger" -> "1"))
     assert(options.maxFilesPerTrigger == Some(1))
+  }
+
+  test("FileStreamSource offset - read Spark 2.1.0 log format") {
+    val offset = readOffsetFromResource("file-source-offset-version-2.1.0.txt")
+    assert(LongOffset.convert(offset) === Some(LongOffset(345)))
+  }
+
+  test("FileStreamSourceLog - read Spark 2.1.0 log format") {
+    assert(readLogFromResource("file-source-log-version-2.1.0") === Seq(
+      FileEntry("/a/b/0", 1480730949000L, 0L),
+      FileEntry("/a/b/1", 1480730950000L, 1L),
+      FileEntry("/a/b/2", 1480730950000L, 2L),
+      FileEntry("/a/b/3", 1480730950000L, 3L),
+      FileEntry("/a/b/4", 1480730951000L, 4L)
+    ))
+  }
+
+  private def readLogFromResource(dir: String): Seq[FileEntry] = {
+    val input = getClass.getResource(s"/structured-streaming/$dir")
+    val log = new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, input.toString)
+    log.allFiles()
+  }
+
+  private def readOffsetFromResource(file: String): SerializedOffset = {
+    import scala.io.Source
+    val str = Source.fromFile(getClass.getResource(s"/structured-streaming/$file").toURI).mkString
+    SerializedOffset(str.trim)
   }
 }
 

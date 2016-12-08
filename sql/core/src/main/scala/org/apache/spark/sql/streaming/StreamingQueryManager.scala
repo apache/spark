@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -41,7 +44,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
   private val listenerBus = new StreamingQueryListenerBus(sparkSession.sparkContext.listenerBus)
-  private val activeQueries = new mutable.HashMap[Long, StreamingQuery]
+  private val activeQueries = new mutable.HashMap[UUID, StreamingQuery]
   private val activeQueriesLock = new Object
   private val awaitTerminationLock = new Object
 
@@ -59,11 +62,18 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
   /**
    * Returns the query if there is an active query with the given id, or null.
    *
-   * @since 2.0.0
+   * @since 2.1.0
    */
-  def get(id: Long): StreamingQuery = activeQueriesLock.synchronized {
+  def get(id: UUID): StreamingQuery = activeQueriesLock.synchronized {
     activeQueries.get(id).orNull
   }
+
+  /**
+   * Returns the query if there is an active query with the given id, or null.
+   *
+   * @since 2.1.0
+   */
+  def get(id: String): StreamingQuery = get(UUID.fromString(id))
 
   /**
    * Wait until any of the queries on the associated SQLContext has terminated since the
@@ -197,11 +207,14 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       trigger: Trigger = ProcessingTime(0),
       triggerClock: Clock = new SystemClock()): StreamingQuery = {
     activeQueriesLock.synchronized {
-      val id = StreamExecution.nextId
-      val name = userSpecifiedName.getOrElse(s"query-$id")
-      if (activeQueries.values.exists(_.name == name)) {
-        throw new IllegalArgumentException(
-          s"Cannot start query with name $name as a query with that name is already active")
+      val name = userSpecifiedName match {
+        case Some(n) =>
+          if (activeQueries.values.exists(_.name == userSpecifiedName.get)) {
+            throw new IllegalArgumentException(
+              s"Cannot start query with name $n as a query with that name is already active")
+          }
+          n
+        case None => null
       }
       val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
         new Path(userSpecified).toUri.toString
@@ -252,7 +265,6 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       }
       val query = new StreamExecution(
         sparkSession,
-        id,
         name,
         checkpointLocation,
         logicalPlan,
@@ -260,8 +272,16 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
         trigger,
         triggerClock,
         outputMode)
+
+      if (activeQueries.values.exists(_.id == query.id)) {
+        throw new IllegalStateException(
+          s"Cannot start query with id ${query.id} as another query with same id is " +
+            s"already active. Perhaps you are attempting to restart a query from checkpoint" +
+            s"that is already active.")
+      }
+
       query.start()
-      activeQueries.put(id, query)
+      activeQueries.put(query.id, query)
       query
     }
   }

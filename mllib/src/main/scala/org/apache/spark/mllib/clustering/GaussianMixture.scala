@@ -274,7 +274,7 @@ class GaussianMixture private (
 private[clustering] object GaussianMixture {
   /**
    * Heuristic to distribute the computation of the `MultivariateGaussian`s, approximately when
-   * d &gt; 25 except for when k is very small.
+   * d is greater than 25 except for when k is very small.
    * @param k  Number of topics
    * @param d  Number of features
    */

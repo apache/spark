@@ -131,10 +131,10 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
  * It supports "gaussian", "binomial", "poisson" and "gamma" as family.
  * Valid link functions for each family is listed below. The first link function of each family
  * is the default one.
- *  - "gaussian" -> "identity", "log", "inverse"
- *  - "binomial" -> "logit", "probit", "cloglog"
- *  - "poisson"  -> "log", "identity", "sqrt"
- *  - "gamma"    -> "inverse", "identity", "log"
+ *  - "gaussian" : "identity", "log", "inverse"
+ *  - "binomial" : "logit", "probit", "cloglog"
+ *  - "poisson"  : "log", "identity", "sqrt"
+ *  - "gamma"    : "inverse", "identity", "log"
  */
 @Experimental
 @Since("2.0.0")
@@ -505,7 +505,11 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     override def initialize(y: Double, weight: Double): Double = {
       require(y >= 0.0, "The response variable of Poisson family " +
         s"should be non-negative, but got $y")
-      y
+      /*
+        Force Poisson mean > 0 to avoid numerical instability in IRLS.
+        R uses y + 0.1 for initialization. See poisson()$initialize.
+       */
+      math.max(y, 0.1)
     }
 
     override def variance(mu: Double): Double = mu
@@ -886,7 +890,9 @@ class GeneralizedLinearRegressionSummary private[regression] (
   protected val model: GeneralizedLinearRegressionModel =
     origModel.copy(ParamMap.empty).setPredictionCol(predictionCol)
 
-  /** Predictions output by the model's `transform` method. */
+  /**
+   * Predictions output by the model's `transform` method.
+   */
   @Since("2.0.0") @transient val predictions: DataFrame = model.transform(dataset)
 
   private[regression] lazy val family: Family = Family.fromName(model.getFamily)
@@ -1066,7 +1072,7 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   import GeneralizedLinearRegression._
 
   /**
-   * Whether the underlying [[WeightedLeastSquares]] using the "normal" solver.
+   * Whether the underlying `WeightedLeastSquares` using the "normal" solver.
    */
   private[ml] val isNormalSolver: Boolean = {
     diagInvAtWA.length != 1 || diagInvAtWA(0) != 0
@@ -1074,10 +1080,10 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
 
   /**
    * Standard error of estimated coefficients and intercept.
-   * This value is only available when the underlying [[WeightedLeastSquares]]
+   * This value is only available when the underlying `WeightedLeastSquares`
    * using the "normal" solver.
    *
-   * If [[GeneralizedLinearRegression.fitIntercept]] is set to true,
+   * If `GeneralizedLinearRegression.fitIntercept` is set to true,
    * then the last element returned corresponds to the intercept.
    */
   @Since("2.0.0")
@@ -1092,10 +1098,10 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
 
   /**
    * T-statistic of estimated coefficients and intercept.
-   * This value is only available when the underlying [[WeightedLeastSquares]]
+   * This value is only available when the underlying `WeightedLeastSquares`
    * using the "normal" solver.
    *
-   * If [[GeneralizedLinearRegression.fitIntercept]] is set to true,
+   * If `GeneralizedLinearRegression.fitIntercept` is set to true,
    * then the last element returned corresponds to the intercept.
    */
   @Since("2.0.0")
@@ -1115,10 +1121,10 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
 
   /**
    * Two-sided p-value of estimated coefficients and intercept.
-   * This value is only available when the underlying [[WeightedLeastSquares]]
+   * This value is only available when the underlying `WeightedLeastSquares`
    * using the "normal" solver.
    *
-   * If [[GeneralizedLinearRegression.fitIntercept]] is set to true,
+   * If `GeneralizedLinearRegression.fitIntercept` is set to true,
    * then the last element returned corresponds to the intercept.
    */
   @Since("2.0.0")

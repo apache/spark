@@ -23,41 +23,58 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.classification.{BinaryLogisticRegressionSummary, LogisticRegression, LogisticRegressionModel}
-import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.feature.{IndexToString, RFormula}
+import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
 private[r] class LogisticRegressionWrapper private (
     val pipeline: PipelineModel,
     val features: Array[String],
-    val isLoaded: Boolean = false) extends MLWritable {
+    val labels: Array[String]) extends MLWritable {
 
-  private val logisticRegressionModel: LogisticRegressionModel =
+  import LogisticRegressionWrapper._
+
+  private val lrModel: LogisticRegressionModel =
     pipeline.stages(1).asInstanceOf[LogisticRegressionModel]
 
-  lazy val totalIterations: Int = logisticRegressionModel.summary.totalIterations
+  val rFeatures: Array[String] = if (lrModel.getFitIntercept) {
+    Array("(Intercept)") ++ features
+  } else {
+    features
+  }
 
-  lazy val objectiveHistory: Array[Double] = logisticRegressionModel.summary.objectiveHistory
-
-  lazy val blrSummary =
-    logisticRegressionModel.summary.asInstanceOf[BinaryLogisticRegressionSummary]
-
-  lazy val roc: DataFrame = blrSummary.roc
-
-  lazy val areaUnderROC: Double = blrSummary.areaUnderROC
-
-  lazy val pr: DataFrame = blrSummary.pr
-
-  lazy val fMeasureByThreshold: DataFrame = blrSummary.fMeasureByThreshold
-
-  lazy val precisionByThreshold: DataFrame = blrSummary.precisionByThreshold
-
-  lazy val recallByThreshold: DataFrame = blrSummary.recallByThreshold
+  val rCoefficients: Array[Double] = {
+    val numRows = lrModel.coefficientMatrix.numRows
+    val numCols = lrModel.coefficientMatrix.numCols
+    val numColsWithIntercept = if (lrModel.getFitIntercept) numCols + 1 else numCols
+    val coefficients: Array[Double] = new Array[Double](numRows * numColsWithIntercept)
+    val coefficientVectors: Seq[Vector] = lrModel.coefficientMatrix.rowIter.toSeq
+    var i = 0
+    if (lrModel.getFitIntercept) {
+      while (i < numRows) {
+        coefficients(i * numColsWithIntercept) = lrModel.interceptVector(i)
+        System.arraycopy(coefficientVectors(i).toArray, 0,
+          coefficients, i * numColsWithIntercept + 1, numCols)
+        i += 1
+      }
+    } else {
+      while (i < numRows) {
+        System.arraycopy(coefficientVectors(i).toArray, 0,
+          coefficients, i * numColsWithIntercept, numCols)
+        i += 1
+      }
+    }
+    coefficients
+  }
 
   def transform(dataset: Dataset[_]): DataFrame = {
-    pipeline.transform(dataset).drop(logisticRegressionModel.getFeaturesCol)
+    pipeline.transform(dataset)
+      .drop(PREDICTED_LABEL_INDEX_COL)
+      .drop(lrModel.getFeaturesCol)
+      .drop(lrModel.getLabelCol)
   }
 
   override def write: MLWriter = new LogisticRegressionWrapper.LogisticRegressionWrapperWriter(this)
@@ -66,6 +83,9 @@ private[r] class LogisticRegressionWrapper private (
 private[r] object LogisticRegressionWrapper
     extends MLReadable[LogisticRegressionWrapper] {
 
+  val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
+  val PREDICTED_LABEL_COL = "prediction"
+
   def fit( // scalastyle:ignore
       data: DataFrame,
       formula: String,
@@ -73,28 +93,25 @@ private[r] object LogisticRegressionWrapper
       elasticNetParam: Double,
       maxIter: Int,
       tol: Double,
-      fitIntercept: Boolean,
       family: String,
       standardization: Boolean,
       thresholds: Array[Double],
-      weightCol: String,
-      aggregationDepth: Int,
-      probability: String
+      weightCol: String
       ): LogisticRegressionWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
-    RWrapperUtils.checkDataColumns(rFormula, data)
+      .setForceIndexLabel(true)
+    checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 
-    // get feature names from output schema
-    val schema = rFormulaModel.transform(data).schema
-    val featureAttrs = AttributeGroup.fromStructField(schema(rFormulaModel.getFeaturesCol))
-      .attributes.get
-    val features = featureAttrs.map(_.name.get)
+    val fitIntercept = rFormula.hasIntercept
+
+    // get labels and feature names from output schema
+    val (features, labels) = getFeaturesAndLabels(rFormulaModel, data)
 
     // assemble and fit the pipeline
-    val logisticRegression = new LogisticRegression()
+    val lr = new LogisticRegression()
       .setRegParam(regParam)
       .setElasticNetParam(elasticNetParam)
       .setMaxIter(maxIter)
@@ -103,21 +120,26 @@ private[r] object LogisticRegressionWrapper
       .setFamily(family)
       .setStandardization(standardization)
       .setWeightCol(weightCol)
-      .setAggregationDepth(aggregationDepth)
       .setFeaturesCol(rFormula.getFeaturesCol)
-      .setProbabilityCol(probability)
+      .setLabelCol(rFormula.getLabelCol)
+      .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
 
     if (thresholds.length > 1) {
-      logisticRegression.setThresholds(thresholds)
+      lr.setThresholds(thresholds)
     } else {
-      logisticRegression.setThreshold(thresholds(0))
+      lr.setThreshold(thresholds(0))
     }
 
+    val idxToStr = new IndexToString()
+      .setInputCol(PREDICTED_LABEL_INDEX_COL)
+      .setOutputCol(PREDICTED_LABEL_COL)
+      .setLabels(labels)
+
     val pipeline = new Pipeline()
-      .setStages(Array(rFormulaModel, logisticRegression))
+      .setStages(Array(rFormulaModel, lr, idxToStr))
       .fit(data)
 
-    new LogisticRegressionWrapper(pipeline, features)
+    new LogisticRegressionWrapper(pipeline, features, labels)
   }
 
   override def read: MLReader[LogisticRegressionWrapper] = new LogisticRegressionWrapperReader
@@ -131,7 +153,8 @@ private[r] object LogisticRegressionWrapper
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("features" -> instance.features.toSeq)
+        ("features" -> instance.features.toSeq) ~
+        ("labels" -> instance.labels.toSeq)
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 
@@ -149,9 +172,10 @@ private[r] object LogisticRegressionWrapper
       val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
       val rMetadata = parse(rMetadataStr)
       val features = (rMetadata \ "features").extract[Array[String]]
+      val labels = (rMetadata \ "labels").extract[Array[String]]
 
       val pipeline = PipelineModel.load(pipelinePath)
-      new LogisticRegressionWrapper(pipeline, features, isLoaded = true)
+      new LogisticRegressionWrapper(pipeline, features, labels)
     }
   }
 }
