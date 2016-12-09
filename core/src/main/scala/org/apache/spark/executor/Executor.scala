@@ -507,9 +507,6 @@ private[spark] class Executor(
             logError(s"Killed task $taskId could not be stopped within $killPollingFrequencyMs; " +
               "not killing JVM because we are running in local mode.")
           } else {
-            // Only throw an exception here in case the finally block was entered via normal
-            // execution and not an exception in order to not mask exceptions thrown by TaskReaper
-            // itself
             throw new SparkException(
               s"Killing executor JVM because killed task $taskId could not be stopped within " +
                 s"$killTimeoutMs ms.")
