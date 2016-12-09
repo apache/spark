@@ -258,6 +258,7 @@ if [[ "$1" == "package" ]]; then
   LFTP mkdir -p $dest_dir
   LFTP mput -O $dest_dir 'spark-*'
   LFTP mput -O $dest_dir 'pyspark-*'
+  LFTP mput -O $dest_dir 'SparkR-*'
   exit 0
 fi
 
