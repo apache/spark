@@ -97,6 +97,12 @@ object HiveCatalogMetrics extends Source {
     MetricRegistry.name("parallelListingJobCount"))
 
   /**
+   * Tracks the total number of cachedDataSourceTables hits.
+   */
+  val METRIC_DATASOUCE_TABLE_CACHE_HITS = metricRegistry.counter(
+    MetricRegistry.name("dataSourceTableCacheHits"))
+
+  /**
    * Resets the values of all metrics to zero. This is useful in tests.
    */
   def reset(): Unit = {
@@ -105,6 +111,7 @@ object HiveCatalogMetrics extends Source {
     METRIC_FILE_CACHE_HITS.dec(METRIC_FILE_CACHE_HITS.getCount())
     METRIC_HIVE_CLIENT_CALLS.dec(METRIC_HIVE_CLIENT_CALLS.getCount())
     METRIC_PARALLEL_LISTING_JOB_COUNT.dec(METRIC_PARALLEL_LISTING_JOB_COUNT.getCount())
+    METRIC_DATASOUCE_TABLE_CACHE_HITS.dec(METRIC_DATASOUCE_TABLE_CACHE_HITS.getCount())
   }
 
   // clients can use these to avoid classloader issues with the codahale classes
@@ -113,4 +120,5 @@ object HiveCatalogMetrics extends Source {
   def incrementFileCacheHits(n: Int): Unit = METRIC_FILE_CACHE_HITS.inc(n)
   def incrementHiveClientCalls(n: Int): Unit = METRIC_HIVE_CLIENT_CALLS.inc(n)
   def incrementParallelListingJobCount(n: Int): Unit = METRIC_PARALLEL_LISTING_JOB_COUNT.inc(n)
+  def incrementDataSourceTableCacheHits(n: Int): Unit = METRIC_DATASOUCE_TABLE_CACHE_HITS.inc(n)
 }

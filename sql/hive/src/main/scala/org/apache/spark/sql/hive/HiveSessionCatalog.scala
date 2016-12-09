@@ -95,7 +95,7 @@ private[sql] class HiveSessionCatalog(
   }
 
   def invalidateCache(): Unit = {
-    metastoreCatalog.invalidateAllCache()
+    metastoreCatalog.cachedDataSourceTables.invalidateAll()
   }
 
   def hiveDefaultTableFilePath(name: TableIdentifier): String = {
@@ -105,8 +105,7 @@ private[sql] class HiveSessionCatalog(
   // For testing only
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
     val key = metastoreCatalog.getQualifiedTableName(table)
-    metastoreCatalog.readLock(key,
-      metastoreCatalog.cachedDataSourceTables.getIfPresent(key))
+    metastoreCatalog.cachedDataSourceTables.getIfPresent(key)
   }
 
   override def makeFunctionBuilder(funcName: String, className: String): FunctionBuilder = {

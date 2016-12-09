@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.util.concurrent.{Executors, TimeUnit}
 
 import org.scalatest.BeforeAndAfterEach
 
@@ -349,6 +350,30 @@ class PartitionedTablePerfStatsSuite
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 0)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
         }
+      }
+    }
+  }
+
+  test("SPARK-18700: add lock for each table's realation in cache") {
+    withTable("test") {
+      withTempDir { dir =>
+        HiveCatalogMetrics.reset()
+        setupPartitionedHiveTable("test", dir)
+        // select the table in multi-threads
+        val executorPool = Executors.newFixedThreadPool(10)
+        (1 to 10).map(threadId => {
+          val runnable = new Runnable {
+            override def run(): Unit = {
+              spark.sql("select * from test where partCol1 = 999").count()
+            }
+          }
+          executorPool.execute(runnable)
+          None
+        })
+        executorPool.shutdown()
+        executorPool.awaitTermination(30, TimeUnit.SECONDS)
+        // check the cache hit, the cache only load once
+        assert(HiveCatalogMetrics.METRIC_DATASOUCE_TABLE_CACHE_HITS.getCount() == 9)
       }
     }
   }
