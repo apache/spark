@@ -194,6 +194,74 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
     listenerBus.post(event)
   }
 
+  private def prepareAndCreateQuery(
+      userSpecifiedName: Option[String],
+      userSpecifiedCheckpointLocation: Option[String],
+      df: DataFrame,
+      sink: Sink,
+      outputMode: OutputMode,
+      useTempCheckpointLocation: Boolean,
+      recoverFromCheckpointLocation: Boolean,
+      trigger: Trigger,
+      triggerClock: Clock): StreamExecution = {
+    val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
+      new Path(userSpecified).toUri.toString
+    }.orElse {
+      df.sparkSession.sessionState.conf.checkpointLocation.map { location =>
+        new Path(location, userSpecifiedName.getOrElse(UUID.randomUUID().toString)).toUri.toString
+      }
+    }.getOrElse {
+      if (useTempCheckpointLocation) {
+        Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
+      } else {
+        throw new AnalysisException(
+          "checkpointLocation must be specified either " +
+            """through option("checkpointLocation", ...) or """ +
+            s"""SparkSession.conf.set("${SQLConf.CHECKPOINT_LOCATION.key}", ...)""")
+      }
+    }
+
+    // If offsets have already been created, we trying to resume a query.
+    if (!recoverFromCheckpointLocation) {
+      val checkpointPath = new Path(checkpointLocation, "offsets")
+      val fs = checkpointPath.getFileSystem(df.sparkSession.sessionState.newHadoopConf())
+      if (fs.exists(checkpointPath)) {
+        throw new AnalysisException(
+          s"This query does not support recovering from checkpoint location. " +
+            s"Delete $checkpointPath to start over.")
+      }
+    }
+
+    val analyzedPlan = df.queryExecution.analyzed
+    df.queryExecution.assertAnalyzed()
+
+    if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
+      UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
+    }
+
+    var nextSourceId = 0L
+
+    val logicalPlan = analyzedPlan.transform {
+      case StreamingRelation(dataSource, _, output) =>
+        // Materialize source to avoid creating it in every batch
+        val metadataPath = s"$checkpointLocation/sources/$nextSourceId"
+        val source = dataSource.createSource(metadataPath)
+        nextSourceId += 1
+        // We still need to use the previous `output` instead of `source.schema` as attributes in
+        // "df.logicalPlan" has already used attributes of the previous `output`.
+        StreamingExecutionRelation(source, output)
+    }
+    new StreamExecution(
+      sparkSession,
+      userSpecifiedName.orNull,
+      checkpointLocation,
+      logicalPlan,
+      sink,
+      trigger,
+      triggerClock,
+      outputMode)
+  }
+
   /**
    * Start a [[StreamingQuery]].
    * @param userSpecifiedName Query name optionally specified by the user.
@@ -219,102 +287,60 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       recoverFromCheckpointLocation: Boolean = true,
       trigger: Trigger = ProcessingTime(0),
       triggerClock: Clock = new SystemClock()): StreamingQuery = {
-    userSpecifiedName foreach { name =>
-      activeQueriesLock.synchronized {
-        if (activeQueries.values.exists(_.name == name) || pendingQueryNames.contains(name)) {
-          throw new IllegalArgumentException(
-            s"Cannot start query with name $name as a query with that name is already active")
-        }
-        pendingQueryNames += name
-      }
-    }
+    // `queryName` and `queryId` will be set when we add them into `pendingQueryNames` and
+    // `pendingQueryIds` so that we can remove them at the end of this method when an error happens.
+    var queryName: String = null
+    var queryId: UUID = null
     try {
-      val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
-        new Path(userSpecified).toUri.toString
-      }.orElse {
-        df.sparkSession.sessionState.conf.checkpointLocation.map { location =>
-          new Path(location, userSpecifiedName.getOrElse(UUID.randomUUID().toString)).toUri.toString
-        }
-      }.getOrElse {
-        if (useTempCheckpointLocation) {
-          Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
-        } else {
-          throw new AnalysisException(
-            "checkpointLocation must be specified either " +
-              """through option("checkpointLocation", ...) or """ +
-              s"""SparkSession.conf.set("${SQLConf.CHECKPOINT_LOCATION.key}", ...)""")
+      userSpecifiedName.foreach { name =>
+        activeQueriesLock.synchronized {
+          if (activeQueries.values.exists(_.name == name) || pendingQueryNames.contains(name)) {
+            throw new IllegalArgumentException(
+              s"Cannot start query with name $name as a query with that name is already active")
+          }
+          pendingQueryNames += name
+          queryName = name
         }
       }
-
-      // If offsets have already been created, we trying to resume a query.
-      if (!recoverFromCheckpointLocation) {
-        val checkpointPath = new Path(checkpointLocation, "offsets")
-        val fs = checkpointPath.getFileSystem(df.sparkSession.sessionState.newHadoopConf())
-        if (fs.exists(checkpointPath)) {
-          throw new AnalysisException(
-            s"This query does not support recovering from checkpoint location. " +
-              s"Delete $checkpointPath to start over.")
-        }
-      }
-
-      val analyzedPlan = df.queryExecution.analyzed
-      df.queryExecution.assertAnalyzed()
-
-      if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
-        UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
-      }
-
-      var nextSourceId = 0L
-
-      val logicalPlan = analyzedPlan.transform {
-        case StreamingRelation(dataSource, _, output) =>
-          // Materialize source to avoid creating it in every batch
-          val metadataPath = s"$checkpointLocation/sources/$nextSourceId"
-          val source = dataSource.createSource(metadataPath)
-          nextSourceId += 1
-          // We still need to use the previous `output` instead of `source.schema` as attributes in
-          // "df.logicalPlan" has already used attributes of the previous `output`.
-          StreamingExecutionRelation(source, output)
-      }
-      val query = new StreamExecution(
-        sparkSession,
-        userSpecifiedName.orNull,
-        checkpointLocation,
-        logicalPlan,
+      val query = prepareAndCreateQuery(
+        userSpecifiedName,
+        userSpecifiedCheckpointLocation,
+        df,
         sink,
+        outputMode,
+        useTempCheckpointLocation,
+        recoverFromCheckpointLocation,
         trigger,
-        triggerClock,
-        outputMode)
-
+        triggerClock)
       activeQueriesLock.synchronized {
         if (activeQueries.values.exists(_.id == query.id) || pendingQueryIds.contains(query.id)) {
           throw new IllegalStateException(
             s"Cannot start query with id ${query.id} as another query with same id is " +
-              s"already active. Perhaps you are attempting to restart a query from checkpoint" +
+              s"already active. Perhaps you are attempting to restart a query from checkpoint " +
               s"that is already active.")
         }
         pendingQueryIds += query.id
+        queryId = query.id
       }
-      try {
-        query.start()
-        activeQueriesLock.synchronized {
-          // It's possible that `notifyQueryTermination` is called before we reach here. So we
-          // need to check the query status before adding it into `activeQueries`.
-          if (query.isActive) {
-            activeQueries.put(query.id, query)
-            pendingQueryIds -= query.id
-            userSpecifiedName.foreach(name => pendingQueryNames -= name)
+      query.start()
+      activeQueriesLock.synchronized {
+        // It's possible that `notifyQueryTermination` is called before we reach here. So we
+        // need to check the query status before adding it into `activeQueries`.
+        if (query.isActive) {
+          activeQueries.put(query.id, query)
+          pendingQueryIds -= query.id
+          queryId = null
+          if (queryName != null) {
+            pendingQueryNames -= queryName
+            queryName = null
           }
         }
-        query
-      } finally {
-        // In case `query.start()` fails
-        activeQueriesLock.synchronized { pendingQueryIds -= query.id }
       }
+      query
     } finally {
-      // In case something fails
       activeQueriesLock.synchronized {
-        userSpecifiedName.foreach(name => pendingQueryNames -= name)
+        if (queryName != null) pendingQueryNames -= queryName
+        if (queryId != null) pendingQueryIds -= queryId
       }
     }
   }
