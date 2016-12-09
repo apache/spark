@@ -48,14 +48,6 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
   @GuardedBy("activeQueriesLock")
   private val activeQueries = new mutable.HashMap[UUID, StreamingQuery]
 
-  /** Track names of queries that are going to start but not yet put into `activeQueries` */
-  @GuardedBy("activeQueriesLock")
-  private val pendingQueryNames = mutable.HashSet[String]()
-
-  /** Track ids of queries that are going to start but not yet put into `activeQueries` */
-  @GuardedBy("activeQueriesLock")
-  private val pendingQueryIds = mutable.HashSet[UUID]()
-
   private val activeQueriesLock = new Object
 
   private val awaitTerminationLock = new Object
@@ -264,6 +256,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
 
   /**
    * Start a [[StreamingQuery]].
+   *
    * @param userSpecifiedName Query name optionally specified by the user.
    * @param userSpecifiedCheckpointLocation  Checkpoint location optionally specified by the user.
    * @param df Streaming DataFrame.
@@ -287,80 +280,57 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       recoverFromCheckpointLocation: Boolean = true,
       trigger: Trigger = ProcessingTime(0),
       triggerClock: Clock = new SystemClock()): StreamingQuery = {
-    // `queryName` and `queryId` will be set when we add them into `pendingQueryNames` and
-    // `pendingQueryIds` so that we can remove them at the end of this method when an error happens.
-    var queryName: String = null
-    var queryId: UUID = null
-    try {
+    val query = createQuery(
+      userSpecifiedName,
+      userSpecifiedCheckpointLocation,
+      df,
+      sink,
+      outputMode,
+      useTempCheckpointLocation,
+      recoverFromCheckpointLocation,
+      trigger,
+      triggerClock)
+
+    activeQueriesLock.synchronized {
       // Make sure no other query with same name is active
       userSpecifiedName.foreach { name =>
         activeQueriesLock.synchronized {
-          if (activeQueries.values.exists(_.name == name) || pendingQueryNames.contains(name)) {
+          if (activeQueries.values.exists(_.name == name)) {
             throw new IllegalArgumentException(
               s"Cannot start query with name $name as a query with that name is already active")
           }
-          pendingQueryNames += name
-          queryName = name
         }
       }
-
-      val query = createQuery(
-        userSpecifiedName,
-        userSpecifiedCheckpointLocation,
-        df,
-        sink,
-        outputMode,
-        useTempCheckpointLocation,
-        recoverFromCheckpointLocation,
-        trigger,
-        triggerClock)
 
       // Make sure no other query with same id is active
-      activeQueriesLock.synchronized {
-        if (activeQueries.values.exists(_.id == query.id) || pendingQueryIds.contains(query.id)) {
-          throw new IllegalStateException(
-            s"Cannot start query with id ${query.id} as another query with same id is " +
-              s"already active. Perhaps you are attempting to restart a query from checkpoint " +
-              s"that is already active.")
-        }
-        pendingQueryIds += query.id
-        queryId = query.id
+      if (activeQueries.values.exists(_.id == query.id)) {
+        throw new IllegalStateException(
+          s"Cannot start query with id ${query.id} as another query with same id is " +
+            s"already active. Perhaps you are attempting to restart a query from checkpoint " +
+            s"that is already active.")
       }
-
+      activeQueries.put(query.id, query)
+    }
+    try {
       // When starting a query, it will call `StreamingQueryListener.onQueryStarted` synchronously.
       // As it's provided by the user and can run arbitrary codes, we must not hold any lock here.
       // Otherwise, it's easy to cause dead-lock, or block too long if the user codes take a long
       // time to finish.
       query.start()
-
-      activeQueriesLock.synchronized {
-        // It's possible that `notifyQueryTermination` is called before we reach here. So we
-        // need to check the query status before adding it into `activeQueries`.
-        if (query.isActive) {
-          activeQueries.put(query.id, query)
-          pendingQueryIds -= query.id
-          queryId = null
-          if (queryName != null) {
-            pendingQueryNames -= queryName
-            queryName = null
-          }
+    } catch {
+      case e: Throwable =>
+        activeQueriesLock.synchronized {
+          activeQueries -= query.id
         }
-      }
-      query
-    } finally {
-      activeQueriesLock.synchronized {
-        if (queryName != null) pendingQueryNames -= queryName
-        if (queryId != null) pendingQueryIds -= queryId
-      }
+        throw e
     }
+    query
   }
 
   /** Notify (by the StreamingQuery) that the query has been terminated */
   private[sql] def notifyQueryTermination(terminatedQuery: StreamingQuery): Unit = {
     activeQueriesLock.synchronized {
       activeQueries -= terminatedQuery.id
-      pendingQueryIds -= terminatedQuery.id
-      Option(terminatedQuery.name).foreach(name => pendingQueryNames -= name)
     }
     awaitTerminationLock.synchronized {
       if (lastTerminatedQuery == null || terminatedQuery.exception.nonEmpty) {
