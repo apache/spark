@@ -198,12 +198,10 @@ private[spark] object ThreadUtils {
       // `awaitPermission` is not actually used anywhere so it's safe to pass in null here.
       // See SPARK-13747.
       val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
-      awaitable.result(Duration.Inf)(awaitPermission)
+      awaitable.result(atMost)(awaitPermission)
     } catch {
-      case e: TimeoutException =>
-        // TimeoutException is thrown in the current thread, so not need to warp the exception.
-        throw e
-      case NonFatal(t) =>
+      // TimeoutException is thrown in the current thread, so not need to warp the exception.
+      case NonFatal(t) if !t.isInstanceOf[TimeoutException] =>
         throw new SparkException("Exception thrown in awaitResult: ", t)
     }
   }
