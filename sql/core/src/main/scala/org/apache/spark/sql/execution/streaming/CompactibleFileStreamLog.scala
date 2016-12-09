@@ -154,12 +154,12 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   }
 
   override def add(batchId: Long, logs: Array[T]): Boolean = {
-    var batchAdded = false
-    if (isCompactionBatch(batchId, compactInterval)) {
-      batchAdded = compact(batchId, logs)
-    } else {
-      batchAdded = super.add(batchId, logs)
-    }
+    val batchAdded =
+      if (isCompactionBatch(batchId, compactInterval)) {
+        compact(batchId, logs)
+      } else {
+        super.add(batchId, logs)
+      }
     if (batchAdded && isDeletingExpiredLog) {
       deleteExpiredLog(batchId)
     }
@@ -214,10 +214,14 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   }
 
   /**
-   * Since all logs before `compactionBatchId` are compacted and written into the
-   * `compactionBatchId` log file, they can be removed. However, due to the eventual consistency of
-   * S3, the compaction file may not be seen by other processes at once. So we only delete files
-   * created `fileCleanupDelayMs` milliseconds ago.
+   * Delete expired log entries that proceed the currentBatchId and retain
+   * sufficient minimum number of batches (given by minBatchsToRetain). This
+   * equates to retaining the earliest compaction log that proceeds
+   * batch id position currentBatchId + 1 - minBatchesToRetain. All log entries
+   * prior to the earliest compaction log proceeding that position will be removed.
+   * However, due to the eventual consistency of S3, the compaction file may not
+   * be seen by other processes at once. So we only delete files created
+   * `fileCleanupDelayMs` milliseconds ago.
    */
   private def deleteExpiredLog(currentBatchId: Long): Unit = {
     if (compactInterval <= currentBatchId + 1 - minBatchesToRetain) {

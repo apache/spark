@@ -29,6 +29,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ManualClock
 
 
@@ -371,25 +372,26 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
     val mapped = inputData.toDS().map(6 / _)
     val prevMinBatchesToRetain = spark.conf.get("spark.sql.streaming.minBatchesToRetain")
 
-    spark.conf.set("spark.sql.streaming.minBatchesToRetain", 1)
-    // Run 3 batches, and then assert that only 2 metadata files is are at the end
-    // since the first should have been purged.
-    testStream(mapped)(
-      AddData(inputData, 1, 2),
-      CheckAnswer(6, 3),
-      AddData(inputData, 1, 2),
-      CheckAnswer(6, 3, 6, 3),
-      AddData(inputData, 4, 6),
-      CheckAnswer(6, 3, 6, 3, 1, 1),
+    withSQLConf(SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
+      // Run 3 batches, and then assert that only 2 metadata files is are at the end
+      // since the first should have been purged.
+      testStream(mapped)(
+        AddData(inputData, 1, 2),
+        CheckAnswer(6, 3),
+        AddData(inputData, 1, 2),
+        CheckAnswer(6, 3, 6, 3),
+        AddData(inputData, 4, 6),
+        CheckAnswer(6, 3, 6, 3, 1, 1),
 
-      AssertOnQuery("metadata log should contain only two files") { q =>
-        val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
-        val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
-        val toTest = logFileNames.filter(! _.endsWith(".crc")).sorted  // Workaround for SPARK-17475
-        assert(toTest.size == 2 && toTest.head == "1")
-        true
-      }
-    )
+        AssertOnQuery("metadata log should contain only two files") { q =>
+          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
+          val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
+          val toTest = logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
+          assert(toTest.size == 2 && toTest.head == "1")
+          true
+        }
+      )
+    }
 
     val inputData2 = MemoryStream[Int]
     spark.conf.set("spark.sql.streaming.minBatchesToRetain", 2)

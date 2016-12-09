@@ -378,7 +378,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val storeId = StateStoreId(dir, opId, 0)
     val sqlConf = new SQLConf()
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
-    val storeConf = StateStoreConf(sqlConf) // StateStoreConf.empty
+    val storeConf = StateStoreConf(sqlConf)
     val hadoopConf = new Configuration()
     val provider = new HDFSBackedStateStoreProvider(
       storeId, keySchema, valueSchema, storeConf, hadoopConf)
