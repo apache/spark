@@ -72,13 +72,9 @@ private[spark] class RpcTimeout(val duration: FiniteDuration, val timeoutProp: S
    *         is still not ready
    */
   def awaitResult[T](future: Future[T]): T = {
-    val wrapAndRethrow: PartialFunction[Throwable, T] = {
-      case NonFatal(t) =>
-        throw new SparkException("Exception thrown in awaitResult", t)
-    }
     try {
       ThreadUtils.awaitResult(future, duration)
-    } catch addMessageIfTimeout.orElse(wrapAndRethrow)
+    } catch addMessageIfTimeout
   }
 }
 
