@@ -31,4 +31,6 @@ private[streaming] class StateStoreConf(@transient private val conf: SQLConf) ex
 
 private[streaming] object StateStoreConf {
   val empty = new StateStoreConf()
+
+  def apply(conf: SQLConf): StateStoreConf = new StateStoreConf(conf)
 }
