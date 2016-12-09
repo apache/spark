@@ -16,14 +16,14 @@
 #
 
 # This example illustrates how to install third-party R packages to executors
-# in your SparkR jobs distributed by `spark.lapply`.
+# in your SparkR jobs distributed by "spark.lapply".
 #
 # Note: This example will install packages to a temporary directory on your machine.
 #       The directory will be removed automatically when the example exit.
 #       You environment should be connected to internet to run this example,
-#       otherwise, you should change `repos` to your private repository url.
+#       otherwise, you should change "repos" to your private repository url.
 #       And the environment need to have necessary tools such as gcc to compile
-#       and install the R package.
+#       and install R package "e1071".
 #
 # To run this example use
 # ./bin/spark-submit examples/src/main/r/native-r-package.R

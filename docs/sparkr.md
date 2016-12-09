@@ -472,28 +472,16 @@ should fit in a single machine. If that is not the case they can do something li
 `dapply`
 
 <div data-lang="r"  markdown="1">
-{% highlight r %}
-# Perform distributed training of multiple models with spark.lapply. Here, we pass
-# a read-only list of arguments which specifies family the generalized linear model should be.
-families <- c("gaussian", "poisson")
-train <- function(family) {
-  model <- glm(Sepal.Length ~ Sepal.Width + Species, iris, family = family)
-  summary(model)
-}
-# Return a list of model's summaries
-model.summaries <- spark.lapply(families, train)
-
-# Print the summary of each model
-print(model.summaries)
-
-{% endhighlight %}
+{% include_example lapply r/ml/ml.R %}
 </div>
 
 ##### spark.lapply with third-party packages
+
 Many of the SparkR jobs distributed by `spark.lapply` need supports from third-party packages. Rather than installing all necessary packages to all executors in advance,
-we could install them during the SparkR interactive session or script. Users can add a file or directory to be downloaded with this SparkR job on every node by `spark.addFile` firstly,
-download them to every executor node, and install them to be used.
-<div>
+we could install them during the SparkR interactive session or script. Users can add package files or directories by `spark.addFile` firstly,
+download them to every executor node, and install them.
+
+<div data-lang="r"  markdown="1">
 {% include_example r/native-r-package.R %}
 </div>
 

@@ -48,6 +48,7 @@ unlink(modelPath)
 # $example off:read_write$
 
 ############################ fit models with spark.lapply #####################################
+# $example on:lapply$
 # Perform distributed training of multiple models with spark.lapply
 costs <- exp(seq(from = log(1), to = log(1000), length.out = 5))
 train <- function(cost) {
@@ -60,6 +61,7 @@ model.summaries <- spark.lapply(costs, train)
 
 # Print the summary of each model
 print(model.summaries)
+# $example off:lapply$
 
 # Stop the SparkSession now
 sparkR.session.stop()
