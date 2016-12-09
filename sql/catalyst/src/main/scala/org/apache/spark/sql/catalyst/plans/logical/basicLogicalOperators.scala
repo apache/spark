@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
 
@@ -106,6 +107,19 @@ case class Filter(condition: Expression, child: LogicalPlan)
   override def output: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows
+
+  override lazy val statistics: Statistics = {
+    // Expected filtering by expressions
+    val expectedFilterDivisor = condition match {
+      case EqualTo(_, _) => 20
+      case StartsWith(_, _) => 10
+      case LessThan(_, _) | LessThanOrEqual(_, _) |
+           GreaterThan(_, _) | GreaterThanOrEqual(_, _) => 2
+      case IsNull(_) => 2
+      case _ => 1
+    }
+    child.statistics.copy(sizeInBytes = child.statistics.sizeInBytes / expectedFilterDivisor)
+  }
 
   override protected def validConstraints: Set[Expression] = {
     val predicates = splitConjunctivePredicates(condition)
@@ -328,6 +342,8 @@ case class Join(
     case LeftAnti | LeftSemi =>
       // LeftSemi and LeftAnti won't ever be bigger than left
       left.statistics.copy()
+    case _ if ExtractEquiJoinKeys.unapply(this).isDefined =>
+      Statistics(sizeInBytes = children.map(_.statistics.sizeInBytes).sum)
     case _ =>
       // make sure we don't propagate isBroadcastable in other joins, because
       // they could explode the size.
