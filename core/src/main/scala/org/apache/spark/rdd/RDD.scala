@@ -1746,7 +1746,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Clears the dependencies of this RDD. This method must ensure that all references
-   * to the original parent RDDs is removed to enable the parent RDDs to be garbage
+   * to the original parent RDDs are removed to enable the parent RDDs to be garbage
    * collected. Subclasses of RDD may override this method for implementing their own cleaning
    * logic. See [[org.apache.spark.rdd.UnionRDD]] for an example.
    */

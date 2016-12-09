@@ -930,7 +930,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
 /**
  * Asserts that input values of a non-nullable child expression are not null.
  *
- * Note that there are cases where `child.nullable == true`, while we still needs to add this
+ * Note that there are cases where `child.nullable == true`, while we still need to add this
  * assertion.  Consider a nullable column `s` whose data type is a struct containing a non-nullable
  * `Int` field named `i`.  Expression `s.i` is nullable because `s` can be null.  However, for all
  * non-null `s`, `s.i` can't be null.

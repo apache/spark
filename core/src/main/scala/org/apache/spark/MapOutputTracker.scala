@@ -322,7 +322,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
   if (minSizeForBroadcast > maxRpcMessageSize) {
     val msg = s"spark.shuffle.mapOutput.minSizeForBroadcast ($minSizeForBroadcast bytes) must " +
       s"be <= spark.rpc.message.maxSize ($maxRpcMessageSize bytes) to prevent sending an rpc " +
-      "message that is to large."
+      "message that is too large."
     logError(msg)
     throw new IllegalArgumentException(msg)
   }

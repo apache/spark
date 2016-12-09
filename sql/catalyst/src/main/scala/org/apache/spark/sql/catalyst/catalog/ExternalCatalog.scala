@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 
 
 /**
- * Interface for the system catalog (of columns, partitions, tables, and databases).
+ * Interface for the system catalog (of functions, partitions, tables, and databases).
  *
  * This is only used for non-temporary items, and implementations must be thread-safe as they
  * can be accessed in multiple threads. This is an external catalog because it is expected to
