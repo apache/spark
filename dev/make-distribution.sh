@@ -241,6 +241,12 @@ cp "$SPARK_HOME"/conf/*.template "$DISTDIR"/conf
 cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
+
+# Remove the python distribution from dist/ if we built it
+if [ "$MAKE_PIP" == "true" ]; then
+  rm $DISTDIR/pyspark-*.tar.gz
+fi
+
 cp -r "$SPARK_HOME/sbin" "$DISTDIR"
 # Copy SparkR if it exists
 if [ -d "$SPARK_HOME"/R/lib/SparkR ]; then
