@@ -19,7 +19,6 @@ package org.apache.spark.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
-import scala.collection.mutable.HashMap
 import scala.language.existentials
 
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
@@ -59,7 +58,7 @@ private[r] class RBackendHandler(server: RBackend)
           assert(numArgs == 1)
 
           writeInt(dos, 0)
-          writeObject(dos, args(0))
+          writeObject(dos, args(0), server.jvmObjectTracker)
         case "stopBackend" =>
           writeInt(dos, 0)
           writeType(dos, "void")
@@ -69,9 +68,9 @@ private[r] class RBackendHandler(server: RBackend)
             val t = readObjectType(dis)
             assert(t == 'c')
             val objToRemove = readString(dis)
-            JVMObjectTracker.remove(objToRemove)
+            server.jvmObjectTracker.remove(JVMObjectId(objToRemove))
             writeInt(dos, 0)
-            writeObject(dos, null)
+            writeObject(dos, null, server.jvmObjectTracker)
           } catch {
             case e: Exception =>
               logError(s"Removing $objId failed", e)
@@ -112,12 +111,8 @@ private[r] class RBackendHandler(server: RBackend)
       val cls = if (isStatic) {
         Utils.classForName(objId)
       } else {
-        JVMObjectTracker.get(objId) match {
-          case None => throw new IllegalArgumentException("Object not found " + objId)
-          case Some(o) =>
-            obj = o
-            o.getClass
-        }
+        obj = server.jvmObjectTracker(JVMObjectId(objId))
+        obj.getClass
       }
 
       val args = readArgs(numArgs, dis)
@@ -142,7 +137,7 @@ private[r] class RBackendHandler(server: RBackend)
 
         // Write status bit
         writeInt(dos, 0)
-        writeObject(dos, ret.asInstanceOf[AnyRef])
+        writeObject(dos, ret.asInstanceOf[AnyRef], server.jvmObjectTracker)
       } else if (methodName == "<init>") {
         // methodName should be "<init>" for constructor
         val ctors = cls.getConstructors
@@ -162,7 +157,7 @@ private[r] class RBackendHandler(server: RBackend)
         val obj = ctors(index.get).newInstance(args : _*)
 
         writeInt(dos, 0)
-        writeObject(dos, obj.asInstanceOf[AnyRef])
+        writeObject(dos, obj.asInstanceOf[AnyRef], server.jvmObjectTracker)
       } else {
         throw new IllegalArgumentException("invalid method " + methodName + " for object " + objId)
       }
@@ -179,7 +174,7 @@ private[r] class RBackendHandler(server: RBackend)
   // Read a number of arguments from the data input stream
   def readArgs(numArgs: Int, dis: DataInputStream): Array[java.lang.Object] = {
     (0 until numArgs).map { _ =>
-      readObject(dis)
+      readObject(dis, server.jvmObjectTracker)
     }.toArray
   }
 
@@ -255,37 +250,4 @@ private[r] class RBackendHandler(server: RBackend)
   }
 }
 
-/**
- * Helper singleton that tracks JVM objects returned to R.
- * This is useful for referencing these objects in RPC calls.
- */
-private[r] object JVMObjectTracker {
 
-  // TODO: This map should be thread-safe if we want to support multiple
-  // connections at the same time
-  private[this] val objMap = new HashMap[String, Object]
-
-  // TODO: We support only one connection now, so an integer is fine.
-  // Investigate using use atomic integer in the future.
-  private[this] var objCounter: Int = 0
-
-  def getObject(id: String): Object = {
-    objMap(id)
-  }
-
-  def get(id: String): Option[Object] = {
-    objMap.get(id)
-  }
-
-  def put(obj: Object): String = {
-    val objId = objCounter.toString
-    objCounter = objCounter + 1
-    objMap.put(objId, obj)
-    objId
-  }
-
-  def remove(id: String): Option[Object] = {
-    objMap.remove(id)
-  }
-
-}
