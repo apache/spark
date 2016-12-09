@@ -350,6 +350,8 @@ test_that("spark.kmeans", {
   # Test summary works on KMeans
   summary.model <- summary(model)
   cluster <- summary.model$cluster
+  k <- summary.model$k
+  expect_equal(k, 2)
   expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
 
   # Test model save/load
