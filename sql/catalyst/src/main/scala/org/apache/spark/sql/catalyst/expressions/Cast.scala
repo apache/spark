@@ -132,6 +132,8 @@ object Cast {
 case class Cast(child: Expression, dataType: DataType, zoneId: String = null)
   extends UnaryExpression with TimeZoneAwareExpression with NullIntolerant {
 
+  def this(child: Expression, dataType: DataType) = this(child, dataType, null)
+
   override def toString: String = s"cast($child as ${dataType.simpleString})"
 
   override def checkInputDataTypes(): TypeCheckResult = {
