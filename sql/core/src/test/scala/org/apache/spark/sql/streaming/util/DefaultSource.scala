@@ -24,7 +24,7 @@ import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryManagerSuite}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 /** Dummy provider: returns a SourceProvider with a blocking `createSource` call. */
-class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
+class BlockingSource extends StreamSourceProvider with StreamSinkProvider {
 
   private val fakeSchema = StructType(StructField("a", IntegerType) :: Nil)
 

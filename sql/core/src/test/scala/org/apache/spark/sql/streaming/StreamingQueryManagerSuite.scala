@@ -222,10 +222,10 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
         // if source resolution was happening on the main thread, it would block the start call,
         // now it should only be blocking the stream execution thread
         val sq = spark.readStream
-          .format("org.apache.spark.sql.streaming.util")
+          .format("org.apache.spark.sql.streaming.util.BlockingSource")
           .load()
           .writeStream
-          .format("org.apache.spark.sql.streaming.util")
+          .format("org.apache.spark.sql.streaming.util.BlockingSource")
           .option("checkpointLocation", tempDir.toString)
           .start()
         eventually(Timeout(streamingTimeout)) {
