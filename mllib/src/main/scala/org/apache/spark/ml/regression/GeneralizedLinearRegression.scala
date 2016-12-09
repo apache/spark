@@ -215,7 +215,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    * Sets the value of param [[weightCol]].
    * If this is not set or empty, we treat all instance weights as 1.0.
    * Default is not set, so all instances have weight one.
-   * In the Binomial model, weights correspond to number of trials.
+   * In the Binomial family, weights correspond to number of trials and should be integer.
+   * Non-integer weights are rounded to integer in AIC calculation.
    *
    * @group setParam
    */
