@@ -342,10 +342,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     }
 
     // replacementMap is either Map[String, String] or Map[Double, Double] or Map[Boolean,Boolean]
-    val replacementMap: Map[_, _] =
-      if (replacement.head._2 == null)
-        replacement
-      else replacement.head._2 match {
+    val replacementMap: Map[_, _] = replacement.head._2 match {
+        case null => replacement
         case v: String => replacement
         case v: Boolean => replacement
         case _ => replacement.map { case (k, v) => (convertToDouble(k), convertToDouble(v)) }
