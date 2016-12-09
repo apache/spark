@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.StructType
 
 /**
  * A suite for testing view related functionality.
@@ -546,7 +546,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("create a nested view") {
+  test("correctly resolve a nested view") {
     withTempDatabase { db =>
       withView(s"$db.view1", s"$db.view2") {
         val view1 = CatalogTable(
