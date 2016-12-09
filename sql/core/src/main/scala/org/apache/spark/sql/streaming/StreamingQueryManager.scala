@@ -294,11 +294,9 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
     activeQueriesLock.synchronized {
       // Make sure no other query with same name is active
       userSpecifiedName.foreach { name =>
-        activeQueriesLock.synchronized {
-          if (activeQueries.values.exists(_.name == name)) {
-            throw new IllegalArgumentException(
-              s"Cannot start query with name $name as a query with that name is already active")
-          }
+        if (activeQueries.values.exists(_.name == name)) {
+          throw new IllegalArgumentException(
+            s"Cannot start query with name $name as a query with that name is already active")
         }
       }
 
@@ -309,6 +307,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
             s"already active. Perhaps you are attempting to restart a query from checkpoint " +
             s"that is already active.")
       }
+
       activeQueries.put(query.id, query)
     }
     try {
