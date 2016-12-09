@@ -86,6 +86,14 @@ private[spark] class Executor(
   private val executorSource = new ExecutorSource(threadPool, executorId)
   // Pool used for threads that supervise task killing / cancellation
   private val taskReaperPool = ThreadUtils.newDaemonCachedThreadPool("Task reaper")
+  // For tasks which are in the process of being killed, this map the most recently created
+  // TaskReaper. All accesses to this map should be synchronized on the map itself (this isn't
+  // a ConcurrentHashMap because we use the synchronization for purposes other than simply guarding
+  // the integrity of the map's internal state). The purpose of this map is to prevent the creation
+  // of a separate TaskReaper for every killTask() of a given task. Instead, this map allows us to
+  // track whether an existing TaskReaper fulfills the role of a TaskReaper that we would otherwise
+  // create. The map key is a task id.
+  private val taskReaperForTask: HashMap[Long, TaskReaper] = HashMap[Long, TaskReaper]()
 
   if (!isLocal) {
     env.metricsSystem.registerSource(executorSource)
@@ -150,9 +158,19 @@ private[spark] class Executor(
   }
 
   def killTask(taskId: Long, interruptThread: Boolean): Unit = {
-    val tr = runningTasks.get(taskId)
-    if (tr != null) {
-      taskReaperPool.execute(new TaskReaper(tr, interruptThread = interruptThread))
+    val taskRunner = runningTasks.get(taskId)
+    if (taskRunner != null) {
+      taskReaperForTask.synchronized {
+        val shouldCreateReaper = taskReaperForTask.get(taskId) match {
+          case None => true
+          case Some(existingReaper) => interruptThread && !existingReaper.interruptThread
+        }
+        if (shouldCreateReaper) {
+          val taskReaper = new TaskReaper(taskRunner, interruptThread = interruptThread)
+          taskReaperForTask(taskId) = taskReaper
+          taskReaperPool.execute(taskReaper)
+        }
+      }
     }
   }
 
@@ -443,7 +461,12 @@ private[spark] class Executor(
    * Supervises the killing / cancellation of a task by sending the interrupted flag, optionally
    * sending a Thread.interrupt(), and monitoring the task until it finishes.
    */
-  private class TaskReaper(taskRunner: TaskRunner, interruptThread: Boolean) extends Runnable {
+  private class TaskReaper(
+      taskRunner: TaskRunner,
+      val interruptThread: Boolean)
+    extends Runnable {
+
+    private[this] val taskId: Long = taskRunner.taskId
 
     private[this] val killPollingFrequencyMs: Long =
       conf.getTimeAsMs("spark.task.killPollingFrequency", "10s")
@@ -456,36 +479,60 @@ private[spark] class Executor(
     override def run(): Unit = {
       val startTimeMs = System.currentTimeMillis()
       def elapsedTimeMs = System.currentTimeMillis() - startTimeMs
-
-      while (!taskRunner.isFinished && (elapsedTimeMs < killTimeoutMs || killTimeoutMs <= 0)) {
-        taskRunner.kill(interruptThread = interruptThread)
-        taskRunner.synchronized {
-          taskRunner.wait(killPollingFrequencyMs)
-        }
-        if (!taskRunner.isFinished) {
-          logWarning(s"Killed task ${taskRunner.taskId} is still running after $elapsedTimeMs ms")
-          if (takeThreadDump) {
-            try {
-              Utils.getThreadDumpForThread(taskRunner.getThreadId).foreach { thread =>
-                if (thread.threadName == taskRunner.threadName) {
-                  logWarning(s"Thread dump from task ${taskRunner.taskId}:\n${thread.stackTrace}")
+      var exceptionThrown: Boolean = true
+      try {
+        while (!taskRunner.isFinished && (elapsedTimeMs < killTimeoutMs || killTimeoutMs <= 0)) {
+          taskRunner.kill(interruptThread = interruptThread)
+          taskRunner.synchronized {
+            taskRunner.wait(killPollingFrequencyMs)
+          }
+          if (!taskRunner.isFinished) {
+            logWarning(s"Killed task $taskId is still running after $elapsedTimeMs ms")
+            if (takeThreadDump) {
+              try {
+                Utils.getThreadDumpForThread(taskRunner.getThreadId).foreach { thread =>
+                  if (thread.threadName == taskRunner.threadName) {
+                    logWarning(s"Thread dump from task $taskId:\n${thread.stackTrace}")
+                  }
                 }
+              } catch {
+                case NonFatal(e) =>
+                  logWarning("Exception thrown while obtaining thread dump: ", e)
               }
-            } catch {
-              case NonFatal(e) =>
-                logWarning("Exception thrown while obtaining thread dump: ", e)
             }
           }
         }
-      }
-      if (!taskRunner.isFinished && killTimeoutMs > 0 && elapsedTimeMs > killTimeoutMs) {
-        if (isLocal) {
-          logError(s"Killed task ${taskRunner.taskId} could not be stopped within " +
-            s"$killPollingFrequencyMs; not killing JVM because we are running in local mode")
-        } else {
-          throw new SparkException(
-            s"Killing executor JVM because killed task ${taskRunner.taskId} could not be" +
-              s" stopped within $killTimeoutMs ms")
+
+        if (!taskRunner.isFinished && killTimeoutMs > 0 && elapsedTimeMs > killTimeoutMs) {
+          if (isLocal) {
+            logError(s"Killed task $taskId could not be stopped within $killPollingFrequencyMs; " +
+              "not killing JVM because we are running in local mode.")
+          } else if (!exceptionThrown) {
+            // Only throw an exception here in case the finally block was entered via normal
+            // execution and not an exception in order to not mask exceptions thrown by TaskReaper
+            // itself
+            throw new SparkException(
+              s"Killing executor JVM because killed task $taskId could not be stopped within " +
+                s"$killTimeoutMs ms.")
+          } else {
+            logError(s"An unexpected exception was thrown in TaskReaper. The task $taskId could " +
+              s"not be stopped within $killTimeoutMs ms. The TaskReaper exception will now " +
+              s"propagate to the uncaught exception handler and trigger JVM exit.")
+          }
+        }
+        exceptionThrown = false
+      } finally {
+        // Clean up entries in the taskReaperForTask map.
+        taskReaperForTask.synchronized {
+          taskReaperForTask.get(taskId).foreach { taskReaperInMap =>
+            if (taskReaperInMap eq this) {
+              taskReaperForTask.remove(taskId)
+            } else {
+              // This must have been a TaskReaper where interruptThread == false where a subsequent
+              // killTask() call for the same task had interruptThread == true and overwrote the
+              // map entry.
+            }
+          }
         }
       }
     }
