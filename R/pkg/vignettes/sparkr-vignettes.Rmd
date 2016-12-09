@@ -526,6 +526,11 @@ gaussianFitted <- predict(gaussianGLM, carsDF)
 head(select(gaussianFitted, "model", "prediction", "mpg", "wt", "hp"))
 ```
 
+#### Logistic Regression Model
+
+We provide `spark.logit` on top of `spark.glm` to support logistic regression with advanced hyper-parameters.
+It supports both binary and multiclass classification, elastic-net regularization, and feature standardization, similar to `glmnet`.
+
 #### Naive Bayes Model
 
 Naive Bayes model assumes independence among the features. `spark.naiveBayes` fits a [Bernoulli naive Bayes model](https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Bernoulli_naive_Bayes) against a SparkDataFrame. The data should be all categorical. These models are often used for document classification.
