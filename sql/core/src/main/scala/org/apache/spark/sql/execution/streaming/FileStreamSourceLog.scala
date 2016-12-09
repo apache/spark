@@ -78,7 +78,7 @@ class FileStreamSourceLog(
 
   override def get(startId: Option[Long], endId: Option[Long]): Array[(Long, Array[FileEntry])] = {
     val startBatchId = startId.getOrElse(0L)
-    val endBatchId = getLatest().map(_._1).getOrElse(0L)
+    val endBatchId = endId.orElse(getLatest().map(_._1)).getOrElse(0L)
 
     val (existedBatches, removedBatches) = (startBatchId to endBatchId).map { id =>
       if (isCompactionBatch(id, compactInterval) && fileEntryCache.containsKey(id)) {

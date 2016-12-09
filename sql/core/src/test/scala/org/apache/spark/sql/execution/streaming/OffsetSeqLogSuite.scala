@@ -74,7 +74,7 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
     val (batchId, offsetSeq) = readFromResource("offset-log-version-2.1.0")
     assert(batchId === 0)
     assert(offsetSeq.offsets === Seq(
-      Some(SerializedOffset("0")),
+      Some(SerializedOffset("""{"logOffset":345}""")),
       Some(SerializedOffset("""{"topic-0":{"0":1}}"""))
     ))
     assert(offsetSeq.metadata === Some(OffsetSeqMetadata(0L, 1480981499528L)))
