@@ -173,11 +173,9 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
   private def trySplitFilter(plan: SparkPlan): SparkPlan = {
     plan match {
       case filter: FilterExec =>
-        // Only push down the predicates that is deterministic and all the referenced attributes
-        // come from child.
+        // Only push down the first few predicates that are all deterministic
         val (candidates, containingNonDeterministic) =
           splitConjunctivePredicates(filter.condition).span(_.deterministic)
-        // Python UDF is always deterministic
         val (pushDown, rest) = candidates.partition(!hasPythonUDF(_))
         if (pushDown.nonEmpty) {
           val newChild = FilterExec(pushDown.reduceLeft(And), filter.child)
