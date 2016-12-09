@@ -251,6 +251,8 @@ if [[ "$1" == "package" ]]; then
   # Put to new directory:
   LFTP mkdir -p $dest_dir
   LFTP mput -O $dest_dir 'spark-*'
+  LFTP mput -O $dest_dir 'pyspark-*'
+  LFTP mput -O $dest_dir 'SparkR-*'
   # Delete /latest directory and rename new upload to /latest
   LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
