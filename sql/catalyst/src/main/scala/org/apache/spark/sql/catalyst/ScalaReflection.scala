@@ -312,11 +312,20 @@ object ScalaReflection extends ScalaReflection {
           "array",
           ObjectType(classOf[Array[Any]]))
 
-        StaticInvoke(
+        val wrappedArray = StaticInvoke(
           scala.collection.mutable.WrappedArray.getClass,
           ObjectType(classOf[Seq[_]]),
           "make",
           array :: Nil)
+
+        if (t <:< localTypeOf[List[_]]) {
+          Invoke(
+            wrappedArray,
+            "toList",
+            ObjectType(classOf[List[_]]))
+        } else {
+          wrappedArray
+        }
 
       case t if t <:< localTypeOf[Map[_, _]] =>
         // TODO: add walked type path for map
