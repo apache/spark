@@ -152,7 +152,7 @@ private[spark] class RRunner[U](
           dataOut.writeInt(mode)
 
           if (isDataFrame) {
-            SerDe.writeObject(dataOut, colNames)
+            SerDe.writeObject(dataOut, colNames, jvmObjectTracker = null)
           }
 
           if (!iter.hasNext) {
