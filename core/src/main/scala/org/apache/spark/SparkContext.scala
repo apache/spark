@@ -292,7 +292,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val executorEnvs = HashMap[String, String]()
 
   // Set SPARK_USER for user who is running SparkContext.
-  val sparkUser: String = Utils.getCurrentUserName()
+  val sparkUser = Utils.getCurrentUserName()
 
   private[spark] def schedulerBackend: SchedulerBackend = _schedulerBackend
 
