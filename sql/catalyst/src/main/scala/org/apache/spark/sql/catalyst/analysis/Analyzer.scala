@@ -21,7 +21,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
+import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
@@ -510,32 +510,61 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    private def lookupTableFromCatalog(u: UnresolvedRelation): LogicalPlan = {
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
+        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
+      case u: UnresolvedRelation => resolveRelation(u)
+    }
+
+    // If the unresolved relation is running directly on files, we just return the original
+    // UnresolvedRelation, the plan will get resolved later. Else we lookup the table from catalog
+    // and change the current database name if it is a view.
+    def resolveRelation(
+        plan: LogicalPlan,
+        currentDatabase: Option[String] = None): LogicalPlan = plan match {
+      case u @ UnresolvedRelation(table: TableIdentifier, _) if isRunningDirectlyOnFiles(table) =>
+        u
+      case u: UnresolvedRelation =>
+        resolveView(lookupTableFromCatalog(u, currentDatabase))
+    }
+
+    // Lookup the table with the given name from catalog. If `currentDatabase` is set, we lookup
+    // the table in the database `currentDatabase`, else we follow the default way.
+    private def lookupTableFromCatalog(
+        u: UnresolvedRelation,
+        currentDatabase: Option[String] = None): LogicalPlan = {
       try {
-        catalog.lookupRelation(u.tableIdentifier, u.alias)
+        catalog.lookupRelation(u.tableIdentifier, u.alias, currentDatabase)
       } catch {
         case _: NoSuchTableException =>
           u.failAnalysis(s"Table or view not found: ${u.tableName}")
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
-      case u: UnresolvedRelation =>
-        val table = u.tableIdentifier
-        if (table.database.isDefined && conf.runSQLonFile && !catalog.isTemporaryTable(table) &&
-            (!catalog.databaseExists(table.database.get) || !catalog.tableExists(table))) {
-          // If the database part is specified, and we support running SQL directly on files, and
-          // it's not a temporary view, and the table does not exist, then let's just return the
-          // original UnresolvedRelation. It is possible we are matching a query like "select *
-          // from parquet.`/path/to/query`". The plan will get resolved later.
-          // Note that we are testing (!db_exists || !table_exists) because the catalog throws
-          // an exception from tableExists if the database does not exist.
-          u
-        } else {
-          lookupTableFromCatalog(u)
+    // If the database part is specified, and we support running SQL directly on files, and
+    // it's not a temporary view, and the table does not exist, then let's just return the
+    // original UnresolvedRelation. It is possible we are matching a query like "select *
+    // from parquet.`/path/to/query`". The plan will get resolved later.
+    // Note that we are testing (!db_exists || !table_exists) because the catalog throws
+    // an exception from tableExists if the database does not exist.
+    private def isRunningDirectlyOnFiles(table: TableIdentifier): Boolean = {
+      table.database.isDefined && conf.runSQLonFile && !catalog.isTemporaryTable(table) &&
+        (!catalog.databaseExists(table.database.get) || !catalog.tableExists(table))
+    }
+
+    // Change the current database name if the plan is a view, and transformDown with the new
+    // database name to resolve all UnresolvedRelation.
+    def resolveView(plan: LogicalPlan): LogicalPlan = plan match {
+      case SubqueryAlias(_, view: View, _) =>
+        val currentDatabase = view.currentDatabase
+        view transform {
+          case v: View if !v.resolved =>
+            resolveView(v)
+          case u: UnresolvedRelation =>
+            resolveRelation(u, currentDatabase)
         }
+      case _ => plan
     }
   }
 
@@ -2220,6 +2249,17 @@ class Analyzer(
 object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case SubqueryAlias(_, child, _) => child
+  }
+}
+
+/**
+ * Removes [[View]] operators from the plan. The operator is only used to provide the database
+ * name we should use in resolving a view, and it's respected till the end of analysis stage
+ * just because we want to see which part of a analyzed logical plan is generated from a view.
+ */
+object EliminateView extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case View(child, _) => child
   }
 }
 

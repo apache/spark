@@ -388,6 +388,20 @@ case class InsertIntoTable(
 }
 
 /**
+ * A container for holding the current database of a view and a query plan.
+ * This operator will be removed at the begining of the optimize stage so we can see what is part
+ * of a view in a analyzed plan.
+ *
+ * @param child The logical plan of this view.
+ * @param currentDatabase The database name we use to resolve the logical plan.
+ */
+case class View(child: LogicalPlan, currentDatabase: Option[String]) extends LogicalPlan {
+
+  override def children: Seq[LogicalPlan] = child :: Nil
+  override def output: Seq[Attribute] = child.output
+}
+
+/**
  * A container for holding named common table expressions (CTEs) and a query plan.
  * This operator will be removed during analysis and the relations will be substituted into child.
  *

@@ -22,7 +22,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
 
 
 /**
@@ -93,13 +93,13 @@ class SessionCatalogSuite extends SparkFunSuite {
 
   test("list databases without pattern") {
     val catalog = new SessionCatalog(newBasicCatalog())
-    assert(catalog.listDatabases().toSet == Set("default", "db1", "db2"))
+    assert(catalog.listDatabases().toSet == Set("default", "db1", "db2", "db3"))
   }
 
   test("list databases with pattern") {
     val catalog = new SessionCatalog(newBasicCatalog())
     assert(catalog.listDatabases("db").toSet == Set.empty)
-    assert(catalog.listDatabases("db*").toSet == Set("db1", "db2"))
+    assert(catalog.listDatabases("db*").toSet == Set("db1", "db2", "db3"))
     assert(catalog.listDatabases("*1").toSet == Set("db1"))
     assert(catalog.listDatabases("db2").toSet == Set("db2"))
   }
@@ -107,7 +107,7 @@ class SessionCatalogSuite extends SparkFunSuite {
   test("drop database") {
     val catalog = new SessionCatalog(newBasicCatalog())
     catalog.dropDatabase("db1", ignoreIfNotExists = false, cascade = false)
-    assert(catalog.listDatabases().toSet == Set("default", "db2"))
+    assert(catalog.listDatabases().toSet == Set("default", "db2", "db3"))
   }
 
   test("drop database when the database is not empty") {
@@ -132,7 +132,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     val externalCatalog3 = newBasicCatalog()
     val sessionCatalog3 = new SessionCatalog(externalCatalog3)
     externalCatalog3.dropDatabase("db2", ignoreIfNotExists = false, cascade = true)
-    assert(sessionCatalog3.listDatabases().toSet == Set("default", "db1"))
+    assert(sessionCatalog3.listDatabases().toSet == Set("default", "db1", "db3"))
   }
 
   test("drop database when the database does not exist") {
@@ -463,6 +463,20 @@ class SessionCatalogSuite extends SparkFunSuite {
     catalog.createTempView("vw1", tmpView, overrideIfExists = false)
     val plan = catalog.lookupRelation(TableIdentifier("vw1"), Option("range"))
     assert(plan == SubqueryAlias("range", tmpView, Option(TableIdentifier("vw1"))))
+  }
+
+  test("lookup view relation") {
+    val externalCatalog = newBasicCatalog()
+    val sessionCatalog = new SessionCatalog(externalCatalog)
+    val metadata1 = externalCatalog.getTable("db3", "view1")
+    sessionCatalog.setCurrentDatabase("default")
+    // Lookup view when currentDatabase is not defined.
+    val view = View(SimpleCatalogRelation("db3", metadata1), None)
+    assert(sessionCatalog.lookupRelation(TableIdentifier("view1", Some("db3")))
+      == SubqueryAlias("view1", view, Some(TableIdentifier("view1", Some("db3")))))
+    // Lookup view when currentDatabase is defined.
+    assert(sessionCatalog.lookupRelation(TableIdentifier("view1"), currentDatabase = Some("db3"))
+      == SubqueryAlias("view1", view, Some(TableIdentifier("view1"))))
   }
 
   test("table exists") {

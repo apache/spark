@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
 
 object SessionCatalog {
@@ -551,17 +551,26 @@ class SessionCatalog(
    *
    * If a database is specified in `name`, this will return the table/view from that database.
    * If no database is specified, this will first attempt to return a temporary table/view with
-   * the same name, then, if that does not exist, return the table/view from the current database.
+   * the same name, then, if that does not exist, and currentDatabase is defined, return the
+   * table/view from the currentDatabase, else return the table/view from the catalog.currentDb.
    *
    * Note that, the global temp view database is also valid here, this will return the global temp
    * view matching the given name.
    *
-   * If the relation is a view, the relation will be wrapped in a [[SubqueryAlias]] which will
-   * track the name of the view.
+   * If the relation is a view, we add a [[View]] operator over the relation, and wrap the logical
+   * plan in a [[SubqueryAlias]] which will track the name of the view.
+   *
+   * @param name The name of the table/view that we lookup.
+   * @param alias The alias name of the table/view that we lookup.
+   * @param currentDatabase The database name we should use to lookup the table/view, if the
+   *                        database part of [[TableIdentifier]] is not defined.
    */
-  def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
+  def lookupRelation(
+      name: TableIdentifier,
+      alias: Option[String] = None,
+      currentDatabase: Option[String] = None): LogicalPlan = {
     synchronized {
-      val db = formatDatabaseName(name.database.getOrElse(currentDb))
+      val db = formatDatabaseName(name.database.getOrElse(currentDatabase.getOrElse(currentDb)))
       val table = formatTableName(name.table)
       val relationAlias = alias.getOrElse(table)
       if (db == globalTempViewManager.database) {
@@ -570,10 +579,16 @@ class SessionCatalog(
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempTables.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
-        val view = Option(metadata.tableType).collect {
-          case CatalogTableType.VIEW => name
+        if (metadata.tableType == CatalogTableType.VIEW) {
+          // The relation is a view, so we wrap the relation by:
+          // 1. Add a [[View]] operator over the relation to keep track of the database name;
+          // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
+          val child = View(SimpleCatalogRelation(metadata), metadata.currentDatabase)
+          SubqueryAlias(relationAlias, child, Some(name))
+        } else {
+          SubqueryAlias(relationAlias, SimpleCatalogRelation(metadata), None)
         }
-        SubqueryAlias(relationAlias, SimpleCatalogRelation(metadata), view)
+        SubqueryAlias(relationAlias, SimpleCatalogRelation(db, metadata), view)
       } else {
         SubqueryAlias(relationAlias, tempTables(table), Option(name))
       }

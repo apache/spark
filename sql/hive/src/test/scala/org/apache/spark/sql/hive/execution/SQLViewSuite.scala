@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
@@ -539,6 +541,36 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           }.getMessage
           assert(e.contains("Not allowed to create a permanent view `view1` by referencing " +
             s"a temporary function `$tempFunctionName`"))
+        }
+      }
+    }
+  }
+
+  test("create a nested view") {
+    withTempDatabase { db =>
+      withView(s"$db.view1", s"$db.view2") {
+        val view1 = CatalogTable(
+          identifier = TableIdentifier("view1", Some(db)),
+          tableType = CatalogTableType.VIEW,
+          storage = CatalogStorageFormat.empty,
+          schema = new StructType().add("id", "int").add("id1", "int"),
+          provider = Some("parquet"),
+          viewOriginalText = Some("SELECT * FROM jt"),
+          viewText = Some("SELECT * FROM jt"),
+          currentDatabase = Some("default"))
+        val view2 = CatalogTable(
+          identifier = TableIdentifier("view2", Some(db)),
+          tableType = CatalogTableType.VIEW,
+          storage = CatalogStorageFormat.empty,
+          schema = new StructType().add("id", "int").add("id1", "int"),
+          provider = Some("parquet"),
+          viewOriginalText = Some("SELECT * FROM view1"),
+          viewText = Some("SELECT * FROM view1"),
+          currentDatabase = Some(db))
+        activateDatabase(db) {
+          hiveContext.sessionState.catalog.createTable(view1, ignoreIfExists = false)
+          hiveContext.sessionState.catalog.createTable(view2, ignoreIfExists = false)
+          checkAnswer(sql("SELECT * FROM view2 ORDER BY id"), (1 to 9).map(i => Row(i, i)))
         }
       }
     }

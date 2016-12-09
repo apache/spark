@@ -861,6 +861,8 @@ abstract class CatalogTestUtils {
    *     - part1
    *     - part2
    *   - func1
+   * db3
+   *   - view1
    */
   def newBasicCatalog(): ExternalCatalog = {
     val catalog = newEmptyCatalog()
@@ -868,8 +870,10 @@ abstract class CatalogTestUtils {
     catalog.createDatabase(newDb("default"), ignoreIfExists = true)
     catalog.createDatabase(newDb("db1"), ignoreIfExists = false)
     catalog.createDatabase(newDb("db2"), ignoreIfExists = false)
+    catalog.createDatabase(newDb("db3"), ignoreIfExists = false)
     catalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = false)
     catalog.createTable(newTable("tbl2", "db2"), ignoreIfExists = false)
+    catalog.createTable(newView("view1", Some("db3")), ignoreIfExists = false)
     catalog.createPartitions("db2", "tbl2", Seq(part1, part2), ignoreIfExists = false)
     catalog.createFunction("db2", newFunc("func1", Some("db2")))
     catalog
@@ -898,6 +902,24 @@ abstract class CatalogTestUtils {
       provider = Some("hive"),
       partitionColumnNames = Seq("a", "b"),
       bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))
+  }
+
+  def newView(name: String, database: Option[String] = None): CatalogTable = {
+    CatalogTable(
+      identifier = TableIdentifier(name, database),
+      tableType = CatalogTableType.VIEW,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType()
+        .add("col1", "int")
+        .add("col2", "string")
+        .add("a", "int")
+        .add("b", "string"),
+      provider = Some("hive"),
+      viewOriginalText = Some("SELECT * FROM tbl1"),
+      viewText = Some("SELECT `gen_attr_0` AS `col1`, `gen_attr_1` AS `col2`, `gen_attr_2` AS " +
+        "`a`, `gen_attr_3` AS `b` FROM (SELECT `gen_attr_0`, `gen_attr_1`, `gen_attr_2`, " +
+        "`gen_attr_3` FROM (SELECT `col1` AS `gen_attr_0`, `col2` AS `gen_attr_1`, `a` AS " +
+        "`gen_attr_2`, `b` AS `gen_attr_3` FROM `db2`.`tbl1`) AS gen_subquery_0) AS tbl1"))
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {

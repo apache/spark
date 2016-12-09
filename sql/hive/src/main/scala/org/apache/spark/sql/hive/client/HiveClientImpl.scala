@@ -428,6 +428,7 @@ private[hive] class HiveClientImpl(
         comment = properties.get("comment"),
         viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
+        currentDatabase = Option(h.getProperty("currentDatabase")),
         unsupportedFeatures = unsupportedFeatures)
     }
   }
@@ -852,6 +853,7 @@ private[hive] class HiveClientImpl(
     table.comment.foreach { c => hiveTable.setProperty("comment", c) }
     table.viewOriginalText.foreach { t => hiveTable.setViewOriginalText(t) }
     table.viewText.foreach { t => hiveTable.setViewExpandedText(t) }
+    table.currentDatabase.foreach {t => hiveTable.setProperty("currentDatabase", t)}
     hiveTable
   }
 

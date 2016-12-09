@@ -55,18 +55,20 @@ private[sql] class HiveSessionCatalog(
     conf,
     hadoopConf) {
 
-  override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
+  override def lookupRelation(
+      name: TableIdentifier,
+      alias: Option[String] = None,
+      currentDatabase: Option[String] = None): LogicalPlan = {
     synchronized {
       val table = formatTableName(name.table)
-      val db = formatDatabaseName(name.database.getOrElse(currentDb))
+      val db = formatDatabaseName(name.database.getOrElse(currentDatabase.getOrElse(currentDb)))
       if (db == globalTempViewManager.database) {
         val relationAlias = alias.getOrElse(table)
         globalTempViewManager.get(table).map { viewDef =>
           SubqueryAlias(relationAlias, viewDef, Some(name))
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempTables.contains(table)) {
-        val database = name.database.map(formatDatabaseName)
-        val newName = name.copy(database = database, table = table)
+        val newName = name.copy(database = Some(db), table = table)
         metastoreCatalog.lookupRelation(newName, alias)
       } else {
         val relation = tempTables(table)
