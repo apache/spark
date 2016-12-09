@@ -291,6 +291,15 @@ class ScalaReflectionSuite extends SparkFunSuite {
       .cls.isAssignableFrom(classOf[org.apache.spark.sql.catalyst.util.GenericArrayData]))
   }
 
+  test("SPARK 16792: Get correct deserializer for List[_]") {
+    val listDeserializer = deserializerFor[List[Int]]
+    assert(listDeserializer.dataType == ObjectType(classOf[List[_]]))
+
+    // Check whether Seq[_] does not use List[_] deserializer (would needlessly add toList overhead)
+    val seqDeserializer = deserializerFor[Seq[Int]]
+    assert(seqDeserializer.dataType != ObjectType(classOf[List[_]]))
+  }
+
   private val dataTypeForComplexData = dataTypeFor[ComplexData]
   private val typeOfComplexData = typeOf[ComplexData]
 
