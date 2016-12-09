@@ -489,6 +489,14 @@ print(model.summaries)
 {% endhighlight %}
 </div>
 
+##### spark.lapply with third-party packages
+Many of the SparkR jobs distributed by `spark.lapply` need supports from third-party packages. Rather than installing all necessary packages to all executors in advance,
+we could install them during the SparkR interactive session or script. Users can add a file or directory to be downloaded with this SparkR job on every node by `spark.addFile` firstly,
+download them to every executor node, and install them to be used.
+<div>
+{% include_example r/native-r-package.R %}
+</div>
+
 ## Running SQL Queries from SparkR
 A SparkDataFrame can also be registered as a temporary view in Spark SQL and that allows you to run SQL queries over its data.
 The `sql` function enables applications to run SQL queries programmatically and returns the result as a `SparkDataFrame`.
