@@ -222,11 +222,14 @@ fi
 # Make R package - this is used for both CRAN release and packing R layout into distribution
 if [ "$MAKE_R" == "true" ]; then
   echo "Building R source package"
+  R_PACKAGE_VERSION=`grep Version $SPARK_HOME/R/pkg/DESCRIPTION | awk '{print $NF}'`
   pushd "$SPARK_HOME/R" > /dev/null
   # Build source package and run full checks
   # Install source package to get it to generate vignettes, etc.
   # Do not source the check-cran.sh - it should be run from where it is for it to set SPARK_HOME
   NO_TESTS=1 CLEAN_INSTALL=1 "$SPARK_HOME/"R/check-cran.sh
+  # Make a copy of R source package matching the Spark release version.
+  cp $SPARK_HOME/R/SparkR_"$R_PACKAGE_VERSION".tar.gz $SPARK_HOME/R/SparkR_"$VERSION".tar.gz
   popd > /dev/null
 else
   echo "Skipping building R source package"
@@ -238,6 +241,12 @@ cp "$SPARK_HOME"/conf/*.template "$DISTDIR"/conf
 cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
+
+# Remove the python distribution from dist/ if we built it
+if [ "$MAKE_PIP" == "true" ]; then
+  rm -f $DISTDIR/python/dist/pyspark-*.tar.gz
+fi
+
 cp -r "$SPARK_HOME/sbin" "$DISTDIR"
 # Copy SparkR if it exists
 if [ -d "$SPARK_HOME"/R/lib/SparkR ]; then
