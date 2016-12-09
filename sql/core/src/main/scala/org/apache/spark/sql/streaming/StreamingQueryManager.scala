@@ -194,7 +194,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
     listenerBus.post(event)
   }
 
-  private def prepareAndCreateQuery(
+  private def createQuery(
       userSpecifiedName: Option[String],
       userSpecifiedCheckpointLocation: Option[String],
       df: DataFrame,
@@ -292,6 +292,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
     var queryName: String = null
     var queryId: UUID = null
     try {
+      // Make sure no other query with same name is active
       userSpecifiedName.foreach { name =>
         activeQueriesLock.synchronized {
           if (activeQueries.values.exists(_.name == name) || pendingQueryNames.contains(name)) {
@@ -302,7 +303,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
           queryName = name
         }
       }
-      val query = prepareAndCreateQuery(
+
+      val query = createQuery(
         userSpecifiedName,
         userSpecifiedCheckpointLocation,
         df,
@@ -312,6 +314,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
         recoverFromCheckpointLocation,
         trigger,
         triggerClock)
+
+      // Make sure no other query with same id is active
       activeQueriesLock.synchronized {
         if (activeQueries.values.exists(_.id == query.id) || pendingQueryIds.contains(query.id)) {
           throw new IllegalStateException(
@@ -322,7 +326,13 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
         pendingQueryIds += query.id
         queryId = query.id
       }
+
+      // When starting a query, it will call `StreamingQueryListener.onQueryStarted` synchronously.
+      // As it's provided by the user and can run arbitrary codes, we must not hold any lock here.
+      // Otherwise, it's easy to cause dead-lock, or block too long if the user codes take a long
+      // time to finish.
       query.start()
+
       activeQueriesLock.synchronized {
         // It's possible that `notifyQueryTermination` is called before we reach here. So we
         // need to check the query status before adding it into `activeQueries`.
