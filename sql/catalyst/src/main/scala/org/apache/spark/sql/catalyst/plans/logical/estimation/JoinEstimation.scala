@@ -164,10 +164,10 @@ object JoinEstimation {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression]): Seq[(AttributeReference, AttributeReference)] = {
     leftKeys.zip(rightKeys).flatMap {
+      case (ExtractAttr(left), ExtractAttr(right)) => Some((left, right))
       // Currently we don't deal with equal joins like key1 = key2 + 5.
       // Note: join keys from EqualNullSafe also fall into this case (Coalesce), consider to
       // support it in the future by using `nullCount` in column stats.
-      case (ExtractAttr(left), ExtractAttr(right)) => Some((left, right))
       case _ => None
     }
   }
