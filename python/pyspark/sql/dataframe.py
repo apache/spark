@@ -1277,10 +1277,10 @@ class DataFrame(object):
             If the value is a dict, then `value` is ignored and `to_replace` must be a
             mapping from column name (string) to replacement value. The value to be
             replaced must be an int, long, float, or string.
-        :param value: int, long, float, string, or list.
+        :param value: int, long, float, string, list or None.
             Value to use to replace holes.
-            The replacement value must be an int, long, float, or string. If `value` is a
-            list or tuple, `value` should be of the same length with `to_replace`.
+            The replacement value must be an int, long, float, string or None. If `value`
+            is a list or tuple, `value` should be of the same length with `to_replace`.
         :param subset: optional list of column names to consider.
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
@@ -1296,6 +1296,16 @@ class DataFrame(object):
         |null|  null| null|
         +----+------+-----+
 
+        >>> df4.na.replace('Alice', None).show()
+        +----+------+----+
+        | age|height|name|
+        +----+------+----+
+        |  10|    80|null|
+        |   5|  null| Bob|
+        |null|  null| Tom|
+        |null|  null|null|
+        +----+------+----+
+
         >>> df4.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
         +----+------+----+
         | age|height|name|
@@ -1310,8 +1320,8 @@ class DataFrame(object):
             raise ValueError(
                 "to_replace should be a float, int, long, string, list, tuple, or dict")
 
-        if not isinstance(value, (float, int, long, basestring, list, tuple)):
-            raise ValueError("value should be a float, int, long, string, list, or tuple")
+        if value is not None and not isinstance(value, (float, int, long, basestring, list, tuple)):
+            raise ValueError("value should be a float, int, long, string, list, tuple or None")
 
         rep_dict = dict()
 
@@ -1328,7 +1338,7 @@ class DataFrame(object):
             if len(to_replace) != len(value):
                 raise ValueError("to_replace and value lists should be of the same length")
             rep_dict = dict(zip(to_replace, value))
-        elif isinstance(to_replace, list) and isinstance(value, (float, int, long, basestring)):
+        elif isinstance(to_replace, list) and (value is None or isinstance(value, (float, int, long, basestring))):
             rep_dict = dict([(tr, value) for tr in to_replace])
         elif isinstance(to_replace, dict):
             rep_dict = to_replace
