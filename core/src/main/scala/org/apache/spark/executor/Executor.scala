@@ -479,7 +479,6 @@ private[spark] class Executor(
     override def run(): Unit = {
       val startTimeMs = System.currentTimeMillis()
       def elapsedTimeMs = System.currentTimeMillis() - startTimeMs
-      var exceptionThrown: Boolean = true
       try {
         while (!taskRunner.isFinished && (elapsedTimeMs < killTimeoutMs || killTimeoutMs <= 0)) {
           taskRunner.kill(interruptThread = interruptThread)
@@ -507,20 +506,15 @@ private[spark] class Executor(
           if (isLocal) {
             logError(s"Killed task $taskId could not be stopped within $killPollingFrequencyMs; " +
               "not killing JVM because we are running in local mode.")
-          } else if (!exceptionThrown) {
+          } else {
             // Only throw an exception here in case the finally block was entered via normal
             // execution and not an exception in order to not mask exceptions thrown by TaskReaper
             // itself
             throw new SparkException(
               s"Killing executor JVM because killed task $taskId could not be stopped within " +
                 s"$killTimeoutMs ms.")
-          } else {
-            logError(s"An unexpected exception was thrown in TaskReaper. The task $taskId could " +
-              s"not be stopped within $killTimeoutMs ms. The TaskReaper exception will now " +
-              s"propagate to the uncaught exception handler and trigger JVM exit.")
           }
         }
-        exceptionThrown = false
       } finally {
         // Clean up entries in the taskReaperForTask map.
         taskReaperForTask.synchronized {
