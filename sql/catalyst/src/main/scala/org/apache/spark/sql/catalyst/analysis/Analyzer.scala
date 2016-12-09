@@ -556,14 +556,15 @@ class Analyzer(
     // Change the current database name if the plan is a view, and transformDown with the new
     // database name to resolve all UnresolvedRelation.
     def resolveView(plan: LogicalPlan): LogicalPlan = plan match {
-      case SubqueryAlias(_, view: View, _) =>
+      case p @ SubqueryAlias(_, view: View, _) =>
         val currentDatabase = view.currentDatabase
-        view transform {
+        val newChild = view transform {
           case v: View if !v.resolved =>
             resolveView(v)
           case u: UnresolvedRelation =>
             resolveRelation(u, currentDatabase)
         }
+        p.copy(child = newChild)
       case _ => plan
     }
   }
