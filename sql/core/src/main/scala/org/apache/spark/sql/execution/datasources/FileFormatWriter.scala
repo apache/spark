@@ -249,7 +249,7 @@ object FileFormatWriter extends Logging {
       var recordsInFile = 0
       newOutputWriter(fileCounter)
       while (iter.hasNext) {
-        if (description.maxRecordsPerFile > 0 && recordsInFile == description.maxRecordsPerFile) {
+        if (description.maxRecordsPerFile > 0 && recordsInFile >= description.maxRecordsPerFile) {
           fileCounter += 1
           recordsInFile = 0
           releaseResources()
@@ -426,7 +426,7 @@ object FileFormatWriter extends Logging {
             updatedPartitions.add(partitionPath)
           }
         } else if (description.maxRecordsPerFile > 0 &&
-            recordsInFile == description.maxRecordsPerFile) {
+            recordsInFile >= description.maxRecordsPerFile) {
           // Exceeded the threshold in terms of the number of records per file.
           // Create a new file by increasing the file counter.
           recordsInFile = 0
