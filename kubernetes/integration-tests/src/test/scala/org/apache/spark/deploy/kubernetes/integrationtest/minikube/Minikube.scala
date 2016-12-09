@@ -21,8 +21,8 @@ import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.X509TrustManager
 
-import io.fabric8.kubernetes.client.internal.SSLUtils
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient}
+import io.fabric8.kubernetes.client.internal.SSLUtils
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
