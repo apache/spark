@@ -21,13 +21,13 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 
 import org.apache.spark.sql.TypedImperativeAggregateSuite.TypedMax
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericInternalRow, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericInternalRow, ImplicitCastInputTypes, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, IntegerType, LongType}
+import org.apache.spark.sql.types._
 
 class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
 
@@ -231,7 +231,8 @@ object TypedImperativeAggregateSuite {
       child: Expression,
       nullable: Boolean = false,
       mutableAggBufferOffset: Int = 0,
-      inputAggBufferOffset: Int = 0) extends TypedImperativeAggregate[MaxValue] {
+      inputAggBufferOffset: Int = 0)
+    extends TypedImperativeAggregate[MaxValue] with ImplicitCastInputTypes {
 
 
     override def createAggregationBuffer(): MaxValue = {

@@ -44,7 +44,7 @@ import org.apache.spark.streaming.scheduler.StreamingListener
  * A Java-friendly version of [[org.apache.spark.streaming.StreamingContext]] which is the main
  * entry point for Spark Streaming functionality. It provides methods to create
  * [[org.apache.spark.streaming.api.java.JavaDStream]] and
- * [[org.apache.spark.streaming.api.java.JavaPairDStream.]] from input sources. The internal
+ * [[org.apache.spark.streaming.api.java.JavaPairDStream]] from input sources. The internal
  * org.apache.spark.api.java.JavaSparkContext (see core Spark documentation) can be accessed
  * using `context.sparkContext`. After creating and transforming DStreams, the streaming
  * computation can be started and stopped using `context.start()` and `context.stop()`,

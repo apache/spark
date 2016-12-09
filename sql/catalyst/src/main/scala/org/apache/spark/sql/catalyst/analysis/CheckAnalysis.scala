@@ -190,12 +190,6 @@ trait CheckAnalysis extends PredicateHelper {
               case e =>
             }
 
-          case j @ Join(_, _, UsingJoin(_, cols), _) =>
-            val from = operator.inputSet.map(_.name).mkString(", ")
-            failAnalysis(
-              s"using columns [${cols.mkString(",")}] " +
-                s"can not be resolved given input columns: [$from] ")
-
           case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
             failAnalysis(
               s"join condition '${condition.sql}' " +
@@ -306,7 +300,7 @@ trait CheckAnalysis extends PredicateHelper {
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
-                if (dt1.asNullable != dt2.asNullable) {
+                if (!dt1.sameType(dt2)) {
                   failAnalysis(
                     s"""
                       |${operator.nodeName} can only be performed on tables with the compatible

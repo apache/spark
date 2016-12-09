@@ -357,6 +357,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.redaction.regex</code></td>
+  <td>(?i)secret|password</td>
+  <td>
+    Regex to decide which Spark configuration properties and environment variables in driver and
+    executor environments contain sensitive information. When this regex matches a property, its
+    value is redacted from the environment UI and various logs like YARN and event logs.
+  </td>
+</tr>
+<tr>
   <td><code>spark.python.profile</code></td>
   <td>false</td>
   <td>
@@ -581,7 +590,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.io.encryption.enabled</code></td>
   <td>false</td>
   <td>
-    Enable IO encryption. Only supported in YARN mode.
+    Enable IO encryption. Currently supported by all modes except Mesos. It's recommended that RPC encryption
+    be enabled when using this feature.
   </td>
 </tr>
 <tr>
@@ -687,6 +697,15 @@ Apart from these, the following properties are also available, and may be useful
   <td></td>
   <td>
     This is the URL where your proxy is running. This URL is for proxy which is running in front of Spark Master. This is useful when running proxy for authentication e.g. OAuth proxy. Make sure this is a complete URL including scheme (http/https) and port to reach your proxy.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.showConsoleProgress</code></td>
+  <td>true</td>
+  <td>
+    Show the progress bar in the console. The progress bar shows the progress of stages
+    that run for longer than 500ms. If multiple stages run at the same time, multiple
+    progress bars will be displayed on the same line.
   </td>
 </tr>
 <tr>

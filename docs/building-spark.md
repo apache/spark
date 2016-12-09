@@ -197,7 +197,7 @@ can be set to control the SBT build. For example:
 To avoid the overhead of launching sbt each time you need to re-compile, you can launch sbt
 in interactive mode by running `build/sbt`, and then run all build commands at the command
 prompt. For more recommendations on reducing build time, refer to the
-[wiki page](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-ReducingBuildTimes).
+[Useful Developer Tools page](http://spark.apache.org/developer-tools.html).
 
 ## Encrypted Filesystems
 
@@ -215,7 +215,7 @@ to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/
 ## IntelliJ IDEA or Eclipse
 
 For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troubleshooting, refer to the
-[wiki page for IDE setup](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-IDESetup).
+[Useful Developer Tools page](http://spark.apache.org/developer-tools.html).
 
 
 # Running Tests

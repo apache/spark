@@ -18,14 +18,13 @@ package org.apache.spark.security
 
 import java.io.{InputStream, OutputStream}
 import java.util.Properties
+import javax.crypto.KeyGenerator
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 
 import org.apache.commons.crypto.random._
 import org.apache.commons.crypto.stream._
-import org.apache.hadoop.io.Text
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
@@ -33,10 +32,6 @@ import org.apache.spark.internal.config._
  * A util class for manipulating IO encryption and decryption streams.
  */
 private[spark] object CryptoStreamUtils extends Logging {
-  /**
-   * Constants and variables for spark IO encryption
-   */
-  val SPARK_IO_TOKEN = new Text("SPARK_IO_TOKEN")
 
   // The initialization vector length in bytes.
   val IV_LENGTH_IN_BYTES = 16
@@ -46,32 +41,30 @@ private[spark] object CryptoStreamUtils extends Logging {
   val COMMONS_CRYPTO_CONF_PREFIX = "commons.crypto."
 
   /**
-   * Helper method to wrap [[OutputStream]] with [[CryptoOutputStream]] for encryption.
+   * Helper method to wrap `OutputStream` with `CryptoOutputStream` for encryption.
    */
   def createCryptoOutputStream(
       os: OutputStream,
-      sparkConf: SparkConf): OutputStream = {
+      sparkConf: SparkConf,
+      key: Array[Byte]): OutputStream = {
     val properties = toCryptoConf(sparkConf)
     val iv = createInitializationVector(properties)
     os.write(iv)
-    val credentials = SparkHadoopUtil.get.getCurrentUserCredentials()
-    val key = credentials.getSecretKey(SPARK_IO_TOKEN)
     val transformationStr = sparkConf.get(IO_CRYPTO_CIPHER_TRANSFORMATION)
     new CryptoOutputStream(transformationStr, properties, os,
       new SecretKeySpec(key, "AES"), new IvParameterSpec(iv))
   }
 
   /**
-   * Helper method to wrap [[InputStream]] with [[CryptoInputStream]] for decryption.
+   * Helper method to wrap `InputStream` with `CryptoInputStream` for decryption.
    */
   def createCryptoInputStream(
       is: InputStream,
-      sparkConf: SparkConf): InputStream = {
+      sparkConf: SparkConf,
+      key: Array[Byte]): InputStream = {
     val properties = toCryptoConf(sparkConf)
     val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
     is.read(iv, 0, iv.length)
-    val credentials = SparkHadoopUtil.get.getCurrentUserCredentials()
-    val key = credentials.getSecretKey(SPARK_IO_TOKEN)
     val transformationStr = sparkConf.get(IO_CRYPTO_CIPHER_TRANSFORMATION)
     new CryptoInputStream(transformationStr, properties, is,
       new SecretKeySpec(key, "AES"), new IvParameterSpec(iv))
@@ -89,6 +82,17 @@ private[spark] object CryptoStreamUtils extends Logging {
       }
     }
     props
+  }
+
+  /**
+   * Creates a new encryption key.
+   */
+  def createKey(conf: SparkConf): Array[Byte] = {
+    val keyLen = conf.get(IO_ENCRYPTION_KEY_SIZE_BITS)
+    val ioKeyGenAlgorithm = conf.get(IO_ENCRYPTION_KEYGEN_ALGORITHM)
+    val keyGen = KeyGenerator.getInstance(ioKeyGenAlgorithm)
+    keyGen.init(keyLen)
+    keyGen.generateKey().getEncoded()
   }
 
   /**

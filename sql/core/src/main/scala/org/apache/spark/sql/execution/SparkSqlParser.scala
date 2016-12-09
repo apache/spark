@@ -126,13 +126,23 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * Create a [[ShowTablesCommand]] logical plan.
    * Example SQL :
    * {{{
-   *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
+   *   SHOW TABLES [EXTENDED] [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards']
+   *   [PARTITION(partition_spec)];
    * }}}
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.partitionSpec != null) {
+      operationNotAllowed("SHOW TABLES [EXTENDED] ... PARTITION", ctx)
+    }
+    if (ctx.EXTENDED != null && ctx.pattern == null) {
+      throw new AnalysisException(
+        s"SHOW TABLES EXTENDED must have identifier_with_wildcards specified.")
+    }
+
     ShowTablesCommand(
       Option(ctx.db).map(_.getText),
-      Option(ctx.pattern).map(string))
+      Option(ctx.pattern).map(string),
+      ctx.EXTENDED != null)
   }
 
   /**
@@ -322,7 +332,20 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a [[CreateTable]] logical plan.
+   * Create a data source table, returning a [[CreateTable]] logical plan.
+   *
+   * Expected format:
+   * {{{
+   *   CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
+   *   USING table_provider
+   *   [OPTIONS table_property_list]
+   *   [PARTITIONED BY (col_name, col_name, ...)]
+   *   [CLUSTERED BY (col_name, col_name, ...)
+   *    [SORTED BY (col_name [ASC|DESC], ...)]
+   *    INTO num_buckets BUCKETS
+   *   ]
+   *   [AS select_statement];
+   * }}}
    */
   override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
@@ -371,6 +394,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         operationNotAllowed("CREATE TEMPORARY TABLE ... USING ... AS query", ctx)
       }
 
+      // Don't allow explicit specification of schema for CTAS
+      if (schema.nonEmpty) {
+        operationNotAllowed(
+          "Schema may not be specified in a Create Table As Select (CTAS) statement",
+          ctx)
+      }
       CreateTable(tableDesc, mode, Some(query))
     } else {
       if (temp) {
@@ -813,9 +842,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
     AlterTableDropPartitionCommand(
       visitTableIdentifier(ctx.tableIdentifier),
-      ctx.partitionSpec.asScala.map(visitPartitionFilterSpec),
-      ctx.EXISTS != null,
-      ctx.PURGE != null)
+      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
+      ifExists = ctx.EXISTS != null,
+      purge = ctx.PURGE != null,
+      retainData = false)
   }
 
   /**
@@ -1052,7 +1082,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
             "CTAS statement."
           operationNotAllowed(errorMessage, ctx)
         }
-        // Just use whatever is projected in the select statement as our schema
+
+        // Don't allow explicit specification of schema for CTAS.
         if (schema.nonEmpty) {
           operationNotAllowed(
             "Schema may not be specified in a Create Table As Select (CTAS) statement",

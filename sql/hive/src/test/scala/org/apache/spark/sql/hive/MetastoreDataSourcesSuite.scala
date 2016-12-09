@@ -413,6 +413,26 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
+  test("saveAsTable(CTAS) using append and insertInto when the target table is Hive serde") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName STORED AS SEQUENCEFILE AS SELECT 1 AS key, 'abc' AS value")
+
+      val df = sql(s"SELECT key, value FROM $tableName")
+      val e = intercept[AnalysisException] {
+        df.write.mode(SaveMode.Append).saveAsTable(tableName)
+      }.getMessage
+      assert(e.contains("Saving data in the Hive serde table `default`.`tab1` is not supported " +
+        "yet. Please use the insertInto() API as an alternative."))
+
+      df.write.insertInto(tableName)
+      checkAnswer(
+        sql(s"SELECT * FROM $tableName"),
+        Row(1, "abc") :: Row(1, "abc") :: Nil
+      )
+    }
+  }
+
   test("SPARK-5839 HiveMetastoreCatalog does not recognize table aliases of data source tables.") {
     withTable("savedJsonTable") {
       // Save the df as a managed table (by not specifying the path).
@@ -1348,49 +1368,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       f
     } finally {
       sparkSession.sparkContext.conf.set(DEBUG_MODE, previousValue)
-    }
-  }
-
-  test("SPARK-17470: support old table that stores table location in storage properties") {
-    withTable("old") {
-      withTempPath { path =>
-        Seq(1 -> "a").toDF("i", "j").write.parquet(path.getAbsolutePath)
-        val tableDesc = CatalogTable(
-          identifier = TableIdentifier("old", Some("default")),
-          tableType = CatalogTableType.EXTERNAL,
-          storage = CatalogStorageFormat.empty.copy(
-            properties = Map("path" -> path.getAbsolutePath)
-          ),
-          schema = new StructType(),
-          properties = Map(
-            HiveExternalCatalog.DATASOURCE_PROVIDER -> "parquet",
-            HiveExternalCatalog.DATASOURCE_SCHEMA ->
-              new StructType().add("i", "int").add("j", "string").json))
-        hiveClient.createTable(tableDesc, ignoreIfExists = false)
-        checkAnswer(spark.table("old"), Row(1, "a"))
-      }
-    }
-  }
-
-  test("SPARK-18464: support old table which doesn't store schema in table properties") {
-    withTable("old") {
-      withTempPath { path =>
-        Seq(1 -> "a").toDF("i", "j").write.parquet(path.getAbsolutePath)
-        val tableDesc = CatalogTable(
-          identifier = TableIdentifier("old", Some("default")),
-          tableType = CatalogTableType.EXTERNAL,
-          storage = CatalogStorageFormat.empty.copy(
-            properties = Map("path" -> path.getAbsolutePath)
-          ),
-          schema = new StructType(),
-          properties = Map(
-            HiveExternalCatalog.DATASOURCE_PROVIDER -> "parquet"))
-        hiveClient.createTable(tableDesc, ignoreIfExists = false)
-
-        checkAnswer(spark.table("old"), Row(1, "a"))
-
-        checkAnswer(sql("DESC old"), Row("i", "int", null) :: Row("j", "string", null) :: Nil)
-      }
     }
   }
 }

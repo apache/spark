@@ -89,11 +89,14 @@ class GeneralizedLinearRegressionSuite
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
       family = "poisson", link = "log").toDF()
 
-    datasetPoissonLogWithZero = generateGeneralizedLinearRegressionInput(
-      intercept = -1.5, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
-      xVariance = Array(0.7, 1.2), nPoints = 100, seed, noiseLevel = 0.01,
-      family = "poisson", link = "log")
-      .map{x => LabeledPoint(if (x.label < 0.7) 0.0 else x.label, x.features)}.toDF()
+    datasetPoissonLogWithZero = Seq(
+      LabeledPoint(0.0, Vectors.dense(18, 1.0)),
+      LabeledPoint(1.0, Vectors.dense(12, 0.0)),
+      LabeledPoint(0.0, Vectors.dense(15, 0.0)),
+      LabeledPoint(0.0, Vectors.dense(13, 2.0)),
+      LabeledPoint(0.0, Vectors.dense(15, 1.0)),
+      LabeledPoint(1.0, Vectors.dense(16, 1.0))
+    ).toDF()
 
     datasetPoissonIdentity = generateGeneralizedLinearRegressionInput(
       intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
@@ -480,12 +483,12 @@ class GeneralizedLinearRegressionSuite
          model <- glm(formula, family="poisson", data=data)
          print(as.vector(coef(model)))
        }
-       [1]  0.4272661 -0.1565423
-       [1] -3.6911354  0.6214301  0.1295814
+       [1] -0.0457441 -0.6833928
+       [1] 1.8121235  -0.1747493  -0.5815417
      */
     val expected = Seq(
-      Vectors.dense(0.0, 0.4272661, -0.1565423),
-      Vectors.dense(-3.6911354, 0.6214301, 0.1295814))
+      Vectors.dense(0.0, -0.0457441, -0.6833928),
+      Vectors.dense(1.8121235, -0.1747493, -0.5815417))
 
     import GeneralizedLinearRegression._
 
@@ -1046,6 +1049,27 @@ class GeneralizedLinearRegressionSuite
     assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
     assert(summary.aic ~== aicR absTol 1E-3)
     assert(summary.solver === "irls")
+  }
+
+  test("glm handle collinear features") {
+    val collinearInstances = Seq(
+      Instance(1.0, 1.0, Vectors.dense(1.0, 2.0)),
+      Instance(2.0, 1.0, Vectors.dense(2.0, 4.0)),
+      Instance(3.0, 1.0, Vectors.dense(3.0, 6.0)),
+      Instance(4.0, 1.0, Vectors.dense(4.0, 8.0))
+    ).toDF()
+    val trainer = new GeneralizedLinearRegression()
+    val model = trainer.fit(collinearInstances)
+    // to make it clear that underlying WLS did not solve analytically
+    intercept[UnsupportedOperationException] {
+      model.summary.coefficientStandardErrors
+    }
+    intercept[UnsupportedOperationException] {
+      model.summary.pValues
+    }
+    intercept[UnsupportedOperationException] {
+      model.summary.tValues
+    }
   }
 
   test("read/write") {

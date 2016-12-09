@@ -68,7 +68,7 @@ trait QueryExecutionListener {
 /**
  * :: Experimental ::
  *
- * Manager for [[QueryExecutionListener]]. See [[org.apache.spark.sql.SQLContext.listenerManager]].
+ * Manager for [[QueryExecutionListener]]. See `org.apache.spark.sql.SQLContext.listenerManager`.
  */
 @Experimental
 @InterfaceStability.Evolving

@@ -24,7 +24,7 @@ import org.apache.spark.sql.functions
 import org.apache.spark.sql.types.DataType
 
 /**
- * A user-defined function. To create one, use the `udf` functions in [[functions]].
+ * A user-defined function. To create one, use the `udf` functions in `functions`.
  *
  * As an example:
  * {{{

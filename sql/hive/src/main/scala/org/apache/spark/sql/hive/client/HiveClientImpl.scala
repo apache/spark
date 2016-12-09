@@ -46,7 +46,8 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -281,6 +282,7 @@ private[hive] class HiveClientImpl(
     shim.setCurrentSessionState(state)
     val ret = try f finally {
       Thread.currentThread().setContextClassLoader(original)
+      HiveCatalogMetrics.incrementHiveClientCalls(1)
     }
     ret
   }
@@ -451,7 +453,8 @@ private[hive] class HiveClientImpl(
       table: String,
       specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit = withHiveState {
+      purge: Boolean,
+      retainData: Boolean): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
     val hiveTable = client.getTable(db, table, true /* throw exception */)
     // do the check at first and collect all the matching partitions
@@ -471,8 +474,7 @@ private[hive] class HiveClientImpl(
     var droppedParts = ArrayBuffer.empty[java.util.List[String]]
     matchingParts.foreach { partition =>
       try {
-        val deleteData = true
-        shim.dropPartition(client, db, table, partition, deleteData, purge)
+        shim.dropPartition(client, db, table, partition, !retainData, purge)
       } catch {
         case e: Exception =>
           val remainingParts = matchingParts.toBuffer -- droppedParts
@@ -515,6 +517,26 @@ private[hive] class HiveClientImpl(
       newParts: Seq[CatalogTablePartition]): Unit = withHiveState {
     val hiveTable = toHiveTable(getTable(db, table))
     client.alterPartitions(table, newParts.map { p => toHivePartition(p, hiveTable) }.asJava)
+  }
+
+  /**
+   * Returns the partition names for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   *
+   * The returned sequence is sorted as strings.
+   */
+  override def getPartitionNames(
+      table: CatalogTable,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String] = withHiveState {
+    val hivePartitionNames =
+      partialSpec match {
+        case None =>
+          // -1 for result limit means "no limit/return all"
+          client.getPartitionNames(table.database, table.identifier.table, -1)
+        case Some(s) =>
+          client.getPartitionNames(table.database, table.identifier.table, s.asJava, -1)
+      }
+    hivePartitionNames.asScala.sorted
   }
 
   override def getPartitionOption(
@@ -747,7 +769,12 @@ private[hive] class HiveClientImpl(
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
   private def toHiveColumn(c: StructField): FieldSchema = {
-    new FieldSchema(c.name, c.dataType.catalogString, c.getComment().orNull)
+    val typeString = if (c.metadata.contains(HiveUtils.hiveTypeString)) {
+      c.metadata.getString(HiveUtils.hiveTypeString)
+    } else {
+      c.dataType.catalogString
+    }
+    new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
 
   private def fromHiveColumn(hc: FieldSchema): StructField = {
@@ -757,10 +784,13 @@ private[hive] class HiveClientImpl(
       case e: ParseException =>
         throw new SparkException("Cannot recognize hive type string: " + hc.getType, e)
     }
+
+    val metadata = new MetadataBuilder().putString(HiveUtils.hiveTypeString, hc.getType).build()
     val field = StructField(
       name = hc.getName,
       dataType = columnType,
-      nullable = true)
+      nullable = true,
+      metadata = metadata)
     Option(hc.getComment).map(field.withComment).getOrElse(field)
   }
 

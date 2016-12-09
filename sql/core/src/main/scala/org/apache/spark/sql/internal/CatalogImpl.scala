@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.StructType
 
 
 /**
- * Internal implementation of the user-facing [[Catalog]].
+ * Internal implementation of the user-facing `Catalog`.
  */
 class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
@@ -175,8 +175,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Get the database with the specified name. This throws an [[AnalysisException]] when no
-   * [[Database]] can be found.
+   * Get the database with the specified name. This throws an `AnalysisException` when no
+   * `Database` can be found.
    */
   override def getDatabase(dbName: String): Database = {
     makeDatabase(dbName)
@@ -184,7 +184,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Get the table or view with the specified name. This table can be a temporary view or a
-   * table/view in the current database. This throws an [[AnalysisException]] when no [[Table]]
+   * table/view in the current database. This throws an `AnalysisException` when no `Table`
    * can be found.
    */
   override def getTable(tableName: String): Table = {
@@ -193,7 +193,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Get the table or view with the specified name in the specified database. This throws an
-   * [[AnalysisException]] when no [[Table]] can be found.
+   * `AnalysisException` when no `Table` can be found.
    */
   override def getTable(dbName: String, tableName: String): Table = {
     makeTable(TableIdentifier(tableName, Option(dbName)))
@@ -201,7 +201,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Get the function with the specified name. This function can be a temporary function or a
-   * function in the current database. This throws an [[AnalysisException]] when no [[Function]]
+   * function in the current database. This throws an `AnalysisException` when no `Function`
    * can be found.
    */
   override def getFunction(functionName: String): Function = {
@@ -209,7 +209,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Get the function with the specified name. This returns [[None]] when no [[Function]] can be
+   * Get the function with the specified name. This returns `None` when no `Function` can be
    * found.
    */
   override def getFunction(dbName: String, functionName: String): Function = {

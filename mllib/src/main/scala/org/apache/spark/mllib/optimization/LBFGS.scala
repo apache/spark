@@ -31,7 +31,8 @@ import org.apache.spark.rdd.RDD
 /**
  * :: DeveloperApi ::
  * Class used to solve an optimization problem using Limited-memory BFGS.
- * Reference: [[http://en.wikipedia.org/wiki/Limited-memory_BFGS]]
+ * Reference: <a href="http://en.wikipedia.org/wiki/Limited-memory_BFGS">
+ * Wikipedia on Limited-memory BFGS</a>
  * @param gradient Gradient function to be used.
  * @param updater Updater to be used to update weights after every iteration.
  */
@@ -48,8 +49,7 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
    * Set the number of corrections used in the LBFGS update. Default 10.
    * Values of numCorrections less than 3 are not recommended; large values
    * of numCorrections will result in excessive computing time.
-   * 3 < numCorrections < 10 is recommended.
-   * Restriction: numCorrections > 0
+   * numCorrections must be positive, and values from 4 to 9 are generally recommended.
    */
   def setNumCorrections(corrections: Int): this.type = {
     require(corrections > 0,
@@ -251,6 +251,9 @@ object LBFGS extends Logging {
             axpy(1.0, grad2, grad1)
             (grad1, loss1 + loss2)
           })
+
+      // broadcasted model is not needed anymore
+      bcW.destroy()
 
       /**
        * regVal is sum of weight squares if it's L2 updater;

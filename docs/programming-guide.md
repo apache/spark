@@ -1378,18 +1378,23 @@ res2: Long = 10
 
 While this code used the built-in support for accumulators of type Long, programmers can also
 create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.util.AccumulatorV2).
-The AccumulatorV2 abstract class has several methods which need to override: 
-`reset` for resetting the accumulator to zero, and `add` for add anothor value into the accumulator, `merge` for merging another same-type accumulator into this one. Other methods need to override can refer to scala API document. For example, supposing we had a `MyVector` class
+The AccumulatorV2 abstract class has several methods which one has to override: `reset` for resetting
+the accumulator to zero, `add` for adding another value into the accumulator,
+`merge` for merging another same-type accumulator into this one. Other methods that must be overridden
+are contained in the [API documentation](api/scala/index.html#org.apache.spark.util.AccumulatorV2). For example, supposing we had a `MyVector` class
 representing mathematical vectors, we could write:
 
 {% highlight scala %}
-object VectorAccumulatorV2 extends AccumulatorV2[MyVector, MyVector] {
-  val vec_ : MyVector = MyVector.createZeroVector
-  def reset(): MyVector = {
-    vec_.reset()
+class VectorAccumulatorV2 extends AccumulatorV2[MyVector, MyVector] {
+
+  private val myVector: MyVector = MyVector.createZeroVector
+
+  def reset(): Unit = {
+    myVector.reset()
   }
-  def add(v1: MyVector, v2: MyVector): MyVector = {
-    vec_.add(v2)
+
+  def add(v: MyVector): Unit = {
+    myVector.add(v)
   }
   ...
 }
@@ -1424,29 +1429,36 @@ accum.value();
 // returns 10
 {% endhighlight %}
 
-Programmers can also create their own types by subclassing
-[AccumulatorParam](api/java/index.html?org/apache/spark/AccumulatorParam.html).
-The AccumulatorParam interface has two methods: `zero` for providing a "zero value" for your data
-type, and `addInPlace` for adding two values together. For example, supposing we had a `Vector` class
+While this code used the built-in support for accumulators of type Long, programmers can also
+create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.util.AccumulatorV2).
+The AccumulatorV2 abstract class has several methods which one has to override: `reset` for resetting
+the accumulator to zero, `add` for adding another value into the accumulator,
+`merge` for merging another same-type accumulator into this one. Other methods that must be overridden
+are contained in the [API documentation](api/scala/index.html#org.apache.spark.util.AccumulatorV2). For example, supposing we had a `MyVector` class
 representing mathematical vectors, we could write:
 
 {% highlight java %}
-class VectorAccumulatorParam implements AccumulatorParam<Vector> {
-  public Vector zero(Vector initialValue) {
-    return Vector.zeros(initialValue.size());
+class VectorAccumulatorV2 implements AccumulatorV2<MyVector, MyVector> {
+
+  private MyVector myVector = MyVector.createZeroVector();
+
+  public void reset() {
+    myVector.reset();
   }
-  public Vector addInPlace(Vector v1, Vector v2) {
-    v1.addInPlace(v2); return v1;
+
+  public void add(MyVector v) {
+    myVector.add(v);
   }
+  ...
 }
 
 // Then, create an Accumulator of this type:
-Accumulator<Vector> vecAccum = sc.accumulator(new Vector(...), new VectorAccumulatorParam());
+VectorAccumulatorV2 myVectorAcc = new VectorAccumulatorV2();
+// Then, register it into spark context:
+jsc.sc().register(myVectorAcc, "MyVectorAcc1");
 {% endhighlight %}
 
-In Java, Spark also supports the more general [Accumulable](api/java/index.html?org/apache/spark/Accumulable.html)
-interface to accumulate data where the resulting type is not the same as the elements added (e.g. build
-a list by collecting together elements).
+Note that, when programmers define their own type of AccumulatorV2, the resulting type can be different than that of the elements added.
 
 </div>
 

@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
 
@@ -51,6 +51,7 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
 
 
   test("watermark metric") {
+
     val inputData = MemoryStream[Int]
 
     val windowedAggregation = inputData.toDF()
@@ -62,16 +63,19 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
 
     testStream(windowedAggregation)(
       AddData(inputData, 15),
-      AssertOnLastQueryStatus { status =>
-        status.triggerDetails.get(StreamMetrics.EVENT_TIME_WATERMARK) === "5000"
+      CheckAnswer(),
+      AssertOnQuery { query =>
+        query.lastProgress.currentWatermark === 5000
       },
       AddData(inputData, 15),
-      AssertOnLastQueryStatus { status =>
-        status.triggerDetails.get(StreamMetrics.EVENT_TIME_WATERMARK) === "5000"
+      CheckAnswer(),
+      AssertOnQuery { query =>
+        query.lastProgress.currentWatermark === 5000
       },
       AddData(inputData, 25),
-      AssertOnLastQueryStatus { status =>
-        status.triggerDetails.get(StreamMetrics.EVENT_TIME_WATERMARK) === "15000"
+      CheckAnswer(),
+      AssertOnQuery { query =>
+        query.lastProgress.currentWatermark === 15000
       }
     )
   }
@@ -96,27 +100,41 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
     )
   }
 
-  ignore("recovery") {
+  test("recovery") {
     val inputData = MemoryStream[Int]
+    val df = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-    val windowedAggregation = inputData.toDF()
-        .withColumn("eventTime", $"value".cast("timestamp"))
-        .withWatermark("eventTime", "10 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
-        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
-
-    testStream(windowedAggregation)(
+    testStream(df)(
       AddData(inputData, 10, 11, 12, 13, 14, 15),
-      CheckAnswer(),
+      CheckLastBatch(),
       AddData(inputData, 25), // Advance watermark to 15 seconds
       StopStream,
       StartStream(),
-      CheckAnswer(),
+      CheckLastBatch(),
       AddData(inputData, 25), // Evict items less than previous watermark.
+      CheckLastBatch((10, 5)),
       StopStream,
+      AssertOnQuery { q => // clear the sink
+        q.sink.asInstanceOf[MemorySink].clear()
+        true
+      },
       StartStream(),
-      CheckAnswer((10, 5))
+      CheckLastBatch((10, 5)), // Recompute last batch and re-evict timestamp 10
+      AddData(inputData, 30), // Advance watermark to 20 seconds
+      CheckLastBatch(),
+      StopStream,
+      StartStream(), // Watermark should still be 15 seconds
+      AddData(inputData, 17),
+      CheckLastBatch(), // We still do not see next batch
+      AddData(inputData, 30), // Advance watermark to 20 seconds
+      CheckLastBatch(),
+      AddData(inputData, 30), // Evict items less than previous watermark.
+      CheckLastBatch((15, 2)) // Ensure we see next window
     )
   }
 
