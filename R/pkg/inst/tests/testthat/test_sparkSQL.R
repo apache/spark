@@ -576,7 +576,7 @@ test_that("test tableNames and tables", {
   tables <- tables()
   expect_equal(count(tables), 2)
   suppressWarnings(dropTempTable("table1"))
-  dropTempView("table2")
+  expect_true(dropTempView("table2"))
 
   tables <- tables()
   expect_equal(count(tables), 0)
