@@ -142,7 +142,7 @@ private[deploy] object IvyTestUtils {
         |}
       """.stripMargin
     val sourceFile =
-      new JavaSourceFromString(new File(dir, className).getAbsolutePath, contents)
+      new JavaSourceFromString(new File(dir, className).toURI.getPath, contents)
     createCompiledClass(className, dir, sourceFile, Seq.empty)
   }
 
