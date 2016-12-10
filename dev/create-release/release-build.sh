@@ -150,7 +150,7 @@ if [[ "$1" == "package" ]]; then
     NAME=$1
     FLAGS=$2
     ZINC_PORT=$3
-    BUILD_PIP_PACKAGE=$4
+    BUILD_PACKAGE=$4
     cp -r spark spark-$SPARK_VERSION-bin-$NAME
 
     cd spark-$SPARK_VERSION-bin-$NAME
@@ -172,11 +172,30 @@ if [[ "$1" == "package" ]]; then
     MVN_HOME=`$MVN -version 2>&1 | grep 'Maven home' | awk '{print $NF}'`
 
 
-    if [ -z "$BUILD_PIP_PACKAGE" ]; then
-      echo "Creating distribution without PIP package"
+    if [ -z "$BUILD_PACKAGE" ]; then
+      echo "Creating distribution without PIP/R package"
       ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz $FLAGS \
         -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
       cd ..
+    elif [[ "$BUILD_PACKAGE" == "withr" ]]; then
+      echo "Creating distribution with R package"
+      ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz --r $FLAGS \
+        -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
+      cd ..
+
+      echo "Copying and signing R source package"
+      R_DIST_NAME=SparkR_$SPARK_VERSION.tar.gz
+      cp spark-$SPARK_VERSION-bin-$NAME/R/$R_DIST_NAME .
+
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
+        --output $R_DIST_NAME.asc \
+        --detach-sig $R_DIST_NAME
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
+        MD5 $R_DIST_NAME > \
+        $R_DIST_NAME.md5
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
+        SHA512 $R_DIST_NAME > \
+        $R_DIST_NAME.sha
     else
       echo "Creating distribution with PIP package"
       ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz --pip $FLAGS \
@@ -219,7 +238,7 @@ if [[ "$1" == "package" ]]; then
   FLAGS="-Psparkr -Phive -Phive-thriftserver -Pyarn -Pmesos"
   make_binary_release "hadoop2.3" "-Phadoop-2.3 $FLAGS" "3033" &
   make_binary_release "hadoop2.4" "-Phadoop-2.4 $FLAGS" "3034" &
-  make_binary_release "hadoop2.6" "-Phadoop-2.6 $FLAGS" "3035" &
+  make_binary_release "hadoop2.6" "-Phadoop-2.6 $FLAGS" "3035" "withr" &
   make_binary_release "hadoop2.7" "-Phadoop-2.7 $FLAGS" "3036" "withpip" &
   make_binary_release "hadoop2.4-without-hive" "-Psparkr -Phadoop-2.4 -Pyarn -Pmesos" "3037" &
   make_binary_release "without-hadoop" "-Psparkr -Phadoop-provided -Pyarn -Pmesos" "3038" &
@@ -232,6 +251,8 @@ if [[ "$1" == "package" ]]; then
   # Put to new directory:
   LFTP mkdir -p $dest_dir
   LFTP mput -O $dest_dir 'spark-*'
+  LFTP mput -O $dest_dir 'pyspark-*'
+  LFTP mput -O $dest_dir 'SparkR_*'
   # Delete /latest directory and rename new upload to /latest
   LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
@@ -239,6 +260,7 @@ if [[ "$1" == "package" ]]; then
   LFTP mkdir -p $dest_dir
   LFTP mput -O $dest_dir 'spark-*'
   LFTP mput -O $dest_dir 'pyspark-*'
+  LFTP mput -O $dest_dir 'SparkR_*'
   exit 0
 fi
 

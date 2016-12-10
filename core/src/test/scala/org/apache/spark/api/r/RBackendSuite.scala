@@ -15,27 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rpc
+package org.apache.spark.api.r
 
-/**
- * A callback that [[RpcEndpoint]] can use to send back a message or failure. It's thread-safe
- * and can be called in any thread.
- */
-private[spark] trait RpcCallContext {
+import org.apache.spark.SparkFunSuite
 
-  /**
-   * Reply a message to the sender. If the sender is [[RpcEndpoint]], its [[RpcEndpoint.receive]]
-   * will be called.
-   */
-  def reply(response: Any): Unit
-
-  /**
-   * Report a failure to the sender.
-   */
-  def sendFailure(e: Throwable): Unit
-
-  /**
-   * The sender of this message.
-   */
-  def senderAddress: RpcAddress
+class RBackendSuite extends SparkFunSuite {
+  test("close() clears jvmObjectTracker") {
+    val backend = new RBackend
+    val tracker = backend.jvmObjectTracker
+    val id = tracker.addAndGetId(new Object)
+    backend.close()
+    assert(tracker.get(id) === None)
+    assert(tracker.size === 0)
+  }
 }

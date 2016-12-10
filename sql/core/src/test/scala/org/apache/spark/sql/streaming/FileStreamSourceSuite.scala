@@ -31,7 +31,8 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class FileStreamSourceTest extends StreamTest with SharedSQLContext with PrivateMethodTester {
+abstract class FileStreamSourceTest
+  extends StreamTest with SharedSQLContext with PrivateMethodTester {
 
   import testImplicits._
 
@@ -60,7 +61,7 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext with Private
       val source = sources.head
       val newOffset = source.withBatchingLocked {
         addData(source)
-        source.currentOffset + 1
+        new FileStreamSourceOffset(source.currentLogOffset + 1)
       }
       logInfo(s"Added file to $source at offset $newOffset")
       (source, newOffset)
@@ -848,13 +849,13 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val explainWithoutExtended = q.explainInternal(false)
         // `extended = false` only displays the physical plan.
         assert("Relation.*text".r.findAllMatchIn(explainWithoutExtended).size === 0)
-        assert("TextFileFormat".r.findAllMatchIn(explainWithoutExtended).size === 1)
+        assert(": Text".r.findAllMatchIn(explainWithoutExtended).size === 1)
 
         val explainWithExtended = q.explainInternal(true)
         // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
         // plan.
         assert("Relation.*text".r.findAllMatchIn(explainWithExtended).size === 3)
-        assert("TextFileFormat".r.findAllMatchIn(explainWithExtended).size === 1)
+        assert(": Text".r.findAllMatchIn(explainWithExtended).size === 1)
       } finally {
         q.stop()
       }
@@ -986,12 +987,17 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
             val _sources = PrivateMethod[Seq[Source]]('sources)
             val fileSource =
               (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
-            assert(fileSource.getBatch(None, LongOffset(2)).as[String].collect() ===
-              List("keep1", "keep2", "keep3"))
-            assert(fileSource.getBatch(Some(LongOffset(0)), LongOffset(2)).as[String].collect() ===
-              List("keep2", "keep3"))
-            assert(fileSource.getBatch(Some(LongOffset(1)), LongOffset(2)).as[String].collect() ===
-              List("keep3"))
+
+            def verify(startId: Option[Int], endId: Int, expected: String*): Unit = {
+              val start = startId.map(new FileStreamSourceOffset(_))
+              val end = FileStreamSourceOffset(endId)
+              assert(fileSource.getBatch(start, end).as[String].collect().toSeq === expected)
+            }
+
+            verify(startId = None, endId = 2, "keep1", "keep2", "keep3")
+            verify(startId = Some(0), endId = 1, "keep2")
+            verify(startId = Some(0), endId = 2, "keep2", "keep3")
+            verify(startId = Some(1), endId = 2, "keep3")
             true
           }
         )
@@ -1022,9 +1028,14 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     assert(options.maxFilesPerTrigger == Some(1))
   }
 
-  test("FileStreamSource offset - read Spark 2.1.0 log format") {
-    val offset = readOffsetFromResource("file-source-offset-version-2.1.0.txt")
-    assert(LongOffset.convert(offset) === Some(LongOffset(345)))
+  test("FileStreamSource offset - read Spark 2.1.0 offset json format") {
+    val offset = readOffsetFromResource("file-source-offset-version-2.1.0-json.txt")
+    assert(FileStreamSourceOffset(offset) === FileStreamSourceOffset(345))
+  }
+
+  test("FileStreamSource offset - read Spark 2.1.0 offset long format") {
+    val offset = readOffsetFromResource("file-source-offset-version-2.1.0-long.txt")
+    assert(FileStreamSourceOffset(offset) === FileStreamSourceOffset(345))
   }
 
   test("FileStreamSourceLog - read Spark 2.1.0 log format") {
