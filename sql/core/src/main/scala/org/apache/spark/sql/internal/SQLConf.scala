@@ -136,7 +136,7 @@ object SQLConf {
       "That is to say by default the optimizer will not choose to broadcast a table unless it " +
       "knows for sure its size is small enough.")
     .longConf
-    .createWithDefault(-1)
+    .createWithDefault(Long.MaxValue)
 
   val SHUFFLE_PARTITIONS = SQLConfigBuilder("spark.sql.shuffle.partitions")
     .doc("The default number of partitions to use when shuffling data for joins or aggregations.")
@@ -764,7 +764,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
-  def defaultSizeInBytes: Long = getConf(DEFAULT_SIZE_IN_BYTES, Long.MaxValue)
+  def defaultSizeInBytes: Long = getConf(DEFAULT_SIZE_IN_BYTES)
 
   def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
 
