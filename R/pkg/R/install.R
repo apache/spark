@@ -182,16 +182,24 @@ getPreferredMirror <- function(version, packageName) {
 }
 
 directDownloadTar <- function(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath) {
-  packageRemotePath <- paste0(
-    file.path(mirrorUrl, version, packageName), ".tgz")
-  fmt <- "Downloading %s for Hadoop %s from:\n- %s"
-  msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion),
-                 packageRemotePath)
-  message(msg)
+  releaseUrl <- Sys.getenv("SPARKR_RELEASE_DOWNLOAD_URL")
+  if (releaseUrl != "") {
+    packageRemotePath <- releaseUrl
+    baseUrl <- releaseUrl
+    message("Downloading from alternate URL:\n- %s", packageRemotePath)
+  } else {
+    packageRemotePath <- paste0(
+      file.path(mirrorUrl, version, packageName), ".tgz")
+    baseUrl <- mirrorUrl
+    fmt <- "Downloading %s for Hadoop %s from:\n- %s"
+    msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion),
+                   packageRemotePath)
+    message(msg)
+  }
 
   isFail <- tryCatch(download.file(packageRemotePath, packageLocalPath),
                      error = function(e) {
-                       message(sprintf("Fetch failed from %s", mirrorUrl))
+                       message(sprintf("Fetch failed from %s", baseUrl))
                        print(e)
                        TRUE
                      })
