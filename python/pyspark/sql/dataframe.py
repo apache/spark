@@ -1338,7 +1338,8 @@ class DataFrame(object):
             if len(to_replace) != len(value):
                 raise ValueError("to_replace and value lists should be of the same length")
             rep_dict = dict(zip(to_replace, value))
-        elif isinstance(to_replace, list) and (value is None or isinstance(value, (float, int, long, basestring))):
+        elif (isinstance(to_replace, list) and
+                (value is None or isinstance(value, (float, int, long, basestring)))):
             rep_dict = dict([(tr, value) for tr in to_replace])
         elif isinstance(to_replace, dict):
             rep_dict = to_replace
