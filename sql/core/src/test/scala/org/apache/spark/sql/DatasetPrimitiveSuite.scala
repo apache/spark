@@ -130,6 +130,30 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     checkDataset(Seq(Array(Tuple1(1))).toDS(), Array(Tuple1(1)))
   }
 
+  test("arbitrary sequences") {
+    import scala.collection.immutable.Queue
+    checkDataset(Seq(Queue(1)).toDS(), Queue(1))
+    checkDataset(Seq(Queue(1.toLong)).toDS(), Queue(1.toLong))
+    checkDataset(Seq(Queue(1.toDouble)).toDS(), Queue(1.toDouble))
+    checkDataset(Seq(Queue(1.toFloat)).toDS(), Queue(1.toFloat))
+    checkDataset(Seq(Queue(1.toByte)).toDS(), Queue(1.toByte))
+    checkDataset(Seq(Queue(1.toShort)).toDS(), Queue(1.toShort))
+    checkDataset(Seq(Queue(true)).toDS(), Queue(true))
+    checkDataset(Seq(Queue("test")).toDS(), Queue("test"))
+    checkDataset(Seq(Queue(Tuple1(1))).toDS(), Queue(Tuple1(1)))
+
+    import scala.collection.mutable.ArrayBuffer
+    checkDataset(Seq(ArrayBuffer(1)).toDS(), ArrayBuffer(1))
+    checkDataset(Seq(ArrayBuffer(1.toLong)).toDS(), ArrayBuffer(1.toLong))
+    checkDataset(Seq(ArrayBuffer(1.toDouble)).toDS(), ArrayBuffer(1.toDouble))
+    checkDataset(Seq(ArrayBuffer(1.toFloat)).toDS(), ArrayBuffer(1.toFloat))
+    checkDataset(Seq(ArrayBuffer(1.toByte)).toDS(), ArrayBuffer(1.toByte))
+    checkDataset(Seq(ArrayBuffer(1.toShort)).toDS(), ArrayBuffer(1.toShort))
+    checkDataset(Seq(ArrayBuffer(true)).toDS(), ArrayBuffer(true))
+    checkDataset(Seq(ArrayBuffer("test")).toDS(), ArrayBuffer("test"))
+    checkDataset(Seq(ArrayBuffer(Tuple1(1))).toDS(), ArrayBuffer(Tuple1(1)))
+  }
+
   test("package objects") {
     import packageobject._
     checkDataset(Seq(PackageClass(1)).toDS(), PackageClass(1))

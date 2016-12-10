@@ -318,13 +318,38 @@ object ScalaReflection extends ScalaReflection {
           "make",
           array :: Nil)
 
-        if (t <:< localTypeOf[List[_]]) {
+        if (localTypeOf[scala.collection.mutable.WrappedArray[_]] <:< t.erasure) {
+          wrappedArray
+        } else {
+          // Convert to another type using `to`
+          val cls = mirror.runtimeClass(t.typeSymbol.asClass)
+          import scala.collection.generic.CanBuildFrom
+          import scala.reflect.ClassTag
+          import scala.util.{Try, Success}
           Invoke(
             wrappedArray,
-            "toList",
-            ObjectType(classOf[List[_]]))
-        } else {
-          wrappedArray
+            "to",
+            ObjectType(cls),
+            StaticInvoke(
+              cls,
+              ObjectType(classOf[CanBuildFrom[_, _, _]]),
+              "canBuildFrom",
+              Try(cls.getDeclaredMethod("canBuildFrom", classOf[ClassTag[_]])) match {
+                case Success(_) =>
+                  StaticInvoke(
+                    ClassTag.getClass,
+                    ObjectType(classOf[ClassTag[_]]),
+                    "apply",
+                    StaticInvoke(
+                      cls,
+                      ObjectType(classOf[Class[_]]),
+                      "getClass"
+                    ) :: Nil
+                  ) :: Nil
+                case _ => Nil
+              }
+            ) :: Nil
+          )
         }
 
       case t if t <:< localTypeOf[Map[_, _]] =>

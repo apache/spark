@@ -100,31 +100,72 @@ abstract class SQLImplicits {
   // Seqs
 
   /** @since 1.6.1 */
-  implicit def newIntSeqEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
+  implicit def newIntSeqEncoder[T <: Seq[Int] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
   /** @since 1.6.1 */
-  implicit def newLongSeqEncoder: Encoder[Seq[Long]] = ExpressionEncoder()
+  implicit def newLongSeqEncoder[T <: Seq[Long] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
   /** @since 1.6.1 */
-  implicit def newDoubleSeqEncoder: Encoder[Seq[Double]] = ExpressionEncoder()
+  implicit def newDoubleSeqEncoder[T <: Seq[Double] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
   /** @since 1.6.1 */
-  implicit def newFloatSeqEncoder: Encoder[Seq[Float]] = ExpressionEncoder()
+  implicit def newFloatSeqEncoder[T <: Seq[Float] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
   /** @since 1.6.1 */
-  implicit def newByteSeqEncoder: Encoder[Seq[Byte]] = ExpressionEncoder()
+  implicit def newByteSeqEncoder[T <: Seq[Byte] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
   /** @since 1.6.1 */
-  implicit def newShortSeqEncoder: Encoder[Seq[Short]] = ExpressionEncoder()
+  implicit def newShortSeqEncoder[T <: Seq[Short] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
   /** @since 1.6.1 */
-  implicit def newBooleanSeqEncoder: Encoder[Seq[Boolean]] = ExpressionEncoder()
+  implicit def newBooleanSeqEncoder[T <: Seq[Boolean] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
   /** @since 1.6.1 */
-  implicit def newStringSeqEncoder: Encoder[Seq[String]] = ExpressionEncoder()
+  implicit def newStringSeqEncoder[T <: Seq[String] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
   /** @since 1.6.1 */
-  implicit def newProductSeqEncoder[A <: Product : TypeTag]: Encoder[Seq[A]] = ExpressionEncoder()
+  implicit def newProductSeqEncoder[A <: Product : TypeTag, T <: Seq[A] : TypeTag]: Encoder[T] =
+    ExpressionEncoder()
+
+  // Seqs with product (List) disambiguation
+
+  /** @since 2.2.0 */
+  implicit def newIntSeqWithProductEncoder[T <: Seq[Int] with Product : TypeTag]: Encoder[T] =
+    newIntSeqEncoder
+
+  /** @since 2.2.0 */
+  implicit def newLongSeqWithProductEncoder[T <: Seq[Long] with Product : TypeTag]: Encoder[T] =
+    newLongSeqEncoder
+
+  /** @since 2.2.0 */
+  implicit def newDoubleListEncoder[T <: Seq[Double] with Product : TypeTag]: Encoder[T] =
+    newDoubleSeqEncoder
+
+  /** @since 2.2.0 */
+  implicit def newFloatSeqWithProductEncoder[T <: Seq[Float] with Product : TypeTag]: Encoder[T] =
+    newFloatSeqEncoder
+
+  /** @since 2.2.0 */
+  implicit def newByteSeqWithProductEncoder[T <: Seq[Byte] with Product : TypeTag]: Encoder[T] =
+    newByteSeqEncoder
+
+  /** @since 2.2.0 */
+  implicit def newShortSeqWithProductEncoder[T <: Seq[Short] with Product : TypeTag]: Encoder[T] =
+    newShortSeqEncoder
+
+  /** @since 2.2.0 */
+  implicit def newBooleanSeqWithProductEncoder[T <: Seq[Boolean] with Product : TypeTag]
+  : Encoder[T] =
+    newBooleanSeqEncoder
+
+  /** @since 2.2.0 */
+  implicit def newStringSeqWithProductEncoder[T <: Seq[String] with Product : TypeTag]: Encoder[T] =
+    newStringSeqEncoder
+
+  /** @since 2.2.0 */
+  implicit def newProductSeqWithProductEncoder
+  [A <: Product : TypeTag, T <: Seq[A] with Product : TypeTag]: Encoder[T] =
+    newProductSeqEncoder[A, T]
 
   // Arrays
 
