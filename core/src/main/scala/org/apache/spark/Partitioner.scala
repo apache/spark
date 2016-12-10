@@ -75,13 +75,11 @@ object Partitioner {
  * so attempting to partition an RDD[Array[_]] or RDD[(Array[_], _)] using a HashPartitioner will
  * produce an unexpected or incorrect result.
  */
-class HashPartitioner(partitions: Int, buckets: Int = 0) extends Partitioner {
+class HashPartitioner(partitions: Int, buckets: Int) extends Partitioner {
   require(partitions >= 0, s"Number of partitions ($partitions) cannot be negative.")
   require(buckets >= 0, s"Number of buckets ($buckets) cannot be negative.")
 
-  def this(partitions: Int) {
-    this(partitions, 0)
-  }
+  def this(partitions: Int) = this(partitions, 0)
 
   def numPartitions: Int = partitions
 

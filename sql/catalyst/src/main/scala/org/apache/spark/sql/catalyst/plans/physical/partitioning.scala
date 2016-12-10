@@ -296,8 +296,10 @@ case class OrderlessHashPartitioning(expressions: Seq[Expression],
  * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
  * in the same partition.
  */
-case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int,
-    numBuckets: Int = 0) extends Expression with Partitioning with Unevaluable {
+case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
+    extends Expression with Partitioning with Unevaluable {
+
+  private[sql] var numBuckets: Int = 0
 
   override def children: Seq[Expression] = expressions
   override def nullable: Boolean = false
@@ -327,6 +329,16 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int,
    * than numPartitions) based on hashing expressions.
    */
   def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
+}
+
+object HashPartitioning {
+
+  def apply(expressions: Seq[Expression], numPartitions: Int,
+      numBuckets: Int): HashPartitioning = {
+    val partitioning = HashPartitioning(expressions, numPartitions)
+    partitioning.numBuckets = numBuckets
+    partitioning
+  }
 }
 
 /**

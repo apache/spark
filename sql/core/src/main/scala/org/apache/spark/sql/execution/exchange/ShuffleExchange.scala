@@ -202,7 +202,7 @@ object ShuffleExchange {
       serializer: Serializer): ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
-      case HashPartitioning(_, n, b) => new HashPartitioner(n, b)
+      case p@HashPartitioning(_, n) => new HashPartitioner(n, p.numBuckets)
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
         // partition bounds. To get accurate samples, we need to copy the mutable keys.
