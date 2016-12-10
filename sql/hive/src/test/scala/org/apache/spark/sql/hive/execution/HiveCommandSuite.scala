@@ -209,11 +209,9 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       withInputFile { path =>
         sql(s"""$loadQuery INPATH "$path" INTO TABLE non_part_table""")
 
-        // Non-local mode is expected to move the file. Check once here that the input file
-        // was actually removed.
-        if (!local) {
-          assert(!path.exists())
-        }
+        // Non-local mode is expected to move the file, while local mode is expected to copy it.
+        // Check once here that the behavior is the expected.
+        assert(local === path.exists())
       }
 
       checkAnswer(
