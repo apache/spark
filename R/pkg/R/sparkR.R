@@ -427,7 +427,7 @@ sparkR.session <- function(
 #' @method setJobGroup default
 setJobGroup.default <- function(groupId, description, interruptOnCancel) {
   sc <- getSparkContext()
-  callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
+  invisible(callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel))
 }
 
 setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
@@ -457,7 +457,7 @@ setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
 #' @method clearJobGroup default
 clearJobGroup.default <- function() {
   sc <- getSparkContext()
-  callJMethod(sc, "clearJobGroup")
+  invisible(callJMethod(sc, "clearJobGroup"))
 }
 
 clearJobGroup <- function(sc) {
@@ -484,7 +484,7 @@ clearJobGroup <- function(sc) {
 #' @method cancelJobGroup default
 cancelJobGroup.default <- function(groupId) {
   sc <- getSparkContext()
-  callJMethod(sc, "cancelJobGroup", groupId)
+  invisible(callJMethod(sc, "cancelJobGroup", groupId))
 }
 
 cancelJobGroup <- function(sc, groupId) {

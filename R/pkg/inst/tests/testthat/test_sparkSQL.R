@@ -576,7 +576,7 @@ test_that("test tableNames and tables", {
   tables <- tables()
   expect_equal(count(tables), 2)
   suppressWarnings(dropTempTable("table1"))
-  dropTempView("table2")
+  expect_true(dropTempView("table2"))
 
   tables <- tables()
   expect_equal(count(tables), 0)
@@ -589,7 +589,7 @@ test_that(
   newdf <- sql("SELECT * FROM table1 where name = 'Michael'")
   expect_is(newdf, "SparkDataFrame")
   expect_equal(count(newdf), 1)
-  dropTempView("table1")
+  expect_true(dropTempView("table1"))
 
   createOrReplaceTempView(df, "dfView")
   sqlCast <- collect(sql("select cast('2' as decimal) as x from dfView limit 1"))
@@ -600,7 +600,7 @@ test_that(
   expect_equal(ncol(sqlCast), 1)
   expect_equal(out[1], "  x")
   expect_equal(out[2], "1 2")
-  dropTempView("dfView")
+  expect_true(dropTempView("dfView"))
 })
 
 test_that("test cache, uncache and clearCache", {
@@ -609,7 +609,7 @@ test_that("test cache, uncache and clearCache", {
   cacheTable("table1")
   uncacheTable("table1")
   clearCache()
-  dropTempView("table1")
+  expect_true(dropTempView("table1"))
 })
 
 test_that("insertInto() on a registered table", {
@@ -630,13 +630,13 @@ test_that("insertInto() on a registered table", {
   insertInto(dfParquet2, "table1")
   expect_equal(count(sql("select * from table1")), 5)
   expect_equal(first(sql("select * from table1 order by age"))$name, "Michael")
-  dropTempView("table1")
+  expect_true(dropTempView("table1"))
 
   createOrReplaceTempView(dfParquet, "table1")
   insertInto(dfParquet2, "table1", overwrite = TRUE)
   expect_equal(count(sql("select * from table1")), 2)
   expect_equal(first(sql("select * from table1 order by age"))$name, "Bob")
-  dropTempView("table1")
+  expect_true(dropTempView("table1"))
 
   unlink(jsonPath2)
   unlink(parquetPath2)
@@ -650,7 +650,7 @@ test_that("tableToDF() returns a new DataFrame", {
   expect_equal(count(tabledf), 3)
   tabledf2 <- tableToDF("table1")
   expect_equal(count(tabledf2), 3)
-  dropTempView("table1")
+  expect_true(dropTempView("table1"))
 })
 
 test_that("toRDD() returns an RRDD", {
