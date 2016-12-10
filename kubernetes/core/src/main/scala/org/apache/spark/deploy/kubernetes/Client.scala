@@ -55,8 +55,8 @@ private[spark] class Client(
 
   private val launchTime = System.currentTimeMillis
   private val kubernetesAppId = sparkConf.getOption("spark.app.name")
-      .orElse(sparkConf.getOption("spark.app.id"))
-      .getOrElse(s"spark-$launchTime")
+    .orElse(sparkConf.getOption("spark.app.id"))
+    .getOrElse(s"spark-$launchTime")
 
   private val secretName = s"spark-submission-server-secret-$kubernetesAppId"
   private val driverLauncherSelectorValue = s"driver-launcher-$launchTime"
@@ -69,6 +69,8 @@ private[spark] class Client(
   private val secretBytes = new Array[Byte](128)
   SECURE_RANDOM.nextBytes(secretBytes)
   private val secretBase64String = Base64.encodeBase64String(secretBytes)
+  private val serviceAccount = sparkConf.get("spark.kubernetes.submit.serviceAccountName",
+    "default")
 
   private implicit val retryableExecutionContext = ExecutionContext
     .fromExecutorService(
@@ -191,6 +193,7 @@ private[spark] class Client(
                   .withSecretName(secret.getMetadata.getName)
                   .endSecret()
                 .endVolume
+              .withServiceAccount(serviceAccount)
               .addNewContainer()
                 .withName(DRIVER_LAUNCHER_CONTAINER_NAME)
                 .withImage(driverDockerImage)
