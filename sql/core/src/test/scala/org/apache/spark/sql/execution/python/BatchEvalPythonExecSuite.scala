@@ -21,8 +21,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.api.python.PythonFunction
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, In}
-import org.apache.spark.sql.execution.{FilterExec, SparkPlanTest}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, GreaterThan, In}
+import org.apache.spark.sql.execution.{FilterExec, InputAdapter, SparkPlanTest, WholeStageCodegenExec}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.BooleanType
 
@@ -44,42 +44,43 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
     val df = Seq(("Hello", 4)).toDF("a", "b")
       .where("dummyPythonUDF(b) and dummyPythonUDF(a) and a in (3, 4)")
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
-      case f @ FilterExec(And(_: AttributeReference, _: AttributeReference), _) => f
-      case b: BatchEvalPythonExec => b
-      case f @ FilterExec(_: In, _) => f
+      case f @ FilterExec(
+          And(_: AttributeReference, _: AttributeReference),
+          InputAdapter(_: BatchEvalPythonExec)) => f
+      case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(FilterExec(_: In, _))) => b
     }
-    assert(qualifiedPlanNodes.size == 3)
+    assert(qualifiedPlanNodes.size == 2)
   }
 
   test("Nested Python UDF: push down deterministic FilterExec predicates") {
     val df = Seq(("Hello", 4)).toDF("a", "b")
       .where("dummyPythonUDF(a, dummyPythonUDF(a, b)) and a in (3, 4)")
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
-      case f @ FilterExec(_: AttributeReference, _) => f
-      case b: BatchEvalPythonExec => b
-      case f @ FilterExec(_: In, _) => f
+      case f @ FilterExec(_: AttributeReference, InputAdapter(_: BatchEvalPythonExec)) => f
+      case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(FilterExec(_: In, _))) => b
     }
-    assert(qualifiedPlanNodes.size == 4)
+    assert(qualifiedPlanNodes.size == 2)
   }
 
   test("Python UDF: no push down on non-deterministic") {
     val df = Seq(("Hello", 4)).toDF("a", "b")
       .where("b > 4 and dummyPythonUDF(a) and rand() > 3")
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
-      case f: FilterExec => f
-      case b: BatchEvalPythonExec => b
+      case f @ FilterExec(
+          And(_: AttributeReference, _: GreaterThan),
+          InputAdapter(_: BatchEvalPythonExec)) => f
+      case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(_: FilterExec)) => b
     }
-    assert(qualifiedPlanNodes.size == 3)
+    assert(qualifiedPlanNodes.size == 2)
   }
 
   test("Python UDF: no push down on predicates starting from the first non-deterministic") {
     val df = Seq(("Hello", 4)).toDF("a", "b")
       .where("dummyPythonUDF(a) and rand() > 3 and b > 4")
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
-      case f: FilterExec => f
-      case b: BatchEvalPythonExec => b
+      case f @ FilterExec(And(_: And, _: GreaterThan), InputAdapter(_: BatchEvalPythonExec)) => f
     }
-    assert(qualifiedPlanNodes.size == 2)
+    assert(qualifiedPlanNodes.size == 1)
   }
 
   test("Python UDF refers to the attributes from more than one child") {

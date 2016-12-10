@@ -126,12 +126,11 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
       plan
     } else {
       val attributeMap = mutable.HashMap[PythonUDF, Expression]()
-      val splittedFilter = trySplitFilter(plan)
+      val splitFilter = trySplitFilter(plan)
       // Rewrite the child that has the input required for the UDF
-      val newChildren =
-        splittedFilter.children.map { child =>
+      val newChildren = splitFilter.children.map { child =>
         // Pick the UDF we are going to evaluate
-        val validUdfs = udfs.filter { case udf =>
+        val validUdfs = udfs.filter { udf =>
           // Check to make sure that the UDF can be evaluated with only the input of this child.
           udf.references.subsetOf(child.outputSet)
         }.toArray  // Turn it into an array since iterators cannot be serialized in Scala 2.10
@@ -152,7 +151,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
         sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
       }
 
-      val rewritten = splittedFilter.withNewChildren(newChildren).transformExpressions {
+      val rewritten = splitFilter.withNewChildren(newChildren).transformExpressions {
         case p: PythonUDF if attributeMap.contains(p) =>
           attributeMap(p)
       }
