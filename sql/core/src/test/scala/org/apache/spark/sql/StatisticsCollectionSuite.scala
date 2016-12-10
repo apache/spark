@@ -222,7 +222,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   def checkColStats(
       df: DataFrame,
       colStats: mutable.LinkedHashMap[String, ColumnStat]): Unit = {
-    val tableName = "column_stats_test_" + randomName.nextInt(10)
+    val tableName = "column_stats_test_" + randomName.nextInt(1000)
     withTable(tableName) {
       df.write.saveAsTable(tableName)
 
