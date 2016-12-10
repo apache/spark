@@ -182,7 +182,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
           val dir = path.listFiles()
           val folders = dir.filter(_.isDirectory).toList
           val filePaths = dir.map(_.getName).toList
-          filePaths ::: folders.flatMap(listFiles)
+          folders.flatMap(listFiles) ++: filePaths
         }
         val expectedFiles = ".part-00000.crc" :: "part-00000" :: Nil
         assert(listFiles(tmpDir).sortBy(_.toString) == expectedFiles)

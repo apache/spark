@@ -87,7 +87,7 @@ case class InsertIntoHiveTable(
   def output: Seq[Attribute] = Seq.empty
 
   val hadoopConf = sessionState.newHadoopConf()
-  val createdTempDir = new scala.collection.mutable.ArrayBuffer[Path]
+  var createdTempDir: Option[Path] = None
   val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
 
   private def executionId: String = {
@@ -114,7 +114,7 @@ case class InsertIntoHiveTable(
       if (!FileUtils.mkdir(fs, dir, true, hadoopConf)) {
         throw new IllegalStateException("Cannot create staging directory  '" + dir.toString + "'")
       }
-      createdTempDir += dir
+      createdTempDir = Some(dir)
       fs.deleteOnExit(dir)
     } catch {
       case e: IOException =>
