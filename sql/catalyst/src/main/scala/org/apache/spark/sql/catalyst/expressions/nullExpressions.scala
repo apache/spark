@@ -206,9 +206,8 @@ case class IsNaN(child: Expression) extends UnaryExpression
       case DoubleType | FloatType =>
         ev.copy(code = s"""
           ${eval.code}
-          boolean ${ev.isNull} = false;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""")
+          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""", isNull = "false")
     }
   }
 }
@@ -383,7 +382,6 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     ev.copy(code = s"""
       int $nonnull = 0;
       $code
-      boolean ${ev.isNull} = false;
-      boolean ${ev.value} = $nonnull >= $n;""")
+      boolean ${ev.value} = $nonnull >= $n;""", isNull = "false")
   }
 }

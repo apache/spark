@@ -24,7 +24,9 @@ import org.apache.commons.codec.digest.DigestUtils
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -123,6 +125,26 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .add("structOfArrayAndMap",
         new StructType().add("array", arrayOfString).add("map", mapOfString))
       .add("structOfUDT", structOfUDT))
+
+  test("SPARK-18207: Compute hash for a lot of expressions") {
+    val N = 1000
+    val wideRow = new GenericInternalRow(
+      Seq.tabulate(N)(i => UTF8String.fromString(i.toString)).toArray[Any])
+    val schema = StructType((1 to N).map(i => StructField("", StringType)))
+
+    val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
+      BoundReference(i, f.dataType, true)
+    }
+    val murmur3HashExpr = Murmur3Hash(exprs, 42)
+    val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
+    val murmursHashEval = Murmur3Hash(exprs, 42).eval(wideRow)
+    assert(murmur3HashPlan(wideRow).getInt(0) == murmursHashEval)
+
+    val hiveHashExpr = HiveHash(exprs)
+    val hiveHashPlan = GenerateMutableProjection.generate(Seq(hiveHashExpr))
+    val hiveHashEval = HiveHash(exprs).eval(wideRow)
+    assert(hiveHashPlan(wideRow).getInt(0) == hiveHashEval)
+  }
 
   private def testHash(inputSchema: StructType): Unit = {
     val inputGenerator = RandomDataGenerator.forType(inputSchema, nullable = false).get

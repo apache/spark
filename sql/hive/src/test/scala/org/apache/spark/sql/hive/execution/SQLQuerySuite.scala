@@ -542,7 +542,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
         userSpecifiedLocation match {
           case Some(location) =>
-            assert(r.catalogTable.storage.locationUri.get === location)
+            assert(r.catalogTable.location === location)
           case None => // OK.
         }
         // Also make sure that the format and serde are as desired.
@@ -1569,7 +1569,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     ).map(i => Row(i._1, i._2, i._3, i._4)))
   }
 
-  test("SPARK-10562: partition by column with mixed case name") {
+  ignore("SPARK-10562: partition by column with mixed case name") {
     withTable("tbl10562") {
       val df = Seq(2012 -> "a").toDF("Year", "val")
       df.write.partitionBy("Year").saveAsTable("tbl10562")
@@ -1937,6 +1937,18 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkAnswer(actual, expected)
       sql("DROP TABLE order")
     }
+  }
+
+
+  test("SPARK-17108: Fix BIGINT and INT comparison failure in spark sql") {
+    sql("create table t1(a map<bigint, array<string>>)")
+    sql("select * from t1 where a[1] is not null")
+
+    sql("create table t2(a map<int, array<string>>)")
+    sql("select * from t2 where a[1] is not null")
+
+    sql("create table t3(a map<bigint, array<string>>)")
+    sql("select * from t3 where a[1L] is not null")
   }
 
   test("SPARK-17796 Support wildcard character in filename for LOAD DATA LOCAL INPATH") {

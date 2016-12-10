@@ -34,21 +34,11 @@ import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.TestUtils.JavaSourceFromString
-import org.apache.spark.util.{ResetSystemProperties, Utils}
+import org.apache.spark.util.{CommandLineUtils, ResetSystemProperties, Utils}
 
-// Note: this suite mixes in ResetSystemProperties because SparkSubmit.main() sets a bunch
-// of properties that needed to be cleared after tests.
-class SparkSubmitSuite
-  extends SparkFunSuite
-  with Matchers
-  with BeforeAndAfterEach
-  with ResetSystemProperties
-  with Timeouts {
 
-  override def beforeEach() {
-    super.beforeEach()
-    System.setProperty("spark.testing", "true")
-  }
+trait TestPrematureExit {
+  suite: SparkFunSuite =>
 
   private val noOpOutputStream = new OutputStream {
     def write(b: Int) = {}
@@ -65,16 +55,19 @@ class SparkSubmitSuite
   }
 
   /** Returns true if the script exits and the given search string is printed. */
-  private def testPrematureExit(input: Array[String], searchString: String) = {
+  private[spark] def testPrematureExit(
+      input: Array[String],
+      searchString: String,
+      mainObject: CommandLineUtils = SparkSubmit) : Unit = {
     val printStream = new BufferPrintStream()
-    SparkSubmit.printStream = printStream
+    mainObject.printStream = printStream
 
     @volatile var exitedCleanly = false
-    SparkSubmit.exitFn = (_) => exitedCleanly = true
+    mainObject.exitFn = (_) => exitedCleanly = true
 
     val thread = new Thread {
       override def run() = try {
-        SparkSubmit.main(input)
+        mainObject.main(input)
       } catch {
         // If exceptions occur after the "exit" has happened, fine to ignore them.
         // These represent code paths not reachable during normal execution.
@@ -87,6 +80,22 @@ class SparkSubmitSuite
     if (!joined.contains(searchString)) {
       fail(s"Search string '$searchString' not found in $joined")
     }
+  }
+}
+
+// Note: this suite mixes in ResetSystemProperties because SparkSubmit.main() sets a bunch
+// of properties that needed to be cleared after tests.
+class SparkSubmitSuite
+  extends SparkFunSuite
+  with Matchers
+  with BeforeAndAfterEach
+  with ResetSystemProperties
+  with Timeouts
+  with TestPrematureExit {
+
+  override def beforeEach() {
+    super.beforeEach()
+    System.setProperty("spark.testing", "true")
   }
 
   // scalastyle:off println

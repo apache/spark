@@ -43,7 +43,8 @@ private[feature] trait Word2VecBase extends Params
    * @group param
    */
   final val vectorSize = new IntParam(
-    this, "vectorSize", "the dimension of codes after transforming from words")
+    this, "vectorSize", "the dimension of codes after transforming from words (> 0)",
+    ParamValidators.gt(0))
   setDefault(vectorSize -> 100)
 
   /** @group getParam */
@@ -55,7 +56,8 @@ private[feature] trait Word2VecBase extends Params
    * @group expertParam
    */
   final val windowSize = new IntParam(
-    this, "windowSize", "the window size (context words from [-window, window])")
+    this, "windowSize", "the window size (context words from [-window, window]) (> 0)",
+    ParamValidators.gt(0))
   setDefault(windowSize -> 5)
 
   /** @group expertGetParam */
@@ -67,7 +69,8 @@ private[feature] trait Word2VecBase extends Params
    * @group param
    */
   final val numPartitions = new IntParam(
-    this, "numPartitions", "number of partitions for sentences of words")
+    this, "numPartitions", "number of partitions for sentences of words (> 0)",
+    ParamValidators.gt(0))
   setDefault(numPartitions -> 1)
 
   /** @group getParam */
@@ -80,7 +83,7 @@ private[feature] trait Word2VecBase extends Params
    * @group param
    */
   final val minCount = new IntParam(this, "minCount", "the minimum number of times a token must " +
-    "appear to be included in the word2vec model's vocabulary")
+    "appear to be included in the word2vec model's vocabulary (>= 0)", ParamValidators.gtEq(0))
   setDefault(minCount -> 5)
 
   /** @group getParam */
@@ -95,7 +98,7 @@ private[feature] trait Word2VecBase extends Params
    */
   final val maxSentenceLength = new IntParam(this, "maxSentenceLength", "Maximum length " +
     "(in words) of each sentence in the input data. Any sentence longer than this threshold will " +
-    "be divided into chunks up to the size.")
+    "be divided into chunks up to the size (> 0)", ParamValidators.gt(0))
   setDefault(maxSentenceLength -> 1000)
 
   /** @group getParam */

@@ -44,6 +44,9 @@ case class CatalogFunction(
  * Storage format, used to describe how a partition or a table is stored.
  */
 case class CatalogStorageFormat(
+    // TODO(ekl) consider storing this field as java.net.URI for type safety. Note that this must
+    // be converted to/from a hadoop Path object using new Path(new URI(locationUri)) and
+    // path.toUri respectively before use as a filesystem path due to URI char escaping.
     locationUri: Option[String],
     inputFormat: Option[String],
     outputFormat: Option[String],
@@ -52,12 +55,10 @@ case class CatalogStorageFormat(
     properties: Map[String, String]) {
 
   override def toString: String = {
-    val serdePropsToString =
-      if (properties.nonEmpty) {
-        s"Properties: " + properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
-      } else {
-        ""
-      }
+    val serdePropsToString = CatalogUtils.maskCredentials(properties) match {
+      case props if props.isEmpty => ""
+      case props => "Properties: " + props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+    }
     val output =
       Seq(locationUri.map("Location: " + _).getOrElse(""),
         inputFormat.map("InputFormat: " + _).getOrElse(""),
@@ -97,6 +98,12 @@ case class CatalogTablePartition(
         s"Partition Parameters:{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
 
     output.filter(_.nonEmpty).mkString("CatalogPartition(\n\t", "\n\t", ")")
+  }
+
+  /** Return the partition location, assuming it is specified. */
+  def location: String = storage.locationUri.getOrElse {
+    val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
+    throw new AnalysisException(s"Partition [$specString] did not specify locationUri")
   }
 
   /**
@@ -169,6 +176,11 @@ case class CatalogTable(
   /** Return the database this table was specified to belong to, assuming it exists. */
   def database: String = identifier.database.getOrElse {
     throw new AnalysisException(s"table $identifier did not specify database")
+  }
+
+  /** Return the table location, assuming it is specified. */
+  def location: String = storage.locationUri.getOrElse {
+    throw new AnalysisException(s"table $identifier did not specify locationUri")
   }
 
   /** Return the fully qualified name of this table, assuming the database was specified. */

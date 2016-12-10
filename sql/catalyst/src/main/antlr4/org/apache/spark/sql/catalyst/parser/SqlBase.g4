@@ -71,11 +71,7 @@ statement
     | createTableHeader ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?
         (PARTITIONED BY partitionColumnNames=identifierList)?
-        bucketSpec?                                                    #createTableUsing
-    | createTableHeader tableProvider
-        (OPTIONS tablePropertyList)?
-        (PARTITIONED BY partitionColumnNames=identifierList)?
-        bucketSpec? AS? query                                          #createTableUsing
+        bucketSpec? (AS? query)?                                       #createTableUsing
     | createTableHeader ('(' columns=colTypeList ')')?
         (COMMENT STRING)?
         (PARTITIONED BY '(' partitionColumns=colTypeList ')')?
@@ -124,8 +120,8 @@ statement
         (USING resource (',' resource)*)?                              #createFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN)? statement    #explain
-    | SHOW TABLES ((FROM | IN) db=identifier)?
-        (LIKE? pattern=STRING)?                                        #showTables
+    | SHOW TABLES EXTENDED? ((FROM | IN) db=identifier)?
+        (LIKE? pattern=STRING)? partitionSpec?                         #showTables
     | SHOW DATABASES (LIKE pattern=STRING)?                            #showDatabases
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
@@ -142,7 +138,7 @@ statement
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | REFRESH .*?                                                      #refreshResource
     | CACHE LAZY? TABLE tableIdentifier (AS? query)?                   #cacheTable
-    | UNCACHE TABLE tableIdentifier                                    #uncacheTable
+    | UNCACHE TABLE (IF EXISTS)? tableIdentifier                       #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         tableIdentifier partitionSpec?                                 #loadData

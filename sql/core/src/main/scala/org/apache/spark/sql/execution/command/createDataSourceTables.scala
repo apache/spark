@@ -58,13 +58,21 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
     // Create the relation to validate the arguments before writing the metadata to the metastore,
     // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
     val pathOption = table.storage.locationUri.map("path" -> _)
+    // Fill in some default table options from the session conf
+    val tableWithDefaultOptions = table.copy(
+      identifier = table.identifier.copy(
+        database = Some(
+          table.identifier.database.getOrElse(sessionState.catalog.getCurrentDatabase))),
+      tracksPartitionsInCatalog = sparkSession.sessionState.conf.manageFilesourcePartitions)
     val dataSource: BaseRelation =
       DataSource(
         sparkSession = sparkSession,
         userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
+        partitionColumns = table.partitionColumnNames,
         className = table.provider.get,
         bucketSpec = table.bucketSpec,
-        options = table.storage.properties ++ pathOption).resolveRelation()
+        options = table.storage.properties ++ pathOption,
+        catalogTable = Some(tableWithDefaultOptions)).resolveRelation()
 
     dataSource match {
       case fs: HadoopFsRelation =>
@@ -175,6 +183,10 @@ case class CreateDataSourceTableAsSelectCommand(
               existingSchema = Some(l.schema)
             case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
               existingSchema = Some(s.metadata.schema)
+            case c: CatalogRelation if c.catalogTable.provider == Some(DDLUtils.HIVE_PROVIDER) =>
+              throw new AnalysisException("Saving data in the Hive serde table " +
+                s"${c.catalogTable.identifier} is not supported yet. Please use the " +
+                "insertInto() API as an alternative..")
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
@@ -208,7 +220,8 @@ case class CreateDataSourceTableAsSelectCommand(
       className = provider,
       partitionColumns = table.partitionColumnNames,
       bucketSpec = table.bucketSpec,
-      options = table.storage.properties ++ pathOption)
+      options = table.storage.properties ++ pathOption,
+      catalogTable = Some(table))
 
     val result = try {
       dataSource.write(mode, df)

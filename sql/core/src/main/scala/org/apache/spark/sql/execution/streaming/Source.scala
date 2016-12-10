@@ -45,6 +45,14 @@ trait Source  {
    * Higher layers will always call this method with a value of `start` greater than or equal
    * to the last value passed to `commit` and a value of `end` less than or equal to the
    * last value returned by `getOffset`
+   *
+   * It is possible for the [[Offset]] type to be a [[SerializedOffset]] when it was
+   * obtained from the log. Moreover, [[StreamExecution]] only compares the [[Offset]]
+   * JSON representation to determine if the two objects are equal. This could have
+   * ramifications when upgrading [[Offset]] JSON formats i.e., two equivalent [[Offset]]
+   * objects could differ between version. Consequently, [[StreamExecution]] may call
+   * this method with two such equivalent [[Offset]] objects. In which case, the [[Source]]
+   * should return an empty [[DataFrame]]
    */
   def getBatch(start: Option[Offset], end: Offset): DataFrame
 

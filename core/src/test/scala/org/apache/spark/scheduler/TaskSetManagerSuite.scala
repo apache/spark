@@ -22,11 +22,13 @@ import java.util.Random
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.mockito.Mockito.{mock, verify}
+import org.mockito.Matchers.{anyInt, anyString}
+import org.mockito.Mockito.{mock, never, spy, verify, when}
 
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.internal.Logging
+import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, ManualClock}
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
@@ -990,6 +992,47 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet3 = FakeTask.createTaskSet(numTasks = 1, stageId = 1, stageAttemptId = 1)
     val manager3 = new TaskSetManager(sched, taskSet3, MAX_TASK_FAILURES, new ManualClock)
     assert(manager3.name === "TaskSet_1.1")
+  }
+
+  test("don't update blacklist for shuffle-fetch failures, preemption, denied commits, " +
+      "or killed tasks") {
+    // Setup a taskset, and fail some tasks for a fetch failure, preemption, denied commit,
+    // and killed task.
+    val conf = new SparkConf().
+      set(config.BLACKLIST_ENABLED, true)
+    sc = new SparkContext("local", "test", conf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    val taskSet = FakeTask.createTaskSet(4)
+    val tsm = new TaskSetManager(sched, taskSet, 4)
+    // we need a spy so we can attach our mock blacklist
+    val tsmSpy = spy(tsm)
+    val blacklist = mock(classOf[TaskSetBlacklist])
+    when(tsmSpy.taskSetBlacklistHelperOpt).thenReturn(Some(blacklist))
+
+    // make some offers to our taskset, to get tasks we will fail
+    val taskDescs = Seq(
+      "exec1" -> "host1",
+      "exec2" -> "host1"
+    ).flatMap { case (exec, host) =>
+      // offer each executor twice (simulating 2 cores per executor)
+      (0 until 2).flatMap{ _ => tsmSpy.resourceOffer(exec, host, TaskLocality.ANY)}
+    }
+    assert(taskDescs.size === 4)
+
+    // now fail those tasks
+    tsmSpy.handleFailedTask(taskDescs(0).taskId, TaskState.FAILED,
+      FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0, 0, "ignored"))
+    tsmSpy.handleFailedTask(taskDescs(1).taskId, TaskState.FAILED,
+      ExecutorLostFailure(taskDescs(1).executorId, exitCausedByApp = false, reason = None))
+    tsmSpy.handleFailedTask(taskDescs(2).taskId, TaskState.FAILED,
+      TaskCommitDenied(0, 2, 0))
+    tsmSpy.handleFailedTask(taskDescs(3).taskId, TaskState.KILLED,
+      TaskKilled)
+
+    // Make sure that the blacklist ignored all of the task failures above, since they aren't
+    // the fault of the executor where the task was running.
+    verify(blacklist, never())
+      .updateBlacklistForFailedTask(anyString(), anyString(), anyInt())
   }
 
   private def createTaskResult(

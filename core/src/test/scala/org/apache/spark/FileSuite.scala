@@ -58,10 +58,15 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     nums.saveAsTextFile(outputDir)
     // Read the plain text file and check it's OK
     val outputFile = new File(outputDir, "part-00000")
-    val content = Source.fromFile(outputFile).mkString
-    assert(content === "1\n2\n3\n4\n")
-    // Also try reading it in as a text file RDD
-    assert(sc.textFile(outputDir).collect().toList === List("1", "2", "3", "4"))
+    val bufferSrc = Source.fromFile(outputFile)
+    Utils.tryWithSafeFinally {
+      val content = bufferSrc.mkString
+      assert(content === "1\n2\n3\n4\n")
+      // Also try reading it in as a text file RDD
+      assert(sc.textFile(outputDir).collect().toList === List("1", "2", "3", "4"))
+    } {
+      bufferSrc.close()
+    }
   }
 
   test("text files (compressed)") {

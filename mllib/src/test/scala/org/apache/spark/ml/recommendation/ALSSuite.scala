@@ -33,6 +33,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.recommendation.ALS._
+import org.apache.spark.ml.recommendation.ALS.Rating
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -537,6 +538,13 @@ class ALSSuite
       assert(intercept[SparkException] {
         model.transform(df.select(df("item_small").as("item"), df("user"))).first
       }.getMessage.contains("was out of Integer range"))
+    }
+  }
+
+  test("SPARK-18268: ALS with empty RDD should fail with better message") {
+    val ratings = sc.parallelize(Array.empty[Rating[Int]])
+    intercept[IllegalArgumentException] {
+      ALS.train(ratings)
     }
   }
 }

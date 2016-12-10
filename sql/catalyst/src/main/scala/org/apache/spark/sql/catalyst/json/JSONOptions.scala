@@ -23,7 +23,7 @@ import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.{CompressionCodecs, ParseModes}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
 
 /**
  * Options for parsing JSON data into Spark SQL rows.
@@ -31,8 +31,10 @@ import org.apache.spark.sql.catalyst.util.{CompressionCodecs, ParseModes}
  * Most of these map directly to Jackson's internal options, specified in [[JsonParser.Feature]].
  */
 private[sql] class JSONOptions(
-    @transient private val parameters: Map[String, String])
+    @transient private val parameters: CaseInsensitiveMap)
   extends Logging with Serializable  {
+
+  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
 
   val samplingRatio =
     parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)

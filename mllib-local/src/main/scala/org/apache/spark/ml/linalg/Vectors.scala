@@ -30,7 +30,7 @@ import org.apache.spark.annotation.Since
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
  *
- * Note: Users should not implement this interface.
+ * @note Users should not implement this interface.
  */
 @Since("2.0.0")
 sealed trait Vector extends Serializable {

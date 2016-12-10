@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.execution.command.RunnableCommand
@@ -54,6 +54,14 @@ case class CreateTempViewUsing(
   if (tableIdent.database.isDefined) {
     throw new AnalysisException(
       s"Temporary view '$tableIdent' should not have specified a database")
+  }
+
+  override def argString: String = {
+    s"[tableIdent:$tableIdent " +
+      userSpecifiedSchema.map(_ + " ").getOrElse("") +
+      s"replace:$replace " +
+      s"provider:$provider " +
+      CatalogUtils.maskCredentials(options)
   }
 
   def run(sparkSession: SparkSession): Seq[Row] = {
@@ -95,22 +103,4 @@ case class RefreshResource(path: String)
     sparkSession.catalog.refreshByPath(path)
     Seq.empty[Row]
   }
-}
-
-/**
- * Builds a map in which keys are case insensitive
- */
-class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
-  with Serializable {
-
-  val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))
-
-  override def get(k: String): Option[String] = baseMap.get(k.toLowerCase)
-
-  override def + [B1 >: String](kv: (String, B1)): Map[String, B1] =
-    baseMap + kv.copy(_1 = kv._1.toLowerCase)
-
-  override def iterator: Iterator[(String, String)] = baseMap.iterator
-
-  override def -(key: String): Map[String, String] = baseMap - key.toLowerCase
 }

@@ -185,9 +185,9 @@ class PlanParserSuite extends PlanTest {
         OverwriteOptions(
           overwrite,
           if (overwrite && partition.nonEmpty) {
-            Some(partition.map(kv => (kv._1, kv._2.get)))
+            partition.map(kv => (kv._1, kv._2.get))
           } else {
-            None
+            Map.empty
           }),
         ifNotExists)
 
@@ -233,9 +233,8 @@ class PlanParserSuite extends PlanTest {
 
     // Grouping Sets
     assertEqual(s"$sql grouping sets((a, b), (a), ())",
-      GroupingSets(Seq(0, 1, 3), Seq('a, 'b), table("d"), Seq('a, 'b, 'sum.function('c).as("c"))))
-    intercept(s"$sql grouping sets((a, b), (c), ())",
-      "c doesn't show up in the GROUP BY list")
+      GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b), table("d"),
+        Seq('a, 'b, 'sum.function('c).as("c"))))
   }
 
   test("limit") {
@@ -348,7 +347,7 @@ class PlanParserSuite extends PlanTest {
     val testUsingJoin = (sql: String, jt: JoinType) => {
       assertEqual(
         s"select * from t $sql u using(a, b)",
-        table("t").join(table("u"), UsingJoin(jt, Seq('a.attr, 'b.attr)), None).select(star()))
+        table("t").join(table("u"), UsingJoin(jt, Seq("a", "b")), None).select(star()))
     }
     val testAll = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin, testUsingJoin)
     val testExistence = Seq(testUnconditionalJoin, testConditionalJoin, testUsingJoin)

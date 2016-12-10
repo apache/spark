@@ -36,7 +36,7 @@ import org.apache.spark.sql.functions._
 
 
 /**
- * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] learning algorithm for
+ * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a> learning algorithm for
  * classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
@@ -54,47 +54,66 @@ class RandomForestClassifier @Since("1.4.0") (
 
   // Parameters from TreeClassifierParams:
 
+  /** @group setParam */
   @Since("1.4.0")
-  override def setMaxDepth(value: Int): this.type = super.setMaxDepth(value)
+  override def setMaxDepth(value: Int): this.type = set(maxDepth, value)
 
+  /** @group setParam */
   @Since("1.4.0")
-  override def setMaxBins(value: Int): this.type = super.setMaxBins(value)
+  override def setMaxBins(value: Int): this.type = set(maxBins, value)
 
+  /** @group setParam */
   @Since("1.4.0")
-  override def setMinInstancesPerNode(value: Int): this.type =
-    super.setMinInstancesPerNode(value)
+  override def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
+  /** @group setParam */
   @Since("1.4.0")
-  override def setMinInfoGain(value: Double): this.type = super.setMinInfoGain(value)
+  override def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
+  /** @group expertSetParam */
   @Since("1.4.0")
-  override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
+  override def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
 
+  /** @group expertSetParam */
   @Since("1.4.0")
-  override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
+  override def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
 
+  /**
+   * Specifies how often to checkpoint the cached node IDs.
+   * E.g. 10 means that the cache will get checkpointed every 10 iterations.
+   * This is only used if cacheNodeIds is true and if the checkpoint directory is set in
+   * [[org.apache.spark.SparkContext]].
+   * Must be >= 1.
+   * (default = 10)
+   * @group setParam
+   */
   @Since("1.4.0")
-  override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
+  override def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
+  /** @group setParam */
   @Since("1.4.0")
-  override def setImpurity(value: String): this.type = super.setImpurity(value)
+  override def setImpurity(value: String): this.type = set(impurity, value)
 
   // Parameters from TreeEnsembleParams:
 
+  /** @group setParam */
   @Since("1.4.0")
-  override def setSubsamplingRate(value: Double): this.type = super.setSubsamplingRate(value)
+  override def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
 
+  /** @group setParam */
   @Since("1.4.0")
-  override def setSeed(value: Long): this.type = super.setSeed(value)
+  override def setSeed(value: Long): this.type = set(seed, value)
 
   // Parameters from RandomForestParams:
 
+  /** @group setParam */
   @Since("1.4.0")
-  override def setNumTrees(value: Int): this.type = super.setNumTrees(value)
+  override def setNumTrees(value: Int): this.type = set(numTrees, value)
 
+  /** @group setParam */
   @Since("1.4.0")
   override def setFeatureSubsetStrategy(value: String): this.type =
-    super.setFeatureSubsetStrategy(value)
+    set(featureSubsetStrategy, value)
 
   override protected def train(dataset: Dataset[_]): RandomForestClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
@@ -144,7 +163,7 @@ object RandomForestClassifier extends DefaultParamsReadable[RandomForestClassifi
 }
 
 /**
- * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for classification.
+ * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a> model for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  *
@@ -158,7 +177,7 @@ class RandomForestClassificationModel private[ml] (
     @Since("1.6.0") override val numFeatures: Int,
     @Since("1.5.0") override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, RandomForestClassificationModel]
-  with RandomForestClassificationModelParams with TreeEnsembleModel[DecisionTreeClassificationModel]
+  with RandomForestClassifierParams with TreeEnsembleModel[DecisionTreeClassificationModel]
   with MLWritable with Serializable {
 
   require(_trees.nonEmpty, "RandomForestClassificationModel requires at least 1 tree.")
@@ -221,15 +240,6 @@ class RandomForestClassificationModel private[ml] (
     }
   }
 
-  /**
-   * Number of trees in ensemble
-   *
-   * @deprecated  Use [[getNumTrees]] instead.  This method will be removed in 2.1.0
-   */
-  // TODO: Once this is removed, then this class can inherit from RandomForestClassifierParams
-  @deprecated("Use getNumTrees instead.  This method will be removed in 2.1.0.", "2.0.0")
-  val numTrees: Int = trees.length
-
   @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestClassificationModel = {
     copyValues(new RandomForestClassificationModel(uid, _trees, numFeatures, numClasses), extra)
@@ -249,7 +259,7 @@ class RandomForestClassificationModel private[ml] (
    * (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
    * and follows the implementation from scikit-learn.
    *
-   * @see [[DecisionTreeClassificationModel.featureImportances]]
+   * @see `DecisionTreeClassificationModel.featureImportances`
    */
   @Since("1.5.0")
   lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)

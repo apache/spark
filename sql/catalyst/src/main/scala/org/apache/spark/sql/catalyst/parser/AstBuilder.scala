@@ -172,24 +172,20 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
-    val dynamicPartitionKeys = partitionKeys.filter(_._2.isEmpty)
+    val dynamicPartitionKeys: Map[String, Option[String]] = partitionKeys.filter(_._2.isEmpty)
     if (ctx.EXISTS != null && dynamicPartitionKeys.nonEmpty) {
       throw new ParseException(s"Dynamic partitions do not support IF NOT EXISTS. Specified " +
         "partitions with value: " + dynamicPartitionKeys.keys.mkString("[", ",", "]"), ctx)
     }
     val overwrite = ctx.OVERWRITE != null
-    val overwritePartition =
-      if (overwrite && partitionKeys.nonEmpty && dynamicPartitionKeys.isEmpty) {
-        Some(partitionKeys.map(t => (t._1, t._2.get)))
-      } else {
-        None
-      }
+    val staticPartitionKeys: Map[String, String] =
+      partitionKeys.filter(_._2.nonEmpty).map(t => (t._1, t._2.get))
 
     InsertIntoTable(
       UnresolvedRelation(tableIdent, None),
       partitionKeys,
       query,
-      OverwriteOptions(overwrite, overwritePartition),
+      OverwriteOptions(overwrite, if (overwrite) staticPartitionKeys else Map.empty),
       ctx.EXISTS != null)
   }
 
@@ -492,33 +488,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       ctx: AggregationContext,
       selectExpressions: Seq[NamedExpression],
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    import ctx._
-    val groupByExpressions = expressionList(groupingExpressions)
+    val groupByExpressions = expressionList(ctx.groupingExpressions)
 
-    if (GROUPING != null) {
+    if (ctx.GROUPING != null) {
       // GROUP BY .... GROUPING SETS (...)
-      val expressionMap = groupByExpressions.zipWithIndex.toMap
-      val numExpressions = expressionMap.size
-      val mask = (1 << numExpressions) - 1
-      val masks = ctx.groupingSet.asScala.map {
-        _.expression.asScala.foldLeft(mask) {
-          case (bitmap, eCtx) =>
-            // Find the index of the expression.
-            val e = typedVisit[Expression](eCtx)
-            val index = expressionMap.find(_._1.semanticEquals(e)).map(_._2).getOrElse(
-              throw new ParseException(
-                s"$e doesn't show up in the GROUP BY list", ctx))
-            // 0 means that the column at the given index is a grouping column, 1 means it is not,
-            // so we unset the bit in bitmap.
-            bitmap & ~(1 << (numExpressions - 1 - index))
-        }
-      }
-      GroupingSets(masks, groupByExpressions, query, selectExpressions)
+      val selectedGroupByExprs =
+        ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)))
+      GroupingSets(selectedGroupByExprs, groupByExpressions, query, selectExpressions)
     } else {
       // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
-      val mappedGroupByExpressions = if (CUBE != null) {
+      val mappedGroupByExpressions = if (ctx.CUBE != null) {
         Seq(Cube(groupByExpressions))
-      } else if (ROLLUP != null) {
+      } else if (ctx.ROLLUP != null) {
         Seq(Rollup(groupByExpressions))
       } else {
         groupByExpressions
@@ -574,10 +555,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         // Resolve the join type and join condition
         val (joinType, condition) = Option(join.joinCriteria) match {
           case Some(c) if c.USING != null =>
-            val columns = c.identifier.asScala.map { column =>
-              UnresolvedAttribute.quoted(column.getText)
-            }
-            (UsingJoin(baseJoinType, columns), None)
+            (UsingJoin(baseJoinType, c.identifier.asScala.map(_.getText)), None)
           case Some(c) if c.booleanExpression != null =>
             (baseJoinType, Option(expression(c.booleanExpression)))
           case None if join.NATURAL != null =>

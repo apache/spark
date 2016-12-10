@@ -27,7 +27,7 @@ import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.jdbc.JdbcDialects
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
@@ -54,7 +54,6 @@ object JDBCRDD extends Logging {
   def resolveTable(options: JDBCOptions): StructType = {
     val url = options.url
     val table = options.table
-    val properties = options.asConnectionProperties
     val dialect = JdbcDialects.get(url)
     val conn: Connection = JdbcUtils.createConnectionFactory(options)()
     try {
@@ -105,35 +104,40 @@ object JDBCRDD extends Logging {
    * Turns a single Filter into a String representing a SQL expression.
    * Returns None for an unhandled filter.
    */
-  def compileFilter(f: Filter): Option[String] = {
+  def compileFilter(f: Filter, dialect: JdbcDialect): Option[String] = {
+    def quote(colName: String): String = dialect.quoteIdentifier(colName)
+
     Option(f match {
-      case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
+      case EqualTo(attr, value) => s"${quote(attr)} = ${compileValue(value)}"
       case EqualNullSafe(attr, value) =>
-        s"(NOT ($attr != ${compileValue(value)} OR $attr IS NULL OR " +
-          s"${compileValue(value)} IS NULL) OR ($attr IS NULL AND ${compileValue(value)} IS NULL))"
-      case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
-      case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
-      case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
-      case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
-      case IsNull(attr) => s"$attr IS NULL"
-      case IsNotNull(attr) => s"$attr IS NOT NULL"
-      case StringStartsWith(attr, value) => s"${attr} LIKE '${value}%'"
-      case StringEndsWith(attr, value) => s"${attr} LIKE '%${value}'"
-      case StringContains(attr, value) => s"${attr} LIKE '%${value}%'"
-      case In(attr, value) => s"$attr IN (${compileValue(value)})"
-      case Not(f) => compileFilter(f).map(p => s"(NOT ($p))").getOrElse(null)
+        val col = quote(attr)
+        s"(NOT ($col != ${compileValue(value)} OR $col IS NULL OR " +
+          s"${compileValue(value)} IS NULL) OR ($col IS NULL AND ${compileValue(value)} IS NULL))"
+      case LessThan(attr, value) => s"${quote(attr)} < ${compileValue(value)}"
+      case GreaterThan(attr, value) => s"${quote(attr)} > ${compileValue(value)}"
+      case LessThanOrEqual(attr, value) => s"${quote(attr)} <= ${compileValue(value)}"
+      case GreaterThanOrEqual(attr, value) => s"${quote(attr)} >= ${compileValue(value)}"
+      case IsNull(attr) => s"${quote(attr)} IS NULL"
+      case IsNotNull(attr) => s"${quote(attr)} IS NOT NULL"
+      case StringStartsWith(attr, value) => s"${quote(attr)} LIKE '${value}%'"
+      case StringEndsWith(attr, value) => s"${quote(attr)} LIKE '%${value}'"
+      case StringContains(attr, value) => s"${quote(attr)} LIKE '%${value}%'"
+      case In(attr, value) if value.isEmpty =>
+        s"CASE WHEN ${quote(attr)} IS NULL THEN NULL ELSE FALSE END"
+      case In(attr, value) => s"${quote(attr)} IN (${compileValue(value)})"
+      case Not(f) => compileFilter(f, dialect).map(p => s"(NOT ($p))").getOrElse(null)
       case Or(f1, f2) =>
         // We can't compile Or filter unless both sub-filters are compiled successfully.
         // It applies too for the following And filter.
         // If we can make sure compileFilter supports all filters, we can remove this check.
-        val or = Seq(f1, f2).flatMap(compileFilter(_))
+        val or = Seq(f1, f2).flatMap(compileFilter(_, dialect))
         if (or.size == 2) {
           or.map(p => s"($p)").mkString(" OR ")
         } else {
           null
         }
       case And(f1, f2) =>
-        val and = Seq(f1, f2).flatMap(compileFilter(_))
+        val and = Seq(f1, f2).flatMap(compileFilter(_, dialect))
         if (and.size == 2) {
           and.map(p => s"($p)").mkString(" AND ")
         } else {
@@ -212,7 +216,9 @@ private[jdbc] class JDBCRDD(
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
    */
   private val filterWhereClause: String =
-    filters.flatMap(JDBCRDD.compileFilter).map(p => s"($p)").mkString(" AND ")
+    filters
+      .flatMap(JDBCRDD.compileFilter(_, JdbcDialects.get(url)))
+      .map(p => s"($p)").mkString(" AND ")
 
   /**
    * A WHERE clause representing both `filters`, if any, and the current partition.

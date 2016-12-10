@@ -139,6 +139,7 @@ abstract class CommonWriteAheadLogTests(
         assert(getLogFilesInDirectory(testDir).size < logFiles.size)
       }
     }
+    writeAheadLog.close()
   }
 
   test(testPrefix + "handling file errors while reading rotating logs") {

@@ -390,6 +390,23 @@ class CheckpointTests(ReusedPySparkTestCase):
         self.assertEqual([1, 2, 3, 4], recovered.collect())
 
 
+class LocalCheckpointTests(ReusedPySparkTestCase):
+
+    def test_basic_localcheckpointing(self):
+        parCollection = self.sc.parallelize([1, 2, 3, 4])
+        flatMappedRDD = parCollection.flatMap(lambda x: range(1, x + 1))
+
+        self.assertFalse(flatMappedRDD.isCheckpointed())
+        self.assertFalse(flatMappedRDD.isLocallyCheckpointed())
+
+        flatMappedRDD.localCheckpoint()
+        result = flatMappedRDD.collect()
+        time.sleep(1)  # 1 second
+        self.assertTrue(flatMappedRDD.isCheckpointed())
+        self.assertTrue(flatMappedRDD.isLocallyCheckpointed())
+        self.assertEqual(flatMappedRDD.collect(), result)
+
+
 class AddFileTests(PySparkTestCase):
 
     def test_add_py_file(self):
@@ -530,6 +547,24 @@ class RDDTests(ReusedPySparkTestCase):
         (x, y) = result[0]
         self.assertEqual(u"Hello World!", x.strip())
         self.assertEqual(u"Hello World!", y.strip())
+
+    def test_cartesian_chaining(self):
+        # Tests for SPARK-16589
+        rdd = self.sc.parallelize(range(10), 2)
+        self.assertSetEqual(
+            set(rdd.cartesian(rdd).cartesian(rdd).collect()),
+            set([((x, y), z) for x in range(10) for y in range(10) for z in range(10)])
+        )
+
+        self.assertSetEqual(
+            set(rdd.cartesian(rdd.cartesian(rdd)).collect()),
+            set([(x, (y, z)) for x in range(10) for y in range(10) for z in range(10)])
+        )
+
+        self.assertSetEqual(
+            set(rdd.cartesian(rdd.zip(rdd)).collect()),
+            set([(x, (y, y)) for x in range(10) for y in range(10)])
+        )
 
     def test_deleting_input_files(self):
         # Regression test for SPARK-1025

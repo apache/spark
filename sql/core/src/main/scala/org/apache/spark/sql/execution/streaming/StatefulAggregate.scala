@@ -21,12 +21,17 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratePredicate, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution
+import org.apache.spark.sql.InternalOutputModes._
+import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.StructType
+
 
 /** Used to identify the state store for a given operator. */
 case class OperatorStateId(
@@ -92,8 +97,9 @@ case class StateStoreRestoreExec(
  */
 case class StateStoreSaveExec(
     keyExpressions: Seq[Attribute],
-    stateId: Option[OperatorStateId],
-    returnAllStates: Option[Boolean],
+    stateId: Option[OperatorStateId] = None,
+    outputMode: Option[OutputMode] = None,
+    eventTimeWatermark: Option[Long] = None,
     child: SparkPlan)
   extends execution.UnaryExecNode with StatefulOperator {
 
@@ -104,9 +110,9 @@ case class StateStoreSaveExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
-    assert(returnAllStates.nonEmpty,
-      "Incorrect planning in IncrementalExecution, returnAllStates have not been set")
-    val saveAndReturnFunc = if (returnAllStates.get) saveAndReturnAll _ else saveAndReturnUpdated _
+    assert(outputMode.nonEmpty,
+      "Incorrect planning in IncrementalExecution, outputMode has not been set")
+
     child.execute().mapPartitionsWithStateStore(
       getStateId.checkpointLocation,
       operatorId = getStateId.operatorId,
@@ -114,75 +120,95 @@ case class StateStoreSaveExec(
       keyExpressions.toStructType,
       child.output.toStructType,
       sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)
-    )(saveAndReturnFunc)
+      Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
+        val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+        val numOutputRows = longMetric("numOutputRows")
+        val numTotalStateRows = longMetric("numTotalStateRows")
+        val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+
+        outputMode match {
+          // Update and output all rows in the StateStore.
+          case Some(Complete) =>
+            while (iter.hasNext) {
+              val row = iter.next().asInstanceOf[UnsafeRow]
+              val key = getKey(row)
+              store.put(key.copy(), row.copy())
+              numUpdatedStateRows += 1
+            }
+            store.commit()
+            numTotalStateRows += store.numKeys()
+            store.iterator().map { case (k, v) =>
+              numOutputRows += 1
+              v.asInstanceOf[InternalRow]
+            }
+
+          // Update and output only rows being evicted from the StateStore
+          case Some(Append) =>
+            while (iter.hasNext) {
+              val row = iter.next().asInstanceOf[UnsafeRow]
+              val key = getKey(row)
+              store.put(key.copy(), row.copy())
+              numUpdatedStateRows += 1
+            }
+
+            val watermarkAttribute =
+              keyExpressions.find(_.metadata.contains(EventTimeWatermark.delayKey)).get
+            // If we are evicting based on a window, use the end of the window.  Otherwise just
+            // use the attribute itself.
+            val evictionExpression =
+              if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
+                LessThanOrEqual(
+                  GetStructField(watermarkAttribute, 1),
+                  Literal(eventTimeWatermark.get * 1000))
+              } else {
+                LessThanOrEqual(
+                  watermarkAttribute,
+                  Literal(eventTimeWatermark.get * 1000))
+              }
+
+            logInfo(s"Filtering state store on: $evictionExpression")
+            val predicate = newPredicate(evictionExpression, keyExpressions)
+            store.remove(predicate.eval)
+
+            store.commit()
+
+            numTotalStateRows += store.numKeys()
+            store.updates().filter(_.isInstanceOf[ValueRemoved]).map { removed =>
+              numOutputRows += 1
+              removed.value.asInstanceOf[InternalRow]
+            }
+
+          // Update and output modified rows from the StateStore.
+          case Some(Update) =>
+            new Iterator[InternalRow] {
+              private[this] val baseIterator = iter
+
+              override def hasNext: Boolean = {
+                if (!baseIterator.hasNext) {
+                  store.commit()
+                  numTotalStateRows += store.numKeys()
+                  false
+                } else {
+                  true
+                }
+              }
+
+              override def next(): InternalRow = {
+                val row = baseIterator.next().asInstanceOf[UnsafeRow]
+                val key = getKey(row)
+                store.put(key.copy(), row.copy())
+                numOutputRows += 1
+                numUpdatedStateRows += 1
+                row
+              }
+            }
+
+          case _ => throw new UnsupportedOperationException(s"Invalid output mode: $outputMode")
+        }
+    }
   }
 
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
-
-  /**
-   * Save all the rows to the state store, and return all the rows in the state store.
-   * Note that this returns an iterator that pipelines the saving to store with downstream
-   * processing.
-   */
-  private def saveAndReturnUpdated(
-      store: StateStore,
-      iter: Iterator[InternalRow]): Iterator[InternalRow] = {
-    val numOutputRows = longMetric("numOutputRows")
-    val numTotalStateRows = longMetric("numTotalStateRows")
-    val numUpdatedStateRows = longMetric("numUpdatedStateRows")
-
-    new Iterator[InternalRow] {
-      private[this] val baseIterator = iter
-      private[this] val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
-
-      override def hasNext: Boolean = {
-        if (!baseIterator.hasNext) {
-          store.commit()
-          numTotalStateRows += store.numKeys()
-          false
-        } else {
-          true
-        }
-      }
-
-      override def next(): InternalRow = {
-        val row = baseIterator.next().asInstanceOf[UnsafeRow]
-        val key = getKey(row)
-        store.put(key.copy(), row.copy())
-        numOutputRows += 1
-        numUpdatedStateRows += 1
-        row
-      }
-    }
-  }
-
-  /**
-   * Save all the rows to the state store, and return all the rows in the state store.
-   * Note that the saving to store is blocking; only after all the rows have been saved
-   * is the iterator on the update store data is generated.
-   */
-  private def saveAndReturnAll(
-      store: StateStore,
-      iter: Iterator[InternalRow]): Iterator[InternalRow] = {
-    val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
-    val numOutputRows = longMetric("numOutputRows")
-    val numTotalStateRows = longMetric("numTotalStateRows")
-    val numUpdatedStateRows = longMetric("numUpdatedStateRows")
-
-    while (iter.hasNext) {
-      val row = iter.next().asInstanceOf[UnsafeRow]
-      val key = getKey(row)
-      store.put(key.copy(), row.copy())
-      numUpdatedStateRows += 1
-    }
-    store.commit()
-    numTotalStateRows += store.numKeys()
-    store.iterator().map { case (k, v) =>
-      numOutputRows += 1
-      v.asInstanceOf[InternalRow]
-    }
-  }
 }
