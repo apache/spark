@@ -140,6 +140,8 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     checkDataset(Seq(Queue(1.toShort)).toDS(), Queue(1.toShort))
     checkDataset(Seq(Queue(true)).toDS(), Queue(true))
     checkDataset(Seq(Queue("test")).toDS(), Queue("test"))
+    // Implicit resolution problem - encoder needs to be provided explicitly
+    implicit val queueEncoder = newProductSeqEncoder[Tuple1[Int], Queue[Tuple1[Int]]]
     checkDataset(Seq(Queue(Tuple1(1))).toDS(), Queue(Tuple1(1)))
 
     import scala.collection.mutable.ArrayBuffer
@@ -151,6 +153,8 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     checkDataset(Seq(ArrayBuffer(1.toShort)).toDS(), ArrayBuffer(1.toShort))
     checkDataset(Seq(ArrayBuffer(true)).toDS(), ArrayBuffer(true))
     checkDataset(Seq(ArrayBuffer("test")).toDS(), ArrayBuffer("test"))
+    // Implicit resolution problem - encoder needs to be provided explicitly
+    implicit val arrayBufferEncoder = newProductSeqEncoder[Tuple1[Int], ArrayBuffer[Tuple1[Int]]]
     checkDataset(Seq(ArrayBuffer(Tuple1(1))).toDS(), ArrayBuffer(Tuple1(1)))
   }
 

@@ -167,6 +167,10 @@ abstract class SQLImplicits {
   [A <: Product : TypeTag, T <: Seq[A] with Product : TypeTag]: Encoder[T] =
     newProductSeqEncoder[A, T]
 
+  // Workaround for implicit resolution problem for Seq.toDS (only supports Seq)
+  implicit def newProductSeqOnlyEncoder[A <: Product : TypeTag]: Encoder[Seq[A]] =
+    newProductSeqEncoder[A, Seq[A]]
+
   // Arrays
 
   /** @since 1.6.1 */
