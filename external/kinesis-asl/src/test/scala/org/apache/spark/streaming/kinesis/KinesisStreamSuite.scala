@@ -271,7 +271,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
           "\nData received does not match data sent after splitting a shard")
       }
 
-      val (shardToMerge, adjShared) = splitOpenShards match { case Seq(e1, e2) => (e1, e2) }
+      val Seq(shardToMerge, adjShared) = splitOpenShards
       localTestUtils.mergeShard(shardToMerge.getShardId, adjShared.getShardId)
       val (mergedOpenShards, mergedCloseShards) = localTestUtils.getShards().partition { shard =>
         shard.getSequenceNumberRange.getEndingSequenceNumber == null
