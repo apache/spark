@@ -772,14 +772,9 @@ head(predict(isoregModel, newDF))
 
 (Added in 2.1.0)
 
-[Logistic regression](https://en.wikipedia.org/wiki/Logistic_regression) is a widely-used model when the response is categorical. It can be seen as a special case of the [Generalized Linear Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
-There are two types of logistic regression models, namely binomial logistic regression (i.e., response is binary) and multinomial
-logistic regression (i.e., response falls into multiple classes). We provide `spark.logit` on top of `spark.glm` to support logistic regression with advanced hyper-parameters.
-It supports both binary and multiclass classification, elastic-net regularization, and feature standardization, similar to `glmnet`.
-
-
-`spark.logit` fits an Logistic Regression Model against a Spark DataFrame. The `family` parameter can be used to select between the
-binomial and multinomial algorithms, or leave it unset and Spark will infer the correct variant.
+[Logistic regression](https://en.wikipedia.org/wiki/Logistic_regression) is a widely-used model when the response is categorical. It can be seen as a special case of the [Generalized Linear Predictive Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
+We provide `spark.logit` on top of `spark.glm` to support logistic regression with advanced hyper-parameters.
+It supports both binary and multiclass classification with elastic-net regularization and feature standardization, similar to `glmnet`.
 
 We use a simple example to demonstrate `spark.logit` usage. In general, there are three steps of using `spark.logit`:
 1). Create a dataframe from a proper data source; 2). Fit a logistic regression model using `spark.logit` with a proper parameter setting;
@@ -788,11 +783,10 @@ and 3). Obtain the coefficient matrix of the fitted model using `summary` and us
 Binomial logistic regression
 ```{r, warning=FALSE}
 df <- createDataFrame(iris)
-# Create a dataframe containing two classes
+# Create a DataFrame containing two classes
 training <- df[df$Species %in% c("versicolor", "virginica"), ]
 model <- spark.logit(training, Species ~ ., regParam = 0.5)
-summary <- summary(model)
-head(summary)
+summary(model)
 ```
 
 Predict values on training data
@@ -803,10 +797,9 @@ fitted <- predict(model, training)
 Multinomial logistic regression against three classes
 ```{r, warning=FALSE}
 df <- createDataFrame(iris)
-# Note family = "multinomial" is optional in this case since the dataset has multiple classes.
+# Note in this case, Spark infers it is multinomial logistic regression, so family = "multinomial" is optional.
 model <- spark.logit(df, Species ~ ., regParam = 0.5)
-summary <- summary(model)
-head(summary)
+summary(model)
 ```
 
 ### Model Persistence
