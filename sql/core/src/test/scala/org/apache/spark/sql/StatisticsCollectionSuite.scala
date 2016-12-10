@@ -133,6 +133,79 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("column stats round trip serialization") {
+    // Make sure we serialize and then deserialize and we will get the result data
+    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+    stats.zip(df.schema).foreach { case ((k, v), field) =>
+      withClue(s"column $k with type ${field.dataType}") {
+        val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap)
+        assert(roundtrip == Some(v))
+      }
+    }
+  }
+
+  test("analyze column command - result verification") {
+    val tableName = "column_stats_test2"
+    // (data.head.productArity - 1) because the last column does not support stats collection.
+    assert(stats.size == data.head.productArity - 1)
+    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+    checkColStats(df, tableName, stats)
+  }
+
+  private def checkColStats(
+      df: DataFrame,
+      tableName: String,
+      colStats: mutable.LinkedHashMap[String, ColumnStat]): Unit = {
+    withTable(tableName) {
+      df.write.saveAsTable(tableName)
+
+      // Collect statistics
+      sql(s"analyze table $tableName compute STATISTICS FOR COLUMNS " +
+        colStats.keys.mkString(", "))
+
+      // Validate statistics
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+      assert(table.stats.isDefined)
+      assert(table.stats.get.colStats.size == colStats.size)
+
+      colStats.foreach { case (k, v) =>
+        withClue(s"column $k") {
+          assert(table.stats.get.colStats(k) == v)
+        }
+      }
+    }
+  }
+
+  test("column stats collection for null columns") {
+    def nullColumnStat(dataType: DataType): ColumnStat = {
+      ColumnStat(0, None, None, 1, dataType.defaultSize.toLong, dataType.defaultSize.toLong)
+    }
+
+    val tableName = "column_stats_test3"
+    val nullData = Seq[
+      (jl.Boolean, jl.Byte, jl.Short, jl.Integer, jl.Long,
+        jl.Double, jl.Float, java.math.BigDecimal,
+        String, Array[Byte], Date, Timestamp)](
+      (null, null, null, null, null, null, null, null, null, null, null, null)
+    )
+    val nullStats = mutable.LinkedHashMap(
+      "cbool" -> nullColumnStat(BooleanType),
+      "cbyte" -> nullColumnStat(ByteType),
+      "cshort" -> nullColumnStat(ShortType),
+      "cint" -> nullColumnStat(IntegerType),
+      "clong" -> nullColumnStat(LongType),
+      "cdouble" -> nullColumnStat(DoubleType),
+      "cfloat" -> nullColumnStat(FloatType),
+      "cdecimal" -> nullColumnStat(DecimalType.SYSTEM_DEFAULT),
+      "cstring" -> nullColumnStat(StringType),
+      "cbinary" -> nullColumnStat(BinaryType),
+      "cdate" -> nullColumnStat(DateType),
+      "ctimestamp" -> nullColumnStat(TimestampType)
+    )
+    assert(nullStats.size == nullData.head.productArity)
+    val df = nullData.toDF(nullStats.keys.toSeq: _*)
+    checkColStats(df, tableName, nullStats)
+  }
 }
 
 
@@ -141,7 +214,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
  * when using the Hive external catalog) as well as in the sql/core module.
  */
 abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils {
-  import testImplicits._
 
   private val dec1 = new java.math.BigDecimal("1.000000000000000000")
   private val dec2 = new java.math.BigDecimal("8.000000000000000000")
@@ -179,40 +251,4 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     "cdate" -> ColumnStat(2, Some(d1), Some(d2), 1, 4, 4),
     "ctimestamp" -> ColumnStat(2, Some(t1), Some(t2), 1, 8, 8)
   )
-
-  test("column stats round trip serialization") {
-    // Make sure we serialize and then deserialize and we will get the result data
-    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
-    stats.zip(df.schema).foreach { case ((k, v), field) =>
-      withClue(s"column $k with type ${field.dataType}") {
-        val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap)
-        assert(roundtrip == Some(v))
-      }
-    }
-  }
-
-  test("analyze column command - result verification") {
-    val tableName = "column_stats_test2"
-    // (data.head.productArity - 1) because the last column does not support stats collection.
-    assert(stats.size == data.head.productArity - 1)
-    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
-
-    withTable(tableName) {
-      df.write.saveAsTable(tableName)
-
-      // Collect statistics
-      sql(s"analyze table $tableName compute STATISTICS FOR COLUMNS " + stats.keys.mkString(", "))
-
-      // Validate statistics
-      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
-      assert(table.stats.isDefined)
-      assert(table.stats.get.colStats.size == stats.size)
-
-      stats.foreach { case (k, v) =>
-        withClue(s"column $k") {
-          assert(table.stats.get.colStats(k) == v)
-        }
-      }
-    }
-  }
 }
