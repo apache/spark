@@ -254,6 +254,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
         "default", "src_part", partitions, ignoreIfExists = true)
     }
 
+    test(s"$version: getPartitionNames(catalogTable)") {
+      val partitionNames = (1 to testPartitionCount).map(key2 => s"key1=1/key2=$key2")
+      assert(partitionNames == client.getPartitionNames(client.getTable("default", "src_part")))
+    }
+
     test(s"$version: getPartitions(catalogTable)") {
       assert(testPartitionCount ==
         client.getPartitions(client.getTable("default", "src_part")).size)
@@ -352,13 +357,13 @@ class VersionsSuite extends SparkFunSuite with Logging {
       // with a version that is older than the minimum (1.2 in this case).
       try {
         client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
-          purge = true)
+          purge = true, retainData = false)
         assert(!versionsWithoutPurge.contains(version))
       } catch {
         case _: UnsupportedOperationException =>
           assert(versionsWithoutPurge.contains(version))
           client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
-            purge = false)
+            purge = false, retainData = false)
       }
 
       assert(client.getPartitionOption("default", "src_part", spec).isEmpty)

@@ -259,6 +259,41 @@ class PartitionProviderCompatibilitySuite
         }
       }
     }
+
+    test(s"SPARK-18659 insert overwrite table files - partition management $enabled") {
+      withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> enabled.toString) {
+        withTable("test") {
+          spark.range(10)
+            .selectExpr("id", "id as A", "'x' as B")
+            .write.partitionBy("A", "B").mode("overwrite")
+            .saveAsTable("test")
+          spark.sql("insert overwrite table test select id, id, 'x' from range(1)")
+          assert(spark.sql("select * from test").count() == 1)
+
+          spark.range(10)
+            .selectExpr("id", "id as A", "'x' as B")
+            .write.partitionBy("A", "B").mode("overwrite")
+            .saveAsTable("test")
+          spark.sql(
+            "insert overwrite table test partition (A, B) select id, id, 'x' from range(1)")
+          assert(spark.sql("select * from test").count() == 1)
+        }
+      }
+    }
+
+    test(s"SPARK-18659 insert overwrite table with lowercase - partition management $enabled") {
+      withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> enabled.toString) {
+        withTable("test") {
+          spark.range(10)
+            .selectExpr("id", "id as A", "'x' as B")
+            .write.partitionBy("A", "B").mode("overwrite")
+            .saveAsTable("test")
+          // note that 'A', 'B' are lowercase instead of their original case here
+          spark.sql("insert overwrite table test partition (a=1, b) select id, 'x' from range(1)")
+          assert(spark.sql("select * from test").count() == 10)
+        }
+      }
+    }
   }
 
   /**

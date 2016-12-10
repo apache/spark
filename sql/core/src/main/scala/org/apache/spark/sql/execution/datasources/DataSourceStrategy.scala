@@ -161,8 +161,8 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
       insert.copy(partition = parts.map(p => (p._1, None)), child = Project(projectList, query))
 
 
-    case i @ logical.InsertIntoTable(
-           l @ LogicalRelation(t: HadoopFsRelation, _, table), part, query, overwrite, false)
+    case logical.InsertIntoTable(
+      l @ LogicalRelation(t: HadoopFsRelation, _, table), _, query, overwrite, false)
         if query.resolved && t.schema.sameType(query.schema) =>
 
       // Sanity checks
@@ -192,11 +192,19 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
       var initialMatchingPartitions: Seq[TablePartitionSpec] = Nil
       var customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty
 
+      val staticPartitionKeys: TablePartitionSpec = if (overwrite.enabled) {
+        overwrite.staticPartitionKeys.map { case (k, v) =>
+          (partitionSchema.map(_.name).find(_.equalsIgnoreCase(k)).get, v)
+        }
+      } else {
+        Map.empty
+      }
+
       // When partitions are tracked by the catalog, compute all custom partition locations that
       // may be relevant to the insertion job.
       if (partitionsTrackedByCatalog) {
         val matchingPartitions = t.sparkSession.sessionState.catalog.listPartitions(
-          l.catalogTable.get.identifier, Some(overwrite.staticPartitionKeys))
+          l.catalogTable.get.identifier, Some(staticPartitionKeys))
         initialMatchingPartitions = matchingPartitions.map(_.spec)
         customPartitionLocations = getCustomPartitionLocations(
           t.sparkSession, l.catalogTable.get, outputPath, matchingPartitions)
@@ -217,7 +225,8 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
             if (deletedPartitions.nonEmpty) {
               AlterTableDropPartitionCommand(
                 l.catalogTable.get.identifier, deletedPartitions.toSeq,
-                ifExists = true, purge = true).run(t.sparkSession)
+                ifExists = true, purge = false,
+                retainData = true /* already deleted */).run(t.sparkSession)
             }
           }
         }
@@ -226,7 +235,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
       val insertCmd = InsertIntoHadoopFsRelationCommand(
         outputPath,
-        if (overwrite.enabled) overwrite.staticPartitionKeys else Map.empty,
+        staticPartitionKeys,
         customPartitionLocations,
         partitionSchema,
         t.bucketSpec,
