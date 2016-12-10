@@ -782,7 +782,7 @@ It supports both binary and multiclass classification, elastic-net regularizatio
 binomial and multinomial algorithms, or leave it unset and Spark will infer the correct variant.
 
 We use a simple example to demonstrate `spark.logit` usage. In general, there are three steps of using `spark.logit`:
-1). Create a dataframe from proper data source; 2). Fit a logistic regression model using `spark.logit` with a proper parameter setting;
+1). Create a dataframe from a proper data source; 2). Fit a logistic regression model using `spark.logit` with a proper parameter setting;
 and 3). Obtain the coefficient matrix of the fitted model using `summary` and use the model for prediction with `predict`.
 
 Binomial logistic regression
@@ -795,7 +795,7 @@ summary <- summary(model)
 head(summary)
 ```
 
-Fitted values on training data
+Predict values on training data
 ```{r}
 fitted <- predict(model, training)
 ```
