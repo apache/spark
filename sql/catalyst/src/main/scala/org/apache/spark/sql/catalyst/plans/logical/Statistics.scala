@@ -214,6 +214,7 @@ object ColumnStat extends Logging {
         val nullLit = Literal(null, col.dataType)
         struct(
           ndv, nullLit, nullLit, numNulls,
+          // Set avg/max size to default size if all the values are null or there is no value.
           Coalesce(Seq(Ceil(Average(Length(col))), defaultSize)),
           Coalesce(Seq(Cast(Max(Length(col)), LongType), defaultSize)))
       case _ =>

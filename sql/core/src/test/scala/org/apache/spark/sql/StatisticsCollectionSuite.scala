@@ -21,6 +21,7 @@ import java.{lang => jl}
 import java.sql.{Date, Timestamp}
 
 import scala.collection.mutable
+import scala.util.Random
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -145,66 +146,27 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("analyze column command - result verification") {
-    val tableName = "column_stats_test2"
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)
     val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
-    checkColStats(df, tableName, stats)
-  }
-
-  private def checkColStats(
-      df: DataFrame,
-      tableName: String,
-      colStats: mutable.LinkedHashMap[String, ColumnStat]): Unit = {
-    withTable(tableName) {
-      df.write.saveAsTable(tableName)
-
-      // Collect statistics
-      sql(s"analyze table $tableName compute STATISTICS FOR COLUMNS " +
-        colStats.keys.mkString(", "))
-
-      // Validate statistics
-      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
-      assert(table.stats.isDefined)
-      assert(table.stats.get.colStats.size == colStats.size)
-
-      colStats.foreach { case (k, v) =>
-        withClue(s"column $k") {
-          assert(table.stats.get.colStats(k) == v)
-        }
-      }
-    }
+    checkColStats(df, stats)
   }
 
   test("column stats collection for null columns") {
-    def nullColumnStat(dataType: DataType): ColumnStat = {
-      ColumnStat(0, None, None, 1, dataType.defaultSize.toLong, dataType.defaultSize.toLong)
-    }
+    val dataTypes: Seq[(DataType, Int)] = Seq(
+      BooleanType, ByteType, ShortType, IntegerType, LongType,
+      DoubleType, FloatType, DecimalType.SYSTEM_DEFAULT,
+      StringType, BinaryType, DateType, TimestampType
+    ).zipWithIndex
 
-    val tableName = "column_stats_test3"
-    val nullData = Seq[
-      (jl.Boolean, jl.Byte, jl.Short, jl.Integer, jl.Long,
-        jl.Double, jl.Float, java.math.BigDecimal,
-        String, Array[Byte], Date, Timestamp)](
-      (null, null, null, null, null, null, null, null, null, null, null, null)
-    )
-    val nullStats = mutable.LinkedHashMap(
-      "cbool" -> nullColumnStat(BooleanType),
-      "cbyte" -> nullColumnStat(ByteType),
-      "cshort" -> nullColumnStat(ShortType),
-      "cint" -> nullColumnStat(IntegerType),
-      "clong" -> nullColumnStat(LongType),
-      "cdouble" -> nullColumnStat(DoubleType),
-      "cfloat" -> nullColumnStat(FloatType),
-      "cdecimal" -> nullColumnStat(DecimalType.SYSTEM_DEFAULT),
-      "cstring" -> nullColumnStat(StringType),
-      "cbinary" -> nullColumnStat(BinaryType),
-      "cdate" -> nullColumnStat(DateType),
-      "ctimestamp" -> nullColumnStat(TimestampType)
-    )
-    assert(nullStats.size == nullData.head.productArity)
-    val df = nullData.toDF(nullStats.keys.toSeq: _*)
-    checkColStats(df, tableName, nullStats)
+    val df = sql("select " + dataTypes.map { case (tpe, idx) =>
+      s"cast(null as ${tpe.sql}) as col$idx"
+    }.mkString(", "))
+
+    val expectedColStats = dataTypes.map { case (tpe, idx) =>
+      (s"col$idx", ColumnStat(0, None, None, 1, tpe.defaultSize.toLong, tpe.defaultSize.toLong))
+    }
+    checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
   }
 }
 
@@ -251,4 +213,33 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     "cdate" -> ColumnStat(2, Some(d1), Some(d2), 1, 4, 4),
     "ctimestamp" -> ColumnStat(2, Some(t1), Some(t2), 1, 8, 8)
   )
+
+  private val randomName = new Random(31)
+
+  /**
+   * Compute column stats for the given DataFrame and compare it with colStats.
+   */
+  def checkColStats(
+      df: DataFrame,
+      colStats: mutable.LinkedHashMap[String, ColumnStat]): Unit = {
+    val tableName = "column_stats_test_" + randomName.nextInt(10)
+    withTable(tableName) {
+      df.write.saveAsTable(tableName)
+
+      // Collect statistics
+      sql(s"analyze table $tableName compute STATISTICS FOR COLUMNS " +
+        colStats.keys.mkString(", "))
+
+      // Validate statistics
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+      assert(table.stats.isDefined)
+      assert(table.stats.get.colStats.size == colStats.size)
+
+      colStats.foreach { case (k, v) =>
+        withClue(s"column $k") {
+          assert(table.stats.get.colStats(k) == v)
+        }
+      }
+    }
+  }
 }
