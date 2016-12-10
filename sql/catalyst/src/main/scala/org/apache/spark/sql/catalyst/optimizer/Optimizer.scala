@@ -103,6 +103,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       SimplifyConditionals,
       RemoveDispensableExpressions,
       SimplifyBinaryComparison,
+      ReorderPredicatesInFilter,
       PruneFilters,
       EliminateSorts,
       SimplifyCasts,

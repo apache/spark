@@ -514,6 +514,34 @@ case class OptimizeCodegen(conf: CatalystConf) extends Rule[LogicalPlan] {
 
 
 /**
+ * Reorders the predicates in `Filter` so more expensive expressions like UDF can evaluate later.
+ */
+object ReorderPredicatesInFilter extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(pred, child) =>
+      // Extracts deterministic suffix expressions from Filter predicate.
+      val expressions = splitConjunctivePredicates(pred)
+      // The beginning index of the deterministic suffix expressions.
+      var splitIndex = -1
+      (expressions.length - 1 to 0 by -1).foreach { idx =>
+        if (splitIndex == -1 && !expressions(idx).deterministic) {
+          splitIndex = idx + 1
+        }
+      }
+      if (splitIndex == expressions.length) {
+        // All expressions are non-deterministic, no reordering.
+        f
+      } else {
+        val (nonDeterminstics, deterministicExprs) = expressions.splitAt(splitIndex)
+        val (udfs, condExprs) = deterministicExprs.partition { e =>
+          e.find(_.isInstanceOf[ScalaUDF]).isDefined
+        }
+        Filter((nonDeterminstics ++ condExprs ++ udfs).reduce(And), child)
+      }
+  }
+}
+
+/**
  * Removes [[Cast Casts]] that are unnecessary because the input is already the correct type.
  */
 object SimplifyCasts extends Rule[LogicalPlan] {
