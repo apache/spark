@@ -79,8 +79,8 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
   /**
    * Param for how to handle invalid entries. Options are 'skip' (filter out rows with
-   * invalid values), 'error' (throw an error), or 'keep' (keep invalid values in a special additional
-   * bucket).
+   * invalid values), 'error' (throw an error), or 'keep' (keep invalid values in a special
+   * additional bucket).
    * Default: "error"
    * @group param
    */
