@@ -158,7 +158,35 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("LOAD DATA") {
+  Seq(true, false).foreach { local =>
+    val loadQuery = if (local) "LOAD DATA LOCAL" else "LOAD DATA"
+    test(loadQuery) {
+      testLoadData(loadQuery, local)
+    }
+  }
+
+  private def testLoadData(loadQuery: String, local: Boolean): Unit = {
+    val testData = hiveContext.getHiveFile("data/files/employee.dat").getCanonicalFile()
+
+    /**
+     * Run a function with a copy of the input data file when running with non-local input. The
+     * semantics in this mode are that the input file is moved to the destination, so we have
+     * to make a copy so that subsequent tests have access to the original file.
+     */
+    def withInputFile(fn: File => Unit): Unit = {
+      if (local) {
+        fn(testData)
+      } else {
+        val tmp = File.createTempFile(testData.getName(), ".tmp")
+        Files.copy(testData, tmp)
+        try {
+          fn(tmp)
+        } finally {
+          tmp.delete()
+        }
+      }
+    }
+
     withTable("non_part_table", "part_table") {
       sql(
         """
@@ -172,14 +200,52 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       // Its content looks like:
       // 16|john
       // 17|robert
-      val testData = hiveContext.getHiveFile("data/files/employee.dat").getCanonicalPath
 
       // LOAD DATA INTO non-partitioned table can't specify partition
       intercept[AnalysisException] {
-        sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE non_part_table PARTITION(ds="1")""")
+        sql(s"""$loadQuery INPATH "$testData" INTO TABLE non_part_table PARTITION(ds="1")""")
       }
 
-      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE non_part_table""")
+      withInputFile { path =>
+        sql(s"""$loadQuery INPATH "$path" INTO TABLE non_part_table""")
+
+        // Non-local mode is expected to move the file. Check once here that the input file
+        // was actually removed.
+        if (!local) {
+          assert(!path.exists())
+        }
+      }
+
+      checkAnswer(
+        sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
+        Row(16, "john") :: Nil)
+
+      // Incorrect URI.
+      // file://path/to/data/files/employee.dat
+      //
+      // TODO: need a similar test for non-local mode.
+      if (local) {
+        val incorrectUri = "file:/" + testData.getAbsolutePath()
+        intercept[AnalysisException] {
+          sql(s"""LOAD DATA LOCAL INPATH "$incorrectUri" INTO TABLE non_part_table""")
+        }
+      }
+
+      // Use URI as inpath:
+      // file:/path/to/data/files/employee.dat
+      withInputFile { path =>
+        sql(s"""$loadQuery INPATH "${path.toURI()}" INTO TABLE non_part_table""")
+      }
+
+      checkAnswer(
+        sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
+        Row(16, "john") :: Row(16, "john") :: Nil)
+
+      // Overwrite existing data.
+      withInputFile { path =>
+        sql(s"""$loadQuery INPATH "${path.toURI()}" OVERWRITE INTO TABLE non_part_table""")
+      }
+
       checkAnswer(
         sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
         Row(16, "john") :: Nil)
@@ -194,93 +260,36 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         """.stripMargin)
 
       // LOAD DATA INTO partitioned table must specify partition
-      intercept[AnalysisException] {
-        sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table""")
+      withInputFile { path =>
+        intercept[AnalysisException] {
+          sql(s"""$loadQuery INPATH "$path" INTO TABLE part_table""")
+        }
+
+        intercept[AnalysisException] {
+          sql(s"""$loadQuery INPATH "$path" INTO TABLE part_table PARTITION(c="1")""")
+        }
+        intercept[AnalysisException] {
+          sql(s"""$loadQuery INPATH "$path" INTO TABLE part_table PARTITION(d="1")""")
+        }
+        intercept[AnalysisException] {
+          sql(s"""$loadQuery INPATH "$path" INTO TABLE part_table PARTITION(c="1", k="2")""")
+        }
       }
 
-      intercept[AnalysisException] {
-        sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1")""")
+      withInputFile { path =>
+        sql(s"""$loadQuery INPATH "$path" INTO TABLE part_table PARTITION(c="1", d="2")""")
       }
-      intercept[AnalysisException] {
-        sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(d="1")""")
-      }
-      intercept[AnalysisException] {
-        sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1", k="2")""")
-      }
-
-      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1", d="2")""")
       checkAnswer(
         sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '2'"),
         sql("SELECT * FROM non_part_table").collect())
 
       // Different order of partition columns.
-      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(d="1", c="2")""")
+      withInputFile { path =>
+        sql(s"""$loadQuery INPATH "$path" INTO TABLE part_table PARTITION(d="1", c="2")""")
+      }
       checkAnswer(
         sql("SELECT employeeID, employeeName FROM part_table WHERE c = '2' AND d = '1'"),
         sql("SELECT * FROM non_part_table").collect())
-    }
-  }
-
-  test("LOAD DATA: input path") {
-    withTable("non_part_table") {
-      sql(
-        """
-          |CREATE TABLE non_part_table (employeeID INT, employeeName STRING)
-          |ROW FORMAT DELIMITED
-          |FIELDS TERMINATED BY '|'
-          |LINES TERMINATED BY '\n'
-        """.stripMargin)
-
-      // Non-existing inpath
-      intercept[AnalysisException] {
-        sql("""LOAD DATA LOCAL INPATH "/non-existing/data.txt" INTO TABLE non_part_table""")
-      }
-
-      val testData = hiveContext.getHiveFile("data/files/employee.dat")
-
-      // Non-local inpath: without URI Scheme and Authority
-      withCopy(testData) { tmp =>
-        sql(s"""LOAD DATA INPATH "${tmp.getCanonicalPath()}" INTO TABLE non_part_table""")
-      }
-
-      checkAnswer(
-        sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
-        Row(16, "john") :: Nil)
-
-      // Use URI as LOCAL inpath:
-      // file:/path/to/data/files/employee.dat
-      val uri = "file:" + testData.getCanonicalPath()
-      sql(s"""LOAD DATA LOCAL INPATH "$uri" INTO TABLE non_part_table""")
-
-      checkAnswer(
-        sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
-        Row(16, "john") :: Row(16, "john") :: Nil)
-
-      // Use URI as non-LOCAL inpath
-      withCopy(testData) { tmp =>
-        val tmpUri = "file:" + tmp.getCanonicalPath()
-        sql(s"""LOAD DATA INPATH "$tmpUri" INTO TABLE non_part_table""")
-      }
-
-      checkAnswer(
-        sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
-        Row(16, "john") :: Row(16, "john") :: Row(16, "john") :: Nil)
-
-      withCopy(testData) { tmp =>
-        val tmpUri = "file:" + tmp.getCanonicalPath()
-        sql(s"""LOAD DATA INPATH "$tmpUri" OVERWRITE INTO TABLE non_part_table""")
-      }
-
-      checkAnswer(
-        sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
-        Row(16, "john") :: Nil)
-
-      // Incorrect URI:
-      // file://path/to/data/files/employee.dat
-      val incorrectUri = "file:/" + testData
-      intercept[AnalysisException] {
-        sql(s"""LOAD DATA LOCAL INPATH "$incorrectUri" INTO TABLE non_part_table""")
-      }
     }
   }
 
@@ -432,18 +441,4 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  /**
-   * Run a function with a copy of the input file. Use this for tests that use "LOAD DATA"
-   * (instead of "LOAD DATA LOCAL") since, according to Hive's semantics, files are moved
-   * into the target location in that case, and we need the original file to be preserved.
-   */
-  private def withCopy(source: File)(fn: File => Unit): Unit = {
-    val tmp = File.createTempFile(source.getName(), ".tmp")
-    Files.copy(source, tmp)
-    try {
-      fn(tmp)
-    } finally {
-      tmp.delete()
-    }
-  }
 }
