@@ -1110,6 +1110,41 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
     assert(e.getMessage.contains("Cannot create encoder for Option of Product type"))
   }
+
+  private def checkString[T](actual: String, expected: String): Unit = {
+    if (expected != actual) {
+      fail(
+        "Dataset.showString() gives wrong result:\n\n" + sideBySide(
+          "== Expected ==\n" + expected,
+          "== Actual ==\n" + actual
+        ).mkString("\n")
+      )
+    }
+  }
+
+  test("SPARK-18653: Dataset.show() should generate correct padding for Unicode Character") {
+    // scalastyle:off
+    val ds = Seq(UnicodeCaseClass(1, 1.1, "文字列1"), UnicodeCaseClass(-2, -2.2, "文字列")).toDS
+    val leftPadding = ds.showString(1, 99)
+    val rightPadding = ds.showString(1, -99)
+    checkString(leftPadding,
+      """+----+----+-------+
+        ||整数|実数|      s|
+        |+----+----+-------+
+        ||   1| 1.1|文字列1|
+        ||  -2|-2.2| 文字列|
+        |+----+----+-------+
+        |""".stripMargin)
+    checkString(rightPadding,
+      """+----+----+-------+
+        ||整数|実数|s      |
+        |+----+----+-------+
+        ||1   |1.1 |文字列1|
+        ||-2  |-2.2|文字列 |
+        |+----+----+-------+
+        |""".stripMargin)
+    // scalastyle:on
+  }
 }
 
 case class Generic[T](id: T, value: Double)
@@ -1185,3 +1220,6 @@ object DatasetTransform {
 
 case class Route(src: String, dest: String, cost: Int)
 case class GroupedRoutes(src: String, dest: String, routes: Seq[Route])
+// scalastyle:off
+case class UnicodeCaseClass(整数: Int, 実数: Double, s: String)
+// scalastyle:on
