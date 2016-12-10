@@ -37,9 +37,9 @@ import org.apache.spark.status.api.v1.{ApplicationStatus, StageStatus}
 private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val EXAMPLES_JAR = Paths.get("target", "integration-tests-spark-jobs")
-      .toFile
-      .listFiles()(0)
-      .getAbsolutePath
+    .toFile
+    .listFiles()(0)
+    .getAbsolutePath
 
   private val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))
   private val INTERVAL = PatienceConfiguration.Interval(Span(2, Seconds))
