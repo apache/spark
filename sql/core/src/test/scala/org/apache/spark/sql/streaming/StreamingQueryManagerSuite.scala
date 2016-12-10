@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.concurrent.CountDownLatch
+
 import scala.concurrent.Future
 import scala.util.Random
 import scala.util.control.NonFatal
@@ -213,6 +215,28 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("SPARK-18811: Source resolution should not block main thread") {
+    failAfter(streamingTimeout) {
+      StreamingQueryManagerSuite.latch = new CountDownLatch(1)
+      withTempDir { tempDir =>
+        // if source resolution was happening on the main thread, it would block the start call,
+        // now it should only be blocking the stream execution thread
+        val sq = spark.readStream
+          .format("org.apache.spark.sql.streaming.util.BlockingSource")
+          .load()
+          .writeStream
+          .format("org.apache.spark.sql.streaming.util.BlockingSource")
+          .option("checkpointLocation", tempDir.toString)
+          .start()
+        eventually(Timeout(streamingTimeout)) {
+          assert(sq.status.message.contains("Initializing sources"))
+        }
+        StreamingQueryManagerSuite.latch.countDown()
+        sq.stop()
+      }
+    }
+  }
+
 
   /** Run a body of code by defining a query on each dataset */
   private def withQueriesOn(datasets: Dataset[_]*)(body: Seq[StreamingQuery] => Unit): Unit = {
@@ -296,4 +320,8 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
     val mapped = inputData.toDS.map(6 / _)
     (inputData, mapped)
   }
+}
+
+object StreamingQueryManagerSuite {
+  var latch: CountDownLatch = null
 }

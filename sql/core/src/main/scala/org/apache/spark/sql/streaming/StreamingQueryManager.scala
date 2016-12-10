@@ -251,23 +251,11 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
         UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
       }
 
-      var nextSourceId = 0L
-
-      val logicalPlan = analyzedPlan.transform {
-        case StreamingRelation(dataSource, _, output) =>
-          // Materialize source to avoid creating it in every batch
-          val metadataPath = s"$checkpointLocation/sources/$nextSourceId"
-          val source = dataSource.createSource(metadataPath)
-          nextSourceId += 1
-          // We still need to use the previous `output` instead of `source.schema` as attributes in
-          // "df.logicalPlan" has already used attributes of the previous `output`.
-          StreamingExecutionRelation(source, output)
-      }
       val query = new StreamExecution(
         sparkSession,
         name,
         checkpointLocation,
-        logicalPlan,
+        analyzedPlan,
         sink,
         trigger,
         triggerClock,

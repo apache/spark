@@ -47,7 +47,7 @@ class StreamExecution(
     override val sparkSession: SparkSession,
     override val name: String,
     checkpointRoot: String,
-    val logicalPlan: LogicalPlan,
+    analyzedPlan: LogicalPlan,
     val sink: Sink,
     val trigger: Trigger,
     val triggerClock: Clock,
@@ -115,12 +115,26 @@ class StreamExecution(
   private val prettyIdString =
     Option(name).map(_ + " ").getOrElse("") + s"[id = $id, runId = $runId]"
 
+  override lazy val logicalPlan: LogicalPlan = {
+    var nextSourceId = 0L
+    analyzedPlan.transform {
+      case StreamingRelation(dataSource, _, output) =>
+        // Materialize source to avoid creating it in every batch
+        val metadataPath = s"$checkpointRoot/sources/$nextSourceId"
+        val source = dataSource.createSource(metadataPath)
+        nextSourceId += 1
+        // We still need to use the previous `output` instead of `source.schema` as attributes in
+        // "df.logicalPlan" has already used attributes of the previous `output`.
+        StreamingExecutionRelation(source, output)
+    }
+  }
+
   /** All stream sources present in the query plan. */
-  protected val sources =
+  protected lazy val sources =
     logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
 
   /** A list of unique sources in the query plan. */
-  private val uniqueSources = sources.distinct
+  private lazy val uniqueSources = sources.distinct
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
@@ -213,6 +227,10 @@ class StreamExecution(
 
       // While active, repeatedly attempt to run batches.
       SparkSession.setActiveSession(sparkSession)
+
+      updateStatusMessage("Initializing sources")
+      // force initialization of the logical plan so that the sources can be created
+      logicalPlan
 
       triggerExecutor.execute(() => {
         startTrigger()
