@@ -1230,10 +1230,24 @@ class Analyzer(
      */
     private def rewriteSubQuery(
         sub: LogicalPlan,
-        outer: Seq[LogicalPlan]): (LogicalPlan, Seq[Expression]) = {
+        outer: Seq[LogicalPlan],
+        scalarSubq: Boolean = false): (LogicalPlan, Seq[Expression]) = {
       // Pull out the tagged predicates and rewrite the subquery in the process.
       val (basePlan, baseConditions) = pullOutCorrelatedPredicates(sub)
 
+      // SPARK-18504: block cases where GROUP BY columns
+      // are not part of the correlated columns
+      if (scalarSubq && sub.isInstanceOf[Aggregate]) {
+        val groupByCols = ExpressionSet.apply(sub.asInstanceOf[Aggregate].
+          groupingExpressions.flatMap(_.references))
+        val conditionsCols = ExpressionSet.apply(baseConditions.flatMap(_.references))
+        val invalidCols = groupByCols.diff(conditionsCols)
+        if (invalidCols.nonEmpty) {
+          failAnalysis("a GROUP BY clause in a scalar correlated subquery " +
+            "cannot contain non-correlated columns: " +
+            invalidCols.mkString(","))
+        }
+      }
       // Make sure the inner and the outer query attributes do not collide.
       val outputSet = outer.map(_.outputSet).reduce(_ ++ _)
       val duplicates = basePlan.outputSet.intersect(outputSet)
@@ -1298,7 +1312,7 @@ class Analyzer(
             s"does not match the required number of columns ($requiredColumns)")
         }
         // Pullout predicates and construct a new plan.
-        f.tupled(rewriteSubQuery(current, plans))
+        f.tupled(rewriteSubQuery(current, plans, e.isInstanceOf[ScalarSubquery]))
       } else {
         e.withNewPlan(current)
       }

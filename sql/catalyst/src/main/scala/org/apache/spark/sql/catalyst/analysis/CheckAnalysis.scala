@@ -135,19 +135,6 @@ trait CheckAnalysis extends PredicateHelper {
               if (aggregates.isEmpty) {
                 failAnalysis("The output of a correlated scalar subquery must be aggregated")
               }
-
-              // SPARK-18504: block cases where GROUP BY columns
-              // are not part of the correlated columns
-              val groupByCols = ExpressionSet.apply(agg.groupingExpressions.flatMap(_.references))
-              val predicateCols = ExpressionSet.apply(conditions.flatMap(_.references))
-              val invalidCols = groupByCols.diff(predicateCols)
-              // GROUP BY columns must be a subset of columns in the predicates
-              if (invalidCols.nonEmpty) {
-                failAnalysis(
-                  "a GROUP BY clause in a scalar correlated subquery " +
-                    "cannot contain non-correlated columns: " +
-                    invalidCols.mkString(","))
-              }
             }
 
             // Skip projects and subquery aliases added by the Analyzer and the SQLBuilder.
