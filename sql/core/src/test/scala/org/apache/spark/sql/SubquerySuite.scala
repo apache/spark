@@ -497,10 +497,11 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-18814 extra GROUP BY column in correlated scalar subquery is not permitted") {
     withTempView("p", "c") {
-      Seq((1,1)).toDF("pk","pv").createOrReplaceTempView("p")
-      Seq((1,1)).toDF("ck","cv").createOrReplaceTempView("c")
+      Seq((1, 1)).toDF("pk", "pv").createOrReplaceTempView("p")
+      Seq((1, 1)).toDF("ck", "cv").createOrReplaceTempView("c")
       checkAnswer(
-        sql("select pk, cv from p,c where p.pk=c.ck and c.cv = (select avg(c1.cv) from c c1 where c1.ck = p.pk)"),
+        sql("select pk, cv from p,c where p.pk=c.ck and " +
+          "c.cv = (select avg(c1.cv) from c c1 where c1.ck = p.pk)"),
         Row(1, 1) :: Nil)
     }
   }
