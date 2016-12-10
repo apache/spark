@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
+import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.unsafe.Platform;
 
@@ -38,7 +39,9 @@ public class BufferHolder {
   public byte[] buffer;
   public int cursor = Platform.BYTE_ARRAY_OFFSET;
   private final UnsafeRow row;
+  private final UnsafeArrayData array;
   private final int fixedSize;
+  private long numElements;
 
   public BufferHolder(UnsafeRow row) {
     this(row, 64);
@@ -55,6 +58,15 @@ public class BufferHolder {
     this.buffer = new byte[fixedSize + initialSize];
     this.row = row;
     this.row.pointTo(buffer, buffer.length);
+    this.array = null;
+  }
+
+  public BufferHolder(UnsafeArrayData array, long numElements) {
+    this.fixedSize = 0;
+    this.buffer = null;
+    this.array = array;
+    this.numElements = numElements;
+    this.row = null;
   }
 
   /**
@@ -67,18 +79,25 @@ public class BufferHolder {
           "exceeds size limitation " + Integer.MAX_VALUE);
     }
     final int length = totalSize() + neededSize;
-    if (buffer.length < length) {
+    if (buffer == null || buffer.length < length) {
       // This will not happen frequently, because the buffer is re-used.
       int newLength = length < Integer.MAX_VALUE / 2 ? length * 2 : Integer.MAX_VALUE;
       final byte[] tmp = new byte[newLength];
-      Platform.copyMemory(
-        buffer,
-        Platform.BYTE_ARRAY_OFFSET,
-        tmp,
-        Platform.BYTE_ARRAY_OFFSET,
-        totalSize());
+      if (buffer != null) {
+        Platform.copyMemory(
+          buffer,
+          Platform.BYTE_ARRAY_OFFSET,
+          tmp,
+          Platform.BYTE_ARRAY_OFFSET,
+          totalSize());
+      }
       buffer = tmp;
-      row.pointTo(buffer, buffer.length);
+      if (row != null)
+        row.pointTo(buffer, buffer.length);
+      else {
+        Platform.putLong(buffer, Platform.BYTE_ARRAY_OFFSET, numElements);
+        array.pointTo(buffer, Platform.BYTE_ARRAY_OFFSET, buffer.length);
+      }
     }
   }
 

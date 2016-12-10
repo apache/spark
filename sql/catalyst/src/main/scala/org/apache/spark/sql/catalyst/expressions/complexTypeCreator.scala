@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -60,12 +61,13 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
     val et = dataType.elementType
     val evals = children.map(e => e.genCode(ctx))
-    val isPrimitiveArray = ctx.isPrimitiveType(et) && children.forall(!_.nullable)
-    val (assigns, allocate) = if (!isPrimitiveArray) {
+    val isPrimitiveArray = ctx.isPrimitiveType(et)
+    val (preprocess, assigns, postprocess) = if (!isPrimitiveArray) {
       val arrayClass = classOf[GenericArrayData].getName
       ctx.addMutableState("Object[]", values,
         s"this.$values = new Object[${children.size}];")
-      (evals.zipWithIndex.map { case (eval, i) =>
+      ("",
+       evals.zipWithIndex.map { case (eval, i) =>
          eval.code + s"""
           if (${eval.isNull}) {
             $values[$i] = null;
@@ -74,19 +76,42 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
           }
         """
        },
-       s"final ArrayData ${ev.value} = new $arrayClass($values);")
+       s"\nfinal ArrayData ${ev.value} = new $arrayClass($values);\n")
     } else {
+      val holder = ctx.freshName("holder")
+      val arrayWriter = ctx.freshName("createArrayWriter")
       val unsafeArrayClass = classOf[UnsafeArrayData].getName
-      val javaDataType = ctx.javaType(et)
-      ctx.addMutableState(s"${javaDataType}[]", values,
-        s"this.$values = new ${javaDataType}[${children.size}];")
-      (evals.zipWithIndex.map { case (eval, i) =>
-         eval.code +
-           s"\n$values[$i] = ${eval.value};"
+      val holderClass = classOf[BufferHolder].getName
+      val arrayWriterClass = classOf[UnsafeArrayWriter].getName
+      ctx.addMutableState(unsafeArrayClass, ev.value,
+        s"${ev.value} = new $unsafeArrayClass();")
+      ctx.addMutableState(holderClass, holder,
+        s"$holder = new $holderClass(${ev.value}, ${children.size});")
+      ctx.addMutableState(arrayWriterClass, arrayWriter,
+        s"$arrayWriter = new $arrayWriterClass();")
+      val primitiveTypeName = ctx.primitiveTypeName(et)
+
+      (s"""
+        $holder.reset();
+        $arrayWriter.initialize($holder, ${children.size}, ${et.defaultSize});
+       """,
+       evals.zipWithIndex.map { case (eval, i) =>
+         eval.code + (if (!children(i).nullable) {
+           s"\n$arrayWriter.write($i, ${eval.value});"
+         } else {
+           s"""
+           if (${eval.isNull}) {
+             $arrayWriter.setNull$primitiveTypeName($i);
+           } else {
+             $arrayWriter.write($i, ${eval.value});
+           }
+         """
+         })
        },
-       s"final ArrayData ${ev.value} = $unsafeArrayClass.fromPrimitiveArray($values);")
+       "")
     }
-    ev.copy(code = ctx.splitExpressions(ctx.INPUT_ROW, assigns) + allocate, isNull = "false")
+    ev.copy(code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess,
+      isNull = "false")
   }
 
   override def prettyName: String = "array"
