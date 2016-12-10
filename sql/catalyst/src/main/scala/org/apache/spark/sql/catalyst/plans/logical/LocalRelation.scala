@@ -75,7 +75,8 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
   }
 
   override lazy val statistics =
-    Statistics(sizeInBytes = output.map(_.dataType.defaultSize).sum * data.length)
+    Statistics(sizeInBytes =
+      (output.map(n => BigInt(n.dataType.defaultSize))).sum * data.length)
 
   def toSQL(inlineTableName: String): String = {
     require(data.nonEmpty)
