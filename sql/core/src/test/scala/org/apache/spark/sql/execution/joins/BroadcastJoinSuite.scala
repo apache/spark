@@ -86,7 +86,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     plan
   }
 
-  // This tests here are failed on Windows due to the failure of initiating executors
+  // The tests here are failed on Windows due to the failure of initiating executors
   // by the path length limitation. See SPARK-18718.
   test("unsafe broadcast hash join updates peak execution memory") {
     assume(!Utils.isWindows)
