@@ -233,8 +233,8 @@ test_that("basenameSansExtFromUrl", {
               "SNAPSHOT-2016_12_09_11_08-eb2d9bf-bin/spark-2.1.1-SNAPSHOT-bin-hadoop2.7.tgz")
   y <- paste0("http://people.apache.org/~pwendell/spark-releases/spark-2.1.0-rc2-bin/spark-2.1.0-",
               "bin-hadoop2.4-without-hive.tgz")
-  expect_equal(x, "spark-2.1.1-SNAPSHOT-bin-hadoop2.7")
-  expect_equal(y, "spark-2.1.0-bin-hadoop2.4-without-hive")
+  expect_equal(basenameSansExtFromUrl(x), "spark-2.1.1-SNAPSHOT-bin-hadoop2.7")
+  expect_equal(basenameSansExtFromUrl(y), "spark-2.1.0-bin-hadoop2.4-without-hive")
 })
 
 sparkR.session.stop()
