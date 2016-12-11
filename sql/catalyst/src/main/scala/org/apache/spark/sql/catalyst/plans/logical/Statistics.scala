@@ -194,11 +194,12 @@ object ColumnStat extends Logging {
     val numNonNulls = if (col.nullable) Count(col) else Count(one)
     val ndv = Least(Seq(HyperLogLogPlusPlus(col, relativeSD), numNonNulls))
     val numNulls = Subtract(Count(one), numNonNulls)
+    val defaultSize = Literal(col.dataType.defaultSize, LongType)
 
     def fixedLenTypeStruct(castType: DataType) = {
       // For fixed width types, avg size should be the same as max size.
-      val avgSize = Literal(col.dataType.defaultSize, LongType)
-      struct(ndv, Cast(Min(col), castType), Cast(Max(col), castType), numNulls, avgSize, avgSize)
+      struct(ndv, Cast(Min(col), castType), Cast(Max(col), castType), numNulls, defaultSize,
+        defaultSize)
     }
 
     col.dataType match {
@@ -213,7 +214,9 @@ object ColumnStat extends Logging {
         val nullLit = Literal(null, col.dataType)
         struct(
           ndv, nullLit, nullLit, numNulls,
-          Ceil(Average(Length(col))), Cast(Max(Length(col)), LongType))
+          // Set avg/max size to default size if all the values are null or there is no value.
+          Coalesce(Seq(Ceil(Average(Length(col))), defaultSize)),
+          Coalesce(Seq(Cast(Max(Length(col)), LongType), defaultSize)))
       case _ =>
         throw new AnalysisException("Analyzing column statistics is not supported for column " +
             s"${col.name} of data type: ${col.dataType}.")
