@@ -17,18 +17,21 @@
 # limitations under the License.
 #
 
-if [ -z "$R_SCRIPT_PATH" ]
-then
-  if [ ! -z "$R_HOME" ]
-  then
-    R_SCRIPT_PATH="$R_HOME/bin"
-  else
-    # if system wide R_HOME is not found, then exit
-    if [ ! `command -v R` ]; then
-      echo "Cannot find 'R_HOME'. Please specify 'R_HOME' or make sure R is properly installed."
-      exit 1
-    fi
-    R_SCRIPT_PATH="$(dirname $(which R))"
-  fi
-  echo "Using R_SCRIPT_PATH = ${R_SCRIPT_PATH}"
-fi
+# This scripts packages the SparkR source files (R and C files) and
+# creates a package that can be loaded in R. The package is by default installed to
+# $FWDIR/lib and the package can be loaded by using the following command in R:
+#
+#   library(SparkR, lib.loc="$FWDIR/lib")
+#
+# NOTE(shivaram): Right now we use $SPARK_HOME/R/lib to be the installation directory
+# to load the SparkR package on the worker nodes.
+
+set -o pipefail
+set -e
+
+FWDIR="$(cd `dirname $0`; pwd)"
+pushd $FWDIR > /dev/null
+. $FWDIR/find-r.sh
+
+# Generate Rd files if devtools is installed
+"$R_SCRIPT_PATH/"Rscript -e ' if("devtools" %in% rownames(installed.packages())) { library(devtools); devtools::document(pkg="./pkg", roclets=c("rd")) }'
