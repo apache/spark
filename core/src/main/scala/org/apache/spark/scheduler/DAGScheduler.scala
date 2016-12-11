@@ -335,8 +335,8 @@ class DAGScheduler(
       val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
       locs.zipWithIndex
         .filter { case (status, _) => status != null } // null if missing
-        .foreach { case (ms, idx) =>
-          stage.addOutputLoc(idx, ms)
+        .foreach { case (status, idx) =>
+          stage.addOutputLoc(idx, status)
         }
     } else {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
@@ -1223,9 +1223,9 @@ class DAGScheduler(
               } else {
                 // Some tasks had failed; let's resubmit this shuffleStage
                 // TODO: Lower-level scheduler should also deal with this
+                val missingPartitions = shuffleStage.findMissingPartitions().mkString(", ")
                 logInfo(s"Resubmitting $shuffleStage (${shuffleStage.name}) " +
-                  "because some of its tasks had failed: " +
-                  shuffleStage.findMissingPartitions().mkString(", "))
+                  s"because some tasks had failed: $missingPartitions")
                 submitStage(shuffleStage)
               }
             }
@@ -1252,7 +1252,7 @@ class DAGScheduler(
               s"due to a fetch failure from $mapStage (${mapStage.name})")
             markStageAsFinished(failedStage, Some(failureMessage))
           } else {
-            logDebug(s"Received fetch failure from $task, but its from $failedStage which is no " +
+            logDebug(s"Received fetch failure from $task, but it's from $failedStage which is no " +
               s"longer running")
           }
 
@@ -1263,7 +1263,7 @@ class DAGScheduler(
             abortStage(failedStage, s"$failedStage (${failedStage.name}) " +
               s"has failed the maximum allowable number of " +
               s"times: ${Stage.MAX_CONSECUTIVE_FETCH_FAILURES}. " +
-              s"Most recent failure reason: ${failureMessage}", None)
+              s"Most recent failure reason: $failureMessage", None)
           } else {
             if (failedStages.isEmpty) {
               // Don't schedule an event to resubmit failed stages if failed isn't empty, because
