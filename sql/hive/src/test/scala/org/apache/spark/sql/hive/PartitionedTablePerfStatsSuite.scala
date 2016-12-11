@@ -354,7 +354,7 @@ class PartitionedTablePerfStatsSuite
     }
   }
 
-  test("SPARK-18700: add lock for each table's realation in cache") {
+  test("SPARK-18700: table loaded only once even when resolved concurrently") {
     withTable("test") {
       withTempDir { dir =>
         HiveCatalogMetrics.reset()

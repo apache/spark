@@ -34,8 +34,6 @@ import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, Pa
 import org.apache.spark.sql.hive.orc.OrcFileFormat
 import org.apache.spark.sql.types._
 
-
-
 /**
  * Legacy catalog for interacting with the Hive metastore.
  *
@@ -56,12 +54,12 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       tableIdent.table.toLowerCase)
   }
 
-  /** ReadWriteLock for each tables, protect the read and write cached */
-  private val tableLockStripes = Striped.lazyWeakLock(10)
+  /** Locks for preventing driver mem waste when concurrent table instantiation */
+  private val tableCreationLocks = Striped.lazyWeakLock(100)
 
   /** Acquires a lock on the table cache for the duration of `f`. */
-  private def cacheLock[A](tableName: QualifiedTableName, f: => A): A = {
-    val lock = tableLockStripes.get(tableName)
+  private def withTableCreationLock[A](tableName: QualifiedTableName, f: => A): A = {
+    val lock = tableCreationLocks.get(tableName)
     lock.lock()
     try f finally {
       lock.unlock()
@@ -225,10 +223,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         }
       }
 
-      // Here we should protect all relation get and create operation with writeLock while
-      // big table's CatalogFileIndex will take some time, only lock cachedDataSourceTables.put
+      // Here we should protect all relation get and create operation with lock while big
+      // table's CatalogFileIndex will take some time, only lock cachedDataSourceTables.put
       // will still cause driver memory waste. More detail see SPARK-18700.
-      cacheLock(tableIdentifier, {
+      withTableCreationLock(tableIdentifier, {
         val cached = getCached(
           tableIdentifier,
           rootPaths,
@@ -272,7 +270,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       })
     } else {
       val rootPath = metastoreRelation.hiveQlTable.getDataLocation
-      cacheLock(tableIdentifier, {
+      withTableCreationLock(tableIdentifier, {
         val cached = getCached(tableIdentifier,
           Seq(rootPath),
           metastoreRelation,
