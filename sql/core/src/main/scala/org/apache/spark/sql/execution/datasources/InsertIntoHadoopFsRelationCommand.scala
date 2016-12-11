@@ -33,10 +33,10 @@ import org.apache.spark.sql.execution.command.RunnableCommand
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
  * Writing to dynamic partitions is also supported.
  *
- * @param staticPartitions partial partitioning spec for write. This defines the scope of
- *                            partition overwrites: when the spec is empty, all partitions are
- *                            overwritten. When it covers a prefix of the partition keys, only
- *                            partitions matching the prefix are overwritten.
+ * @param staticPartitions partial partitioning spec for write. This defines the scope of partition
+ *                         overwrites: when the spec is empty, all partitions are overwritten.
+ *                         When it covers a prefix of the partition keys, only partitions matching
+ *                         the prefix are overwritten.
  * @param customPartitionLocations mapping of partition specs to their custom locations. The
  *                                 caller should guarantee that exactly those table partitions
  *                                 falling under the specified static partition keys are contained

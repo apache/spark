@@ -196,10 +196,11 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
         l.catalogTable.isDefined && l.catalogTable.get.partitionColumnNames.nonEmpty &&
         l.catalogTable.get.tracksPartitionsInCatalog
-      val staticPartitions = parts.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
 
       var initialMatchingPartitions: Seq[TablePartitionSpec] = Nil
       var customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty
+
+      val staticPartitions = parts.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
 
       // When partitions are tracked by the catalog, compute all custom partition locations that
       // may be relevant to the insertion job.
@@ -236,7 +237,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
       val insertCmd = InsertIntoHadoopFsRelationCommand(
         outputPath,
-        if (overwrite) staticPartitions else Map.empty,
+        staticPartitions,
         customPartitionLocations,
         partitionSchema,
         t.bucketSpec,
