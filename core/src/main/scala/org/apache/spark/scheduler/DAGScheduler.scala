@@ -333,16 +333,16 @@ class DAGScheduler(
       // (so we don't unnecessarily re-compute that data).
       val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
       val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
-      (0 until locs.length).foreach { i =>
-        if (locs(i) ne null) {
-          // locs(i) will be null if missing
-          stage.addOutputLoc(i, locs(i))
+      locs.zipWithIndex
+        .filter { case (status, _) => status != null } // null if missing
+        .foreach { case (ms, idx) =>
+          stage.addOutputLoc(idx, ms)
         }
-      }
     } else {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
       // since we can't do it in the RDD constructor because # of partitions is unknown
-      logInfo("Registering RDD " + rdd.id + " (" + rdd.getCreationSite + ")")
+      logInfo(s"Registering RDD ${rdd.id} (partitions: ${rdd.partitions.length}, " +
+        s" ${rdd.getCreationSite})")
       mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length)
     }
     stage
@@ -1137,12 +1137,12 @@ class DAGScheduler(
     listenerBus.post(SparkListenerTaskEnd(
        stageId, task.stageAttemptId, taskType, event.reason, event.taskInfo, taskMetrics))
 
-    if (!stageIdToStage.contains(task.stageId)) {
+    if (!stageIdToStage.contains(stageId)) {
       // Skip all the actions if the stage has been cancelled.
       return
     }
 
-    val stage = stageIdToStage(task.stageId)
+    val stage = stageIdToStage(stageId)
     event.reason match {
       case Success =>
         stage.pendingPartitions -= task.partitionId
@@ -1176,7 +1176,7 @@ class DAGScheduler(
                   }
                 }
               case None =>
-                logInfo("Ignoring result from " + rt + " because its job has finished")
+                logInfo(s"Ignoring result from $rt because its job has finished")
             }
 
           case smt: ShuffleMapTask =>
@@ -1184,7 +1184,7 @@ class DAGScheduler(
             updateAccumulators(event)
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
-            logDebug("ShuffleMapTask finished on " + execId)
+            logDebug(s"ShuffleMapTask finished on $execId")
             if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
               logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
             } else {
@@ -1211,14 +1211,7 @@ class DAGScheduler(
 
               clearCacheLocs()
 
-              if (!shuffleStage.isAvailable) {
-                // Some tasks had failed; let's resubmit this shuffleStage
-                // TODO: Lower-level scheduler should also deal with this
-                logInfo("Resubmitting " + shuffleStage + " (" + shuffleStage.name +
-                  ") because some of its tasks had failed: " +
-                  shuffleStage.findMissingPartitions().mkString(", "))
-                submitStage(shuffleStage)
-              } else {
+              if (shuffleStage.isAvailable) {
                 // Mark any map-stage jobs waiting on this stage as finished
                 if (shuffleStage.mapStageJobs.nonEmpty) {
                   val stats = mapOutputTracker.getStatistics(shuffleStage.shuffleDep)
@@ -1227,12 +1220,19 @@ class DAGScheduler(
                   }
                 }
                 submitWaitingChildStages(shuffleStage)
+              } else {
+                // Some tasks had failed; let's resubmit this shuffleStage
+                // TODO: Lower-level scheduler should also deal with this
+                logInfo(s"Resubmitting $shuffleStage (${shuffleStage.name}) " +
+                  "because some of its tasks had failed: " +
+                  shuffleStage.findMissingPartitions().mkString(", "))
+                submitStage(shuffleStage)
               }
             }
         }
 
       case Resubmitted =>
-        logInfo("Resubmitted " + task + ", so marking it as still running")
+        logInfo(s"Resubmitted $task, so marking it as still running")
         stage.pendingPartitions += task.partitionId
 
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId, failureMessage) =>
@@ -1290,10 +1290,10 @@ class DAGScheduler(
           }
         }
 
-      case commitDenied: TaskCommitDenied =>
+      case _: TaskCommitDenied =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
-      case exceptionFailure: ExceptionFailure =>
+      case _: ExceptionFailure =>
         // Tasks failed with exceptions might still have accumulator updates.
         updateAccumulators(event)
 
