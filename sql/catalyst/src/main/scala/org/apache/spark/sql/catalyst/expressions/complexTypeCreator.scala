@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -125,10 +126,13 @@ private [sql] object genArrayData {
       ctx.addMutableState(holderClass, holder, "")
       ctx.addMutableState(arrayWriterClass, arrayWriter, "")
       val baseOffset = Platform.BYTE_ARRAY_OFFSET
+      val unsafeArraySizeInBytes =
+        UnsafeArrayData.calculateHeaderPortionInBytes(size) +
+        ByteArrayMethods.roundNumberOfBytesToNearestWord(dt.defaultSize * size)
 
       (s"""
         $array = new $unsafeArrayClass();
-        $holder = new $holderClass(${size}, ${dt.defaultSize});
+        $holder = new $holderClass($unsafeArraySizeInBytes);
         $arrayWriter = new $arrayWriterClass();
         $holder.reset();
         $arrayWriter.initialize($holder, ${size});

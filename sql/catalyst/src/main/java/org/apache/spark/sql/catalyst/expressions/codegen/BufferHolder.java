@@ -60,12 +60,9 @@ public class BufferHolder {
     this.row.pointTo(buffer, buffer.length);
   }
 
-  public BufferHolder(int numElements, int elementSize) {
-    int headerInBytes = calculateHeaderPortionInBytes(numElements);
-    int fixedPartInBytes =
-      ByteArrayMethods.roundNumberOfBytesToNearestWord(elementSize * numElements);
+  public BufferHolder(int initialSizeInBytes) {
     this.fixedSize = 0;
-    this.buffer = new byte[headerInBytes + fixedPartInBytes];
+    this.buffer = new byte[initialSizeInBytes];
     this.row = null;
   }
 
