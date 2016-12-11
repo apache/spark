@@ -73,6 +73,17 @@ public class UnsafeArrayWriter {
     holder.cursor += (headerInBytes + fixedPartInBytes);
   }
 
+  public void initialize(BufferHolder holder, int numElements) {
+    this.numElements = numElements;
+    this.headerInBytes = calculateHeaderPortionInBytes(numElements);
+
+    this.holder = holder;
+    this.startingOffset = holder.cursor;
+
+    Platform.putLong(holder.buffer, startingOffset, numElements);
+    /* avoid to fill 0 since we ensure all elements in holder.buffer are 0 */
+  }
+
   private void zeroOutPaddingBytes(int numBytes) {
     if ((numBytes & 0x07) > 0) {
       Platform.putLong(holder.buffer, holder.cursor + ((numBytes >> 3) << 3), 0L);

@@ -57,64 +57,88 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val values = ctx.freshName("values")
+    val array = ctx.freshName("array")
 
     val et = dataType.elementType
     val evals = children.map(e => e.genCode(ctx))
     val isPrimitiveArray = ctx.isPrimitiveType(et)
-    val (preprocess, assigns, postprocess) = if (!isPrimitiveArray) {
+    val primitiveTypeName = if (isPrimitiveArray) ctx.primitiveTypeName(et) else ""
+    val (preprocess, arrayData, arrayWriter) =
+      genArrayData.getCodeArrayData(ctx, et, children.size, isPrimitiveArray, array)
+
+    ev.copy(code =
+      preprocess +
+      ctx.splitExpressions(
+        ctx.INPUT_ROW,
+        evals.zipWithIndex.map { case (eval, i) =>
+          eval.code +
+            (if (isPrimitiveArray) {
+              (if (!children(i).nullable) {
+                s"\n$arrayWriter.write($i, ${eval.value});"
+              } else {
+                s"""
+                if (${eval.isNull}) {
+                  $arrayWriter.setNull$primitiveTypeName($i);
+                } else {
+                  $arrayWriter.write($i, ${eval.value});
+                }
+               """
+              })
+            } else {
+              s"""
+              if (${eval.isNull}) {
+                $array[$i] = null;
+              } else {
+                $array[$i] = ${eval.value};
+              }
+             """
+            })
+        }) +
+      s"\nfinal ArrayData ${ev.value} = $arrayData;\n",
+      isNull = "false")
+  }
+
+  override def prettyName: String = "array"
+}
+
+private [sql] object genArrayData {
+  // This function returns Java code pieces based on DataType and isPrimitive
+  // for allocation of ArrayData class
+  def getCodeArrayData(
+      ctx: CodegenContext,
+      dt: DataType,
+      size: Int,
+      isPrimitive : Boolean,
+      array: String): (String, String, String) = {
+    if (!isPrimitive) {
       val arrayClass = classOf[GenericArrayData].getName
-      ctx.addMutableState("Object[]", values,
-        s"this.$values = new Object[${children.size}];")
-      ("",
-       evals.zipWithIndex.map { case (eval, i) =>
-         eval.code + s"""
-          if (${eval.isNull}) {
-            $values[$i] = null;
-          } else {
-            $values[$i] = ${eval.value};
-          }
-        """
-       },
-       s"\nfinal ArrayData ${ev.value} = new $arrayClass($values);\n")
+      ctx.addMutableState("Object[]", array,
+        s"this.$array = new Object[${size}];")
+      ("", s"new $arrayClass($array)", null)
     } else {
       val holder = ctx.freshName("holder")
       val arrayWriter = ctx.freshName("createArrayWriter")
       val unsafeArrayClass = classOf[UnsafeArrayData].getName
       val holderClass = classOf[BufferHolder].getName
       val arrayWriterClass = classOf[UnsafeArrayWriter].getName
-      ctx.addMutableState(unsafeArrayClass, ev.value, "")
+      ctx.addMutableState(unsafeArrayClass, array, "")
       ctx.addMutableState(holderClass, holder, "")
       ctx.addMutableState(arrayWriterClass, arrayWriter, "")
-      val primitiveTypeName = ctx.primitiveTypeName(et)
+      val baseOffset = Platform.BYTE_ARRAY_OFFSET
 
       (s"""
-        ${ev.value} = new $unsafeArrayClass();
-        $holder = new $holderClass(${ev.value}, ${children.size});
+        $array = new $unsafeArrayClass();
+        $holder = new $holderClass(${size}, ${dt.defaultSize});
         $arrayWriter = new $arrayWriterClass();
         $holder.reset();
-        $arrayWriter.initialize($holder, ${children.size}, ${et.defaultSize});
-       """,
-       evals.zipWithIndex.map { case (eval, i) =>
-         eval.code + (if (!children(i).nullable) {
-           s"\n$arrayWriter.write($i, ${eval.value});"
-         } else {
-           s"""
-           if (${eval.isNull}) {
-             $arrayWriter.setNull$primitiveTypeName($i);
-           } else {
-             $arrayWriter.write($i, ${eval.value});
-           }
-         """
-         })
-       },
-       "")
+        $arrayWriter.initialize($holder, ${size});
+        $array.pointTo($holder.buffer, $baseOffset, $holder.buffer.length);
+      """,
+       array,
+       arrayWriter
+      )
     }
-    ev.copy(code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess,
-      isNull = "false")
   }
-
-  override def prettyName: String = "array"
 }
 
 /**
@@ -166,28 +190,6 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     new ArrayBasedMapData(new GenericArrayData(keyArray), new GenericArrayData(valueArray))
   }
 
-  // This function returns Java code pieces based on DataType and isPrimitive
-  // for allocation of ArrayData class
-  private def getArrayData(
-      ctx: CodegenContext,
-      dt: DataType,
-      array: String,
-      isPrimitive : Boolean,
-      size: Int): String = {
-    if (!isPrimitive) {
-      val arrayClass = classOf[GenericArrayData].getName
-      ctx.addMutableState("Object[]", array,
-        s"this.$array = new Object[${size}];")
-      s"new $arrayClass($array)"
-    } else {
-      val unsafeArrayClass = classOf[UnsafeArrayData].getName
-      val javaDataType = ctx.javaType(dt)
-      ctx.addMutableState(s"${javaDataType}[]", array,
-        s"this.$array = new ${javaDataType}[${size}];")
-      s"$unsafeArrayClass.fromPrimitiveArray($array)"
-    }
-  }
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val mapClass = classOf[ArrayBasedMapData].getName
     val keyArray = ctx.freshName("keyArray")
@@ -196,36 +198,60 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val MapType(keyDt, valueDt, _) = dataType
     val evalKeys = keys.map(e => e.genCode(ctx))
     val isPrimitiveArrayKey = ctx.isPrimitiveType(keyDt)
-    val isNonNullKey = keys.forall(!_.nullable)
+    val primitiveKeyTypeName = if (isPrimitiveArrayKey) ctx.primitiveTypeName(keyDt) else ""
     val evalValues = values.map(e => e.genCode(ctx))
-    val isPrimitiveArrayValue =
-      ctx.isPrimitiveType(valueDt) && values.forall(!_.nullable)
-    val keyData = getArrayData(ctx, keyDt, keyArray, isPrimitiveArrayKey, keys.size)
-    val valueData = getArrayData(ctx, valueDt, valueArray, isPrimitiveArrayValue, values.size)
+    val isPrimitiveArrayValue = ctx.isPrimitiveType(valueDt)
+    val primitiveValueTypeName = if (isPrimitiveArrayKey) ctx.primitiveTypeName(keyDt) else ""
+    val (preprocessKeyData, keyData, keyDataArrayWriter) =
+      genArrayData.getCodeArrayData(ctx, keyDt, keys.size, isPrimitiveArrayKey, keyArray)
+    val (preprocessValueData, valueData, valueDataArrayWriter) =
+      genArrayData.getCodeArrayData(ctx, valueDt, values.size, isPrimitiveArrayValue, valueArray)
 
     ev.copy(code = s"final boolean ${ev.isNull} = false;" +
+      preprocessKeyData +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
         evalKeys.zipWithIndex.map { case (eval, i) =>
           eval.code +
-            (if (isNonNullKey) {
-               s"$keyArray[$i] = ${eval.value};"
-             } else {
-               s"""
-             if (${eval.isNull}) {
-               throw new RuntimeException("Cannot use null as map key!");
-             } else {
-               $keyArray[$i] = ${eval.value};
-             }
-             """
-             })
+            (if (isPrimitiveArrayKey) {
+               (if (!keys(i).nullable) {
+                  s"\n$keyDataArrayWriter.write($i, ${eval.value});"
+                } else {
+                  s"""
+                 if (${eval.isNull}) {
+                   $keyDataArrayWriter.setNull$primitiveKeyTypeName($i);
+                 } else {
+                   $keyDataArrayWriter.write($i, ${eval.value});
+                 }
+                """
+                })
+              } else {
+                s"""
+                if (${eval.isNull}) {
+                  throw new RuntimeException("Cannot use null as map key!");
+                } else {
+                  $keyArray[$i] = ${eval.value};
+                }
+               """
+              })
         }) +
+      preprocessValueData +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
         evalValues.zipWithIndex.map { case (eval, i) =>
           eval.code +
             (if (isPrimitiveArrayValue) {
-               s"$valueArray[$i] = ${eval.value};"
+               (if (!values(i).nullable) {
+                  s"\n$valueDataArrayWriter.write($i, ${eval.value});"
+                } else {
+                  s"""
+                 if (${eval.isNull}) {
+                   $valueDataArrayWriter.setNull$primitiveValueTypeName($i);
+                 } else {
+                   $valueDataArrayWriter.write($i, ${eval.value});
+                 }
+                """
+                })
              } else {
                s"""
                if (${eval.isNull}) {
