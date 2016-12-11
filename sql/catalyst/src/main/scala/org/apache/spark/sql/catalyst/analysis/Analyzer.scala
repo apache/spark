@@ -1225,8 +1225,12 @@ class Analyzer(
     }
 
     /**
-     * Rewrite the subquery in a safe way by preventing that the subquery and the outer use the same
-     * attributes.
+     * Rewrite the subquery in a safe way by preventing that the subquery and
+     * the outer use the same attributes.
+     *
+     * If this is a scalar subquery, check that GROUP BY columns are a subset
+     * of the columns used in the correlated predicate(s). Otherwise, pulling up
+     * correlated predicates could cause incorrect results.
      */
     private def rewriteSubQuery(
         sub: LogicalPlan,
@@ -1235,17 +1239,21 @@ class Analyzer(
       // Pull out the tagged predicates and rewrite the subquery in the process.
       val (basePlan, baseConditions) = pullOutCorrelatedPredicates(sub)
 
-      // SPARK-18504: block cases where GROUP BY columns
-      // are not part of the correlated columns
-      if (scalarSubq && sub.isInstanceOf[Aggregate]) {
-        val groupByCols = ExpressionSet.apply(sub.asInstanceOf[Aggregate].
-          groupingExpressions.flatMap(_.references))
-        val conditionsCols = ExpressionSet.apply(baseConditions.flatMap(_.references))
-        val invalidCols = groupByCols.diff(conditionsCols)
-        if (invalidCols.nonEmpty) {
-          failAnalysis("a GROUP BY clause in a scalar correlated subquery " +
-            "cannot contain non-correlated columns: " +
-            invalidCols.mkString(","))
+      // SPARK-18504/SPARK-18814:
+      // Block cases where GROUP BY columns are not part of the correlated columns
+      // of a scalar subquery.
+      if (scalarSubq) {
+        sub match {
+          case a @ Aggregate(grouping, _, _) =>
+            val groupByCols = ExpressionSet(grouping.flatMap(_.references))
+            val conditionsCols = ExpressionSet(baseConditions.flatMap(_.references))
+            val invalidCols = groupByCols.diff(conditionsCols)
+            if (invalidCols.nonEmpty) {
+              failAnalysis("A GROUP BY clause in a scalar correlated subquery " +
+                "cannot contain non-correlated columns: " +
+                invalidCols.mkString(","))
+            }
+          case _ => None
         }
       }
       // Make sure the inner and the outer query attributes do not collide.
