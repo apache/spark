@@ -23,18 +23,7 @@ set -e
 FWDIR="$(cd `dirname $0`; pwd)"
 pushd $FWDIR > /dev/null
 
-if [ ! -z "$R_HOME" ]
-  then
-    R_SCRIPT_PATH="$R_HOME/bin"
-  else
-    # if system wide R_HOME is not found, then exit
-    if [ ! `command -v R` ]; then
-      echo "Cannot find 'R_HOME'. Please specify 'R_HOME' or make sure R is properly installed."
-      exit 1
-    fi
-    R_SCRIPT_PATH="$(dirname $(which R))"
-fi
-echo "Using R_SCRIPT_PATH = ${R_SCRIPT_PATH}"
+. $FWDIR/find-r.sh
 
 # Install the package (this is required for code in vignettes to run when building it later)
 # Build the latest docs, but not vignettes, which is built with the package next
