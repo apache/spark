@@ -70,11 +70,11 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   def schema: StructType = encoder.schema
 
-  def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
+  def toDS(): Dataset[A] = {
     Dataset(sqlContext.sparkSession, logicalPlan)
   }
 
-  def toDF()(implicit sqlContext: SQLContext): DataFrame = {
+  def toDF(): DataFrame = {
     Dataset.ofRows(sqlContext.sparkSession, logicalPlan)
   }
 
@@ -186,16 +186,23 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
     }.mkString("\n")
   }
 
-  override def addBatch(batchId: Long, data: DataFrame): Unit = synchronized {
-    if (latestBatchId.isEmpty || batchId > latestBatchId.get) {
+  override def addBatch(batchId: Long, data: DataFrame): Unit = {
+    val notCommitted = synchronized {
+      latestBatchId.isEmpty || batchId > latestBatchId.get
+    }
+    if (notCommitted) {
       logDebug(s"Committing batch $batchId to $this")
       outputMode match {
         case InternalOutputModes.Append | InternalOutputModes.Update =>
-          batches.append(AddedData(batchId, data.collect()))
+          val rows = AddedData(batchId, data.collect())
+          synchronized { batches += rows }
 
         case InternalOutputModes.Complete =>
-          batches.clear()
-          batches += AddedData(batchId, data.collect())
+          val rows = AddedData(batchId, data.collect())
+          synchronized {
+            batches.clear()
+            batches += rows
+          }
 
         case _ =>
           throw new IllegalArgumentException(
@@ -206,7 +213,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
     }
   }
 
-  def clear(): Unit = {
+  def clear(): Unit = synchronized {
     batches.clear()
   }
 

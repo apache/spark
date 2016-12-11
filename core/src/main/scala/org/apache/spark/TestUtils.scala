@@ -93,7 +93,10 @@ private[spark] object TestUtils {
     val jarStream = new JarOutputStream(jarFileStream, new java.util.jar.Manifest())
 
     for (file <- files) {
-      val jarEntry = new JarEntry(Paths.get(directoryPrefix.getOrElse(""), file.getName).toString)
+      // The `name` for the argument in `JarEntry` should use / for its separator. This is
+      // ZIP specification.
+      val prefix = directoryPrefix.map(d => s"$d/").getOrElse("")
+      val jarEntry = new JarEntry(prefix + file.getName)
       jarStream.putNextEntry(jarEntry)
 
       val in = new FileInputStream(file)

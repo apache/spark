@@ -28,6 +28,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
 
@@ -486,6 +487,19 @@ class InMemoryCatalog(
     } else {
       Option(catalog(db).tables(table).partitions(spec))
     }
+  }
+
+  override def listPartitionNames(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String] = synchronized {
+    val partitionColumnNames = getTable(db, table).partitionColumnNames
+
+    listPartitions(db, table, partialSpec).map { partition =>
+      partitionColumnNames.map { name =>
+        escapePathName(name) + "=" + escapePathName(partition.spec(name))
+      }.mkString("/")
+    }.sorted
   }
 
   override def listPartitions(
