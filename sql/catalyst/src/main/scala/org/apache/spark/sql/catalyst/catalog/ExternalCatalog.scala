@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.types.StructField
 
 
 /**
@@ -239,29 +238,6 @@ abstract class ExternalCatalog {
       db: String,
       table: String,
       predicates: Seq[Expression]): Seq[CatalogTablePartition]
-
-  // --------------------------------------------------------------------------
-  // Columns
-  // --------------------------------------------------------------------------
-
-  /**
-   * Alter one or more column(s)'s comment.
-   *
-   * Note: If the underlying implementation does not support altering a certain field,
-   * this becomes a no-op.
-   * @param db database name
-   * @param table table name
-   * @param columnComments map from column names to comments
-   */
-  def alterColumnComments(db: String, table: String, columnComments: Map[String, String]): Unit
-
-  /**
-   * List the metadata of all columns that are defined in the specified table schema, assuming it
-   * exists.
-   * @param db database name
-   * @param table table name
-   */
-  def listColumns(db: String, table: String): Seq[StructField]
 
   // --------------------------------------------------------------------------
   // Functions

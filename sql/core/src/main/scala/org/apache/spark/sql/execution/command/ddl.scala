@@ -308,12 +308,13 @@ case class AlterTableChangeColumnsCommand(
       }
     }
 
-    // Create map from columns to new comments.
-    val columnComments = columns.map {
-      case (col, field: StructField) if field.getComment().isDefined =>
-        (col, field.getComment.get)
+    val newSchema = table.schema.fields.map { field =>
+      // If `columns` contains field name, update the field to the new column, else respect the
+      // field.
+      columns.get(field.name).getOrElse(field)
     }
-    catalog.alterColumnComments(tableName, columnComments)
+    val newTable = table.copy(schema = StructType(newSchema))
+    catalog.alterTable(newTable)
 
     Seq.empty[Row]
   }

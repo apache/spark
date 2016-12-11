@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Test suite for the [[HiveExternalCatalog]].
@@ -41,12 +41,6 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     override val tableInputFormat: String = "org.apache.hadoop.mapred.SequenceFileInputFormat"
     override val tableOutputFormat: String = "org.apache.hadoop.mapred.SequenceFileOutputFormat"
     override def newEmptyCatalog(): ExternalCatalog = externalCatalog
-    // Compare columns ignore nullability.
-    override def columnsEqual(columns: Seq[StructField], others: Seq[StructField]): Boolean = {
-      val normalColumns = columns.map(_.copy(nullable = true))
-      val normalOthers = others.map(_.copy(nullable = true))
-      normalColumns == normalOthers
-    }
   }
 
   protected override def resetState(): Unit = {

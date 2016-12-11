@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * An in-memory (ephemeral) implementation of the system catalog.
@@ -538,28 +537,6 @@ class InMemoryCatalog(
     throw new UnsupportedOperationException(
       "listPartitionsByFilter is not implemented for InMemoryCatalog")
   }
-
-  // --------------------------------------------------------------------------
-  // Columns
-  // --------------------------------------------------------------------------
-
-  override def alterColumnComments(
-      db: String,
-      table: String,
-      columnComments: Map[String, String]): Unit = synchronized {
-    val oldTable = getTable(db, table)
-    val newSchema = oldTable.schema.fields.map { field =>
-      // If `columns` contains field name, update the field with new comment,
-      // else respect the field.
-      columnComments.get(field.name).map(field.withComment(_)).getOrElse(field)
-    }
-    catalog(db).tables(table).table = oldTable.copy(schema = StructType(newSchema))
-  }
-
-  override def listColumns(db: String, table: String): Seq[StructField] = synchronized {
-    getTable(db, table).schema.fields
-  }
-
 
   // --------------------------------------------------------------------------
   // Functions

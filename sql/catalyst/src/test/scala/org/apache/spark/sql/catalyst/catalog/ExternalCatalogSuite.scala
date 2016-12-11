@@ -26,7 +26,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 
@@ -560,45 +560,6 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   }
 
   // --------------------------------------------------------------------------
-  // Columns
-  // --------------------------------------------------------------------------
-
-  test("alter column comments") {
-    val catalog = newBasicCatalog()
-    val columnComments = Map(field1.name -> "insert comment", field2.name -> s"^*`%?",
-      field3.name -> "change comment")
-    catalog.alterColumnComments("db2", "tbl1", columnComments)
-    val newColumns = field1.withComment("insert comment") :: field2.withComment(s"^*`%?") ::
-      field3.withComment("change comment") :: field4 :: Nil
-    assert(columnsEqual(catalog.listColumns("db2", "tbl1"), newColumns))
-  }
-
-  test("alter column comments when database/table does not exist") {
-    val catalog = newBasicCatalog()
-    val columnComments = Map(field1.name -> "insert comment")
-    intercept[AnalysisException] {
-      catalog.alterColumnComments("unknown_db", "unknown_table", columnComments)
-    }
-    intercept[AnalysisException] {
-      catalog.alterColumnComments("db2", "unknown_table", columnComments)
-    }
-  }
-
-  test("alter column comments when column does not exist") {
-    val catalog = newBasicCatalog()
-    val columnComments = Map("unknown_col" -> "insert comment")
-    catalog.alterColumnComments("db2", "tbl1", columnComments)
-    assert(columnsEqual(catalog.listColumns("db2", "tbl1"), schema.fields.toList))
-  }
-
-  test("list columns") {
-    val catalog = newBasicCatalog()
-    assert(columnsEqual(catalog.listColumns("db2", "tbl1"), schema.fields.toList))
-    intercept[AnalysisException] { catalog.listColumns("unknown_db", "unknown_table") }
-    intercept[AnalysisException] { catalog.listColumns("db2", "unknown_table") }
-  }
-
-  // --------------------------------------------------------------------------
   // Functions
   // --------------------------------------------------------------------------
 
@@ -724,7 +685,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       identifier = TableIdentifier("my_table", Some("db1")),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat(None, None, None, None, false, Map.empty),
-      schema = schema,
+      schema = new StructType().add("a", "int").add("b", "string"),
       provider = Some("hive")
     )
 
@@ -744,7 +705,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       storage = CatalogStorageFormat(
         Some(Utils.createTempDir().getAbsolutePath),
         None, None, None, false, Map.empty),
-      schema = schema,
+      schema = new StructType().add("a", "int").add("b", "string"),
       provider = Some("hive")
     )
     catalog.createTable(externalTable, ignoreIfExists = false)
@@ -847,11 +808,6 @@ abstract class CatalogTestUtils {
     CatalogTablePartition(Map("a" -> "5", "b" -> "6", "c" -> "7"), storageFormat)
   lazy val partWithUnknownColumns =
     CatalogTablePartition(Map("a" -> "5", "unknown" -> "6"), storageFormat)
-  lazy val field1 = StructField("col1", IntegerType)
-  lazy val field2 = StructField("col2", StringType, nullable = false).withComment("some blabla...")
-  lazy val field3 = StructField("a", IntegerType, nullable = false).withComment(s"^*`%?")
-  lazy val field4 = StructField("b", StringType)
-  lazy val schema = StructType(field1 :: field2 :: field3 :: field4 :: Nil)
   lazy val funcClass = "org.apache.spark.myFunc"
 
   /**
@@ -894,7 +850,11 @@ abstract class CatalogTestUtils {
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
       storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().getAbsolutePath)),
-      schema = schema,
+      schema = new StructType()
+        .add("col1", "int")
+        .add("col2", "string")
+        .add("a", "int")
+        .add("b", "string"),
       provider = Some("hive"),
       partitionColumnNames = Seq("a", "b"),
       bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))
@@ -916,12 +876,4 @@ abstract class CatalogTestUtils {
     catalog.listPartitions(db, table).map(_.spec).toSet == parts.map(_.spec).toSet
   }
 
-  /**
-   * Whether the columns equal the ones given.
-   * Node: HIVE column don't have `nullable` field, so we should rewrite this function for
-   * HiveExternalCatalogSuite.
-   */
-  def columnsEqual(columns: Seq[StructField], others: Seq[StructField]): Boolean = {
-    columns == others
-  }
 }
