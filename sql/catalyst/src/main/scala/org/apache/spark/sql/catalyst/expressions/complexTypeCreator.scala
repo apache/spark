@@ -83,15 +83,15 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
       val unsafeArrayClass = classOf[UnsafeArrayData].getName
       val holderClass = classOf[BufferHolder].getName
       val arrayWriterClass = classOf[UnsafeArrayWriter].getName
-      ctx.addMutableState(unsafeArrayClass, ev.value,
-        s"${ev.value} = new $unsafeArrayClass();")
-      ctx.addMutableState(holderClass, holder,
-        s"$holder = new $holderClass(${ev.value}, ${children.size});")
-      ctx.addMutableState(arrayWriterClass, arrayWriter,
-        s"$arrayWriter = new $arrayWriterClass();")
+      ctx.addMutableState(unsafeArrayClass, ev.value, "")
+      ctx.addMutableState(holderClass, holder, "")
+      ctx.addMutableState(arrayWriterClass, arrayWriter, "")
       val primitiveTypeName = ctx.primitiveTypeName(et)
 
       (s"""
+        ${ev.value} = new $unsafeArrayClass();
+        $holder = new $holderClass(${ev.value}, ${children.size});
+        $arrayWriter = new $arrayWriterClass();
         $holder.reset();
         $arrayWriter.initialize($holder, ${children.size}, ${et.defaultSize});
        """,
