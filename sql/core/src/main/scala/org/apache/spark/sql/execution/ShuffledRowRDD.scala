@@ -113,7 +113,7 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
 class ShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
     specifiedPartitionStartIndices: Option[Array[Int]] = None)
-  extends RDD[InternalRow](dependency.rdd.context, Seq(dependency)) {
+  extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
   private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions
 
