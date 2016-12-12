@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.storage._
@@ -74,8 +74,8 @@ private[spark] class SerializerManager(
    * loaded yet. */
   private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
 
-  // Size of each chunk, in bytes.
-  private val chunkSize: Int = conf.getInt("spark.io.chunkSize", 4 * 1024 * 1024)
+  // As pageSizeBytes is less than 64MB, so it is safe to convert `Long` tp `Int`.
+  private val chunkSize: Int = SparkEnv.get.memoryManager.pageSizeBytes.toInt
   def encryptionEnabled: Boolean = encryptionKey.isDefined
 
   def canUseKryo(ct: ClassTag[_]): Boolean = {

@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.{SparkConf, TaskContext}
+import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
@@ -99,8 +99,8 @@ private[spark] class MemoryStore(
   // Initial memory to request before unrolling any block
   private val unrollMemoryThreshold: Long =
     conf.getLong("spark.storage.unrollMemoryThreshold", 1024 * 1024)
-  // Size of each chunk, in bytes.
-  private val chunkSize = conf.getInt("spark.io.chunkSize", 4 * 1024 * 1024)
+  // As pageSizeBytes is less than 64MB, so it is safe to convert `Long` tp `Int`.
+  private val chunkSize = SparkEnv.get.memoryManager.pageSizeBytes.toInt
 
   /** Total amount of memory available for storage, in bytes. */
   private def maxMemory: Long = {
