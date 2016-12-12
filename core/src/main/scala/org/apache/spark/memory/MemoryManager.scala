@@ -214,6 +214,7 @@ private[spark] abstract class MemoryManager(
    */
   val pageSizeBytes: Long = {
     val minPageSize = 1L * 1024 * 1024   // 1MB
+    val maxPageSize = 64L * minPageSize  // 64MB
     val cores = if (numCores > 0) numCores else Runtime.getRuntime.availableProcessors()
     // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
     val safetyFactor = 16
@@ -222,10 +223,8 @@ private[spark] abstract class MemoryManager(
       case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.poolSize
     }
     val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
-    val maxPageSize = math.min(64L * minPageSize, math.max(minPageSize, size))
-    val userSetting = conf.getSizeAsBytes("spark.buffer.pageSize")
-    // In case of too large page size.
-    math.min(userSetting, maxPageSize)
+    val default = math.min(maxPageSize, math.max(minPageSize, size))
+    conf.getSizeAsBytes("spark.buffer.pageSize", default)
   }
 
   /**
