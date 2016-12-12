@@ -109,16 +109,27 @@ case class Filter(condition: Expression, child: LogicalPlan)
   override def maxRows: Option[Long] = child.maxRows
 
   override lazy val statistics: Statistics = {
-    // Expected filtering by expressions
-    val expectedFilterDivisor = condition match {
+    // Expected filtering by expressions based on some constants for now.
+    def expectedFilterDivisor(cond: Expression): Int = cond match {
       case EqualTo(_, _) => 20
-      case StartsWith(_, _) => 10
       case LessThan(_, _) | LessThanOrEqual(_, _) |
            GreaterThan(_, _) | GreaterThanOrEqual(_, _) => 2
-      case IsNull(_) => 2
+      case In(_, _) => 2
+      case StartsWith(_, _) | EndsWith(_, _) => 10
+      case Contains(_, _) | Like(_, _) => 5
+      case And(left, right) =>
+        math.min(20, expectedFilterDivisor(left) * expectedFilterDivisor(right))
+      case Or(left, right) =>
+        val leftDivisor = expectedFilterDivisor(left)
+        val rightDivisor = expectedFilterDivisor(right)
+        math.max(2, (leftDivisor * rightDivisor) / (leftDivisor + rightDivisor))
+      case Not(e) => math.max(2, expectedFilterDivisor(e) / 3)
+      case IsNull(_) => 3
       case _ => 1
     }
-    child.statistics.copy(sizeInBytes = child.statistics.sizeInBytes / expectedFilterDivisor)
+
+    child.statistics.copy(sizeInBytes = child.statistics.sizeInBytes /
+        expectedFilterDivisor(condition))
   }
 
   override protected def validConstraints: Set[Expression] = {
