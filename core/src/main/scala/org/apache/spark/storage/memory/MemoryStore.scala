@@ -99,7 +99,7 @@ private[spark] class MemoryStore(
   // Initial memory to request before unrolling any block
   private val unrollMemoryThreshold: Long =
     conf.getLong("spark.storage.unrollMemoryThreshold", 1024 * 1024)
-  // As pageSizeBytes is less than 64MB, so it is safe to convert `Long` tp `Int`.
+  // As pageSizeBytes is less than 64MB, so it is safe to convert `Long` to `Int`.
   private val chunkSize = SparkEnv.get.memoryManager.pageSizeBytes.toInt
 
   /** Total amount of memory available for storage, in bytes. */

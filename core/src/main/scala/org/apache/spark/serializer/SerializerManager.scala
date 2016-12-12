@@ -74,7 +74,7 @@ private[spark] class SerializerManager(
    * loaded yet. */
   private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
 
-  // As pageSizeBytes is less than 64MB, so it is safe to convert `Long` tp `Int`.
+  // As pageSizeBytes is less than 64MB, so it is safe to convert `Long` to `Int`.
   private val chunkSize: Int = SparkEnv.get.memoryManager.pageSizeBytes.toInt
   def encryptionEnabled: Boolean = encryptionKey.isDefined
 
