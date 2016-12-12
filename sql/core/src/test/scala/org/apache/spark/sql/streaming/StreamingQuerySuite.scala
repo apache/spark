@@ -29,6 +29,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ManualClock
 
 
@@ -369,25 +370,52 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
   testQuietly("StreamExecution metadata garbage collection") {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map(6 / _)
+    withSQLConf(SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
+      // Run 3 batches, and then assert that only 2 metadata files is are at the end
+      // since the first should have been purged.
+      testStream(mapped)(
+        AddData(inputData, 1, 2),
+        CheckAnswer(6, 3),
+        AddData(inputData, 1, 2),
+        CheckAnswer(6, 3, 6, 3),
+        AddData(inputData, 4, 6),
+        CheckAnswer(6, 3, 6, 3, 1, 1),
 
-    // Run 3 batches, and then assert that only 2 metadata files is are at the end
-    // since the first should have been purged.
-    testStream(mapped)(
-      AddData(inputData, 1, 2),
-      CheckAnswer(6, 3),
-      AddData(inputData, 1, 2),
-      CheckAnswer(6, 3, 6, 3),
-      AddData(inputData, 4, 6),
-      CheckAnswer(6, 3, 6, 3, 1, 1),
+        AssertOnQuery("metadata log should contain only two files") { q =>
+          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
+          val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
+          val toTest = logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
+          assert(toTest.size == 2 && toTest.head == "1")
+          true
+        }
+      )
+    }
 
-      AssertOnQuery("metadata log should contain only two files") { q =>
-        val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
-        val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
-        val toTest = logFileNames.filter(! _.endsWith(".crc")).sorted  // Workaround for SPARK-17475
-        assert(toTest.size == 2 && toTest.head == "1")
-        true
-      }
-    )
+    val inputData2 = MemoryStream[Int]
+    withSQLConf(SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2") {
+      // Run 5 batches, and then assert that 3 metadata files is are at the end
+      // since the two should have been purged.
+      testStream(inputData2.toDS())(
+        AddData(inputData2, 1, 2),
+        CheckAnswer(1, 2),
+        AddData(inputData2, 1, 2),
+        CheckAnswer(1, 2, 1, 2),
+        AddData(inputData2, 3, 4),
+        CheckAnswer(1, 2, 1, 2, 3, 4),
+        AddData(inputData2, 5, 6),
+        CheckAnswer(1, 2, 1, 2, 3, 4, 5, 6),
+        AddData(inputData2, 7, 8),
+        CheckAnswer(1, 2, 1, 2, 3, 4, 5, 6, 7, 8),
+
+        AssertOnQuery("metadata log should contain three files") { q =>
+          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
+          val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
+          val toTest = logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
+          assert(toTest.size == 3 && toTest.head == "2")
+          true
+        }
+      )
+    }
   }
 
   /** Create a streaming DF that only execute one batch in which it returns the given static DF */

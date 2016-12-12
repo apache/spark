@@ -58,6 +58,9 @@ class StreamExecution(
 
   private val pollingDelayMs = sparkSession.sessionState.conf.streamingPollingDelay
 
+  private val minBatchesToRetain = sparkSession.sessionState.conf.minBatchesToRetain
+  require(minBatchesToRetain > 0, "minBatchesToRetain has to be positive")
+
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
    */
@@ -400,10 +403,11 @@ class StreamExecution(
           }
         }
 
-        // Now that we have logged the new batch, no further processing will happen for
-        // the batch before the previous batch, and it is safe to discard the old metadata.
+        // It is now safe to discard the metadata beyond the minimum number to retain.
         // Note that purge is exclusive, i.e. it purges everything before the target ID.
-        offsetLog.purge(currentBatchId - 1)
+        if (minBatchesToRetain < currentBatchId) {
+          offsetLog.purge(currentBatchId - minBatchesToRetain)
+        }
       }
     } else {
       awaitBatchLock.lock()

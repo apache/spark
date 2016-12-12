@@ -151,10 +151,11 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
 
   testWithUninterruptibleThread("delete expired file") {
     // Set FILE_SINK_LOG_CLEANUP_DELAY to 0 so that we can detect the deleting behaviour
-    // deterministically
+    // deterministically and one min batches to retain
     withSQLConf(
       SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3",
-      SQLConf.FILE_SINK_LOG_CLEANUP_DELAY.key -> "0") {
+      SQLConf.FILE_SINK_LOG_CLEANUP_DELAY.key -> "0",
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
       withFileStreamSinkLog { sinkLog =>
         val fs = sinkLog.metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
 
@@ -174,13 +175,52 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
         sinkLog.add(1, Array(newFakeSinkFileStatus("/a/b/1", FileStreamSinkLog.ADD_ACTION)))
         assert(Set("0", "1") === listBatchFiles())
         sinkLog.add(2, Array(newFakeSinkFileStatus("/a/b/2", FileStreamSinkLog.ADD_ACTION)))
-        assert(Set("2.compact") === listBatchFiles())
+        assert(Set("0", "1", "2.compact") === listBatchFiles())
         sinkLog.add(3, Array(newFakeSinkFileStatus("/a/b/3", FileStreamSinkLog.ADD_ACTION)))
         assert(Set("2.compact", "3") === listBatchFiles())
         sinkLog.add(4, Array(newFakeSinkFileStatus("/a/b/4", FileStreamSinkLog.ADD_ACTION)))
         assert(Set("2.compact", "3", "4") === listBatchFiles())
         sinkLog.add(5, Array(newFakeSinkFileStatus("/a/b/5", FileStreamSinkLog.ADD_ACTION)))
-        assert(Set("5.compact") === listBatchFiles())
+        assert(Set("2.compact", "3", "4", "5.compact") === listBatchFiles())
+        sinkLog.add(6, Array(newFakeSinkFileStatus("/a/b/6", FileStreamSinkLog.ADD_ACTION)))
+        assert(Set("5.compact", "6") === listBatchFiles())
+      }
+    }
+
+    withSQLConf(
+      SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3",
+      SQLConf.FILE_SINK_LOG_CLEANUP_DELAY.key -> "0",
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2") {
+      withFileStreamSinkLog { sinkLog =>
+        val fs = sinkLog.metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
+
+        def listBatchFiles(): Set[String] = {
+          fs.listStatus(sinkLog.metadataPath).map(_.getPath.getName).filter { fileName =>
+            try {
+              getBatchIdFromFileName(fileName)
+              true
+            } catch {
+              case _: NumberFormatException => false
+            }
+          }.toSet
+        }
+
+        sinkLog.add(0, Array(newFakeSinkFileStatus("/a/b/0", FileStreamSinkLog.ADD_ACTION)))
+        assert(Set("0") === listBatchFiles())
+        sinkLog.add(1, Array(newFakeSinkFileStatus("/a/b/1", FileStreamSinkLog.ADD_ACTION)))
+        assert(Set("0", "1") === listBatchFiles())
+        sinkLog.add(2, Array(newFakeSinkFileStatus("/a/b/2", FileStreamSinkLog.ADD_ACTION)))
+        assert(Set("0", "1", "2.compact") === listBatchFiles())
+        sinkLog.add(3, Array(newFakeSinkFileStatus("/a/b/3", FileStreamSinkLog.ADD_ACTION)))
+        assert(Set("0", "1", "2.compact", "3") === listBatchFiles())
+        sinkLog.add(4, Array(newFakeSinkFileStatus("/a/b/4", FileStreamSinkLog.ADD_ACTION)))
+        assert(Set("2.compact", "3", "4") === listBatchFiles())
+        sinkLog.add(5, Array(newFakeSinkFileStatus("/a/b/5", FileStreamSinkLog.ADD_ACTION)))
+        assert(Set("2.compact", "3", "4", "5.compact") === listBatchFiles())
+        sinkLog.add(6, Array(newFakeSinkFileStatus("/a/b/6", FileStreamSinkLog.ADD_ACTION)))
+        assert(Set("2.compact", "3", "4", "5.compact", "6") === listBatchFiles())
+        sinkLog.add(7, Array(newFakeSinkFileStatus("/a/b/7", FileStreamSinkLog.ADD_ACTION)))
+        assert(Set("5.compact", "6", "7") === listBatchFiles())
       }
     }
   }

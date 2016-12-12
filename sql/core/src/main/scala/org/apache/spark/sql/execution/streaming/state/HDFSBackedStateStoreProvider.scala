@@ -303,7 +303,6 @@ private[state] class HDFSBackedStateStoreProvider(
       val mapFromFile = readSnapshotFile(version).getOrElse {
         val prevMap = loadMap(version - 1)
         val newMap = new MapType(prevMap)
-        newMap.putAll(prevMap)
         updateFromDeltaFile(version, newMap)
         newMap
       }
