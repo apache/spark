@@ -22,7 +22,6 @@ import com.google.common.util.concurrent.Striped
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
@@ -164,7 +163,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 relation.partitionSchema == partitionSchema.getOrElse(StructType(Nil))
 
             if (useCached) {
-              HiveCatalogMetrics.incrementDataSourceTableCacheHits(1)
               Some(logical)
             } else {
               // If the cached relation is not updated, we invalidate it right away.
