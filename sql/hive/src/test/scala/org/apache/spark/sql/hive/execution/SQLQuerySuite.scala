@@ -2011,6 +2011,22 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("test CTE with join between two table with the same column name ") {
+    sql("DROP TABLE IF EXISTS p1")
+    sql("DROP TABLE IF EXISTS p2")
+    sql("CREATE TABLE p1 (col String)" )
+    sql("CREATE TABLE p2 (col String)")
+
+    assert(
+      sql(
+        """
+          | WITH CTE AS
+          |  (SELECT s2.col as col FROM p1
+          |     CROSS JOIN (SELECT e.col as col FROM p2 E) s2)
+          | SELECT T1.col as c1,T2.col as c2 FROM CTE T1 CROSS JOIN CTE T2
+        """.stripMargin).collect.isEmpty)
+  }
+
   def testCommandAvailable(command: String): Boolean = {
     val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
     attempt.isSuccess && attempt.get == 0

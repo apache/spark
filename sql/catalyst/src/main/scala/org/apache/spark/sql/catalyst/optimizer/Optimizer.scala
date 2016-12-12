@@ -26,7 +26,7 @@ import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -200,6 +200,7 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
         case plan: Project if plan eq proj => plan.child
         case plan => plan transformExpressions {
           case a: Attribute if attrMap.contains(a) => attrMap(a)
+          case b: Alias if (attrMap.exists(_._1.exprId == b.exprId)) => b.child
         }
       }
     }.getOrElse(plan)
@@ -416,8 +417,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case w: Window if w.windowExpressions.isEmpty => w.child
 
     // Eliminate no-op Projects
-    case p @ Project(_, child) if sameOutput(child.output, p.output) => child
-
+    case p @ Project(_, child) if sameOutput(child.output, p.output) =>
+      if (child.isInstanceOf[CatalogRelation]) p else child
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
