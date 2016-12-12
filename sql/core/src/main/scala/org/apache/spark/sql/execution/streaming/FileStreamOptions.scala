@@ -53,4 +53,15 @@ class FileStreamOptions(parameters: CaseInsensitiveMap) extends Logging {
   /** Options as specified by the user, in a case-insensitive map, without "path" set. */
   val optionMapWithoutPath: Map[String, String] =
     parameters.filterKeys(_ != "path")
+
+  /** Whether to scan new files first. */
+  val newestFirst: Boolean = parameters.get("newestFirst").map { str =>
+    try {
+      str.toBoolean
+    } catch {
+      case _: IllegalArgumentException =>
+        throw new IllegalArgumentException(
+          s"Invalid value '$str' for option 'newestFirst', must be 'true' or 'false'")
+    }
+  }.getOrElse(false)
 }
