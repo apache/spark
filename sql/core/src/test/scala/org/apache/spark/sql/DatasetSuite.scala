@@ -33,7 +33,6 @@ case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
-
   import testImplicits._
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
@@ -67,11 +66,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("range") {
     assert(spark.range(10).map(_ + 1).reduce(_ + _) == 55)
-    assert(spark.range(10).map { case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(spark.range(10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
     assert(spark.range(0, 10).map(_ + 1).reduce(_ + _) == 55)
-    assert(spark.range(0, 10).map { case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(spark.range(0, 10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
     assert(spark.range(0, 10, 1, 2).map(_ + 1).reduce(_ + _) == 55)
-    assert(spark.range(0, 10, 1, 2).map { case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(spark.range(0, 10, 1, 2).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
   }
 
   test("SPARK-12404: Datatype Helper Serializability") {
@@ -173,8 +172,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // We inject a group by here to make sure this test case is future proof
     // when we implement better pipelining and local execution mode.
     val ds: Dataset[(ClassData, Long)] = Seq(ClassData("one", 1), ClassData("two", 2)).toDS()
-      .map(c => ClassData(c.a, c.b + 1))
-      .groupByKey(p => p).count()
+        .map(c => ClassData(c.a, c.b + 1))
+        .groupByKey(p => p).count()
 
     checkDatasetUnorderly(
       ds,
@@ -204,7 +203,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds.select(
         expr("_1").as[String],
-        expr("_2").as[Int]): Dataset[(String, Int)],
+        expr("_2").as[Int]) : Dataset[(String, Int)],
       ("a", 1), ("b", 2), ("c", 3))
   }
 
@@ -271,7 +270,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("reduce") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    assert(ds.reduce((a, b) => ("sum", a._2 + b._2)) ==("sum", 6))
+    assert(ds.reduce((a, b) => ("sum", a._2 + b._2)) == ("sum", 6))
   }
 
   test("joinWith, flat schema") {
@@ -540,7 +539,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-14696: implicit encoders for boxed types") {
-    assert(spark.range(1).map { i => i: java.lang.Long }.head == 0L)
+    assert(spark.range(1).map { i => i : java.lang.Long }.head == 0L)
   }
 
   test("SPARK-11894: Incorrect results are returned when using null") {
@@ -690,9 +689,9 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-14554: Dataset.map may generate wrong java code for wide table") {
-    val wideDF = spark.range(10).select(Seq.tabulate(1000) { i => ('id + i).as(s"c$i") }: _*)
+    val wideDF = spark.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i") }: _*)
     // Make sure the generated code for this plan can compile and execute.
-    checkDataset(wideDF.map(_.getLong(0)), 0L until 10: _*)
+    checkDataset(wideDF.map(_.getLong(0)), 0L until 10 : _*)
   }
 
   test("SPARK-14838: estimating sizeInBytes in operators with ObjectProducer shouldn't fail") {
@@ -1010,7 +1009,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(df10.schema(0).dataType.asInstanceOf[MapType].valueContainsNull == true)
 
     val df11 = Seq(TestDataPoint(1, 2.2, "a", null),
-      TestDataPoint(3, 4.4, "null", (TestDataPoint2(33, "b")))).toDF
+                   TestDataPoint(3, 4.4, "null", (TestDataPoint2(33, "b")))).toDF
     assert(df11.schema(0).nullable == false)
     assert(df11.schema(1).nullable == false)
     assert(df11.schema(2).nullable == true)
@@ -1051,15 +1050,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       val dsPhysicalPlan = ds.queryExecution.executedPlan
       val cpPhysicalPlan = cp.queryExecution.executedPlan
 
-      assertResult(dsPhysicalPlan.outputPartitioning) {
-        logicalRDD.outputPartitioning }
-      assertResult(dsPhysicalPlan.outputOrdering) {
-        logicalRDD.outputOrdering }
+      assertResult(dsPhysicalPlan.outputPartitioning) { logicalRDD.outputPartitioning }
+      assertResult(dsPhysicalPlan.outputOrdering) { logicalRDD.outputOrdering }
 
-      assertResult(dsPhysicalPlan.outputPartitioning) {
-        cpPhysicalPlan.outputPartitioning }
-      assertResult(dsPhysicalPlan.outputOrdering) {
-        cpPhysicalPlan.outputOrdering }
+      assertResult(dsPhysicalPlan.outputPartitioning) { cpPhysicalPlan.outputPartitioning }
+      assertResult(dsPhysicalPlan.outputOrdering) { cpPhysicalPlan.outputOrdering }
 
       // For a lazy checkpoint() call, the first check also materializes the checkpoint.
       checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
@@ -1132,6 +1127,21 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     val ds2 = Seq(WithMap("hi", Map(42L -> "foo"))).toDS
     checkDataset(ds2.map(t => t), WithMap("hi", Map(42L -> "foo")))
+  }
+
+  test("SPARK-18746: add implicit encoder for BigDecimal, date, timestamp") {
+    // For this implicit encoder, 18 is the default scale
+    assert(spark.range(1).map { x => new java.math.BigDecimal(1) }.head ==
+      new java.math.BigDecimal(1).setScale(18))
+
+    assert(spark.range(1).map { x => scala.math.BigDecimal(1, 18) }.head ==
+      scala.math.BigDecimal(1, 18))
+
+    assert(spark.range(1).map { x => new java.sql.Date(2016, 12, 12) }.head ==
+      new java.sql.Date(2016, 12, 12))
+
+    assert(spark.range(1).map { x => new java.sql.Timestamp(100000) }.head ==
+      new java.sql.Timestamp(100000))
   }
 }
 
