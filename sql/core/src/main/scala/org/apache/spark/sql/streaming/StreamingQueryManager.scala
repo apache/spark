@@ -224,7 +224,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
         }
       }.getOrElse {
         if (useTempCheckpointLocation) {
-          Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
+          "file:///" + Utils.createTempDir(namePrefix = "temporary").getCanonicalPath
         } else {
           throw new AnalysisException(
             "checkpointLocation must be specified either " +
