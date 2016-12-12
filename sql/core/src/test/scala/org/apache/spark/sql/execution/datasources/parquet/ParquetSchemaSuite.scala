@@ -1424,7 +1424,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     catalystSchema = new StructType(),
 
-    expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE)
+    expectedSchema = "message root {}")
 
   testSchemaClipping(
     "disjoint field sets",
