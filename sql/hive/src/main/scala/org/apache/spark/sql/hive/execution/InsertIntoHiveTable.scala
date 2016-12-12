@@ -126,16 +126,15 @@ case class InsertIntoHiveTable(
   }
 
   def getExternalTmpPath(path: Path): Path = {
-    val hiveVersion = externalCatalog.asInstanceOf[HiveExternalCatalog].client.version.fullVersion
-    if (hiveVersion.startsWith("0.12") ||
-      hiveVersion.startsWith("0.13") ||
-      hiveVersion.startsWith("0.14") ||
-      hiveVersion.startsWith("1.0")) {
+    import org.apache.spark.sql.hive.client.hive._
+
+    val hiveVersion = externalCatalog.asInstanceOf[HiveExternalCatalog].client.version
+    if (hiveVersion == v12 || hiveVersion == v13 || hiveVersion == v14 || hiveVersion == v1_0) {
       oldStyleExternalTempPath(path)
-    } else if (hiveVersion.startsWith("1.1") || hiveVersion.startsWith("1.2")) {
+    } else if (hiveVersion == v1_1 || hiveVersion == v1_2) {
       newStyleExternalTempPath(path)
     } else {
-      throw new IllegalStateException("Unsupported hive version: " + hiveVersion)
+      throw new IllegalStateException("Unsupported hive version: " + hiveVersion.fullVersion)
     }
   }
 
