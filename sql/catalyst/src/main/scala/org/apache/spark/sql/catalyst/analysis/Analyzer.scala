@@ -1235,26 +1235,23 @@ class Analyzer(
     private def rewriteSubQuery(
         sub: LogicalPlan,
         outer: Seq[LogicalPlan],
-        scalarSubq: Boolean = false): (LogicalPlan, Seq[Expression]) = {
+        isScalarSubq: Boolean): (LogicalPlan, Seq[Expression]) = {
       // Pull out the tagged predicates and rewrite the subquery in the process.
       val (basePlan, baseConditions) = pullOutCorrelatedPredicates(sub)
 
       // SPARK-18504/SPARK-18814:
       // Block cases where GROUP BY columns are not part of the correlated columns
       // of a scalar subquery.
-      if (scalarSubq) {
-        sub match {
-          case a @ Aggregate(grouping, _, _) =>
-            val groupByCols = ExpressionSet(grouping.flatMap(_.references))
-            val conditionsCols = ExpressionSet(baseConditions.flatMap(_.references))
-            val invalidCols = groupByCols.diff(conditionsCols)
-            if (invalidCols.nonEmpty) {
-              failAnalysis("A GROUP BY clause in a scalar correlated subquery " +
-                "cannot contain non-correlated columns: " +
-                invalidCols.mkString(","))
-            }
-          case _ => None
-        }
+      sub collect {
+        case a @ Aggregate(grouping, _, _) if (isScalarSubq) =>
+          val groupByCols = ExpressionSet(grouping.flatMap(_.references))
+          val conditionsCols = ExpressionSet(baseConditions.flatMap(_.references))
+          val invalidCols = groupByCols.diff(conditionsCols)
+          if (invalidCols.nonEmpty) {
+            failAnalysis("A GROUP BY clause in a scalar correlated subquery " +
+              "cannot contain non-correlated columns: " +
+              invalidCols.mkString(","))
+          }
       }
       // Make sure the inner and the outer query attributes do not collide.
       val outputSet = outer.map(_.outputSet).reduce(_ ++ _)
