@@ -990,7 +990,8 @@ test_that("spark.kstest", {
   # Test print.summary.KSTest
   printStats <- capture.output(print.summary.KSTest(stats))
   expect_match(printStats[1], "Kolmogorov-Smirnov test summary:")
-  expect_match(printStats[5], "Low presumption against null hypothesis: Sample follows theoretical distribution. ")
+  expect_match(printStats[5],
+               "Low presumption against null hypothesis: Sample follows theoretical distribution. ")
 })
 
 test_that("spark.randomForest", {
