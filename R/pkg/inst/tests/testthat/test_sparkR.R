@@ -44,3 +44,11 @@ test_that("sparkCheckInstall", {
   deployMode <- "client"
   expect_error(sparkCheckInstall(sparkHome, master, deployMode))
 })
+
+test_that("sparkR.session", {
+  # nothing should be written outside the tempdir() without explicit user premission
+  inital_working_directory_files <- list.files()
+  sparkR.session()
+  expect_equal(inital_working_directory_files, list.files())
+
+})
