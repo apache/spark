@@ -24,7 +24,7 @@ import org.apache.spark.sql.{DataFrame, Row}
  * :: Experimental ::
  * Summary of clustering algorithms.
  *
- * @param predictions  [[DataFrame]] produced by model.transform().
+ * @param predictions  `DataFrame` produced by model.transform().
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.

@@ -22,11 +22,11 @@ import java.nio.ByteBuffer
 import com.google.common.primitives.{Doubles, Ints, Longs}
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.{PercentileDigest}
+import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.{defaultCompressThreshold, Stats}
@@ -71,7 +71,8 @@ case class ApproximatePercentile(
     percentageExpression: Expression,
     accuracyExpression: Expression,
     override val mutableAggBufferOffset: Int,
-    override val inputAggBufferOffset: Int) extends TypedImperativeAggregate[PercentileDigest] {
+    override val inputAggBufferOffset: Int)
+  extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes {
 
   def this(child: Expression, percentageExpression: Expression, accuracyExpression: Expression) = {
     this(child, percentageExpression, accuracyExpression, 0, 0)

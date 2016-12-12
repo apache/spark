@@ -115,7 +115,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      */
     private def canBroadcast(plan: LogicalPlan): Boolean = {
       plan.statistics.isBroadcastable ||
-        plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold
+        (plan.statistics.sizeInBytes >= 0 &&
+          plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold)
     }
 
     /**
@@ -403,7 +404,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.UnionExec(unionChildren.map(planLater)) :: Nil
       case g @ logical.Generate(generator, join, outer, _, _, child) =>
         execution.GenerateExec(
-          generator, join = join, outer = outer, g.output, planLater(child)) :: Nil
+          generator, join = join, outer = outer, g.qualifiedGeneratorOutput,
+          planLater(child)) :: Nil
       case logical.OneRowRelation =>
         execution.RDDScanExec(Nil, singleRowRdd, "OneRowRelation") :: Nil
       case r: logical.Range =>

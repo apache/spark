@@ -234,7 +234,7 @@ class GaussianMixture private (
   }
 
   /**
-   * Java-friendly version of [[run()]]
+   * Java-friendly version of `run()`
    */
   @Since("1.3.0")
   def run(data: JavaRDD[Vector]): GaussianMixtureModel = run(data.rdd)
@@ -273,8 +273,8 @@ class GaussianMixture private (
 
 private[clustering] object GaussianMixture {
   /**
-   * Heuristic to distribute the computation of the [[MultivariateGaussian]]s, approximately when
-   * d > 25 except for when k is very small.
+   * Heuristic to distribute the computation of the `MultivariateGaussian`s, approximately when
+   * d is greater than 25 except for when k is very small.
    * @param k  Number of topics
    * @param d  Number of features
    */

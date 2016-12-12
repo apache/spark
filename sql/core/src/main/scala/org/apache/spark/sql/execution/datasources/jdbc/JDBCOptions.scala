@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 /**
@@ -41,10 +39,23 @@ class JDBCOptions(
       JDBCOptions.JDBC_TABLE_NAME -> table)))
   }
 
+  /**
+   * Returns a property with all options.
+   */
+  val asProperties: Properties = {
+    val properties = new Properties()
+    parameters.foreach { case (k, v) => properties.setProperty(k, v) }
+    properties
+  }
+
+  /**
+   * Returns a property with all options except Spark internal data source options like `url`,
+   * `dbtable`, and `numPartition`. This should be used when invoking JDBC API like `Driver.connect`
+   * because each DBMS vendor has its own property list for JDBC driver. See SPARK-17776.
+   */
   val asConnectionProperties: Properties = {
     val properties = new Properties()
-    // We should avoid to pass the options into properties. See SPARK-17776.
-    parameters.filterKeys(!jdbcOptionNames.contains(_))
+    parameters.filterKeys(key => !jdbcOptionNames(key.toLowerCase))
       .foreach { case (k, v) => properties.setProperty(k, v) }
     properties
   }
@@ -74,19 +85,20 @@ class JDBCOptions(
     }
   }
 
+  // the number of partitions
+  val numPartitions = parameters.get(JDBC_NUM_PARTITIONS).map(_.toInt)
+
   // ------------------------------------------------------------
   // Optional parameters only for reading
   // ------------------------------------------------------------
   // the column used to partition
-  val partitionColumn = parameters.getOrElse(JDBC_PARTITION_COLUMN, null)
+  val partitionColumn = parameters.get(JDBC_PARTITION_COLUMN)
   // the lower bound of partition column
-  val lowerBound = parameters.getOrElse(JDBC_LOWER_BOUND, null)
+  val lowerBound = parameters.get(JDBC_LOWER_BOUND).map(_.toLong)
   // the upper bound of the partition column
-  val upperBound = parameters.getOrElse(JDBC_UPPER_BOUND, null)
-  // the number of partitions
-  val numPartitions = parameters.getOrElse(JDBC_NUM_PARTITIONS, null)
-  require(partitionColumn == null ||
-    (lowerBound != null && upperBound != null && numPartitions != null),
+  val upperBound = parameters.get(JDBC_UPPER_BOUND).map(_.toLong)
+  require(partitionColumn.isEmpty ||
+    (lowerBound.isDefined && upperBound.isDefined && numPartitions.isDefined),
     s"If '$JDBC_PARTITION_COLUMN' is specified then '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND'," +
       s" and '$JDBC_NUM_PARTITIONS' are required.")
   val fetchSize = {
@@ -122,18 +134,13 @@ class JDBCOptions(
       case "REPEATABLE_READ" => Connection.TRANSACTION_REPEATABLE_READ
       case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
     }
-  // the maximum number of connections
-  val maxConnections = parameters.get(JDBC_MAX_CONNECTIONS).map(_.toInt)
-  require(maxConnections.isEmpty || maxConnections.get > 0,
-    s"Invalid value `${maxConnections.get}` for parameter `$JDBC_MAX_CONNECTIONS`. " +
-      "The minimum value is 1.")
 }
 
 object JDBCOptions {
-  private val jdbcOptionNames = ArrayBuffer.empty[String]
+  private val jdbcOptionNames = collection.mutable.Set[String]()
 
   private def newOption(name: String): String = {
-    jdbcOptionNames += name
+    jdbcOptionNames += name.toLowerCase
     name
   }
 
@@ -149,5 +156,4 @@ object JDBCOptions {
   val JDBC_CREATE_TABLE_OPTIONS = newOption("createTableOptions")
   val JDBC_BATCH_INSERT_SIZE = newOption("batchsize")
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
-  val JDBC_MAX_CONNECTIONS = newOption("maxConnections")
 }

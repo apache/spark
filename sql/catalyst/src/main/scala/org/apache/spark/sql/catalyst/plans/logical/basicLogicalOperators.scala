@@ -93,13 +93,13 @@ case class Generate(
 
   override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)
 
-  def output: Seq[Attribute] = {
-    val qualified = qualifier.map(q =>
-      // prepend the new qualifier to the existed one
-      generatorOutput.map(a => a.withQualifier(Some(q)))
-    ).getOrElse(generatorOutput)
+  def qualifiedGeneratorOutput: Seq[Attribute] = qualifier.map { q =>
+    // prepend the new qualifier to the existed one
+    generatorOutput.map(a => a.withQualifier(Some(q)))
+  }.getOrElse(generatorOutput)
 
-    if (join) child.output ++ qualified else qualified
+  def output: Seq[Attribute] = {
+    if (join) child.output ++ qualifiedGeneratorOutput else qualifiedGeneratorOutput
   }
 }
 
@@ -134,7 +134,7 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
     childrenResolved &&
       left.output.length == right.output.length &&
       left.output.zip(right.output).forall { case (l, r) =>
-        l.dataType.asNullable == r.dataType.asNullable
+        l.dataType.sameType(r.dataType)
       } && duplicateResolved
 }
 
@@ -211,8 +211,8 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
         child.output.length == children.head.output.length &&
         // compare the data types with the first child
         child.output.zip(children.head.output).forall {
-          case (l, r) => l.dataType.asNullable == r.dataType.asNullable }
-      )
+          case (l, r) => l.dataType.sameType(r.dataType)
+        })
     children.length > 1 && childrenResolved && allChildrenCompatible
   }
 

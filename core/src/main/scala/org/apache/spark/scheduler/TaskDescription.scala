@@ -23,7 +23,7 @@ import org.apache.spark.util.SerializableBuffer
 
 /**
  * Description of a task that gets passed onto executors to be executed, usually created by
- * [[TaskSetManager.resourceOffer]].
+ * `TaskSetManager.resourceOffer`.
  */
 private[spark] class TaskDescription(
     val taskId: Long,

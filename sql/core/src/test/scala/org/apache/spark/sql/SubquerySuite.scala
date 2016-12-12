@@ -744,4 +744,67 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+  // This restriction applies to
+  // the permutation of { LOJ, ROJ, FOJ } x { EXISTS, IN, scalar subquery }
+  // where correlated predicates appears in right operand of LOJ,
+  // or in left operand of ROJ, or in either operand of FOJ.
+  // The test cases below cover the representatives of the patterns
+  test("Correlated subqueries in outer joins") {
+    withTempView("t1", "t2", "t3") {
+      Seq(1).toDF("c1").createOrReplaceTempView("t1")
+      Seq(2).toDF("c1").createOrReplaceTempView("t2")
+      Seq(1).toDF("c1").createOrReplaceTempView("t3")
+
+      // Left outer join (LOJ) in IN subquery context
+      intercept[AnalysisException] {
+        sql(
+          """
+            | select t1.c1
+            | from   t1
+            | where  1 IN (select 1
+            |              from   t3 left outer join
+            |                     (select c1 from t2 where t1.c1 = 2) t2
+            |                     on t2.c1 = t3.c1)""".stripMargin).collect()
+      }
+      // Right outer join (ROJ) in EXISTS subquery context
+      intercept[AnalysisException] {
+        sql(
+          """
+            | select t1.c1
+            | from   t1
+            | where  exists (select 1
+            |                from   (select c1 from t2 where t1.c1 = 2) t2
+            |                       right outer join t3
+            |                       on t2.c1 = t3.c1)""".stripMargin).collect()
+      }
+      // SPARK-18578: Full outer join (FOJ) in scalar subquery context
+      intercept[AnalysisException] {
+        sql(
+          """
+            | select (select max(1)
+            |         from   (select c1 from  t2 where t1.c1 = 2 and t1.c1=t2.c1) t2
+            |                full join t3
+            |                on t2.c1=t3.c1)
+            | from   t1""".stripMargin).collect()
+      }
+    }
+  }
+
+  // Generate operator
+  test("Correlated subqueries in LATERAL VIEW") {
+    withTempView("t1", "t2") {
+      Seq((1, 1), (2, 0)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq[(Int, Array[Int])]((1, Array(1, 2)), (2, Array(-1, -3)))
+        .toDF("c1", "arr_c2").createTempView("t2")
+      checkAnswer(
+        sql(
+          """
+          | select c2
+          | from t1
+          | where exists (select *
+          |               from t2 lateral view explode(arr_c2) q as c2
+                          where t1.c1 = t2.c1)""".stripMargin),
+        Row(1) :: Row(0) :: Nil)
+    }
+  }
 }

@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.io._
 import java.lang.reflect.Constructor
-import java.net.{MalformedURLException, URI}
+import java.net.{URI}
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
@@ -382,6 +382,9 @@ class SparkContext(config: SparkConf) extends Logging {
       throw new SparkException("An application name must be set in your configuration")
     }
 
+    // log out spark.app.name in the Spark driver logs
+    logInfo(s"Submitted application: $appName")
+
     // System property spark.yarn.app.id must be set if user code ran by AM on a YARN cluster
     if (master == "yarn" && deployMode == "cluster" && !_conf.contains("spark.yarn.app.id")) {
       throw new SparkException("Detected yarn cluster mode, but isn't running on a cluster. " +
@@ -422,10 +425,6 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     if (master == "yarn" && deployMode == "client") System.setProperty("SPARK_YARN_MODE", "true")
-    if (_conf.get(IO_ENCRYPTION_ENABLED) && !SparkHadoopUtil.get.isYarnMode()) {
-      throw new SparkException("IO encryption is only supported in YARN mode, please disable it " +
-        s"by setting ${IO_ENCRYPTION_ENABLED.key} to false")
-    }
 
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
     // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
@@ -645,7 +644,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Get a local property set in this thread, or null if it is missing. See
-   * [[org.apache.spark.SparkContext.setLocalProperty]].
+   * `org.apache.spark.SparkContext.setLocalProperty`.
    */
   def getLocalProperty(key: String): String =
     Option(localProperties.get).map(_.getProperty(key)).orNull
@@ -663,7 +662,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Application programmers can use this method to group all those jobs together and give a
    * group description. Once set, the Spark web UI will associate such jobs with this group.
    *
-   * The application can also use [[org.apache.spark.SparkContext.cancelJobGroup]] to cancel all
+   * The application can also use `org.apache.spark.SparkContext.cancelJobGroup` to cancel all
    * running jobs in this group. For example,
    * {{{
    * // In the main thread:
@@ -1384,7 +1383,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Create and register a [[CollectionAccumulator]], which starts with empty list and accumulates
+   * Create and register a `CollectionAccumulator`, which starts with empty list and accumulates
    * inputs by adding them into the list.
    */
   def collectionAccumulator[T]: CollectionAccumulator[T] = {
@@ -1394,7 +1393,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Create and register a [[CollectionAccumulator]], which starts with empty list and accumulates
+   * Create and register a `CollectionAccumulator`, which starts with empty list and accumulates
    * inputs by adding them into the list.
    */
   def collectionAccumulator[T](name: String): CollectionAccumulator[T] = {
@@ -1761,25 +1760,30 @@ class SparkContext(config: SparkConf) extends Logging {
   def listJars(): Seq[String] = addedJars.keySet.toSeq
 
   /**
+   * When stopping SparkContext inside Spark components, it's easy to cause dead-lock since Spark
+   * may wait for some internal threads to finish. It's better to use this method to stop
+   * SparkContext instead.
+   */
+  private[spark] def stopInNewThread(): Unit = {
+    new Thread("stop-spark-context") {
+      setDaemon(true)
+
+      override def run(): Unit = {
+        try {
+          SparkContext.this.stop()
+        } catch {
+          case e: Throwable =>
+            logError(e.getMessage, e)
+            throw e
+        }
+      }
+    }.start()
+  }
+
+  /**
    * Shut down the SparkContext.
    */
   def stop(): Unit = {
-    if (env.rpcEnv.isInRPCThread) {
-      // `stop` will block until all RPC threads exit, so we cannot call stop inside a RPC thread.
-      // We should launch a new thread to call `stop` to avoid dead-lock.
-      new Thread("stop-spark-context") {
-        setDaemon(true)
-
-        override def run(): Unit = {
-          _stop()
-        }
-      }.start()
-    } else {
-      _stop()
-    }
-  }
-
-  private def _stop() {
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(
         s"Cannot stop SparkContext within listener thread of ${LiveListenerBus.name}")
@@ -2043,7 +2047,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Cancel active jobs for the specified group. See [[org.apache.spark.SparkContext.setJobGroup]]
+   * Cancel active jobs for the specified group. See `org.apache.spark.SparkContext.setJobGroup`
    * for more information.
    */
   def cancelJobGroup(groupId: String) {
@@ -2061,7 +2065,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel a given job if it's scheduled or running.
    *
    * @param jobId the job ID to cancel
-   * @throws InterruptedException if the cancel message cannot be sent
+   * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
   def cancelJob(jobId: Int) {
     dagScheduler.cancelJob(jobId)
@@ -2071,7 +2075,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel a given stage and all jobs associated with it.
    *
    * @param stageId the stage ID to cancel
-   * @throws InterruptedException if the cancel message cannot be sent
+   * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
   def cancelStage(stageId: Int) {
     dagScheduler.cancelStage(stageId)
@@ -2566,8 +2570,8 @@ object SparkContext extends Logging {
     val serviceLoaders =
       ServiceLoader.load(classOf[ExternalClusterManager], loader).asScala.filter(_.canCreate(url))
     if (serviceLoaders.size > 1) {
-      throw new SparkException(s"Multiple Cluster Managers ($serviceLoaders) registered " +
-          s"for the url $url:")
+      throw new SparkException(
+        s"Multiple external cluster managers registered for the url $url: $serviceLoaders")
     }
     serviceLoaders.headOption
   }
