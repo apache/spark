@@ -1243,7 +1243,7 @@ class Analyzer(
       // Block cases where GROUP BY columns are not part of the correlated columns
       // of a scalar subquery.
       sub collect {
-        case a @ Aggregate(grouping, _, _) if (isScalarSubq) =>
+        case a @ Aggregate(grouping, _, _) if isScalarSubq =>
           val groupByCols = ExpressionSet(grouping.flatMap(_.references))
           val conditionsCols = ExpressionSet(baseConditions.flatMap(_.references))
           val invalidCols = groupByCols.diff(conditionsCols)
