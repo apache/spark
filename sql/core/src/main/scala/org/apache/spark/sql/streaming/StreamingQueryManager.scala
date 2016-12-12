@@ -47,9 +47,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
 
   @GuardedBy("activeQueriesLock")
   private val activeQueries = new mutable.HashMap[UUID, StreamingQuery]
-
   private val activeQueriesLock = new Object
-
   private val awaitTerminationLock = new Object
 
   @GuardedBy("awaitTerminationLock")
