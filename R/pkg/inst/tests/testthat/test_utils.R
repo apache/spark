@@ -235,7 +235,7 @@ test_that("basenameSansExtFromUrl", {
               "bin-hadoop2.4-without-hive.tgz")
   expect_equal(basenameSansExtFromUrl(x), "spark-2.1.1-SNAPSHOT-bin-hadoop2.7")
   expect_equal(basenameSansExtFromUrl(y), "spark-2.1.0-bin-hadoop2.4-without-hive")
-  z <- paste0("http://people.apache.org/~pwendell/spark-releases/spark-2.1.0--hive.tar.gz")
+  z <- "http://people.apache.org/~pwendell/spark-releases/spark-2.1.0--hive.tar.gz"
   expect_equal(basenameSansExtFromUrl(z), "spark-2.1.0--hive")
 })
 
