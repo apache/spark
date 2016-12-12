@@ -73,6 +73,9 @@ public class UnsafeArrayWriter {
     holder.cursor += (headerInBytes + fixedPartInBytes);
   }
 
+  // This is a special constructor for writing data to UnsafeArray for a primitive array
+  // that writes regions only for null bits and values
+  // This assumes that all elements in holder.buffer are 0
   public void initialize(BufferHolder holder, int numElements) {
     this.numElements = numElements;
     this.headerInBytes = calculateHeaderPortionInBytes(numElements);

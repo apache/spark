@@ -65,7 +65,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     val isPrimitiveArray = ctx.isPrimitiveType(et)
     val primitiveTypeName = if (isPrimitiveArray) ctx.primitiveTypeName(et) else ""
     val (preprocess, arrayData, arrayWriter) =
-      genArrayData.getCodeArrayData(ctx, et, children.size, isPrimitiveArray, array)
+      GenArrayData.getCodeArrayData(ctx, et, children.size, isPrimitiveArray, array)
 
     ev.copy(code =
       preprocess +
@@ -102,7 +102,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def prettyName: String = "array"
 }
 
-private [sql] object genArrayData {
+private [sql] object GenArrayData {
   // This function returns Java code pieces based on DataType and isPrimitive
   // for allocation of ArrayData class
   def getCodeArrayData(
@@ -207,9 +207,9 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val isPrimitiveArrayValue = ctx.isPrimitiveType(valueDt)
     val primitiveValueTypeName = if (isPrimitiveArrayKey) ctx.primitiveTypeName(keyDt) else ""
     val (preprocessKeyData, keyData, keyDataArrayWriter) =
-      genArrayData.getCodeArrayData(ctx, keyDt, keys.size, isPrimitiveArrayKey, keyArray)
+      GenArrayData.getCodeArrayData(ctx, keyDt, keys.size, isPrimitiveArrayKey, keyArray)
     val (preprocessValueData, valueData, valueDataArrayWriter) =
-      genArrayData.getCodeArrayData(ctx, valueDt, values.size, isPrimitiveArrayValue, valueArray)
+      GenArrayData.getCodeArrayData(ctx, valueDt, values.size, isPrimitiveArrayValue, valueArray)
 
     ev.copy(code = s"final boolean ${ev.isNull} = false;" +
       preprocessKeyData +

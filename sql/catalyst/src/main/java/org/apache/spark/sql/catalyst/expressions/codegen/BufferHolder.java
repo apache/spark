@@ -18,10 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.Platform;
-
-import static org.apache.spark.sql.catalyst.expressions.UnsafeArrayData.calculateHeaderPortionInBytes;
 
 /**
  * A helper class to manage the data buffer for an unsafe row.  The data buffer can grow and
@@ -60,6 +57,8 @@ public class BufferHolder {
     this.row.pointTo(buffer, buffer.length);
   }
 
+  // This is a special constructor for writing data to UnsafeArray for a primitive array
+  // that do not require to grow buffer (not to call grow()) during write operations
   public BufferHolder(int initialSizeInBytes) {
     this.fixedSize = 0;
     this.buffer = new byte[initialSizeInBytes];
