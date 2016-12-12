@@ -166,6 +166,10 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   private def testLoadData(loadQuery: String, local: Boolean): Unit = {
+    // employee.dat has two columns separated by '|', the first is an int, the second is a string.
+    // Its content looks like:
+    // 16|john
+    // 17|robert
     val testData = hiveContext.getHiveFile("data/files/employee.dat").getCanonicalFile()
 
     /**
@@ -195,11 +199,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
           |FIELDS TERMINATED BY '|'
           |LINES TERMINATED BY '\n'
         """.stripMargin)
-
-      // employee.dat has two columns separated by '|', the first is an int, the second is a string.
-      // Its content looks like:
-      // 16|john
-      // 17|robert
 
       // LOAD DATA INTO non-partitioned table can't specify partition
       intercept[AnalysisException] {
