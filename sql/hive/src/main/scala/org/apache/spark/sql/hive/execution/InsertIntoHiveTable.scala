@@ -130,7 +130,7 @@ case class InsertIntoHiveTable(
     if (extURI.getScheme == "viewfs") {
       getExtTmpPathRelTo(path.getParent, hadoopConf)
     } else {
-      new Path(getExternalScratchDir(extURI, hadoopConf), "-ext-10000")
+      new Path(getExternalScratchDir(path.getParent.toUri, hadoopConf), "-ext-10000")
     }
   }
 
@@ -331,6 +331,8 @@ case class InsertIntoHiveTable(
     // Invalidate the cache.
     sqlContext.sharedState.cacheManager.invalidateCache(table)
     sqlContext.sessionState.catalog.refreshTable(table.catalogTable.identifier)
+
+    tmpLocation.getFileSystem(hadoopConf).delete(tmpLocation.getParent, true)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

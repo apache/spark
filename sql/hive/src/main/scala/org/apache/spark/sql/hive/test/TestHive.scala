@@ -54,7 +54,9 @@ object TestHive
           "org.apache.spark.sql.hive.execution.PairSerDe")
         .set("spark.sql.warehouse.dir", TestHiveContext.makeWarehouseDir().toURI.getPath)
         // SPARK-8910
-        .set("spark.ui.enabled", "false")))
+        .set("spark.ui.enabled", "false")
+        .set(HiveUtils.HIVE_METASTORE_JARS, "maven")
+        .set(HiveUtils.HIVE_METASTORE_VERSION, "0.13")))
 
 
 /**
@@ -429,11 +431,18 @@ private[hive] class TestHiveSparkSession(
       }
 
       sharedState.cacheManager.clearCache()
-      loadedTables.clear()
       sessionState.catalog.clearTempTables()
       sessionState.catalog.invalidateCache()
 
-      sessionState.metadataHive.reset()
+      for {
+        db <- sharedState.externalCatalog.listDatabases()
+        table <- sharedState.externalCatalog.listTables(db)
+      } {
+        if (db == "default" && testTables.keySet.contains(table)) {
+        } else {
+          sharedState.externalCatalog.dropTable(db, table, ignoreIfNotExists = true, purge = false)
+        }
+      }
 
       FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
