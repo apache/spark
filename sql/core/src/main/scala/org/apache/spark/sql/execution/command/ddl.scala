@@ -276,7 +276,8 @@ case class AlterTableUnsetPropertiesCommand(
 
 
 /**
- * A command to change the columns for a table, only support changing column comment for now.
+ * A command to change the columns for a table, only support changing the comments of non-partition
+ * columns for now.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -293,36 +294,52 @@ case class AlterTableChangeColumnsCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
-    // Currently only support changing column comment, throw a Exception if other fields e.g.
-    // name/dataType are changed.
-    columns.foreach { case (oldColumnName, newColumn) =>
-      val originColumn = table.schema.collectFirst {
-        case field if field.name == oldColumnName => field
-      }
-      val unchanged = originColumn.forall(equalIgnoreComment(_, newColumn))
-      if (!unchanged) {
+
+    // Create a map that converts the origin column to the new column with changed comment, throw
+    // a Exception if the column reference is invalid or the column name/dataType is changed.
+    val columnsMap = columns.map { case (oldName: String, newField: StructField) =>
+      // Find the origin column from schema by column name.
+      val originColumn = findColumn(table.schema, oldName, resolver)
+      // Throw a Exception if the column name/dataType is changed.
+      if (!columnEqual(originColumn, newField, resolver)) {
         throw new AnalysisException(
-          s"ALTER TABLE CHANGE COLUMN is not supported for changing column " +
-            s"'${getDesc(originColumn.get)}' to '${getDesc(newColumn)}'")
+          "ALTER TABLE CHANGE COLUMN is not supported for changing column " +
+            s"'${getDesc(originColumn)}' to '${getDesc(newField)}'")
       }
+      // Create a new column from the origin column with new comment.
+      val newColumn = addComment(originColumn, newField.getComment)
+      // Create the map from origin column to changed column
+      originColumn -> newColumn
     }
 
-    val newSchema = table.schema.fields.map { field =>
-      // If `columns` contains field name, update the field to the new column, else respect the
-      // field.
-      columns.get(field.name).getOrElse(field)
-    }
+    val newSchema = table.schema.fields.map(field => columnsMap.getOrElse(field, field))
     val newTable = table.copy(schema = StructType(newSchema))
     catalog.alterTable(newTable)
 
     Seq.empty[Row]
   }
 
-  // Compare a [[StructField]] to another, return true if they have equal values except for
-  // comment.
-  private def equalIgnoreComment(field: StructField, other: StructField): Boolean = {
-    field.withComment("") == other.withComment("")
+  // Find the origin column from schema by column name, throw a Exception if the column
+  // reference is invalid.
+  private def findColumn(schema: StructType, name: String, resolver: Resolver): StructField = {
+    schema.fields.collectFirst {
+      case field if resolver(field.name, name) => field
+    }.getOrElse(throw new AnalysisException(
+      s"Invalid column reference '$name', table schema is '${schema}'"))
+  }
+
+  // Add the comment to a column, if comment is empty, return the original column.
+  private def addComment(column: StructField, comment: Option[String]): StructField = {
+    comment.map(column.withComment(_)).getOrElse(column)
+  }
+
+  // Compare a [[StructField]] to another, return true if they have the same column
+  // name(by resolver) and dataType.
+  private def columnEqual(
+      field: StructField, other: StructField, resolver: Resolver): Boolean = {
+    resolver(field.name, other.name) && field.dataType == other.dataType
   }
 
   // Genereate the full description of a StructField.

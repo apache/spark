@@ -26,8 +26,16 @@ DESC test_change;
 ALTER TABLE test_change CHANGE a a Int COMMENT 'this is column a';
 DESC test_change;
 
+-- Change a invalid column
+ALTER TABLE test_change CHANGE invalid_col invalid_col Int;
+DESC test_change;
+
 -- Change column name/dataType/position/comment together (not supported yet)
 ALTER TABLE test_change CHANGE a a1 String COMMENT 'this is column a1' AFTER b;
+DESC test_change;
+
+-- Case sensitive
+ALTER TABLE test_change CHANGE a A Int COMMENT 'this is column A';
 DESC test_change;
 
 -- Change column can't apply to a temporary/global_temporary view
