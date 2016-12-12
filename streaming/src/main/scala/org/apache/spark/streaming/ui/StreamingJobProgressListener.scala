@@ -39,7 +39,7 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
   private var totalProcessedRecords = 0L
   private val receiverInfos = new HashMap[Int, ReceiverInfo]
 
-  @volatile var startTime = -1L
+  @volatile private var _startTime = -1L
 
   // Because onJobStart and onBatchXXX messages are processed in different threads,
   // we may not be able to get the corresponding BatchUIData when receiving onJobStart. So here we
@@ -68,8 +68,8 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
 
   val batchDuration = ssc.graph.batchDuration.milliseconds
 
-  override def onStreamingStarted(schedulerStarted: StreamingListenerStreamingStarted) {
-    startTime = schedulerStarted.time
+  override def onStreamingStarted(streamingStarted: StreamingListenerStreamingStarted) {
+    _startTime = streamingStarted.time
   }
 
   override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
@@ -157,6 +157,8 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
       Some(Time(batchTime.toLong) -> outputOpId.toInt)
     }
   }
+
+  def startTime: Long = _startTime
 
   def numReceivers: Int = synchronized {
     receiverInfos.size

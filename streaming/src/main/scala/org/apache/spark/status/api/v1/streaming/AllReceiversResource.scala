@@ -46,18 +46,21 @@ private[v1] object AllReceiversResource {
           if (eventRates.isEmpty) None
           else Some(eventRates.map(_._2).sum / eventRates.size)
 
-        val lastErrorInfo = receiverInfo match {
+        val (errorTime, errorMessage, error) = receiverInfo match {
           case None => (None, None, None)
           case Some(info) =>
-            val someTime =
+            val someTime = {
               if (info.lastErrorTime >= 0) Some(new Date(info.lastErrorTime))
               else None
-            val someMessage =
+            }
+            val someMessage = {
               if (info.lastErrorMessage.length > 0) Some(info.lastErrorMessage)
               else None
-            val someError =
+            }
+            val someError = {
               if (info.lastError.length > 0) Some(info.lastError)
               else None
+            }
 
             (someTime, someMessage, someError)
         }
@@ -68,9 +71,9 @@ private[v1] object AllReceiversResource {
           isActive = receiverInfo.map(_.active),
           executorId = receiverInfo.map(_.executorId),
           executorHost = receiverInfo.map(_.location),
-          lastErrorTime = lastErrorInfo._1,
-          lastErrorMessage = lastErrorInfo._2,
-          lastError = lastErrorInfo._3,
+          lastErrorTime = errorTime,
+          lastErrorMessage = errorMessage,
+          lastError = error,
           avgEventRate = avgEventRate,
           eventRates = eventRates
         )
