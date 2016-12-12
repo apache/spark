@@ -478,8 +478,8 @@ should fit in a single machine. If that is not the case they can do something li
 ##### spark.lapply with third-party packages
 
 Many of the SparkR jobs distributed by `spark.lapply` need supports from third-party packages. Rather than installing all necessary packages to all executors in advance,
-we could install them during the SparkR interactive session or script. Users can add package files or directories by `spark.addFile` firstly,
-download them to every executor node, and install them.
+we could install them during the SparkR interactive session or script. Users can add package files or directories by `spark.addFile` first,
+which automatically download them to every executor node, and then install them.
 
 <div data-lang="r"  markdown="1">
 {% include_example r/native-r-package.R %}

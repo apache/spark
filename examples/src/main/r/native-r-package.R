@@ -52,7 +52,7 @@ path <- spark.getSparkFiles(filename)
 costs <- exp(seq(from = log(1), to = log(1000), length.out = 5))
 train <- function(cost) {
     if("e1071" %in% rownames(installed.packages(lib = libDir)) == FALSE) {
-        install.packages(path, repos = NULL, type = "source")
+        install.packages(path, lib = libDir, repos = NULL, type = "source")
     }
     library(e1071)
     model <- svm(Species ~ ., data = iris, cost = cost)
