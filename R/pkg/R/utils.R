@@ -857,6 +857,9 @@ basenameSansExtFromUrl <- function(url) {
   # split by '/'
   splits <- unlist(strsplit(url, "^.+/"))
   last <- tail(splits, 1)
-  # strip extension by the last '.'
-  sub("([^.]+)\\.[[:alnum:]]+$", "\\1", last)
+  # this is from file_path_sans_ext
+  # first, remove any compression extension
+  filename <- sub("[.](gz|bz2|xz)$", "", last)
+  # then, strip extension by the last '.'
+  sub("([^.]+)\\.[[:alnum:]]+$", "\\1", filename)
 }

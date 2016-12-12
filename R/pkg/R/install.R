@@ -115,7 +115,7 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
   } else {
     if (releaseUrl != "") {
       message("Downloading from alternate URL:\n- ", releaseUrl)
-      downloadUrl(releaseUrl, packageLocalPath, paste0("Fetch failed from ", mirrorUrl))
+      downloadUrl(releaseUrl, packageLocalPath, paste0("Fetch failed from ", releaseUrl))
     } else {
       robustDownloadTar(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath)
     }
