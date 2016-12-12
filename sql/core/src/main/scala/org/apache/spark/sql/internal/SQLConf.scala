@@ -136,7 +136,7 @@ object SQLConf {
       "That is to say by default the optimizer will not choose to broadcast a table unless it " +
       "knows for sure its size is small enough.")
     .longConf
-    .createWithDefault(-1)
+    .createWithDefault(Long.MaxValue)
 
   val SHUFFLE_PARTITIONS = SQLConfigBuilder("spark.sql.shuffle.partitions")
     .doc("The default number of partitions to use when shuffling data for joins or aggregations.")
@@ -603,6 +603,13 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10L)
 
+  val STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL =
+    SQLConfigBuilder("spark.sql.streaming.noDataProgressEventInterval")
+      .internal()
+      .doc("How long to wait between two progress events when there is no data")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(10000L)
+
   val STREAMING_METRICS_ENABLED =
     SQLConfigBuilder("spark.sql.streaming.metricsEnabled")
       .doc("Whether Dropwizard/Codahale metrics will be reported for active streaming queries.")
@@ -610,7 +617,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val STREAMING_PROGRESS_RETENTION =
-    SQLConfigBuilder("spark.sql.streaming.numRecentProgresses")
+    SQLConfigBuilder("spark.sql.streaming.numRecentProgressUpdates")
       .doc("The number of progress updates to retain for a streaming query")
       .intConf
       .createWithDefault(100)
@@ -625,7 +632,8 @@ object SQLConf {
 
   val IGNORE_CORRUPT_FILES = SQLConfigBuilder("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
-      "encountering corrupt files and contents that have been read will still be returned.")
+      "encountering corrupted or non-existing and contents that have been read will still be " +
+      "returned.")
     .booleanConf
     .createWithDefault(false)
 
@@ -683,6 +691,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def streamingSchemaInference: Boolean = getConf(STREAMING_SCHEMA_INFERENCE)
 
   def streamingPollingDelay: Long = getConf(STREAMING_POLLING_DELAY)
+
+  def streamingNoDataProgressEventInterval: Long =
+    getConf(STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL)
 
   def streamingMetricsEnabled: Boolean = getConf(STREAMING_METRICS_ENABLED)
 
@@ -753,7 +764,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
-  def defaultSizeInBytes: Long = getConf(DEFAULT_SIZE_IN_BYTES, Long.MaxValue)
+  def defaultSizeInBytes: Long = getConf(DEFAULT_SIZE_IN_BYTES)
 
   def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
 

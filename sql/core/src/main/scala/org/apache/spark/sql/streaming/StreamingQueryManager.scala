@@ -207,10 +207,14 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       trigger: Trigger = ProcessingTime(0),
       triggerClock: Clock = new SystemClock()): StreamingQuery = {
     activeQueriesLock.synchronized {
-      val name = userSpecifiedName.getOrElse(s"query-${StreamingQueryManager.nextId}")
-      if (activeQueries.values.exists(_.name == name)) {
-        throw new IllegalArgumentException(
-          s"Cannot start query with name $name as a query with that name is already active")
+      val name = userSpecifiedName match {
+        case Some(n) =>
+          if (activeQueries.values.exists(_.name == userSpecifiedName.get)) {
+            throw new IllegalArgumentException(
+              s"Cannot start query with name $n as a query with that name is already active")
+          }
+          n
+        case None => null
       }
       val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
         new Path(userSpecified).toUri.toString
@@ -247,27 +251,23 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
         UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
       }
 
-      var nextSourceId = 0L
-
-      val logicalPlan = analyzedPlan.transform {
-        case StreamingRelation(dataSource, _, output) =>
-          // Materialize source to avoid creating it in every batch
-          val metadataPath = s"$checkpointLocation/sources/$nextSourceId"
-          val source = dataSource.createSource(metadataPath)
-          nextSourceId += 1
-          // We still need to use the previous `output` instead of `source.schema` as attributes in
-          // "df.logicalPlan" has already used attributes of the previous `output`.
-          StreamingExecutionRelation(source, output)
-      }
       val query = new StreamExecution(
         sparkSession,
         name,
         checkpointLocation,
-        logicalPlan,
+        analyzedPlan,
         sink,
         trigger,
         triggerClock,
         outputMode)
+
+      if (activeQueries.values.exists(_.id == query.id)) {
+        throw new IllegalStateException(
+          s"Cannot start query with id ${query.id} as another query with same id is " +
+            s"already active. Perhaps you are attempting to restart a query from checkpoint" +
+            s"that is already active.")
+      }
+
       query.start()
       activeQueries.put(query.id, query)
       query
@@ -286,9 +286,4 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       awaitTerminationLock.notifyAll()
     }
   }
-}
-
-private object StreamingQueryManager {
-  private val _nextId = new AtomicLong(0)
-  private def nextId: Long = _nextId.getAndIncrement()
 }

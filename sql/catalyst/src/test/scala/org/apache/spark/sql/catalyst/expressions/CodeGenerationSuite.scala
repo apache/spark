@@ -97,6 +97,22 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual(0) == cases)
   }
 
+  test("SPARK-18091: split large if expressions into blocks due to JVM code size limit") {
+    var strExpr: Expression = Literal("abc")
+    for (_ <- 1 to 150) {
+      strExpr = Decode(Encode(strExpr, "utf-8"), "utf-8")
+    }
+
+    val expressions = Seq(If(EqualTo(strExpr, strExpr), strExpr, strExpr))
+    val plan = GenerateMutableProjection.generate(expressions)
+    val actual = plan(null).toSeq(expressions.map(_.dataType))
+    val expected = Seq(UTF8String.fromString("abc"))
+
+    if (!checkResult(actual, expected)) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+    }
+  }
+
   test("SPARK-14793: split wide array creation into blocks due to JVM code size limit") {
     val length = 5000
     val expressions = Seq(CreateArray(List.fill(length)(EqualTo(Literal(1), Literal(1)))))
