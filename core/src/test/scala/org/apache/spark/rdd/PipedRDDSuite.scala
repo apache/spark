@@ -162,8 +162,8 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
       val piped = nums.pipe(s"$envCommand MY_TEST_ENV", Map("MY_TEST_ENV" -> "LALALA"))
       val c = piped.collect()
       assert(c.length === 2)
-      assert(c(0).contains("LALALA"))
-      assert(c(1).contains("LALALA"))
+      assert(c(0).stripPrefix("MY_TEST_ENV=") === "LALALA")
+      assert(c(1).stripPrefix("MY_TEST_ENV=") === "LALALA")
     } else {
       assert(true)
     }
@@ -256,7 +256,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
       val tContext = TaskContext.empty()
       val rddIter = pipedRdd.compute(hadoopPart1, tContext)
       val arr = rddIter.toArray
-      assert(arr(0).contains("/some/path"))
+      assert(arr(0).stripPrefix(s"$varName=") === "/some/path")
     } else {
       // printenv isn't available so just pass the test
     }
