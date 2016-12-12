@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming
 import java.util.UUID
 
 import scala.collection.mutable
+import scala.concurrent.duration._
 
 import org.scalactic.TolerantNumerics
 import org.scalatest.concurrent.AsyncAssertions.Waiter
@@ -30,6 +31,7 @@ import org.scalatest.PrivateMethodTester._
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler._
+import org.apache.spark.sql.{Encoder, SparkSession}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryListener._
@@ -45,7 +47,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   after {
     spark.streams.active.foreach(_.stop())
     assert(spark.streams.active.isEmpty)
-    assert(addedListeners.isEmpty)
+    assert(addedListeners().isEmpty)
     // Make sure we don't leak any events to the next test
     spark.sparkContext.listenerBus.waitUntilEmpty(10000)
   }
@@ -69,6 +71,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         AssertOnQuery { query =>
           assert(listener.startEvent !== null)
           assert(listener.startEvent.id === query.id)
+          assert(listener.startEvent.runId === query.runId)
           assert(listener.startEvent.name === query.name)
           assert(listener.progressEvents.isEmpty)
           assert(listener.terminationEvent === null)
@@ -92,6 +95,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           eventually(Timeout(streamingTimeout)) {
             assert(listener.terminationEvent !== null)
             assert(listener.terminationEvent.id === query.id)
+            assert(listener.terminationEvent.runId === query.runId)
             assert(listener.terminationEvent.exception === None)
           }
           listener.checkAsyncErrors()
@@ -146,7 +150,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       assert(isListenerActive(listener1) === false)
       assert(isListenerActive(listener2) === true)
     } finally {
-      addedListeners.foreach(spark.streams.removeListener)
+      addedListeners().foreach(spark.streams.removeListener)
     }
   }
 
@@ -167,30 +171,40 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("QueryStartedEvent serialization") {
-    val queryStarted = new StreamingQueryListener.QueryStartedEvent(UUID.randomUUID(), "name")
-    val json = JsonProtocol.sparkEventToJson(queryStarted)
-    val newQueryStarted = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[StreamingQueryListener.QueryStartedEvent]
+    def testSerialization(event: QueryStartedEvent): Unit = {
+      val json = JsonProtocol.sparkEventToJson(event)
+      val newEvent = JsonProtocol.sparkEventFromJson(json).asInstanceOf[QueryStartedEvent]
+      assert(newEvent.id === event.id)
+      assert(newEvent.runId === event.runId)
+      assert(newEvent.name === event.name)
+    }
+
+    testSerialization(new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, "name"))
+    testSerialization(new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, null))
   }
 
   test("QueryProgressEvent serialization") {
-    val event = new StreamingQueryListener.QueryProgressEvent(
-      StreamingQueryStatusAndProgressSuite.testProgress)
-    val json = JsonProtocol.sparkEventToJson(event)
-    val newEvent = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[StreamingQueryListener.QueryProgressEvent]
-    assert(event.progress.json === newEvent.progress.json)
+    def testSerialization(event: QueryProgressEvent): Unit = {
+      val json = JsonProtocol.sparkEventToJson(event)
+      val newEvent = JsonProtocol.sparkEventFromJson(json).asInstanceOf[QueryProgressEvent]
+      assert(newEvent.progress.json === event.progress.json)  // json as a proxy for equality
+    }
+    testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress1))
+    testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress2))
   }
 
   test("QueryTerminatedEvent serialization") {
+    def testSerialization(event: QueryTerminatedEvent): Unit = {
+      val json = JsonProtocol.sparkEventToJson(event)
+      val newEvent = JsonProtocol.sparkEventFromJson(json).asInstanceOf[QueryTerminatedEvent]
+      assert(newEvent.id === event.id)
+      assert(newEvent.runId === event.runId)
+      assert(newEvent.exception === event.exception)
+    }
+
     val exception = new RuntimeException("exception")
-    val queryQueryTerminated = new StreamingQueryListener.QueryTerminatedEvent(
-      UUID.randomUUID, Some(exception.getMessage))
-    val json = JsonProtocol.sparkEventToJson(queryQueryTerminated)
-    val newQueryTerminated = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[StreamingQueryListener.QueryTerminatedEvent]
-    assert(queryQueryTerminated.id === newQueryTerminated.id)
-    assert(queryQueryTerminated.exception === newQueryTerminated.exception)
+    testSerialization(
+      new QueryTerminatedEvent(UUID.randomUUID, UUID.randomUUID, Some(exception.getMessage)))
   }
 
   test("only one progress event per interval when no data") {
@@ -225,12 +239,67 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           }
           true
         }
+        // `recentProgress` should not receive too many no data events
+        actions += AssertOnQuery { q =>
+          q.recentProgress.size > 1 && q.recentProgress.size <= 11
+        }
         testStream(input.toDS)(actions: _*)
         spark.sparkContext.listenerBus.waitUntilEmpty(10000)
         // 11 is the max value of the possible numbers of events.
         assert(numProgressEvent > 1 && numProgressEvent <= 11)
       } finally {
         spark.streams.removeListener(listener)
+      }
+    }
+  }
+
+  test("listener only posts events from queries started in the related sessions") {
+    val session1 = spark.newSession()
+    val session2 = spark.newSession()
+    val collector1 = new EventCollector
+    val collector2 = new EventCollector
+
+    def runQuery(session: SparkSession): Unit = {
+      collector1.reset()
+      collector2.reset()
+      val mem = MemoryStream[Int](implicitly[Encoder[Int]], session.sqlContext)
+      testStream(mem.toDS)(
+        AddData(mem, 1, 2, 3),
+        CheckAnswer(1, 2, 3)
+      )
+      session.sparkContext.listenerBus.waitUntilEmpty(5000)
+    }
+
+    def assertEventsCollected(collector: EventCollector): Unit = {
+      assert(collector.startEvent !== null)
+      assert(collector.progressEvents.nonEmpty)
+      assert(collector.terminationEvent !== null)
+    }
+
+    def assertEventsNotCollected(collector: EventCollector): Unit = {
+      assert(collector.startEvent === null)
+      assert(collector.progressEvents.isEmpty)
+      assert(collector.terminationEvent === null)
+    }
+
+    assert(session1.ne(session2))
+    assert(session1.streams.ne(session2.streams))
+
+    withListenerAdded(collector1, session1) {
+      assert(addedListeners(session1).nonEmpty)
+
+      withListenerAdded(collector2, session2) {
+        assert(addedListeners(session2).nonEmpty)
+
+        // query on session1 should send events only to collector1
+        runQuery(session1)
+        assertEventsCollected(collector1)
+        assertEventsNotCollected(collector2)
+
+        // query on session2 should send events only to collector2
+        runQuery(session2)
+        assertEventsCollected(collector2)
+        assertEventsNotCollected(collector1)
       }
     }
   }
@@ -282,21 +351,23 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  private def withListenerAdded(listener: StreamingQueryListener)(body: => Unit): Unit = {
+  private def withListenerAdded(
+      listener: StreamingQueryListener,
+      session: SparkSession = spark)(body: => Unit): Unit = {
     try {
       failAfter(streamingTimeout) {
-        spark.streams.addListener(listener)
+        session.streams.addListener(listener)
         body
       }
     } finally {
-      spark.streams.removeListener(listener)
+      session.streams.removeListener(listener)
     }
   }
 
-  private def addedListeners(): Array[StreamingQueryListener] = {
+  private def addedListeners(session: SparkSession = spark): Array[StreamingQueryListener] = {
     val listenerBusMethod =
       PrivateMethod[StreamingQueryListenerBus]('listenerBus)
-    val listenerBus = spark.streams invokePrivate listenerBusMethod()
+    val listenerBus = session.streams invokePrivate listenerBusMethod()
     listenerBus.listeners.toArray.map(_.asInstanceOf[StreamingQueryListener])
   }
 

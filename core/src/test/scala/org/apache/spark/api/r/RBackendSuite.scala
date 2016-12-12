@@ -15,21 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.api.r
 
-import org.apache.spark.sql.execution.streaming.StreamExecutionMetadata
+import org.apache.spark.SparkFunSuite
 
-class StreamExecutionMetadataSuite extends StreamTest {
-
-  test("stream execution metadata") {
-    assert(StreamExecutionMetadata(0, 0) ===
-      StreamExecutionMetadata("""{}"""))
-    assert(StreamExecutionMetadata(1, 0) ===
-      StreamExecutionMetadata("""{"batchWatermarkMs":1}"""))
-    assert(StreamExecutionMetadata(0, 2) ===
-      StreamExecutionMetadata("""{"batchTimestampMs":2}"""))
-    assert(StreamExecutionMetadata(1, 2) ===
-      StreamExecutionMetadata(
-        """{"batchWatermarkMs":1,"batchTimestampMs":2}"""))
+class RBackendSuite extends SparkFunSuite {
+  test("close() clears jvmObjectTracker") {
+    val backend = new RBackend
+    val tracker = backend.jvmObjectTracker
+    val id = tracker.addAndGetId(new Object)
+    backend.close()
+    assert(tracker.get(id) === None)
+    assert(tracker.size === 0)
   }
 }

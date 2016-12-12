@@ -526,6 +526,11 @@ By default `saveAsTable` will create a "managed table", meaning that the locatio
 be controlled by the metastore. Managed tables will also have their data deleted automatically
 when a table is dropped.
 
+Currently, `saveAsTable` does not expose an API supporting the creation of an "External table" from a `DataFrame`, 
+however, this functionality can be achieved by providing a `path` option to the `DataFrameWriter` with `path` as the key 
+and location of the external table as its value (String) when saving the table with `saveAsTable`. When an External table 
+is dropped only its metadata is removed.
+
 ## Parquet Files
 
 [Parquet](http://parquet.io) is a columnar format that is supported by many other data processing systems.

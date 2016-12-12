@@ -29,6 +29,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
 /**
  * :: Experimental ::
@@ -57,8 +58,9 @@ class StateOperatorProgress private[sql](
  * a trigger. Each event relates to processing done for a single trigger of the streaming
  * query. Events are emitted even when no new data is available to be processed.
  *
- * @param id A unique id of the query.
- * @param name Name of the query. This name is unique across all active queries.
+ * @param id An unique query id that persists across restarts. See `StreamingQuery.id()`.
+ * @param runId A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
+ * @param name User-specified name of the query, null if not specified.
  * @param timestamp Timestamp (ms) of the beginning of the trigger.
  * @param batchId A unique id for the current batch of data being processed.  Note that in the
  *                case of retries after a failure a given batchId my be executed more than once.
@@ -73,8 +75,9 @@ class StateOperatorProgress private[sql](
 @Experimental
 class StreamingQueryProgress private[sql](
   val id: UUID,
+  val runId: UUID,
   val name: String,
-  val timestamp: Long,
+  val timestamp: String,
   val batchId: Long,
   val durationMs: ju.Map[String, java.lang.Long],
   val currentWatermark: Long,
@@ -105,8 +108,9 @@ class StreamingQueryProgress private[sql](
     }
 
     ("id" -> JString(id.toString)) ~
+    ("runId" -> JString(runId.toString)) ~
     ("name" -> JString(name)) ~
-    ("timestamp" -> JInt(timestamp)) ~
+    ("timestamp" -> JString(timestamp)) ~
     ("numInputRows" -> JInt(numInputRows)) ~
     ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
     ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
@@ -118,7 +122,6 @@ class StreamingQueryProgress private[sql](
     ("stateOperators" -> JArray(stateOperators.map(_.jsonValue).toList)) ~
     ("sources" -> JArray(sources.map(_.jsonValue).toList)) ~
     ("sink" -> sink.jsonValue)
-
   }
 }
 
