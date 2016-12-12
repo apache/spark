@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.status.api.v1;
+package org.apache.spark.status.api.v1.streaming;
 
 import org.apache.spark.util.EnumUtil;
 

@@ -15,20 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.status.api.v1
+package org.apache.spark.status.api.v1.streaming
 
 import javax.ws.rs.{GET, PathParam, Produces}
 import javax.ws.rs.core.MediaType
 
+import org.apache.spark.status.api.v1.NotFoundException
 import org.apache.spark.streaming.ui.StreamingJobProgressListener
+import org.apache.spark.streaming.ui.StreamingJobProgressListener._
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class OneReceiverResource(listener: StreamingJobProgressListener) {
+private[v1] class OneOutputOperationResource(listener: StreamingJobProgressListener) {
 
   @GET
-  def oneReceiver(@PathParam("streamId") streamId: Int): ReceiverInfo = {
-    val someReceiver = AllReceiversResource.receiverInfoList(listener)
-      .find { _.streamId == streamId }
-    someReceiver.getOrElse(throw new NotFoundException("unknown receiver: " + streamId))
+  def oneOperation(
+      @PathParam("batchId") batchId: Long,
+      @PathParam("outputOpId") opId: OutputOpId): OutputOperationInfo = {
+
+    val someOutputOp = AllOutputOperationsResource.outputOperationInfoList(listener, batchId)
+      .find { _.outputOpId == opId }
+    someOutputOp.getOrElse(throw new NotFoundException("unknown output operation: " + opId))
   }
 }

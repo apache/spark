@@ -27,7 +27,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.scheduler._
 
-private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
+private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
   extends SparkListener with StreamingListener {
 
   private val waitingBatchUIData = new HashMap[Time, BatchUIData]
@@ -273,7 +273,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   }
 }
 
-private[streaming] object StreamingJobProgressListener {
+private[spark] object StreamingJobProgressListener {
   type SparkJobId = Int
   type OutputOpId = Int
 }

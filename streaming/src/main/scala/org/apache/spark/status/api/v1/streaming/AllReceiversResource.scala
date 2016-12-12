@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.status.api.v1
+package org.apache.spark.status.api.v1.streaming
 
 import java.util.Date
 import javax.ws.rs.{GET, Produces}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.streaming.status.api.v1.AllReceiversResource._
+import org.apache.spark.status.api.v1.streaming.AllReceiversResource._
 import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
 @Produces(Array(MediaType.APPLICATION_JSON))

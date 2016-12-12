@@ -20,7 +20,6 @@ package org.apache.spark.streaming.ui
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.status.api.v1.StreamingApiRootResource
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 /**
@@ -37,23 +36,20 @@ private[spark] class StreamingTab(val ssc: StreamingContext)
   val parent = getSparkUI(ssc)
   val listener = ssc.progressListener
 
-  val apiHandler = StreamingApiRootResource.getServletHandler(parent, listener)
-
   ssc.addStreamingListener(listener)
   ssc.sc.addSparkListener(listener)
+  parent.setStreamingJobProgressListener(listener)
   attachPage(new StreamingPage(this))
   attachPage(new BatchPage(this))
 
   def attach() {
     getSparkUI(ssc).attachTab(this)
     getSparkUI(ssc).addStaticHandler(STATIC_RESOURCE_DIR, "/static/streaming")
-    parent.attachHandler(apiHandler)
   }
 
   def detach() {
     getSparkUI(ssc).detachTab(this)
     getSparkUI(ssc).removeStaticHandler("/static/streaming")
-    parent.detachHandler(apiHandler)
   }
 }
 

@@ -14,24 +14,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.streaming.status.api.v1
 
-import javax.ws.rs.container.{ContainerRequestContext, ContainerRequestFilter}
-import javax.ws.rs.core.Response
-import javax.ws.rs.ext.Provider
+package org.apache.spark.status.api.v1.streaming
 
-@Provider
-private[v1] class SecurityFilter extends ContainerRequestFilter
-  with StreamingUIRootFromServletContext{
-  override def filter(req: ContainerRequestContext): Unit = {
-    val user = Option(req.getSecurityContext.getUserPrincipal).map { _.getName }.orNull
-    if (!uiRoot.securityManager.checkUIViewPermissions(user)) {
-      req.abortWith(
-        Response
-          .status(Response.Status.FORBIDDEN)
-          .entity(raw"""user "$user"is not authorized""")
-          .build()
-      )
-    }
+import javax.ws.rs.{GET, PathParam, Produces}
+import javax.ws.rs.core.MediaType
+
+import org.apache.spark.status.api.v1.NotFoundException
+import org.apache.spark.streaming.ui.StreamingJobProgressListener
+
+@Produces(Array(MediaType.APPLICATION_JSON))
+private[v1] class OneReceiverResource(listener: StreamingJobProgressListener) {
+
+  @GET
+  def oneReceiver(@PathParam("streamId") streamId: Int): ReceiverInfo = {
+    val someReceiver = AllReceiversResource.receiverInfoList(listener)
+      .find { _.streamId == streamId }
+    someReceiver.getOrElse(throw new NotFoundException("unknown receiver: " + streamId))
   }
 }

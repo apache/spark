@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.status.api.v1
+package org.apache.spark.status.api.v1.streaming
 
 import java.util.Date
 
 import org.apache.spark.streaming.ui.StreamingJobProgressListener._
 
-class StreamingStatistics private[streaming](
+class StreamingStatistics private[spark](
   val startTime: Date,
   val batchDuration: Long,
   val numReceivers: Int,
@@ -38,7 +38,7 @@ class StreamingStatistics private[streaming](
   val avgTotalDelay: Option[Long]
 )
 
-class ReceiverInfo private[streaming](
+class ReceiverInfo private[spark](
   val streamId: Int,
   val streamName: String,
   val isActive: Option[Boolean],
@@ -51,7 +51,7 @@ class ReceiverInfo private[streaming](
   val eventRates: Seq[(Long, Double)]
 )
 
-class BatchInfo private[streaming](
+class BatchInfo private[spark](
   val batchId: Long,
   val batchTime: Date,
   val status: String,
@@ -67,7 +67,7 @@ class BatchInfo private[streaming](
   val firstFailureReason: Option[String]
 )
 
-class OutputOperationInfo private[streaming](
+class OutputOperationInfo private[spark](
   val outputOpId: OutputOpId,
   val name: String,
   val description: String,
