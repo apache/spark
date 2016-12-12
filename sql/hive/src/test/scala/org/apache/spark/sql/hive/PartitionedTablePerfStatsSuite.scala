@@ -376,7 +376,7 @@ class PartitionedTablePerfStatsSuite
           // check the cache hit, we use the metric of METRIC_FILES_DISCOVERED and
           // METRIC_PARALLEL_LISTING_JOB_COUNT to check this, while the lock take effect,
           // only one thread can really do the build, so the listing job count is 2, the other
-          // one is cahce.load func. Also METRIC_FILES_DISCOVERED is $partition_num * 2
+          // one is cache.load func. Also METRIC_FILES_DISCOVERED is $partition_num * 2
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 100)
           assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 2)
         }

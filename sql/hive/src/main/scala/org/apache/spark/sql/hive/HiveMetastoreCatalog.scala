@@ -53,7 +53,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       tableIdent.table.toLowerCase)
   }
 
-  /** Locks for preventing driver mem waste when concurrent table instantiation */
+  /** These locks guard against multiple attempts to instantiate a table, which wastes memory. */
   private val tableCreationLocks = Striped.lazyWeakLock(100)
 
   /** Acquires a lock on the table cache for the duration of `f`. */
@@ -221,9 +221,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         }
       }
 
-      // Here we should protect all relation get and create operation with lock while big
-      // table's CatalogFileIndex will take some time, only lock cachedDataSourceTables.put
-      // will still cause driver memory waste. More detail see SPARK-18700.
       withTableCreationLock(tableIdentifier, {
         val cached = getCached(
           tableIdentifier,
