@@ -125,7 +125,7 @@ object PageRank extends Logging {
       .mapTriplets( e => 1.0 / e.srcAttr, TripletFields.Src )
       // Set the vertex attributes to the initial pagerank values
       .mapVertices { (id, attr) =>
-        if (!(id != src && personalized)) resetProb else 0.0
+        if (!(id != src && personalized)) 1.0 else 0.0
       }
 
     def delta(u: VertexId, v: VertexId): Double = { if (u == v) 1.0 else 0.0 }
@@ -196,7 +196,7 @@ object PageRank extends Logging {
     // we won't be able to store its activations in a sparse vector
     val zero = Vectors.sparse(sources.size, List()).asBreeze
     val sourcesInitMap = sources.zipWithIndex.map { case (vid, i) =>
-      val v = Vectors.sparse(sources.size, Array(i), Array(resetProb)).asBreeze
+      val v = Vectors.sparse(sources.size, Array(i), Array(1.0)).asBreeze
       (vid, v)
     }.toMap
     val sc = graph.vertices.sparkContext
@@ -307,7 +307,7 @@ object PageRank extends Logging {
       .mapTriplets( e => 1.0 / e.srcAttr )
       // Set the vertex attributes to (initialPR, delta = 0)
       .mapVertices { (id, attr) =>
-        if (id == src) (resetProb, Double.NegativeInfinity) else (0.0, 0.0)
+        if (id == src) (1.0, Double.NegativeInfinity) else (0.0, 0.0)
       }
       .cache()
 
