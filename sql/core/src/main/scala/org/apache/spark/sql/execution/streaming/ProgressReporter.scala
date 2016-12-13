@@ -100,7 +100,7 @@ trait ProgressReporter extends Logging {
 
   /** Returns the most recent query progress update. */
   def lastProgress: StreamingQueryProgress = progressBuffer.synchronized {
-    progressBuffer.last
+    progressBuffer.lastOption.orNull
   }
 
   /** Begins recording statistics about query progress for a given trigger. */
