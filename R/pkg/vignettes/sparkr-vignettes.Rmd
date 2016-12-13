@@ -565,7 +565,7 @@ head(aftPredictions)
 
 #### Gaussian Mixture Model
 
-(Coming in 2.1.0)
+(Added in 2.1.0)
 
 `spark.gaussianMixture` fits multivariate [Gaussian Mixture Model](https://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model) (GMM) against a `SparkDataFrame`. [Expectation-Maximization](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm) (EM) is used to approximate the maximum likelihood estimator (MLE) of the model.
 
@@ -584,7 +584,7 @@ head(select(gmmFitted, "V1", "V2", "prediction"))
 
 #### Latent Dirichlet Allocation
 
-(Coming in 2.1.0)
+(Added in 2.1.0)
 
 `spark.lda` fits a [Latent Dirichlet Allocation](https://en.wikipedia.org/wiki/Latent_Dirichlet_allocation) model on a `SparkDataFrame`. It is often used in topic modeling in which topics are inferred from a collection of text documents. LDA can be thought of as a clustering algorithm as follows:
 
@@ -657,7 +657,7 @@ perplexity
 
 #### Multilayer Perceptron
 
-(Coming in 2.1.0)
+(Added in 2.1.0)
 
 Multilayer perceptron classifier (MLPC) is a classifier based on the [feedforward artificial neural network](https://en.wikipedia.org/wiki/Feedforward_neural_network). MLPC consists of multiple layers of nodes. Each layer is fully connected to the next layer in the network. Nodes in the input layer represent the input data. All other nodes map inputs to outputs by a linear combination of the inputs with the node’s weights $w$ and bias $b$ and applying an activation function. This can be written in matrix form for MLPC with $K+1$ layers as follows:
 $$
@@ -694,7 +694,7 @@ MLPC employs backpropagation for learning the model. We use the logistic loss fu
 
 #### Collaborative Filtering
 
-(Coming in 2.1.0)
+(Added in 2.1.0)
 
 `spark.als` learns latent factors in [collaborative filtering](https://en.wikipedia.org/wiki/Recommender_system#Collaborative_filtering) via [alternating least squares](http://dl.acm.org/citation.cfm?id=1608614).
 
@@ -725,7 +725,7 @@ head(predicted)
 
 #### Isotonic Regression Model
 
-(Coming in 2.1.0)
+(Added in 2.1.0)
 
 `spark.isoreg` fits an [Isotonic Regression](https://en.wikipedia.org/wiki/Isotonic_regression) model against a `SparkDataFrame`. It solves a weighted univariate a regression problem under a complete order constraint. Specifically, given a set of real observed responses $y_1, \ldots, y_n$, corresponding real features $x_1, \ldots, x_n$, and optionally positive weights $w_1, \ldots, w_n$, we want to find a monotone (piecewise linear) function $f$ to  minimize
 $$
@@ -768,8 +768,39 @@ newDF <- createDataFrame(data.frame(x = c(1.5, 3.2)))
 head(predict(isoregModel, newDF))
 ```
 
-#### What's More?
-We also expect Decision Tree, Random Forest, Kolmogorov-Smirnov Test coming in the next version 2.1.0.
+### Logistic Regression Model
+
+(Added in 2.1.0)
+
+[Logistic regression](https://en.wikipedia.org/wiki/Logistic_regression) is a widely-used model when the response is categorical. It can be seen as a special case of the [Generalized Linear Predictive Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
+We provide `spark.logit` on top of `spark.glm` to support logistic regression with advanced hyper-parameters.
+It supports both binary and multiclass classification with elastic-net regularization and feature standardization, similar to `glmnet`.
+
+We use a simple example to demonstrate `spark.logit` usage. In general, there are three steps of using `spark.logit`:
+1). Create a dataframe from a proper data source; 2). Fit a logistic regression model using `spark.logit` with a proper parameter setting;
+and 3). Obtain the coefficient matrix of the fitted model using `summary` and use the model for prediction with `predict`.
+
+Binomial logistic regression
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+# Create a DataFrame containing two classes
+training <- df[df$Species %in% c("versicolor", "virginica"), ]
+model <- spark.logit(training, Species ~ ., regParam = 0.5)
+summary(model)
+```
+
+Predict values on training data
+```{r}
+fitted <- predict(model, training)
+```
+
+Multinomial logistic regression against three classes
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+# Note in this case, Spark infers it is multinomial logistic regression, so family = "multinomial" is optional.
+model <- spark.logit(df, Species ~ ., regParam = 0.5)
+summary(model)
+```
 
 ### Model Persistence
 The following example shows how to save/load an ML model by SparkR.
