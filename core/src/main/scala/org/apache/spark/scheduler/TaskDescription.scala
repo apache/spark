@@ -17,20 +17,30 @@
 
 package org.apache.spark.scheduler
 
+import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 import java.util.Properties
 
-import scala.collection.mutable.Map
+import scala.collection.mutable.{HashMap, Map}
 
-import org.apache.spark.util.SerializableBuffer
+import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 /**
  * Description of a task that gets passed onto executors to be executed, usually created by
  * [[TaskSetManager.resourceOffer]].
  *
- * This class contains a serialized task rather than a Task object, because when a TaskDescription
- * is received by an Executor, the Executor needs to first get the list of JARs and files and add
- * these to the classpath before deserializing the Task object.
+ * TaskDescriptions and the associated Task need to be serialized carefully for two reasons:
+ *
+ *     (1) When a TaskDescription is received by an Executor, the Executor needs to first get the
+ *         list of JARs and files and add these to the classpath, and set the properties, before
+ *         deserializing the Task object (serializedTask). This is why the Properties are included
+ *         in the TaskDescription, even though they're also in the serialized task.
+ *     (2) Because a TaskDescription is serialized and sent to an executor for each task, efficient
+ *         serialization (both in terms of serialization time and serialized buffer size) is
+ *         important. For this reason, we serialize TaskDescriptions ourselves with the
+ *         TaskDescription.encode and TaskDescription.decode methods.  This results in a smaller
+ *         serialized size because it avoids serializing unnecessary fields in the Map objects
+ *         (which can introduce significant overhead when the maps are small).
  */
 private[spark] class TaskDescription(
     val taskId: Long,
@@ -41,13 +51,85 @@ private[spark] class TaskDescription(
     val addedFiles: Map[String, Long],
     val addedJars: Map[String, Long],
     val properties: Properties,
-    _serializedTask: ByteBuffer)
-  extends Serializable {
-
-  // Because ByteBuffers are not serializable, wrap the task in a SerializableBuffer
-  private val buffer = new SerializableBuffer(_serializedTask)
-
-  def serializedTask: ByteBuffer = buffer.value
+    val serializedTask: ByteBuffer) {
 
   override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
+}
+
+private[spark] object TaskDescription {
+  def encode(taskDescription: TaskDescription): ByteBuffer = {
+    val bytesOut = new ByteBufferOutputStream(4096)
+    val dataOut = new DataOutputStream(bytesOut)
+
+    dataOut.writeLong(taskDescription.taskId)
+    dataOut.writeInt(taskDescription.attemptNumber)
+    dataOut.writeUTF(taskDescription.executorId)
+    dataOut.writeUTF(taskDescription.name)
+    dataOut.writeInt(taskDescription.index)
+
+    // Write files.
+    dataOut.writeInt(taskDescription.addedFiles.size)
+    for ((name, timestamp) <- taskDescription.addedFiles) {
+      dataOut.writeUTF(name)
+      dataOut.writeLong(timestamp)
+    }
+
+    // Write jars.
+    dataOut.writeInt(taskDescription.addedJars.size)
+    for ((name, timestamp) <- taskDescription.addedJars) {
+      dataOut.writeUTF(name)
+      dataOut.writeLong(timestamp)
+    }
+
+    // Write properties.
+    val propBytes = Utils.serialize(taskDescription.properties)
+    dataOut.writeInt(propBytes.length)
+    dataOut.write(propBytes)
+
+    // Write the task. The task is already serialized, so write it directly to the byte buffer
+    // (this requires first flushing the data output stream, so that all of the data has been
+    // written from the data output stream so the underlying ByteBufferOutputStream before
+    // we write the task).
+    dataOut.flush()
+    Utils.writeByteBuffer(taskDescription.serializedTask, bytesOut)
+
+    dataOut.close()
+    bytesOut.close()
+    bytesOut.toByteBuffer
+  }
+
+  def decode(byteBuffer: ByteBuffer): TaskDescription = {
+    val dataIn = new DataInputStream(new ByteBufferInputStream(byteBuffer))
+    val taskId = dataIn.readLong()
+    val attemptNumber = dataIn.readInt()
+    val executorId = dataIn.readUTF()
+    val name = dataIn.readUTF()
+    val index = dataIn.readInt()
+
+    // Read files.
+    val taskFiles = new HashMap[String, Long]()
+    val numFiles = dataIn.readInt()
+    for (i <- 0 until numFiles) {
+      taskFiles(dataIn.readUTF()) = dataIn.readLong()
+    }
+
+    // Read jars.
+    val taskJars = new HashMap[String, Long]()
+    val numJars = dataIn.readInt()
+    for (i <- 0 until numJars) {
+      taskJars(dataIn.readUTF()) = dataIn.readLong()
+    }
+
+    // Read properties.
+    val propsLength = dataIn.readInt()
+    val propBytes = new Array[Byte](propsLength)
+    dataIn.readFully(propBytes, 0, propsLength)
+    val properties = Utils.deserialize[Properties](propBytes)
+
+    // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
+    val serializedTask = byteBuffer.slice()
+
+    new TaskDescription(taskId, attemptNumber, executorId, name, index, taskFiles, taskJars,
+      properties, serializedTask)
+  }
 }
