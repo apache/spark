@@ -1869,6 +1869,46 @@ class HiveSparkSubmitTests(SparkSubmitTests):
         self.assertTrue(os.path.exists(metastore_path))
 
 
+class HiveSparkSubmitTests(SparkSubmitTests):
+
+    def test_hivecontext(self):
+        # This test checks that HiveContext is using Hive metastore (SPARK-16224).
+        # It sets a metastore url and checks if there is a derby dir created by
+        # Hive metastore. If this derby dir exists, HiveContext is using
+        # Hive metastore.
+        metastore_path = os.path.join(tempfile.mkdtemp(), "spark16224_metastore_db")
+        metastore_URL = "jdbc:derby:;databaseName=" + metastore_path + ";create=true"
+        hive_site_dir = os.path.join(self.programDir, "conf")
+        hive_site_file = self.createTempFile("hive-site.xml", ("""
+            |<configuration>
+            |  <property>
+            |  <name>javax.jdo.option.ConnectionURL</name>
+            |  <value>%s</value>
+            |  </property>
+            |</configuration>
+            """ % metastore_URL).lstrip(), "conf")
+        script = self.createTempFile("test.py", """
+            |import os
+            |
+            |from pyspark.conf import SparkConf
+            |from pyspark.context import SparkContext
+            |from pyspark.sql import HiveContext
+            |
+            |conf = SparkConf()
+            |sc = SparkContext(conf=conf)
+            |hive_context = HiveContext(sc)
+            |print(hive_context.sql("show databases").collect())
+            """)
+        proc = subprocess.Popen(
+            [self.sparkSubmit, "--master", "local-cluster[1,1,1024]",
+             "--driver-class-path", hive_site_dir, script],
+            stdout=subprocess.PIPE)
+        out, err = proc.communicate()
+        self.assertEqual(0, proc.returncode)
+        self.assertIn("default", out.decode('utf-8'))
+        self.assertTrue(os.path.exists(metastore_path))
+
+
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
     @classmethod
