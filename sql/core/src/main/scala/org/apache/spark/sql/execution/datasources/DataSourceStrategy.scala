@@ -32,8 +32,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
@@ -128,6 +127,12 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
     projectList
   }
 
+  /**
+   * Returns true if the [[InsertIntoTable]] plan has already been preprocessed by analyzer rule
+   * [[PreprocessTableInsertion]]. It is important that this rule([[DataSourceAnalysis]]) has to
+   * be run after [[PreprocessTableInsertion]], to normalize the column names in partition spec and
+   * fix the schema mismatch by adding Cast.
+   */
   private def hasBeenPreprocessed(
       tableOutput: Seq[Attribute],
       partSchema: StructType,
@@ -142,9 +147,9 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case insert @ logical.InsertIntoTable(
-      l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, false)
-      if hasBeenPreprocessed(l.output, t.partitionSchema, parts, query) =>
+    case InsertIntoTable(
+        l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, false)
+        if hasBeenPreprocessed(l.output, t.partitionSchema, parts, query) =>
 
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
@@ -307,7 +312,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ logical.InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _)
+    case i @ InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _)
         if DDLUtils.isDatasourceTable(s.metadata) =>
       i.copy(table = readDataSourceTable(sparkSession, s))
 
@@ -353,7 +358,7 @@ object DataSourceStrategy extends Strategy with Logging {
         Map.empty,
         None) :: Nil
 
-    case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
+    case InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
       part, query, overwrite, false) if part.isEmpty =>
       ExecutedCommandExec(InsertIntoDataSourceCommand(l, query, overwrite)) :: Nil
 
