@@ -47,7 +47,7 @@ class StreamExecution(
     @transient private val _sparkSession: SparkSession,
     override val name: String,
     checkpointRoot: String,
-    @transient analyzedPlan: LogicalPlan,
+    @transient private val analyzedPlan: LogicalPlan,
     @transient val sink: Sink,
     val trigger: Trigger,
     @transient val triggerClock: Clock,
