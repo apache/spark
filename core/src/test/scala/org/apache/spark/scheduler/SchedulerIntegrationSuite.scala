@@ -163,7 +163,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       // when the job succeeds.
       // When the final task of a taskset completes, we post
       // the event to the DAGScheduler event loop before we finish processing in the taskscheduler
-      // thread.  Its possible the DAGScheduler thread processes the event, finishes the job,
+      // thread.  It's possible the DAGScheduler thread processes the event, finishes the job,
       // and notifies the job waiter before our original thread in the task scheduler finishes
       // handling the event and marks the taskset as complete.  So its ok if we need to wait a
       // *little* bit longer for the original taskscheduler thread to finish up to deal w/ the race.
