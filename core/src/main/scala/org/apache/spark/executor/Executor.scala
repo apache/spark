@@ -480,8 +480,12 @@ private[spark] class Executor(
       val startTimeMs = System.currentTimeMillis()
       def elapsedTimeMs = System.currentTimeMillis() - startTimeMs
       try {
+        // Only attempt to kill the task once. If interruptThread = false then a second kill
+        // attempt would be a no-op and if interruptThread = true then it may not be safe or
+        // effective to interrupt multiple times:
+        taskRunner.kill(interruptThread = interruptThread)
+        // Monitor the killed task until it exits:
         while (!taskRunner.isFinished && (elapsedTimeMs < killTimeoutMs || killTimeoutMs <= 0)) {
-          taskRunner.kill(interruptThread = interruptThread)
           taskRunner.synchronized {
             taskRunner.wait(killPollingFrequencyMs)
           }
