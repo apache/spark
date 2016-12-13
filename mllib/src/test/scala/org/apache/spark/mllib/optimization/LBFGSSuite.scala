@@ -230,6 +230,25 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
       (weightLBFGS(0) ~= weightGD(0) relTol 0.02) && (weightLBFGS(1) ~= weightGD(1) relTol 0.02),
       "The weight differences between LBFGS and GD should be within 2%.")
   }
+
+  test("SPARK-18471: LBFGS aggregator on empty partitions") {
+    val regParam = 0
+
+    val initialWeightsWithIntercept = Vectors.dense(0.0)
+    val convergenceTol = 1e-12
+    val numIterations = 1
+    val dataWithEmptyPartitions = sc.parallelize(Seq((1.0, Vectors.dense(2.0))), 2)
+
+    LBFGS.runLBFGS(
+      dataWithEmptyPartitions,
+      gradient,
+      simpleUpdater,
+      numCorrections,
+      convergenceTol,
+      numIterations,
+      regParam,
+      initialWeightsWithIntercept)
+  }
 }
 
 class LBFGSClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
