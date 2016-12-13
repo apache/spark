@@ -174,11 +174,8 @@ private[scheduler] class BlacklistTracker (
             if (enabled) {
               scheduler match {
                 case Some(scheduler) =>
-                  logInfo(s"Killing blacklisted executor id: $exec" +
+                  logInfo(s"Killing blacklisted executor id $exec" +
                           s"since spark.blacklist.kill is set.")
-                  // TODO Do this killing in the driver via an RPC message?
-                  // TODO Update the coarseGrainedSchedulerBackend's list of executors and hosts
-                  // TODO to fail fast and not attempt to allocate this executor?
                   scheduler.killExecutors(Seq(exec), true, true)
                 case None =>
                   logWarning(s"Not attempting to kill blacklisted executor id $exec" +
@@ -203,25 +200,16 @@ private[scheduler] class BlacklistTracker (
             !nodeIdToBlacklistExpiryTime.contains(node)) {
           logInfo(s"Blacklisting node $node because it has ${blacklistedExecsOnNode.size} " +
             s"executors blacklisted: ${blacklistedExecsOnNode}")
-          // TODO:
-          // As soon as this decision has been made, a couple of things need to happen.
-          // First, as quickly as possible, we need to tell the scheduler backend to:
-          // not create any additional executors on this host
-          // (attempt to) fail to create any executors being created.
-          // not schedule any additional tasks on the executors on this host.
-          //
-          // Then, we kill and re-create all the executors on this host.
           conf.get(config.BLACKLIST_ENABLED) match {
             case Some(enabled) =>
               if (enabled) {
                 scheduler match {
                   case Some(scheduler) =>
-                    logInfo(s"Killing blacklisted executor id: $exec" +
+                    logInfo(s"Killing all executors on blacklisted host $node" +
                       s"since spark.blacklist.kill is set.")
-                    // TODO Same as above.
                     scheduler.killExecutorsOnHost(node)
                   case None =>
-                    logWarning(s"Not attempting to kill blacklisted executor id $exec" +
+                    logWarning(s"Not attempting to kill executors on blacklisted host $node" +
                       s"since scheduler is not defined.")
                 }
               }

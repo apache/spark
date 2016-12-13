@@ -140,6 +140,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             // Ignoring the task kill since the executor is not registered.
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
         }
+
+      case KillExecutorsOnHost(host) =>
+        scheduler.getExecutorsAliveOnHost(host).foreach(exec =>
+          killExecutors(exec.toSeq, replace = true, force = true)
+        )
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -607,9 +612,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   final override def killExecutorsOnHost(host: String): Unit = {
     logInfo(s"Requesting to kill any and all executors on host ${host}")
-    scheduler.getExecutorsAliveOnHost(host).foreach(exec =>
-      killExecutors(exec.toSeq, replace = true, force = true)
-    )
+    driverEndpoint.send(KillExecutorsOnHost(host))
   }
 }
 
