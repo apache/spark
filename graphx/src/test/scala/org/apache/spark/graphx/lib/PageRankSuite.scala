@@ -41,7 +41,7 @@ object GridPageRank {
       }
     }
     // compute the pagerank
-    var pr = Array.fill(nRows * nCols)(resetProb)
+    var pr = Array.fill(nRows * nCols)(1.0)
     for (iter <- 0 until nIter) {
       val oldPr = pr
       pr = new Array[Double](nRows * nCols)
