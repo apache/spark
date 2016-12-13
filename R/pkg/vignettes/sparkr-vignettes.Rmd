@@ -537,7 +537,7 @@ Users can call `summary` to get a summary of the fitted model, `predict` to make
 
 In the following example, we use the `longley` dataset to train a random forest and make predictions:
 
-```{r}
+```{r, warning=FALSE}
 df <- createDataFrame(longley)
 rfModel <- spark.randomForest(df, Employed ~ ., type = "regression", maxDepth = 2, numTrees = 2)
 summary(rfModel)
@@ -551,7 +551,7 @@ Users can call `summary` to get a summary of the fitted model, `predict` to make
 
 Similar to the random forest example above, we use the `longley` dataset to train a gradient-boosted tree and make predictions:
 
-```{r}
+```{r, warning=FALSE}
 df <- createDataFrame(longley)
 gbtModel <- spark.gbt(df, Employed ~ ., type = "regression", maxDepth = 2, maxIter = 2)
 summary(gbtModel)
