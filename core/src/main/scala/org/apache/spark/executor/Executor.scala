@@ -479,13 +479,14 @@ private[spark] class Executor(
     override def run(): Unit = {
       val startTimeMs = System.currentTimeMillis()
       def elapsedTimeMs = System.currentTimeMillis() - startTimeMs
+      def timeoutExceeded(): Boolean = killTimeoutMs > 0 && elapsedTimeMs > killTimeoutMs
       try {
         // Only attempt to kill the task once. If interruptThread = false then a second kill
         // attempt would be a no-op and if interruptThread = true then it may not be safe or
         // effective to interrupt multiple times:
         taskRunner.kill(interruptThread = interruptThread)
         // Monitor the killed task until it exits:
-        while (!taskRunner.isFinished && (elapsedTimeMs < killTimeoutMs || killTimeoutMs <= 0)) {
+        while (!taskRunner.isFinished && !timeoutExceeded()) {
           taskRunner.synchronized {
             taskRunner.wait(killPollingFrequencyMs)
           }
@@ -506,7 +507,7 @@ private[spark] class Executor(
           }
         }
 
-        if (!taskRunner.isFinished && killTimeoutMs > 0 && elapsedTimeMs > killTimeoutMs) {
+        if (!taskRunner.isFinished && timeoutExceeded()) {
           if (isLocal) {
             logError(s"Killed task $taskId could not be stopped within $killPollingFrequencyMs; " +
               "not killing JVM because we are running in local mode.")
