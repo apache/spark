@@ -91,10 +91,6 @@ private[spark] class EventLoggingListener(
    * Creates the log file in the configured log directory.
    */
   def start() {
-    val statusList = Option(fileSystem.listStatus(new Path(logBaseDir))).map(_.toSeq)
-      .getOrElse(Seq[FileStatus]())
-    EventLoggingListener.cleanRedundantLogFiles(sparkConf, fileSystem, statusList)
-
     if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
       throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
     }
@@ -331,56 +327,6 @@ private[spark] object EventLoggingListener extends Logging {
         in.close()
         throw e
     }
-  }
-
-  /**
-   * Clean invalid job history files based on `spark.history.fs.cleaner.cleanType`:
-   * 1. age (default): Job history files older than `spark.history.fs.cleaner.maxAge` will be
-   * deleted.
-   * 2. space: Job history files can only use `space.history.fs.cleaner.maxSpace` size of
-   * external storage space. The excess part of job history files will be deleted, oldest file
-   * first.
-   */
-  private[spark] def cleanRedundantLogFiles(
-      sparkConf: SparkConf,
-      fileSystem: FileSystem,
-      statusList: Seq[FileStatus]): Seq[FileStatus] = {
-    val sorted = statusList.sortWith {case (entry1, entry2) =>
-      entry1.getModificationTime() < entry2.getModificationTime()
-    }
-    val maxAge = sparkConf.getTimeAsSeconds("spark.history.fs.cleaner.maxAge", "7d") * 1000
-    val maxSpace = sparkConf.getSizeAsBytes("space.history.fs.cleaner.maxSpace", "100G")
-    val now = new SystemClock().getTimeMillis()
-    var spaceUsed = 0L
-
-    val shouldClean = sparkConf.get("spark.history.fs.cleaner.cleanType", "age") match {
-      case "age" =>
-        sorted.filter(status => status.getModificationTime < now - maxAge &&
-          !status.getPath().getName().endsWith(EventLoggingListener.IN_PROGRESS))
-      case "space" =>
-        sorted.reverse.filter(status => {
-          spaceUsed += status.getLen
-          spaceUsed >= maxSpace &&
-            !status.getPath().getName().endsWith(EventLoggingListener.IN_PROGRESS)
-        })
-      case s: String =>
-        logWarning(s"'spark.history.fs.cleaner.cleanType' can only be set as 'age' or " +
-          s"'space', but invalid $s was set, and replaced as 'age' mode.")
-        sorted.filter(status => status.getModificationTime < now - maxAge &&
-          !status.getPath().getName().endsWith(EventLoggingListener.IN_PROGRESS))
-    }
-
-    shouldClean.foreach(status =>
-      try {
-        fileSystem.delete(status.getPath, true)
-      } catch {
-        case e: AccessControlException =>
-          logInfo(s"No permission to delete ${status.getPath}, ignoring.")
-        case t: IOException =>
-          logError(s"IOException in cleaning ${status.getPath}", t)
-      }
-    )
-    shouldClean
   }
 
 }

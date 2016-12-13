@@ -84,7 +84,7 @@ case class DataSource(
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
   lazy val providingClass: Class[_] = DataSource.lookupDataSource(className)
-  lazy val sourceInfo = sourceSchema()
+  lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = new CaseInsensitiveMap(options)
 
   /**
