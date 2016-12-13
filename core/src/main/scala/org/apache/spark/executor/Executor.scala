@@ -86,7 +86,7 @@ private[spark] class Executor(
   private val executorSource = new ExecutorSource(threadPool, executorId)
   // Pool used for threads that supervise task killing / cancellation
   private val taskReaperPool = ThreadUtils.newDaemonCachedThreadPool("Task reaper")
-  // For tasks which are in the process of being killed, this map the most recently created
+  // For tasks which are in the process of being killed, this map holds the most recently created
   // TaskReaper. All accesses to this map should be synchronized on the map itself (this isn't
   // a ConcurrentHashMap because we use the synchronization for purposes other than simply guarding
   // the integrity of the map's internal state). The purpose of this map is to prevent the creation
