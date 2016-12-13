@@ -125,7 +125,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     logInfo(s"Best train validation split metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     val model = copyValues(new TrainValidationSplitModel(uid, bestModel, metrics).setParent(this))
-    val summary = new TuningSummary(bestModel.transform(dataset), epm, metrics, bestIndex)
+    val summary = new TuningSummary(epm, metrics, bestIndex)
     model.setSummary(Some(summary))
     model
   }

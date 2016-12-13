@@ -19,7 +19,7 @@ package org.apache.spark.ml.tuning
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 /**
@@ -32,7 +32,6 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
 @Since("2.2.0")
 @Experimental
 class TuningSummary private[tuning](
-    @transient val predictions: DataFrame,
     val params: Array[ParamMap],
     val metrics: Array[Double],
     val bestIndex: Int) {
@@ -43,8 +42,9 @@ class TuningSummary private[tuning](
   def trainingMetrics: DataFrame = {
     require(params.nonEmpty, "estimator param maps should not be empty")
     require(params.length == metrics.length, "estimator param maps number should match metrics")
-    val sqlContext = predictions.sqlContext
-    val sc = sqlContext.sparkContext
+    val spark = SparkSession.builder().getOrCreate()
+    val sqlContext = spark.sqlContext
+    val sc = spark.sparkContext
     val fields = params(0).toSeq.sortBy(_.param.name).map(_.param.name) ++ Seq("metrics")
     val schema = new StructType(fields.map(name => StructField(name, StringType)).toArray)
     val rows = sc.parallelize(params.zip(metrics)).map { case (param, metric) =>
