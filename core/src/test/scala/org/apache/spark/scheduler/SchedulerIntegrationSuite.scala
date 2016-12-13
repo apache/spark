@@ -27,9 +27,9 @@ import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.scalactic.TripleEquals
+import org.scalatest.Assertions.AssertionsHelper
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
-import org.scalatest.Assertions.AssertionsHelper
 
 import org.apache.spark._
 import org.apache.spark.TaskState._
