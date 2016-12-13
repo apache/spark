@@ -21,12 +21,15 @@ import java.util.Properties
 import javax.crypto.KeyGenerator
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 
+import scala.collection.JavaConverters._
+
 import org.apache.commons.crypto.random._
 import org.apache.commons.crypto.stream._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.network.util.CryptoUtils
 
 /**
  * A util class for manipulating IO encryption and decryption streams.
@@ -37,8 +40,6 @@ private[spark] object CryptoStreamUtils extends Logging {
   val IV_LENGTH_IN_BYTES = 16
   // The prefix of IO encryption related configurations in Spark configuration.
   val SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX = "spark.io.encryption.commons.config."
-  // The prefix for the configurations passing to Apache Commons Crypto library.
-  val COMMONS_CRYPTO_CONF_PREFIX = "commons.crypto."
 
   /**
    * Helper method to wrap `OutputStream` with `CryptoOutputStream` for encryption.
@@ -70,18 +71,9 @@ private[spark] object CryptoStreamUtils extends Logging {
       new SecretKeySpec(key, "AES"), new IvParameterSpec(iv))
   }
 
-  /**
-   * Get Commons-crypto configurations from Spark configurations identified by prefix.
-   */
   def toCryptoConf(conf: SparkConf): Properties = {
-    val props = new Properties()
-    conf.getAll.foreach { case (k, v) =>
-      if (k.startsWith(SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX)) {
-        props.put(COMMONS_CRYPTO_CONF_PREFIX + k.substring(
-          SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX.length()), v)
-      }
-    }
-    props
+    CryptoUtils.toCryptoConf(SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX,
+      conf.getAll.toMap.asJava.entrySet())
   }
 
   /**

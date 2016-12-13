@@ -33,12 +33,12 @@ import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class ExternalShuffleSecuritySuite {
 
-  TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+  TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
   TransportServer server;
 
   @Before
