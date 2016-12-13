@@ -560,7 +560,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
       def shouldClean(attempt: FsApplicationAttemptInfo): Boolean = {
         cleanType match {
-          case "time" =>
+          case "age" =>
             now - attempt.lastUpdated > maxAge
           case "space" =>
             spaceUsed += fs.getContentSummary(new Path(s"$logDir/${attempt.logPath}")).getLength

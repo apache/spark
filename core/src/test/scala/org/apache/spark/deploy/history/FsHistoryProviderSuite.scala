@@ -356,7 +356,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val log1 = newLogFile("app1", Some("attempt1"), inProgress = false)
     writeFile(log1, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
-      // TODO: add comments
+      // Here, we simulated a `SparkListenerExecutorRemoved` event that occupies 2MB to create
+      // a same size event log file.
       SparkListenerExecutorRemoved(0L, "executor", createReason(2 * 1024 * 1024)),
       SparkListenerApplicationEnd(2L)
     )
@@ -366,7 +367,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val log2 = newLogFile("app1", Some("attempt2"), inProgress = false)
     writeFile(log2, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt2")),
-      // TODO: add comments
+      // Here, we simulated a `SparkListenerExecutorRemoved` event that occupies 2MB to create
+      // a same size event log file.
       SparkListenerExecutorRemoved(0L, "executor", createReason(2 * 1024 * 1024)),
       SparkListenerApplicationEnd(4L)
     )
@@ -375,7 +377,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val log3 = newLogFile("app2", Some("attempt1"), inProgress = true)
     writeFile(log3, true, None,
       SparkListenerApplicationStart("app2", Some("app2"), 5L, "test", Some("attempt1")),
-      // TODO: add comments
+      // Here, we simulated a `SparkListenerExecutorRemoved` event that occupies 4MB to create
+      // a same size event log file.
       SparkListenerExecutorRemoved(0L, "executor", createReason(4 * 1024 * 1024)),
       SparkListenerApplicationEnd(6L)
     )
@@ -391,7 +394,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val log4 = newLogFile("app3", Some("attempt1"), inProgress = false)
     writeFile(log4, true, None,
       SparkListenerApplicationStart("app3", Some("app3"), 7L, "test", Some("attempt1")),
-      // TODO: add comments
+      // Here, we simulated a `SparkListenerExecutorRemoved` event that occupies 3MB to create
+      // a same size event log file.
       SparkListenerExecutorRemoved(0L, "executor", createReason(3 * 1024 * 1024)),
       SparkListenerApplicationEnd(8L)
     )
@@ -408,7 +412,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val log5 = newLogFile("app4", Some("attempt1"), inProgress = true)
     writeFile(log5, true, None,
       SparkListenerApplicationStart("app4", Some("app4"), 9L, "test", Some("attempt1")),
-      // TODO: add comments
+      // Here, we simulated a `SparkListenerExecutorRemoved` event that occupies 5MB to create
+      // a same size event log file.
       SparkListenerExecutorRemoved(0L, "executor", createReason(5 * 1024 * 1024)),
       SparkListenerApplicationEnd(10L)
     )

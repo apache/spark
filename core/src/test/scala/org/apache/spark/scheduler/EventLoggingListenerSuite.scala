@@ -23,8 +23,7 @@ import java.net.URI
 import scala.collection.mutable
 import scala.io.Source
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
 
@@ -32,7 +31,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.io._
-import org.apache.spark.util.{JsonProtocol, SystemClock, Utils}
+import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
  * Test whether EventLoggingListener logs events properly.
