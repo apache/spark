@@ -126,10 +126,8 @@ trait CheckAnalysis extends PredicateHelper {
           case s @ ScalarSubquery(query, conditions, _) if conditions.nonEmpty =>
 
             // Collect the columns from the subquery for further checking.
-            var subqueryColumns = conditions.flatMap(_.references).collect {
-              case xs if query.output.contains(xs) =>
-                xs
-            }
+            var subqueryColumns = conditions.flatMap(_.references).filter(query.output.contains)
+
             def checkAggregate(agg: Aggregate): Unit = {
               // Make sure correlated scalar subqueries contain one row for every outer row by
               // enforcing that they are aggregates which contain exactly one aggregate expressions.
@@ -144,9 +142,9 @@ trait CheckAnalysis extends PredicateHelper {
 
               // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
               // are not part of the correlated columns.
-              val groupByCols = ExpressionSet(agg.groupingExpressions.flatMap(_.references))
-              val correlatedCols = ExpressionSet(subqueryColumns)
-              val invalidCols = groupByCols.diff(correlatedCols)
+              val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
+              val correlatedCols = AttributeSet(subqueryColumns)
+              val invalidCols = groupByCols -- correlatedCols
               // GROUP BY columns must be a subset of columns in the predicates
               if (invalidCols.nonEmpty) {
                 failAnalysis(
@@ -164,11 +162,10 @@ trait CheckAnalysis extends PredicateHelper {
                 // SPARK-18814: Map any aliases to their AttributeReference children
                 // for the checking in the Aggregate operators below this Project.
                 subqueryColumns = subqueryColumns.map {
-                  case xs =>
-                    p.projectList.collectFirst {
-                      case e @ Alias(child : AttributeReference, _) if e.toAttribute equals xs =>
-                        child
-                    }.getOrElse(xs)
+                  xs => p.projectList.collectFirst {
+                    case e @ Alias(child : AttributeReference, _) if e.exprId == xs.exprId =>
+                      child
+                  }.getOrElse(xs)
                 }
 
                 cleanQuery(p.child)
