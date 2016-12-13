@@ -28,7 +28,6 @@ import scala.reflect.ClassTag
 
 import org.scalactic.TripleEquals
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.PatienceConfiguration
 import org.scalatest.time.SpanSugar._
 import org.scalatest.Assertions.AssertionsHelper
 
@@ -167,7 +166,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       // and notifies the job waiter before our original thread in the task scheduler finishes
       // handling the event and marks the taskset as complete.  So its ok if we need to wait a
       // *little* bit longer for the original taskscheduler thread to finish up to deal w/ the race.
-      eventually(timeout(1 second), interval(100 millis)) {
+      eventually(timeout(1 second), interval(10 millis)) {
         assert(taskScheduler.runningTaskSets.isEmpty)
       }
       assert(!backend.hasTasks)
