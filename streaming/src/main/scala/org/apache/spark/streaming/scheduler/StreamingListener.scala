@@ -69,7 +69,7 @@ case class StreamingListenerReceiverStopped(receiverInfo: ReceiverInfo)
 @DeveloperApi
 trait StreamingListener {
 
-  /** Called when the streaming starts */
+  /** Called when the streaming has been started */
   def onStreamingStarted(streamingStarted: StreamingListenerStreamingStarted) { }
 
   /** Called when a receiver has been started */
