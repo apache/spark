@@ -60,19 +60,12 @@ object DateTimeUtils {
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
   final val MonthOf31Days = Set(1, 3, 5, 7, 8, 10, 12)
 
-  @transient lazy val defaultTimeZone = TimeZone.getDefault
+  def defaultTimeZone(): TimeZone = TimeZone.getDefault()
 
   // Reuse the Calendar object in each thread as it is expensive to create in each method call.
   private val threadLocalGmtCalendar = new ThreadLocal[Calendar] {
     override protected def initialValue: Calendar = {
       Calendar.getInstance(TimeZoneGMT)
-    }
-  }
-
-  // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
-  val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {
-    override protected def initialValue: TimeZone = {
-      Calendar.getInstance.getTimeZone
     }
   }
 
@@ -92,7 +85,7 @@ object DateTimeUtils {
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
   def millisToDays(millisUtc: Long): SQLDate = {
-    millisToDays(millisUtc, threadLocalLocalTimeZone.get())
+    millisToDays(millisUtc, defaultTimeZone())
   }
 
   def millisToDays(millisUtc: Long, timeZone: TimeZone): SQLDate = {
@@ -104,7 +97,7 @@ object DateTimeUtils {
 
   // reverse of millisToDays
   def daysToMillis(days: SQLDate): Long = {
-    daysToMillis(days, threadLocalLocalTimeZone.get())
+    daysToMillis(days, defaultTimeZone())
   }
 
   def daysToMillis(days: SQLDate, timeZone: TimeZone): Long = {
@@ -117,7 +110,7 @@ object DateTimeUtils {
 
   // Converts Timestamp to string according to Hive TimestampWritable convention.
   def timestampToString(us: SQLTimestamp): String = {
-    timestampToString(us, threadLocalLocalTimeZone.get())
+    timestampToString(us, defaultTimeZone())
   }
 
   // Converts Timestamp to string according to Hive TimestampWritable convention.
@@ -248,7 +241,7 @@ object DateTimeUtils {
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
    */
   def stringToTimestamp(s: UTF8String): Option[SQLTimestamp] = {
-    stringToTimestamp(s, threadLocalLocalTimeZone.get())
+    stringToTimestamp(s, defaultTimeZone())
   }
 
   def stringToTimestamp(s: UTF8String, timeZone: TimeZone): Option[SQLTimestamp] = {
@@ -471,7 +464,7 @@ object DateTimeUtils {
   }
 
   private def localTimestamp(microsec: SQLTimestamp): SQLTimestamp = {
-    localTimestamp(microsec, defaultTimeZone)
+    localTimestamp(microsec, defaultTimeZone())
   }
 
   private def localTimestamp(microsec: SQLTimestamp, timeZone: TimeZone): SQLTimestamp = {
@@ -942,7 +935,7 @@ object DateTimeUtils {
    */
   def convertTz(ts: SQLTimestamp, fromZone: TimeZone, toZone: TimeZone): SQLTimestamp = {
     // We always use local timezone to parse or format a timestamp
-    val localZone = threadLocalLocalTimeZone.get()
+    val localZone = defaultTimeZone()
     val utcTs = if (fromZone.getID == localZone.getID) {
       ts
     } else {
@@ -980,7 +973,6 @@ object DateTimeUtils {
    */
   private[util] def resetThreadLocals(): Unit = {
     threadLocalGmtCalendar.remove()
-    threadLocalLocalTimeZone.remove()
     threadLocalTimestampFormat.remove()
     threadLocalDateFormat.remove()
   }

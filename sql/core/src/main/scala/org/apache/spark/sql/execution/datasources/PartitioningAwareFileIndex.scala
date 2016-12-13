@@ -139,7 +139,7 @@ abstract class PartitioningAwareFileIndex(
             Cast(
               Literal.create(row.getUTF8String(i), StringType),
               userProvidedSchema.fields(i).dataType,
-              DateTimeUtils.threadLocalLocalTimeZone.get().getID).eval()
+              DateTimeUtils.defaultTimeZone().getID).eval()
           }: _*)
         }
 

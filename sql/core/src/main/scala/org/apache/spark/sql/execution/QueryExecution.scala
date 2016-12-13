@@ -147,7 +147,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     /** Implementation following Hive's TimestampWritable.toString */
     def formatTimestamp(timestamp: Timestamp): String = {
       val timestampFormat = DateTimeUtils.threadLocalTimestampFormat.get()
-      timestampFormat.setTimeZone(DateTimeUtils.threadLocalLocalTimeZone.get())
+      timestampFormat.setTimeZone(DateTimeUtils.defaultTimeZone())
 
       val timestampString = timestamp.toString
       if (timestampString.length() > 19) {
