@@ -1225,34 +1225,15 @@ class Analyzer(
     }
 
     /**
-     * Rewrite the subquery in a safe way by preventing that the subquery and
-     * the outer use the same attributes.
-     *
-     * If this is a scalar subquery, check that GROUP BY columns are a subset
-     * of the columns used in the correlated predicate(s). Otherwise, pulling up
-     * correlated predicates could cause incorrect results.
+     * Rewrite the subquery in a safe way by preventing that the subquery and the outer use the same
+     * attributes.
      */
     private def rewriteSubQuery(
         sub: LogicalPlan,
-        outer: Seq[LogicalPlan],
-        isScalarSubq: Boolean): (LogicalPlan, Seq[Expression]) = {
+        outer: Seq[LogicalPlan]): (LogicalPlan, Seq[Expression]) = {
       // Pull out the tagged predicates and rewrite the subquery in the process.
       val (basePlan, baseConditions) = pullOutCorrelatedPredicates(sub)
 
-      // SPARK-18504/SPARK-18814:
-      // Block cases where GROUP BY columns are not part of the correlated columns
-      // of a scalar subquery.
-      sub collect {
-        case Aggregate(grouping, _, _) if isScalarSubq =>
-          val groupByCols = ExpressionSet(grouping.flatMap(_.references))
-          val conditionsCols = ExpressionSet(baseConditions.flatMap(_.references))
-          val invalidCols = groupByCols.diff(conditionsCols)
-          if (invalidCols.nonEmpty) {
-            failAnalysis("A GROUP BY clause in a scalar correlated subquery " +
-              "cannot contain non-correlated columns: " +
-              invalidCols.mkString(","))
-          }
-      }
       // Make sure the inner and the outer query attributes do not collide.
       val outputSet = outer.map(_.outputSet).reduce(_ ++ _)
       val duplicates = basePlan.outputSet.intersect(outputSet)
@@ -1317,7 +1298,7 @@ class Analyzer(
             s"does not match the required number of columns ($requiredColumns)")
         }
         // Pullout predicates and construct a new plan.
-        f.tupled(rewriteSubQuery(current, plans, e.isInstanceOf[ScalarSubquery]))
+        f.tupled(rewriteSubQuery(current, plans))
       } else {
         e.withNewPlan(current)
       }

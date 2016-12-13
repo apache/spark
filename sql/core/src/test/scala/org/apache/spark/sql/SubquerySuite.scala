@@ -505,7 +505,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1")
     }
     assert(msg2.getMessage.contains(
-      "A GROUP BY clause in a scalar correlated subquery cannot contain non-correlated columns:"))
+      "The output of a correlated scalar subquery must be aggregated"))
   }
 
   test("non-equal correlated scalar subquery") {
