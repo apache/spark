@@ -200,7 +200,8 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
         case plan: Project if plan eq proj => plan.child
         case plan => plan transformExpressions {
           case a: Attribute if attrMap.contains(a) => attrMap(a)
-          case b: Alias if (attrMap.exists(_._1.exprId == b.exprId)) => b.child
+          case b: Alias if attrMap.exists(_._1.exprId == b.exprId)
+            && b.child.isInstanceOf[NamedExpression] => b.child
         }
       }
     }.getOrElse(plan)
