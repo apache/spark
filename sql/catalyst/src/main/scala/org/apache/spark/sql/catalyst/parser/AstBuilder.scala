@@ -383,7 +383,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         }
 
         // Window
-        withDistinct.optionalMap(windows)(withWindows)
+        val withWindow = withDistinct.optionalMap(windows)(withWindows)
+
+        // Hint
+        withWindow.optionalMap(ctx.hint)(withHints)
     }
   }
 
@@ -506,6 +509,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       }
       Aggregate(mappedGroupByExpressions, selectExpressions, query)
     }
+  }
+
+  /**
+   * Add a Hint to a logical plan.
+   */
+  private def withHints(
+      ctx: HintContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val stmt = ctx.hintStatement
+    Hint(stmt.hintName.getText, stmt.parameters.asScala.map(_.getText), query)
   }
 
   /**

@@ -78,7 +78,8 @@ class Analyzer(
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      new SubstituteUnresolvedOrdinals(conf)),
+      new SubstituteUnresolvedOrdinals(conf),
+      SubstituteHints),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
       ResolveRelations ::
@@ -1966,6 +1967,63 @@ class Analyzer(
             .map { case (_, expr) => IsNull(expr) }
             .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
           inputsNullCheck.map(If(_, Literal.create(null, udf.dataType), udf)).getOrElse(udf)
+      }
+    }
+  }
+
+  /**
+   * Substitute Hints.
+   * - BROADCAST/BROADCASTJOIN/MAPJOIN match the closest table with the given name parameters.
+   *
+   * This rule substitutes `UnresolvedRelation`s in `Substitute` batch before `ResolveRelations`
+   * rule is applied. Here are two reasons.
+   * - To support `MetastoreRelation` in Hive module.
+   * - To reduce the effect of `Hint` on the other rules.
+   *
+   * After this rule, it is guaranteed that there exists no unknown `Hint` in the plan.
+   * All new `Hint`s should be transformed into concrete Hint classes `BroadcastHint` here.
+   */
+  object SubstituteHints extends Rule[LogicalPlan] {
+    val BROADCAST_HINT_NAMES = Set("BROADCAST", "BROADCASTJOIN", "MAPJOIN")
+
+    import scala.collection.mutable.Set
+    private def appendAllDescendant(set: Set[LogicalPlan], plan: LogicalPlan): Unit = {
+      set += plan
+      plan.children.foreach { child => appendAllDescendant(set, child) }
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case logical: LogicalPlan => logical transformDown {
+        case h @ Hint(name, parameters, child) if BROADCAST_HINT_NAMES.contains(name.toUpperCase) =>
+          var resolvedChild = child
+          for (table <- parameters) {
+            var stop = false
+            val skipNodeSet = scala.collection.mutable.Set.empty[LogicalPlan]
+            resolvedChild = resolvedChild.transformDown {
+              case n if skipNodeSet.contains(n) =>
+                skipNodeSet -= n
+                n
+              case p @ Project(_, _) if p != resolvedChild =>
+                appendAllDescendant(skipNodeSet, p)
+                skipNodeSet -= p
+                p
+              case r @ BroadcastHint(UnresolvedRelation(t, _))
+                  if !stop && resolver(t.table, table) =>
+                stop = true
+                r
+              case r @ UnresolvedRelation(t, alias) if !stop && resolver(t.table, table) =>
+                stop = true
+                if (alias.isDefined) {
+                  SubqueryAlias(alias.get, BroadcastHint(r.copy(alias = None)), None)
+                } else {
+                  BroadcastHint(r)
+                }
+            }
+          }
+          resolvedChild
+
+        // Remove unrecognized hints
+        case Hint(name, _, child) => child
       }
     }
   }

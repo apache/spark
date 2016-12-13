@@ -1158,6 +1158,97 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       "inline_tables")
   }
 
+  test("broadcast hint on single table") {
+    checkSQL("SELECT /*+ MAPJOIN(parquet_t0) */ * FROM parquet_t0",
+      "broadcast_hint_single_table_1")
+
+    checkSQL("SELECT /*+ MAPJOIN(parquet_t0, parquet_t0) */ * FROM parquet_t0",
+      "broadcast_hint_single_table_2")
+
+    checkSQL(
+      "SELECT /*+ MAPJOIN(parquet_t0) */ * FROM parquet_t0 as a",
+      "broadcast_hint_single_table_3")
+  }
+
+  test("broadcast hint on multiple tables") {
+    checkSQL(
+      "SELECT /*+ MAPJOIN(parquet_t0) */ * FROM parquet_t0, parquet_t1 WHERE id < key",
+      "broadcast_hint_multiple_table_1")
+    checkSQL(
+      "SELECT /*+ MAPJOIN(parquet_t1) */ * FROM parquet_t0, parquet_t1 WHERE id < key",
+      "broadcast_hint_multiple_table_2")
+  }
+
+  test("multiple broadcast hints on multiple tables") {
+    checkSQL(
+      "SELECT /*+ MAPJOIN(parquet_t0, parquet_t1) */ * FROM parquet_t0, parquet_t1 WHERE id < key",
+      "multiple_broadcast_hints")
+  }
+
+  test("broadcast hint with filter") {
+    checkSQL(
+      "SELECT /*+ MAPJOIN(parquet_t0) */ * FROM parquet_t0 WHERE id < 10",
+      "broadcast_hint_with_filter")
+  }
+
+  test("broadcast hint with filter/limit") {
+    checkSQL(
+      "SELECT /*+ MAPJOIN(parquet_t0) */ * FROM parquet_t0 WHERE id < 10 LIMIT 10",
+      "broadcast_hint_with_filter_limit")
+  }
+
+  test("broadcast hint with generator") {
+    checkSQL(
+      "SELECT * FROM (SELECT /*+ MAPJOIN(parquet_t0) */ EXPLODE(ARRAY(1,2,3)) FROM parquet_t0) T",
+      "broadcast_hint_generator")
+  }
+
+  test("broadcast hint with groupby/having/orderby") {
+    checkSQL(
+      """
+        |SELECT /*+ MAPJOIN(parquet_t0) */ *
+        |FROM parquet_t0
+        |WHERE id > 0
+        |GROUP BY id
+        |HAVING count(*) > 0
+        |ORDER BY id
+      """.stripMargin,
+      "broadcast_hint_groupby_having_orderby")
+  }
+
+  test("broadcast hint with window") {
+    checkSQL(
+      """
+        |SELECT /*+ MAPJOIN(parquet_t1) */
+        |       x.key, MAX(y.key) OVER (PARTITION BY x.key % 5 ORDER BY x.key)
+        |FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key
+      """.stripMargin,
+      "broadcast_hint_window")
+  }
+
+  test("broadcast hint with rollup") {
+    checkSQL(
+      """
+        |SELECT /*+ MAPJOIN(parquet_t1) */
+        |       count(*) as cnt, key%5, grouping_id()
+        |FROM parquet_t1
+        |GROUP BY key % 5 WITH ROLLUP
+      """.stripMargin,
+      "broadcast_hint_rollup")
+  }
+
+  test("broadcast hint with grouping sets") {
+    checkSQL(
+      s"""
+         |SELECT /*+ MAPJOIN(parquet_t1) */
+         |       count(*) AS cnt, key % 5 AS k1, key - 5 AS k2, grouping_id() AS k3
+         |FROM parquet_t1
+         |GROUP BY key % 5, key - 5
+         |GROUPING SETS (key % 5, key - 5)
+      """.stripMargin,
+      "broadcast_hint_groupingset")
+  }
+
   test("SPARK-17750 - interval arithmetic") {
     withTable("dates") {
       sql("create table dates (ts timestamp)")

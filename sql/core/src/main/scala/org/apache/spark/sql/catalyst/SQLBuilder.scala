@@ -177,6 +177,10 @@ class SQLBuilder private (
         toSQL(p.right),
         p.condition.map(" ON " + _.sql).getOrElse(""))
 
+    // Hint on aliased table should be matched directly. Otherwise, this Hint will be propagate up.
+    case h @ Hint(_, _, s @ SubqueryAlias(alias, p @ Project(_, _: SQLTable), _)) =>
+      build("(" + toSQL(p.copy(child = h.copy(child = p.child))) + ")", "AS", s.alias)
+
     case SQLTable(database, table, _, sample) =>
       val qualifiedName = s"${quoteIdentifier(database)}.${quoteIdentifier(table)}"
       sample.map { case (lowerBound, upperBound) =>
@@ -219,6 +223,9 @@ class SQLBuilder private (
     case OneRowRelation =>
       ""
 
+    case Hint(_, _, child) =>
+      toSQL(child)
+
     case _ =>
       throw new UnsupportedOperationException(s"unsupported plan $node")
   }
@@ -231,14 +238,24 @@ class SQLBuilder private (
   private def build(segments: String*): String =
     segments.map(_.trim).filter(_.nonEmpty).mkString(" ")
 
-  private def projectToSQL(plan: Project, isDistinct: Boolean): String = {
-    build(
-      "SELECT",
-      if (isDistinct) "DISTINCT" else "",
-      plan.projectList.map(_.sql).mkString(", "),
-      if (plan.child == OneRowRelation) "" else "FROM",
-      toSQL(plan.child)
-    )
+  private def projectToSQL(plan: Project, isDistinct: Boolean): String = plan match {
+    case p @ Project(projectList, Hint("BROADCAST", tables, child)) =>
+      build(
+        "SELECT",
+        if (tables.nonEmpty) s"/*+ MAPJOIN(${tables.mkString(", ")}) */" else "",
+        if (isDistinct) "DISTINCT" else "",
+        plan.projectList.map(_.sql).mkString(", "),
+        if (child == OneRowRelation) "" else "FROM",
+        toSQL(child)
+      )
+    case _ =>
+      build(
+        "SELECT",
+        if (isDistinct) "DISTINCT" else "",
+        plan.projectList.map(_.sql).mkString(", "),
+        if (plan.child == OneRowRelation) "" else "FROM",
+        toSQL(plan.child)
+      )
   }
 
   private def scriptTransformationToSQL(plan: ScriptTransformation): String = {
@@ -436,7 +453,9 @@ class SQLBuilder private (
         // Insert sub queries on top of operators that need to appear after FROM clause.
         AddSubquery,
         // Reconstruct subquery expressions.
-        ConstructSubqueryExpressions
+        ConstructSubqueryExpressions,
+        // Normalize BroadcastHints to reconstruct hint comments.
+        NormalizeBroadcastHint
       )
     )
 
@@ -446,6 +465,46 @@ class SQLBuilder private (
           AttributeReference(normalizedName(a), a.dataType)(exprId = a.exprId, qualifier = None)
         case a: Alias =>
           Alias(a.child, normalizedName(a))(exprId = a.exprId, qualifier = None)
+      }
+    }
+
+    /**
+     * Merge and move upward to the nearest Project.
+     * A broadcast hint comment is scattered into multiple nodes inside the plan, and the
+     * information of BroadcastHint resides its current position inside the plan. In order to
+     * reconstruct broadcast hint comment, we need to pack the information of BroadcastHint into
+     * Hint("BROADCAST", _, _) and collect them up by moving upward to the nearest Project node.
+     */
+    object NormalizeBroadcastHint extends Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+        // Capture the broadcasted information and store it in Hint.
+        case BroadcastHint(child @ SubqueryAlias(_, Project(_, SQLTable(_, table, _, _)), _)) =>
+          Hint("BROADCAST", Seq(table), child)
+
+        // Nearest Project is found.
+        case p @ Project(_, Hint(_, _, _)) => p
+
+        // Merge BROADCAST hints up to the nearest Project.
+        case Hint("BROADCAST", params1, h @ Hint("BROADCAST", params2, _)) =>
+          h.copy(parameters = params1 ++ params2)
+        case j @ Join(h1 @ Hint("BROADCAST", p1, left), h2 @ Hint("BROADCAST", p2, right), _, _) =>
+          h1.copy(parameters = p1 ++ p2, child = j.copy(left = left, right = right))
+
+        // Bubble up BROADCAST hints to the nearest Project.
+        case j @ Join(h @ Hint("BROADCAST", _, hintChild), _, _, _) =>
+          h.copy(child = j.copy(left = hintChild))
+        case j @ Join(_, h @ Hint("BROADCAST", _, hintChild), _, _) =>
+          h.copy(child = j.copy(right = hintChild))
+
+        // Other UnaryNodes are bypassed.
+        case u: UnaryNode
+            if u.child.isInstanceOf[Hint] && u.child.asInstanceOf[Hint].name.equals("BROADCAST") =>
+          val hint = u.child.asInstanceOf[Hint]
+          hint.copy(child = u.withNewChildren(Seq(hint.child)))
+
+        // Other binary(CoGroup/Intersect/Except) and Union are ignored.
+        // - CoGroup is not used in SQL.
+        // - Intersect/Except/Union have Project nodes inside.
       }
     }
 
@@ -580,6 +639,8 @@ class SQLBuilder private (
       case _: SQLTable => plan
       case _: Generate => plan
       case OneRowRelation => plan
+      case _: BroadcastHint => plan
+      case _: Hint => plan
       case _ => addSubquery(plan)
     }
   }
