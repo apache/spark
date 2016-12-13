@@ -888,8 +888,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitChangeColumns(ctx: ChangeColumnsContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.partitionSpec != null) {
-      operationNotAllowed("ALTER TABLE PARTITION partition_spec CHANGE COLUMN, can not change " +
-        "the columns in partition spec", ctx)
+      operationNotAllowed("ALTER TABLE table PARTITION partition_spec CHANGE COLUMN", ctx)
     }
 
     val tableName = visitTableIdentifier(ctx.tableIdentifier)
@@ -897,7 +896,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val columns = ctx.expandColTypeList.expandColType.asScala.map { col =>
       if (col.colPosition != null) {
         operationNotAllowed(
-          "ALTER TABLE [PARTITION] CHANGE COLUMN ... FIRST | AFTER otherCol", ctx)
+          "ALTER TABLE table [PARTITION partition_spec] CHANGE COLUMN ... FIRST | AFTER otherCol",
+          ctx)
       }
       col.identifier.getText -> visitColType(col.colType)
     }.toMap

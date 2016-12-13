@@ -306,7 +306,8 @@ case class AlterTableChangeColumnsCommand(
       if (!columnEqual(originColumn, newField, resolver)) {
         throw new AnalysisException(
           "ALTER TABLE CHANGE COLUMN is not supported for changing column " +
-            s"'${getDesc(originColumn)}' to '${getDesc(newField)}'")
+            s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
+            s"'${newField.name}' with type '${newField.dataType}'")
       }
       // Create a new column from the origin column with new comment.
       val newColumn = addComment(originColumn, newField.getComment)
@@ -340,11 +341,6 @@ case class AlterTableChangeColumnsCommand(
   private def columnEqual(
       field: StructField, other: StructField, resolver: Resolver): Boolean = {
     resolver(field.name, other.name) && field.dataType == other.dataType
-  }
-
-  // Genereate the full description of a StructField.
-  private def getDesc(field: StructField): String = {
-    s"StructField(${field.name},${field.dataType},${field.nullable},${field.metadata})"
   }
 }
 
