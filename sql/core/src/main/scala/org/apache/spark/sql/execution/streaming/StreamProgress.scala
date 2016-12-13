@@ -24,7 +24,7 @@ import scala.collection.{immutable, GenTraversableOnce}
  */
 class StreamProgress(
     val baseMap: immutable.Map[Source, Offset] = new immutable.HashMap[Source, Offset])
-  extends scala.collection.immutable.Map[Source, Offset] {
+  extends scala.collection.immutable.Map[Source, Offset] with Serializable {
 
   def toOffsetSeq(source: Seq[Source], metadata: OffsetSeqMetadata): OffsetSeq = {
     OffsetSeq(source.map(get), Some(metadata))

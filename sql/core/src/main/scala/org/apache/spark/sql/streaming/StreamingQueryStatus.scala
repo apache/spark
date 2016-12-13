@@ -35,7 +35,7 @@ import org.json4s.jackson.JsonMethods._
 class StreamingQueryStatus protected[sql](
     val message: String,
     val isDataAvailable: Boolean,
-    val isTriggerActive: Boolean) {
+    val isTriggerActive: Boolean) extends Serializable {
 
   /** The compact JSON representation of this status. */
   def json: String = compact(render(jsonValue))

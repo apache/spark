@@ -71,7 +71,7 @@ trait ProgressReporter extends Logging {
   private var metricWarningLogged: Boolean = false
 
   /** Holds the most recent query progress updates.  Accesses must lock on the queue itself. */
-  private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
+  @transient private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
 
   private val noDataProgressEventInterval =
     sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
