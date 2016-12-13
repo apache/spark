@@ -486,11 +486,21 @@ private[spark] class Executor(
         // effective to interrupt multiple times:
         taskRunner.kill(interruptThread = interruptThread)
         // Monitor the killed task until it exits:
-        while (!taskRunner.isFinished && !timeoutExceeded()) {
+        var finished: Boolean = false
+        while (!finished && !timeoutExceeded()) {
           taskRunner.synchronized {
-            taskRunner.wait(killPollingFrequencyMs)
+            // We need to synchronize on the TaskRunner while checking whether the task has
+            // finished in order to avoid a race where the task is marked as finished right after
+            // we check and before we call wait().
+            if (taskRunner.isFinished) {
+              finished = true
+            } else {
+              taskRunner.wait(killPollingFrequencyMs)
+            }
           }
-          if (!taskRunner.isFinished) {
+          if (taskRunner.isFinished) {
+            finished = true
+          } else {
             logWarning(s"Killed task $taskId is still running after $elapsedTimeMs ms")
             if (takeThreadDump) {
               try {
