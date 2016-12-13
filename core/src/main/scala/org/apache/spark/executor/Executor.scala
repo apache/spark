@@ -468,8 +468,8 @@ private[spark] class Executor(
 
     private[this] val taskId: Long = taskRunner.taskId
 
-    private[this] val killPollingFrequencyMs: Long =
-      conf.getTimeAsMs("spark.task.killPollingFrequency", "10s")
+    private[this] val killPollingIntervalMs: Long =
+      conf.getTimeAsMs("spark.task.killPollingInterval", "10s")
 
     private[this] val killTimeoutMs: Long = conf.getTimeAsMs("spark.task.killTimeout", "2m")
 
@@ -495,7 +495,7 @@ private[spark] class Executor(
             if (taskRunner.isFinished) {
               finished = true
             } else {
-              taskRunner.wait(killPollingFrequencyMs)
+              taskRunner.wait(killPollingIntervalMs)
             }
           }
           if (taskRunner.isFinished) {
@@ -519,7 +519,7 @@ private[spark] class Executor(
 
         if (!taskRunner.isFinished && timeoutExceeded()) {
           if (isLocal) {
-            logError(s"Killed task $taskId could not be stopped within $killPollingFrequencyMs; " +
+            logError(s"Killed task $taskId could not be stopped within $killTimeoutMs ms; " +
               "not killing JVM because we are running in local mode.")
           } else {
             throw new SparkException(

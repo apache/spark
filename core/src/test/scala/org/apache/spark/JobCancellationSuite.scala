@@ -247,7 +247,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   test("task reaper will not kill JVM if spark.task.killTimeout == -1") {
     val conf = new SparkConf()
       .set("spark.task.killTimeout", "-1")
-      .set("spark.task.killPollingFrequency", "1s")
+      .set("spark.task.killPollingInterval", "1s")
       .set("spark.deploy.maxExecutorRetries", "1")
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
 
