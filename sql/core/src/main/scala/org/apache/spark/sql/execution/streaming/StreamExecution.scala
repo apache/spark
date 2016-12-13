@@ -223,7 +223,8 @@ class StreamExecution(
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
 
-      postEvent(new QueryStartedEvent(id, runId, name)) // Assumption: Does not throw exception.
+      // `postEvent` does not throw non fatal exception.
+      postEvent(new QueryStartedEvent(id, runId, name))
 
       // Unblock starting thread
       startLatch.countDown()
@@ -286,7 +287,7 @@ class StreamExecution(
           e,
           committedOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString,
           availableOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString)
-        logError(s"Query $name terminated with error", e)
+        logError(s"Query $prettyIdString terminated with error", e)
         updateStatusMessage(s"Terminated with exception: ${e.getMessage}")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
         // handle them

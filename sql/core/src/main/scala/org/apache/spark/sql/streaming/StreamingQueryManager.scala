@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicLong
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 
@@ -44,10 +44,13 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
   private val listenerBus = new StreamingQueryListenerBus(sparkSession.sparkContext.listenerBus)
+
+  @GuardedBy("activeQueriesLock")
   private val activeQueries = new mutable.HashMap[UUID, StreamingQuery]
   private val activeQueriesLock = new Object
   private val awaitTerminationLock = new Object
 
+  @GuardedBy("awaitTerminationLock")
   private var lastTerminatedQuery: StreamingQuery = null
 
   /**
@@ -181,8 +184,65 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
     listenerBus.post(event)
   }
 
+  private def createQuery(
+      userSpecifiedName: Option[String],
+      userSpecifiedCheckpointLocation: Option[String],
+      df: DataFrame,
+      sink: Sink,
+      outputMode: OutputMode,
+      useTempCheckpointLocation: Boolean,
+      recoverFromCheckpointLocation: Boolean,
+      trigger: Trigger,
+      triggerClock: Clock): StreamExecution = {
+    val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
+      new Path(userSpecified).toUri.toString
+    }.orElse {
+      df.sparkSession.sessionState.conf.checkpointLocation.map { location =>
+        new Path(location, userSpecifiedName.getOrElse(UUID.randomUUID().toString)).toUri.toString
+      }
+    }.getOrElse {
+      if (useTempCheckpointLocation) {
+        Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
+      } else {
+        throw new AnalysisException(
+          "checkpointLocation must be specified either " +
+            """through option("checkpointLocation", ...) or """ +
+            s"""SparkSession.conf.set("${SQLConf.CHECKPOINT_LOCATION.key}", ...)""")
+      }
+    }
+
+    // If offsets have already been created, we trying to resume a query.
+    if (!recoverFromCheckpointLocation) {
+      val checkpointPath = new Path(checkpointLocation, "offsets")
+      val fs = checkpointPath.getFileSystem(df.sparkSession.sessionState.newHadoopConf())
+      if (fs.exists(checkpointPath)) {
+        throw new AnalysisException(
+          s"This query does not support recovering from checkpoint location. " +
+            s"Delete $checkpointPath to start over.")
+      }
+    }
+
+    val analyzedPlan = df.queryExecution.analyzed
+    df.queryExecution.assertAnalyzed()
+
+    if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
+      UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
+    }
+
+    new StreamExecution(
+      sparkSession,
+      userSpecifiedName.orNull,
+      checkpointLocation,
+      analyzedPlan,
+      sink,
+      trigger,
+      triggerClock,
+      outputMode)
+  }
+
   /**
    * Start a [[StreamingQuery]].
+   *
    * @param userSpecifiedName Query name optionally specified by the user.
    * @param userSpecifiedCheckpointLocation  Checkpoint location optionally specified by the user.
    * @param df Streaming DataFrame.
@@ -206,72 +266,50 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       recoverFromCheckpointLocation: Boolean = true,
       trigger: Trigger = ProcessingTime(0),
       triggerClock: Clock = new SystemClock()): StreamingQuery = {
+    val query = createQuery(
+      userSpecifiedName,
+      userSpecifiedCheckpointLocation,
+      df,
+      sink,
+      outputMode,
+      useTempCheckpointLocation,
+      recoverFromCheckpointLocation,
+      trigger,
+      triggerClock)
+
     activeQueriesLock.synchronized {
-      val name = userSpecifiedName match {
-        case Some(n) =>
-          if (activeQueries.values.exists(_.name == userSpecifiedName.get)) {
-            throw new IllegalArgumentException(
-              s"Cannot start query with name $n as a query with that name is already active")
-          }
-          n
-        case None => null
-      }
-      val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
-        new Path(userSpecified).toUri.toString
-      }.orElse {
-        df.sparkSession.sessionState.conf.checkpointLocation.map { location =>
-          new Path(location, name).toUri.toString
-        }
-      }.getOrElse {
-        if (useTempCheckpointLocation) {
-          Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
-        } else {
-          throw new AnalysisException(
-            "checkpointLocation must be specified either " +
-              """through option("checkpointLocation", ...) or """ +
-              s"""SparkSession.conf.set("${SQLConf.CHECKPOINT_LOCATION.key}", ...)""")
+      // Make sure no other query with same name is active
+      userSpecifiedName.foreach { name =>
+        if (activeQueries.values.exists(_.name == name)) {
+          throw new IllegalArgumentException(
+            s"Cannot start query with name $name as a query with that name is already active")
         }
       }
 
-      // If offsets have already been created, we trying to resume a query.
-      if (!recoverFromCheckpointLocation) {
-        val checkpointPath = new Path(checkpointLocation, "offsets")
-        val fs = checkpointPath.getFileSystem(df.sparkSession.sessionState.newHadoopConf())
-        if (fs.exists(checkpointPath)) {
-          throw new AnalysisException(
-            s"This query does not support recovering from checkpoint location. " +
-              s"Delete $checkpointPath to start over.")
-        }
-      }
-
-      val analyzedPlan = df.queryExecution.analyzed
-      df.queryExecution.assertAnalyzed()
-
-      if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
-        UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
-      }
-
-      val query = new StreamExecution(
-        sparkSession,
-        name,
-        checkpointLocation,
-        analyzedPlan,
-        sink,
-        trigger,
-        triggerClock,
-        outputMode)
-
+      // Make sure no other query with same id is active
       if (activeQueries.values.exists(_.id == query.id)) {
         throw new IllegalStateException(
           s"Cannot start query with id ${query.id} as another query with same id is " +
-            s"already active. Perhaps you are attempting to restart a query from checkpoint" +
+            s"already active. Perhaps you are attempting to restart a query from checkpoint " +
             s"that is already active.")
       }
 
-      query.start()
       activeQueries.put(query.id, query)
-      query
     }
+    try {
+      // When starting a query, it will call `StreamingQueryListener.onQueryStarted` synchronously.
+      // As it's provided by the user and can run arbitrary codes, we must not hold any lock here.
+      // Otherwise, it's easy to cause dead-lock, or block too long if the user codes take a long
+      // time to finish.
+      query.start()
+    } catch {
+      case e: Throwable =>
+        activeQueriesLock.synchronized {
+          activeQueries -= query.id
+        }
+        throw e
+    }
+    query
   }
 
   /** Notify (by the StreamingQuery) that the query has been terminated */
