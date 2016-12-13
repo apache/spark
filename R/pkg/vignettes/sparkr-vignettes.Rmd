@@ -539,7 +539,7 @@ In the following example, we use the `longley` dataset to train a random forest 
 
 ```{r}
 df <- createDataFrame(longley)
-rfModel <- spark.randomForest(df, Employed ~ ., type = "regression", numTrees = 5)
+rfModel <- spark.randomForest(df, Employed ~ ., type = "regression", maxDepth = 2, numTrees = 2)
 summary(rfModel)
 predictions <- predict(rfModel, df)
 ```
@@ -553,7 +553,7 @@ Similar to the random forest example above, we use the `longley` dataset to trai
 
 ```{r}
 df <- createDataFrame(longley)
-gbtModel <- spark.gbt(df, Employed ~ ., type = "regression", maxIter = 5)
+gbtModel <- spark.gbt(df, Employed ~ ., type = "regression", maxDepth = 2, maxIter = 2)
 summary(gbtModel)
 predictions <- predict(gbtModel, df)
 ```
