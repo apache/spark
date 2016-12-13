@@ -561,14 +561,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       def shouldClean(attempt: FsApplicationAttemptInfo): Boolean = {
         cleanType match {
           case "time" =>
-            now - attempt.lastUpdated > maxAge && attempt.completed
+            now - attempt.lastUpdated > maxAge
           case "space" =>
-            spaceUsed += fs.getContentSummary(new Path(attempt.logPath)).getLength
-            spaceUsed >= maxSpace && attempt.completed
+            spaceUsed += fs.getContentSummary(new Path(s"$logDir/${attempt.logPath}")).getLength
+            spaceUsed >= maxSpace
           case s: String =>
             logWarning(s"'spark.history.fs.cleaner.cleanType' can only be set as 'age' or " +
               s"'space', but invalid $s was set, and replaced as 'age' mode.")
-            now - attempt.lastUpdated > maxAge && attempt.completed
+            now - attempt.lastUpdated > maxAge
         }
       }
 

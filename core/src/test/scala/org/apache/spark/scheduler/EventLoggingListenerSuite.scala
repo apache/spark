@@ -60,48 +60,6 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     Utils.deleteRecursively(testDir)
   }
 
-  for(cleanType <- Seq("age", "space")) {
-    test(s"Clean redundant event log file (cleanType: $cleanType)") {
-      val logBase = testDir.toString
-      val sparkConf = new SparkConf()
-      val hadoopConf = new Configuration()
-      val fileSystem = FileSystem.get(new Path(logBase).toUri, hadoopConf)
-      sparkConf.set("spark.history.fs.cleaner.cleanType", cleanType)
-      val now = new SystemClock().getTimeMillis()
-      val sevenDaysAgo = now - Utils.timeStringAsSeconds("8d") * 1000
-      val hugeFileLength = Utils.byteStringAsBytes("50g")
-      val smallFileLength = Utils.byteStringAsBytes("100m")
-
-      // redundant event log file
-      val log1 = new FileStatus(hugeFileLength, false, 0, 0, sevenDaysAgo - 1,
-        new Path(logBase + "/1"))
-      val log2 = new FileStatus(smallFileLength, false, 0, 0, sevenDaysAgo - 2,
-        new Path(logBase + "/2"))
-      val log3 = new FileStatus(hugeFileLength, false, 0, 0, sevenDaysAgo - 3,
-        new Path(logBase + "/3"))
-      val redundant = Seq(log1, log2, log3)
-
-      // reserved event log file
-      val log4 = new FileStatus(smallFileLength, false, 0, 0, now + 1, new Path(logBase + "/4"))
-      val log5 = new FileStatus(hugeFileLength, false, 0, 0, now + 2, new Path(logBase + "/5"))
-      val log6 = new FileStatus(smallFileLength, false, 0, 0, now + 3, new Path(logBase + "/6"))
-      val log7 = new FileStatus(hugeFileLength, false, 0, 0, sevenDaysAgo - 4,
-        new Path(logBase + "/7" + EventLoggingListener.IN_PROGRESS))
-      val log8 = new FileStatus(smallFileLength, false, 0, 0, sevenDaysAgo - 5,
-        new Path(logBase + "/8" + EventLoggingListener.IN_PROGRESS))
-      val log9 = new FileStatus(hugeFileLength, false, 0, 0, now + 4,
-        new Path(logBase + "/9" + EventLoggingListener.IN_PROGRESS))
-      val log10 = new FileStatus(smallFileLength, false, 0, 0, now + 5,
-        new Path(logBase + "/10" + EventLoggingListener.IN_PROGRESS))
-      val reserved = Seq(log4, log5, log6, log7, log8, log9, log10)
-
-      val logs = redundant ++ reserved
-
-      val shouldClean = EventLoggingListener.cleanRedundantLogFiles(sparkConf, fileSystem, logs)
-      redundant.foreach(fileStatus => assert(shouldClean.contains(fileStatus)))
-    }
-  }
-
   test("Verify log file exist") {
     // Verify logging directory exists
     val conf = getLoggingConf(testDirPath)
