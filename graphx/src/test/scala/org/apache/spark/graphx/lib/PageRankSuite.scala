@@ -70,10 +70,10 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       val resetProb = 0.15
       val errorTol = 1.0e-5
 
-      val staticRanks1 = starGraph.staticPageRank(numIter = 1, resetProb).vertices
-      val staticRanks2 = starGraph.staticPageRank(numIter = 2, resetProb).vertices.cache()
+      val staticRanks1 = starGraph.staticPageRank(numIter = 2, resetProb).vertices
+      val staticRanks2 = starGraph.staticPageRank(numIter = 3, resetProb).vertices.cache()
 
-      // Static PageRank should only take 2 iterations to converge
+      // Static PageRank should only take 3 iterations to converge
       val notMatching = staticRanks1.innerZipJoin(staticRanks2) { (vid, pr1, pr2) =>
         if (pr1 != pr2) 1 else 0
       }.map { case (vid, test) => test }.sum()
