@@ -30,8 +30,27 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
+/**
+ * :: Experimental ::
+ * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
+ */
+@Experimental
+class StateOperatorProgress private[sql](
+    val numRowsTotal: Long,
+    val numRowsUpdated: Long) {
+
+  /** The compact JSON representation of this progress. */
+  def json: String = compact(render(jsonValue))
+
+  /** The pretty (i.e. indented) JSON representation of this progress. */
+  def prettyJson: String = pretty(render(jsonValue))
+
+  private[sql] def jsonValue: JValue = {
+    ("numRowsTotal" -> JInt(numRowsTotal)) ~
+    ("numRowsUpdated" -> JInt(numRowsUpdated))
+  }
+}
 /**
  * :: Experimental ::
  * Information about progress made in the execution of a [[StreamingQuery]] during
@@ -182,26 +201,5 @@ class SinkProgress protected[sql](
 
   private[sql] def jsonValue: JValue = {
     ("description" -> JString(description))
-  }
-}
-
-/**
- * :: Experimental ::
- * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
- */
-@Experimental
-class StateOperatorProgress private[sql](
-    val numRowsTotal: Long,
-    val numRowsUpdated: Long) {
-
-  /** The compact JSON representation of this progress. */
-  def json: String = compact(render(jsonValue))
-
-  /** The pretty (i.e. indented) JSON representation of this progress. */
-  def prettyJson: String = pretty(render(jsonValue))
-
-  private[sql] def jsonValue: JValue = {
-    ("numRowsTotal" -> JInt(numRowsTotal)) ~
-    ("numRowsUpdated" -> JInt(numRowsUpdated))
   }
 }
