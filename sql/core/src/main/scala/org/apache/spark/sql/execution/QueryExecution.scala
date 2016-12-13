@@ -146,18 +146,20 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
     /** Implementation following Hive's TimestampWritable.toString */
     def formatTimestamp(timestamp: Timestamp): String = {
+      val timestampFormat = DateTimeUtils.threadLocalTimestampFormat.get()
+      timestampFormat.setTimeZone(DateTimeUtils.threadLocalLocalTimeZone.get())
+
       val timestampString = timestamp.toString
       if (timestampString.length() > 19) {
         if (timestampString.length() == 21) {
           if (timestampString.substring(19).compareTo(".0") == 0) {
-            return DateTimeUtils.threadLocalTimestampFormat.get().format(timestamp)
+            return timestampFormat.format(timestamp)
           }
         }
-        return DateTimeUtils.threadLocalTimestampFormat.get().format(timestamp) +
-          timestampString.substring(19)
+        return timestampFormat.format(timestamp) + timestampString.substring(19)
       }
 
-      return DateTimeUtils.threadLocalTimestampFormat.get().format(timestamp)
+      return timestampFormat.format(timestamp)
     }
 
     def formatDecimal(d: java.math.BigDecimal): String = {
