@@ -129,17 +129,26 @@ case class InsertIntoHiveTable(
     import org.apache.spark.sql.hive.client.hive._
 
     val hiveVersion = externalCatalog.asInstanceOf[HiveExternalCatalog].client.version
+    // Before Hive 1.1, when inserting into a table, Hive will create the staging directory under
+    // a common scratch directory. After the writing is finished, Hive will simply empty the table
+    // directory and move the staging directory to it.
+    // After Hive 1.1, Hive will create the staging directory under the table directory, and when
+    // moving staging directory to table directory, Hive will still empty the table directory, but
+    // will exclude the staging directory there.
+    // We have to follow the Hive behavior here, to avoid troubles. For example, if we create
+    // staging directory under the table director for Hive prior to 1.1, the staging directory will
+    // be removed by Hive when Hive is trying to empty the table directory.
     if (hiveVersion == v12 || hiveVersion == v13 || hiveVersion == v14 || hiveVersion == v1_0) {
-      oldStyleExternalTempPath(path)
+      oldVersionExternalTempPath(path)
     } else if (hiveVersion == v1_1 || hiveVersion == v1_2) {
-      newStyleExternalTempPath(path)
+      newVersionExternalTempPath(path)
     } else {
       throw new IllegalStateException("Unsupported hive version: " + hiveVersion.fullVersion)
     }
   }
 
   // Mostly copied from Context.java#getExternalTmpPath of Hive 0.13
-  def oldStyleExternalTempPath(path: Path): Path = {
+  def oldVersionExternalTempPath(path: Path): Path = {
     val extURI: URI = path.toUri
     val scratchPath = new Path(scratchDir, executionId)
     var dirPath = new Path(
@@ -164,7 +173,7 @@ case class InsertIntoHiveTable(
   }
 
   // Mostly copied from Context.java#getExternalTmpPath of Hive 1.2
-  def newStyleExternalTempPath(path: Path): Path = {
+  def newVersionExternalTempPath(path: Path): Path = {
     val extURI: URI = path.toUri
     if (extURI.getScheme == "viewfs") {
       getExtTmpPathRelTo(path.getParent)
