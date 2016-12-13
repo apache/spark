@@ -634,7 +634,7 @@ tableNames <- function(x, ...) {
 cacheTable.default <- function(tableName) {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
-  callJMethod(catalog, "cacheTable", tableName)
+  invisible(callJMethod(catalog, "cacheTable", tableName))
 }
 
 cacheTable <- function(x, ...) {
@@ -663,7 +663,7 @@ cacheTable <- function(x, ...) {
 uncacheTable.default <- function(tableName) {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
-  callJMethod(catalog, "uncacheTable", tableName)
+  invisible(callJMethod(catalog, "uncacheTable", tableName))
 }
 
 uncacheTable <- function(x, ...) {
@@ -686,7 +686,7 @@ uncacheTable <- function(x, ...) {
 clearCache.default <- function() {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
-  callJMethod(catalog, "clearCache")
+  invisible(callJMethod(catalog, "clearCache"))
 }
 
 clearCache <- function() {
@@ -730,6 +730,7 @@ dropTempTable <- function(x, ...) {
 #' If the view has been cached before, then it will also be uncached.
 #'
 #' @param viewName the name of the view to be dropped.
+#' @return TRUE if the view is dropped successfully, FALSE otherwise.
 #' @rdname dropTempView
 #' @name dropTempView
 #' @export

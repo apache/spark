@@ -158,12 +158,13 @@ abstract class AbstractCommandBuilder {
         "launcher",
         "mllib",
         "repl",
+        "resource-managers/mesos",
+        "resource-managers/yarn",
         "sql/catalyst",
         "sql/core",
         "sql/hive",
         "sql/hive-thriftserver",
-        "streaming",
-        "yarn"
+        "streaming"
       );
       if (prependClasses) {
         if (!isTesting) {

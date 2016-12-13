@@ -312,7 +312,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           pathToNonPartitionedTable,
           userSpecifiedSchema = Option("num int, str string"),
           userSpecifiedPartitionCols = partitionCols,
-          expectedSchema = new StructType().add("num", IntegerType).add("str", StringType),
+          expectedSchema = if (partitionCols.isDefined) {
+            // we skipped inference, so the partition col is ordered at the end
+            new StructType().add("str", StringType).add("num", IntegerType)
+          } else {
+            // no inferred partitioning, so schema is in original order
+            new StructType().add("num", IntegerType).add("str", StringType)
+          },
           expectedPartitionCols = partitionCols.map(Seq(_)).getOrElse(Seq.empty[String]))
       }
     }
@@ -565,7 +571,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val table = catalog.getTableMetadata(TableIdentifier("tbl"))
       assert(table.tableType == CatalogTableType.MANAGED)
       assert(table.provider == Some("parquet"))
-      assert(table.schema == new StructType().add("a", IntegerType).add("b", IntegerType))
+      // a is ordered last since it is a user-specified partitioning column
+      assert(table.schema == new StructType().add("b", IntegerType).add("a", IntegerType))
       assert(table.partitionColumnNames == Seq("a"))
     }
   }
@@ -878,7 +885,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     testRenamePartitions(isDatasourceTable = true)
   }
 
-  test("show tables") {
+  test("show table extended") {
     withTempView("show1a", "show2b") {
       sql(
         """
@@ -902,9 +909,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           |)
         """.stripMargin)
       assert(
-        sql("SHOW TABLES EXTENDED LIKE 'show*'").count() >= 2)
+        sql("SHOW TABLE EXTENDED LIKE 'show*'").count() >= 2)
       assert(
-        sql("SHOW TABLES EXTENDED LIKE 'show*'").schema ==
+        sql("SHOW TABLE EXTENDED LIKE 'show*'").schema ==
           StructType(StructField("database", StringType, false) ::
             StructField("tableName", StringType, false) ::
             StructField("isTemporary", BooleanType, false) ::

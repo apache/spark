@@ -700,6 +700,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.showConsoleProgress</code></td>
+  <td>true</td>
+  <td>
+    Show the progress bar in the console. The progress bar shows the progress of stages
+    that run for longer than 500ms. If multiple stages run at the same time, multiple
+    progress bars will be displayed on the same line.
+  </td>
+</tr>
+<tr>
   <td><code>spark.worker.ui.retainedExecutors</code></td>
   <td>1000</td>
   <td>
@@ -1579,14 +1588,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.authenticate.encryption.aes.enabled</code></td>
+  <td><code>spark.network.aes.enabled</code></td>
   <td>false</td>
   <td>
-    Enable AES for over-the-wire encryption
+    Enable AES for over-the-wire encryption. This is supported for RPC and the block transfer service.
+    This option has precedence over SASL-based encryption if both are enabled.
   </td>
 </tr>
 <tr>
-  <td><code>spark.authenticate.encryption.aes.cipher.keySize</code></td>
+  <td><code>spark.network.aes.keySize</code></td>
   <td>16</td>
   <td>
     The bytes of AES cipher key which is effective when AES cipher is enabled. AES
@@ -1594,14 +1604,12 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.authenticate.encryption.aes.cipher.class</code></td>
-  <td>null</td>
+  <td><code>spark.network.aes.config.*</code></td>
+  <td>None</td>
   <td>
-    Specify the underlying implementation class of crypto cipher. Set null here to use default.
-    In order to use OpenSslCipher users should install openssl. Currently, there are two cipher
-    classes available in Commons Crypto library:
-        org.apache.commons.crypto.cipher.OpenSslCipher
-        org.apache.commons.crypto.cipher.JceCipher
+    Configuration values for the commons-crypto library, such as which cipher implementations to
+    use. The config name should be the name of commons-crypto configuration without the
+    "commons.crypto" prefix.
   </td>
 </tr>
 <tr>
@@ -1679,7 +1687,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Encryption
+#### TLS / SSL
 
 <table class="table">
     <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>

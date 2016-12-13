@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.util.UUID
+import java.text.SimpleDateFormat
+import java.util.{Date, TimeZone, UUID}
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
@@ -27,6 +28,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
 
 /**
@@ -43,6 +45,7 @@ trait ProgressReporter extends Logging {
 
   // Internal state of the stream, required for computing metrics.
   protected def id: UUID
+  protected def runId: UUID
   protected def name: String
   protected def triggerClock: Clock
   protected def logicalPlan: LogicalPlan
@@ -52,9 +55,10 @@ trait ProgressReporter extends Logging {
   protected def committedOffsets: StreamProgress
   protected def sources: Seq[Source]
   protected def sink: Sink
-  protected def streamExecutionMetadata: StreamExecutionMetadata
+  protected def offsetSeqMetadata: OffsetSeqMetadata
   protected def currentBatchId: Long
   protected def sparkSession: SparkSession
+  protected def postEvent(event: StreamingQueryListener.Event): Unit
 
   // Local timestamps and counters.
   private var currentTriggerStartTimestamp = -1L
@@ -69,6 +73,15 @@ trait ProgressReporter extends Logging {
   /** Holds the most recent query progress updates.  Accesses must lock on the queue itself. */
   private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
 
+  private val noDataProgressEventInterval =
+    sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
+
+  // The timestamp we report an event that has no input data
+  private var lastNoDataProgressEventTime = Long.MinValue
+
+  private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
+  timestampFormat.setTimeZone(TimeZone.getTimeZone("UTC"))
+
   @volatile
   protected var currentStatus: StreamingQueryStatus = {
     new StreamingQueryStatus(
@@ -81,7 +94,7 @@ trait ProgressReporter extends Logging {
   def status: StreamingQueryStatus = currentStatus
 
   /** Returns an array containing the most recent query progress updates. */
-  def recentProgresses: Array[StreamingQueryProgress] = progressBuffer.synchronized {
+  def recentProgress: Array[StreamingQueryProgress] = progressBuffer.synchronized {
     progressBuffer.toArray
   }
 
@@ -97,6 +110,17 @@ trait ProgressReporter extends Logging {
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
     currentStatus = currentStatus.copy(isTriggerActive = true)
     currentDurationsMs.clear()
+  }
+
+  private def updateProgress(newProgress: StreamingQueryProgress): Unit = {
+    progressBuffer.synchronized {
+      progressBuffer += newProgress
+      while (progressBuffer.length >= sparkSession.sqlContext.conf.streamingProgressRetention) {
+        progressBuffer.dequeue()
+      }
+    }
+    postEvent(new QueryProgressEvent(newProgress))
+    logInfo(s"Streaming query made progress: $newProgress")
   }
 
   /** Finalizes the query progress and adds it to list of recent status updates. */
@@ -134,23 +158,28 @@ trait ProgressReporter extends Logging {
 
     val newProgress = new StreamingQueryProgress(
       id = id,
+      runId = runId,
       name = name,
-      timestamp = currentTriggerStartTimestamp,
+      timestamp = timestampFormat.format(new Date(currentTriggerStartTimestamp)),
       batchId = currentBatchId,
       durationMs = currentDurationsMs.toMap.mapValues(long2Long).asJava,
-      currentWatermark = streamExecutionMetadata.batchWatermarkMs,
+      currentWatermark = offsetSeqMetadata.batchWatermarkMs,
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
       sink = sinkProgress)
 
-    progressBuffer.synchronized {
-      progressBuffer += newProgress
-      while (progressBuffer.length >= sparkSession.sqlContext.conf.streamingProgressRetention) {
-        progressBuffer.dequeue()
+    if (hasNewData) {
+      // Reset noDataEventTimestamp if we processed any data
+      lastNoDataProgressEventTime = Long.MinValue
+      updateProgress(newProgress)
+    } else {
+      val now = triggerClock.getTimeMillis()
+      if (now - noDataProgressEventInterval >= lastNoDataProgressEventTime) {
+        lastNoDataProgressEventTime = now
+        updateProgress(newProgress)
       }
     }
 
-    logInfo(s"Streaming query made progress: $newProgress")
     currentStatus = currentStatus.copy(isTriggerActive = false)
   }
 
