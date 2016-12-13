@@ -42,7 +42,7 @@ case class EventTimeStats(var max: Long, var min: Long, var sum: Long, var count
     this.count += that.count
   }
 
-  def avg: Long = (sum.toDouble / count).toLong
+  def avg: Long = sum / count
 }
 
 object EventTimeStats {
@@ -76,7 +76,7 @@ class EventTimeStatsAccum(protected var currentStats: EventTimeStats = EventTime
  * adding appropriate metadata to this column, this operator also tracks the maximum observed event
  * time. Based on the maximum observed time and a user specified delay, we can calculate the
  * `watermark` after which we assume we will no longer see late records for a particular time
- * period.
+ * period. Note that event time is measured in milliseconds.
  */
 case class EventTimeWatermarkExec(
     eventTime: Attribute,
@@ -90,7 +90,7 @@ case class EventTimeWatermarkExec(
     child.execute().mapPartitions { iter =>
       val getEventTime = UnsafeProjection.create(eventTime :: Nil, child.output)
       iter.map { row =>
-        eventTimeStats.add((getEventTime(row).getLong(0).toDouble / 1000).toLong)
+        eventTimeStats.add(getEventTime(row).getLong(0) / 1000)
         row
       }
     }

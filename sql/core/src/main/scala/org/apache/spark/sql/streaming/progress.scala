@@ -61,13 +61,20 @@ class StateOperatorProgress private[sql](
  * @param id An unique query id that persists across restarts. See `StreamingQuery.id()`.
  * @param runId A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
  * @param name User-specified name of the query, null if not specified.
- * @param timestamp Timestamp (ms) of the beginning of the trigger.
+ * @param timestamp Beginning time of the trigger in ISO8601 format, i.e. UTC timestamps.
  * @param batchId A unique id for the current batch of data being processed.  Note that in the
  *                case of retries after a failure a given batchId my be executed more than once.
  *                Similarly, when there is no data to be processed, the batchId will not be
  *                incremented.
  * @param durationMs The amount of time taken to perform various operations in milliseconds.
- * @param eventTime Statistics of event time seen in this batch
+ * @param eventTime Statistics of event time seen in this batch. It may contain the following keys:
+ *                 {
+ *                   "max" -> "2016-12-05T20:54:20.827Z"  // maximum event time seen in this trigger
+ *                   "min" -> "2016-12-05T20:54:20.827Z"  // minimum event time seen in this trigger
+ *                   "avg" -> "2016-12-05T20:54:20.827Z"  // average event time seen in this trigger
+ *                   "watermark" -> "2016-12-05T20:54:20.827Z"  // watermark used in this trigger
+ *                 }
+ *                 All timestamps are in ISO8601 format, i.e. UTC timestamps.
  * @param stateOperators Information about operators in the query that store state.
  * @param sources detailed statistics on data being read from each of the streaming sources.
  * @since 2.1.0
