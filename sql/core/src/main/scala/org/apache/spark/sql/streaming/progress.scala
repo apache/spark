@@ -87,12 +87,11 @@ class StreamingQueryProgress private[sql](
       if (value.isNaN || value.isInfinity) JNothing else JDouble(value)
     }
 
+    /** Convert map to JValue while handling empty maps. Also, this sorts the keys. */
     def safeMapToJValue[T](map: ju.Map[String, T], valueToJValue: T => JValue): JValue = {
       if (map.isEmpty) return JNothing
       val keys = map.asScala.keySet.toSeq.sorted
-      keys
-        .map { k => k -> valueToJValue(map.get(k)) }
-        .foldLeft("" -> JNothing: JObject)(_ ~ _)
+      keys.map { k => k -> valueToJValue(map.get(k)) : JObject }.reduce(_ ~ _)
     }
 
     ("id" -> JString(id.toString)) ~

@@ -53,7 +53,7 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
   }
 
 
-  test("event time and watermark metric") {
+  test("event time and watermark metrics") {
     val inputData = MemoryStream[Int]
 
     val windowedAggregation = inputData.toDF()
