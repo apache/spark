@@ -150,8 +150,8 @@ object PageRank extends Logging {
         (src: VertexId, id: VertexId) => resetProb
       }
 
-      rankGraph = rankGraph.joinVertices(rankUpdates) {
-        (id, oldRank, msgSum) => rPrb(src, id) + (1.0 - resetProb) * msgSum
+      rankGraph = rankGraph.outerJoinVertices(rankUpdates) {
+        (id, oldRank, msgSumOpt) => rPrb(src, id) + (1.0 - resetProb) * msgSumOpt.getOrElse(0.0)
       }.cache()
 
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
@@ -225,11 +225,11 @@ object PageRank extends Logging {
         ctx => ctx.sendToDst(ctx.srcAttr :* ctx.attr),
         (a : BV[Double], b : BV[Double]) => a :+ b, TripletFields.Src)
 
-      rankGraph = rankGraph.joinVertices(rankUpdates) {
-        (vid, oldRank, msgSum) =>
-          val popActivations: BV[Double] = msgSum :* (1.0 - resetProb)
+      rankGraph = rankGraph.outerJoinVertices(rankUpdates) {
+        (vid, oldRank, msgSumOpt) =>
+          val popActivations: BV[Double] = msgSumOpt.getOrElse(zero) :* (1.0 - resetProb)
           val resetActivations = if (sourcesInitMapBC.value contains vid) {
-            sourcesInitMapBC.value(vid)
+            sourcesInitMapBC.value(vid) :* resetProb
           } else {
             zero
           }
@@ -323,7 +323,7 @@ object PageRank extends Logging {
       msgSum: Double): (Double, Double) = {
       val (oldPR, lastDelta) = attr
       var teleport = oldPR
-      val delta = if (src==id) 1.0 else 0.0
+      val delta = if (src==id) resetProb else 0.0
       teleport = oldPR*delta
 
       val newPR = teleport + (1.0 - resetProb) * msgSum
