@@ -51,6 +51,7 @@ class StateOperatorProgress private[sql](
     ("numRowsUpdated" -> JInt(numRowsUpdated))
   }
 }
+
 /**
  * :: Experimental ::
  * Information about progress made in the execution of a [[StreamingQuery]] during
