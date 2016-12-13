@@ -27,9 +27,6 @@ import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.scalactic.TripleEquals
-import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.PatienceConfiguration
-import org.scalatest.time.SpanSugar._
 import org.scalatest.Assertions.AssertionsHelper
 
 import org.apache.spark._
@@ -160,16 +157,8 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       }
       // When a job fails, we terminate before waiting for all the task end events to come in,
       // so there might still be a running task set.  So we only check these conditions
-      // when the job succeeds.
-      // When the final task of a taskset completes, we post
-      // the event to the DAGScheduler event loop before we finish processing in the taskscheduler
-      // thread.  Its possible the DAGScheduler thread processes the event, finishes the job,
-      // and notifies the job waiter before our original thread in the task scheduler finishes
-      // handling the event and marks the taskset as complete.  So its ok if we need to wait a
-      // *little* bit longer for the original taskscheduler thread to finish up to deal w/ the race.
-      eventually(timeout(1 second), interval(100 millis)) {
-        assert(taskScheduler.runningTaskSets.isEmpty)
-      }
+      // when the job succeeds
+      assert(taskScheduler.runningTaskSets.isEmpty)
       assert(!backend.hasTasks)
     } else {
       assert(failure != null)

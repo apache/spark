@@ -1365,7 +1365,7 @@ Apart from these, the following properties are also available, and may be useful
     before the node is blacklisted for the entire application.  Blacklisted nodes will
     be automatically added back to the pool of available resources after the timeout specified by
     <code>spark.blacklist.timeout</code>.  Note that with dynamic allocation, though, the executors
-    may get marked as idle and be reclaimed by the cluster manager.
+    on the node may get marked as idle and be reclaimed by the cluster manager.
   </td>
 </tr>
 <tr>

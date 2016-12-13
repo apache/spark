@@ -241,10 +241,10 @@ private[yarn] class YarnAllocator(
       val blacklistAdditions = nodeBlacklist -- currentNodeBlacklist
       val blacklistRemovals = currentNodeBlacklist -- nodeBlacklist
       if (blacklistAdditions.nonEmpty) {
-        logInfo(s"adding nodes to blacklist: $blacklistAdditions")
+        logInfo(s"adding nodes to YARN application master's blacklist: $blacklistAdditions")
       }
       if (blacklistRemovals.nonEmpty) {
-        logInfo(s"removing nodes from blacklist: $blacklistRemovals")
+        logInfo(s"removing nodes from YARN application master's blacklist: $blacklistRemovals")
       }
       amClient.updateBlacklist(blacklistAdditions.toList.asJava, blacklistRemovals.toList.asJava)
       currentNodeBlacklist = nodeBlacklist

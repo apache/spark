@@ -439,11 +439,14 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       new WorkerOffer("executor0", "host0", 1),
       new WorkerOffer("executor1", "host1", 1),
       new WorkerOffer("executor2", "host1", 1),
-      new WorkerOffer("executor3", "host2", 10)
+      new WorkerOffer("executor3", "host2", 10),
+      new WorkerOffer("executor4", "host3", 1)
     )
 
     // setup our mock blacklist:
-    // host1, executor0 & executor3 are completely blacklisted (which covers all the executors)
+    // host1, executor0 & executor3 are completely blacklisted
+    // This covers everything *except* one core on executor4 / host3, so that everything is still
+    // schedulable.
     when(blacklist.isNodeBlacklisted("host1")).thenReturn(true)
     when(blacklist.isExecutorBlacklisted("executor0")).thenReturn(true)
     when(blacklist.isExecutorBlacklisted("executor3")).thenReturn(true)
@@ -455,14 +458,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     val firstTaskAttempts = taskScheduler.resourceOffers(offers).flatten
     firstTaskAttempts.foreach { task => logInfo(s"scheduled $task on ${task.executorId}") }
-    assert(firstTaskAttempts.isEmpty)
+    assert(firstTaskAttempts.size === 1)
     ('0' until '2').foreach { hostNum =>
       verify(blacklist, atLeast(1)).isNodeBlacklisted("host" + hostNum)
-    }
-
-    // we should have aborted the existing stages, since they aren't schedulable
-    (0 to 2).foreach { stageId =>
-      assert(stageToTsm(stageId).isZombie)
     }
   }
 

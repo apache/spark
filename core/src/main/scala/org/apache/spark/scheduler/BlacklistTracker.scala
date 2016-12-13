@@ -63,7 +63,7 @@ private[scheduler] class BlacklistTracker (
    * to do so.  But it will not grow too large, because as soon as an executor gets too many
    * failures, we blacklist the executor and remove its entry here.
    */
-  private val executorIdToFailureList = new  HashMap[String, ExecutorFailureList]()
+  private val executorIdToFailureList = new HashMap[String, ExecutorFailureList]()
   val executorIdToBlacklistStatus = new HashMap[String, BlacklistedExecutor]()
   val nodeIdToBlacklistExpiryTime = new HashMap[String, Long]()
   /**
@@ -143,14 +143,14 @@ private[scheduler] class BlacklistTracker (
     // if any tasks failed, we count them towards the overall failure count for the executor at
     // this point.
     val now = clock.getTimeMillis()
-    val expiryTime = now + BLACKLIST_TIMEOUT_MILLIS
     failuresByExec.foreach { case (exec, failuresInTaskSet) =>
-      val allFailuresOnOneExecutor =
+      val appFailuresOnExecutor =
         executorIdToFailureList.getOrElseUpdate(exec, new ExecutorFailureList)
-      allFailuresOnOneExecutor.dropFailuresWithTimeoutBefore(now)
-      allFailuresOnOneExecutor.addFailures(stageId, stageAttemptId, failuresInTaskSet)
-      val newTotal = allFailuresOnOneExecutor.numUniqueTaskFailures
+      appFailuresOnExecutor.addFailures(stageId, stageAttemptId, failuresInTaskSet)
+      appFailuresOnExecutor.dropFailuresWithTimeoutBefore(now)
+      val newTotal = appFailuresOnExecutor.numUniqueTaskFailures
 
+      val expiryTimeForNewBlacklists = now + BLACKLIST_TIMEOUT_MILLIS
       // If this pushes the total number of failures over the threshold, blacklist the executor.
       // If its already blacklisted, we avoid "re-blacklisting" (which can happen if there were
       // other tasks already running in another taskset when it got blacklisted), because it makes
@@ -160,7 +160,7 @@ private[scheduler] class BlacklistTracker (
         logInfo(s"Blacklisting executor id: $exec because it has $newTotal" +
           s" task failures in successful task sets")
         val node = failuresInTaskSet.node
-        executorIdToBlacklistStatus.put(exec, BlacklistedExecutor(node, expiryTime))
+        executorIdToBlacklistStatus.put(exec, BlacklistedExecutor(node, expiryTimeForNewBlacklists))
         updateNextExpiryTime()
 
         // In addition to blacklisting the executor, we also update the data for failures on the
@@ -173,7 +173,7 @@ private[scheduler] class BlacklistTracker (
             !nodeIdToBlacklistExpiryTime.contains(node)) {
           logInfo(s"Blacklisting node $node because it has ${blacklistedExecsOnNode.size} " +
             s"executors blacklisted: ${blacklistedExecsOnNode}")
-          nodeIdToBlacklistExpiryTime.put(node, expiryTime)
+          nodeIdToBlacklistExpiryTime.put(node, expiryTimeForNewBlacklists)
           _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
         }
       }
@@ -208,9 +208,8 @@ private[scheduler] class BlacklistTracker (
 
 
   /**
-   * Tracks all failures for one executor (that have not passed the timeout).  Designed to
-   * efficiently remove failures that are older than the timeout, and query for the number of unique
-   * failed tasks.
+   * Tracks all failures for one executor (that have not passed the timeout).
+   *
    * In general we actually expect this to be extremely small, since it won't contain more than the
    * maximum number of task failures before an executor is failed (default 2).
    */
@@ -221,10 +220,10 @@ private[scheduler] class BlacklistTracker (
     /**
      * All failures on this executor in successful task sets.
      */
-    private var failures = ArrayBuffer[(TaskId, Long)]()
+    private var failuresAndExpiryTimes = ArrayBuffer[(TaskId, Long)]()
     /**
-     * As an optimization, we track the min expiry time so its quick to tell if there are
-     * any failures with expiry before the current time.
+     * As an optimization, we track the min expiry time over all entries in failuresAndExpiryTimes
+     * so its quick to tell if there are any failures with expiry before the current time.
      */
     private var minExpiryTime = Long.MaxValue
 
@@ -235,7 +234,7 @@ private[scheduler] class BlacklistTracker (
       failuresInTaskSet.taskToFailureCountAndFailureTime.foreach {
         case (taskIdx, (_, failureTime)) =>
           val expiryTime = failureTime + BLACKLIST_TIMEOUT_MILLIS
-          failures += ((TaskId(stage, stageAttempt, taskIdx), expiryTime))
+          failuresAndExpiryTimes += ((TaskId(stage, stageAttempt, taskIdx), expiryTime))
           if (expiryTime < minExpiryTime) {
             minExpiryTime = expiryTime
           }
@@ -246,9 +245,9 @@ private[scheduler] class BlacklistTracker (
      * The number of unique tasks that failed on this executor.  Only counts failures within the
      * timeout, and in successful tasksets.
      */
-    def numUniqueTaskFailures: Int = failures.size
+    def numUniqueTaskFailures: Int = failuresAndExpiryTimes.size
 
-    def isEmpty: Boolean = failures.isEmpty
+    def isEmpty: Boolean = failuresAndExpiryTimes.isEmpty
 
     /**
      * Apply the timeout to individual tasks.  This is to prevent one-off failures that are very
@@ -267,7 +266,7 @@ private[scheduler] class BlacklistTracker (
       if (minExpiryTime < dropBefore) {
         var newMinExpiry = Long.MaxValue
         val newFailures = new ArrayBuffer[(TaskId, Long)]
-        failures.foreach { case (task, expiryTime) =>
+        failuresAndExpiryTimes.foreach { case (task, expiryTime) =>
           if (expiryTime >= dropBefore) {
             newFailures += ((task, expiryTime))
             if (expiryTime < newMinExpiry) {
@@ -275,13 +274,13 @@ private[scheduler] class BlacklistTracker (
             }
           }
         }
-        failures = newFailures
+        failuresAndExpiryTimes = newFailures
         minExpiryTime = newMinExpiry
       }
     }
 
     override def toString(): String = {
-      s"failures = $failures"
+      s"failures = $failuresAndExpiryTimes"
     }
   }
 
