@@ -126,23 +126,33 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * Create a [[ShowTablesCommand]] logical plan.
    * Example SQL :
    * {{{
-   *   SHOW TABLES [EXTENDED] [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards']
-   *   [PARTITION(partition_spec)];
+   *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
    * }}}
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
+    ShowTablesCommand(
+      Option(ctx.db).map(_.getText),
+      Option(ctx.pattern).map(string),
+      isExtended = false)
+  }
+
+  /**
+   * Create a [[ShowTablesCommand]] logical plan.
+   * Example SQL :
+   * {{{
+   *   SHOW TABLE EXTENDED [(IN|FROM) database_name] LIKE 'identifier_with_wildcards'
+   *   [PARTITION(partition_spec)];
+   * }}}
+   */
+  override def visitShowTable(ctx: ShowTableContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.partitionSpec != null) {
-      operationNotAllowed("SHOW TABLES [EXTENDED] ... PARTITION", ctx)
-    }
-    if (ctx.EXTENDED != null && ctx.pattern == null) {
-      throw new AnalysisException(
-        s"SHOW TABLES EXTENDED must have identifier_with_wildcards specified.")
+      operationNotAllowed("SHOW TABLE EXTENDED ... PARTITION", ctx)
     }
 
     ShowTablesCommand(
       Option(ctx.db).map(_.getText),
       Option(ctx.pattern).map(string),
-      ctx.EXTENDED != null)
+      isExtended = true)
   }
 
   /**
