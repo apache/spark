@@ -2138,7 +2138,9 @@ private[spark] object Utils extends Logging {
     if (threadId <= 0) {
       None
     } else {
-      val threadInfo = Option(ManagementFactory.getThreadMXBean.getThreadInfo(threadId))
+      // The Int.MaxValue here requests the entire untruncated stack trace of the thread:
+      val threadInfo =
+        Option(ManagementFactory.getThreadMXBean.getThreadInfo(threadId, Int.MaxValue))
       threadInfo.map(threadInfoToThreadStackTrace)
     }
   }
