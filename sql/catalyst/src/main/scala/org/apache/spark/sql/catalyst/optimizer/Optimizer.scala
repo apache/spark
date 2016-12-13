@@ -226,7 +226,7 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
   // when the project is the right child of the Union,
   // this function is to check it.
   def isUnionRightProj(p: Project, plan: LogicalPlan): Boolean = {
-    plan.collectFirst{
+    plan.collectFirst {
       case u @ Union(children) if children.tail.exists(_ eq p)
         && children.head.isInstanceOf[Project]
         && p.projectList.exists(proj =>
