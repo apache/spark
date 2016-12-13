@@ -184,7 +184,7 @@ class KMeansModel private[ml] (
       s"No training summary available for the ${this.getClass.getSimpleName}")
   }
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   override def toString: String = {
     s"KMeansModel (uid=$uid) with ${$(k)} centers"
   }

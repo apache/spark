@@ -434,7 +434,7 @@ class VectorIndexerModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter = new VectorIndexerModelWriter(this)
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   override def toString: String = {
     s"VectorIndexerModel (uid=$uid) with $numFeatures features"
   }

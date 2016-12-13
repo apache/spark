@@ -103,7 +103,7 @@ class BucketedRandomProjectionLSHModel private[ml](
     new BucketedRandomProjectionLSHModel.BucketedRandomProjectionLSHModelWriter(this)
   }
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   override def toString: String = {
     s"BucketedRandomProjectionLSHModel (uid=$uid) with bucketLength ${$(bucketLength)}"
   }

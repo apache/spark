@@ -255,7 +255,7 @@ class IsotonicRegressionModel private[ml] (
   override def write: MLWriter =
     new IsotonicRegressionModelWriter(this)
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   override def toString: String = {
     s"IsotonicRegressionModel (uid=$uid)"
   }
