@@ -885,7 +885,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     testRenamePartitions(isDatasourceTable = true)
   }
 
-  test("show tables") {
+  test("show table extended") {
     withTempView("show1a", "show2b") {
       sql(
         """
@@ -909,9 +909,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           |)
         """.stripMargin)
       assert(
-        sql("SHOW TABLES EXTENDED LIKE 'show*'").count() >= 2)
+        sql("SHOW TABLE EXTENDED LIKE 'show*'").count() >= 2)
       assert(
-        sql("SHOW TABLES EXTENDED LIKE 'show*'").schema ==
+        sql("SHOW TABLE EXTENDED LIKE 'show*'").schema ==
           StructType(StructField("database", StringType, false) ::
             StructField("tableName", StringType, false) ::
             StructField("isTemporary", BooleanType, false) ::
