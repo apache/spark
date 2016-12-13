@@ -49,18 +49,12 @@ private[v1] object AllReceiversResource {
         val (errorTime, errorMessage, error) = receiverInfo match {
           case None => (None, None, None)
           case Some(info) =>
-            val someTime = {
-              if (info.lastErrorTime >= 0) Some(new Date(info.lastErrorTime))
-              else None
-            }
-            val someMessage = {
-              if (info.lastErrorMessage.length > 0) Some(info.lastErrorMessage)
-              else None
-            }
-            val someError = {
-              if (info.lastError.length > 0) Some(info.lastError)
-              else None
-            }
+            val someTime =
+              if (info.lastErrorTime >= 0) Some(new Date(info.lastErrorTime)) else None
+            val someMessage =
+              if (info.lastErrorMessage.length > 0) Some(info.lastErrorMessage) else None
+            val someError =
+              if (info.lastError.length > 0) Some(info.lastError) else None
 
             (someTime, someMessage, someError)
         }

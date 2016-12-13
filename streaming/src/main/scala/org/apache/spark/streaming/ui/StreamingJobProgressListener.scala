@@ -39,7 +39,7 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
   private var totalProcessedRecords = 0L
   private val receiverInfos = new HashMap[Int, ReceiverInfo]
 
-  @volatile private var _startTime = -1L
+  private var _startTime = -1L
 
   // Because onJobStart and onBatchXXX messages are processed in different threads,
   // we may not be able to get the corresponding BatchUIData when receiving onJobStart. So here we

@@ -67,8 +67,6 @@ class StreamingContext private[streaming] (
     _batchDur: Duration
   ) extends Logging {
 
-  private var startTime = -1L
-
   /**
    * Create a StreamingContext using an existing SparkContext.
    * @param sparkContext existing SparkContext
@@ -586,8 +584,8 @@ class StreamingContext private[streaming] (
               scheduler.start()
             }
             state = StreamingContextState.ACTIVE
-            startTime = System.currentTimeMillis()
-            scheduler.listenerBus.post(StreamingListenerStreamingStarted(startTime))
+            scheduler.listenerBus.post(
+              StreamingListenerStreamingStarted(System.currentTimeMillis()))
           } catch {
             case NonFatal(e) =>
               logError("Error starting the context, marking it as stopped", e)
