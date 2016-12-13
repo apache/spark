@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.yarn.util;
 
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 import org.apache.hadoop.conf.Configuration;
@@ -39,4 +40,10 @@ public class HadoopConfigProvider extends ConfigProvider {
     }
     return value;
   }
+
+  @Override
+  public Iterable<Map.Entry<String, String>> getAll() {
+    return conf;
+  }
+
 }
