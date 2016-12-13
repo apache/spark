@@ -38,17 +38,17 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
         |  "id" : "${testProgress1.id.toString}",
         |  "runId" : "${testProgress1.runId.toString}",
         |  "name" : "myName",
-        |  "triggerTimestamp" : "2016-12-05T20:54:20.827Z",
+        |  "timestamp" : "2016-12-05T20:54:20.827Z",
         |  "numInputRows" : 678,
         |  "inputRowsPerSecond" : 10.0,
         |  "durationMs" : {
         |    "total" : 0
         |  },
-        |  "queryTimestamps" : {
-        |    "eventTime.avg" : "2016-12-05T20:54:20.827Z",
-        |    "eventTime.max" : "2016-12-05T20:54:20.827Z",
-        |    "eventTime.min" : "2016-12-05T20:54:20.827Z",
-        |    "processingTime" : "2016-12-05T20:54:20.827Z"
+        |  "eventTime" : {
+        |    "avg" : "2016-12-05T20:54:20.827Z",
+        |    "max" : "2016-12-05T20:54:20.827Z",
+        |    "min" : "2016-12-05T20:54:20.827Z",
+        |    "watermark" : "2016-12-05T20:54:20.827Z"
         |  },
         |  "stateOperators" : [ {
         |    "numRowsTotal" : 0,
@@ -76,7 +76,7 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
          |  "id" : "${testProgress2.id.toString}",
          |  "runId" : "${testProgress2.runId.toString}",
          |  "name" : null,
-         |  "triggerTimestamp" : "2016-12-05T20:54:20.827Z",
+         |  "timestamp" : "2016-12-05T20:54:20.827Z",
          |  "numInputRows" : 678,
          |  "durationMs" : {
          |    "total" : 0
@@ -135,14 +135,14 @@ object StreamingQueryStatusAndProgressSuite {
     id = UUID.randomUUID,
     runId = UUID.randomUUID,
     name = "myName",
-    triggerTimestamp = "2016-12-05T20:54:20.827Z",
+    timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
     durationMs = Map("total" -> 0L).mapValues(long2Long).asJava,
-    queryTimestamps = Map(
-      "eventTime.max" -> "2016-12-05T20:54:20.827Z",
-      "eventTime.min" -> "2016-12-05T20:54:20.827Z",
-      "eventTime.avg" -> "2016-12-05T20:54:20.827Z",
-      "processingTime" -> "2016-12-05T20:54:20.827Z").asJava,
+    eventTime = Map(
+      "max" -> "2016-12-05T20:54:20.827Z",
+      "min" -> "2016-12-05T20:54:20.827Z",
+      "avg" -> "2016-12-05T20:54:20.827Z",
+      "watermark" -> "2016-12-05T20:54:20.827Z").asJava,
     stateOperators = Array(new StateOperatorProgress(numRowsTotal = 0, numRowsUpdated = 1)),
     sources = Array(
       new SourceProgress(
@@ -161,10 +161,10 @@ object StreamingQueryStatusAndProgressSuite {
     id = UUID.randomUUID,
     runId = UUID.randomUUID,
     name = null, // should not be present in the json
-    triggerTimestamp = "2016-12-05T20:54:20.827Z",
+    timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
     durationMs = Map("total" -> 0L).mapValues(long2Long).asJava,
-    queryTimestamps = Map.empty[String, String].asJava,  // empty maps should be handled correctly
+    eventTime = Map.empty[String, String].asJava,  // empty maps should be handled correctly
     stateOperators = Array(new StateOperatorProgress(numRowsTotal = 0, numRowsUpdated = 1)),
     sources = Array(
       new SourceProgress(

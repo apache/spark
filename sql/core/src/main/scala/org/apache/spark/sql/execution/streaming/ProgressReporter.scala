@@ -157,10 +157,10 @@ trait ProgressReporter extends Logging {
       id = id,
       runId = runId,
       name = name,
-      triggerTimestamp = formatTimestamp(currentTriggerStartTimestamp),
+      timestamp = formatTimestamp(currentTriggerStartTimestamp),
       batchId = currentBatchId,
       durationMs = currentDurationsMs.toMap.mapValues(long2Long).asJava,
-      queryTimestamps = executionStats.eventTimeStats.asJava,
+      eventTime = executionStats.eventTimeStats.asJava,
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
       sink = sinkProgress)
@@ -182,12 +182,10 @@ trait ProgressReporter extends Logging {
 
   /** Extracts statistics from the most recent query execution. */
   private def extractExecutionStats(hasNewData: Boolean): ExecutionStats = {
-    val basicQueryTimestamps = Map(
-      "watermark" -> offsetSeqMetadata.batchWatermarkMs,
-      "processingTime" -> offsetSeqMetadata.batchTimestampMs).mapValues(formatTimestamp)
+    val watermarkTimestamp = Map("watermark" -> formatTimestamp(offsetSeqMetadata.batchWatermarkMs))
 
     if (!hasNewData) {
-      return ExecutionStats(Map.empty, Seq.empty, basicQueryTimestamps)
+      return ExecutionStats(Map.empty, Seq.empty, watermarkTimestamp)
     }
 
     // We want to associate execution plan leaves to sources that generate them, so that we match
@@ -250,10 +248,10 @@ trait ProgressReporter extends Logging {
       case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>
         val stats = e.eventTimeStats.value
         Map(
-          "eventTime.max" -> stats.max,
-          "eventTime.min" -> stats.min,
-          "eventTime.avg" -> stats.avg).mapValues(formatTimestamp)
-    }.headOption.getOrElse(Map.empty) ++ basicQueryTimestamps
+          "max" -> stats.max,
+          "min" -> stats.min,
+          "avg" -> stats.avg).mapValues(formatTimestamp)
+    }.headOption.getOrElse(Map.empty) ++ watermarkTimestamp
 
     ExecutionStats(numInputRows, stateOperators, eventTimeStats)
   }

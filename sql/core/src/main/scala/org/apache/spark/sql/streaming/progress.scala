@@ -41,13 +41,13 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
  * @param id An unique query id that persists across restarts. See `StreamingQuery.id()`.
  * @param runId A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
  * @param name User-specified name of the query, null if not specified.
- * @param triggerTimestamp Timestamp (ms) of the beginning of the trigger.
+ * @param timestamp Timestamp (ms) of the beginning of the trigger.
  * @param batchId A unique id for the current batch of data being processed.  Note that in the
  *                case of retries after a failure a given batchId my be executed more than once.
  *                Similarly, when there is no data to be processed, the batchId will not be
  *                incremented.
  * @param durationMs The amount of time taken to perform various operations in milliseconds.
- * @param queryTimestamps Statistics of event time seen in this batch
+ * @param eventTime Statistics of event time seen in this batch
  * @param stateOperators Information about operators in the query that store state.
  * @param sources detailed statistics on data being read from each of the streaming sources.
  * @since 2.1.0
@@ -57,10 +57,10 @@ class StreamingQueryProgress private[sql](
   val id: UUID,
   val runId: UUID,
   val name: String,
-  val triggerTimestamp: String,
+  val timestamp: String,
   val batchId: Long,
   val durationMs: ju.Map[String, JLong],
-  val queryTimestamps: ju.Map[String, String],
+  val eventTime: ju.Map[String, String],
   val stateOperators: Array[StateOperatorProgress],
   val sources: Array[SourceProgress],
   val sink: SinkProgress) {
@@ -98,12 +98,12 @@ class StreamingQueryProgress private[sql](
     ("id" -> JString(id.toString)) ~
     ("runId" -> JString(runId.toString)) ~
     ("name" -> JString(name)) ~
-    ("triggerTimestamp" -> JString(triggerTimestamp)) ~
+    ("timestamp" -> JString(timestamp)) ~
     ("numInputRows" -> JInt(numInputRows)) ~
     ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
     ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
     ("durationMs" -> safeMapToJValue[JLong](durationMs, v => JInt(v.toLong))) ~
-    ("queryTimestamps" -> safeMapToJValue[String](queryTimestamps, s => JString(s))) ~
+    ("eventTime" -> safeMapToJValue[String](eventTime, s => JString(s))) ~
     ("stateOperators" -> JArray(stateOperators.map(_.jsonValue).toList)) ~
     ("sources" -> JArray(sources.map(_.jsonValue).toList)) ~
     ("sink" -> sink.jsonValue)

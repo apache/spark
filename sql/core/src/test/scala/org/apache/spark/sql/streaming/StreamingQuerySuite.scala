@@ -245,7 +245,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
         assert(progress.id === query.id)
         assert(progress.name === query.name)
         assert(progress.batchId === 0)
-        assert(progress.triggerTimestamp === "1970-01-01T00:00:00.100Z") // 100 ms in UTC
+        assert(progress.timestamp === "1970-01-01T00:00:00.100Z") // 100 ms in UTC
         assert(progress.numInputRows === 2)
         assert(progress.processedRowsPerSecond === 2.0)
 
@@ -255,8 +255,6 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
         assert(progress.durationMs.get("walCommit") === 0)
         assert(progress.durationMs.get("triggerExecution") === 1000)
 
-        assert(progress.queryTimestamps.get("processingTime") === "1970-01-01T00:00:00.300Z")
-        assert(!progress.queryTimestamps.keySet.asScala.exists(_.toLowerCase.contains("eventtime")))
         assert(progress.sources.length === 1)
         assert(progress.sources(0).description contains "MemoryStream")
         assert(progress.sources(0).startOffset === null)

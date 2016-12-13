@@ -64,7 +64,7 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
         .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
     def assertEventStats(body: ju.Map[String, String] => Unit): AssertOnQuery = AssertOnQuery { q =>
-      body(q.recentProgress.filter(_.numInputRows > 0).lastOption.get.queryTimestamps)
+      body(q.recentProgress.filter(_.numInputRows > 0).lastOption.get.eventTime)
       true
     }
 
@@ -72,33 +72,33 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
       AddData(inputData, 15),
       CheckAnswer(),
       assertEventStats { e =>
-        assert(e.get("eventTime.max") === formatTimestamp(15))
-        assert(e.get("eventTime.min") === formatTimestamp(15))
-        assert(e.get("eventTime.avg") === formatTimestamp(15))
+        assert(e.get("max") === formatTimestamp(15))
+        assert(e.get("min") === formatTimestamp(15))
+        assert(e.get("avg") === formatTimestamp(15))
         assert(e.get("watermark") === formatTimestamp(0))
       },
       AddData(inputData, 10, 12, 14),
       CheckAnswer(),
       assertEventStats { e =>
-        assert(e.get("eventTime.max") === formatTimestamp(14))
-        assert(e.get("eventTime.min") === formatTimestamp(10))
-        assert(e.get("eventTime.avg") === formatTimestamp(12))
+        assert(e.get("max") === formatTimestamp(14))
+        assert(e.get("min") === formatTimestamp(10))
+        assert(e.get("avg") === formatTimestamp(12))
         assert(e.get("watermark") === formatTimestamp(5))
       },
       AddData(inputData, 25),
       CheckAnswer(),
       assertEventStats { e =>
-        assert(e.get("eventTime.max") === formatTimestamp(25))
-        assert(e.get("eventTime.min") === formatTimestamp(25))
-        assert(e.get("eventTime.avg") === formatTimestamp(25))
+        assert(e.get("max") === formatTimestamp(25))
+        assert(e.get("min") === formatTimestamp(25))
+        assert(e.get("avg") === formatTimestamp(25))
         assert(e.get("watermark") === formatTimestamp(5))
       },
       AddData(inputData, 25),
       CheckAnswer((10, 3)),
       assertEventStats { e =>
-        assert(e.get("eventTime.max") === formatTimestamp(25))
-        assert(e.get("eventTime.min") === formatTimestamp(25))
-        assert(e.get("eventTime.avg") === formatTimestamp(25))
+        assert(e.get("max") === formatTimestamp(25))
+        assert(e.get("min") === formatTimestamp(25))
+        assert(e.get("avg") === formatTimestamp(25))
         assert(e.get("watermark") === formatTimestamp(15))
       }
     )
