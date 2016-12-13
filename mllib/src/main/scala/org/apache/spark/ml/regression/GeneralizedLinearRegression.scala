@@ -215,6 +215,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    * Sets the value of param [[weightCol]].
    * If this is not set or empty, we treat all instance weights as 1.0.
    * Default is not set, so all instances have weight one.
+   * In the Binomial family, weights correspond to number of trials and should be integer.
+   * Non-integer weights are rounded to integer in AIC calculation.
    *
    * @group setParam
    */
@@ -467,10 +469,12 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     override def variance(mu: Double): Double = mu * (1.0 - mu)
 
+    private def ylogy(y: Double, mu: Double): Double = {
+      if (y == 0) 0.0 else y * math.log(y / mu)
+    }
+
     override def deviance(y: Double, mu: Double, weight: Double): Double = {
-      val my = 1.0 - y
-      2.0 * weight * (y * math.log(math.max(y, 1.0) / mu) +
-        my * math.log(math.max(my, 1.0) / (1.0 - mu)))
+      2.0 * weight * (ylogy(y, mu) + ylogy(1.0 - y, 1.0 - mu))
     }
 
     override def aic(
@@ -479,7 +483,13 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         numInstances: Double,
         weightSum: Double): Double = {
       -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
-        weight * dist.Binomial(1, mu).logProbabilityOf(math.round(y).toInt)
+        // weights for Binomial distribution correspond to number of trials
+        val wt = math.round(weight).toInt
+        if (wt == 0) {
+          0.0
+        } else {
+          dist.Binomial(wt, mu).logProbabilityOf(math.round(y * weight).toInt)
+        }
       }.sum()
     }
 
