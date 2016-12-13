@@ -70,10 +70,16 @@ object DateTimeUtils {
   }
 
   // `SimpleDateFormat` is not thread-safe.
-  val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
+  private val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
     override def initialValue(): SimpleDateFormat = {
       new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
     }
+  }
+
+  def getThreadLocalTimestampFormat(timeZone: TimeZone): DateFormat = {
+    val sdf = threadLocalTimestampFormat.get()
+    sdf.setTimeZone(timeZone)
+    sdf
   }
 
   // `SimpleDateFormat` is not thread-safe.
@@ -81,6 +87,12 @@ object DateTimeUtils {
     override def initialValue(): SimpleDateFormat = {
       new SimpleDateFormat("yyyy-MM-dd", Locale.US)
     }
+  }
+
+  def getThreadLocalDateFormat(): DateFormat = {
+    val sdf = threadLocalDateFormat.get()
+    sdf.setTimeZone(defaultTimeZone())
+    sdf
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
@@ -106,7 +118,7 @@ object DateTimeUtils {
   }
 
   def dateToString(days: SQLDate): String =
-    threadLocalDateFormat.get.format(toJavaDate(days))
+    getThreadLocalDateFormat.format(toJavaDate(days))
 
   // Converts Timestamp to string according to Hive TimestampWritable convention.
   def timestampToString(us: SQLTimestamp): String = {
@@ -117,8 +129,7 @@ object DateTimeUtils {
   def timestampToString(us: SQLTimestamp, timeZone: TimeZone): String = {
     val ts = toJavaTimestamp(us)
     val timestampString = ts.toString
-    val timestampFormat = threadLocalTimestampFormat.get
-    timestampFormat.setTimeZone(timeZone)
+    val timestampFormat = getThreadLocalTimestampFormat(timeZone)
     val formatted = timestampFormat.format(ts)
 
     if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
