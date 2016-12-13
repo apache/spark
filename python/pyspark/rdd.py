@@ -135,6 +135,9 @@ def _load_from_socket(port, serializer):
         break
     if not sock:
         raise Exception("could not open socket")
+    # The RDD materialization time is unpredicable, if we set a timeout for socket reading
+    # operation, it will very possibly fail. See SPARK-18281.
+    sock.settimeout(None)
     try:
         rf = sock.makefile("rb", 65536)
         for item in serializer.load_stream(rf):
@@ -2349,7 +2352,12 @@ class RDD(object):
         """
         with SCCallSiteSync(self.context) as css:
             port = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
-        return _load_from_socket(port, self._jrdd_deserializer)
+        # We set a timeout for connecting socket. The connection only begins when we start
+        # to consume the first element. If we do not begin to consume the returned iterator
+        # immediately, there will be a failure.
+        iter = _load_from_socket(port, self._jrdd_deserializer)
+        peek = next(iter)
+        return chain([peek], iter)
 
 
 def _prepare_for_python_RDD(sc, command):
