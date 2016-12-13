@@ -262,8 +262,10 @@ object PhysicalAggregation {
 /**
  * A pattern that matches a base table access and collects the
  * the corresponding leaf node and the applied predicates.
+ * A base table access represents Project or Filter operators
+ * above a LeafNode.
  */
-object BaseTableAccess extends PredicateHelper{
+object BaseTableAccess extends PredicateHelper {
   def unapply(plan: LogicalPlan): Option[(LogicalPlan, Seq[Expression])] = plan match {
     case t: LeafNode =>
       Some(t, Seq.empty[Expression])

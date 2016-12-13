@@ -405,6 +405,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val STARJOIN_OPTIMIZATION = buildConf("spark.sql.starJoinOptimization")
+    .doc("When true, it enables join reordering based on star schema detection. ")
+    .booleanConf
+    .createWithDefault(false)
+
+  val STARJOIN_FACT_TABLE_RATIO = buildConf("spark.sql.starJoinFactTableRatio")
+    .internal()
+    .doc("Specifies the upper limit of the ratio between the largest fact tables" +
+      " for a star join to be considered. ")
+    .doubleConf
+    .createWithDefault(0.9)
+
   // The output committer class used by data sources. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   val OUTPUT_COMMITTER_CLASS =
@@ -968,7 +980,7 @@ class SQLConf extends Serializable with Logging {
 
   def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
-  def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
+  override def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
 
   def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 
@@ -987,6 +999,10 @@ class SQLConf extends Serializable with Logging {
     getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD)
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
+
+  override def starJoinOptimization: Boolean = getConf(STARJOIN_OPTIMIZATION)
+
+  override def starJoinFactTableRatio: Double = getConf(STARJOIN_FACT_TABLE_RATIO)
 
   /** ********************** SQLConf functionality methods ************ */
 
