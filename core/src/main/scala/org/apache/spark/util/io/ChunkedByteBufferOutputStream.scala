@@ -30,7 +30,7 @@ import org.apache.spark.storage.StorageUtils
  * @param chunkSize size of each chunk, in bytes.
  */
 private[spark] class ChunkedByteBufferOutputStream(
-    var chunkSize: Int,
+    chunkSize: Int,
     allocator: Int => ByteBuffer)
   extends OutputStream {
 
