@@ -103,6 +103,9 @@ private[spark] class Executor(
   // Whether to load classes in user jars before those in Spark jars
   private val userClassPathFirst = conf.getBoolean("spark.executor.userClassPathFirst", false)
 
+  // Whether to monitor killed / interrupted tasks
+  private val taskReaperEnabled = conf.getBoolean("spark.task.reaper.enabled", false)
+
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
   private val urlClassLoader = createClassLoader()
@@ -160,16 +163,20 @@ private[spark] class Executor(
   def killTask(taskId: Long, interruptThread: Boolean): Unit = {
     val taskRunner = runningTasks.get(taskId)
     if (taskRunner != null) {
-      taskReaperForTask.synchronized {
-        val shouldCreateReaper = taskReaperForTask.get(taskId) match {
-          case None => true
-          case Some(existingReaper) => interruptThread && !existingReaper.interruptThread
+      if (taskReaperEnabled) {
+        taskReaperForTask.synchronized {
+          val shouldCreateReaper = taskReaperForTask.get(taskId) match {
+            case None => true
+            case Some(existingReaper) => interruptThread && !existingReaper.interruptThread
+          }
+          if (shouldCreateReaper) {
+            val taskReaper = new TaskReaper(taskRunner, interruptThread = interruptThread)
+            taskReaperForTask(taskId) = taskReaper
+            taskReaperPool.execute(taskReaper)
+          }
         }
-        if (shouldCreateReaper) {
-          val taskReaper = new TaskReaper(taskRunner, interruptThread = interruptThread)
-          taskReaperForTask(taskId) = taskReaper
-          taskReaperPool.execute(taskReaper)
-        }
+      } else {
+        taskRunner.kill(interruptThread = interruptThread)
       }
     }
   }
@@ -469,12 +476,12 @@ private[spark] class Executor(
     private[this] val taskId: Long = taskRunner.taskId
 
     private[this] val killPollingIntervalMs: Long =
-      conf.getTimeAsMs("spark.task.killPollingInterval", "10s")
+      conf.getTimeAsMs("spark.task.reaper.pollingInterval", "10s")
 
-    private[this] val killTimeoutMs: Long = conf.getTimeAsMs("spark.task.killTimeout", "2m")
+    private[this] val killTimeoutMs: Long = conf.getTimeAsMs("spark.task.reaper.killTimeout", "2m")
 
     private[this] val takeThreadDump: Boolean =
-      conf.getBoolean("spark.task.threadDumpKilledTasks", true)
+      conf.getBoolean("spark.task.reaper.threadDump", true)
 
     override def run(): Unit = {
       val startTimeMs = System.currentTimeMillis()
