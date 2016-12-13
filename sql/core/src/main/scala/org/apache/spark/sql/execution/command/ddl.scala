@@ -298,18 +298,19 @@ case class AlterTableChangeColumnsCommand(
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
     // Create a map that converts the origin column to the new column with changed comment, throw
-    // a Exception if the column reference is invalid or the column name/dataType is changed.
+    // an AnalysisException if the column reference is invalid or the column name/dataType is
+    // changed.
     val columnsMap = columns.map { case (oldName: String, newField: StructField) =>
       // Find the origin column from schema by column name.
-      val originColumn = findColumn(table.schema, oldName, resolver)
-      // Throw a Exception if the column name/dataType is changed.
+      val originColumn = findColumnByName(table.schema, oldName, resolver)
+      // Throw an AnalysisException if the column name/dataType is changed.
       if (!columnEqual(originColumn, newField, resolver)) {
         throw new AnalysisException(
           "ALTER TABLE CHANGE COLUMN is not supported for changing column " +
             s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
             s"'${newField.name}' with type '${newField.dataType}'")
       }
-      // Create a new column from the origin column with new comment.
+      // Create a new column from the origin column with the new comment.
       val newColumn = addComment(originColumn, newField.getComment)
       // Create the map from origin column to changed column
       originColumn.name -> newColumn
@@ -322,9 +323,10 @@ case class AlterTableChangeColumnsCommand(
     Seq.empty[Row]
   }
 
-  // Find the origin column from schema by column name, throw a Exception if the column
+  // Find the origin column from schema by column name, throw an AnalysisException if the column
   // reference is invalid.
-  private def findColumn(schema: StructType, name: String, resolver: Resolver): StructField = {
+  private def findColumnByName(
+      schema: StructType, name: String, resolver: Resolver): StructField = {
     schema.fields.collectFirst {
       case field if resolver(field.name, name) => field
     }.getOrElse(throw new AnalysisException(

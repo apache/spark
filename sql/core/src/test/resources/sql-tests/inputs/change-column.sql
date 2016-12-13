@@ -34,8 +34,11 @@ DESC test_change;
 ALTER TABLE test_change CHANGE a a1 STRING COMMENT 'this is column a1' AFTER b;
 DESC test_change;
 
--- Case sensitive
+-- Check the behavior with different values of CASE_SENSITIVE
+SET spark.sql.caseSensitive=false;
 ALTER TABLE test_change CHANGE a A INT COMMENT 'this is column A';
+SET spark.sql.caseSensitive=true;
+ALTER TABLE test_change CHANGE a A INT COMMENT 'this is column A1';
 DESC test_change;
 
 -- Change column can't apply to a temporary/global_temporary view
