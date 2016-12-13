@@ -70,7 +70,7 @@ object DateTimeUtils {
   }
 
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
-  private val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {
+  val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {
     override protected def initialValue: TimeZone = {
       Calendar.getInstance.getTimeZone
     }

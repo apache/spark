@@ -41,6 +41,7 @@ import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.types._
@@ -263,7 +264,9 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     // Expressions that given a partition key build a string like: col1=val/col2=val/...
     val partitionStringExpression = partitionOutput.zipWithIndex.flatMap { case (c, i) =>
       val escaped =
-        ScalaUDF(fun, StringType, Seq(Cast(c, StringType)), Seq(StringType))
+        ScalaUDF(fun, StringType,
+          Seq(Cast(c, StringType, DateTimeUtils.threadLocalLocalTimeZone.get().getID)),
+          Seq(StringType))
       val str = If(IsNull(c), Literal(defaultPartName), escaped)
       val partitionName = Literal(dynamicPartColNames(i) + "=") :: str :: Nil
       if (i == 0) partitionName else Literal(Path.SEPARATOR_CHAR.toString) :: partitionName

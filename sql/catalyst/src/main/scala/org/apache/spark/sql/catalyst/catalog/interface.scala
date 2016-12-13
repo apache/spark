@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{StructField, StructType}
 
 
@@ -111,7 +112,8 @@ case class CatalogTablePartition(
    */
   def toRow(partitionSchema: StructType): InternalRow = {
     InternalRow.fromSeq(partitionSchema.map { field =>
-      Cast(Literal(spec(field.name)), field.dataType).eval()
+      Cast(Literal(spec(field.name)), field.dataType,
+        DateTimeUtils.threadLocalLocalTimeZone.get().getID).eval()
     })
   }
 }
