@@ -223,7 +223,7 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
   // the attribute(col#14) of union exists in left child, it will be ok.
   //
   // so here we should not do RemoveAliasOnlyProject
-  // when the project is the left child of the Union,
+  // when the project is the right child of the Union,
   // this function is to check it.
   def isUnionRightProj(p: Project, plan: LogicalPlan): Boolean = {
     plan.collectFirst{
