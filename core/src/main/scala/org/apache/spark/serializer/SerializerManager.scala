@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.SparkConf
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.storage._
@@ -74,7 +74,6 @@ private[spark] class SerializerManager(
    * loaded yet. */
   private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
 
-  private val chunkSize: Int = SparkEnv.get.memoryManager.pageSizeBytes.toInt
   def encryptionEnabled: Boolean = encryptionKey.isDefined
 
   def canUseKryo(ct: ClassTag[_]): Boolean = {
@@ -181,7 +180,7 @@ private[spark] class SerializerManager(
       blockId: BlockId,
       values: Iterator[_],
       classTag: ClassTag[_]): ChunkedByteBuffer = {
-    val bbos = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate)
+    val bbos = new ChunkedByteBufferOutputStream(1024 * 1024 * 4, ByteBuffer.allocate)
     val byteStream = new BufferedOutputStream(bbos)
     val autoPick = !blockId.isInstanceOf[StreamBlockId]
     val ser = getSerializer(classTag, autoPick).newInstance()

@@ -69,8 +69,6 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   @transient private var compressionCodec: Option[CompressionCodec] = _
   /** Size of each block. Default value is 4MB.  This value is only read by the broadcaster. */
   @transient private var blockSize: Int = _
-  /** Size of each chunk, in bytes. */
-  @transient private var chunkSize: Int = _
 
   private def setConf(conf: SparkConf) {
     compressionCodec = if (conf.getBoolean("spark.broadcast.compress", true)) {
@@ -80,7 +78,6 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     }
     // Note: use getSizeAsKb (not bytes) to maintain compatibility if no units are provided
     blockSize = conf.getSizeAsKb("spark.broadcast.blockSize", "4m").toInt * 1024
-    chunkSize = SparkEnv.get.memoryManager.pageSizeBytes.toInt
     checksumEnabled = conf.getBoolean("spark.broadcast.checksum", true)
   }
   setConf(SparkEnv.get.conf)
@@ -126,7 +123,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
       throw new SparkException(s"Failed to store $broadcastId in BlockManager")
     }
     val blocks =
-      TorrentBroadcast.blockifyObject(value, chunkSize, SparkEnv.get.serializer, compressionCodec)
+      TorrentBroadcast.blockifyObject(value, blockSize, SparkEnv.get.serializer, compressionCodec)
     if (checksumEnabled) {
       checksums = new Array[Int](blocks.length)
     }
@@ -260,10 +257,10 @@ private object TorrentBroadcast extends Logging {
 
   def blockifyObject[T: ClassTag](
       obj: T,
-      chunkSize: Int,
+      blockSize: Int,
       serializer: Serializer,
       compressionCodec: Option[CompressionCodec]): Array[ByteBuffer] = {
-    val cbbos = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate)
+    val cbbos = new ChunkedByteBufferOutputStream(blockSize, ByteBuffer.allocate)
     val out = compressionCodec.map(c => c.compressedOutputStream(cbbos)).getOrElse(cbbos)
     val ser = serializer.newInstance()
     val serOut = ser.serializeStream(out)

@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageUtils
 
 /**
@@ -30,9 +31,14 @@ import org.apache.spark.storage.StorageUtils
  * @param chunkSize size of each chunk, in bytes.
  */
 private[spark] class ChunkedByteBufferOutputStream(
-    chunkSize: Int,
+    var chunkSize: Int,
     allocator: Int => ByteBuffer)
-  extends OutputStream {
+  extends OutputStream with Logging{
+
+  if (chunkSize < 0) {
+    logWarning(s"chunkSize should not be an negative value, replaced as 4MB default.")
+    chunkSize = 4 * 1024 * 1024
+  }
 
   private[this] var toChunkedByteBufferWasCalled = false
 

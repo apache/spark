@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
+import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
@@ -99,7 +99,6 @@ private[spark] class MemoryStore(
   // Initial memory to request before unrolling any block
   private val unrollMemoryThreshold: Long =
     conf.getLong("spark.storage.unrollMemoryThreshold", 1024 * 1024)
-  private val chunkSize = SparkEnv.get.memoryManager.pageSizeBytes.toInt
 
   /** Total amount of memory available for storage, in bytes. */
   private def maxMemory: Long = {
@@ -332,7 +331,7 @@ private[spark] class MemoryStore(
     var unrollMemoryUsedByThisBlock = 0L
     // Underlying buffer for unrolling the block
     val redirectableStream = new RedirectableOutputStream
-    val bbos = new ChunkedByteBufferOutputStream(chunkSize, allocator)
+    val bbos = new ChunkedByteBufferOutputStream(initialMemoryThreshold.toInt, allocator)
     redirectableStream.setOutputStream(bbos)
     val serializationStream: SerializationStream = {
       val autoPick = !blockId.isInstanceOf[StreamBlockId]
