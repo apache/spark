@@ -382,6 +382,24 @@ class StreamExecution(
     if (hasNewData) {
       // Current batch timestamp in milliseconds
       offsetSeqMetadata.batchTimestampMs = triggerClock.getTimeMillis()
+      // Update the eventTime watermark if we find one in the plan.
+      if (lastExecution != null) {
+        lastExecution.executedPlan.collect {
+          case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>
+            logDebug(s"Observed event time stats: ${e.eventTimeStats.value}")
+            e.eventTimeStats.value.max - e.delay.milliseconds
+        }.headOption.foreach { newWatermarkMs =>
+          if (newWatermarkMs > offsetSeqMetadata.batchWatermarkMs) {
+            logInfo(s"Updating eventTime watermark to: $newWatermarkMs ms")
+            offsetSeqMetadata.batchWatermarkMs = newWatermarkMs
+          } else {
+            logDebug(
+              s"Event time didn't move: $newWatermarkMs < " +
+                s"${offsetSeqMetadata.batchWatermarkMs}")
+          }
+        }
+      }
+
       updateStatusMessage("Writing offsets to log")
       reportTimeTaken("walCommit") {
         assert(offsetLog.add(
@@ -483,21 +501,6 @@ class StreamExecution(
 
     reportTimeTaken("addBatch") {
       sink.addBatch(currentBatchId, nextBatch)
-    }
-
-    // Update the eventTime watermark if we find one in the plan.
-    lastExecution.executedPlan.collect {
-      case e: EventTimeWatermarkExec =>
-        logTrace(s"Maximum observed eventTime: ${e.maxEventTime.value}")
-        (e.maxEventTime.value / 1000) - e.delay.milliseconds()
-    }.headOption.foreach { newWatermark =>
-      if (newWatermark > offsetSeqMetadata.batchWatermarkMs) {
-        logInfo(s"Updating eventTime watermark to: $newWatermark ms")
-        offsetSeqMetadata.batchWatermarkMs = newWatermark
-      } else {
-        logTrace(s"Event time didn't move: $newWatermark < " +
-          s"$offsetSeqMetadata.currentEventTimeWatermark")
-      }
     }
 
     awaitBatchLock.lock()
