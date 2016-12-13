@@ -610,6 +610,17 @@ class CodegenContext {
     splitExpressions(expressions, "apply", ("InternalRow", row) :: Nil)
   }
 
+  /**
+   * Splits the generated code of expressions into multiple functions, because function has
+   * 64kb code size limit in JVM
+   *
+   * @param expressions the codes to evaluate expressions.
+   * @param funcName the split function name base.
+   * @param arguments the list of (type, name) of the arguments of the split function.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
+   */
   def splitExpressions(
       expressions: Seq[String],
       funcName: String,
