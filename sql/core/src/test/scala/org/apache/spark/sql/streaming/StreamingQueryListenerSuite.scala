@@ -185,9 +185,12 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   test("QueryProgressEvent serialization") {
     def testSerialization(event: QueryProgressEvent): Unit = {
+      import scala.collection.JavaConverters._
       val json = JsonProtocol.sparkEventToJson(event)
       val newEvent = JsonProtocol.sparkEventFromJson(json).asInstanceOf[QueryProgressEvent]
       assert(newEvent.progress.json === event.progress.json)  // json as a proxy for equality
+      assert(newEvent.progress.durationMs.asScala === event.progress.durationMs.asScala)
+      assert(newEvent.progress.eventTime.asScala === event.progress.eventTime.asScala)
     }
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress1))
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress2))
