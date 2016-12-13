@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import scala.collection.JavaConverters._
+
 import org.apache.commons.lang3.RandomStringUtils
 import org.scalactic.TolerantNumerics
 import org.scalatest.concurrent.Eventually._

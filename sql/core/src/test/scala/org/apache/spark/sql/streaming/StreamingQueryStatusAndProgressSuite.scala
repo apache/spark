@@ -44,7 +44,12 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
         |  "durationMs" : {
         |    "total" : 0
         |  },
-        |  "currentWatermark" : 3,
+        |  "eventTime" : {
+        |    "avg" : "2016-12-05T20:54:20.827Z",
+        |    "max" : "2016-12-05T20:54:20.827Z",
+        |    "min" : "2016-12-05T20:54:20.827Z",
+        |    "watermark" : "2016-12-05T20:54:20.827Z"
+        |  },
         |  "stateOperators" : [ {
         |    "numRowsTotal" : 0,
         |    "numRowsUpdated" : 1
@@ -76,7 +81,6 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
          |  "durationMs" : {
          |    "total" : 0
          |  },
-         |  "currentWatermark" : 3,
          |  "stateOperators" : [ {
          |    "numRowsTotal" : 0,
          |    "numRowsUpdated" : 1
@@ -134,7 +138,11 @@ object StreamingQueryStatusAndProgressSuite {
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
     durationMs = Map("total" -> 0L).mapValues(long2Long).asJava,
-    currentWatermark = 3L,
+    eventTime = Map(
+      "max" -> "2016-12-05T20:54:20.827Z",
+      "min" -> "2016-12-05T20:54:20.827Z",
+      "avg" -> "2016-12-05T20:54:20.827Z",
+      "watermark" -> "2016-12-05T20:54:20.827Z").asJava,
     stateOperators = Array(new StateOperatorProgress(numRowsTotal = 0, numRowsUpdated = 1)),
     sources = Array(
       new SourceProgress(
@@ -156,7 +164,7 @@ object StreamingQueryStatusAndProgressSuite {
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
     durationMs = Map("total" -> 0L).mapValues(long2Long).asJava,
-    currentWatermark = 3L,
+    eventTime = Map.empty[String, String].asJava,  // empty maps should be handled correctly
     stateOperators = Array(new StateOperatorProgress(numRowsTotal = 0, numRowsUpdated = 1)),
     sources = Array(
       new SourceProgress(
