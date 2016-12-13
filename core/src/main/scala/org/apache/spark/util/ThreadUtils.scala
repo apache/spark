@@ -209,7 +209,7 @@ private[spark] object ThreadUtils {
       // `awaitPermission` is not actually used anywhere so it's safe to pass in null here.
       // See SPARK-13747.
       val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
-      awaitable.result(Duration.Inf)(awaitPermission)
+      awaitable.result(atMost)(awaitPermission)
     } catch {
       case NonFatal(t) =>
         throw new SparkException("Exception thrown in awaitResult: ", t)
