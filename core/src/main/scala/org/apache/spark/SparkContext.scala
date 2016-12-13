@@ -2067,8 +2067,8 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Run a job on all partitions in an RDD and pass the results to a handler function, but take
-   * a function of type `Iterator[T] => U` instead of `(TaskContext, Iterator[T]) => U`.
+   * Run a job on all partitions in an RDD and pass the results to a handler function, this time the
+   * argument is a function that doesn't take `TaskContext` (the other one does).
    *
    * @param rdd target RDD to run tasks on
    * @param processPartition a function to run on each partition of the RDD
