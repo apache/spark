@@ -16,11 +16,11 @@ SHOW TABLES 'show_t*';
 SHOW TABLES LIKE 'show_t1*|show_t2*';
 SHOW TABLES IN showdb 'show_t*';
 
--- SHOW TABLES EXTENDED
+-- SHOW TABLE EXTENDED
 -- Ignore these because there exist timestamp results, e.g. `Created`.
--- SHOW TABLES EXTENDED LIKE 'show_t*';
-SHOW TABLES EXTENDED;
-SHOW TABLES EXTENDED LIKE 'show_t1' PARTITION(c='Us');
+-- SHOW TABLE EXTENDED LIKE 'show_t*';
+SHOW TABLE EXTENDED;
+SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us');
 
 -- Clean Up
 DROP TABLE show_t1;
