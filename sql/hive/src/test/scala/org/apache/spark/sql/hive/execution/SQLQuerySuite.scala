@@ -2011,6 +2011,28 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+
+  test("union all with same column") {
+    sql("DROP TABLE IF EXISTS p1")
+    sql("DROP TABLE IF EXISTS p2")
+    sql("DROP TABLE IF EXISTS p3")
+
+    sql("CREATE TABLE p1 (col int)" )
+    sql("CREATE TABLE p2 (col int)")
+    sql("CREATE TABLE p3 (col int)")
+
+    sql("set spark.sql.crossJoin.enabled = true")
+
+    assert(sql(
+      """
+        |SELECT 1 as cste,col FROM
+        |  (SELECT col as col FROM
+        |     (SELECT p1.col as col FROM p1 LEFT JOIN p2
+        |        UNION ALL SELECT col FROM p3 ) T1) T2
+      """.stripMargin).collect.isEmpty)
+
+  }
+
   def testCommandAvailable(command: String): Boolean = {
     val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
     attempt.isSuccess && attempt.get == 0
