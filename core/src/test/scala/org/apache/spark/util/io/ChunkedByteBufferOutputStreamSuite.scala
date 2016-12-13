@@ -119,4 +119,21 @@ class ChunkedByteBufferOutputStreamSuite extends SparkFunSuite {
     assert(arrays(1).toSeq === ref.slice(10, 20))
     assert(arrays(2).toSeq === ref.slice(20, 30))
   }
+
+  test("negative chunk size") {
+    val ref = new Array[Byte](8 * 1024 * 1024 + 10)
+    Random.nextBytes(ref)
+    val o = new ChunkedByteBufferOutputStream(-10, ByteBuffer.allocate)
+    o.write(ref)
+    o.close()
+    val arrays = o.toChunkedByteBuffer.getChunks().map(_.array())
+    assert(arrays.length === 3)
+    assert(arrays(0).length === 4 * 1024 * 1024)
+    assert(arrays(1).length === 4 * 1024 * 1024)
+    assert(arrays(2).length === 10 )
+
+    assert(arrays(0).toSeq === ref.slice(0, 4 * 1024 * 1024))
+    assert(arrays(1).toSeq === ref.slice(4 * 1024 * 1024, 8 * 1024 * 1024))
+    assert(arrays(2).toSeq === ref.slice(8 * 1024 * 1024, 8 * 1024 * 1024 + 10))
+  }
 }
