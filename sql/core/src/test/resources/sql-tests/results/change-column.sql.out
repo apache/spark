@@ -3,7 +3,7 @@
 
 
 -- !query 0
-CREATE TABLE test_change(a Int, b String, c Int)
+CREATE TABLE test_change(a INT, b STRING, c INT)
 -- !query 0 schema
 struct<>
 -- !query 0 output
@@ -21,21 +21,21 @@ c                   	int
 
 
 -- !query 2
-ALTER TABLE test_change CHANGE a a1 Int
+ALTER TABLE test_change CHANGE a a1 INT
 -- !query 2 schema
 struct<>
 -- !query 2 output
 org.apache.spark.sql.AnalysisException
-ALTER TABLE CHANGE COLUMN is not supported for changing column 'StructField(a,IntegerType,true,{})' to 'StructField(a1,IntegerType,true,{})';
+ALTER TABLE CHANGE COLUMN is not supported for changing column 'a' with type 'IntegerType' to 'a1' with type 'IntegerType';
 
 
 -- !query 3
-ALTER TABLE test_change CHANGE b b1 String, c c1 Int
+ALTER TABLE test_change CHANGE b b1 STRING, c c1 INT
 -- !query 3 schema
 struct<>
 -- !query 3 output
 org.apache.spark.sql.AnalysisException
-ALTER TABLE CHANGE COLUMN is not supported for changing column 'StructField(b,StringType,true,{})' to 'StructField(b1,StringType,true,{})';
+ALTER TABLE CHANGE COLUMN is not supported for changing column 'b' with type 'StringType' to 'b1' with type 'StringType';
 
 
 -- !query 4
@@ -49,21 +49,21 @@ c                   	int
 
 
 -- !query 5
-ALTER TABLE test_change CHANGE a a String
+ALTER TABLE test_change CHANGE a a STRING
 -- !query 5 schema
 struct<>
 -- !query 5 output
 org.apache.spark.sql.AnalysisException
-ALTER TABLE CHANGE COLUMN is not supported for changing column 'StructField(a,IntegerType,true,{})' to 'StructField(a,StringType,true,{})';
+ALTER TABLE CHANGE COLUMN is not supported for changing column 'a' with type 'IntegerType' to 'a' with type 'StringType';
 
 
 -- !query 6
-ALTER TABLE test_change CHANGE b b Int, c c Double
+ALTER TABLE test_change CHANGE b b INT, c c DOUBLE
 -- !query 6 schema
 struct<>
 -- !query 6 output
 org.apache.spark.sql.AnalysisException
-ALTER TABLE CHANGE COLUMN is not supported for changing column 'StructField(b,StringType,true,{})' to 'StructField(b,IntegerType,true,{})';
+ALTER TABLE CHANGE COLUMN is not supported for changing column 'b' with type 'StringType' to 'b' with type 'IntegerType';
 
 
 -- !query 7
@@ -77,30 +77,30 @@ c                   	int
 
 
 -- !query 8
-ALTER TABLE test_change CHANGE a a Int AFTER b
+ALTER TABLE test_change CHANGE a a INT AFTER b
 -- !query 8 schema
 struct<>
 -- !query 8 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Operation not allowed: ALTER TABLE [PARTITION] CHANGE COLUMN ... FIRST | AFTER otherCol(line 1, pos 0)
+Operation not allowed: ALTER TABLE table [PARTITION partition_spec] CHANGE COLUMN ... FIRST | AFTER otherCol(line 1, pos 0)
 
 == SQL ==
-ALTER TABLE test_change CHANGE a a Int AFTER b
+ALTER TABLE test_change CHANGE a a INT AFTER b
 ^^^
 
 
 -- !query 9
-ALTER TABLE test_change CHANGE b b String FIRST, c c Int AFTER b
+ALTER TABLE test_change CHANGE b b STRING FIRST, c c INT AFTER b
 -- !query 9 schema
 struct<>
 -- !query 9 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Operation not allowed: ALTER TABLE [PARTITION] CHANGE COLUMN ... FIRST | AFTER otherCol(line 1, pos 0)
+Operation not allowed: ALTER TABLE table [PARTITION partition_spec] CHANGE COLUMN ... FIRST | AFTER otherCol(line 1, pos 0)
 
 == SQL ==
-ALTER TABLE test_change CHANGE b b String FIRST, c c Int AFTER b
+ALTER TABLE test_change CHANGE b b STRING FIRST, c c INT AFTER b
 ^^^
 
 
@@ -115,7 +115,7 @@ c                   	int
 
 
 -- !query 11
-ALTER TABLE test_change CHANGE a a Int COMMENT 'this is column a'
+ALTER TABLE test_change CHANGE a a INT COMMENT 'this is column a'
 -- !query 11 schema
 struct<>
 -- !query 11 output
@@ -123,7 +123,7 @@ struct<>
 
 
 -- !query 12
-ALTER TABLE test_change CHANGE b b String COMMENT '#*02?`', c c Int COMMENT ''
+ALTER TABLE test_change CHANGE b b STRING COMMENT '#*02?`', c c INT COMMENT ''
 -- !query 12 schema
 struct<>
 -- !query 12 output
@@ -141,7 +141,7 @@ c                   	int
 
 
 -- !query 14
-ALTER TABLE test_change CHANGE a a Int COMMENT 'this is column a'
+ALTER TABLE test_change CHANGE a a INT COMMENT 'this is column a'
 -- !query 14 schema
 struct<>
 -- !query 14 output
@@ -159,7 +159,7 @@ c                   	int
 
 
 -- !query 16
-ALTER TABLE test_change CHANGE invalid_col invalid_col Int
+ALTER TABLE test_change CHANGE invalid_col invalid_col INT
 -- !query 16 schema
 struct<>
 -- !query 16 output
@@ -178,16 +178,16 @@ c                   	int
 
 
 -- !query 18
-ALTER TABLE test_change CHANGE a a1 String COMMENT 'this is column a1' AFTER b
+ALTER TABLE test_change CHANGE a a1 STRING COMMENT 'this is column a1' AFTER b
 -- !query 18 schema
 struct<>
 -- !query 18 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Operation not allowed: ALTER TABLE [PARTITION] CHANGE COLUMN ... FIRST | AFTER otherCol(line 1, pos 0)
+Operation not allowed: ALTER TABLE table [PARTITION partition_spec] CHANGE COLUMN ... FIRST | AFTER otherCol(line 1, pos 0)
 
 == SQL ==
-ALTER TABLE test_change CHANGE a a1 String COMMENT 'this is column a1' AFTER b
+ALTER TABLE test_change CHANGE a a1 STRING COMMENT 'this is column a1' AFTER b
 ^^^
 
 
@@ -202,7 +202,7 @@ c                   	int
 
 
 -- !query 20
-ALTER TABLE test_change CHANGE a A Int COMMENT 'this is column A'
+ALTER TABLE test_change CHANGE a A INT COMMENT 'this is column A'
 -- !query 20 schema
 struct<>
 -- !query 20 output
@@ -228,7 +228,7 @@ struct<>
 
 
 -- !query 23
-ALTER TABLE temp_view CHANGE a a Int COMMENT 'this is column a'
+ALTER TABLE temp_view CHANGE a a INT COMMENT 'this is column a'
 -- !query 23 schema
 struct<>
 -- !query 23 output
@@ -245,7 +245,7 @@ struct<>
 
 
 -- !query 25
-ALTER TABLE global_temp.global_temp_view CHANGE a a Int COMMENT 'this is column a'
+ALTER TABLE global_temp.global_temp_view CHANGE a a INT COMMENT 'this is column a'
 -- !query 25 schema
 struct<>
 -- !query 25 output
@@ -254,7 +254,7 @@ Database 'global_temp' not found;
 
 
 -- !query 26
-CREATE TABLE partition_table(a Int, b String) PARTITIONED BY (c Int, d String)
+CREATE TABLE partition_table(a INT, b STRING) PARTITIONED BY (c INT, d STRING)
 -- !query 26 schema
 struct<>
 -- !query 26 output
@@ -262,16 +262,16 @@ struct<>
 
 
 -- !query 27
-ALTER TABLE partition_table PARTITION (c = 1) CHANGE COLUMN a new_a Int
+ALTER TABLE partition_table PARTITION (c = 1) CHANGE COLUMN a new_a INT
 -- !query 27 schema
 struct<>
 -- !query 27 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Operation not allowed: ALTER TABLE PARTITION partition_spec CHANGE COLUMN, can not change the columns in partition spec(line 1, pos 0)
+Operation not allowed: ALTER TABLE table PARTITION partition_spec CHANGE COLUMN(line 1, pos 0)
 
 == SQL ==
-ALTER TABLE partition_table PARTITION (c = 1) CHANGE COLUMN a new_a Int
+ALTER TABLE partition_table PARTITION (c = 1) CHANGE COLUMN a new_a INT
 ^^^
 
 

@@ -312,10 +312,10 @@ case class AlterTableChangeColumnsCommand(
       // Create a new column from the origin column with new comment.
       val newColumn = addComment(originColumn, newField.getComment)
       // Create the map from origin column to changed column
-      originColumn -> newColumn
+      originColumn.name -> newColumn
     }
 
-    val newSchema = table.schema.fields.map(field => columnsMap.getOrElse(field, field))
+    val newSchema = table.schema.fields.map(field => columnsMap.getOrElse(field.name, field))
     val newTable = table.copy(schema = StructType(newSchema))
     catalog.alterTable(newTable)
 
