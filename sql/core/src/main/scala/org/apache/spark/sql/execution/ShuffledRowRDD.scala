@@ -128,9 +128,7 @@ class ShuffledRowRDD(
   private[this] val part: Partitioner =
     new CoalescedPartitioner(dependency.partitioner, partitionStartIndices)
 
-  // Don't even think of removing the override
-  // and making the dependency explicit in `extends RDD` above. It has once been tried.
-  override def getDependencies: Seq[Dependency[_]] = Seq(dependency)
+  override def getDependencies: Seq[Dependency[_]] = List(dependency)
 
   override val partitioner: Option[Partitioner] = Some(part)
 
