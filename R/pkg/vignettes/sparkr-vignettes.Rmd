@@ -700,11 +700,11 @@ MLPC employs backpropagation for learning the model. We use the logistic loss fu
 
 `spark.mlp` requires at least two columns in `data`: one named `"label"` and the other one `"features"`. The `"features"` column should be in libSVM-format.
 
-We use a sample data set to show how to use `spark.mlp` in classification.
+We use iris data set to show how to use `spark.mlp` in classification.
 ```{r, warning=FALSE}
-df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
+df <- createDataFrame(iris)
 # fit a Multilayer Perceptron Classification Model
-model <- spark.mlp(df, label ~ features, blockSize = 128, layers = c(4, 3), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
+model <- spark.mlp(df, Species ~ ., blockSize = 128, layers = c(4, 3), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
 # check the summary of the fitted model
 summary(model)
 # make predictions use the fitted model
