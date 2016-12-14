@@ -1218,11 +1218,11 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' @param data A SparkDataFrame for training.
 #' @param features Features column name. Either libSVM-format column or character-format column is
 #'        valid.
-#' @param k Number of topics.
-#' @param maxIter Maximum iterations.
+#' @param k Number of topics, default is 10.
+#' @param maxIter Maximum iterations, default is 20.
 #' @param optimizer Optimizer to train an LDA model, "online" or "em", default is "online".
 #' @param subsamplingRate (For online optimizer) Fraction of the corpus to be sampled and used in
-#'        each iteration of mini-batch gradient descent, in range (0, 1].
+#'        each iteration of mini-batch gradient descent, in range (0, 1], default is 0.05.
 #' @param topicConcentration concentration parameter (commonly named \code{beta} or \code{eta}) for
 #'        the prior placed on topic distributions over terms, default -1 to set automatically on the
 #'        Spark side. Use \code{summary} to retrieve the effective topicConcentration. Only 1-size
@@ -1233,7 +1233,7 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #'        docConcentration. Only 1-size or \code{k}-size numeric is accepted.
 #' @param customizedStopWords stopwords that need to be removed from the given corpus. Ignore the
 #'        parameter if libSVM-format column is used as the features column.
-#' @param maxVocabSize maximum vocabulary size, default 1 << 18
+#' @param maxVocabSize maximum vocabulary size, default is 1 << 18
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.lda} returns a fitted Latent Dirichlet Allocation model.
 #' @rdname spark.lda
