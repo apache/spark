@@ -177,15 +177,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       throw new ParseException(s"Dynamic partitions do not support IF NOT EXISTS. Specified " +
         "partitions with value: " + dynamicPartitionKeys.keys.mkString("[", ",", "]"), ctx)
     }
-    val overwrite = ctx.OVERWRITE != null
-    val staticPartitionKeys: Map[String, String] =
-      partitionKeys.filter(_._2.nonEmpty).map(t => (t._1, t._2.get))
 
     InsertIntoTable(
       UnresolvedRelation(tableIdent, None),
       partitionKeys,
       query,
-      OverwriteOptions(overwrite, if (overwrite) staticPartitionKeys else Map.empty),
+      ctx.OVERWRITE != null,
       ctx.EXISTS != null)
   }
 

@@ -33,10 +33,10 @@ import org.apache.spark.sql.execution.command.RunnableCommand
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
  * Writing to dynamic partitions is also supported.
  *
- * @param staticPartitionKeys partial partitioning spec for write. This defines the scope of
- *                            partition overwrites: when the spec is empty, all partitions are
- *                            overwritten. When it covers a prefix of the partition keys, only
- *                            partitions matching the prefix are overwritten.
+ * @param staticPartitions partial partitioning spec for write. This defines the scope of partition
+ *                         overwrites: when the spec is empty, all partitions are overwritten.
+ *                         When it covers a prefix of the partition keys, only partitions matching
+ *                         the prefix are overwritten.
  * @param customPartitionLocations mapping of partition specs to their custom locations. The
  *                                 caller should guarantee that exactly those table partitions
  *                                 falling under the specified static partition keys are contained
@@ -44,7 +44,7 @@ import org.apache.spark.sql.execution.command.RunnableCommand
  */
 case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
-    staticPartitionKeys: TablePartitionSpec,
+    staticPartitions: TablePartitionSpec,
     customPartitionLocations: Map[TablePartitionSpec, String],
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
@@ -122,9 +122,9 @@ case class InsertIntoHadoopFsRelationCommand(
    * locations are also cleared based on the custom locations map given to this class.
    */
   private def deleteMatchingPartitions(fs: FileSystem, qualifiedOutputPath: Path): Unit = {
-    val staticPartitionPrefix = if (staticPartitionKeys.nonEmpty) {
+    val staticPartitionPrefix = if (staticPartitions.nonEmpty) {
       "/" + partitionColumns.flatMap { p =>
-        staticPartitionKeys.get(p.name) match {
+        staticPartitions.get(p.name) match {
           case Some(value) =>
             Some(escapePathName(p.name) + "=" + escapePathName(value))
           case None =>
@@ -143,7 +143,7 @@ case class InsertIntoHadoopFsRelationCommand(
     // now clear all custom partition locations (e.g. /custom/dir/where/foo=2/bar=4)
     for ((spec, customLoc) <- customPartitionLocations) {
       assert(
-        (staticPartitionKeys.toSet -- spec).isEmpty,
+        (staticPartitions.toSet -- spec).isEmpty,
         "Custom partition location did not match static partitioning keys")
       val path = new Path(customLoc)
       if (fs.exists(path) && !fs.delete(path, true)) {
