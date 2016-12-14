@@ -2662,8 +2662,6 @@
      -->
     <profile>
       <id>cloud</id>
-      <properties>
-      </properties>
       <modules>
         <module>cloud</module>
       </modules>
