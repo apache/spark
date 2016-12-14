@@ -67,8 +67,10 @@ object UnsupportedOperationChecker {
         // watermark a group is never "finished" so we would never output anything.
         if (watermarkAttributes.isEmpty) {
           throwError(
-            s"$outputMode output mode not supported when there are streaming aggregations on " +
-                s"streaming DataFrames/DataSets")(plan)
+            s"$outputMode output mode is supported only on aggregations on " +
+              s"streaming DataFrames/Datasets where watermark has been defined on the" +
+              s"aggregation column. Either use Complete mode or define the watermark using " +
+              s"Dataset/Dataframe operation 'withWatemark()'.")(plan)
         }
 
       case InternalOutputModes.Complete | InternalOutputModes.Update if aggregates.isEmpty =>
