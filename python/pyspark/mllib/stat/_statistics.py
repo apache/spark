@@ -164,7 +164,6 @@ class Statistics(object):
         of fit test of the observed data against the expected distribution,
         or againt the uniform distribution (by default), with each category
         having an expected frequency of `1 / len(observed)`.
-        (Note: `observed` cannot contain negative values)
 
         If `observed` is matrix, conduct Pearson's independence test on the
         input contingency matrix, which cannot contain negative entries or
@@ -175,6 +174,8 @@ class Statistics(object):
         For each feature, the (feature, label) pairs are converted into a
         contingency matrix for which the chi-squared statistic is computed.
         All label and feature values must be categorical.
+
+        .. note:: `observed` cannot contain negative values
 
         :param observed: it could be a vector containing the observed categorical
                          counts/relative frequencies, or the contingency matrix

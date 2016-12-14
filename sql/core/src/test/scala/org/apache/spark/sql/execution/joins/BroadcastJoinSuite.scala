@@ -21,11 +21,14 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, BitwiseOr, Cast, Literal, ShiftLeft}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.{LongType, ShortType}
+import org.apache.spark.util.Utils
 
 /**
  * Test various broadcast join operators.
@@ -83,31 +86,39 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     plan
   }
 
+  // The tests here are failed on Windows due to the failure of initiating executors
+  // by the path length limitation. See SPARK-18718.
   test("unsafe broadcast hash join updates peak execution memory") {
+    assume(!Utils.isWindows)
     testBroadcastJoinPeak[BroadcastHashJoinExec]("unsafe broadcast hash join", "inner")
   }
 
   test("unsafe broadcast hash outer join updates peak execution memory") {
+    assume(!Utils.isWindows)
     testBroadcastJoinPeak[BroadcastHashJoinExec]("unsafe broadcast hash outer join", "left_outer")
   }
 
   test("unsafe broadcast left semi join updates peak execution memory") {
+    assume(!Utils.isWindows)
     testBroadcastJoinPeak[BroadcastHashJoinExec]("unsafe broadcast left semi join", "leftsemi")
   }
 
   test("broadcast hint isn't bothered by authBroadcastJoinThreshold set to low values") {
+    assume(!Utils.isWindows)
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       testBroadcastJoin[BroadcastHashJoinExec]("inner", true)
     }
   }
 
   test("broadcast hint isn't bothered by a disabled authBroadcastJoinThreshold") {
+    assume(!Utils.isWindows)
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       testBroadcastJoin[BroadcastHashJoinExec]("inner", true)
     }
   }
 
   test("broadcast hint isn't propagated after a join") {
+    assume(!Utils.isWindows)
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val df1 = spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
       val df2 = spark.createDataFrame(Seq((1, "1"), (2, "2"))).toDF("key", "value")
@@ -135,6 +146,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   test("broadcast hint is propagated correctly") {
+    assume(!Utils.isWindows)
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val df2 = spark.createDataFrame(Seq((1, "1"), (2, "2"), (3, "2"))).toDF("key", "value")
       val broadcasted = broadcast(df2)
@@ -152,5 +164,51 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
 
       cases.foreach(assertBroadcastJoin)
     }
+  }
+
+  test("join key rewritten") {
+    assume(!Utils.isWindows)
+    val l = Literal(1L)
+    val i = Literal(2)
+    val s = Literal.create(3, ShortType)
+    val ss = Literal("hello")
+
+    assert(HashJoin.rewriteKeyExpr(l :: Nil) === l :: Nil)
+    assert(HashJoin.rewriteKeyExpr(l :: l :: Nil) === l :: l :: Nil)
+    assert(HashJoin.rewriteKeyExpr(l :: i :: Nil) === l :: i :: Nil)
+
+    assert(HashJoin.rewriteKeyExpr(i :: Nil) === Cast(i, LongType) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(i :: l :: Nil) === i :: l :: Nil)
+    assert(HashJoin.rewriteKeyExpr(i :: i :: Nil) ===
+      BitwiseOr(ShiftLeft(Cast(i, LongType), Literal(32)),
+        BitwiseAnd(Cast(i, LongType), Literal((1L << 32) - 1))) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(i :: i :: i :: Nil) === i :: i :: i :: Nil)
+
+    assert(HashJoin.rewriteKeyExpr(s :: Nil) === Cast(s, LongType) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(s :: l :: Nil) === s :: l :: Nil)
+    assert(HashJoin.rewriteKeyExpr(s :: s :: Nil) ===
+      BitwiseOr(ShiftLeft(Cast(s, LongType), Literal(16)),
+        BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(s :: s :: s :: Nil) ===
+      BitwiseOr(ShiftLeft(
+        BitwiseOr(ShiftLeft(Cast(s, LongType), Literal(16)),
+          BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))),
+        Literal(16)),
+        BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(s :: s :: s :: s :: Nil) ===
+      BitwiseOr(ShiftLeft(
+        BitwiseOr(ShiftLeft(
+          BitwiseOr(ShiftLeft(Cast(s, LongType), Literal(16)),
+            BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))),
+          Literal(16)),
+          BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))),
+        Literal(16)),
+        BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(s :: s :: s :: s :: s :: Nil) ===
+      s :: s :: s :: s :: s :: Nil)
+
+    assert(HashJoin.rewriteKeyExpr(ss :: Nil) === ss :: Nil)
+    assert(HashJoin.rewriteKeyExpr(l :: ss :: Nil) === l :: ss :: Nil)
+    assert(HashJoin.rewriteKeyExpr(i :: ss :: Nil) === i :: ss :: Nil)
   }
 }

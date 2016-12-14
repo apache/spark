@@ -95,6 +95,18 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     }
   }
 
+  test("Event logging with password redaction") {
+    val key = "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD"
+    val secretPassword = "secret_password"
+    val conf = getLoggingConf(testDirPath, None)
+      .set(key, secretPassword)
+    val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    val envDetails = SparkEnv.environmentDetails(conf, "FIFO", Seq.empty, Seq.empty)
+    val event = SparkListenerEnvironmentUpdate(envDetails)
+    val redactedProps = eventLogger.redactEvent(event).environmentDetails("Spark Properties").toMap
+    assert(redactedProps(key) == "*********(redacted)")
+  }
+
   test("Log overwriting") {
     val logUri = EventLoggingListener.getLogPath(testDir.toURI, "test", None)
     val logPath = new URI(logUri).getPath
@@ -202,8 +214,6 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
     // Make sure expected events exist in the log file.
     val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
-    val logStart = SparkListenerLogStart(SPARK_VERSION)
-    val lines = readLines(logData)
     val eventSet = mutable.Set(
       SparkListenerApplicationStart,
       SparkListenerBlockManagerAdded,
@@ -216,19 +226,25 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       SparkListenerTaskStart,
       SparkListenerTaskEnd,
       SparkListenerApplicationEnd).map(Utils.getFormattedClassName)
-    lines.foreach { line =>
-      eventSet.foreach { event =>
-        if (line.contains(event)) {
-          val parsedEvent = JsonProtocol.sparkEventFromJson(parse(line))
-          val eventType = Utils.getFormattedClassName(parsedEvent)
-          if (eventType == event) {
-            eventSet.remove(event)
+    Utils.tryWithSafeFinally {
+      val logStart = SparkListenerLogStart(SPARK_VERSION)
+      val lines = readLines(logData)
+      lines.foreach { line =>
+        eventSet.foreach { event =>
+          if (line.contains(event)) {
+            val parsedEvent = JsonProtocol.sparkEventFromJson(parse(line))
+            val eventType = Utils.getFormattedClassName(parsedEvent)
+            if (eventType == event) {
+              eventSet.remove(event)
+            }
           }
         }
       }
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
+      assert(eventSet.isEmpty, "The following events are missing: " + eventSet.toSeq)
+    } {
+      logData.close()
     }
-    assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
-    assert(eventSet.isEmpty, "The following events are missing: " + eventSet.toSeq)
   }
 
   private def readLines(in: InputStream): Seq[String] = {

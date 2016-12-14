@@ -52,7 +52,7 @@ case class BroadcastNestedLoopJoinExec(
       UnspecifiedDistribution :: BroadcastDistribution(IdentityBroadcastMode) :: Nil
   }
 
-  private[this] def genResultProjection: InternalRow => InternalRow = joinType match {
+  private[this] def genResultProjection: UnsafeProjection = joinType match {
     case LeftExistence(j) =>
       UnsafeProjection.create(output, output)
     case other =>
@@ -84,7 +84,7 @@ case class BroadcastNestedLoopJoinExec(
 
   @transient private lazy val boundCondition = {
     if (condition.isDefined) {
-      newPredicate(condition.get, streamed.output ++ broadcast.output)
+      newPredicate(condition.get, streamed.output ++ broadcast.output).eval _
     } else {
       (r: InternalRow) => true
     }
@@ -119,7 +119,7 @@ case class BroadcastNestedLoopJoinExec(
     streamed.execute().mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
       val joinedRow = new JoinedRow
-      val nulls = new GenericMutableRow(broadcast.output.size)
+      val nulls = new GenericInternalRow(broadcast.output.size)
 
       // Returns an iterator to avoid copy the rows.
       new Iterator[InternalRow] {
@@ -205,14 +205,14 @@ case class BroadcastNestedLoopJoinExec(
       val joinedRow = new JoinedRow
 
       if (condition.isDefined) {
-        val resultRow = new GenericMutableRow(Array[Any](null))
+        val resultRow = new GenericInternalRow(Array[Any](null))
         streamedIter.map { row =>
           val result = buildRows.exists(r => boundCondition(joinedRow(row, r)))
           resultRow.setBoolean(0, result)
           joinedRow(row, resultRow)
         }
       } else {
-        val resultRow = new GenericMutableRow(Array[Any](buildRows.nonEmpty))
+        val resultRow = new GenericInternalRow(Array[Any](buildRows.nonEmpty))
         streamedIter.map { row =>
           joinedRow(row, resultRow)
         }
@@ -293,7 +293,7 @@ case class BroadcastNestedLoopJoinExec(
     }
 
     val notMatchedBroadcastRows: Seq[InternalRow] = {
-      val nulls = new GenericMutableRow(streamed.output.size)
+      val nulls = new GenericInternalRow(streamed.output.size)
       val buf: CompactBuffer[InternalRow] = new CompactBuffer()
       val joinedRow = new JoinedRow
       joinedRow.withLeft(nulls)
@@ -311,7 +311,7 @@ case class BroadcastNestedLoopJoinExec(
     val matchedStreamRows = streamRdd.mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
       val joinedRow = new JoinedRow
-      val nulls = new GenericMutableRow(broadcast.output.size)
+      val nulls = new GenericInternalRow(broadcast.output.size)
 
       streamedIter.flatMap { streamedRow =>
         var i = 0
@@ -366,8 +366,9 @@ case class BroadcastNestedLoopJoinExec(
     }
 
     val numOutputRows = longMetric("numOutputRows")
-    resultRdd.mapPartitionsInternal { iter =>
+    resultRdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val resultProj = genResultProjection
+      resultProj.initialize(index)
       iter.map { r =>
         numOutputRows += 1
         resultProj(r)

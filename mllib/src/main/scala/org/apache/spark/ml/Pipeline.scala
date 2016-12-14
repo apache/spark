@@ -46,6 +46,10 @@ abstract class PipelineStage extends Params with Logging {
    *
    * Check transform validity and derive the output schema from the input schema.
    *
+   * We check validity for interactions between parameters during `transformSchema` and
+   * raise an exception if any parameter value is invalid. Parameter value checks which
+   * do not depend on other parameters are handled by `Param.validate()`.
+   *
    * Typical implementation should first conduct verification on schema change and parameter
    * validity, including complex parameter interaction checks.
    */
@@ -169,7 +173,7 @@ class Pipeline @Since("1.4.0") (
   override def copy(extra: ParamMap): Pipeline = {
     val map = extractParamMap(extra)
     val newStages = map(stages).map(_.copy(extra))
-    new Pipeline().setStages(newStages)
+    new Pipeline(uid).setStages(newStages)
   }
 
   @Since("1.2.0")
@@ -212,7 +216,9 @@ object Pipeline extends MLReadable[Pipeline] {
     }
   }
 
-  /** Methods for `MLReader` and `MLWriter` shared between [[Pipeline]] and [[PipelineModel]] */
+  /**
+   * Methods for `MLReader` and `MLWriter` shared between [[Pipeline]] and [[PipelineModel]]
+   */
   private[ml] object SharedReadWrite {
 
     import org.json4s.JsonDSL._

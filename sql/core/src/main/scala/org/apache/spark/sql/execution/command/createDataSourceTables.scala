@@ -57,17 +57,26 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     // Create the relation to validate the arguments before writing the metadata to the metastore,
     // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
+    val pathOption = table.storage.locationUri.map("path" -> _)
+    // Fill in some default table options from the session conf
+    val tableWithDefaultOptions = table.copy(
+      identifier = table.identifier.copy(
+        database = Some(
+          table.identifier.database.getOrElse(sessionState.catalog.getCurrentDatabase))),
+      tracksPartitionsInCatalog = sparkSession.sessionState.conf.manageFilesourcePartitions)
     val dataSource: BaseRelation =
       DataSource(
         sparkSession = sparkSession,
         userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
+        partitionColumns = table.partitionColumnNames,
         className = table.provider.get,
         bucketSpec = table.bucketSpec,
-        options = table.storage.properties).resolveRelation()
+        options = table.storage.properties ++ pathOption,
+        catalogTable = Some(tableWithDefaultOptions)).resolveRelation()
 
     dataSource match {
       case fs: HadoopFsRelation =>
-        if (table.tableType == CatalogTableType.EXTERNAL && fs.location.paths.isEmpty) {
+        if (table.tableType == CatalogTableType.EXTERNAL && fs.location.rootPaths.isEmpty) {
           throw new AnalysisException(
             "Cannot create a file-based external data source table without path")
         }
@@ -85,19 +94,18 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       }
     }
 
-    val optionsWithPath = if (table.tableType == CatalogTableType.MANAGED) {
-      table.storage.properties + ("path" -> sessionState.catalog.defaultTablePath(table.identifier))
-    } else {
-      table.storage.properties
-    }
-
     val newTable = table.copy(
-      storage = table.storage.copy(properties = optionsWithPath),
       schema = dataSource.schema,
-      partitionColumnNames = partitionColumnNames)
+      partitionColumnNames = partitionColumnNames,
+      // If metastore partition management for file source tables is enabled, we start off with
+      // partition provider hive, but no partitions in the metastore. The user has to call
+      // `msck repair table` to populate the table partitions.
+      tracksPartitionsInCatalog = partitionColumnNames.nonEmpty &&
+        sparkSession.sessionState.conf.manageFilesourcePartitions)
     // We will return Nil or throw exception at the beginning if the table already exists, so when
     // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
     sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+
     Seq.empty[Row]
   }
 }
@@ -134,12 +142,6 @@ case class CreateDataSourceTableAsSelectCommand(
     val tableIdentWithDB = table.identifier.copy(database = Some(db))
     val tableName = tableIdentWithDB.unquotedString
 
-    val optionsWithPath = if (table.tableType == CatalogTableType.MANAGED) {
-      table.storage.properties + ("path" -> sessionState.catalog.defaultTablePath(table.identifier))
-    } else {
-      table.storage.properties
-    }
-
     var createMetastoreTable = false
     var existingSchema = Option.empty[StructType]
     if (sparkSession.sessionState.catalog.tableExists(tableIdentWithDB)) {
@@ -156,13 +158,7 @@ case class CreateDataSourceTableAsSelectCommand(
           return Seq.empty[Row]
         case SaveMode.Append =>
           // Check if the specified data source match the data source of the existing table.
-          val dataSource = DataSource(
-            sparkSession = sparkSession,
-            userSpecifiedSchema = Some(query.schema.asNullable),
-            partitionColumns = table.partitionColumnNames,
-            bucketSpec = table.bucketSpec,
-            className = provider,
-            options = optionsWithPath)
+          val existingProvider = DataSource.lookupDataSource(provider)
           // TODO: Check that options from the resolved relation match the relation that we are
           // inserting into (i.e. using the same compression).
 
@@ -172,7 +168,7 @@ case class CreateDataSourceTableAsSelectCommand(
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
               // check if the file formats match
               l.relation match {
-                case r: HadoopFsRelation if r.fileFormat.getClass != dataSource.providingClass =>
+                case r: HadoopFsRelation if r.fileFormat.getClass != existingProvider =>
                   throw new AnalysisException(
                     s"The file format of the existing table $tableName is " +
                       s"`${r.fileFormat.getClass.getName}`. It doesn't match the specified " +
@@ -187,6 +183,10 @@ case class CreateDataSourceTableAsSelectCommand(
               existingSchema = Some(l.schema)
             case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
               existingSchema = Some(s.metadata.schema)
+            case c: CatalogRelation if c.catalogTable.provider == Some(DDLUtils.HIVE_PROVIDER) =>
+              throw new AnalysisException("Saving data in the Hive serde table " +
+                s"${c.catalogTable.identifier} is not supported yet. Please use the " +
+                "insertInto() API as an alternative..")
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
@@ -207,13 +207,21 @@ case class CreateDataSourceTableAsSelectCommand(
       case None => data
     }
 
+    val tableLocation = if (table.tableType == CatalogTableType.MANAGED) {
+      Some(sessionState.catalog.defaultTablePath(table.identifier))
+    } else {
+      table.storage.locationUri
+    }
+
     // Create the relation based on the data of df.
+    val pathOption = tableLocation.map("path" -> _)
     val dataSource = DataSource(
       sparkSession,
       className = provider,
       partitionColumns = table.partitionColumnNames,
       bucketSpec = table.bucketSpec,
-      options = optionsWithPath)
+      options = table.storage.properties ++ pathOption,
+      catalogTable = Some(table))
 
     val result = try {
       dataSource.write(mode, df)
@@ -224,12 +232,21 @@ case class CreateDataSourceTableAsSelectCommand(
     }
     if (createMetastoreTable) {
       val newTable = table.copy(
-        storage = table.storage.copy(properties = optionsWithPath),
+        storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
         // the schema of df). It is important since the nullability may be changed by the relation
         // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
         schema = result.schema)
       sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+    }
+
+    result match {
+      case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
+          sparkSession.sqlContext.conf.manageFilesourcePartitions =>
+        // Need to recover partitions into the metastore so our saved data is visible.
+        sparkSession.sessionState.executePlan(
+          AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
+      case _ =>
     }
 
     // Refresh the cache of the table in the catalog.

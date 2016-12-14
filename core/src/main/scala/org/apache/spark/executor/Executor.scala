@@ -232,13 +232,18 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
+      val threadMXBean = ManagementFactory.getThreadMXBean
       val taskMemoryManager = new TaskMemoryManager(env.memoryManager, taskId)
       val deserializeStartTime = System.currentTimeMillis()
+      val deserializeStartCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
+        threadMXBean.getCurrentThreadCpuTime
+      } else 0L
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = env.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
       var taskStart: Long = 0
+      var taskStartCpu: Long = 0
       startGCTime = computeTotalGcTime()
 
       try {
@@ -269,6 +274,9 @@ private[spark] class Executor(
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
+        taskStartCpu = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
+          threadMXBean.getCurrentThreadCpuTime
+        } else 0L
         var threwException = true
         val value = try {
           val res = task.run(
@@ -302,6 +310,9 @@ private[spark] class Executor(
           }
         }
         val taskFinish = System.currentTimeMillis()
+        val taskFinishCpu = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
+          threadMXBean.getCurrentThreadCpuTime
+        } else 0L
 
         // If the task has been killed, let's fail it.
         if (task.killed) {
@@ -317,8 +328,12 @@ private[spark] class Executor(
         // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
         task.metrics.setExecutorDeserializeTime(
           (taskStart - deserializeStartTime) + task.executorDeserializeTime)
+        task.metrics.setExecutorDeserializeCpuTime(
+          (taskStartCpu - deserializeStartCpuTime) + task.executorDeserializeCpuTime)
         // We need to subtract Task.run()'s deserialization time to avoid double-counting
         task.metrics.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
+        task.metrics.setExecutorCpuTime(
+          (taskFinishCpu - taskStartCpu) - task.executorDeserializeCpuTime)
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
         task.metrics.setResultSerializationTime(afterSerialization - beforeSerialization)
 

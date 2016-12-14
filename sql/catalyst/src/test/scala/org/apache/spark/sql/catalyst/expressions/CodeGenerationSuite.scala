@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Timestamp
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
@@ -24,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects.{CreateExternalRow, GetExternalRowField, ValidateExternalType}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -66,7 +68,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val length = 5000
     val expressions = List.fill(length)(EqualTo(Literal(1), Literal(1)))
     val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq.fill(length)(true)
 
     if (!checkResult(actual, expected)) {
@@ -89,17 +91,33 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expression = CaseWhen((1 to cases).map(generateCase(_)))
 
     val plan = GenerateMutableProjection.generate(Seq(expression))
-    val input = new GenericMutableRow(Array[Any](UTF8String.fromString(s"${clauses}:${cases}")))
+    val input = new GenericInternalRow(Array[Any](UTF8String.fromString(s"${clauses}:${cases}")))
     val actual = plan(input).toSeq(Seq(expression.dataType))
 
     assert(actual(0) == cases)
+  }
+
+  test("SPARK-18091: split large if expressions into blocks due to JVM code size limit") {
+    var strExpr: Expression = Literal("abc")
+    for (_ <- 1 to 150) {
+      strExpr = Decode(Encode(strExpr, "utf-8"), "utf-8")
+    }
+
+    val expressions = Seq(If(EqualTo(strExpr, strExpr), strExpr, strExpr))
+    val plan = GenerateMutableProjection.generate(expressions)
+    val actual = plan(null).toSeq(expressions.map(_.dataType))
+    val expected = Seq(UTF8String.fromString("abc"))
+
+    if (!checkResult(actual, expected)) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+    }
   }
 
   test("SPARK-14793: split wide array creation into blocks due to JVM code size limit") {
     val length = 5000
     val expressions = Seq(CreateArray(List.fill(length)(EqualTo(Literal(1), Literal(1)))))
     val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq(new GenericArrayData(Seq.fill(length)(true)))
 
     if (!checkResult(actual, expected)) {
@@ -114,7 +132,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
         case (expr, i) => Seq(Literal(i), expr)
       }))
     val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType)).map {
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType)).map {
       case m: ArrayBasedMapData => ArrayBasedMapData.toScalaMap(m)
     }
     val expected = (0 until length).map((_, true)).toMap :: Nil
@@ -128,7 +146,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val length = 5000
     val expressions = Seq(CreateStruct(List.fill(length)(EqualTo(Literal(1), Literal(1)))))
     val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq(InternalRow(Seq.fill(length)(true): _*))
 
     if (!checkResult(actual, expected)) {
@@ -143,7 +161,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
         expr => Seq(Literal(expr.toString), expr)
       }))
     val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq(InternalRow(Seq.fill(length)(true): _*))
 
     if (!checkResult(actual, expected)) {
@@ -156,8 +174,25 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val schema = StructType(Seq.fill(length)(StructField("int", IntegerType)))
     val expressions = Seq(CreateExternalRow(Seq.fill(length)(Literal(1)), schema))
     val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq(Row.fromSeq(Seq.fill(length)(1)))
+
+    if (!checkResult(actual, expected)) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+    }
+  }
+
+  test("SPARK-17702: split wide constructor into blocks due to JVM code size limit") {
+    val length = 5000
+    val expressions = Seq.fill(length) {
+      ToUTCTimestamp(
+        Literal.create(Timestamp.valueOf("2015-07-24 00:00:00"), TimestampType),
+        Literal.create("PST", StringType))
+    }
+    val plan = GenerateMutableProjection.generate(expressions)
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
+    val expected = Seq.fill(length)(
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 07:00:00")))
 
     if (!checkResult(actual, expected)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")

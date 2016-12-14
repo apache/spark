@@ -34,7 +34,7 @@ Run with:
 if __name__ == "__main__":
     # $example on:spark_hive$
     # warehouse_location points to the default location for managed databases and tables
-    warehouse_location = 'file:${system:user.dir}/spark-warehouse'
+    warehouse_location = 'spark-warehouse'
 
     spark = SparkSession \
         .builder \

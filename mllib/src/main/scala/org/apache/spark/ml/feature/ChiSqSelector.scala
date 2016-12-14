@@ -27,7 +27,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.feature.ChiSqSelectorType
+import org.apache.spark.mllib.feature.{ChiSqSelector => OldChiSqSelector}
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.rdd.RDD
@@ -42,60 +42,82 @@ private[feature] trait ChiSqSelectorParams extends Params
   with HasFeaturesCol with HasOutputCol with HasLabelCol {
 
   /**
-   * Number of features that selector will select (ordered by statistic value descending). If the
+   * Number of features that selector will select, ordered by ascending p-value. If the
    * number of features is less than numTopFeatures, then this will select all features.
+   * Only applicable when selectorType = "numTopFeatures".
    * The default value of numTopFeatures is 50.
+   *
    * @group param
    */
+  @Since("1.6.0")
   final val numTopFeatures = new IntParam(this, "numTopFeatures",
-    "Number of features that selector will select, ordered by statistics value descending. If the" +
+    "Number of features that selector will select, ordered by ascending p-value. If the" +
       " number of features is < numTopFeatures, then this will select all features.",
     ParamValidators.gtEq(1))
   setDefault(numTopFeatures -> 50)
 
   /** @group getParam */
+  @Since("1.6.0")
   def getNumTopFeatures: Int = $(numTopFeatures)
 
+  /**
+   * Percentile of features that selector will select, ordered by statistics value descending.
+   * Only applicable when selectorType = "percentile".
+   * Default value is 0.1.
+   * @group param
+   */
+  @Since("2.1.0")
   final val percentile = new DoubleParam(this, "percentile",
-    "Percentile of features that selector will select, ordered by statistics value descending.",
+    "Percentile of features that selector will select, ordered by ascending p-value.",
     ParamValidators.inRange(0, 1))
   setDefault(percentile -> 0.1)
 
   /** @group getParam */
+  @Since("2.1.0")
   def getPercentile: Double = $(percentile)
 
-  final val alpha = new DoubleParam(this, "alpha",
-    "The highest p-value for features to be kept.",
+  /**
+   * The highest p-value for features to be kept.
+   * Only applicable when selectorType = "fpr".
+   * Default value is 0.05.
+   * @group param
+   */
+  @Since("2.1.0")
+  final val fpr = new DoubleParam(this, "fpr", "The highest p-value for features to be kept.",
     ParamValidators.inRange(0, 1))
-  setDefault(alpha -> 0.05)
+  setDefault(fpr -> 0.05)
 
   /** @group getParam */
-  def getAlpha: Double = $(alpha)
+  @Since("2.1.0")
+  def getFpr: Double = $(fpr)
 
   /**
-   * The ChiSqSelector supports KBest, Percentile, FPR selection,
-   * which is the same as ChiSqSelectorType defined in MLLIB.
-   * when call setNumTopFeatures, the selectorType is set to KBest
-   * when call setPercentile, the selectorType is set to Percentile
-   * when call setAlpha, the selectorType is set to FPR
+   * The selector type of the ChisqSelector.
+   * Supported options: "numTopFeatures" (default), "percentile", "fpr".
+   * @group param
    */
+  @Since("2.1.0")
   final val selectorType = new Param[String](this, "selectorType",
-    "ChiSqSelector Type: KBest, Percentile, FPR")
-  setDefault(selectorType -> ChiSqSelectorType.KBest.toString)
+    "The selector type of the ChisqSelector. " +
+      "Supported options: " + OldChiSqSelector.supportedSelectorTypes.mkString(", "),
+    ParamValidators.inArray[String](OldChiSqSelector.supportedSelectorTypes))
+  setDefault(selectorType -> OldChiSqSelector.NumTopFeatures)
 
   /** @group getParam */
-  def getChiSqSelectorType: String = $(selectorType)
+  @Since("2.1.0")
+  def getSelectorType: String = $(selectorType)
 }
 
 /**
  * Chi-Squared feature selection, which selects categorical features to use for predicting a
  * categorical label.
- * The selector supports three selection methods: `KBest`, `Percentile` and `FPR`.
- * `KBest` chooses the `k` top features according to a chi-squared test.
- * `Percentile` is similar but chooses a fraction of all features instead of a fixed number.
- * `FPR` chooses all features whose false positive rate meets some threshold.
- * By default, the selection method is `KBest`, the default number of top features is 50.
- * User can use setNumTopFeatures, setPercentile and setAlpha to set different selection methods.
+ * The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`.
+ *  - `numTopFeatures` chooses a fixed number of top features according to a chi-squared test.
+ *  - `percentile` is similar but chooses a fraction of all features instead of a fixed number.
+ *  - `fpr` chooses all features whose p-value is below a threshold, thus controlling the false
+ *    positive rate of selection.
+ * By default, the selection method is `numTopFeatures`, with the default number of top features
+ * set to 50.
  */
 @Since("1.6.0")
 final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: String)
@@ -106,22 +128,19 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
 
   /** @group setParam */
   @Since("1.6.0")
-  def setNumTopFeatures(value: Int): this.type = {
-    set(selectorType, ChiSqSelectorType.KBest.toString)
-    set(numTopFeatures, value)
-  }
+  def setNumTopFeatures(value: Int): this.type = set(numTopFeatures, value)
 
+  /** @group setParam */
   @Since("2.1.0")
-  def setPercentile(value: Double): this.type = {
-    set(selectorType, ChiSqSelectorType.Percentile.toString)
-    set(percentile, value)
-  }
+  def setPercentile(value: Double): this.type = set(percentile, value)
 
+  /** @group setParam */
   @Since("2.1.0")
-  def setAlpha(value: Double): this.type = {
-    set(selectorType, ChiSqSelectorType.FPR.toString)
-    set(alpha, value)
-  }
+  def setFpr(value: Double): this.type = set(fpr, value)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setSelectorType(value: String): this.type = set(selectorType, value)
 
   /** @group setParam */
   @Since("1.6.0")
@@ -143,23 +162,23 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
         case Row(label: Double, features: Vector) =>
           OldLabeledPoint(label, OldVectors.fromML(features))
       }
-    var selector = new feature.ChiSqSelector()
-    ChiSqSelectorType.withName($(selectorType)) match {
-      case ChiSqSelectorType.KBest =>
-        selector.setNumTopFeatures($(numTopFeatures))
-      case ChiSqSelectorType.Percentile =>
-        selector.setPercentile($(percentile))
-      case ChiSqSelectorType.FPR =>
-        selector.setAlpha($(alpha))
-      case errorType =>
-        throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
-    }
+    val selector = new feature.ChiSqSelector()
+      .setSelectorType($(selectorType))
+      .setNumTopFeatures($(numTopFeatures))
+      .setPercentile($(percentile))
+      .setFpr($(fpr))
     val model = selector.fit(input)
     copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
   }
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
+    val otherPairs = OldChiSqSelector.supportedSelectorTypes.filter(_ != $(selectorType))
+    otherPairs.foreach { paramName: String =>
+      if (isSet(getParam(paramName))) {
+        logWarning(s"Param $paramName will take no effect when selector type = ${$(selectorType)}.")
+      }
+    }
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     SchemaUtils.checkNumericType(schema, $(labelCol))
     SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
@@ -187,7 +206,7 @@ final class ChiSqSelectorModel private[ml] (
 
   import ChiSqSelectorModel._
 
-  /** list of indices to select (filter). Must be ordered asc */
+  /** list of indices to select (filter). */
   @Since("1.6.0")
   val selectedFeatures: Array[Int] = chiSqSelector.selectedFeatures
 
@@ -198,13 +217,6 @@ final class ChiSqSelectorModel private[ml] (
   /** @group setParam */
   @Since("1.6.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
-
-  /**
-   * @group setParam
-   */
-  @Since("1.6.0")
-  @deprecated("labelCol is not used by ChiSqSelectorModel.", "2.0.0")
-  def setLabelCol(value: String): this.type = set(labelCol, value)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {

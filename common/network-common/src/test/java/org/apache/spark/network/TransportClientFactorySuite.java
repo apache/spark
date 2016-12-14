@@ -40,7 +40,7 @@ import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.util.ConfigProvider;
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
@@ -53,7 +53,7 @@ public class TransportClientFactorySuite {
 
   @Before
   public void setUp() {
-    conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+    conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
     RpcHandler rpcHandler = new NoOpRpcHandler();
     context = new TransportContext(conf, rpcHandler);
     server1 = context.createServer();
@@ -198,6 +198,11 @@ public class TransportClientFactorySuite {
           throw new NoSuchElementException(name);
         }
         return value;
+      }
+
+      @Override
+      public Iterable<Map.Entry<String, String>> getAll() {
+        throw new UnsupportedOperationException();
       }
     });
     TransportContext context = new TransportContext(conf, new NoOpRpcHandler(), true);

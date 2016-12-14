@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming;
 
 import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.InternalOutputModes;
 
 /**
@@ -29,6 +30,7 @@ import org.apache.spark.sql.InternalOutputModes;
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 public class OutputMode {
 
   /**
@@ -44,7 +46,7 @@ public class OutputMode {
 
   /**
    * OutputMode in which all the rows in the streaming DataFrame/Dataset will be written
-   * to the sink every time these is some updates. This output mode can only be used in queries
+   * to the sink every time there are some updates. This output mode can only be used in queries
    * that contain aggregations.
    *
    * @since 2.0.0

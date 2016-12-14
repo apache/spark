@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.11</artifactId>
-  <version>2.1.0-SNAPSHOT</version>
+  <version>2.2.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -111,6 +111,7 @@
     <module>external/kafka-0-8-assembly</module>
     <module>external/kafka-0-10</module>
     <module>external/kafka-0-10-assembly</module>
+    <module>external/kafka-0-10-sql</module>
   </modules>
 
   <properties>
@@ -144,7 +145,7 @@
     <avro.version>1.7.7</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <jets3t.version>0.7.1</jets3t.version>
-    <aws.kinesis.client.version>1.6.1</aws.kinesis.client.version>
+    <aws.kinesis.client.version>1.6.2</aws.kinesis.client.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
@@ -167,7 +168,7 @@
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.3.2</commons-lang3.version>
+    <commons-lang3.version>3.5</commons-lang3.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
     <janino.version>3.0.0</janino.version>
     <jersey.version>2.22.2</jersey.version>
@@ -551,12 +552,12 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.41.Final</version>
+        <version>4.0.42.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty</artifactId>
-        <version>3.8.0.Final</version>
+        <version>3.9.9.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -743,7 +744,7 @@
       <dependency>
         <groupId>com.spotify</groupId>
         <artifactId>docker-client</artifactId>
-        <version>3.6.6</version>
+        <version>5.0.2</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -1428,6 +1429,11 @@
             <groupId>jline</groupId>
             <artifactId>jline</artifactId>
           </exclusion>
+          <!-- Cat X license now; see SPARK-18262 -->
+          <exclusion>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1753,6 +1759,10 @@
             <groupId>org.codehaus.janino</groupId>
             <artifactId>janino</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.janino</groupId>
+            <artifactId>commons-compiler</artifactId>
+          </exclusion>
           <!-- hsqldb interferes with the use of derby as the default db
             in hive's use of datanucleus.
           -->
@@ -1788,6 +1798,11 @@
       <dependency>
         <groupId>org.codehaus.janino</groupId>
         <artifactId>janino</artifactId>
+        <version>${janino.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.janino</groupId>
+        <artifactId>commons-compiler</artifactId>
         <version>${janino.version}</version>
       </dependency>
       <dependency>
@@ -1894,7 +1909,7 @@
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>build-helper-maven-plugin</artifactId>
-          <version>1.10</version>
+          <version>1.12</version>
         </plugin>
         <plugin>
           <groupId>net.alchim31.maven</groupId>
@@ -1957,7 +1972,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.5.1</version>
+          <version>3.6.0</version>
           <configuration>
             <source>${java.version}</source>
             <target>${java.version}</target>
@@ -2077,7 +2092,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-jar-plugin</artifactId>
-          <version>2.6</version>
+          <version>3.0.2</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -2087,7 +2102,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-source-plugin</artifactId>
-          <version>2.4</version>
+          <version>3.0.1</version>
           <configuration>
             <attach>true</attach>
           </configuration>
@@ -2122,17 +2137,17 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>2.10.3</version>
+          <version>2.10.4</version>
         </plugin>
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>exec-maven-plugin</artifactId>
-          <version>1.4.0</version>
+          <version>1.5.0</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-assembly-plugin</artifactId>
-          <version>2.6</version>
+          <version>3.0.0</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -2470,6 +2485,38 @@
             <artifactId>maven-javadoc-plugin</artifactId>
             <configuration>
               <additionalparam>-Xdoclint:all -Xdoclint:-missing</additionalparam>
+              <tags>
+                <tag>
+                  <name>example</name>
+                  <placement>a</placement>
+                  <head>Example:</head>
+                </tag>
+                <tag>
+                  <name>note</name>
+                  <placement>a</placement>
+                  <head>Note:</head>
+                </tag>
+                <tag>
+                  <name>group</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>tparam</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>constructor</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>todo</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>groupname</name>
+                  <placement>X</placement>
+                </tag>
+              </tags>
             </configuration>
           </plugin>
         </plugins>
@@ -2533,7 +2580,7 @@
     <profile>
       <id>yarn</id>
       <modules>
-        <module>yarn</module>
+        <module>resource-managers/yarn</module>
         <module>common/network-yarn</module>
       </modules>
     </profile>
@@ -2541,7 +2588,7 @@
     <profile>
       <id>mesos</id>
       <modules>
-        <module>mesos</module>
+        <module>resource-managers/mesos</module>
       </modules>
     </profile>
 
@@ -2690,6 +2737,54 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+
+    <!--
+     This is a profile to enable the use of the ASF snapshot and staging repositories
+     during a build. It is useful when testing againt nightly or RC releases of dependencies.
+     It MUST NOT be used when building copies of Spark to use in production of for distribution,
+     -->
+    <profile>
+      <id>snapshots-and-staging</id>
+      <properties>
+        <!-- override point for ASF staging/snapshot repos -->
+        <asf.staging>https://repository.apache.org/content/groups/staging/</asf.staging>
+        <asf.snapshots>https://repository.apache.org/content/repositories/snapshots/</asf.snapshots>
+      </properties>
+
+      <pluginRepositories>
+        <pluginRepository>
+          <id>ASF Staging</id>
+          <url>${asf.staging}</url>
+        </pluginRepository>
+        <pluginRepository>
+          <id>ASF Snapshots</id>
+          <url>${asf.snapshots}</url>
+          <snapshots>
+            <enabled>true</enabled>
+          </snapshots>
+          <releases>
+            <enabled>false</enabled>
+          </releases>
+        </pluginRepository>
+
+      </pluginRepositories>
+      <repositories>
+        <repository>
+          <id>ASF Staging</id>
+          <url>${asf.staging}</url>
+        </repository>
+        <repository>
+          <id>ASF Snapshots</id>
+          <url>${asf.snapshots}</url>
+          <snapshots>
+            <enabled>true</enabled>
+          </snapshots>
+          <releases>
+            <enabled>false</enabled>
+          </releases>
+        </repository>
+      </repositories>
     </profile>
 
     <!--
