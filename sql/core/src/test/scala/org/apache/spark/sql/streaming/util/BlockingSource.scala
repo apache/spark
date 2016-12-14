@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.streaming.util
 
+import java.util.concurrent.CountDownLatch
+
 import org.apache.spark.sql.{SQLContext, _}
 import org.apache.spark.sql.execution.streaming.{LongOffset, Offset, Sink, Source}
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
-import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryManagerSuite}
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 /** Dummy provider: returns a SourceProvider with a blocking `createSource` call. */
@@ -42,7 +44,7 @@ class BlockingSource extends StreamSourceProvider with StreamSinkProvider {
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): Source = {
-    StreamingQueryManagerSuite.latch.await()
+    BlockingSource.latch.await()
     new Source {
       override def schema: StructType = fakeSchema
       override def getOffset: Option[Offset] = Some(new LongOffset(0))
@@ -63,4 +65,8 @@ class BlockingSource extends StreamSourceProvider with StreamSinkProvider {
       override def addBatch(batchId: Long, data: DataFrame): Unit = {}
     }
   }
+}
+
+object BlockingSource {
+  var latch: CountDownLatch = null
 }
