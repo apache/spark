@@ -125,10 +125,15 @@ class StreamingQuery(object):
     @since(2.1)
     def lastProgress(self):
         """
-        Returns the most recent :class:`StreamingQueryProgress` update of this streaming query.
+        Returns the most recent :class:`StreamingQueryProgress` update of this streaming query or
+        None if there were no progress updates
         :return: a map
         """
-        return json.loads(self._jsq.lastProgress().json())
+        lastProgress = self._jsq.lastProgress()
+        if lastProgress:
+            return json.loads(lastProgress.json())
+        else:
+            return None
 
     @since(2.0)
     def processAllAvailable(self):
