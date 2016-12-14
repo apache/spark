@@ -855,7 +855,7 @@ afStats <- head(select(df, mean(df$Armed_Forces), sd(df$Armed_Forces)))
 afMean <- afStats[1]
 afStd <- afStats[2]
 
-test <- spark.kstest(df, "Armed_Forces", "norm", c(afMean,afStd))
+test <- spark.kstest(df, "Armed_Forces", "norm", c(afMean, afStd))
 testSummary <- summary(test)
 testSummary
 ```
