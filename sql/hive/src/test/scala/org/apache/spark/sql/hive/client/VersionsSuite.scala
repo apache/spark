@@ -553,7 +553,7 @@ class VersionsSuite extends SparkFunSuite with SQLTestUtils with TestHiveSinglet
             s"""
                |CREATE TABLE tab(c1 string)
                |location '${tmpDir.toURI.toString}'
-           """.stripMargin)
+             """.stripMargin)
 
           (1 to 3).map { i =>
             spark.sql(s"INSERT OVERWRITE TABLE tab SELECT '$i'")
