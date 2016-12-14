@@ -1595,14 +1595,14 @@ setMethod("write.ml", signature(object = "ALSModel", path = "character"),
 #' \dontrun{
 #' data <- data.frame(test = c(0.1, 0.15, 0.2, 0.3, 0.25))
 #' df <- createDataFrame(data)
-#' test <- spark.ktest(df, "test", "norm", c(0, 1))
+#' test <- spark.kstest(df, "test", "norm", c(0, 1))
 #'
 #' # get a summary of the test result
 #' testSummary <- summary(test)
 #' testSummary
 #'
 #' # print out the summary in an organized way
-#' print.summary.KSTest(test)
+#' print.summary.KSTest(testSummary)
 #' }
 #' @note spark.kstest since 2.1.0
 setMethod("spark.kstest", signature(data = "SparkDataFrame"),
