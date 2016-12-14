@@ -173,7 +173,7 @@ sealed trait Matrix extends Serializable {
   /**
    * Converts this matrix to a sparse matrix in column major order.
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def toSparse: SparseMatrix = toSparseMatrix(columnMajor = true)
 
   /**
@@ -182,12 +182,12 @@ sealed trait Matrix extends Serializable {
    * @param columnMajor Whether the values of the resulting dense matrix should be in column major
    *                    or row major order. If `false`, resulting matrix will be row major.
    */
-  private [ml] def toDenseMatrix(columnMajor: Boolean): DenseMatrix
+  private[ml] def toDenseMatrix(columnMajor: Boolean): DenseMatrix
 
   /**
    * Converts this matrix to a dense matrix in column major order.
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def toDense: DenseMatrix = toDenseMatrix(columnMajor = true)
 
   /**
@@ -196,7 +196,7 @@ sealed trait Matrix extends Serializable {
    * @param columnMajor Whether the values of the resulting matrix should be in column major
    *                    or row major order. If `false`, resulting matrix will be row major.
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def compressed(columnMajor: Boolean): Matrix = {
     if (getDenseSizeInBytes < getSparseSizeInBytes(columnMajor)) {
       toDenseMatrix(columnMajor)
@@ -210,7 +210,7 @@ sealed trait Matrix extends Serializable {
    * major format, whichever uses less storage. When dense representation is optimal, it maintains
    * the current layout order.
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def compressed: Matrix = {
     val cscSize = getSparseSizeInBytes(columnMajor = true)
     val csrSize = getSparseSizeInBytes(columnMajor = false)
