@@ -478,7 +478,7 @@ case class DataSource(
         val plan =
           InsertIntoHadoopFsRelationCommand(
             outputPath = outputPath,
-            staticPartitionKeys = Map.empty,
+            staticPartitions = Map.empty,
             customPartitionLocations = Map.empty,
             partitionColumns = columns,
             bucketSpec = bucketSpec,
