@@ -449,6 +449,10 @@ SparkR supports the following machine learning models and algorithms.
 
 * Generalized Linear Model (GLM)
 
+* Random Forest
+
+* Gradient-Boosted Trees (GBT)
+
 * Naive Bayes Model
 
 * $k$-means Clustering
@@ -524,6 +528,34 @@ When doing prediction, a new column called `prediction` will be appended. Let's 
 ```{r}
 gaussianFitted <- predict(gaussianGLM, carsDF)
 head(select(gaussianFitted, "model", "prediction", "mpg", "wt", "hp"))
+```
+
+#### Random Forest
+
+`spark.randomForest` fits a [random forest](https://en.wikipedia.org/wiki/Random_forest) classification or regression model on a `SparkDataFrame`.
+Users can call `summary` to get a summary of the fitted model, `predict` to make predictions, and `write.ml`/`read.ml` to save/load fitted models.
+
+In the following example, we use the `longley` dataset to train a random forest and make predictions:
+
+```{r, warning=FALSE}
+df <- createDataFrame(longley)
+rfModel <- spark.randomForest(df, Employed ~ ., type = "regression", maxDepth = 2, numTrees = 2)
+summary(rfModel)
+predictions <- predict(rfModel, df)
+```
+
+#### Gradient-Boosted Trees
+
+`spark.gbt` fits a [gradient-boosted tree](https://en.wikipedia.org/wiki/Gradient_boosting) classification or regression model on a `SparkDataFrame`.
+Users can call `summary` to get a summary of the fitted model, `predict` to make predictions, and `write.ml`/`read.ml` to save/load fitted models.
+
+Similar to the random forest example above, we use the `longley` dataset to train a gradient-boosted tree and make predictions:
+
+```{r, warning=FALSE}
+df <- createDataFrame(longley)
+gbtModel <- spark.gbt(df, Employed ~ ., type = "regression", maxDepth = 2, maxIter = 2)
+summary(gbtModel)
+predictions <- predict(gbtModel, df)
 ```
 
 #### Naive Bayes Model
