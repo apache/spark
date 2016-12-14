@@ -459,6 +459,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val firstTaskAttempts = taskScheduler.resourceOffers(offers).flatten
     firstTaskAttempts.foreach { task => logInfo(s"scheduled $task on ${task.executorId}") }
     assert(firstTaskAttempts.size === 1)
+    assert(firstTaskAttempts.head.executorId === "executor4")
     ('0' until '2').foreach { hostNum =>
       verify(blacklist, atLeast(1)).isNodeBlacklisted("host" + hostNum)
     }
