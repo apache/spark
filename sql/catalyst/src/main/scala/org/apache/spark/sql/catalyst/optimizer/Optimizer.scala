@@ -418,8 +418,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case w: Window if w.windowExpressions.isEmpty => w.child
 
     // Eliminate no-op Projects
-    case p @ Project(_, child) if sameOutput(child.output, p.output) =>
-      if (child.isInstanceOf[CatalogRelation]) p else child
+    case p @ Project(_, child) if sameOutput(child.output, p.output) => child
+
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
