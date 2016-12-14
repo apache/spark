@@ -303,7 +303,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         partitionColumns = table.partitionColumnNames,
         bucketSpec = table.bucketSpec,
         className = table.provider.get,
-        options = table.storage.properties ++ pathOption)
+        options = table.storage.properties ++ pathOption,
+        catalogTable = Some(simpleCatalogRelation.metadata))
 
     LogicalRelation(
       dataSource.resolveRelation(),
