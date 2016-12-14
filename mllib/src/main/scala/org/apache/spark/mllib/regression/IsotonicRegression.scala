@@ -313,9 +313,9 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
 
   /**
    * Performs a pool adjacent violators algorithm (PAV).
-   * Uses approach with single processing of data where violators
-   * in previously processed data created by pooling are fixed immediately.
-   * Uses optimization of discovering monotonicity violating sequences (blocks).
+   * Iterate through data multiple times, fixing any monotonicity violations
+   * we find. Uses optimization of discovering monotonicity violating sequences (blocks).
+   * Typical complexity is linear, with quadratic worst-case.
    *
    * @param input Input data of tuples (label, feature, weight).
    * @return Result tuples (label, feature, weight) where labels were updated
@@ -338,7 +338,7 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       var i = start
       while (i <= end) {
         input(i) = (weightedSum / weight, input(i)._2, input(i)._3)
-        i = i + 1
+        i += 1
       }
     }
 
@@ -357,11 +357,11 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
         var j = i
 
         // Find next monotonicity violating sequence, if any.
-        while (j < n && input(j)._1 >= input(j + 1)._1) {
-          j = j + 1
+        while (j < n && input(j)._1 > input(j + 1)._1) {
+          j += 1
         }
 
-        // Pool the violating sequence with the data point preceding it
+        // Pool the violating sequence
         if (input(i)._1 != input(j)._1) {
           pool(input, i, j)
           notFinished = true
