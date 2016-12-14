@@ -115,9 +115,9 @@ object PageRank extends Logging {
     val src: VertexId = srcId.getOrElse(-1L)
 
     // Initialize the PageRank graph with each edge attribute having
-    // weight 1/outDegree and each vertex with attribute resetProb.
+    // weight 1/outDegree and each vertex with attribute 1.0.
     // When running personalized pagerank, only the source vertex
-    // has an attribute resetProb. All others are set to 0.
+    // has an attribute 1.0. All others are set to 0.
     var rankGraph: Graph[Double, Double] = graph
       // Associate the degree with each vertex
       .outerJoinVertices(graph.outDegrees) { (vid, vdata, deg) => deg.getOrElse(0) }
