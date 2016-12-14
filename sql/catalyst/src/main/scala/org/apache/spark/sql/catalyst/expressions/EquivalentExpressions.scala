@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
 
 /**
  * This class is used to compute equality of (sub)expression trees. Expressions can be added
@@ -72,7 +73,10 @@ class EquivalentExpressions {
       root: Expression,
       ignoreLeaf: Boolean = true,
       skipReferenceToExpressions: Boolean = true): Unit = {
-    val skip = root.isInstanceOf[LeafExpression] && ignoreLeaf
+    val skip = (root.isInstanceOf[LeafExpression] && ignoreLeaf) ||
+      // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
+      // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
+      root.find(_.isInstanceOf[LambdaVariable]).isDefined
     // There are some special expressions that we should not recurse into children.
     //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
     //   2. ReferenceToExpressions: it's kind of an explicit sub-expression elimination.

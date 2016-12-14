@@ -18,6 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 
 class DataTypeSuite extends SparkFunSuite {
 
@@ -359,4 +360,33 @@ class DataTypeSuite extends SparkFunSuite {
       StructField("a", StringType, nullable = false) ::
       StructField("b", StringType, nullable = false) :: Nil),
     expected = false)
+
+  def checkCatalogString(dt: DataType): Unit = {
+    test(s"catalogString: $dt") {
+      val dt2 = CatalystSqlParser.parseDataType(dt.catalogString)
+      assert(dt === dt2)
+    }
+  }
+  def createStruct(n: Int): StructType = new StructType(Array.tabulate(n) {
+    i => StructField(s"col$i", IntegerType, nullable = true)
+  })
+
+  checkCatalogString(BooleanType)
+  checkCatalogString(ByteType)
+  checkCatalogString(ShortType)
+  checkCatalogString(IntegerType)
+  checkCatalogString(LongType)
+  checkCatalogString(FloatType)
+  checkCatalogString(DoubleType)
+  checkCatalogString(DecimalType(10, 5))
+  checkCatalogString(BinaryType)
+  checkCatalogString(StringType)
+  checkCatalogString(DateType)
+  checkCatalogString(TimestampType)
+  checkCatalogString(createStruct(4))
+  checkCatalogString(createStruct(40))
+  checkCatalogString(ArrayType(IntegerType))
+  checkCatalogString(ArrayType(createStruct(40)))
+  checkCatalogString(MapType(IntegerType, StringType))
+  checkCatalogString(MapType(IntegerType, createStruct(40)))
 }

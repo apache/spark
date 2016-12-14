@@ -17,12 +17,25 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.{Boolean => JavaBoolean}
+import java.lang.{Byte => JavaByte}
+import java.lang.{Double => JavaDouble}
+import java.lang.{Float => JavaFloat}
+import java.lang.{Integer => JavaInteger}
+import java.lang.{Long => JavaLong}
+import java.lang.{Short => JavaShort}
+import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util
 import java.util.Objects
+import javax.xml.bind.DatatypeConverter
+
+import scala.math.{BigDecimal, BigInt}
 
 import org.json4s.JsonAST._
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -44,17 +57,61 @@ object Literal {
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal => Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale))
-    case d: java.math.BigDecimal =>
+    case d: JavaBigDecimal =>
       Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
+    case a: Array[_] =>
+      val elementType = componentTypeToDataType(a.getClass.getComponentType())
+      val dataType = ArrayType(elementType)
+      val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
+      Literal(convert(a), dataType)
     case i: CalendarInterval => Literal(i, CalendarIntervalType)
     case null => Literal(null, NullType)
     case v: Literal => v
     case _ =>
       throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
+  }
+
+  /**
+   * Returns the Spark SQL DataType for a given class object. Since this type needs to be resolved
+   * in runtime, we use match-case idioms for class objects here. However, there are similar
+   * functions in other files (e.g., HiveInspectors), so these functions need to merged into one.
+   */
+  private[this] def componentTypeToDataType(clz: Class[_]): DataType = clz match {
+    // primitive types
+    case JavaShort.TYPE => ShortType
+    case JavaInteger.TYPE => IntegerType
+    case JavaLong.TYPE => LongType
+    case JavaDouble.TYPE => DoubleType
+    case JavaByte.TYPE => ByteType
+    case JavaFloat.TYPE => FloatType
+    case JavaBoolean.TYPE => BooleanType
+
+    // java classes
+    case _ if clz == classOf[Date] => DateType
+    case _ if clz == classOf[Timestamp] => TimestampType
+    case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
+    case _ if clz == classOf[Array[Byte]] => BinaryType
+    case _ if clz == classOf[JavaShort] => ShortType
+    case _ if clz == classOf[JavaInteger] => IntegerType
+    case _ if clz == classOf[JavaLong] => LongType
+    case _ if clz == classOf[JavaDouble] => DoubleType
+    case _ if clz == classOf[JavaByte] => ByteType
+    case _ if clz == classOf[JavaFloat] => FloatType
+    case _ if clz == classOf[JavaBoolean] => BooleanType
+
+    // other scala classes
+    case _ if clz == classOf[String] => StringType
+    case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
+    case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
+    case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
+
+    case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
+
+    case _ => throw new AnalysisException(s"Unsupported component type $clz in arrays")
   }
 
   /**
@@ -163,20 +220,34 @@ object DecimalLiteral {
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
-case class Literal protected (value: Any, dataType: DataType)
-  extends LeafExpression with CodegenFallback {
+case class Literal (value: Any, dataType: DataType) extends LeafExpression with CodegenFallback {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
 
-  override def toString: String = if (value != null) value.toString else "null"
+  override def toString: String = value match {
+    case null => "null"
+    case binary: Array[Byte] => s"0x" + DatatypeConverter.printHexBinary(binary)
+    case other => other.toString
+  }
 
-  override def hashCode(): Int = 31 * (31 * Objects.hashCode(dataType)) + Objects.hashCode(value)
+  override def hashCode(): Int = {
+    val valueHashCode = value match {
+      case null => 0
+      case binary: Array[Byte] => util.Arrays.hashCode(binary)
+      case other => other.hashCode()
+    }
+    31 * Objects.hashCode(dataType) + valueHashCode
+  }
 
   override def equals(other: Any): Boolean = other match {
+    case o: Literal if !dataType.equals(o.dataType) => false
     case o: Literal =>
-      dataType.equals(o.dataType) &&
-        (value == null && null == o.value || value != null && value.equals(o.value))
+      (value, o.value) match {
+        case (null, null) => true
+        case (a: Array[Byte], b: Array[Byte]) => util.Arrays.equals(a, b)
+        case (a, b) => a != null && a.equals(b)
+      }
     case _ => false
   }
 
@@ -246,17 +317,31 @@ case class Literal protected (value: Any, dataType: DataType)
     case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null => "NULL"
     case _ if value == null => s"CAST(NULL AS ${dataType.sql})"
     case (v: UTF8String, StringType) =>
-      // Escapes all backslashes and double quotes.
-      "\"" + v.toString.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+      // Escapes all backslashes and single quotes.
+      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
     case (v: Byte, ByteType) => v + "Y"
     case (v: Short, ShortType) => v + "S"
     case (v: Long, LongType) => v + "L"
     // Float type doesn't have a suffix
-    case (v: Float, FloatType) => s"CAST($v AS ${FloatType.sql})"
-    case (v: Double, DoubleType) => v + "D"
-    case (v: Decimal, t: DecimalType) => s"CAST($v AS ${t.sql})"
+    case (v: Float, FloatType) =>
+      val castedValue = v match {
+        case _ if v.isNaN => "'NaN'"
+        case Float.PositiveInfinity => "'Infinity'"
+        case Float.NegativeInfinity => "'-Infinity'"
+        case _ => v
+      }
+      s"CAST($castedValue AS ${FloatType.sql})"
+    case (v: Double, DoubleType) =>
+      v match {
+        case _ if v.isNaN => s"CAST('NaN' AS ${DoubleType.sql})"
+        case Double.PositiveInfinity => s"CAST('Infinity' AS ${DoubleType.sql})"
+        case Double.NegativeInfinity => s"CAST('-Infinity' AS ${DoubleType.sql})"
+        case _ => v + "D"
+      }
+    case (v: Decimal, t: DecimalType) => v + "BD"
     case (v: Int, DateType) => s"DATE '${DateTimeUtils.toJavaDate(v)}'"
     case (v: Long, TimestampType) => s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
+    case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
     case _ => value.toString
   }
 }

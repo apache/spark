@@ -49,7 +49,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkCon
     val r1 = 1.0
     val n1 = 10
     val r2 = 4.0
-    val n2 = 40
+    val n2 = 10
     val n = n1 + n2
     val points = genCircle(r1, n1) ++ genCircle(r2, n2)
     val similarities = for (i <- 1 until n; j <- 0 until i) yield {
@@ -83,7 +83,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkCon
     val r1 = 1.0
     val n1 = 10
     val r2 = 4.0
-    val n2 = 40
+    val n2 = 10
     val n = n1 + n2
     val points = genCircle(r1, n1) ++ genCircle(r2, n2)
     val similarities = for (i <- 1 until n; j <- 0 until i) yield {
@@ -91,11 +91,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkCon
     }
 
     val edges = similarities.flatMap { case (i, j, s) =>
-      if (i != j) {
-        Seq(Edge(i, j, s), Edge(j, i, s))
-      } else {
-        None
-      }
+      Seq(Edge(i, j, s), Edge(j, i, s))
     }
     val graph = Graph.fromEdges(sc.parallelize(edges, 2), 0.0)
 

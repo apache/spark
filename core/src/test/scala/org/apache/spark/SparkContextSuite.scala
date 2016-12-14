@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.File
+import java.net.MalformedURLException
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
@@ -168,6 +169,27 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       sc.addJar(jarPath.toString)
       assert(sc.listJars().filter(_.contains("TestUDTF.jar")).size == 1)
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("SPARK-17650: malformed url's throw exceptions before bricking Executors") {
+    try {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      Seq("http", "https", "ftp").foreach { scheme =>
+        val badURL = s"$scheme://user:pwd/path"
+        val e1 = intercept[MalformedURLException] {
+          sc.addFile(badURL)
+        }
+        assert(e1.getMessage.contains(badURL))
+        val e2 = intercept[MalformedURLException] {
+          sc.addJar(badURL)
+        }
+        assert(e2.getMessage.contains(badURL))
+        assert(sc.addedFiles.isEmpty)
+        assert(sc.addedJars.isEmpty)
+      }
     } finally {
       sc.stop()
     }

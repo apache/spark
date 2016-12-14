@@ -33,6 +33,8 @@ SPARK_HOME="$(cd "`dirname "$0"`/.."; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
 MAKE_TGZ=false
+MAKE_PIP=false
+MAKE_R=false
 NAME=none
 MVN="$SPARK_HOME/build/mvn"
 
@@ -40,7 +42,7 @@ function exit_with_usage {
   echo "make-distribution.sh - tool for making binary distributions of Spark"
   echo ""
   echo "usage:"
-  cl_options="[--name] [--tgz] [--mvn <mvn-command>]"
+  cl_options="[--name] [--tgz] [--pip] [--r] [--mvn <mvn-command>]"
   echo "make-distribution.sh $cl_options <maven build options>"
   echo "See Spark's \"Building Spark\" doc for correct Maven options."
   echo ""
@@ -66,6 +68,12 @@ while (( "$#" )); do
       ;;
     --tgz)
       MAKE_TGZ=true
+      ;;
+    --pip)
+      MAKE_PIP=true
+      ;;
+    --r)
+      MAKE_R=true
       ;;
     --mvn)
       MVN="$2"
@@ -201,12 +209,44 @@ fi
 # Copy data files
 cp -r "$SPARK_HOME/data" "$DISTDIR"
 
+# Make pip package
+if [ "$MAKE_PIP" == "true" ]; then
+  echo "Building python distribution package"
+  pushd "$SPARK_HOME/python" > /dev/null
+  python setup.py sdist
+  popd > /dev/null
+else
+  echo "Skipping building python distribution package"
+fi
+
+# Make R package - this is used for both CRAN release and packing R layout into distribution
+if [ "$MAKE_R" == "true" ]; then
+  echo "Building R source package"
+  R_PACKAGE_VERSION=`grep Version $SPARK_HOME/R/pkg/DESCRIPTION | awk '{print $NF}'`
+  pushd "$SPARK_HOME/R" > /dev/null
+  # Build source package and run full checks
+  # Install source package to get it to generate vignettes, etc.
+  # Do not source the check-cran.sh - it should be run from where it is for it to set SPARK_HOME
+  NO_TESTS=1 CLEAN_INSTALL=1 "$SPARK_HOME/"R/check-cran.sh
+  # Make a copy of R source package matching the Spark release version.
+  cp $SPARK_HOME/R/SparkR_"$R_PACKAGE_VERSION".tar.gz $SPARK_HOME/R/SparkR_"$VERSION".tar.gz
+  popd > /dev/null
+else
+  echo "Skipping building R source package"
+fi
+
 # Copy other things
 mkdir "$DISTDIR"/conf
 cp "$SPARK_HOME"/conf/*.template "$DISTDIR"/conf
 cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
+
+# Remove the python distribution from dist/ if we built it
+if [ "$MAKE_PIP" == "true" ]; then
+  rm -f $DISTDIR/python/dist/pyspark-*.tar.gz
+fi
+
 cp -r "$SPARK_HOME/sbin" "$DISTDIR"
 # Copy SparkR if it exists
 if [ -d "$SPARK_HOME"/R/lib/SparkR ]; then

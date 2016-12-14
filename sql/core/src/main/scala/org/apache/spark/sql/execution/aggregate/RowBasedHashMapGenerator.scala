@@ -141,8 +141,16 @@ class RowBasedHashMapGenerator(
     }
 
     val createUnsafeRowForKey = groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-      s"agg_rowWriter.write(${ordinal}, ${key.name})"}
-      .mkString(";\n")
+      key.dataType match {
+        case t: DecimalType =>
+          s"agg_rowWriter.write(${ordinal}, ${key.name}, ${t.precision}, ${t.scale})"
+        case t: DataType =>
+          if (!t.isInstanceOf[StringType] && !ctx.isPrimitiveType(t)) {
+            throw new IllegalArgumentException(s"cannot generate code for unsupported type: $t")
+          }
+          s"agg_rowWriter.write(${ordinal}, ${key.name})"
+      }
+    }.mkString(";\n")
 
     s"""
        |public org.apache.spark.sql.catalyst.expressions.UnsafeRow findOrInsert(${

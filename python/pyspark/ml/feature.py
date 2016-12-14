@@ -125,10 +125,13 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     """
     Maps a column of continuous features to a column of feature buckets.
 
-    >>> df = spark.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
+    >>> values = [(0.1,), (0.4,), (1.2,), (1.5,), (float("nan"),), (float("nan"),)]
+    >>> df = spark.createDataFrame(values, ["values"])
     >>> bucketizer = Bucketizer(splits=[-float("inf"), 0.5, 1.4, float("inf")],
     ...     inputCol="values", outputCol="buckets")
-    >>> bucketed = bucketizer.transform(df).collect()
+    >>> bucketed = bucketizer.setHandleInvalid("keep").transform(df).collect()
+    >>> len(bucketed)
+    6
     >>> bucketed[0].buckets
     0.0
     >>> bucketed[1].buckets
@@ -144,6 +147,9 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     >>> loadedBucketizer = Bucketizer.load(bucketizerPath)
     >>> loadedBucketizer.getSplits() == bucketizer.getSplits()
     True
+    >>> bucketed = bucketizer.setHandleInvalid("skip").transform(df).collect()
+    >>> len(bucketed)
+    4
 
     .. versionadded:: 1.4.0
     """
@@ -158,21 +164,28 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
               "splits specified will be treated as errors.",
               typeConverter=TypeConverters.toListFloat)
 
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
+                          "Options are 'skip' (filter out rows with invalid values), " +
+                          "'error' (throw an error), or 'keep' (keep invalid values in a special " +
+                          "additional bucket).",
+                          typeConverter=TypeConverters.toString)
+
     @keyword_only
-    def __init__(self, splits=None, inputCol=None, outputCol=None):
+    def __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        __init__(self, splits=None, inputCol=None, outputCol=None)
+        __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error")
         """
         super(Bucketizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Bucketizer", self.uid)
+        self._setDefault(handleInvalid="error")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, splits=None, inputCol=None, outputCol=None):
+    def setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        setParams(self, splits=None, inputCol=None, outputCol=None)
+        setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error")
         Sets params for this Bucketizer.
         """
         kwargs = self.setParams._input_kwargs
@@ -191,6 +204,20 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         Gets the value of threshold or its default value.
         """
         return self.getOrDefault(self.splits)
+
+    @since("2.1.0")
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
+    @since("2.1.0")
+    def getHandleInvalid(self):
+        """
+        Gets the value of :py:attr:`handleInvalid` or its default value.
+        """
+        return self.getOrDefault(self.handleInvalid)
 
 
 @inherit_doc
@@ -654,8 +681,6 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
 @inherit_doc
 class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Rescale each feature individually to range [-1, 1] by dividing through the largest maximum
     absolute value in each feature. It does not shift/center the data, and thus does not destroy
     any sparsity.
@@ -715,8 +740,6 @@ class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
 class MaxAbsScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Model fitted by :py:class:`MaxAbsScaler`.
 
     .. versionadded:: 2.0.0
@@ -742,8 +765,8 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
     For the case E_max == E_min, Rescaled(e_i) = 0.5 * (max + min)
 
-    Note that since zero values will probably be transformed to non-zero values, output of the
-    transformer will be DenseVector even for sparse input.
+    .. note:: Since zero values will probably be transformed to non-zero values, output of the
+        transformer will be DenseVector even for sparse input.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
@@ -1014,9 +1037,9 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
     :py:attr:`dropLast`) because it makes the vector entries sum up to
     one, and hence linearly dependent.
     So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
-    Note that this is different from scikit-learn's OneHotEncoder,
-    which keeps all categories.
-    The output vectors are sparse.
+
+    .. note:: This is different from scikit-learn's OneHotEncoder,
+        which keeps all categories. The output vectors are sparse.
 
     .. seealso::
 
@@ -1161,12 +1184,17 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
     :py:attr:`relativeError` parameter.
     The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
 
-    >>> df = spark.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
+    >>> values = [(0.1,), (0.4,), (1.2,), (1.5,), (float("nan"),), (float("nan"),)]
+    >>> df = spark.createDataFrame(values, ["values"])
     >>> qds = QuantileDiscretizer(numBuckets=2,
-    ...     inputCol="values", outputCol="buckets", relativeError=0.01)
+    ...     inputCol="values", outputCol="buckets", relativeError=0.01, handleInvalid="error")
     >>> qds.getRelativeError()
     0.01
     >>> bucketizer = qds.fit(df)
+    >>> qds.setHandleInvalid("keep").fit(df).transform(df).count()
+    6
+    >>> qds.setHandleInvalid("skip").fit(df).transform(df).count()
+    4
     >>> splits = bucketizer.getSplits()
     >>> splits[0]
     -inf
@@ -1194,23 +1222,33 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
                           "Must be in the range [0, 1].",
                           typeConverter=TypeConverters.toFloat)
 
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
+                          "Options are skip (filter out rows with invalid values), " +
+                          "error (throw an error), or keep (keep invalid values in a special " +
+                          "additional bucket).",
+                          typeConverter=TypeConverters.toString)
+
     @keyword_only
-    def __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001):
+    def __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001,
+                 handleInvalid="error"):
         """
-        __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001)
+        __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, \
+                 handleInvalid="error")
         """
         super(QuantileDiscretizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer",
                                             self.uid)
-        self._setDefault(numBuckets=2, relativeError=0.001)
+        self._setDefault(numBuckets=2, relativeError=0.001, handleInvalid="error")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001):
+    def setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001,
+                  handleInvalid="error"):
         """
-        setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001)
+        setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, \
+                  handleInvalid="error")
         Set the params for the QuantileDiscretizer
         """
         kwargs = self.setParams._input_kwargs
@@ -1244,13 +1282,28 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
         """
         return self.getOrDefault(self.relativeError)
 
+    @since("2.1.0")
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
+    @since("2.1.0")
+    def getHandleInvalid(self):
+        """
+        Gets the value of :py:attr:`handleInvalid` or its default value.
+        """
+        return self.getOrDefault(self.handleInvalid)
+
     def _create_model(self, java_model):
         """
         Private method to convert the java_model to a Python model.
         """
         return Bucketizer(splits=list(java_model.getSplits()),
                           inputCol=self.getInputCol(),
-                          outputCol=self.getOutputCol())
+                          outputCol=self.getOutputCol(),
+                          handleInvalid=self.getHandleInvalid())
 
 
 @inherit_doc
@@ -1698,7 +1751,8 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
 class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     A feature transformer that filters out stop words from input.
-    Note: null values from input array are preserved unless adding null to stopWords explicitly.
+
+    .. note:: null values from input array are preserved unless adding null to stopWords explicitly.
 
     >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["text"])
     >>> remover = StopWordsRemover(inputCol="text", outputCol="words", stopWords=["b"])
@@ -2489,21 +2543,30 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     formula = Param(Params._dummy(), "formula", "R model formula",
                     typeConverter=TypeConverters.toString)
 
+    forceIndexLabel = Param(Params._dummy(), "forceIndexLabel",
+                            "Force to index label whether it is numeric or string",
+                            typeConverter=TypeConverters.toBoolean)
+
     @keyword_only
-    def __init__(self, formula=None, featuresCol="features", labelCol="label"):
+    def __init__(self, formula=None, featuresCol="features", labelCol="label",
+                 forceIndexLabel=False):
         """
-        __init__(self, formula=None, featuresCol="features", labelCol="label")
+        __init__(self, formula=None, featuresCol="features", labelCol="label", \
+                 forceIndexLabel=False)
         """
         super(RFormula, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
+        self._setDefault(forceIndexLabel=False)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.5.0")
-    def setParams(self, formula=None, featuresCol="features", labelCol="label"):
+    def setParams(self, formula=None, featuresCol="features", labelCol="label",
+                  forceIndexLabel=False):
         """
-        setParams(self, formula=None, featuresCol="features", labelCol="label")
+        setParams(self, formula=None, featuresCol="features", labelCol="label", \
+                  forceIndexLabel=False)
         Sets params for RFormula.
         """
         kwargs = self.setParams._input_kwargs
@@ -2522,6 +2585,20 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
         Gets the value of :py:attr:`formula`.
         """
         return self.getOrDefault(self.formula)
+
+    @since("2.1.0")
+    def setForceIndexLabel(self, value):
+        """
+        Sets the value of :py:attr:`forceIndexLabel`.
+        """
+        return self._set(forceIndexLabel=value)
+
+    @since("2.1.0")
+    def getForceIndexLabel(self):
+        """
+        Gets the value of :py:attr:`forceIndexLabel`.
+        """
+        return self.getOrDefault(self.forceIndexLabel)
 
     def _create_model(self, java_model):
         return RFormulaModel(java_model)
@@ -2564,9 +2641,9 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     >>> selector = ChiSqSelector(numTopFeatures=1, outputCol="selectedFeatures")
     >>> model = selector.fit(df)
     >>> model.transform(df).head().selectedFeatures
-    DenseVector([1.0])
+    DenseVector([18.0])
     >>> model.selectedFeatures
-    [3]
+    [2]
     >>> chiSqSelectorPath = temp_path + "/chi-sq-selector"
     >>> selector.save(chiSqSelectorPath)
     >>> loadedSelector = ChiSqSelector.load(chiSqSelectorPath)
@@ -2581,39 +2658,69 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     .. versionadded:: 2.0.0
     """
 
+    selectorType = Param(Params._dummy(), "selectorType",
+                         "The selector type of the ChisqSelector. " +
+                         "Supported options: numTopFeatures (default), percentile and fpr.",
+                         typeConverter=TypeConverters.toString)
+
     numTopFeatures = \
         Param(Params._dummy(), "numTopFeatures",
-              "Number of features that selector will select, ordered by statistics value " +
-              "descending. If the number of features is < numTopFeatures, then this will select " +
+              "Number of features that selector will select, ordered by ascending p-value. " +
+              "If the number of features is < numTopFeatures, then this will select " +
               "all features.", typeConverter=TypeConverters.toInt)
 
+    percentile = Param(Params._dummy(), "percentile", "Percentile of features that selector " +
+                       "will select, ordered by ascending p-value.",
+                       typeConverter=TypeConverters.toFloat)
+
+    fpr = Param(Params._dummy(), "fpr", "The highest p-value for features to be kept.",
+                typeConverter=TypeConverters.toFloat)
+
     @keyword_only
-    def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, labelCol="label"):
+    def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None,
+                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05):
         """
-        __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, labelCol="label")
+        __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
+                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05)
         """
         super(ChiSqSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
-        self._setDefault(numTopFeatures=50)
+        self._setDefault(numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1,
+                         fpr=0.05)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.0.0")
     def setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
-                  labelCol="labels"):
+                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05):
         """
-        setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,\
-                  labelCol="labels")
+        setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
+                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05)
         Sets params for this ChiSqSelector.
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("2.1.0")
+    def setSelectorType(self, value):
+        """
+        Sets the value of :py:attr:`selectorType`.
+        """
+        return self._set(selectorType=value)
+
+    @since("2.1.0")
+    def getSelectorType(self):
+        """
+        Gets the value of selectorType or its default value.
+        """
+        return self.getOrDefault(self.selectorType)
+
     @since("2.0.0")
     def setNumTopFeatures(self, value):
         """
         Sets the value of :py:attr:`numTopFeatures`.
+        Only applicable when selectorType = "numTopFeatures".
         """
         return self._set(numTopFeatures=value)
 
@@ -2623,6 +2730,36 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         Gets the value of numTopFeatures or its default value.
         """
         return self.getOrDefault(self.numTopFeatures)
+
+    @since("2.1.0")
+    def setPercentile(self, value):
+        """
+        Sets the value of :py:attr:`percentile`.
+        Only applicable when selectorType = "percentile".
+        """
+        return self._set(percentile=value)
+
+    @since("2.1.0")
+    def getPercentile(self):
+        """
+        Gets the value of percentile or its default value.
+        """
+        return self.getOrDefault(self.percentile)
+
+    @since("2.1.0")
+    def setFpr(self, value):
+        """
+        Sets the value of :py:attr:`fpr`.
+        Only applicable when selectorType = "fpr".
+        """
+        return self._set(fpr=value)
+
+    @since("2.1.0")
+    def getFpr(self):
+        """
+        Gets the value of fpr or its default value.
+        """
+        return self.getOrDefault(self.fpr)
 
     def _create_model(self, java_model):
         return ChiSqSelectorModel(java_model)
@@ -2641,7 +2778,7 @@ class ChiSqSelectorModel(JavaModel, JavaMLReadable, JavaMLWritable):
     @since("2.0.0")
     def selectedFeatures(self):
         """
-        List of indices to select (filter). Must be ordered asc.
+        List of indices to select (filter).
         """
         return self._call_java("selectedFeatures")
 

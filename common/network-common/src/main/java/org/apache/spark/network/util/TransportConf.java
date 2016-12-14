@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.util;
 
+import java.util.Properties;
+
 import com.google.common.primitives.Ints;
 
 /**
@@ -168,6 +170,28 @@ public class TransportConf {
    */
   public boolean saslServerAlwaysEncrypt() {
     return conf.getBoolean("spark.network.sasl.serverAlwaysEncrypt", false);
+  }
+
+  /**
+   * The trigger for enabling AES encryption.
+   */
+  public boolean aesEncryptionEnabled() {
+    return conf.getBoolean("spark.network.aes.enabled", false);
+  }
+
+  /**
+   * The key size to use when AES cipher is enabled. Notice that the length should be 16, 24 or 32
+   * bytes.
+   */
+  public int aesCipherKeySize() {
+    return conf.getInt("spark.network.aes.keySize", 16);
+  }
+
+  /**
+   * The commons-crypto configuration for the module.
+   */
+  public Properties cryptoConf() {
+    return CryptoUtils.toCryptoConf("spark.network.aes.config.", conf.getAll());
   }
 
 }
