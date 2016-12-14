@@ -1138,7 +1138,7 @@ class SQLTests(ReusedPySparkTestCase):
 
         # Use "sleep_udf" to delay the progress update so that we can test `lastProgress` when there
         # were no updates.
-        q = df.select(sleep_udf(col("value"))).writeStream \
+        q = df.select(sleep_udf(col("value")).alias('value')).writeStream \
             .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
         try:
             # "lastProgress" will return None in most cases. However, as it may be flaky when
