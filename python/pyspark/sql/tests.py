@@ -360,6 +360,15 @@ class SQLTests(ReusedPySparkTestCase):
         [res] = self.spark.sql("SELECT MYUDF('')").collect()
         self.assertEqual("", res[0])
 
+    def test_udf_with_filter_function(self):
+        df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
+        from pyspark.sql.functions import udf, col
+        from pyspark.sql.types import BooleanType
+
+        my_filter = udf(lambda a: a < 2, BooleanType())
+        sel = df.select(col("key"), col("value")).filter((my_filter(col("key"))) & (df.value < "2"))
+        self.assertEqual(sel.collect(), [Row(key=1, value='1')])
+
     def test_udf_with_aggregate_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
         from pyspark.sql.functions import udf, col, sum

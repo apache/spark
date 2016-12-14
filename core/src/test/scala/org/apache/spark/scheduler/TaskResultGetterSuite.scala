@@ -171,7 +171,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     val tempDir = Utils.createTempDir()
     val srcDir = new File(tempDir, "repro/")
     srcDir.mkdirs()
-    val excSource = new JavaSourceFromString(new File(srcDir, "MyException").getAbsolutePath,
+    val excSource = new JavaSourceFromString(new File(srcDir, "MyException").toURI.getPath,
       """package repro;
         |
         |public class MyException extends Exception {
