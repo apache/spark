@@ -80,7 +80,7 @@ def pr_message(build_display_name,
                 short_commit_hash,
                 commit_url,
                 str(' ' + post_msg + '.') if post_msg else '.')
-    return '**[Test build %s %s](%sconsoleFull)** for PR %s at commit [`%s`](%s)%s' % str_args
+    return '**[Test build %s %s](%stestReport)** for PR %s at commit [`%s`](%s)%s' % str_args
 
 
 def run_pr_checks(pr_tests, ghprb_actual_commit, sha1):
