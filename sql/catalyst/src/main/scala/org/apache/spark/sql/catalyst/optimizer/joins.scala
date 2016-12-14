@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.types._
 
 /**
  * Encapsulates star-schema join detection.
@@ -42,12 +41,16 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
    *    + Usually, the table with the highest cardinality is the fact table.
    *    + Table being joined with the most number of tables is the fact table.
    *
-   * This function finds the star join with the largest fact table using a combination
-   * of the above two conditions. Then, it reorders the star join tables based on
-   * the following heuristics:
-   *  1. Place the largest fact table on the driving arm to avoid large tables on
-   *     the inner of a join and thus favor hash joins.
-   *  2. Apply the most selective dimensions early in the plan to reduce the data flow.
+   * To detect star joins, the algorithm uses a combination of the above two conditions.
+   * The fact table is chosen based on the cardinality heuristics, and the dimension
+   * tables are chosen based on the RI constraints. A star join will consist of the largest
+   * fact table joined with the dimension tables on their primary keys. To detect that a
+   * column is a primary key, the algorithm uses table and column statistics.
+   *
+   * Since Catalyst only supports left-deep tree plans, the algorithm currently returns only
+   * the star join with the largest fact table. Choosing the largest fact table on the
+   * driving arm to avoid large inners is in general a good heuristic. This restriction can
+   * be lifted with support for bushy tree plans.
    *
    * The highlights of the algorithm are the following:
    *
@@ -57,19 +60,16 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
    * the algorithm only considers base table access as part of a star join since they provide
    * reliable statistics.
    *
-   * If some of the table are not base table access with valid statistics, the algorithm falls
-   * back to the positional join reordering since, in the absence of statistics, we cannot make
-   * good planning decisions. Otherwise, the algorithm finds the largest fact table by sorting
-   * the tables based on cardinality (number of rows).
+   * If some of the plans are not base table access, or statistics are not available, the algorithm
+   * falls back to the positional join reordering, since in the absence of statistics it cannot make
+   * good planning decisions. Otherwise, the algorithm finds the table with the largest cardinality
+   * (number of rows), which is assumed to be a fact table.
    *
-   * The algorithm next computes the set of dimension tables for the current fact table.
-   * A dimension table is assumed to be in a RI relationship with the fact tables. To infer
-   * that a column is a primary key, the algorithm compares the number of distinct values
-   * in the column with the total number of rows in the table. If their relative difference
-   * is within certain limits, and the column has no null values, it is assumed to be a
-   * primary key.
-   *
-   * Conservatively, the algorithm only considers equi-joins between a fact and a dimension table.
+   * Next, it computes the set of dimension tables for the current fact table. A dimension table
+   * is assumed to be in a RI relationship with a fact table. To infer column uniqueness,
+   * the algorithm compares the number of distinct values with the total number of rows in the
+   * table. If their relative difference is within certain limits (i.e. ndvMaxError * 2, adjusted
+   * based on tpcds data), the column is assumed to be unique.
    *
    * Given a star join, i.e. fact and dimension tables, the algorithm considers three cases:
    *
@@ -94,9 +94,9 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
    *
    * Other assumptions made by the algorithm, mainly to prevent regressions in the absence of a
    * cost model, are the following:
-   * a) Only considers star joins with more than one dimensions, which is a typical
+   * 1) Only considers star joins with more than one dimensions, which is a typical
    *    star join scenario.
-   * b) If the top largest tables have comparable number of rows, fall back to the default
+   * 2) If the top largest tables have comparable number of rows, fall back to the default
    *    join reordering. This will prevent changing the position of the large tables in the join.
    */
   def findStarJoinPlan(

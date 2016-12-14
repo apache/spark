@@ -23,6 +23,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
+
 class StarJoinSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
    def createTables(): Unit = {
@@ -594,76 +595,5 @@ class StarJoinSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
       verifyStarJoinPlans(query9, equivQuery9, Row(1, 3) :: Nil)
     }
-  }
-
-   test("SPARK-17791: Miscellaneous tests with star join reordering") {
-     withTable("f1", "d1", "d2", "d3", "s3", "f11", "d3_ns", "d3_ss") {
-       createTables()
-       runStats()
-
-       // Star join reordering with uncorrelated subquery predicates
-       // on the fact table.
-       // Star join: f1, d2, d1, d3, s3
-       // Default join reordering: d1, f1, d2, d3, s3
-       val query1 = sql(
-         """
-           | select f1_fk1, f1_fk3
-           | from d1, d2, f1, d3, s3
-           | where f1_fk2 = d2_pk1 and d2_c2 <= 2
-           | and f1_fk1 = d1_pk1
-           | and f1_c4 IN (select s3_c4 from s3 limit 2)
-           | and f1_fk3 = d3_pk1
-           | and d3_fk1 = s3_pk1
-           | limit 1
-         """.stripMargin)
-
-       // Equivalent query
-       // Default reordering: f1, d2, d1, d3, s3
-       val equivQuery1 = sql(
-         """
-           | select f1_fk1, f1_fk3
-           | from f1, d2, d1, d3, s3
-           | where f1_fk2 = d2_pk1 and d2_c2 <= 2
-           | and f1_fk1 = d1_pk1
-           | and f1_c4 IN (select s3_c4 from s3 limit 2)
-           | and f1_fk3 = d3_pk1
-           | and d3_fk1 = s3_pk1
-           | limit 1
-         """.stripMargin)
-
-       verifyStarJoinPlans(query1, equivQuery1, Row(1, 3) :: Nil)
-
-       // Star join reordering with correlated subquery predicates
-       // on the fact table.
-       // Star join: f1, d2, d1, d3, s3
-       // Default join reordering: d1, f1, d2, d3, s3
-       val query2 = sql(
-         """
-           | select f1_fk1, f1_fk3
-           | from d1, d2, f1, d3, s3
-           | where f1_fk2 = d2_pk1 and d2_c2 <= 2
-           | and f1_fk1 = d1_pk1
-           | and f1_c4 IN (select s3_c4 from s3 where f1_fk3 = s3_c3)
-           | and f1_fk3 = d3_pk1
-           | and d3_fk1 = s3_pk1
-           | limit 1
-         """.stripMargin)
-
-       // Equivalent query
-       // Default reordering: f1, d2, d1, d3, s3
-       val equivQuery2 = sql(
-         """
-           | select f1_fk1, f1_fk3
-           | from f1, d2, d1, d3, s3
-           | where f1_fk2 = d2_pk1 and d2_c2 <= 2
-           | and f1_fk1 = d1_pk1
-           | and f1_c4 IN (select s3_c4 from s3 where f1_fk3 = s3_c3)
-           | and f1_fk3 = d3_pk1
-           | and d3_fk1 = s3_pk1
-           | limit 1
-         """.stripMargin)
-
-       verifyStarJoinPlans(query2, equivQuery2, Row(1, 3) :: Nil)
-     }
   }
 }
