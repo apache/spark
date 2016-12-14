@@ -56,6 +56,15 @@ from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
 
 
+_have_arrow = False
+try:
+    import pyarrow
+    _have_arrow = True
+except:
+    # No Arrow, but that's okay, we'll skip those tests
+    pass
+
+
 class UTCOffsetTimezone(datetime.tzinfo):
     """
     Specifies timezone in UTC offset
@@ -2337,6 +2346,37 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             self.assertTrue(range_frame_match())
 
         importlib.reload(window)
+
+@unittest.skipIf(not _have_arrow, "Arrow not installed")
+class ArrowTests(ReusedPySparkTestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+        cls.spark = SparkSession(cls.sc)
+
+    def assertFramesEqual(self, df_with_arrow, df_without):
+        msg = ("DataFrame from Arrow is not equal" +
+               ("\n\nWith Arrow:\n%s\n%s" % (df_with_arrow, df_with_arrow.dtypes)) +
+               ("\n\nWithout:\n%s\n%s" % (df_without, df_without.dtypes)))
+        self.assertTrue(df_without.equals(df_with_arrow), msg=msg)
+
+    def test_arrow_toPandas(self):
+        schema = StructType([
+            StructField("str_t", StringType(), True),  # Fails in conversion
+            StructField("int_t", IntegerType(), True),  # Fails, without is converted to int64
+            StructField("long_t", LongType(), True),  # Fails if nullable=False
+            StructField("double_t", DoubleType(), True)])
+        data = [("a", 1, 10, 2.0),
+                ("b", 2, 20, 4.0),
+                ("c", 3, 30, 6.0)]
+
+        df = self.spark.createDataFrame(data, schema=schema)
+        df = df.select("long_t", "double_t")
+        pdf = df.toPandas(useArrow=False)
+        pdf_arrow = df.toPandas(useArrow=True)
+        self.assertFramesEqual(pdf_arrow, pdf)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *

@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import java.io.CharArrayWriter
+import java.io.{ByteArrayOutputStream, CharArrayWriter}
+import java.nio.channels.Channels
 import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
@@ -26,6 +27,12 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
+import io.netty.buffer.ArrowBuf
+import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.file.ArrowWriter
+import org.apache.arrow.vector.schema.{ArrowFieldNode, ArrowRecordBatch}
+import org.apache.arrow.vector.types.FloatingPointPrecision
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
@@ -55,6 +62,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
+
 
 private[sql] object Dataset {
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
@@ -2363,7 +2371,185 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Return an iterator that contains all rows in this Dataset.
+   * Transform Spark DataType to Arrow ArrowType.
+   */
+  private[sql] def dataTypeToArrowType(dt: DataType): ArrowType = {
+    dt match {
+      case IntegerType =>
+        new ArrowType.Int(8 * IntegerType.defaultSize, true)
+      case LongType =>
+        new ArrowType.Int(8 * LongType.defaultSize, true)
+      case StringType =>
+        ArrowType.List.INSTANCE
+      case DoubleType =>
+        new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)
+      case FloatType =>
+        new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE)
+      case BooleanType =>
+        ArrowType.Bool.INSTANCE
+      case ByteType =>
+        new ArrowType.Int(8, false)
+      case _ =>
+        throw new IllegalArgumentException(s"Unsupported data type")
+    }
+  }
+
+  /**
+   * Transform Spark StructType to Arrow Schema.
+   */
+  private[sql] def schemaToArrowSchema(schema: StructType): Schema = {
+    val arrowFields = schema.fields.map {
+      case StructField(name, dataType, nullable, metadata) =>
+        dataType match {
+          // TODO: Consider other nested types
+          case StringType =>
+            // TODO: Make sure String => List<Utf8>
+            val itemField =
+              new Field("item", false, ArrowType.Utf8.INSTANCE, List.empty[Field].asJava)
+            new Field(name, nullable, dataTypeToArrowType(dataType), List(itemField).asJava)
+          case _ =>
+            new Field(name, nullable, dataTypeToArrowType(dataType), List.empty[Field].asJava)
+        }
+    }
+    val arrowSchema = new Schema(arrowFields.toIterable.asJava)
+    arrowSchema
+  }
+
+  /**
+   * Compute the number of bytes needed to build validity map. According to
+   * [Arrow Layout](https://github.com/apache/arrow/blob/master/format/Layout.md#null-bitmaps),
+   * the length of the validity bitmap should be multiples of 64 bytes.
+   */
+  private def numBytesOfBitmap(numOfRows: Int): Int = {
+    Math.ceil(numOfRows / 64.0).toInt * 8
+  }
+
+  /**
+   * Get an entry from the InternalRow, and then set to ArrowBuf.
+   * Note: No Null check for the entry.
+   */
+  private def getAndSetToArrow(
+      row: InternalRow, buf: ArrowBuf, dataType: DataType, ordinal: Int): Unit = {
+    dataType match {
+      case NullType =>
+      case BooleanType =>
+        buf.writeBoolean(row.getBoolean(ordinal))
+      case ShortType =>
+        buf.writeShort(row.getShort(ordinal))
+      case IntegerType =>
+        buf.writeInt(row.getInt(ordinal))
+      case LongType =>
+        buf.writeLong(row.getLong(ordinal))
+      case FloatType =>
+        buf.writeFloat(row.getFloat(ordinal))
+      case DoubleType =>
+        buf.writeDouble(row.getDouble(ordinal))
+      case ByteType =>
+        buf.writeByte(row.getByte(ordinal))
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Unsupported data type ${dataType.simpleString}")
+    }
+  }
+
+  /**
+   * Convert an array of InternalRow to an ArrowBuf.
+   */
+  private def internalRowToArrowBuf(
+      rows: Array[InternalRow],
+      ordinal: Int,
+      field: StructField,
+      allocator: RootAllocator): (Array[ArrowBuf], Array[ArrowFieldNode]) = {
+    val numOfRows = rows.length
+
+    field.dataType match {
+      case IntegerType | LongType | DoubleType | FloatType | BooleanType | ByteType =>
+        val validity = allocator.buffer(numBytesOfBitmap(numOfRows))
+        val buf = allocator.buffer(numOfRows * field.dataType.defaultSize)
+        var nullCount = 0
+        rows.foreach { row =>
+          if (row.isNullAt(ordinal)) {
+            nullCount += 1
+          } else {
+            getAndSetToArrow(row, buf, field.dataType, ordinal)
+          }
+        }
+
+        val fieldNode = new ArrowFieldNode(numOfRows, nullCount)
+
+        (Array(validity, buf), Array(fieldNode))
+
+      case StringType =>
+        val validityOffset = allocator.buffer(numBytesOfBitmap(numOfRows))
+        val bufOffset = allocator.buffer((numOfRows + 1) * IntegerType.defaultSize)
+        var bytesCount = 0
+        bufOffset.writeInt(bytesCount)  // Start position
+        val validityValues = allocator.buffer(numBytesOfBitmap(numOfRows))
+        val bufValues = allocator.buffer(Int.MaxValue)  // TODO: Reduce the size?
+        var nullCount = 0
+        rows.foreach { row =>
+          if (row.isNullAt(ordinal)) {
+            nullCount += 1
+            bufOffset.writeInt(bytesCount)
+          } else {
+            val bytes = row.getUTF8String(ordinal).getBytes
+            bytesCount += bytes.length
+            bufOffset.writeInt(bytesCount)
+            bufValues.writeBytes(bytes)
+          }
+        }
+
+        val fieldNodeOffset = if (field.nullable) {
+          new ArrowFieldNode(numOfRows, nullCount)
+        } else {
+          new ArrowFieldNode(numOfRows, 0)
+        }
+
+        val fieldNodeValues = new ArrowFieldNode(bytesCount, 0)
+
+        (Array(validityOffset, bufOffset, validityValues, bufValues),
+          Array(fieldNodeOffset, fieldNodeValues))
+    }
+  }
+
+  /**
+   * Transfer an array of InternalRow to an ArrowRecordBatch.
+   */
+  private[sql] def internalRowsToArrowRecordBatch(
+      rows: Array[InternalRow], allocator: RootAllocator): ArrowRecordBatch = {
+    val bufAndField = this.schema.fields.zipWithIndex.map { case (field, ordinal) =>
+      internalRowToArrowBuf(rows, ordinal, field, allocator)
+    }
+
+    val buffers = bufAndField.flatMap(_._1).toList.asJava
+    val fieldNodes = bufAndField.flatMap(_._2).toList.asJava
+
+    new ArrowRecordBatch(rows.length, fieldNodes, buffers)
+  }
+
+  /**
+   * Collect a Dataset to an ArrowRecordBatch.
+   *
+   * @group action
+   * @since 2.2.0
+   */
+  @DeveloperApi
+  def collectAsArrow(): ArrowRecordBatch = {
+    val allocator = new RootAllocator(Long.MaxValue)
+    withNewExecutionId {
+      try {
+        val collectedRows = queryExecution.executedPlan.executeCollect()
+        val recordBatch = internalRowsToArrowRecordBatch(collectedRows, allocator)
+        recordBatch
+      } catch {
+        case e: Exception =>
+          throw e
+      }
+    }
+  }
+
+  /**
+   * Return an iterator that contains all of [[Row]]s in this Dataset.
    *
    * The iterator will consume as much memory as the largest partition in this Dataset.
    *
@@ -2744,6 +2930,27 @@ class Dataset[T] private[sql](
       val iter = new SerDeUtil.AutoBatchedPickler(
         queryExecution.executedPlan.executeCollect().iterator.map(toJava))
       PythonRDD.serveIterator(iter, "serve-DataFrame")
+    }
+  }
+
+  /**
+   * Collect a Dataset as an ArrowRecordBatch, and serve the ArrowRecordBatch to PySpark.
+   */
+  private[sql] def collectAsArrowToPython(): Int = {
+    val recordBatch = collectAsArrow()
+    val arrowSchema = schemaToArrowSchema(this.schema)
+    val out = new ByteArrayOutputStream()
+    try {
+      val writer = new ArrowWriter(Channels.newChannel(out), arrowSchema)
+      writer.writeRecordBatch(recordBatch)
+      writer.close()
+    } catch {
+      case e: Exception =>
+        throw e
+    }
+
+    withNewExecutionId {
+      PythonRDD.serveIterator(Iterator(out.toByteArray), "serve-Arrow")
     }
   }
 
