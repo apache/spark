@@ -565,7 +565,7 @@ class VersionsSuite extends SparkFunSuite with SQLTestUtils with TestHiveSinglet
             folders.flatMap(listFiles) ++: filePaths
           }
           val expectedFiles = ".part-00000.crc" :: "part-00000" :: Nil
-          assert(listFiles(tmpDir).sortBy(_.toString) == expectedFiles)
+          assert(listFiles(tmpDir).sorted == expectedFiles)
         }
       }
     }
