@@ -62,9 +62,9 @@ class FileStreamSource(
   /** Maximum number of new files to be considered in each batch */
   private val maxFilesPerBatch = sourceOptions.maxFilesPerTrigger
 
-  private val fileSortOrder = if (sourceOptions.newestFirst) {
+  private val fileSortOrder = if (sourceOptions.latestFirst) {
       logWarning(
-        """'newestFirst' is true. New files will be processed first.
+        """'latestFirst' is true. New files will be processed first.
           |It may affect the watermark value""".stripMargin)
       implicitly[Ordering[Long]].reverse
     } else {

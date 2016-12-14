@@ -54,14 +54,17 @@ class FileStreamOptions(parameters: CaseInsensitiveMap) extends Logging {
   val optionMapWithoutPath: Map[String, String] =
     parameters.filterKeys(_ != "path")
 
-  /** Whether to scan new files first. */
-  val newestFirst: Boolean = parameters.get("newestFirst").map { str =>
+  /**
+   * Whether to scan latest files first. If it's true, when the source finds unprocessed files in a
+   * trigger, it will first process the latest files.
+   */
+  val latestFirst: Boolean = parameters.get("latestFirst").map { str =>
     try {
       str.toBoolean
     } catch {
       case _: IllegalArgumentException =>
         throw new IllegalArgumentException(
-          s"Invalid value '$str' for option 'newestFirst', must be 'true' or 'false'")
+          s"Invalid value '$str' for option 'latestFirst', must be 'true' or 'false'")
     }
   }.getOrElse(false)
 }

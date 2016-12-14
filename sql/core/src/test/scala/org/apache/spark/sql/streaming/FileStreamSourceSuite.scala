@@ -1061,7 +1061,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     SerializedOffset(str.trim)
   }
 
-  test("FileStreamSource - newestFirst") {
+  test("FileStreamSource - latestFirst") {
     withTempDir { src =>
       // Prepare two files: 1.txt, 2.txt, and make sure they have different modified time.
       val f1 = stringToFile(new File(src, "1.txt"), "1")
@@ -1071,11 +1071,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         assert(f1.lastModified < f2.lastModified)
       }
 
-      // Read oldest first, so the first batch is "1", and the second batch is "2".
+      // Read oldest files first, so the first batch is "1", and the second batch is "2".
       val fileStream = createFileStream(
         "text",
         src.getCanonicalPath,
-        options = Map("newestFirst" -> "false", "maxFilesPerTrigger" -> "1"))
+        options = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "1"))
       val clock = new StreamManualClock()
       testStream(fileStream)(
         StartStream(trigger = ProcessingTime(10), triggerClock = clock),
@@ -1098,11 +1098,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         CheckLastBatch("2")
       )
 
-      // Read newest first, so the first batch is "2", and the second batch is "1".
+      // Read latest files first, so the first batch is "2", and the second batch is "1".
       val fileStream2 = createFileStream(
         "text",
         src.getCanonicalPath,
-        options = Map("newestFirst" -> "true", "maxFilesPerTrigger" -> "1"))
+        options = Map("latestFirst" -> "true", "maxFilesPerTrigger" -> "1"))
       val clock2 = new StreamManualClock()
       testStream(fileStream2)(
         StartStream(trigger = ProcessingTime(10), triggerClock = clock2),
