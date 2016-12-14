@@ -35,32 +35,31 @@ class StarJoinSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
      // Table f1 is the fact table. Tables d1, d2, and d3 are the dimension tables.
      // Dimension d3 is further joined/normalized into table s3.
      // Tables' cardinality: f1 > d1 > d2 > d3 > s3
-     sql("create table f1 (f1_fk1 int, f1_fk2 varchar(5), f1_fk3 int, f1_c4 int) using parquet")
+     sql("create table f1 (f1_fk1 int, f1_fk2 int, f1_fk3 int, f1_c4 int) using parquet")
      sql("create table d1 (d1_pk1 int, d1_c2 int, d1_c3 int, d1_c4 int) using parquet")
-     sql("create table d2 (d2_c2 int, d2_pk1 varchar(5), d2_c3 int, d2_c4 varchar(5))" +
-       " using parquet")
+     sql("create table d2 (d2_c2 int, d2_pk1 int, d2_c3 int, d2_c4 int) using parquet")
      sql("create table d3 (d3_fk1 int, d3_c2 int, d3_pk1 int, d3_c4 int) using parquet")
      sql("create table s3 (s3_pk1 int, s3_c2 int, s3_c3 int, s3_c4 int) using parquet")
 
-     sql("insert into f1 values (1, '2', 3, 4), (2, '1', 2, 3), (3, '3', 1, 2), " +
-       "(1, '2', 4, 1), (2, '1', 3, 2), (3, '3', 2, 3)")
+     sql("insert into f1 values (1, 2, 3, 4), (2, 1, 2, 3), (3, 3, 1, 2), (1, 2, 4, 1)," +
+       " (2, 1, 3, 2), (3, 3, 2, 3)")
      sql("insert into d1 values (1, 2, 3, 3), (2, 1, 2, 3), (3, 3, 1, 2), (4, 2, 4, 3)")
-     sql("insert into d2 values (1, '2', 3, '4'), (2, '1', 2, '3'), (3, '3', 1, '3')")
+     sql("insert into d2 values (1, 2, 3, 4), (2, 1, 2, 3), (3, 3, 1, 3)")
      sql("insert into d3 values (1, 2, 3, 2), (2, 1, 2, 2), (3, 3, 1, 2), (1, 2, 4, 3)," +
-       "(2, 1, 5, 3)")
+       " (2, 1, 5, 3)")
      sql("insert into s3 values (1, 3, 3, 4), (2, 3, null, 3)")
 
      // Additional tables to test stats availability
      sql("create table d3_ns (d3_fk1 int, d3_c2 int, d3_pk1 int, d3_c4 int) using parquet")
      sql("create table d3_ss (d3_fk1 int, d3_c2 int, d3_pk1 int, d3_c4 int) using parquet")
-     sql("create table f11 (f1_fk1 int, f1_fk2 varchar(5), f1_fk3 int, f1_c4 int) using parquet")
+     sql("create table f11 (f1_fk1 int, f1_fk2 int, f1_fk3 int, f1_c4 int) using parquet")
 
      sql("insert into d3_ns values (1, 2, 3, 4), (2, 1, 2, 4), (3, 3, 1, 2), (1, 2, 4, 4)," +
        "(2, 1, 5, 2)")
      sql("insert into d3_ss values (1, 2, 3, 4), (2, 1, 2, 4), (3, 3, 1, 2), (1, 2, 4, 4)," +
        "(2, 1, 5, 2)")
-     sql("insert into f11 values (1, '2', 3, 4), (2, '1', 2, 3), (3, '3', 1, 2)," +
-       "(1, '2', 4, 1), (2, '1', 3, 2), (3, '3', 2, 3)")
+     sql("insert into f11 values (1, 2, 3, 4), (2, 1, 2, 3), (3, 3, 1, 2)," +
+       "(1, 2, 4, 1), (2, 1, 3, 2), (3, 3, 2, 3)")
    }
 
   def runStats(): Unit = {
@@ -253,28 +252,7 @@ class StarJoinSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("SPARK-17791: unit tests") {
-    withTable("f1", "d1", "d2", "d3", "s3", "f11", "d3_ns", "d3_ss") {
-      createTables()
-      runStats()
-
-      /*
-      val query5 = sql(
-        """
-          | select f1_fk1, f1_fk3
-          | from d1, d3, f1, d2, s3
-          | where f1_fk2 = d2_c4 and d2_c2 < 4
-          | and f1_fk1 = d1_c4
-          | and f1_fk3 = d3_c4
-          | and d3_fk1 = s3_pk1
-          | order by f1_fk1, f1_fk3
-          | limit 1
-        """.stripMargin).show()
-      */
-    }
-  }
-
-      test("SPARK-17791: Test non qualifying star joins") {
+  test("SPARK-17791: Test non qualifying star joins") {
     // Covered tests cases:
     // 1. Table stats not available for some of the joined tables
     // 2. Column stats not available for some of the joined tables

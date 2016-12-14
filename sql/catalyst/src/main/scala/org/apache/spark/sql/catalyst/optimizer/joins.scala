@@ -224,35 +224,18 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
         case Some(col) if t.outputSet.contains(col) =>
           val stats = t.statistics
           stats.rowCount match {
-            case Some(rowCount) =>
+            case Some(rowCount) if rowCount >= 0 =>
               if (stats.colStats.nonEmpty && stats.colStats.contains(col.name)) {
                 val colStats = stats.colStats.get(col.name)
-                val dataType = col.dataType
-
-                val numDistVals = dataType match {
-                  case StringType =>
-                    val cs = colStats.get.forString
-                    if (cs.numNulls <= 0) Option(cs.ndv) else None
-                  case atomicType: AtomicType =>
-                    val cs = colStats.get.forNumeric(atomicType)
-                    if (cs.numNulls <= 0) Option(cs.ndv) else None
-                  case _ => None
+                if (colStats.get.nullCount > 0) {
+                  false
+                } else {
+                  val distinctCount = colStats.get.distinctCount
+                  val relDiff = math.abs((distinctCount.toDouble / rowCount.toDouble) - 1.0d)
+                  // ndvMaxErr adjusted based on TPCDS 1TB data results
+                  if (relDiff <= conf.ndvMaxError * 2) true else false
                 }
-
-                numDistVals match {
-                  case Some(ndv) =>
-                    // Compute the relative difference between ndv and rowCount
-                    if (rowCount > 0 &&
-                        math.abs((ndv / rowCount.toDouble) - 1.0d) <= conf.ndvMaxError * 2) {
-                      true
-                    } else {
-                      false
-                    }
-                   case None => false
-                }
-              } else {
-                false
-              }
+              } else false
             case None => false
           }
         case None => false
@@ -294,6 +277,7 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
       leafCol match {
         case Some(col) if t.outputSet.contains(col) =>
           val stats = t.statistics
+          val dataType = col.dataType
           stats.colStats.nonEmpty && stats.colStats.contains(col.name)
         case None => false
       }
