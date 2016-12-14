@@ -661,7 +661,7 @@ class StreamingContext private[streaming] (
     var shutdownHookRefToRemove: AnyRef = null
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(
-        s"Cannot stop StreamingContext within listener thread of ${LiveListenerBus.name}")
+        "Cannot stop SparkContext within listener event executor thread")
     }
     synchronized {
       // The state should always be Stopped after calling `stop()`, even if we haven't started yet

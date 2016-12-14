@@ -35,7 +35,7 @@ import org.apache.spark.util.ListenerBus
  * and StreamingQueryManager. So this bus will dispatch events to registered listeners for only
  * those queries that were started in the associated SparkSession.
  */
-class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
+class StreamingQueryListenerBus(val sparkListenerBus: LiveListenerBus)
   extends SparkListener with ListenerBus[StreamingQueryListener, StreamingQueryListener.Event] {
 
   import StreamingQueryListener._
@@ -69,7 +69,7 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
         activeQueryRunIds.synchronized { activeQueryRunIds += s.runId }
         sparkListenerBus.post(s)
         // post to local listeners to trigger callbacks
-        postToAll(s)
+        postToAllSync(s)
       case _ =>
         sparkListenerBus.post(event)
     }
@@ -83,7 +83,7 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
         // we need to ignore QueryStartedEvent if this method is called within SparkListenerBus
         // thread
         if (!LiveListenerBus.withinListenerThread.value || !e.isInstanceOf[QueryStartedEvent]) {
-          postToAll(e)
+          postToAllSync(e)
         }
       case _ =>
     }

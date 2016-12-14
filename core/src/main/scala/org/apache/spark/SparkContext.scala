@@ -1874,7 +1874,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def stop(): Unit = {
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(
-        s"Cannot stop SparkContext within listener thread of ${LiveListenerBus.name}")
+        s"Cannot stop SparkContext within listener event executor thread")
     }
     // Use the stopping variable to ensure no contention for the stop scenario.
     // Still track the stopped variable for use elsewhere in the code.

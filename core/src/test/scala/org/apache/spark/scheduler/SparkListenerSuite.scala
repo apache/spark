@@ -20,13 +20,13 @@ package org.apache.spark.scheduler
 import java.util.concurrent.Semaphore
 
 import scala.collection.mutable
-import scala.collection.JavaConverters._
 
 import org.scalatest.Matchers
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
+
 
 class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Matchers
   with ResetSystemProperties {
@@ -364,11 +364,9 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     bus.start()
 
     // Post events to all listeners, and wait until the queue is drained
-    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
-    bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-
     // The exception should be caught, and the event should be propagated to other listeners
-    assert(bus.listenerThreadIsAlive)
+    (1 to 5).foreach { _ =>
+      bus.postToAllSync(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
     assert(jobCounter1.count === 5)
     assert(jobCounter2.count === 5)
   }
@@ -381,10 +379,10 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val conf = new SparkConf().setMaster("local").setAppName("test")
       .set("spark.extraListeners", listeners.map(_.getName).mkString(","))
     sc = new SparkContext(conf)
-    sc.listenerBus.listeners.asScala.count(_.isInstanceOf[BasicJobCounter]) should be (1)
-    sc.listenerBus.listeners.asScala
+    sc.listenerBus.listeners.count(_.isInstanceOf[BasicJobCounter]) should be (1)
+    sc.listenerBus.listeners
       .count(_.isInstanceOf[ListenerThatAcceptsSparkConf]) should be (1)
-    sc.listenerBus.listeners.asScala
+    sc.listenerBus.listeners
         .count(_.isInstanceOf[FirehoseListenerThatAcceptsSparkConf]) should be (1)
   }
 
