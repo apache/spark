@@ -276,7 +276,7 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
   override def load(path: String): LinearSVCModel = super.load(path)
 
   /** [[MLWriter]] instance for [[LinearSVCModel]] */
-  private[LinearSVCModel]
+  private[LinearSVCModel$]
   class LinearSVCWriter(instance: LinearSVCModel)
     extends MLWriter with Logging {
 
@@ -434,6 +434,7 @@ private class LinearSVCAggregator(
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
+      
       val localFeaturesStd = bcFeaturesStd.value
       val localCoefficients = coefficientsArray
       val localGradientSumArray = gradientSumArray
