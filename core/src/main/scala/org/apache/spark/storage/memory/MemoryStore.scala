@@ -332,6 +332,8 @@ private[spark] class MemoryStore(
     // Underlying buffer for unrolling the block
     val redirectableStream = new RedirectableOutputStream
     val chunkSize = if (initialMemoryThreshold > Int.MaxValue) {
+      logWarning(s"Initial memory threshold of ${Utils.bytesToString(initialMemoryThreshold)} " +
+        s"is too large to be set as chunk size. It is safe to use 4MB as chunk size instead.")
       4 * 1024 * 1024
     } else {
       initialMemoryThreshold.toInt
