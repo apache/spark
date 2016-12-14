@@ -502,8 +502,7 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param isotonic Whether the output sequence should be isotonic/increasing (TRUE) or
 #'                 antitonic/decreasing (FALSE).
-#' @param featureIndex The index of the feature if \code{featuresCol} is a vector column
-#'                     (default: 0), no effect otherwise.
+#' @param featureIndex The index of the feature if \code{featuresCol} is a vector column, no effect otherwise.
 #' @param weightCol The weight column name.
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.isoreg} returns a fitted Isotonic Regression model.
@@ -717,7 +716,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param regParam the regularization parameter.
 #' @param elasticNetParam the ElasticNet mixing parameter. For alpha = 0.0, the penalty is an L2 penalty.
 #'                        For alpha = 1.0, it is an L1 penalty. For 0.0 < alpha < 1.0, the penalty is a combination
-#'                        of L1 and L2. Default is 0.0 which is an L2 penalty.
+#'                        of L1 and L2.
 #' @param maxIter maximum iteration number.
 #' @param tol convergence tolerance of iterations.
 #' @param family the name of family which is a description of the label distribution to be used in the model.
@@ -732,7 +731,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param standardization whether to standardize the training features before fitting the model. The coefficients
 #'                        of models will be always returned on the original scale, so it will be transparent for
 #'                        users. Note that with/without standardization, the models should be always converged
-#'                        to the same solution when no regularization is applied. Default is TRUE, same as glmnet.
+#'                        to the same solution when no regularization is applied.
 #' @param thresholds in binary classification, in range [0, 1]. If the estimated probability of class label 1
 #'                  is > threshold, then predict 1, else 0. A high threshold encourages the model to predict 0
 #'                  more often; a low threshold encourages the model to predict 1 more often. Note: Setting this with
@@ -1218,11 +1217,11 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' @param data A SparkDataFrame for training.
 #' @param features Features column name. Either libSVM-format column or character-format column is
 #'        valid.
-#' @param k Number of topics, default is 10.
-#' @param maxIter Maximum iterations, default is 20.
+#' @param k Number of topics.
+#' @param maxIter Maximum iterations.
 #' @param optimizer Optimizer to train an LDA model, "online" or "em", default is "online".
 #' @param subsamplingRate (For online optimizer) Fraction of the corpus to be sampled and used in
-#'        each iteration of mini-batch gradient descent, in range (0, 1], default is 0.05.
+#'        each iteration of mini-batch gradient descent, in range (0, 1].
 #' @param topicConcentration concentration parameter (commonly named \code{beta} or \code{eta}) for
 #'        the prior placed on topic distributions over terms, default -1 to set automatically on the
 #'        Spark side. Use \code{summary} to retrieve the effective topicConcentration. Only 1-size
