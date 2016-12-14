@@ -20,6 +20,7 @@ package org.apache.spark.ui
 import java.util.{Date, ServiceLoader}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
@@ -38,7 +39,7 @@ import org.apache.spark.util.Utils
 /**
  * Top level user interface for a Spark application.
  */
-private[spark] class SparkUI private (
+class SparkUI private (
     val sc: Option[SparkContext],
     val conf: SparkConf,
     securityManager: SecurityManager,
@@ -71,7 +72,7 @@ private[spark] class SparkUI private (
     attachTab(new EnvironmentTab(this))
     attachTab(new ExecutorsTab(this))
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
-    attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
+    // attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
     attachHandler(ApiRootResource.getServletHandler(this))
     // This should be POST only, but, the YARN AM proxy won't proxy POSTs
     attachHandler(createRedirectHandler(
@@ -88,6 +89,10 @@ private[spark] class SparkUI private (
 
   def setAppId(id: String): Unit = {
     appId = id
+  }
+
+  def setTabs(newTabs: ArrayBuffer[WebUITab]): Unit = {
+    tabs = newTabs
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */

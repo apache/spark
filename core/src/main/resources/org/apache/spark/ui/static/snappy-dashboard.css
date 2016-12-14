@@ -1,0 +1,119 @@
+/*
+ ==========================================================================
+   SnappyData Custom Styles
+ ==========================================================================
+*/
+
+
+.keyStates{
+  float: left;
+  padding: 5px;
+  margin: 5px 10px;
+  border: 1px solid #DCDCDC;
+  box-shadow: 0px 1px 10px rgba(0, 0, 0, 0.4);
+  background: white none repeat scroll 0% 0%;
+  overflow: visible;
+  width: 100%;
+  max-width: 223px;
+  min-height: 100px;
+}
+
+.keyStatesLeft{
+  float: left;
+  padding: 5px;
+  margin: 5px 10px;
+  border: 1px solid #DCDCDC;
+  box-shadow: 0px 1px 10px rgba(0, 0, 0, 0.4);
+  background: white none repeat scroll 0% 0%;
+  overflow: visible;
+  width: 100%;
+  max-width: 223px;
+  min-height: 100px;
+}
+
+.keyStatesRight{
+  float: left;
+  padding: 5px;
+  margin: 5px 10px;
+  border: 1px solid #DCDCDC;
+  box-shadow: 0px 1px 10px rgba(0, 0, 0, 0.4);
+  background: white none repeat scroll 0% 0%;
+  overflow: visible;
+  width: 100%;
+  max-width: 223px;
+  min-height: 100px;
+}
+
+.keyStatsValue{
+  padding-bottom: 10px;
+  font-weight: bolder;
+  vertical-align: middle;
+  text-align: center;
+  padding-top: 25px;
+  font-size: 24px;
+}
+
+.keyStatesText{
+  font-weight: bolder;
+  min-height: 25px;
+  text-align: center;
+  padding: 10px;
+}
+
+.clusterHealthImageBox{
+  float: left;
+  width: 94px;
+  border-right: thin inset;
+  height: 100px;
+}
+
+.clusterHealthTextBox{
+  text-align: center;
+  float: left;
+  width: 200px;}
+
+.statusTextNormal{
+  color: #87B025;
+}
+.statusTextWarning{
+  color: #FDB406;
+}
+.statusTextError{
+  color: #FD063A;
+}
+
+.divClass2{
+}
+.div-width-100{
+  width: 100px;
+}
+.div-width-200{
+  width: 200px;
+}
+.div-width-300{
+  width: 300px;
+}
+
+.progressBar{
+  height: 19px;
+  width: 100%;
+  border-radius: 5px;
+  border: thin solid #3EC0FF;
+  background: #A0DFFF none repeat scroll 0 0;
+}
+.completedProgress{
+  float: left;
+  border-radius: inherit;
+  background: #3EC0FF none repeat scroll 0px 0px;
+}
+/*
+.remainingProgress{
+  float: left;
+  border-radius: inherit;
+  background: #A0DFFF none repeat scroll 0px 0px;
+}*/
+.progressValue{
+  float:right;
+  width:20%;
+  text-align:center;
+}

@@ -160,6 +160,7 @@ private[spark] object UIUtils extends Logging {
     <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/webui.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/snappy-dashboard.css")} type="text/css"/>
     <script src={prependBaseUri("/static/sorttable.js")} ></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
     <script src={prependBaseUri("/static/vis.min.js")}></script>
@@ -222,7 +223,7 @@ private[spark] object UIUtils extends Logging {
           <div class="navbar-inner">
             <div class="brand">
               <a href={prependBaseUri("/")} class="brand">
-                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
+                <img src={prependBaseUri("/static/snappydata/SnappyData-Logo-230X50.png")} />
                 <span class="version">{org.apache.spark.SPARK_VERSION}</span>
               </a>
             </div>
@@ -241,6 +242,52 @@ private[spark] object UIUtils extends Logging {
               </h3>
             </div>
           </div>
+          {content}
+        </div>
+      </body>
+    </html>
+  }
+
+  /** Returns a simple spark page with correctly formatted tabs */
+  def simpleSparkPageWithTabs(
+      title: String,
+      content: => Seq[Node],
+      activeTab: SparkUITab,
+      refreshInterval: Option[Int] = None,
+      helpText: Option[String] = None,
+      showVisualization: Boolean = false): Seq[Node] = {
+
+    val appName = activeTab.appName
+    val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
+    val header = activeTab.headerTabs.map { tab =>
+      <li class={if (tab == activeTab) "active" else ""}>
+        <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
+      </li>
+    }
+    // val helpButton: Seq[Node] = helpText.map(tooltip(_, "bottom")).getOrElse(Seq.empty)
+
+    <html>
+      <head>
+        {commonHeaderNodes}
+        {if (showVisualization) vizHeaderNodes else Seq.empty}
+        <title>{appName} - {title}</title>
+      </head>
+      <body>
+        <div class="navbar navbar-static-top">
+          <div class="navbar-inner">
+            <div class="brand">
+              <a href={prependBaseUri("/")} class="brand">
+                <img src={prependBaseUri("/static/snappydata/SnappyData-Logo-230X50.png")} />
+                <span class="version">{org.apache.spark.SPARK_VERSION}</span>
+              </a>
+            </div>
+            <p class="navbar-text pull-right">
+              <strong title={appName}>{shortAppName}</strong> application UI
+            </p>
+            <ul class="nav">{header}</ul>
+          </div>
+        </div>
+        <div class="container-fluid">
           {content}
         </div>
       </body>

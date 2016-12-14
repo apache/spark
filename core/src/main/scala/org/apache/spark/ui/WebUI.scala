@@ -46,7 +46,7 @@ private[spark] abstract class WebUI(
     name: String = "")
   extends Logging {
 
-  protected val tabs = ArrayBuffer[WebUITab]()
+  protected var tabs = ArrayBuffer[WebUITab]()
   protected val handlers = ArrayBuffer[ServletContextHandler]()
   protected val pageToHandlers = new HashMap[WebUIPage, ArrayBuffer[ServletContextHandler]]
   protected var serverInfo: Option[ServerInfo] = None

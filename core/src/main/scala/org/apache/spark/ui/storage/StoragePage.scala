@@ -32,7 +32,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val content = rddTable(listener.rddInfoList) ++
       receiverBlockTables(listener.allExecutorStreamBlockStatus.sortBy(_.executorId))
-    UIUtils.headerSparkPage("Storage", content, parent)
+    UIUtils.headerSparkPage("Spark Cache", content, parent)
   }
 
   private[storage] def rddTable(rdds: Seq[RDDInfo]): Seq[Node] = {
