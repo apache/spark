@@ -1128,9 +1128,25 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(df.isStreaming)
         out = os.path.join(tmpPath, 'out')
         chk = os.path.join(tmpPath, 'chk')
-        q = df.writeStream \
+
+        def func(x):
+            time.sleep(1)
+            return x
+
+        from pyspark.sql.functions import col, udf
+        sleep_udf = udf(func)
+
+        # Use "sleep_udf" to delay the progress update so that we can test `lastProgress` when there
+        # were no updates.
+        q = df.select(sleep_udf(col("value")).alias('value')).writeStream \
             .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
         try:
+            # "lastProgress" will return None in most cases. However, as it may be flaky when
+            # Jenkins is very slow, we don't assert it. If there is something wrong, "lastProgress"
+            # may throw error with a high chance and make this test flaky, so we should still be
+            # able to detect broken codes.
+            q.lastProgress
+
             q.processAllAvailable()
             lastProgress = q.lastProgress
             recentProgress = q.recentProgress

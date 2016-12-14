@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import scala.collection.JavaConverters._
+import java.util.concurrent.CountDownLatch
 
 import org.apache.commons.lang3.RandomStringUtils
 import org.scalactic.TolerantNumerics
@@ -32,6 +32,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.util.BlockingSource
 import org.apache.spark.util.ManualClock
 
 
@@ -310,6 +311,24 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message.startsWith("Terminated with exception"))
     )
+  }
+
+  test("lastProgress should be null when recentProgress is empty") {
+    BlockingSource.latch = new CountDownLatch(1)
+    withTempDir { tempDir =>
+      val sq = spark.readStream
+        .format("org.apache.spark.sql.streaming.util.BlockingSource")
+        .load()
+        .writeStream
+        .format("org.apache.spark.sql.streaming.util.BlockingSource")
+        .option("checkpointLocation", tempDir.toString)
+        .start()
+      // Creating source is blocked so recentProgress is empty and lastProgress should be null
+      assert(sq.lastProgress === null)
+      // Release the latch and stop the query
+      BlockingSource.latch.countDown()
+      sq.stop()
+    }
   }
 
   test("codahale metrics") {
