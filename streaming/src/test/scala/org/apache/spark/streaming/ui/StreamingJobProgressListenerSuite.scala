@@ -62,6 +62,10 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
       0 -> StreamInputInfo(0, 300L),
       1 -> StreamInputInfo(1, 300L, Map(StreamInputInfo.METADATA_KEY_DESCRIPTION -> "test")))
 
+    // onStreamingStarted
+    listener.onStreamingStarted(StreamingListenerStreamingStarted(100L))
+    listener.startTime should be (100)
+
     // onBatchSubmitted
     val batchInfoSubmitted = BatchInfo(Time(1000), streamIdToInputInfo, 1000, None, None, Map.empty)
     listener.onBatchSubmitted(StreamingListenerBatchSubmitted(batchInfoSubmitted))
