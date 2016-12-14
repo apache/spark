@@ -56,8 +56,8 @@ case class MapType(
 
   /**
    * The default size of a value of the MapType is
-   * 1 * (the default size of the key type + the default size of the value type).
-   * (We assume that there are 1 elements).
+   * (the default size of the key type + the default size of the value type).
+   * We assume that there is only 1 element on average in a map. See SPARK-18853.
    */
   override def defaultSize: Int = 1 * (keyType.defaultSize + valueType.defaultSize)
 

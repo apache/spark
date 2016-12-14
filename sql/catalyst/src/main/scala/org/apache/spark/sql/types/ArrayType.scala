@@ -78,8 +78,8 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
       ("containsNull" -> containsNull)
 
   /**
-   * The default size of a value of the ArrayType is 1 * the default size of the element type.
-   * (We assume that there are 1 elements).
+   * The default size of a value of the ArrayType is the default size of the element type.
+   * We assume that there is only 1 element on average in an array. See SPARK-18853.
    */
   override def defaultSize: Int = 1 * elementType.defaultSize
 
