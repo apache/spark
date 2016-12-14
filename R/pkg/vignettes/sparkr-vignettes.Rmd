@@ -469,6 +469,10 @@ SparkR supports the following machine learning models and algorithms.
 
 * Isotonic Regression Model
 
+* Logistic Regression Model
+
+* Kolmogorov-Smirnov Test
+
 More will be added in the future.
 
 ### R Formula
@@ -800,7 +804,7 @@ newDF <- createDataFrame(data.frame(x = c(1.5, 3.2)))
 head(predict(isoregModel, newDF))
 ```
 
-### Logistic Regression Model
+#### Logistic Regression Model
 
 (Added in 2.1.0)
 
@@ -833,6 +837,29 @@ df <- createDataFrame(iris)
 model <- spark.logit(df, Species ~ ., regParam = 0.5)
 summary(model)
 ```
+
+#### Kolmogorov-Smirnov Test
+
+`spark.kstest` runs a two-sided, one-sample [Kolmogorov-Smirnov (KS) test](https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test).
+Given a `SparkDataFrame`, the test compares continuous data in a given column `testCol` with the theoretical distribution
+specified by parameter `nullHypothesis`.
+Users can call `summary` to get a summary of the test results.
+
+In the following example, we test whether the `longley` dataset's `Armed_Forces` column
+follows a normal distribution.  We set the parameters of the normal distribution using
+the mean and standard deviation of the sample.
+
+```{r, warning=FALSE}
+df <- createDataFrame(longley)
+afStats <- head(select(df, mean(df$Armed_Forces), sd(df$Armed_Forces)))
+afMean <- afStats[1]
+afStd <- afStats[2]
+
+test <- spark.kstest(df, "Armed_Forces", "norm", c(afMean, afStd))
+testSummary <- summary(test)
+testSummary
+```
+
 
 ### Model Persistence
 The following example shows how to save/load an ML model by SparkR.
