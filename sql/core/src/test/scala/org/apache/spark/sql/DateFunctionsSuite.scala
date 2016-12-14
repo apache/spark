@@ -23,6 +23,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -69,11 +70,26 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select("t").filter($"t" <= "2014-06-01"),
       Row(Timestamp.valueOf("2014-01-01 00:00:00")) :: Nil)
+  }
 
+  test("timestamp comparison with date strings with session local timezone") {
+    val df = Seq(
+      (1, Timestamp.valueOf("2015-12-31 16:00:00")),
+      (2, Timestamp.valueOf("2016-01-01 00:00:00"))).toDF("i", "t")
 
     checkAnswer(
-      df.select("t").filter($"t" >= "2014-06-01"),
-      Row(Timestamp.valueOf("2015-01-01 00:00:00")) :: Nil)
+      df.select("t").filter($"t" <= "2016-01-01 00:00:00"),
+      Seq(
+        Row(Timestamp.valueOf("2015-12-31 16:00:00")),
+        Row(Timestamp.valueOf("2016-01-01 00:00:00"))))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select("t").filter($"t" <= "2016-01-01 00:00:00"),
+        Seq(
+          Row(Timestamp.valueOf("2015-12-31 16:00:00"))))
+    }
   }
 
   test("date comparison with date strings") {
@@ -91,6 +107,37 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Date.valueOf("2015-01-01")) :: Nil)
   }
 
+  test("date comparison with date strings with session local timezone") {
+    val df = Seq(
+      (1, Date.valueOf("2015-12-31")),
+      (2, Date.valueOf("2016-01-01"))).toDF("i", "t")
+
+    checkAnswer(
+      df.select("t").filter($"t" <= "2016-01-01"),
+      Seq(
+        Row(Date.valueOf("2015-12-31")),
+        Row(Date.valueOf("2016-01-01"))))
+
+    checkAnswer(
+      df.select("t").filter($"t" >= "2016"),
+      Seq(
+        Row(Date.valueOf("2016-01-01"))))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select("t").filter($"t" <= "2016-01-01"),
+        Seq(
+          Row(Date.valueOf("2015-12-31")),
+          Row(Date.valueOf("2016-01-01"))))
+
+      checkAnswer(
+        df.select("t").filter($"t" >= "2016"),
+        Seq(
+          Row(Date.valueOf("2016-01-01"))))
+    }
+  }
+
   test("date format") {
     val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
@@ -103,6 +150,27 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("2015", "2015", "2013"))
   }
 
+  test("date format with session local timezone") {
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(
+        date_format($"a", "yyyy-MM-dd HH:mm:ss"),
+        date_format($"b", "yyyy-MM-dd HH:mm:ss"),
+        date_format($"c", "yyyy-MM-dd HH:mm:ss")),
+      Row("2015-04-08 00:00:00", "2015-04-08 13:10:15", "2013-04-08 13:10:15"))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select(
+          date_format($"a", "yyyy-MM-dd HH:mm:ss"),
+          date_format($"b", "yyyy-MM-dd HH:mm:ss"),
+          date_format($"c", "yyyy-MM-dd HH:mm:ss")),
+        Row("2015-04-08 00:00:00", "2015-04-08 13:10:15", "2013-04-08 20:10:15"))
+    }
+  }
+
   test("year") {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
@@ -113,6 +181,24 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("year(a)", "year(b)", "year(c)"),
       Row(2015, 2015, 2013))
+  }
+
+  test("year with session local timezone") {
+    val d = new Date(sdf.parse("2015-12-31 16:00:00").getTime)
+    val ts = new Timestamp(sdf.parse("2015-12-31 16:00:00").getTime)
+
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(year($"a"), year($"b"), year($"c")),
+      Row(2015, 2015, 2015))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select(year($"a"), year($"b"), year($"c")),
+        Row(2015, 2015, 2016))
+    }
   }
 
   test("quarter") {
@@ -129,6 +215,24 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(2, 2, 4))
   }
 
+  test("quarter with session local timezone") {
+    val d = new Date(sdf.parse("2015-12-31 16:00:00").getTime)
+    val ts = new Timestamp(sdf.parse("2015-12-31 16:00:00").getTime)
+
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(quarter($"a"), quarter($"b"), quarter($"c")),
+      Row(4, 4, 4))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select(quarter($"a"), quarter($"b"), quarter($"c")),
+        Row(4, 4, 1))
+    }
+  }
+
   test("month") {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
@@ -139,6 +243,24 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("month(a)", "month(b)", "month(c)"),
       Row(4, 4, 4))
+  }
+
+  test("month with session local timezone") {
+    val d = new Date(sdf.parse("2015-12-31 16:00:00").getTime)
+    val ts = new Timestamp(sdf.parse("2015-12-31 16:00:00").getTime)
+
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(month($"a"), month($"b"), month($"c")),
+      Row(12, 12, 12))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select(month($"a"), month($"b"), month($"c")),
+        Row(12, 12, 1))
+    }
   }
 
   test("dayofmonth") {
@@ -153,6 +275,24 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(8, 8, 8))
   }
 
+  test("dayofmonth with session local timezone") {
+    val d = new Date(sdf.parse("2015-12-31 16:00:00").getTime)
+    val ts = new Timestamp(sdf.parse("2015-12-31 16:00:00").getTime)
+
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(dayofmonth($"a"), dayofmonth($"b"), dayofmonth($"c")),
+      Row(31, 31, 31))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select(dayofmonth($"a"), dayofmonth($"b"), dayofmonth($"c")),
+        Row(31, 31, 1))
+    }
+  }
+
   test("dayofyear") {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
@@ -163,6 +303,24 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("dayofyear(a)", "dayofyear(b)", "dayofyear(c)"),
       Row(98, 98, 98))
+  }
+
+  test("dayofyear with session local timezone") {
+    val d = new Date(sdf.parse("2015-12-31 16:00:00").getTime)
+    val ts = new Timestamp(sdf.parse("2015-12-31 16:00:00").getTime)
+
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(dayofyear($"a"), dayofyear($"b"), dayofyear($"c")),
+      Row(365, 365, 365))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select(dayofyear($"a"), dayofyear($"b"), dayofyear($"c")),
+        Row(365, 365, 1))
+    }
   }
 
   test("hour") {
@@ -177,6 +335,24 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(0, 13, 13))
   }
 
+  test("hour with session local timezone") {
+    val d = new Date(sdf.parse("2015-12-31 16:00:00").getTime)
+    val ts = new Timestamp(sdf.parse("2015-12-31 16:00:00").getTime)
+
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(hour($"a"), hour($"b"), hour($"c")),
+      Row(0, 16, 16))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select(hour($"a"), hour($"b"), hour($"c")),
+        Row(0, 16, 0))
+    }
+  }
+
   test("minute") {
     val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
@@ -187,6 +363,32 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("minute(a)", "minute(b)", "minute(c)"),
       Row(0, 10, 10))
+  }
+
+  test("minute with session local timezone") {
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(minute($"a"), minute($"b"), minute($"c")),
+      Row(0, 10, 10))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select(minute($"a"), minute($"b"), minute($"c")),
+        Row(0, 10, 10))
+    }
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "ACT") {
+
+      checkAnswer(
+        df.select(minute($"a"), minute($"b"), minute($"c")),
+        Row(0, 10, 40))
+
+      checkAnswer(
+        df.selectExpr("minute(a)", "minute(b)", "minute(c)"),
+        Row(0, 10, 40))
+    }
   }
 
   test("second") {
@@ -201,6 +403,21 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(0, 15, 15))
   }
 
+  test("second with session local timezone") {
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(second($"a"), second($"b"), second($"c")),
+      Row(0, 15, 15))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select(second($"a"), second($"b"), second($"c")),
+        Row(0, 15, 15))
+    }
+  }
+
   test("weekofyear") {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
@@ -211,6 +428,24 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("weekofyear(a)", "weekofyear(b)", "weekofyear(c)"),
       Row(15, 15, 15))
+  }
+
+  test("weekofyear with session local timezone") {
+    val d = new Date(sdf.parse("2016-01-03 16:00:00").getTime)
+    val ts = new Timestamp(sdf.parse("2016-01-03 16:00:00").getTime)
+
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(weekofyear($"a"), weekofyear($"b"), weekofyear($"c")),
+      Row(53, 53, 53))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select(weekofyear($"a"), weekofyear($"b"), weekofyear($"c")),
+        Row(53, 53, 1))
+    }
   }
 
   test("function date_add") {
@@ -340,6 +575,24 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Date.valueOf("2015-07-31")), Row(Date.valueOf("2015-07-31"))))
   }
 
+  test("function last_day with session local timezone") {
+    val ts1 = new Timestamp(sdf.parse("2015-12-30 16:00:00").getTime)
+    val ts2 = new Timestamp(sdf.parse("2015-12-31 16:00:00").getTime)
+
+    val df = Seq((1, ts1), (2, ts2)).toDF("i", "t")
+
+    checkAnswer(
+      df.select(last_day(col("t"))),
+      Seq(Row(Date.valueOf("2015-12-31")), Row(Date.valueOf("2015-12-31"))))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select(last_day(col("t"))),
+        Seq(Row(Date.valueOf("2015-12-31")), Row(Date.valueOf("2016-01-31"))))
+    }
+  }
+
   test("function next_day") {
     val df1 = Seq(("mon", "2015-07-23"), ("tuesday", "2015-07-20")).toDF("dow", "d")
     val df2 = Seq(("th", "2015-07-23 00:11:22"), ("xx", "2015-07-24 11:22:33")).toDF("dow", "t")
@@ -349,6 +602,24 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df2.select(next_day(col("t"), "th")),
       Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-07-30"))))
+  }
+
+  test("function next_day with session local timezone") {
+    val ts1 = new Timestamp(sdf.parse("2016-12-11 16:00:00").getTime)
+    val ts2 = new Timestamp(sdf.parse("2016-12-12 16:00:00").getTime)
+
+    val df = Seq(("mon", ts1), ("tuesday", ts2)).toDF("dow", "t")
+
+    checkAnswer(
+      df.select(next_day(col("t"), "MONDAY")),
+      Seq(Row(Date.valueOf("2016-12-12")), Row(Date.valueOf("2016-12-19"))))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select(next_day(col("t"), "MONDAY")),
+        Seq(Row(Date.valueOf("2016-12-19")), Row(Date.valueOf("2016-12-19"))))
+    }
   }
 
   test("function to_date") {
@@ -381,6 +652,26 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"))))
   }
 
+  test("function to_date with session local timezone") {
+    val d = Date.valueOf("2015-12-31")
+    val t = Timestamp.valueOf("2015-12-31 16:00:00")
+    val s = "2015-12-31 16:00:00"
+
+    val df = Seq((d, t, s)).toDF("d", "t", "s")
+
+    checkAnswer(
+      df.select(to_date(col("d")), to_date(col("t")), to_date(col("s"))),
+      Seq(Row(Date.valueOf("2015-12-31"), Date.valueOf("2015-12-31"), Date.valueOf("2015-12-31"))))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select(to_date(col("d")), to_date(col("t")), to_date(col("s"))),
+        Seq(
+          Row(Date.valueOf("2015-12-31"), Date.valueOf("2016-01-01"), Date.valueOf("2015-12-31"))))
+    }
+  }
+
   test("function trunc") {
     val df = Seq(
       (1, Timestamp.valueOf("2015-07-22 10:00:00")),
@@ -393,6 +684,23 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("trunc(t, 'Month')"),
       Seq(Row(Date.valueOf("2015-07-01")), Row(Date.valueOf("2014-12-01"))))
+  }
+
+  test("function trunc with session local timezone") {
+    val df = Seq(
+      (1, Timestamp.valueOf("2015-12-30 16:00:00")),
+      (2, Timestamp.valueOf("2015-12-31 16:00:00"))).toDF("i", "t")
+
+    checkAnswer(
+      df.select(trunc(col("t"), "YY")),
+      Seq(Row(Date.valueOf("2015-01-01")), Row(Date.valueOf("2015-01-01"))))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      checkAnswer(
+        df.select(trunc(col("t"), "YY")),
+        Seq(Row(Date.valueOf("2015-01-01")), Row(Date.valueOf("2016-01-01"))))
+    }
   }
 
   test("from_unixtime") {
@@ -420,6 +728,36 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr(s"from_unixtime(a, '$fmt3')"),
       Seq(Row(sdf3.format(new Timestamp(1000000))), Row(sdf3.format(new Timestamp(-1000000)))))
+  }
+
+  test("from_unixtime with session local timezone") {
+    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+    val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
+    val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
+    val fmt3 = "yy-MM-dd HH-mm-ss"
+    val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
+
+    val df = Seq((1000, "yyyy-MM-dd HH:mm:ss.SSS"), (-1000, "yy-MM-dd HH-mm-ss")).toDF("a", "b")
+
+    checkAnswer(
+      df.selectExpr("from_unixtime(a)"),
+      Seq(Row(sdf1.format(new Timestamp(1000000))), Row(sdf1.format(new Timestamp(-1000000)))))
+    checkAnswer(
+      df.selectExpr("from_unixtime(a, b)"),
+      Seq(Row(sdf2.format(new Timestamp(1000000))), Row(sdf3.format(new Timestamp(-1000000)))))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+      sdf1.setTimeZone(DateTimeUtils.TimeZoneGMT)
+      sdf2.setTimeZone(DateTimeUtils.TimeZoneGMT)
+      sdf3.setTimeZone(DateTimeUtils.TimeZoneGMT)
+
+      checkAnswer(
+        df.selectExpr("from_unixtime(a)"),
+        Seq(Row(sdf1.format(new Timestamp(1000000))), Row(sdf1.format(new Timestamp(-1000000)))))
+      checkAnswer(
+        df.selectExpr("from_unixtime(a, b)"),
+        Seq(Row(sdf2.format(new Timestamp(1000000))), Row(sdf3.format(new Timestamp(-1000000)))))
+    }
   }
 
   test("unix_timestamp") {
@@ -454,6 +792,47 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(sql(s"select cast ($now as timestamp)"), Row(new java.util.Date(now * 1000)))
   }
 
+  test("unix_timestamp with session local timezone") {
+    val date = Date.valueOf("2015-12-31")
+    val ts = Timestamp.valueOf("2015-12-31 16:00:00.0")
+    val s = "2015/12/31 16:00:00.0"
+    val ss = "2015-12-31 16:00:00"
+    val fmt = "yyyy/MM/dd HH:mm:ss.S"
+
+    val df = Seq((date, ts, s, ss)).toDF("d", "ts", "s", "ss")
+
+    checkAnswer(
+      df.select(
+        unix_timestamp(col("d")),
+        unix_timestamp(col("ts")),
+        unix_timestamp(col("s"), fmt),
+        unix_timestamp(col("ss"))),
+      Seq(
+        Row(date.getTime / 1000L, ts.getTime / 1000L, ts.getTime / 1000L, ts.getTime / 1000L)))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+      val sdf1 = new SimpleDateFormat("yyyy-MM-dd", Locale.US)
+      sdf1.setTimeZone(DateTimeUtils.TimeZoneGMT)
+      val sdf2 = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.S", Locale.US)
+      sdf2.setTimeZone(DateTimeUtils.TimeZoneGMT)
+      val sdf3 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+      sdf3.setTimeZone(DateTimeUtils.TimeZoneGMT)
+
+      checkAnswer(
+        df.select(
+          unix_timestamp(col("d")),
+          unix_timestamp(col("ts")),
+          unix_timestamp(col("s"), fmt),
+          unix_timestamp(col("ss"))),
+        Seq(
+          Row(
+            sdf1.parse("2015-12-31").getTime / 1000L,
+            ts.getTime / 1000L,
+            sdf2.parse(s).getTime / 1000L,
+            sdf3.parse(ss).getTime / 1000L)))
+    }
+  }
+
   test("to_unix_timestamp") {
     val date1 = Date.valueOf("2015-07-24")
     val date2 = Date.valueOf("2015-07-25")
@@ -473,6 +852,47 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(date1.getTime / 1000L), Row(date2.getTime / 1000L)))
     checkAnswer(df.selectExpr(s"to_unix_timestamp(s, '$fmt')"), Seq(
       Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+  }
+
+  test("to_unix_timestamp with session local timezone") {
+    val date = Date.valueOf("2015-12-31")
+    val ts = Timestamp.valueOf("2015-12-31 16:00:00.0")
+    val s = "2015/12/31 16:00:00.0"
+    val ss = "2015-12-31 16:00:00"
+    val fmt = "yyyy/MM/dd HH:mm:ss.S"
+
+    val df = Seq((date, ts, s, ss)).toDF("d", "ts", "s", "ss")
+
+    checkAnswer(
+      df.selectExpr(
+        "to_unix_timestamp(d)",
+        "to_unix_timestamp(ts)",
+        s"to_unix_timestamp(s, '$fmt')",
+        "to_unix_timestamp(ss)"),
+      Seq(
+        Row(date.getTime / 1000L, ts.getTime / 1000L, ts.getTime / 1000L, ts.getTime / 1000L)))
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+      val sdf1 = new SimpleDateFormat("yyyy-MM-dd", Locale.US)
+      sdf1.setTimeZone(DateTimeUtils.TimeZoneGMT)
+      val sdf2 = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.S", Locale.US)
+      sdf2.setTimeZone(DateTimeUtils.TimeZoneGMT)
+      val sdf3 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+      sdf3.setTimeZone(DateTimeUtils.TimeZoneGMT)
+
+      checkAnswer(
+        df.selectExpr(
+          "to_unix_timestamp(d)",
+          "to_unix_timestamp(ts)",
+          s"to_unix_timestamp(s, '$fmt')",
+          "to_unix_timestamp(ss)"),
+        Seq(
+          Row(
+            sdf1.parse("2015-12-31").getTime / 1000L,
+            ts.getTime / 1000L,
+            sdf2.parse(s).getTime / 1000L,
+            sdf3.parse(ss).getTime / 1000L)))
+    }
   }
 
   test("datediff") {
