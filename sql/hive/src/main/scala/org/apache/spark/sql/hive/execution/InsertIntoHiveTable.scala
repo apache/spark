@@ -120,7 +120,6 @@ case class InsertIntoHiveTable(
       case e: IOException =>
         throw new RuntimeException(
           "Cannot create staging directory '" + dir.toString + "': " + e.getMessage, e)
-
     }
     return dir
   }
@@ -167,11 +166,11 @@ case class InsertIntoHiveTable(
       if (!FileUtils.mkdir(fs, dirPath, true, hadoopConf)) {
         throw new IllegalStateException("Cannot create staging directory: " + dirPath.toString)
       }
+      createdTempDir = Some(dirPath)
       fs.deleteOnExit(dirPath)
     } catch {
       case e: IOException =>
         throw new RuntimeException("Cannot create staging directory: " + dirPath.toString, e)
-
     }
     dirPath
   }
