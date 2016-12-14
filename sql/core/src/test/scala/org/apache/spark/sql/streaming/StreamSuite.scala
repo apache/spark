@@ -279,7 +279,8 @@ class StreamSuite extends StreamTest {
     // Test `explain` not throwing errors
     df.explain()
     val q = df.writeStream.queryName("memory_explain").format("memory").start()
-      .asInstanceOf[StreamExecution]
+      .asInstanceOf[StreamingQueryWrapper]
+      .streamingQuery
     try {
       assert("No physical plan. Waiting for data." === q.explainInternal(false))
       assert("No physical plan. Waiting for data." === q.explainInternal(true))
@@ -315,7 +316,7 @@ class StreamSuite extends StreamTest {
     val q2 = startQuery(input.toDS.map { i =>
       // Emulate that `StreamingQuery` get captured with normal usage unintentionally.
       // It should not fail the query.
-      q1.name
+      q1
       i
     }, "stream_serializable_test_2")
     val q3 = startQuery(input.toDS.map { i =>

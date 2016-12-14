@@ -44,15 +44,15 @@ import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
  * and the results are committed transactionally to the given [[Sink]].
  */
 class StreamExecution(
-    @transient private val _sparkSession: SparkSession,
+    override val sparkSession: SparkSession,
     override val name: String,
     checkpointRoot: String,
-    @transient private val analyzedPlan: LogicalPlan,
-    @transient val sink: Sink,
+    analyzedPlan: LogicalPlan,
+    val sink: Sink,
     val trigger: Trigger,
-    @transient val triggerClock: Clock,
+    val triggerClock: Clock,
     val outputMode: OutputMode)
-  extends StreamingQuery with ProgressReporter with Logging with Serializable {
+  extends StreamingQuery with ProgressReporter with Logging {
 
   import org.apache.spark.sql.streaming.StreamingQueryListener._
 
@@ -64,11 +64,11 @@ class StreamExecution(
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
    */
-  @transient private val awaitBatchLock = new ReentrantLock(true)
-  @transient private val awaitBatchLockCondition = awaitBatchLock.newCondition()
+  private val awaitBatchLock = new ReentrantLock(true)
+  private val awaitBatchLockCondition = awaitBatchLock.newCondition()
 
-  @transient private val startLatch = new CountDownLatch(1)
-  @transient private val terminationLatch = new CountDownLatch(1)
+  private val startLatch = new CountDownLatch(1)
+  private val terminationLatch = new CountDownLatch(1)
 
   /**
    * Tracks how much data we have processed and committed to the sink or state store from each
@@ -77,7 +77,7 @@ class StreamExecution(
    * Other threads should make a shallow copy if they are going to access this field more than
    * once, since the field's value may change at any time.
    */
-  @volatile @transient
+  @volatile
   var committedOffsets = new StreamProgress
 
   /**
@@ -87,14 +87,14 @@ class StreamExecution(
    * Other threads should make a shallow copy if they are going to access this field more than
    * once, since the field's value may change at any time.
    */
-  @volatile @transient
+  @volatile
   var availableOffsets = new StreamProgress
 
   /** The current batchId or -1 if execution has not yet been initialized. */
   protected var currentBatchId: Long = -1
 
   /** Metadata associated with the whole query */
-  @transient protected val streamMetadata: StreamMetadata = {
+  protected val streamMetadata: StreamMetadata = {
     val metadataPath = new Path(checkpointFile("metadata"))
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
     StreamMetadata.read(metadataPath, hadoopConf).getOrElse {
@@ -118,7 +118,7 @@ class StreamExecution(
   private val prettyIdString =
     Option(name).map(_ + " ").getOrElse("") + s"[id = $id, runId = $runId]"
 
-  @transient override lazy val logicalPlan: LogicalPlan = {
+  override lazy val logicalPlan: LogicalPlan = {
     var nextSourceId = 0L
     analyzedPlan.transform {
       case StreamingRelation(dataSource, _, output) =>
@@ -133,13 +133,13 @@ class StreamExecution(
   }
 
   /** All stream sources present in the query plan. */
-  @transient protected lazy val sources =
+  protected lazy val sources =
     logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
 
   /** A list of unique sources in the query plan. */
-  @transient private lazy val uniqueSources = sources.distinct
+  private lazy val uniqueSources = sources.distinct
 
-  @transient private val triggerExecutor = trigger match {
+  private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
   }
 
@@ -147,11 +147,11 @@ class StreamExecution(
   @volatile
   private var state: State = INITIALIZED
 
-  @volatile @transient
+  @volatile
   var lastExecution: QueryExecution = _
 
   /** Holds the most recent input data for each source. */
-  @transient protected var newData: Map[Source, DataFrame] = _
+  protected var newData: Map[Source, DataFrame] = _
 
   @volatile
   private var streamDeathCause: StreamingQueryException = null
@@ -160,7 +160,7 @@ class StreamExecution(
   private val callSite = Utils.getCallSite()
 
   /** Used to report metrics to coda-hale. This uses id for easier tracking across restarts. */
-  @transient lazy val streamMetrics = new MetricsReporter(
+  lazy val streamMetrics = new MetricsReporter(
     this, s"spark.streaming.${Option(name).getOrElse(id)}")
 
   /**
@@ -168,7 +168,7 @@ class StreamExecution(
    * [[org.apache.spark.util.UninterruptibleThread]] to avoid potential deadlocks in using
    * [[HDFSMetadataLog]]. See SPARK-14131 for more details.
    */
-  @transient val microBatchThread =
+  val microBatchThread =
     new StreamExecutionThread(s"stream execution thread for $prettyIdString") {
       override def run(): Unit = {
         // To fix call site like "run at <unknown>:0", we bridge the call site from the caller
@@ -184,12 +184,7 @@ class StreamExecution(
    * processing is done.  Thus, the Nth record in this log indicated data that is currently being
    * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
    */
-  @transient val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
-
-  override def sparkSession: SparkSession = {
-    assertRunInDriver()
-    _sparkSession
-  }
+  val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
 
   /** Whether the query is currently active or not */
   override def isActive: Boolean = state == ACTIVE
@@ -523,7 +518,6 @@ class StreamExecution(
    * batch. This method blocks until the thread stops running.
    */
   override def stop(): Unit = {
-    assertRunInDriver()
     // Set the state to TERMINATED so that the batching thread knows that it was interrupted
     // intentionally
     state = TERMINATED
@@ -563,7 +557,6 @@ class StreamExecution(
   @volatile private var noNewData = false
 
   override def processAllAvailable(): Unit = {
-    assertRunInDriver()
     awaitBatchLock.lock()
     try {
       noNewData = false
@@ -582,7 +575,6 @@ class StreamExecution(
   }
 
   override def awaitTermination(): Unit = {
-    assertRunInDriver()
     if (state == INITIALIZED) {
       throw new IllegalStateException("Cannot wait for termination on a query that has not started")
     }
@@ -593,7 +585,6 @@ class StreamExecution(
   }
 
   override def awaitTermination(timeoutMs: Long): Boolean = {
-    assertRunInDriver()
     if (state == INITIALIZED) {
       throw new IllegalStateException("Cannot wait for termination on a query that has not started")
     }
@@ -618,7 +609,6 @@ class StreamExecution(
   }
 
   override def explain(extended: Boolean): Unit = {
-    assertRunInDriver()
     // scalastyle:off println
     println(explainInternal(extended))
     // scalastyle:on println
@@ -631,7 +621,6 @@ class StreamExecution(
   }
 
   def toDebugString: String = {
-    assertRunInDriver()
     val deathCauseStr = if (streamDeathCause != null) {
       "Error:\n" + stackTraceToString(streamDeathCause.cause)
     } else ""
@@ -648,13 +637,6 @@ class StreamExecution(
        |
        |$deathCauseStr
      """.stripMargin
-  }
-
-  /** Assert the codes run in the driver. */
-  private def assertRunInDriver(): Unit = {
-    if (_sparkSession == null) {
-      throw new IllegalStateException("StreamingQuery cannot be used in executors")
-    }
   }
 
   trait State
