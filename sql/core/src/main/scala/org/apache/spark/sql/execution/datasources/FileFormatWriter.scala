@@ -46,6 +46,13 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 /** A helper object for writing FileFormat data out to a location. */
 object FileFormatWriter extends Logging {
 
+  /**
+   * Max number of files a single task writes out due to file size. In most cases the number of
+   * files written should be very small. This is just a safe guard to protect some really bad
+   * settings, e.g. maxRecordsPerFile = 1.
+   */
+  private val MAX_FILE_COUNTER = 1000 * 1000
+
   /** Describes how output files should be placed in the filesystem. */
   case class OutputSpec(
     outputPath: String, customPartitionLocations: Map[TablePartitionSpec, String])
@@ -246,11 +253,14 @@ object FileFormatWriter extends Logging {
 
     override def execute(iter: Iterator[InternalRow]): Set[String] = {
       var fileCounter = 0
-      var recordsInFile = 0
+      var recordsInFile: Long = 0L
       newOutputWriter(fileCounter)
       while (iter.hasNext) {
         if (description.maxRecordsPerFile > 0 && recordsInFile >= description.maxRecordsPerFile) {
           fileCounter += 1
+          assert(fileCounter < MAX_FILE_COUNTER,
+            s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
+
           recordsInFile = 0
           releaseResources()
           newOutputWriter(fileCounter)
@@ -405,7 +415,7 @@ object FileFormatWriter extends Logging {
       val sortedIterator = sorter.sortedIterator()
 
       // If anything below fails, we should abort the task.
-      var recordsInFile = 0
+      var recordsInFile: Long = 0L
       var fileCounter = 0
       var currentKey: UnsafeRow = null
       val updatedPartitions = mutable.Set[String]()
@@ -431,6 +441,9 @@ object FileFormatWriter extends Logging {
           // Create a new file by increasing the file counter.
           recordsInFile = 0
           fileCounter += 1
+          assert(fileCounter < MAX_FILE_COUNTER,
+            s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
+
           releaseResources()
           newOutputWriter(currentKey, getPartitionStringFunc, fileCounter)
         }
