@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import breeze.linalg.{DenseVector => BDV}
-import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
+import breeze.optimize.{CachedDiffFunction, DiffFunction, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 import scala.collection.mutable
 
@@ -26,7 +26,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.linalg.BLAS._
@@ -38,12 +37,10 @@ import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit}
-import org.apache.spark.sql.types.DoubleType
-import org.apache.spark.util.VersionUtils
 
-/** Params for SVM. */
-private[ml] trait SVMParams extends ProbabilisticClassifierParams
-  with HasSeed with HasStepSize with HasRegParam with HasMaxIter
+/** Params for linear SVM Classifier. */
+private[ml] trait LinearSVCParams extends ClassifierParams
+  with HasStepSize with HasRegParam with HasMaxIter
   with HasFitIntercept with HasTol with HasStandardization with HasWeightCol with HasThreshold
   with HasAggregationDepth {
 
@@ -51,17 +48,17 @@ private[ml] trait SVMParams extends ProbabilisticClassifierParams
 
 /**
  * :: Experimental ::
- * SVM with Hinge and OWLQN
+ * Linear SVM Classifier with Hinge Loss and OWLQN optimizer
  */
-@Since("2.1.0")
+@Since("2.2.0")
 @Experimental
-class SVM @Since("2.1.0") (
-    @Since("2.1.0") override val uid: String)
-  extends Predictor[Vector, SVM, SVMModel]
-  with SVMParams with DefaultParamsWritable {
+class LinearSVC @Since("2.2.0")(
+    @Since("2.2.0") override val uid: String)
+  extends Classifier[Vector, LinearSVC, LinearSVCModel]
+  with LinearSVCParams with DefaultParamsWritable {
 
-  @Since("2.1.0")
-  def this() = this(Identifiable.randomUID("svm"))
+  @Since("2.2.0")
+  def this() = this(Identifiable.randomUID("linearsvc"))
 
   /**
    * Set the maximum number of iterations.
@@ -69,7 +66,7 @@ class SVM @Since("2.1.0") (
    *
    * @group setParam
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
   setDefault(maxIter -> 100)
 
@@ -79,7 +76,7 @@ class SVM @Since("2.1.0") (
    *
    * @group setParam
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
   setDefault(regParam -> 0.0)
 
@@ -90,20 +87,12 @@ class SVM @Since("2.1.0") (
    *
    * @group setParam
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setTol(value: Double): this.type = set(tol, value)
   setDefault(tol -> 1E-6)
 
-  /**
-   * Set the seed for weights initialization if weights are not set
-   *
-   * @group setParam
-   */
-  @Since("2.1.0")
-  def setSeed(value: Long): this.type = set(seed, value)
-
-  @Since("2.1.0")
-  override def copy(extra: ParamMap): SVM = defaultCopy(extra)
+  @Since("2.2.0")
+  override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
   /**
    * Sets the value of param [[weightCol]].
@@ -112,27 +101,25 @@ class SVM @Since("2.1.0") (
    *
    * @group setParam
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /**
-   * Train a model using the given dataset and parameters.
-   * Developers can implement this instead of [[fit()]] to avoid dealing with schema validation
-   * and copying parameters into the model.
+   * Train a linear SVM Classifier Model with Hinge Loss and OWLQN optimizer
    *
    * @param dataset Training dataset
    * @return Fitted model
    */
-  override protected def train(dataset: Dataset[_]): SVMModel = {
+  override protected def train(dataset: Dataset[_]): LinearSVCModel = {
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
+      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
         case Row(label: Double, weight: Double, features: Vector) =>
           Instance(label, weight, features)
       }
 
     val instr = Instrumentation.create(this, instances)
-    instr.logParams(regParam, standardization, threshold, maxIter, tol, fitIntercept)
+    instr.logParams(params: _*)
 
     val (summarizer, labelSummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
@@ -160,13 +147,6 @@ class SVM @Since("2.1.0") (
         n
       case None => histogram.length
     }
-
-    if (isDefined(thresholds)) {
-      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
-        ".train() called with non-matching numClasses and thresholds.length." +
-        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
-    }
-
     instr.logNumClasses(numClasses)
     instr.logNumFeatures(numFeatures)
 
@@ -181,15 +161,13 @@ class SVM @Since("2.1.0") (
       val featuresStd = summarizer.variance.toArray.map(math.sqrt)
       val regParamL2 = $(regParam)
       val bcFeaturesStd = instances.context.broadcast(featuresStd)
-      val costFun = new SVMCostFun(instances, numClasses, $(fitIntercept),
+      val costFun = new LinearSVCCostFun(instances, numClasses, $(fitIntercept),
         $(standardization), bcFeaturesStd, regParamL2, false,
         $(aggregationDepth))
 
       def regParamL1Fun = (index: Int) => 0D
       val optimizer = new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
-
       val initialCoefficientsWithIntercept = Vectors.zeros(numFeaturesPlusIntercept)
-
       initialCoefficientsWithIntercept.toArray(numFeatures) = math.log(
         histogram(1) / histogram(0))
 
@@ -232,31 +210,33 @@ class SVM @Since("2.1.0") (
       (Vectors.dense(coefficientArray), intercept, arrayBuilder.result())
     }
 
-    val model = copyValues(new SVMModel(uid, coefficientMatrix, interceptVector))
+    val model = copyValues(new LinearSVCModel(uid, coefficientMatrix, interceptVector))
     instr.logSuccess(model)
     model
   }
 }
 
-@Since("2.1.0")
-object SVM extends DefaultParamsReadable[SVM] {
+@Since("2.2.0")
+object LinearSVC extends DefaultParamsReadable[LinearSVC] {
 
-  @Since("2.1.0")
-  override def load(path: String): SVM = super.load(path)
+  @Since("2.2.0")
+  override def load(path: String): LinearSVC = super.load(path)
 }
 
 /**
  * :: Experimental ::
- * SVM Model trained by [[SVM]]
+ * SVM Model trained by [[LinearSVC]]
  */
-@Since("2.1.0")
+@Since("2.2.0")
 @Experimental
-class SVMModel private[ml] (
-    @Since("2.1.0") override val uid: String,
-    @Since("2.1.0") val weights: Vector,
-    @Since("2.1.0") val intercept: Double)
-  extends PredictionModel[Vector, SVMModel]
-  with SVMParams with MLWritable {
+class LinearSVCModel private[ml](
+    @Since("2.2.0") override val uid: String,
+    @Since("2.2.0") val weights: Vector,
+    @Since("2.2.0") val intercept: Double)
+  extends ClassificationModel[Vector, LinearSVCModel]
+  with LinearSVCParams with MLWritable {
+
+  override val numClasses = 2
 
   /**
    * Predict label for the given features.
@@ -267,37 +247,40 @@ class SVMModel private[ml] (
     if (margin > $(threshold)) 1.0 else 0.0
   }
 
-  @Since("2.1.0")
-  override def copy(extra: ParamMap): SVMModel = {
-    copyValues(new SVMModel(uid, weights, intercept), extra)
+  override protected def predictRaw(features: Vector): Vector = {
+    val margin = features.asBreeze.dot(weights.asBreeze) + intercept
+    Vectors.dense(-margin, margin)
+  }
+
+  @Since("2.2.0")
+  override def copy(extra: ParamMap): LinearSVCModel = {
+    copyValues(new LinearSVCModel(uid, weights, intercept), extra)
   }
 
   /**
    * Returns a [[org.apache.spark.ml.util.MLWriter]] instance for this ML instance.
    */
-  @Since("2.1.0")
-  override def write: MLWriter = new SVMModel.SVMModelWriter(this)
+  @Since("2.2.0")
+  override def write: MLWriter = new LinearSVCModel.LinearSVCWriter(this)
 
 }
 
 
-@Since("2.1.0")
-object SVMModel extends MLReadable[SVMModel] {
+@Since("2.2.0")
+object LinearSVCModel extends MLReadable[LinearSVCModel] {
 
-  @Since("2.1.0")
-  override def read: MLReader[SVMModel] = new SVMModelReader
+  @Since("2.2.0")
+  override def read: MLReader[LinearSVCModel] = new LinearSVCReader
 
-  @Since("2.1.0")
-  override def load(path: String): SVMModel = super.load(path)
+  @Since("2.2.0")
+  override def load(path: String): LinearSVCModel = super.load(path)
 
-  /** [[MLWriter]] instance for [[SVMModel]] */
-  private[SVMModel]
-  class SVMModelWriter(instance: SVMModel)
+  /** [[MLWriter]] instance for [[LinearSVCModel]] */
+  private[LinearSVCModel]
+  class LinearSVCWriter(instance: LinearSVCModel)
     extends MLWriter with Logging {
 
-    private case class Data(
-        coefficients: Vector,
-        intercept: Double)
+    private case class Data(coefficients: Vector, intercept: Double)
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
@@ -309,29 +292,28 @@ object SVMModel extends MLReadable[SVMModel] {
     }
   }
 
-  private class SVMModelReader extends MLReader[SVMModel] {
+  private class LinearSVCReader extends MLReader[LinearSVCModel] {
 
     /** Checked against metadata when loading model */
-    private val className = classOf[SVMModel].getName
+    private val className = classOf[LinearSVCModel].getName
 
-    override def load(path: String): SVMModel = {
+    override def load(path: String): LinearSVCModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
       val Row(coefficients: Vector, intercept: Double) =
         data.select("coefficients", "intercept").head()
-      val model = new SVMModel(metadata.uid, coefficients, intercept)
+      val model = new LinearSVCModel(metadata.uid, coefficients, intercept)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }
 }
 
-
 /**
- * SVMCostFun implements Breeze's DiffFunction[T] for hinge loss function
+ * LinearSVCCostFun implements Breeze's DiffFunction[T] for hinge loss function
  */
-private class SVMCostFun(
+private class LinearSVCCostFun(
     instances: RDD[Instance],
     numClasses: Int,
     fitIntercept: Boolean,
@@ -348,11 +330,11 @@ private class SVMCostFun(
     val numFeatures = featuresStd.length
 
     val svmAggregator = {
-      val seqOp = (c: SVMAggregator, instance: Instance) => c.add(instance)
-      val combOp = (c1: SVMAggregator, c2: SVMAggregator) => c1.merge(c2)
+      val seqOp = (c: LinearSVCAggregator, instance: Instance) => c.add(instance)
+      val combOp = (c1: LinearSVCAggregator, c2: LinearSVCAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
-        new SVMAggregator(bcCoeffs, bcFeaturesStd, numClasses, fitIntercept, false)
+        new LinearSVCAggregator(bcCoeffs, bcFeaturesStd, numClasses, fitIntercept, false)
       )(seqOp, combOp, aggregationDepth)
     }
 
@@ -404,17 +386,17 @@ private class SVMCostFun(
 
 
 /**
- * SVMAggregator computes the gradient and loss for hinge loss function, as used
+ * LinearSVCAggregator computes the gradient and loss for hinge loss function, as used
  * in binary classification for instances in sparse or dense vector in a online fashion.
  *
- * Two SVMAggregator can be merged together to have a summary of loss and gradient of
+ * Two LinearSVCAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
  *
  * @param bcCoefficients The coefficients corresponding to the features.
  * @param fitIntercept Whether to fit an intercept term.
  * @param bcFeaturesStd The standard deviation values of the features.
  */
-private class SVMAggregator(
+private class LinearSVCAggregator(
     bcCoefficients: Broadcast[Vector],
     bcFeaturesStd: Broadcast[Array[Double]],
     numClasses: Int,
@@ -424,7 +406,6 @@ private class SVMAggregator(
   private val numFeatures = bcFeaturesStd.value.length
   private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
   private val coefficients = bcCoefficients.value
-  private val featuresStd = bcFeaturesStd.value
   private var weightSum = 0.0
   private var lossSum = 0.0
 
@@ -440,11 +421,11 @@ private class SVMAggregator(
   private val gradientSumArray = Array.ofDim[Double](coefficientsArray.length)
 
   /**
-   * Add a new training instance to this SVMAggregator, and update the loss and gradient
+   * Add a new training instance to this LinearSVCAggregator, and update the loss and gradient
    * of the objective function.
    *
    * @param instance The instance of data point to be added.
-   * @return This SVMAggregator object.
+   * @return This LinearSVCAggregator object.
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
@@ -453,60 +434,56 @@ private class SVMAggregator(
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
-
-      val localCoefficientsArray = coefficientsArray
+      val localFeaturesStd = bcFeaturesStd.value
+      val localCoefficients = coefficientsArray
       val localGradientSumArray = gradientSumArray
 
-      numClasses match {
-        case 2 =>
-          val dotProduct = {
-          var sum = 0.0
-          features.foreachActive { (index, value) =>
-            if (featuresStd(index) != 0.0 && value != 0.0) {
-              sum += coefficients(index) * value / featuresStd(index)
-            }
+      val dotProduct = {
+        var sum = 0.0
+        features.foreachActive { (index, value) =>
+          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+            sum += localCoefficients(index) * value / localFeaturesStd(index)
           }
-          if (fitIntercept) sum += coefficients(numFeaturesPlusIntercept - 1)
-          sum
         }
-          // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
-          // Therefore the gradient is -(2y - 1)*x
-          val labelScaled = 2 * label - 1.0
-          val (gradient, loss) = if (1.0 > labelScaled * dotProduct) {
-            val gradient = features.copy
-            scal(-labelScaled, gradient)
-            (gradient, 1.0 - labelScaled * dotProduct)
-          } else {
-            (Vectors.sparse(localCoefficientsArray.size, Array.empty, Array.empty), 0.0)
-          }
-
-          features.foreachActive { (index, value) =>
-            if (featuresStd(index) != 0.0 && value != 0.0) {
-              localGradientSumArray(index) += gradient(index)
-            }
-          }
-
-          if (fitIntercept) {
-            localGradientSumArray(dim) += gradient.toArray.last
-          }
-          lossSum += loss
-        case _ =>
-          new NotImplementedError("SVM in ML package only supports binary classification for now.")
+        if (fitIntercept) sum += localCoefficients(numFeaturesPlusIntercept - 1)
+        sum
       }
+      // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
+      // Therefore the gradient is -(2y - 1)*x
+      val labelScaled = 2 * label - 1.0
+      val (gradient, loss) = if (1.0 > labelScaled * dotProduct) {
+        val gradient = features.copy
+        scal(-labelScaled, gradient)
+        (gradient, 1.0 - labelScaled * dotProduct)
+      } else {
+        (Vectors.sparse(localCoefficients.size, Array.empty, Array.empty), 0.0)
+      }
+
+      features.foreachActive { (index, value) =>
+        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+          localGradientSumArray(index) += gradient(index)
+        }
+      }
+
+      if (fitIntercept) {
+        localGradientSumArray(dim) += gradient.toArray.last
+      }
+      lossSum += loss
+
       weightSum += weight
       this
     }
   }
 
   /**
-   * Merge another SVMAggregator, and update the loss and gradient
+   * Merge another LinearSVCAggregator, and update the loss and gradient
    * of the objective function.
    * (Note that it's in place merging; as a result, `this` object will be modified.)
    *
-   * @param other The other SVMAggregator to be merged.
-   * @return This SVMAggregator object.
+   * @param other The other LinearSVCAggregator to be merged.
+   * @return This LinearSVCAggregator object.
    */
-  def merge(other: SVMAggregator): this.type = {
+  def merge(other: LinearSVCAggregator): this.type = {
     require(dim == other.dim, s"Dimensions mismatch when merging with another " +
       s"LeastSquaresAggregator. Expecting $dim but got ${other.dim}.")
 

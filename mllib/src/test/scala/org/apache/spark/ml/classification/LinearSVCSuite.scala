@@ -26,7 +26,7 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class SVMSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("SVM binary classification") {
     val nPoints = 100
@@ -35,13 +35,13 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     val B = -1.5
     val C = 1.0
     val binaryDataset = {
-      val testData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
+      val testData = LinearSVCSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
       spark.createDataFrame(sc.parallelize(testData, 4))
     }
-    val svm = new SVM().setMaxIter(10).setRegParam(0.3)
+    val svm = new LinearSVC().setMaxIter(10)
     val model = svm.fit(binaryDataset)
 
-    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 17)
+    val validationData = LinearSVCSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 17)
     val validationDataFrame = spark.createDataFrame(sc.parallelize(validationData, 4))
 
     assert(model.transform(validationDataFrame).where("prediction=label").count() > nPoints * 0.8)
@@ -49,27 +49,27 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
 
   test("read/write: SVM") {
-    def checkModelData(model: SVMModel, model2: SVMModel): Unit = {
+    def checkModelData(model: LinearSVCModel, model2: LinearSVCModel): Unit = {
       assert(model.intercept === model2.intercept)
       assert(model.weights.toArray === model2.weights.toArray)
       assert(model.numFeatures === model2.numFeatures)
     }
-    val svm = new SVM()
+    val svm = new LinearSVC()
     val nPoints = 100
     // NOTE: Intercept should be small for generating equal 0s and 1s
     val A = 0.01
     val B = -1.5
     val C = 1.0
     val binaryDataset = {
-      val testData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
+      val testData = LinearSVCSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
       spark.createDataFrame(sc.parallelize(testData, 4))
     }
-    testEstimatorAndModelReadWrite(svm, binaryDataset, SVMSuite.allParamSettings,
+    testEstimatorAndModelReadWrite(svm, binaryDataset, LinearSVCSuite.allParamSettings,
       checkModelData)
   }
 }
 
-object SVMSuite {
+object LinearSVCSuite {
 
   val allParamSettings: Map[String, Any] = Map(
     "regParam" -> 0.01,
