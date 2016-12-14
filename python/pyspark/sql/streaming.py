@@ -129,7 +129,11 @@ class StreamingQuery(object):
         None if there were no progress updates
         :return: a map
         """
-        return json.loads(self._jsq.lastProgress().json())
+        lastProgress = self._jsq.lastProgress()
+        if lastProgress:
+            return json.loads(lastProgress.json())
+        else:
+            return None
 
     @since(2.0)
     def processAllAvailable(self):
