@@ -101,10 +101,19 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
  *
  * There is no code generation since this expression should be replaced with a literal.
  */
-case class CurrentBatchTimestamp(timestampMs: Long, dataType: DataType)
-  extends LeafExpression with Nondeterministic with CodegenFallback {
+case class CurrentBatchTimestamp(timestampMs: Long, dataType: DataType, zoneId: String = null)
+  extends LeafExpression with TimeZoneAwareExpression with Nondeterministic with CodegenFallback {
+
+  def this(timestampMs: Long, dataType: DataType) = this(timestampMs, dataType, null)
 
   override def nullable: Boolean = false
+
+  override def timeZoneResolved: Boolean = dataType != DateType || super.timeZoneResolved
+
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
+
+  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
 
   override def prettyName: String = "current_batch_timestamp"
 
@@ -119,7 +128,7 @@ case class CurrentBatchTimestamp(timestampMs: Long, dataType: DataType)
   def toLiteral: Literal = dataType match {
     case _: TimestampType =>
       Literal(DateTimeUtils.fromJavaTimestamp(new Timestamp(timestampMs)), TimestampType)
-    case _: DateType => Literal(DateTimeUtils.millisToDays(timestampMs), DateType)
+    case _: DateType => Literal(DateTimeUtils.millisToDays(timestampMs, timeZone), DateType)
   }
 }
 
