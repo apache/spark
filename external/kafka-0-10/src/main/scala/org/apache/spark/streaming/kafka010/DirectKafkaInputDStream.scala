@@ -195,6 +195,8 @@ private[spark] class DirectKafkaInputDStream[K, V](
     c.pause(newPartitions.asJava)
     // find latest available offsets
     c.seekToEnd(currentOffsets.keySet.asJava)
+    c.resume(newPartitions.asJava)
+    c.resume(c.assignment())
     parts.map(tp => tp -> c.position(tp)).toMap
   }
 
