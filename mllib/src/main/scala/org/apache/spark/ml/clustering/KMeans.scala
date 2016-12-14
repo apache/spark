@@ -306,7 +306,7 @@ class KMeans @Since("1.5.0") (
     fit(dataset, handlePersistence)
   }
 
-  @Since("2.2.0")
+  @Since("2.1.0")
   protected def fit(dataset: Dataset[_], handlePersistence: Boolean): KMeansModel = {
     transformSchema(dataset.schema, logging = true)
     val instances: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {

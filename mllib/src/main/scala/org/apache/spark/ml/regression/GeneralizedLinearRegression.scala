@@ -99,8 +99,6 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
     isDefined(linkPredictionCol) && $(linkPredictionCol).nonEmpty
   }
 
-  import GeneralizedLinearRegression._
-
   @Since("2.0.0")
   override def validateAndTransformSchema(
       schema: StructType,
