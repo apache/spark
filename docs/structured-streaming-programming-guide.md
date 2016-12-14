@@ -1241,11 +1241,28 @@ spark.streams().awaitAnyTermination()  # block until any one of them terminates
 
 
 ## Monitoring Streaming Queries
-There are two ways you can monitor queries. You can directly get the current status
-of an active query using `streamingQuery.status`, which will return a `StreamingQueryStatus` object
-([Scala](api/scala/index.html#org.apache.spark.sql.streaming.StreamingQueryStatus)/[Java](api/java/org/apache/spark/sql/streaming/StreamingQueryStatus.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.streaming.StreamingQueryStatus) docs)
-that has all the details like current ingestion rates, processing rates, average latency,
-details of the currently active trigger, etc.
+There are two APIs for monitoring and debugging active queries - 
+interactively and asynchronously.
+
+### Interactive APIs
+
+You can directly get the current status and metrics of an active query using 
+`streamingQuery.lastProgress()` and `streamingQuery.status()`. 
+`lastProgress()` returns a `StreamingQueryProgress` object 
+in [Scala](api/scala/index.html#org.apache.spark.sql.streaming.StreamingQueryProgress) 
+and [Java](api/java/org/apache/spark/sql/streaming/StreamingQueryProgress.html)
+and an dictionary with the same fields in Python. It has all the information about
+the progress made in the last trigger of the stream - what data was processed, 
+what were the processing rates, latencies, etc. There is also 
+`streamingQuery.recentProgress` which returns an array of last few progresses.  
+
+In addition, `streamingQuery.status()` returns `StreamingQueryStatus` object 
+in [Scala](api/scala/index.html#org.apache.spark.sql.streaming.StreamingQueryStatus) 
+and [Java](api/java/org/apache/spark/sql/streaming/StreamingQueryStatus.html)
+and an dictionary with the same fields in Python. It gives information about
+what the query is immediately doing - is a trigger active, is data being processed, etc.
+
+Here are a few examples.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
@@ -1253,34 +1270,65 @@ details of the currently active trigger, etc.
 {% highlight scala %}
 val query: StreamingQuery = ...
 
+println(query.progress)
+
+/* Will print something like the following.
+
+{
+  "id" : "ce011fdc-8762-4dcb-84eb-a77333e28109",
+  "runId" : "88e2ff94-ede0-45a8-b687-6316fbef529a",
+  "name" : "MyQuery",
+  "timestamp" : "2016-12-14T18:45:24.873Z",
+  "numInputRows" : 10,
+  "inputRowsPerSecond" : 120.0,
+  "processedRowsPerSecond" : 200.0,
+  "durationMs" : {
+    "triggerExecution" : 3,
+    "getOffset" : 2
+  },
+  "eventTime" : {
+    "watermark" : "2016-12-14T18:45:24.873Z"
+  },
+  "stateOperators" : [ ],
+  "sources" : [ {
+    "description" : "KafkaSource[Subscribe[topic-0]]",
+    "startOffset" : {
+      "topic-0" : {
+        "2" : 0,
+        "4" : 1,
+        "1" : 1,
+        "3" : 1,
+        "0" : 1
+      }
+    },
+    "endOffset" : {
+      "topic-0" : {
+        "2" : 0,
+        "4" : 115,
+        "1" : 134,
+        "3" : 21,
+        "0" : 534
+      }
+    },
+    "numInputRows" : 10,
+    "inputRowsPerSecond" : 120.0,
+    "processedRowsPerSecond" : 200.0
+  } ],
+  "sink" : {
+    "description" : "MemorySink"
+  }
+}
+*/
+
+
 println(query.status)
 
-/* Will print the current status of the query
-
-Status of query 'queryName'
-    Query id: 1
-    Status timestamp: 123
-    Input rate: 15.5 rows/sec
-    Processing rate 23.5 rows/sec
-    Latency: 345.0 ms
-    Trigger details:
-        batchId: 5
-        isDataPresentInTrigger: true
-        isTriggerActive: true
-        latency.getBatch.total: 20
-        latency.getOffset.total: 10
-        numRows.input.total: 100
-    Source statuses [1 source]:
-        Source 1 - MySource1
-            Available offset: 0
-            Input rate: 15.5 rows/sec
-            Processing rate: 23.5 rows/sec
-            Trigger details:
-                numRows.input.source: 100
-                latency.getOffset.source: 10
-                latency.getBatch.source: 20
-    Sink status - MySink
-        Committed offsets: [1, -]
+/*  Will print something like the following.
+{
+  "message" : "Waiting for data to arrive",
+  "isDataAvailable" : false,
+  "isTriggerActive" : false
+}
 */
 {% endhighlight %}
 
@@ -1290,34 +1338,63 @@ Status of query 'queryName'
 {% highlight java %}
 StreamingQuery query = ...
 
+System.out.println(query.progress);
+/* Will print something like the following.
+
+{
+  "id" : "ce011fdc-8762-4dcb-84eb-a77333e28109",
+  "runId" : "88e2ff94-ede0-45a8-b687-6316fbef529a",
+  "name" : "MyQuery",
+  "timestamp" : "2016-12-14T18:45:24.873Z",
+  "numInputRows" : 10,
+  "inputRowsPerSecond" : 120.0,
+  "processedRowsPerSecond" : 200.0,
+  "durationMs" : {
+    "triggerExecution" : 3,
+    "getOffset" : 2
+  },
+  "eventTime" : {
+    "watermark" : "2016-12-14T18:45:24.873Z"
+  },
+  "stateOperators" : [ ],
+  "sources" : [ {
+    "description" : "KafkaSource[Subscribe[topic-0]]",
+    "startOffset" : {
+      "topic-0" : {
+        "2" : 0,
+        "4" : 1,
+        "1" : 1,
+        "3" : 1,
+        "0" : 1
+      }
+    },
+    "endOffset" : {
+      "topic-0" : {
+        "2" : 0,
+        "4" : 115,
+        "1" : 134,
+        "3" : 21,
+        "0" : 534
+      }
+    },
+    "numInputRows" : 10,
+    "inputRowsPerSecond" : 120.0,
+    "processedRowsPerSecond" : 200.0
+  } ],
+  "sink" : {
+    "description" : "MemorySink"
+  }
+}
+*/
+
+
 System.out.println(query.status);
-
-/* Will print the current status of the query
-
-Status of query 'queryName'
-    Query id: 1
-    Status timestamp: 123
-    Input rate: 15.5 rows/sec
-    Processing rate 23.5 rows/sec
-    Latency: 345.0 ms
-    Trigger details:
-        batchId: 5
-        isDataPresentInTrigger: true
-        isTriggerActive: true
-        latency.getBatch.total: 20
-        latency.getOffset.total: 10
-        numRows.input.total: 100
-    Source statuses [1 source]:
-        Source 1 - MySource1
-            Available offset: 0
-            Input rate: 15.5 rows/sec
-            Processing rate: 23.5 rows/sec
-            Trigger details:
-                numRows.input.source: 100
-                latency.getOffset.source: 10
-                latency.getBatch.source: 20
-    Sink status - MySink
-        Committed offsets: [1, -]
+/*  Will print something like the following.
+{
+  "message" : "Waiting for data to arrive",
+  "isDataAvailable" : false,
+  "isTriggerActive" : false
+}
 */
 {% endhighlight %}
 
@@ -1325,43 +1402,27 @@ Status of query 'queryName'
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-query = ...  // a StreamingQuery
-
-print(query.status)
+query = ...  # a StreamingQuery
+print(query.progress)
 
 '''
-Will print the current status of the query
+Will print something like the following.
 
-Status of query 'queryName'
-    Query id: 1
-    Status timestamp: 123
-    Input rate: 15.5 rows/sec
-    Processing rate 23.5 rows/sec
-    Latency: 345.0 ms
-    Trigger details:
-        batchId: 5
-        isDataPresentInTrigger: true
-        isTriggerActive: true
-        latency.getBatch.total: 20
-        latency.getOffset.total: 10
-        numRows.input.total: 100
-    Source statuses [1 source]:
-        Source 1 - MySource1
-            Available offset: 0
-            Input rate: 15.5 rows/sec
-            Processing rate: 23.5 rows/sec
-            Trigger details:
-                numRows.input.source: 100
-                latency.getOffset.source: 10
-                latency.getBatch.source: 20
-    Sink status - MySink
-        Committed offsets: [1, -]
+{u'stateOperators': [], u'eventTime': {u'watermark': u'2016-12-14T18:45:24.873Z'}, u'name': u'MyQuery', u'timestamp': u'2016-12-14T18:45:24.873Z', u'processedRowsPerSecond': 200.0, u'inputRowsPerSecond': 120.0, u'numInputRows': 10, u'sources': [{u'description': u'KafkaSource[Subscribe[topic-0]]', u'endOffset': {u'topic-0': {u'1': 134, u'0': 534, u'3': 21, u'2': 0, u'4': 115}}, u'processedRowsPerSecond': 200.0, u'inputRowsPerSecond': 120.0, u'numInputRows': 10, u'startOffset': {u'topic-0': {u'1': 1, u'0': 1, u'3': 1, u'2': 0, u'4': 1}}}], u'durationMs': {u'getOffset': 2, u'triggerExecution': 3}, u'runId': u'88e2ff94-ede0-45a8-b687-6316fbef529a', u'id': u'ce011fdc-8762-4dcb-84eb-a77333e28109', u'sink': {u'description': u'MemorySink'}}
+'''
+
+print(query.status)
+''' 
+Will print something like the following.
+
+{u'message': u'Waiting for data to arrive', u'isTriggerActive': False, u'isDataAvailable': False}
 '''
 {% endhighlight %}
 
 </div>
 </div>
 
+### Asynchronous API
 
 You can also asynchronously monitor all queries associated with a
 `SparkSession` by attaching a `StreamingQueryListener`
@@ -1377,15 +1438,14 @@ stopped and when there is progress made in an active query. Here is an example,
 val spark: SparkSession = ...
 
 spark.streams.addListener(new StreamingQueryListener() {
-
     override def onQueryStarted(queryStarted: QueryStartedEvent): Unit = {
-        println("Query started: " + queryTerminated.queryStatus.name)
+        println("Query started: " + queryTerminated.id)
     }
     override def onQueryTerminated(queryTerminated: QueryTerminatedEvent): Unit = {
-        println("Query terminated: " + queryTerminated.queryStatus.name)
+        println("Query terminated: " + queryTerminated.id)
     }
     override def onQueryProgress(queryProgress: QueryProgressEvent): Unit = {
-        println("Query made progress: " + queryProgress.queryStatus)
+        println("Query made progress: " + queryProgress.progress)
     }
 })
 {% endhighlight %}
@@ -1397,15 +1457,14 @@ spark.streams.addListener(new StreamingQueryListener() {
 SparkSession spark = ...
 
 spark.streams.addListener(new StreamingQueryListener() {
-
     @Overrides void onQueryStarted(QueryStartedEvent queryStarted) {
-        System.out.println("Query started: " + queryTerminated.queryStatus.name);
+        System.out.println("Query started: " + queryTerminated.id);
     }
     @Overrides void onQueryTerminated(QueryTerminatedEvent queryTerminated) {
-        System.out.println("Query terminated: " + queryTerminated.queryStatus.name);
+        System.out.println("Query terminated: " + queryTerminated.id);
     }
     @Overrides void onQueryProgress(QueryProgressEvent queryProgress) {
-        System.out.println("Query made progress: " + queryProgress.queryStatus);
+        System.out.println("Query made progress: " + queryProgress.progress);
     }
 });
 {% endhighlight %}
