@@ -47,7 +47,7 @@ class StreamExecution(
     override val sparkSession: SparkSession,
     override val name: String,
     checkpointRoot: String,
-    val logicalPlan: LogicalPlan,
+    analyzedPlan: LogicalPlan,
     val sink: Sink,
     val trigger: Trigger,
     val triggerClock: Clock,
@@ -57,6 +57,9 @@ class StreamExecution(
   import org.apache.spark.sql.streaming.StreamingQueryListener._
 
   private val pollingDelayMs = sparkSession.sessionState.conf.streamingPollingDelay
+
+  private val minBatchesToRetain = sparkSession.sessionState.conf.minBatchesToRetain
+  require(minBatchesToRetain > 0, "minBatchesToRetain has to be positive")
 
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
@@ -115,12 +118,26 @@ class StreamExecution(
   private val prettyIdString =
     Option(name).map(_ + " ").getOrElse("") + s"[id = $id, runId = $runId]"
 
+  override lazy val logicalPlan: LogicalPlan = {
+    var nextSourceId = 0L
+    analyzedPlan.transform {
+      case StreamingRelation(dataSource, _, output) =>
+        // Materialize source to avoid creating it in every batch
+        val metadataPath = s"$checkpointRoot/sources/$nextSourceId"
+        val source = dataSource.createSource(metadataPath)
+        nextSourceId += 1
+        // We still need to use the previous `output` instead of `source.schema` as attributes in
+        // "df.logicalPlan" has already used attributes of the previous `output`.
+        StreamingExecutionRelation(source, output)
+    }
+  }
+
   /** All stream sources present in the query plan. */
-  protected val sources =
+  protected lazy val sources =
     logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
 
   /** A list of unique sources in the query plan. */
-  private val uniqueSources = sources.distinct
+  private lazy val uniqueSources = sources.distinct
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
@@ -206,13 +223,18 @@ class StreamExecution(
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
 
-      postEvent(new QueryStartedEvent(id, runId, name)) // Assumption: Does not throw exception.
+      // `postEvent` does not throw non fatal exception.
+      postEvent(new QueryStartedEvent(id, runId, name))
 
       // Unblock starting thread
       startLatch.countDown()
 
       // While active, repeatedly attempt to run batches.
       SparkSession.setActiveSession(sparkSession)
+
+      updateStatusMessage("Initializing sources")
+      // force initialization of the logical plan so that the sources can be created
+      logicalPlan
 
       triggerExecutor.execute(() => {
         startTrigger()
@@ -265,7 +287,7 @@ class StreamExecution(
           e,
           committedOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString,
           availableOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString)
-        logError(s"Query $name terminated with error", e)
+        logError(s"Query $prettyIdString terminated with error", e)
         updateStatusMessage(s"Terminated with exception: ${e.getMessage}")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
         // handle them
@@ -360,6 +382,24 @@ class StreamExecution(
     if (hasNewData) {
       // Current batch timestamp in milliseconds
       offsetSeqMetadata.batchTimestampMs = triggerClock.getTimeMillis()
+      // Update the eventTime watermark if we find one in the plan.
+      if (lastExecution != null) {
+        lastExecution.executedPlan.collect {
+          case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>
+            logDebug(s"Observed event time stats: ${e.eventTimeStats.value}")
+            e.eventTimeStats.value.max - e.delay.milliseconds
+        }.headOption.foreach { newWatermarkMs =>
+          if (newWatermarkMs > offsetSeqMetadata.batchWatermarkMs) {
+            logInfo(s"Updating eventTime watermark to: $newWatermarkMs ms")
+            offsetSeqMetadata.batchWatermarkMs = newWatermarkMs
+          } else {
+            logDebug(
+              s"Event time didn't move: $newWatermarkMs < " +
+                s"${offsetSeqMetadata.batchWatermarkMs}")
+          }
+        }
+      }
+
       updateStatusMessage("Writing offsets to log")
       reportTimeTaken("walCommit") {
         assert(offsetLog.add(
@@ -382,10 +422,11 @@ class StreamExecution(
           }
         }
 
-        // Now that we have logged the new batch, no further processing will happen for
-        // the batch before the previous batch, and it is safe to discard the old metadata.
+        // It is now safe to discard the metadata beyond the minimum number to retain.
         // Note that purge is exclusive, i.e. it purges everything before the target ID.
-        offsetLog.purge(currentBatchId - 1)
+        if (minBatchesToRetain < currentBatchId) {
+          offsetLog.purge(currentBatchId - minBatchesToRetain)
+        }
       }
     } else {
       awaitBatchLock.lock()
@@ -460,21 +501,6 @@ class StreamExecution(
 
     reportTimeTaken("addBatch") {
       sink.addBatch(currentBatchId, nextBatch)
-    }
-
-    // Update the eventTime watermark if we find one in the plan.
-    lastExecution.executedPlan.collect {
-      case e: EventTimeWatermarkExec =>
-        logTrace(s"Maximum observed eventTime: ${e.maxEventTime.value}")
-        (e.maxEventTime.value / 1000) - e.delay.milliseconds()
-    }.headOption.foreach { newWatermark =>
-      if (newWatermark > offsetSeqMetadata.batchWatermarkMs) {
-        logInfo(s"Updating eventTime watermark to: $newWatermark ms")
-        offsetSeqMetadata.batchWatermarkMs = newWatermark
-      } else {
-        logTrace(s"Event time didn't move: $newWatermark < " +
-          s"$offsetSeqMetadata.currentEventTimeWatermark")
-      }
     }
 
     awaitBatchLock.lock()

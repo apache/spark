@@ -15,18 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.util;
+package org.apache.spark.api.r
 
-import java.util.NoSuchElementException;
+import org.apache.spark.SparkFunSuite
 
-/** Uses System properties to obtain config values. */
-public class SystemPropertyConfigProvider extends ConfigProvider {
-  @Override
-  public String get(String name) {
-    String value = System.getProperty(name);
-    if (value == null) {
-      throw new NoSuchElementException(name);
-    }
-    return value;
+class RBackendSuite extends SparkFunSuite {
+  test("close() clears jvmObjectTracker") {
+    val backend = new RBackend
+    val tracker = backend.jvmObjectTracker
+    val id = tracker.addAndGetId(new Object)
+    backend.close()
+    assert(tracker.get(id) === None)
+    assert(tracker.size === 0)
   }
 }

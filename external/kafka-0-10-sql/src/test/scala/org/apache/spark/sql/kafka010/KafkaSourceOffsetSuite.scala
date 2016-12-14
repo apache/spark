@@ -90,7 +90,7 @@ class KafkaSourceOffsetSuite extends OffsetSuite with SharedSQLContext {
     }
   }
 
-  test("read Spark 2.1.0 log format") {
+  test("read Spark 2.1.0 offset format") {
     val offset = readFromResource("kafka-source-offset-version-2.1.0.txt")
     assert(KafkaSourceOffset(offset) ===
       KafkaSourceOffset(("topic1", 0, 456L), ("topic1", 1, 789L), ("topic2", 0, 0L)))

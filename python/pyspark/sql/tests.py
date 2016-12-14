@@ -360,6 +360,15 @@ class SQLTests(ReusedPySparkTestCase):
         [res] = self.spark.sql("SELECT MYUDF('')").collect()
         self.assertEqual("", res[0])
 
+    def test_udf_with_filter_function(self):
+        df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
+        from pyspark.sql.functions import udf, col
+        from pyspark.sql.types import BooleanType
+
+        my_filter = udf(lambda a: a < 2, BooleanType())
+        sel = df.select(col("key"), col("value")).filter((my_filter(col("key"))) & (df.value < "2"))
+        self.assertEqual(sel.collect(), [Row(key=1, value='1')])
+
     def test_udf_with_aggregate_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
         from pyspark.sql.functions import udf, col, sum
@@ -411,6 +420,14 @@ class SQLTests(ReusedPySparkTestCase):
         res = df.select(df.id, my_copy(df.id).alias("copy")).limit(1)
         res.explain(True)
         self.assertEqual(res.collect(), [Row(id=0, copy=0)])
+
+    def test_udf_with_input_file_name(self):
+        from pyspark.sql.functions import udf, input_file_name
+        from pyspark.sql.types import StringType
+        sourceFile = udf(lambda path: path, StringType())
+        filePath = "python/test_support/sql/people1.json"
+        row = self.spark.read.json(filePath).select(sourceFile(input_file_name())).first()
+        self.assertTrue(row[0].find("people1.json") != -1)
 
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])

@@ -41,7 +41,9 @@ import org.apache.spark.util.Clock
 trait ProgressReporter extends Logging {
 
   case class ExecutionStats(
-    inputRows: Map[Source, Long], stateOperators: Seq[StateOperatorProgress])
+    inputRows: Map[Source, Long],
+    stateOperators: Seq[StateOperatorProgress],
+    eventTimeStats: Map[String, String])
 
   // Internal state of the stream, required for computing metrics.
   protected def id: UUID
@@ -127,12 +129,7 @@ trait ProgressReporter extends Logging {
   protected def finishTrigger(hasNewData: Boolean): Unit = {
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
 
-    val executionStats: ExecutionStats = if (!hasNewData) {
-      ExecutionStats(Map.empty, Seq.empty)
-    } else {
-      extractExecutionStats
-    }
-
+    val executionStats = extractExecutionStats(hasNewData)
     val processingTimeSec =
       (currentTriggerEndTimestamp - currentTriggerStartTimestamp).toDouble / 1000
 
@@ -160,10 +157,10 @@ trait ProgressReporter extends Logging {
       id = id,
       runId = runId,
       name = name,
-      timestamp = timestampFormat.format(new Date(currentTriggerStartTimestamp)),
+      timestamp = formatTimestamp(currentTriggerStartTimestamp),
       batchId = currentBatchId,
       durationMs = currentDurationsMs.toMap.mapValues(long2Long).asJava,
-      currentWatermark = offsetSeqMetadata.batchWatermarkMs,
+      eventTime = executionStats.eventTimeStats.asJava,
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
       sink = sinkProgress)
@@ -184,7 +181,13 @@ trait ProgressReporter extends Logging {
   }
 
   /** Extracts statistics from the most recent query execution. */
-  private def extractExecutionStats: ExecutionStats = {
+  private def extractExecutionStats(hasNewData: Boolean): ExecutionStats = {
+    val watermarkTimestamp = Map("watermark" -> formatTimestamp(offsetSeqMetadata.batchWatermarkMs))
+
+    if (!hasNewData) {
+      return ExecutionStats(Map.empty, Seq.empty, watermarkTimestamp)
+    }
+
     // We want to associate execution plan leaves to sources that generate them, so that we match
     // the their metrics (e.g. numOutputRows) to the sources. To do this we do the following.
     // Consider the translation from the streaming logical plan to the final executed plan.
@@ -241,7 +244,16 @@ trait ProgressReporter extends Logging {
         numRowsUpdated = node.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L))
     }
 
-    ExecutionStats(numInputRows, stateOperators)
+    val eventTimeStats = lastExecution.executedPlan.collect {
+      case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>
+        val stats = e.eventTimeStats.value
+        Map(
+          "max" -> stats.max,
+          "min" -> stats.min,
+          "avg" -> stats.avg).mapValues(formatTimestamp)
+    }.headOption.getOrElse(Map.empty) ++ watermarkTimestamp
+
+    ExecutionStats(numInputRows, stateOperators, eventTimeStats)
   }
 
   /** Records the duration of running `body` for the next query progress update. */
@@ -255,6 +267,10 @@ trait ProgressReporter extends Logging {
     currentDurationsMs.put(triggerDetailKey, previousTime + timeTaken)
     logDebug(s"$triggerDetailKey took $timeTaken ms")
     result
+  }
+
+  private def formatTimestamp(millis: Long): String = {
+    timestampFormat.format(new Date(millis))
   }
 
   /** Updates the message returned in `status`. */

@@ -1661,7 +1661,7 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     } catch {
       case t: Throwable => logError("DAGScheduler failed to cancel all jobs.", t)
     }
-    dagScheduler.sc.stop()
+    dagScheduler.sc.stopInNewThread()
   }
 
   override def onStop(): Unit = {
