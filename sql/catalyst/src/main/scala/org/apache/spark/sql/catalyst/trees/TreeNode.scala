@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.UUID
 
 import scala.collection.Map
-import scala.collection.mutable.Stack
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.ClassUtils
@@ -28,12 +27,9 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkContext
-import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.ScalaReflection._
-import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
@@ -504,6 +500,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /**
    * Returns the tree node at the specified number.
    * Numbers for each node can be found in the [[numberedTreeString]].
+   *
+   * Note that this cannot return BaseType because logical plan's plan node might return
+   * physical plan for innerChildren, e.g. in-memory relation logical plan node has a reference
+   * to the physical plan node it is referencing.
    */
   def apply(number: Int): TreeNode[_] = getNodeNumbered(new MutableInt(number)).orNull
 
@@ -514,6 +514,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       Some(this)
     } else {
       number.i -= 1
+      // Note that this traversal order must be the same as numberedTreeString.
       innerChildren.map(_.getNodeNumbered(number)).find(_ != None).getOrElse {
         children.map(_.getNodeNumbered(number)).find(_ != None).flatten
       }
@@ -532,6 +533,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * The `i`-th element in `lastChildren` indicates whether the ancestor of the current node at
    * depth `i + 1` is the last child of its own parent node.  The depth of the root node is 0, and
    * `lastChildren` for the root node should be empty.
+   *
+   * Note that this traversal (numbering) order must be the same as [[getNodeNumbered]].
    */
   def generateTreeString(
       depth: Int,
