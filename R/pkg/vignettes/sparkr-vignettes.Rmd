@@ -674,7 +674,6 @@ perplexity <- spark.perplexity(model, corpusDF)
 perplexity
 ```
 
-
 #### Multilayer Perceptron
 
 (Added in 2.1.0)
