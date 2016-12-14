@@ -63,9 +63,9 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     val numbered = df.queryExecution.analyzed.numberedTreeString.split("\n")
 
     // There should be 8 plan nodes in total
-    assert(numbered.size == 8)
+    assert(numbered.size == dfs.size)
 
-    for (i <- 0 until 8) {
+    for (i <- dfs.indices) {
       val node = df.queryExecution.analyzed(i)
       assert(node.nodeName == dfs(i))
       assert(numbered(i).contains(node.nodeName))
