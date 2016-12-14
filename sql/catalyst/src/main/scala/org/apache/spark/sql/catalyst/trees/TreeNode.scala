@@ -493,7 +493,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   /**
    * Returns a string representation of the nodes in this tree, where each operator is numbered.
-   * The numbers can be used with [[trees.TreeNode.apply apply]] to easily access specific subtrees.
+   * The numbers can be used with [[TreeNode.apply]] to easily access specific subtrees.
+   *
+   * The numbers are based on depth-first traversal of the tree (with innerChildren traversed first
+   * before children).
    */
   def numberedTreeString: String =
     treeString.split("\n").zipWithIndex.map { case (line, i) => f"$i%02d $line" }.mkString("\n")
@@ -502,16 +505,18 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Returns the tree node at the specified number.
    * Numbers for each node can be found in the [[numberedTreeString]].
    */
-  def apply(number: Int): BaseType = getNodeNumbered(new MutableInt(number))
+  def apply(number: Int): TreeNode[_] = getNodeNumbered(new MutableInt(number)).orNull
 
-  protected def getNodeNumbered(number: MutableInt): BaseType = {
+  private def getNodeNumbered(number: MutableInt): Option[TreeNode[_]] = {
     if (number.i < 0) {
-      null.asInstanceOf[BaseType]
+      None
     } else if (number.i == 0) {
-      this
+      Some(this)
     } else {
       number.i -= 1
-      children.map(_.getNodeNumbered(number)).find(_ != null).getOrElse(null.asInstanceOf[BaseType])
+      innerChildren.map(_.getNodeNumbered(number)).find(_ != None).getOrElse {
+        children.map(_.getNodeNumbered(number)).find(_ != None).flatten
+      }
     }
   }
 
@@ -534,19 +539,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       builder: StringBuilder,
       verbose: Boolean,
       prefix: String = ""): StringBuilder = {
+
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
-        val prefixFragment = if (isLast) "   " else ":  "
-        builder.append(prefixFragment)
+        builder.append(if (isLast) "   " else ":  ")
       }
-
-      val branch = if (lastChildren.last) "+- " else ":- "
-      builder.append(branch)
+      builder.append(if (lastChildren.last) "+- " else ":- ")
     }
 
     builder.append(prefix)
-    val headline = if (verbose) verboseString else simpleString
-    builder.append(headline)
+    builder.append(if (verbose) verboseString else simpleString)
     builder.append("\n")
 
     if (innerChildren.nonEmpty) {
@@ -557,9 +559,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
 
     if (children.nonEmpty) {
-      children.init.foreach(
-        _.generateTreeString(depth + 1, lastChildren :+ false, builder, verbose, prefix))
-      children.last.generateTreeString(depth + 1, lastChildren :+ true, builder, verbose, prefix)
+      children.init.foreach(_.generateTreeString(
+        depth + 1, lastChildren :+ false, builder, verbose, prefix))
+      children.last.generateTreeString(
+        depth + 1, lastChildren :+ true, builder, verbose, prefix)
     }
 
     builder
