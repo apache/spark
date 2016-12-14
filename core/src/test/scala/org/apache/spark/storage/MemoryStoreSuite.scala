@@ -60,7 +60,7 @@ class MemoryStoreSuite
     SizeEstimator invokePrivate initialize()
   }
 
-  def makeMemoryStore(maxMem: Long): (MemoryStore, BlockInfoManager) = {
+  def makeMemoryStore(maxMem: Long, conf: SparkConf = conf): (MemoryStore, BlockInfoManager) = {
     val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
     val blockInfoManager = new BlockInfoManager
     val blockEvictionHandler = new BlockEvictionHandler {
@@ -301,6 +301,34 @@ class MemoryStoreSuite
     assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
     result4.left.get.discard()
     assert(memoryStore.currentUnrollMemoryForThisTask === 0) // discard released the unroll memory
+  }
+
+  test("set unrollMemoryThreshold a huge value larger than Int.MaxValue") {
+    val tmpConf = conf.clone.set("spark.storage.unrollMemoryThreshold", s"${1L + Int.MaxValue}")
+    val (memoryStore, blockInfoManager) = makeMemoryStore(12000L + Int.MaxValue, tmpConf)
+    val smallList = List.fill(40)(new Array[Byte](100))
+    def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
+    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
+
+    def putIteratorAsBytes[T](
+        blockId: BlockId,
+        iter: Iterator[T],
+        classTag: ClassTag[T]): Either[PartiallySerializedBlock[T], Long] = {
+      assert(blockInfoManager.lockNewBlockForWriting(
+        blockId,
+        new BlockInfo(StorageLevel.MEMORY_ONLY_SER, classTag, tellMaster = false)))
+      val res = memoryStore.putIteratorAsBytes(blockId, iter, classTag, MemoryMode.ON_HEAP)
+      blockInfoManager.unlock(blockId)
+      res
+    }
+
+    // Unroll with plenty of space. This should succeed and cache both blocks.
+    val result1 = putIteratorAsBytes("b1", smallIterator, ClassTag.Any)
+    val result2 = putIteratorAsBytes("b2", smallIterator, ClassTag.Any)
+    assert(memoryStore.contains("b1"))
+    assert(memoryStore.contains("b2"))
+    assert(result1.isRight) // unroll was successful
+    assert(result2.isRight)
   }
 
   test("PartiallySerializedBlock.valuesIterator") {
