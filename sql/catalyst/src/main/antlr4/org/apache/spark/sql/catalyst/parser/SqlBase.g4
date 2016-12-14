@@ -90,7 +90,7 @@ statement
     | ALTER (TABLE | VIEW) tableIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
     | ALTER TABLE tableIdentifier partitionSpec?
-        CHANGE COLUMN? expandColTypeList                               #changeColumns
+        CHANGE COLUMN? identifier colType colPosition?                 #changeColumn
     | ALTER TABLE tableIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
     | ALTER TABLE tableIdentifier (partitionSpec)?
@@ -596,14 +596,6 @@ colTypeList
 
 colType
     : identifier dataType (COMMENT STRING)?
-    ;
-
-expandColTypeList
-    : expandColType (',' expandColType)*
-    ;
-
-expandColType
-    : identifier colType colPosition?
     ;
 
 complexColTypeList

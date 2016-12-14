@@ -4,22 +4,21 @@ DESC test_change;
 
 -- Change column name (not supported yet)
 ALTER TABLE test_change CHANGE a a1 INT;
-ALTER TABLE test_change CHANGE b b1 STRING, c c1 INT;
 DESC test_change;
 
 -- Change column dataType (not supported yet)
 ALTER TABLE test_change CHANGE a a STRING;
-ALTER TABLE test_change CHANGE b b INT, c c DOUBLE;
 DESC test_change;
 
 -- Change column position (not supported yet)
 ALTER TABLE test_change CHANGE a a INT AFTER b;
-ALTER TABLE test_change CHANGE b b STRING FIRST, c c INT AFTER b;
+ALTER TABLE test_change CHANGE b b STRING FIRST;
 DESC test_change;
 
 -- Change column comment
 ALTER TABLE test_change CHANGE a a INT COMMENT 'this is column a';
-ALTER TABLE test_change CHANGE b b STRING COMMENT '#*02?`', c c INT COMMENT '';
+ALTER TABLE test_change CHANGE b b STRING COMMENT '#*02?`';
+ALTER TABLE test_change CHANGE c c INT COMMENT '';
 DESC test_change;
 
 -- Don't change anything.

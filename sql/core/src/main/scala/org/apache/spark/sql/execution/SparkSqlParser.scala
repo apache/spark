@@ -877,32 +877,30 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a [[AlterTableChangeColumnsCommand]] command.
+   * Create a [[AlterTableChangeColumnCommand]] command.
    *
    * For example:
    * {{{
    *   ALTER TABLE table [PARTITION partition_spec]
-   *   CHANGE [COLUMN] `col` `col` dataType [COMMENT "comment"] [FIRST | AFTER `otherCol`]
-   *   [, `col2` `col2` dataType [COMMENT "comment"] [FIRST | AFTER `otherCol`], ...]
+   *   CHANGE [COLUMN] column_old_name column_new_name column_dataType [COMMENT column_comment]
+   *   [FIRST | AFTER column_name];
    * }}}
    */
-  override def visitChangeColumns(ctx: ChangeColumnsContext): LogicalPlan = withOrigin(ctx) {
+  override def visitChangeColumn(ctx: ChangeColumnContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.partitionSpec != null) {
       operationNotAllowed("ALTER TABLE table PARTITION partition_spec CHANGE COLUMN", ctx)
     }
 
-    val tableName = visitTableIdentifier(ctx.tableIdentifier)
+    if (ctx.colPosition != null) {
+      operationNotAllowed(
+        "ALTER TABLE table [PARTITION partition_spec] CHANGE COLUMN ... FIRST | AFTER otherCol",
+        ctx)
+    }
 
-    val columns = ctx.expandColTypeList.expandColType.asScala.map { col =>
-      if (col.colPosition != null) {
-        operationNotAllowed(
-          "ALTER TABLE table [PARTITION partition_spec] CHANGE COLUMN ... FIRST | AFTER otherCol",
-          ctx)
-      }
-      col.identifier.getText -> visitColType(col.colType)
-    }.toMap
-
-    AlterTableChangeColumnsCommand(tableName, columns)
+    AlterTableChangeColumnCommand(
+      tableName = visitTableIdentifier(ctx.tableIdentifier),
+      columnName = ctx.identifier.getText,
+      newColumn = visitColType(ctx.colType))
   }
 
   /**

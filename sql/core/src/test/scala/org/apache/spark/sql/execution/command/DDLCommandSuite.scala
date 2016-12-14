@@ -666,12 +666,14 @@ class DDLCommandSuite extends PlanTest {
     val parsed1 = parser.parsePlan(sql1)
     val parsed2 = parser.parsePlan(sql2)
     val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableChangeColumnsCommand(
+    val expected1 = AlterTableChangeColumnCommand(
       tableIdent,
-      Map("col_old_name" -> StructField("col_new_name", IntegerType)))
-    val expected2 = AlterTableChangeColumnsCommand(
+      "col_old_name",
+      StructField("col_new_name", IntegerType))
+    val expected2 = AlterTableChangeColumnCommand(
       tableIdent,
-      Map("col_name" -> StructField("col_name", IntegerType).withComment("new_comment")))
+      "col_name",
+      StructField("col_name", IntegerType).withComment("new_comment"))
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
   }

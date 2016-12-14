@@ -276,8 +276,8 @@ case class AlterTableUnsetPropertiesCommand(
 
 
 /**
- * A command to change the columns for a table, only support changing the comments of non-partition
- * columns for now.
+ * A command to change the column for a table, only support changing the comment of a non-partition
+ * column for now.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -286,9 +286,10 @@ case class AlterTableUnsetPropertiesCommand(
  *   [FIRST | AFTER column_name];
  * }}}
  */
-case class AlterTableChangeColumnsCommand(
+case class AlterTableChangeColumnCommand(
     tableName: TableIdentifier,
-    columns: Map[String, StructField]) extends RunnableCommand {
+    columnName: String,
+    newColumn: StructField) extends RunnableCommand {
 
   // TODO: support change column name/dataType/metadata/position.
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -297,26 +298,24 @@ case class AlterTableChangeColumnsCommand(
     val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
-    // Create a map that converts the origin column to the new column with changed comment, throw
-    // an AnalysisException if the column reference is invalid or the column name/dataType is
-    // changed.
-    val columnsMap = columns.map { case (oldName: String, newField: StructField) =>
-      // Find the origin column from schema by column name.
-      val originColumn = findColumnByName(table.schema, oldName, resolver)
-      // Throw an AnalysisException if the column name/dataType is changed.
-      if (!columnEqual(originColumn, newField, resolver)) {
-        throw new AnalysisException(
-          "ALTER TABLE CHANGE COLUMN is not supported for changing column " +
-            s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
-            s"'${newField.name}' with type '${newField.dataType}'")
-      }
-      // Create a new column from the origin column with the new comment.
-      val newColumn = addComment(originColumn, newField.getComment)
-      // Create the map from origin column to changed column
-      originColumn.name -> newColumn
+    // Find the origin column from schema by column name.
+    val originColumn = findColumnByName(table.schema, columnName, resolver)
+    // Throw an AnalysisException if the column name/dataType is changed.
+    if (!columnEqual(originColumn, newColumn, resolver)) {
+      throw new AnalysisException(
+        "ALTER TABLE CHANGE COLUMN is not supported for changing column " +
+          s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
+          s"'${newColumn.name}' with type '${newColumn.dataType}'")
     }
 
-    val newSchema = table.schema.fields.map(field => columnsMap.getOrElse(field.name, field))
+    val newSchema = table.schema.fields.map { field =>
+      if (field.name == originColumn.name) {
+        // Create a new column from the origin column with the new comment.
+        addComment(field, newColumn.getComment)
+      } else {
+        field
+      }
+    }
     val newTable = table.copy(schema = StructType(newSchema))
     catalog.alterTable(newTable)
 
