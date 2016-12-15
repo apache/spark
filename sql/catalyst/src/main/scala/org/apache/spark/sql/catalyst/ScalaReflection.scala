@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -772,6 +774,25 @@ object ScalaReflection extends ScalaReflection {
           }), nullable = true)
       case other =>
         throw new UnsupportedOperationException(s"Schema for type $other is not supported")
+    }
+  }
+
+  def scalaConverterFor[T: TypeTag]: Any => Any = scalaConverterFor(localTypeOf[T])
+
+  def scalaConverterFor(tpe: `Type`): Any => Any = ScalaReflectionLock.synchronized {
+    val dataType = schemaFor(tpe).dataType
+    val converter = CatalystTypeConverters.createToScalaConverter(dataType)
+    tpe match {
+      // Since no Scala implicit conversion from `Seq` to `Array` could be expected, we need to
+      // explicitly apply this conversion here.
+      case t if t <:< localTypeOf[Array[_]] =>
+        (v: Any) => {
+          converter(v) match {
+            case ar: mutable.WrappedArray[_] => ar.array
+          }
+        }
+      case _ =>
+        converter
     }
   }
 

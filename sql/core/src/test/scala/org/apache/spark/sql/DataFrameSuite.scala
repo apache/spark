@@ -1453,6 +1453,134 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)
   }
 
+  test("SPARK-18884 correctly handle array inputs in functions.udf") {
+    Seq("true", "false").foreach { codegenEnabled =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
+        // scalastyle:off line.size.limit
+        Seq((
+            udf { (ar1: Array[Int]) => ar1.sum },
+            udf { (ar1: Array[Int], ar2: Array[Int]) => (ar1 ++ ar2).sum },
+            udf { (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int]) => (ar1 ++ ar2 ++ ar3).sum },
+            udf { (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4).sum },
+            udf { (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5).sum },
+            udf { (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6).sum },
+            udf { (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7).sum },
+            udf { (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8).sum },
+            udf { (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9).sum },
+            udf { (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int], ar10: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10).sum }
+          ), (
+            udf { (ar1: Seq[Int]) => ar1.sum },
+            udf { (ar1: Seq[Int], ar2: Seq[Int]) => (ar1 ++ ar2).sum },
+            udf { (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int]) => (ar1 ++ ar2 ++ ar3).sum },
+            udf { (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4).sum },
+            udf { (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5).sum },
+            udf { (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6).sum },
+            udf { (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7).sum },
+            udf { (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8).sum },
+            udf { (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9).sum },
+            udf { (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10).sum }
+          )
+        ).map { case (udf1, udf2, udf3, udf4, udf5, udf6, udf7, udf8, udf9, udf10) =>
+          val arVal = functions.array(lit(1), lit(1))
+          val df = spark.range(1)
+          checkAnswer(df.select(udf1(arVal)), Row(2) :: Nil)
+          checkAnswer(df.select(udf2(arVal, arVal)), Row(4) :: Nil)
+          checkAnswer(df.select(udf3(arVal, arVal, arVal)), Row(6) :: Nil)
+          checkAnswer(df.select(udf4(arVal, arVal, arVal, arVal)), Row(8) :: Nil)
+          checkAnswer(df.select(udf5(arVal, arVal, arVal, arVal, arVal)), Row(10) :: Nil)
+          checkAnswer(df.select(udf6(arVal, arVal, arVal, arVal, arVal, arVal)), Row(12) :: Nil)
+          checkAnswer(df.select(udf7(arVal, arVal, arVal, arVal, arVal, arVal, arVal)), Row(14) :: Nil)
+          checkAnswer(df.select(udf8(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal)), Row(16) :: Nil)
+          checkAnswer(df.select(udf9(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal)), Row(18) :: Nil)
+          checkAnswer(df.select(udf10(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal)), Row(20) :: Nil)
+        }
+        // scalastyle:on line.size.limit
+      }
+    }
+  }
+
+  test("SPARK-18884 correctly handle array inputs in UDFRegistration.register") {
+    // scalastyle:off line.size.limit
+    Seq("true", "false").foreach { codegenEnabled =>
+      Seq((1, 1)).toDF("a", "b").select(array($"a", $"b").as("arVal")).createOrReplaceTempView("t")
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
+        // Register UDFs for `Array`
+        spark.udf.register("testArrayUdf1", (ar1: Array[Int]) => ar1.sum)
+        spark.udf.register("testArrayUdf2", (ar1: Array[Int], ar2: Array[Int]) => (ar1 ++ ar2).sum)
+        spark.udf.register("testArrayUdf3", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int]) => (ar1 ++ ar2 ++ ar3).sum)
+        spark.udf.register("testArrayUdf4", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4).sum)
+        spark.udf.register("testArrayUdf5", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5).sum)
+        spark.udf.register("testArrayUdf6", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6).sum)
+        spark.udf.register("testArrayUdf7", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7).sum)
+        spark.udf.register("testArrayUdf8", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8).sum)
+        spark.udf.register("testArrayUdf9", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9).sum)
+        spark.udf.register("testArrayUdf10", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int], ar10: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10).sum)
+        spark.udf.register("testArrayUdf11", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int], ar10: Array[Int], ar11: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11).sum)
+        spark.udf.register("testArrayUdf12", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int], ar10: Array[Int], ar11: Array[Int], ar12: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12).sum)
+        spark.udf.register("testArrayUdf13", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int], ar10: Array[Int], ar11: Array[Int], ar12: Array[Int], ar13: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13).sum)
+        spark.udf.register("testArrayUdf14", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int], ar10: Array[Int], ar11: Array[Int], ar12: Array[Int], ar13: Array[Int], ar14: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14).sum)
+        spark.udf.register("testArrayUdf15", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int], ar10: Array[Int], ar11: Array[Int], ar12: Array[Int], ar13: Array[Int], ar14: Array[Int], ar15: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15).sum)
+        spark.udf.register("testArrayUdf16", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int], ar10: Array[Int], ar11: Array[Int], ar12: Array[Int], ar13: Array[Int], ar14: Array[Int], ar15: Array[Int], ar16: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15 ++ ar16).sum)
+        spark.udf.register("testArrayUdf17", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int], ar10: Array[Int], ar11: Array[Int], ar12: Array[Int], ar13: Array[Int], ar14: Array[Int], ar15: Array[Int], ar16: Array[Int], ar17: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15 ++ ar16 ++ ar17).sum)
+        spark.udf.register("testArrayUdf18", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int], ar10: Array[Int], ar11: Array[Int], ar12: Array[Int], ar13: Array[Int], ar14: Array[Int], ar15: Array[Int], ar16: Array[Int], ar17: Array[Int], ar18: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15 ++ ar16 ++ ar17 ++ ar18).sum)
+        spark.udf.register("testArrayUdf19", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int], ar10: Array[Int], ar11: Array[Int], ar12: Array[Int], ar13: Array[Int], ar14: Array[Int], ar15: Array[Int], ar16: Array[Int], ar17: Array[Int], ar18: Array[Int], ar19: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15 ++ ar16 ++ ar17 ++ ar18 ++ ar19).sum)
+        spark.udf.register("testArrayUdf20", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int], ar10: Array[Int], ar11: Array[Int], ar12: Array[Int], ar13: Array[Int], ar14: Array[Int], ar15: Array[Int], ar16: Array[Int], ar17: Array[Int], ar18: Array[Int], ar19: Array[Int], ar20: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15 ++ ar16 ++ ar17 ++ ar18 ++ ar19 ++ ar20).sum)
+        spark.udf.register("testArrayUdf21", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int], ar10: Array[Int], ar11: Array[Int], ar12: Array[Int], ar13: Array[Int], ar14: Array[Int], ar15: Array[Int], ar16: Array[Int], ar17: Array[Int], ar18: Array[Int], ar19: Array[Int], ar20: Array[Int], ar21: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15 ++ ar16 ++ ar17 ++ ar18 ++ ar19 ++ ar20 ++ ar21).sum)
+        spark.udf.register("testArrayUdf22", (ar1: Array[Int], ar2: Array[Int], ar3: Array[Int], ar4: Array[Int], ar5: Array[Int], ar6: Array[Int], ar7: Array[Int], ar8: Array[Int], ar9: Array[Int], ar10: Array[Int], ar11: Array[Int], ar12: Array[Int], ar13: Array[Int], ar14: Array[Int], ar15: Array[Int], ar16: Array[Int], ar17: Array[Int], ar18: Array[Int], ar19: Array[Int], ar20: Array[Int], ar21: Array[Int], ar22: Array[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15 ++ ar16 ++ ar17 ++ ar18 ++ ar19 ++ ar20 ++ ar21 ++ ar22).sum)
+
+        // Register UDFs for `Seq`
+        spark.udf.register("testSeqUdf1", (ar1: Seq[Int]) => ar1.sum)
+        spark.udf.register("testSeqUdf2", (ar1: Seq[Int], ar2: Seq[Int]) => (ar1 ++ ar2).sum)
+        spark.udf.register("testSeqUdf3", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int]) => (ar1 ++ ar2 ++ ar3).sum)
+        spark.udf.register("testSeqUdf4", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4).sum)
+        spark.udf.register("testSeqUdf5", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5).sum)
+        spark.udf.register("testSeqUdf6", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6).sum)
+        spark.udf.register("testSeqUdf7", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7).sum)
+        spark.udf.register("testSeqUdf8", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8).sum)
+        spark.udf.register("testSeqUdf9", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9).sum)
+        spark.udf.register("testSeqUdf10", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10).sum)
+        spark.udf.register("testSeqUdf11", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int], ar11: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11).sum)
+        spark.udf.register("testSeqUdf12", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int], ar11: Seq[Int], ar12: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12).sum)
+        spark.udf.register("testSeqUdf13", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int], ar11: Seq[Int], ar12: Seq[Int], ar13: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13).sum)
+        spark.udf.register("testSeqUdf14", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int], ar11: Seq[Int], ar12: Seq[Int], ar13: Seq[Int], ar14: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14).sum)
+        spark.udf.register("testSeqUdf15", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int], ar11: Seq[Int], ar12: Seq[Int], ar13: Seq[Int], ar14: Seq[Int], ar15: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15).sum)
+        spark.udf.register("testSeqUdf16", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int], ar11: Seq[Int], ar12: Seq[Int], ar13: Seq[Int], ar14: Seq[Int], ar15: Seq[Int], ar16: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15 ++ ar16).sum)
+        spark.udf.register("testSeqUdf17", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int], ar11: Seq[Int], ar12: Seq[Int], ar13: Seq[Int], ar14: Seq[Int], ar15: Seq[Int], ar16: Seq[Int], ar17: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15 ++ ar16 ++ ar17).sum)
+        spark.udf.register("testSeqUdf18", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int], ar11: Seq[Int], ar12: Seq[Int], ar13: Seq[Int], ar14: Seq[Int], ar15: Seq[Int], ar16: Seq[Int], ar17: Seq[Int], ar18: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15 ++ ar16 ++ ar17 ++ ar18).sum)
+        spark.udf.register("testSeqUdf19", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int], ar11: Seq[Int], ar12: Seq[Int], ar13: Seq[Int], ar14: Seq[Int], ar15: Seq[Int], ar16: Seq[Int], ar17: Seq[Int], ar18: Seq[Int], ar19: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15 ++ ar16 ++ ar17 ++ ar18 ++ ar19).sum)
+        spark.udf.register("testSeqUdf20", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int], ar11: Seq[Int], ar12: Seq[Int], ar13: Seq[Int], ar14: Seq[Int], ar15: Seq[Int], ar16: Seq[Int], ar17: Seq[Int], ar18: Seq[Int], ar19: Seq[Int], ar20: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15 ++ ar16 ++ ar17 ++ ar18 ++ ar19 ++ ar20).sum)
+        spark.udf.register("testSeqUdf21", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int], ar11: Seq[Int], ar12: Seq[Int], ar13: Seq[Int], ar14: Seq[Int], ar15: Seq[Int], ar16: Seq[Int], ar17: Seq[Int], ar18: Seq[Int], ar19: Seq[Int], ar20: Seq[Int], ar21: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15 ++ ar16 ++ ar17 ++ ar18 ++ ar19 ++ ar20 ++ ar21).sum)
+        spark.udf.register("testSeqUdf22", (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int], ar11: Seq[Int], ar12: Seq[Int], ar13: Seq[Int], ar14: Seq[Int], ar15: Seq[Int], ar16: Seq[Int], ar17: Seq[Int], ar18: Seq[Int], ar19: Seq[Int], ar20: Seq[Int], ar21: Seq[Int], ar22: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10 ++ ar11 ++ ar12 ++ ar13 ++ ar14 ++ ar15 ++ ar16 ++ ar17 ++ ar18 ++ ar19 ++ ar20 ++ ar21 ++ ar22).sum)
+
+        Seq("Array", "Seq").foreach { name =>
+          checkAnswer(sql(s"select test${name}Udf1(arVal) FROM t"), Row(2) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf2(arVal, arVal) FROM t"), Row(4) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf3(arVal, arVal, arVal) FROM t"), Row(6) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf4(arVal, arVal, arVal, arVal) FROM t"), Row(8) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf5(arVal, arVal, arVal, arVal, arVal) FROM t"), Row(10) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf6(arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(12) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf7(arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(14) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf8(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(16) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf9(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(18) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf10(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(20) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf11(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(22) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf12(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(24) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf13(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(26) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf14(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(28) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf15(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(30) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf16(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(32) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf17(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(34) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf18(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(36) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf19(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(38) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf20(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(40) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf21(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(42) :: Nil)
+          checkAnswer(sql(s"select test${name}Udf22(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal) FROM t"), Row(44) :: Nil)
+        }
+      }
+    }
+    // scalastyle:on line.size.limit
+  }
+
   test("SPARK-12398 truncated toString") {
     val df1 = Seq((1L, "row1")).toDF("id", "name")
     assert(df1.toString() === "[id: bigint, name: string]")
