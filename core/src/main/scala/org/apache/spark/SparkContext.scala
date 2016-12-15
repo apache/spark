@@ -1096,7 +1096,23 @@ class SparkContext(config: SparkConf) extends Logging {
     hadoopFile[K, V, F](path, defaultMinPartitions)
   }
 
-  /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat. */
+  /**
+   * Smarter version of `newApiHadoopFile` that uses class tags to figure out the classes of keys,
+   * values and the `org.apache.hadoop.mapreduce.InputFormat` (new MapReduce API) so that user
+   * don't need to pass them directly. Instead, callers can just write, for example:
+   * ```
+   * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path)
+   * ```
+   *
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
+   * @param path directory to the input data files, the path can be comma separated paths
+   * as a list of inputs
+   * @return RDD of tuples of key and corresponding value
+   */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]]
       (path: String)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = withScope {
@@ -1990,6 +2006,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Run a function on a given set of partitions in an RDD and return the results as an array.
+   * The function that is run against each partition additionally takes `TaskContext` argument.
    *
    * @param rdd target RDD to run tasks on
    * @param func a function to run on each partition of the RDD
@@ -2008,8 +2025,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Run a job on a given set of partitions of an RDD, but take a function of type
-   * `Iterator[T] => U` instead of `(TaskContext, Iterator[T]) => U`.
+   * Run a function on a given set of partitions in an RDD and return the results as an array.
    *
    * @param rdd target RDD to run tasks on
    * @param func a function to run on each partition of the RDD
@@ -2027,7 +2043,8 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Run a job on all partitions in an RDD and return the results in an array.
+   * Run a job on all partitions in an RDD and return the results in an array. The function
+   * that is run against each partition additionally takes `TaskContext` argument.
    *
    * @param rdd target RDD to run tasks on
    * @param func a function to run on each partition of the RDD
@@ -2039,8 +2056,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Run a job on all partitions in an RDD and return the results in an array, this time the
-   * argument is a function that doesn't take `TaskContext` (the other one does).
+   * Run a job on all partitions in an RDD and return the results in an array.
    *
    * @param rdd target RDD to run tasks on
    * @param func a function to run on each partition of the RDD
@@ -2052,7 +2068,8 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Run a job on all partitions in an RDD and pass the results to a handler function.
+   * Run a job on all partitions in an RDD and pass the results to a handler function. The function
+   * that is run against each partition additionally takes `TaskContext` argument.
    *
    * @param rdd target RDD to run tasks on
    * @param processPartition a function to run on each partition of the RDD
@@ -2067,8 +2084,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Run a job on all partitions in an RDD and pass the results to a handler function, this time the
-   * argument is a function that doesn't take `TaskContext` (the other one does).
+   * Run a job on all partitions in an RDD and pass the results to a handler function.
    *
    * @param rdd target RDD to run tasks on
    * @param processPartition a function to run on each partition of the RDD
