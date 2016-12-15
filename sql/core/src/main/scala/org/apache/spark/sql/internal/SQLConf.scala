@@ -210,6 +210,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_TIMESTAMP_AS_INT96 = SQLConfigBuilder("spark.sql.parquet.timestampAsInt96")
+    .doc("Write timestamps as int96 to maintain legacy compatibility")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_CACHE_METADATA = SQLConfigBuilder("spark.sql.parquet.cacheMetadata")
     .doc("Turns on caching of Parquet schema metadata. Can speed up querying of static data.")
     .booleanConf
@@ -774,6 +779,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
+
+  def isParquetTimestampAsINT96: Boolean = getConf(PARQUET_TIMESTAMP_AS_INT96)
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 

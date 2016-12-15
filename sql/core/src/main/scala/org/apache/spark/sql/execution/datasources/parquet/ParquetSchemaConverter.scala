@@ -51,22 +51,28 @@ import org.apache.spark.sql.types._
  *        and prior versions when converting a Catalyst [[StructType]] to a Parquet [[MessageType]].
  *        When set to false, use standard format defined in parquet-format spec.  This argument only
  *        affects Parquet write path.
+ * @param writeTimestampAsInt96 Whether to use serialize Timestamps in legacy INT96 format for
+ *        forwards compatibility.
  */
 private[parquet] class ParquetSchemaConverter(
     assumeBinaryIsString: Boolean = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
     assumeInt96IsTimestamp: Boolean = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
-    writeLegacyParquetFormat: Boolean = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get) {
+    writeLegacyParquetFormat: Boolean = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get,
+    writeTimestampAsInt96: Boolean = SQLConf.PARQUET_TIMESTAMP_AS_INT96.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
     assumeInt96IsTimestamp = conf.isParquetINT96AsTimestamp,
-    writeLegacyParquetFormat = conf.writeLegacyParquetFormat)
+    writeLegacyParquetFormat = conf.writeLegacyParquetFormat,
+    writeTimestampAsInt96 = conf.isParquetTimestampAsINT96)
 
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
     assumeInt96IsTimestamp = conf.get(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key).toBoolean,
     writeLegacyParquetFormat = conf.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
-      SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get.toString).toBoolean)
+      SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get.toString).toBoolean,
+    writeTimestampAsInt96 = conf.get(SQLConf.PARQUET_TIMESTAMP_AS_INT96.key,
+      SQLConf.PARQUET_TIMESTAMP_AS_INT96.defaultValue.get.toString).toBoolean)
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
@@ -369,6 +375,9 @@ private[parquet] class ParquetSchemaConverter(
       // from Spark 1.5.0, we resort to a timestamp type with 100 ns precision so that we can store
       // a timestamp into a `Long`.  This design decision is subject to change though, for example,
       // we may resort to microsecond precision in the future.
+      case TimestampType if writeTimestampAsInt96 =>
+        Types.primitive(INT96, repetition).named(field.name)
+
       case TimestampType =>
         Types.primitive(INT64, repetition).as(TIMESTAMP_MICROS).named(field.name)
 

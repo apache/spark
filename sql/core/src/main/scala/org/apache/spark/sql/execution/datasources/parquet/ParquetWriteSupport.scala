@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.nio.{ByteBuffer, ByteOrder}
 import java.util
 
 import scala.collection.JavaConverters.mapAsJavaMapConverter
@@ -31,6 +32,7 @@ import org.apache.parquet.io.api.{Binary, RecordConsumer}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter.minBytesForPrecision
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -58,11 +60,17 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   // `ValueWriter`s for all fields of the schema
   private var rootFieldWriters: Seq[ValueWriter] = _
 
+  // Reusable byte array used to write timestamps as Parquet INT96 values
+  private val timestampBuffer = new Array[Byte](12)
+
   // The Parquet `RecordConsumer` to which all `InternalRow`s are written
   private var recordConsumer: RecordConsumer = _
 
   // Whether to write data in legacy Parquet format compatible with Spark 1.4 and prior versions
   private var writeLegacyParquetFormat: Boolean = _
+
+  // Whether to write timestamps as int96
+  private var writeTimestampAsInt96: Boolean = _
 
   // Reusable byte array used to write decimal values
   private val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
@@ -74,6 +82,10 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
       // `SQLConf.PARQUET_WRITE_LEGACY_FORMAT` should always be explicitly set in ParquetRelation
       assert(configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key) != null)
       configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean
+    }
+    this.writeTimestampAsInt96 = {
+      assert(configuration.get(SQLConf.PARQUET_TIMESTAMP_AS_INT96.key) != null)
+      configuration.get(SQLConf.PARQUET_TIMESTAMP_AS_INT96.key).toBoolean
     }
     this.rootFieldWriters = schema.map(_.dataType).map(makeWriter)
 
@@ -148,9 +160,7 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
           recordConsumer.addBinary(
             Binary.fromReusedByteArray(row.getUTF8String(ordinal).getBytes))
 
-      case TimestampType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          recordConsumer.addLong(row.getLong(ordinal))
+      case TimestampType => makeTimestampWriter()
 
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>
@@ -175,6 +185,18 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
       // TODO Adds IntervalType support
       case _ => sys.error(s"Unsupported data type $dataType.")
     }
+  }
+
+  private def makeTimestampWriter(): ValueWriter = {
+    val int96Writer = (row: SpecializedGetters, ordinal: Int) => {
+      val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
+      val buf = ByteBuffer.wrap(timestampBuffer)
+      buf.order(ByteOrder.LITTLE_ENDIAN).putLong(timeOfDayNanos).putInt(julianDay)
+      recordConsumer.addBinary(Binary.fromReusedByteArray(timestampBuffer))
+    }
+    val longWriter = (row: SpecializedGetters, ordinal: Int) =>
+      recordConsumer.addLong(row.getLong(ordinal))
+    if (writeTimestampAsInt96) int96Writer else longWriter
   }
 
   private def makeDecimalWriter(precision: Int, scale: Int): ValueWriter = {

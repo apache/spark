@@ -131,6 +131,10 @@ class ParquetFileFormat
       SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
       sparkSession.sessionState.conf.writeLegacyParquetFormat.toString)
 
+    conf.set(
+      SQLConf.PARQUET_TIMESTAMP_AS_INT96.key,
+      sparkSession.sessionState.conf.isParquetTimestampAsINT96.toString)
+
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
