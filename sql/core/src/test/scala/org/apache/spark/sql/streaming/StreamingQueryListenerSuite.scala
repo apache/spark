@@ -52,79 +52,89 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     spark.sparkContext.listenerBus.waitUntilEmpty(10000)
   }
 
-  testQuietly("single listener, check trigger events are generated correctly") {
-    val clock = new StreamManualClock
-    val inputData = new MemoryStream[Int](0, sqlContext)
-    val df = inputData.toDS().as[Long].map { 10 / _ }
-    val listener = new EventCollector
-    try {
-      // No events until started
-      spark.streams.addListener(listener)
-      assert(listener.startEvent === null)
-      assert(listener.progressEvents.isEmpty)
-      assert(listener.terminationEvent === null)
+  for (i <- 0 to 10000) {
+    testQuietly(s"single listener, check trigger events are generated correctly- $i") {
+      val clock = new StreamManualClock
+      val inputData = new MemoryStream[Int](0, sqlContext)
+      val df = inputData.toDS().as[Long].map {
+        10 / _
+      }
+      val listener = new EventCollector
+      try {
+        // No events until started
+        spark.streams.addListener(listener)
+        assert(listener.startEvent === null)
+        assert(listener.progressEvents.isEmpty)
+        assert(listener.terminationEvent === null)
 
-      testStream(df, OutputMode.Append)(
+        testStream(df, OutputMode.Append)(
 
-        // Start event generated when query started
-        StartStream(ProcessingTime(100), triggerClock = clock),
-        AssertOnQuery { query =>
-          assert(listener.startEvent !== null)
-          assert(listener.startEvent.id === query.id)
-          assert(listener.startEvent.runId === query.runId)
-          assert(listener.startEvent.name === query.name)
-          assert(listener.progressEvents.isEmpty)
-          assert(listener.terminationEvent === null)
-          true
-        },
+          // Start event generated when query started
+          StartStream(ProcessingTime(100), triggerClock = clock),
+          AssertOnQuery { query =>
+            assert(listener.startEvent !== null)
+            assert(listener.startEvent.id === query.id)
+            assert(listener.startEvent.runId === query.runId)
+            assert(listener.startEvent.name === query.name)
+            assert(listener.progressEvents.isEmpty)
+            assert(listener.terminationEvent === null)
+            true
+          },
 
-        // Progress event generated when data processed
-        AddData(inputData, 1, 2),
-        AdvanceManualClock(100),
-        CheckAnswer(10, 5),
-        AssertOnQuery { query =>
-          assert(listener.progressEvents.nonEmpty)
-          assert(listener.progressEvents.last.json === query.lastProgress.json)
-          assert(listener.terminationEvent === null)
-          true
-        },
+          // Progress event generated when data processed
+          AddData(inputData, 1, 2),
+          AdvanceManualClock(100),
+          CheckAnswer(10, 5),
+          AssertOnQuery { query =>
+            assert(listener.progressEvents.nonEmpty)
+            // SPARK-18868: We can't use query.lastProgress, because in progressEvents, we filter
+            // out non-zero input rows, but the lastProgress may be a zero input row trigger
+            val lastNonZeroProgress = query.recentProgress.filter(_.numInputRows > 0).lastOption
+              .getOrElse(fail("No progress updates received in StreamingQuery!"))
+            assert(listener.progressEvents.last.json === lastNonZeroProgress.json)
+            assert(listener.terminationEvent === null)
+            true
+          },
 
-        // Termination event generated when stopped cleanly
-        StopStream,
-        AssertOnQuery { query =>
-          eventually(Timeout(streamingTimeout)) {
+          // Termination event generated when stopped cleanly
+          StopStream,
+          AssertOnQuery { query =>
+            eventually(Timeout(streamingTimeout)) {
+              assert(listener.terminationEvent !== null)
+              assert(listener.terminationEvent.id === query.id)
+              assert(listener.terminationEvent.runId === query.runId)
+              assert(listener.terminationEvent.exception === None)
+            }
+            listener.checkAsyncErrors()
+            listener.reset()
+            true
+          },
+
+          // Termination event generated with exception message when stopped with error
+          StartStream(ProcessingTime(100), triggerClock = clock),
+          AddData(inputData, 0),
+          AdvanceManualClock(100),
+          ExpectFailure[SparkException],
+          AssertOnQuery { query =>
             assert(listener.terminationEvent !== null)
             assert(listener.terminationEvent.id === query.id)
-            assert(listener.terminationEvent.runId === query.runId)
-            assert(listener.terminationEvent.exception === None)
+            assert(listener.terminationEvent.exception.nonEmpty)
+            // Make sure that the exception message reported through listener
+            // contains the actual exception and relevant stack trace
+            assert(!listener.terminationEvent.exception.get.contains("StreamingQueryException"))
+            assert(
+              listener.terminationEvent.exception.get.contains("java.lang.ArithmeticException"))
+            assert(listener.terminationEvent.exception.get.contains("StreamingQueryListenerSuite"))
+            listener.checkAsyncErrors()
+            true
           }
-          listener.checkAsyncErrors()
-          listener.reset()
-          true
-        },
-
-        // Termination event generated with exception message when stopped with error
-        StartStream(ProcessingTime(100), triggerClock = clock),
-        AddData(inputData, 0),
-        AdvanceManualClock(100),
-        ExpectFailure[SparkException],
-        AssertOnQuery { query =>
-          assert(listener.terminationEvent !== null)
-          assert(listener.terminationEvent.id === query.id)
-          assert(listener.terminationEvent.exception.nonEmpty)
-          // Make sure that the exception message reported through listener
-          // contains the actual exception and relevant stack trace
-          assert(!listener.terminationEvent.exception.get.contains("StreamingQueryException"))
-          assert(listener.terminationEvent.exception.get.contains("java.lang.ArithmeticException"))
-          assert(listener.terminationEvent.exception.get.contains("StreamingQueryListenerSuite"))
-          listener.checkAsyncErrors()
-          true
-        }
-      )
-    } finally {
-      spark.streams.removeListener(listener)
+        )
+      } finally {
+        spark.streams.removeListener(listener)
+      }
     }
   }
+  /*
 
   test("adding and removing listener") {
     def isListenerActive(listener: EventCollector): Boolean = {
@@ -330,6 +340,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     // to verify that we can skip broken jsons generated by Structured Streaming.
     testReplayListenerBusWithBorkenEventJsons("query-event-logs-version-2.0.2.txt")
   }
+  */
 
   private def testReplayListenerBusWithBorkenEventJsons(fileName: String): Unit = {
     val input = getClass.getResourceAsStream(s"/structured-streaming/$fileName")
