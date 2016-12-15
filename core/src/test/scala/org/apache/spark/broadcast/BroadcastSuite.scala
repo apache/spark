@@ -43,7 +43,6 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
   }
 }
 
-
 class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Using TorrentBroadcast locally") {
