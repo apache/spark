@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
  * input partition ordering requirements are met.
  */
 case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
-  private def defaultNumPreShufflePartitions: Int = conf.numShufflePartitions
+  private lazy val defaultNumPreShufflePartitions: Int = conf.numShufflePartitions
 
   private def targetPostShuffleInputSize: Long = conf.targetPostShuffleInputSize
 
@@ -157,14 +157,18 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     assert(requiredChildOrderings.length == children.length)
 
     // Ensure that the operator's children satisfy their output distribution requirements:
-    children = children.zip(requiredChildDistributions).map {
+    // The second boolean parameter in the result is true when a ShuffleExchange
+    // was introduced to satisfy the output distribution.
+    val newChildren = children.zip(requiredChildDistributions).map {
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
-        child
+        (child, false)
       case (child, BroadcastDistribution(mode)) =>
-        BroadcastExchangeExec(mode, child)
+        (BroadcastExchangeExec(mode, child), false)
       case (child, distribution) =>
-        ShuffleExchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
+        (ShuffleExchange(createPartitioning(distribution,
+          defaultNumPreShufflePartitions), child), true)
     }
+    children = newChildren.map(_._1)
 
     // If the operator has multiple children and specifies child output distributions (e.g. join),
     // then the children's output partitionings must be compatible:
@@ -180,17 +184,14 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       // First check if the existing partitions of the children all match. This means they are
       // partitioned by the same partitioning into the same number of partitions. In that case,
       // don't try to make them match `defaultPartitions`, just use the existing partitioning.
-      val maxChildrenNumPartitions = children.map(_.outputPartitioning.numPartitions).max
-      val numBuckets = {
-        children.map(child => {
-          if (child.outputPartitioning.isInstanceOf[OrderlessHashPartitioning]) {
-            child.outputPartitioning.asInstanceOf[OrderlessHashPartitioning].numBuckets
-          }
-          else {
-            0
-          }
-        }).reduceLeft(_ max _)
-      }
+      val maxChildrenNumPartitions = math.abs(newChildren.map {
+        case (child, false) => child.outputPartitioning.numPartitions
+        case _ => -defaultNumPreShufflePartitions
+      }.max)
+      val numBuckets = children.map(_.outputPartitioning match {
+        case p: OrderlessHashPartitioning => p.numBuckets
+        case _ => 0
+      }).max
       val useExistingPartitioning = children.zip(requiredChildDistributions).forall {
         case (child, distribution) =>
           child.outputPartitioning.guarantees(
