@@ -296,13 +296,13 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
     val handler = createAllocator(4, mockAmClient)
     handler.requestTotalExecutorsWithPreferredLocalities(1, 0, Map(), Set("hostA"))
-    verify(mockAmClient).updateBlacklist(Seq("hostA").asJava, Seq().asJava)
+    verify(mockAmClient).updateBlacklist(Seq("hostA").asJava, Seq[String]().asJava)
 
     handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map(), Set("hostA", "hostB"))
-    verify(mockAmClient).updateBlacklist(Seq("hostB").asJava, Seq().asJava)
+    verify(mockAmClient).updateBlacklist(Seq("hostB").asJava, Seq[String]().asJava)
 
     handler.requestTotalExecutorsWithPreferredLocalities(3, 0, Map(), Set())
-    verify(mockAmClient).updateBlacklist(Seq().asJava, Seq("hostA", "hostB").asJava)
+    verify(mockAmClient).updateBlacklist(Seq[String]().asJava, Seq("hostA", "hostB").asJava)
   }
 
   test("memory exceeded diagnostic regexes") {
