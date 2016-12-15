@@ -459,7 +459,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       timestamp = "2016-12-05T20:54:20.827Z",
       batchId = 100,
       durationMs = Collections.singletonMap("test", 10L),
-      currentWatermark = 1000,
+      eventTime = Collections.singletonMap("watermark", "10"),
       stateOperators = Array(stateOperatorProgress),
       sources = Array(sourceProgress),
       sink = sinkProgress
