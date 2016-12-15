@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.UUID
 
 import scala.collection.Map
+import scala.collection.mutable.Stack
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.ClassUtils
@@ -482,10 +483,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   /**
    * Returns a string representation of the nodes in this tree, where each operator is numbered.
-   * The numbers can be used with [[TreeNode.apply]] to easily access specific subtrees.
-   *
-   * The numbers are based on depth-first traversal of the tree (with innerChildren traversed first
-   * before children).
+   * The numbers can be used with [[trees.TreeNode.apply apply]] to easily access specific subtrees.
    */
   def numberedTreeString: String =
     treeString.split("\n").zipWithIndex.map { case (line, i) => f"$i%02d $line" }.mkString("\n")
@@ -493,24 +491,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /**
    * Returns the tree node at the specified number.
    * Numbers for each node can be found in the [[numberedTreeString]].
-   *
-   * Note that this cannot return BaseType because logical plan's plan node might return
-   * physical plan for innerChildren, e.g. in-memory relation logical plan node has a reference
-   * to the physical plan node it is referencing.
    */
-  def apply(number: Int): TreeNode[_] = getNodeNumbered(new MutableInt(number)).orNull
+  def apply(number: Int): BaseType = getNodeNumbered(new MutableInt(number))
 
-  private def getNodeNumbered(number: MutableInt): Option[TreeNode[_]] = {
+  protected def getNodeNumbered(number: MutableInt): BaseType = {
     if (number.i < 0) {
-      None
+      null.asInstanceOf[BaseType]
     } else if (number.i == 0) {
-      Some(this)
+      this
     } else {
       number.i -= 1
-      // Note that this traversal order must be the same as numberedTreeString.
-      innerChildren.map(_.getNodeNumbered(number)).find(_ != None).getOrElse {
-        children.map(_.getNodeNumbered(number)).find(_ != None).flatten
-      }
+      children.map(_.getNodeNumbered(number)).find(_ != null).getOrElse(null.asInstanceOf[BaseType])
     }
   }
 
@@ -526,8 +517,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * The `i`-th element in `lastChildren` indicates whether the ancestor of the current node at
    * depth `i + 1` is the last child of its own parent node.  The depth of the root node is 0, and
    * `lastChildren` for the root node should be empty.
-   *
-   * Note that this traversal (numbering) order must be the same as [[getNodeNumbered]].
    */
   def generateTreeString(
       depth: Int,
@@ -535,16 +524,19 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       builder: StringBuilder,
       verbose: Boolean,
       prefix: String = ""): StringBuilder = {
-
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
-        builder.append(if (isLast) "   " else ":  ")
+        val prefixFragment = if (isLast) "   " else ":  "
+        builder.append(prefixFragment)
       }
-      builder.append(if (lastChildren.last) "+- " else ":- ")
+
+      val branch = if (lastChildren.last) "+- " else ":- "
+      builder.append(branch)
     }
 
     builder.append(prefix)
-    builder.append(if (verbose) verboseString else simpleString)
+    val headline = if (verbose) verboseString else simpleString
+    builder.append(headline)
     builder.append("\n")
 
     if (innerChildren.nonEmpty) {
@@ -555,10 +547,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
 
     if (children.nonEmpty) {
-      children.init.foreach(_.generateTreeString(
-        depth + 1, lastChildren :+ false, builder, verbose, prefix))
-      children.last.generateTreeString(
-        depth + 1, lastChildren :+ true, builder, verbose, prefix)
+      children.init.foreach(
+        _.generateTreeString(depth + 1, lastChildren :+ false, builder, verbose, prefix))
+      children.last.generateTreeString(depth + 1, lastChildren :+ true, builder, verbose, prefix)
     }
 
     builder
