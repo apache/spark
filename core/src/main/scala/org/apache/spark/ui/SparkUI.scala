@@ -151,6 +151,16 @@ private[spark] object SparkUI {
   val DEFAULT_RETAINED_STAGES = 1000
   val DEFAULT_RETAINED_JOBS = 1000
 
+  var productVersion: String = new String()
+
+  def getProductVersion: String = {
+    productVersion
+  }
+
+  def setProductVersion(version: String): Unit = {
+    productVersion = version
+  }
+
   def getUIPort(conf: SparkConf): Int = {
     conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
   }
