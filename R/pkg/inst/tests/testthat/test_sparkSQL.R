@@ -2170,7 +2170,7 @@ test_that("Default warehouse dir should be set to tempdir", {
   inital_working_directory_files <- list.files()
   result <- sql("CREATE TABLE warehouse")
   expect_equal(inital_working_directory_files, list.files())
-  result <- sql("DELETE TABLE warehouse")
+  result <- sql("DROP TABLE warehouse")
 })
 
 irisDF <- suppressWarnings(createDataFrame(iris))
