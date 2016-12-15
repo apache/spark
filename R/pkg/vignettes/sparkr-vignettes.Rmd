@@ -704,8 +704,21 @@ We use iris data set to show how to use `spark.mlp` in classification.
 df <- createDataFrame(iris)
 # fit a Multilayer Perceptron Classification Model
 model <- spark.mlp(df, Species ~ ., blockSize = 128, layers = c(4, 3), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
+```
+
+To avoid lengthy display, we only present partial results of the model summary. You can check the full result from your sparkR shell.
+```{r, include=FALSE}
+ops <- options()
+options(max.print=5)
+```
+```{r}
 # check the summary of the fitted model
 summary(model)
+```
+```{r, include=FALSE}
+options(ops)
+```
+```{r}
 # make predictions use the fitted model
 predictions <- predict(model, df)
 head(select(predictions, predictions$prediction))
