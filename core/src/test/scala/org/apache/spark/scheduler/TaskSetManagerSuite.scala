@@ -1035,6 +1035,70 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       .updateBlacklistForFailedTask(anyString(), anyString(), anyInt())
   }
 
+  test("Delay scheduling checks utilization at each locality level") {
+    // Create a cluster with 100 executors, and submit 100 tasks, but each task would prefer to
+    // be on the same node in the cluster.  We should not wait to schedule each task on the one
+    // executor.
+    sc = new SparkContext("local", "test")
+    val execs = Seq(("exec0", "host0")) ++ (1 to 100).map { x => (s"exec$x", s"host$x") }
+    val sched = new FakeTaskScheduler(sc, execs: _*)
+    val tasks = FakeTask.createTaskSet(500, (1 to 500).map { _ =>
+      Seq(TaskLocation(TaskLocation.executorLocationTag + "host0_exec0"))}: _*)
+    val clock = new ManualClock
+    val manager = new TaskSetManager(sched, tasks, MAX_TASK_FAILURES, clock)
+    logInfo("initial locality levels = " + manager.myLocalityLevels.mkString(","))
+    assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
+    // initially, the locality preferences should lead us to only schedule tasks on one executor
+    logInfo(s"trying to schedule first task at ${clock.getTimeMillis()}")
+    val firstScheduledTask = execs.flatMap { case (exec, host) =>
+      val schedTaskOpt = manager.resourceOffer(execId = exec, host = host, ANY)
+      assert(schedTaskOpt.isDefined === (exec == "exec0"))
+      schedTaskOpt
+    }.head
+
+    // without advancing the clock, no matter how many times we make offers on the *other*
+    // executors, nothing should get scheduled
+    (0 until 50).foreach { _ =>
+      execs.foreach { case (exec, host) =>
+        if (exec != "exec0") {
+          assert(manager.resourceOffer(execId = exec, host = host, ANY).isEmpty)
+        }
+      }
+    }
+
+    // now we advance the clock till just *before* the locality delay is up, and we finish the first
+    // task
+    val processWait = sc.getConf.getTimeAsMs("spark.locality.wait.process", "3s")
+    val nodeWait = sc.getConf.getTimeAsMs("spark.locality.wait.node", "3s")
+    clock.advance(processWait + nodeWait - 1)
+    logInfo(s"finishing first task at ${clock.getTimeMillis()}")
+    manager.handleSuccessfulTask(firstScheduledTask.taskId,
+      createTaskResult(firstScheduledTask.index))
+    // if we offer all the resources again, still we should only schedule on one executor
+    logInfo(s"trying to schedule second task at ${clock.getTimeMillis()}")
+    val secondScheduledTask = execs.flatMap { case (exec, host) =>
+      val schedTaskOpt = manager.resourceOffer(execId = exec, host = host, ANY)
+      assert(schedTaskOpt.isDefined === (exec == "exec0"))
+      schedTaskOpt
+    }.head
+
+    // Now lets advance the clock further, so that all of our other executors have been sitting
+    // idle for longer than the locality wait time.  We have managed to schedule *something* at a
+    // lower locality level within the time, but regardless, we *should* still schedule on the all
+    // the other resources by this point
+    clock.advance(10)
+    // this would pass if we advanced the clock by this much instead
+//    clock.advance(processWait + nodeWait + 10)
+    logInfo(s"trying to schedule everyting at ${clock.getTimeMillis()}")
+    execs.foreach { case (exec, host) =>
+      if (exec != "exec0") {
+        withClue(s"trying to schedule on $exec:$host at time ${clock.getTimeMillis()}") {
+          assert(manager.resourceOffer(execId = exec, host = host, ANY).isDefined)
+        }
+      }
+    }
+  }
+
   private def createTaskResult(
       id: Int,
       accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty): DirectTaskResult[Int] = {
