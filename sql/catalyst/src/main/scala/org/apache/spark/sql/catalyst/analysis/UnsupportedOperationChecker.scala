@@ -102,8 +102,9 @@ object UnsupportedOperationChecker {
           }
           throwErrorIf(
             child.isStreaming && distinctAggExprs.nonEmpty,
-            "Distinct aggregations are not supported on streaming DataFrames/Datasets, unless" +
-              "it is on aggregated DataFrame/Dataset in Complete output mode")
+            "Distinct aggregations are not supported on streaming DataFrames/Datasets, unless " +
+              "it is on aggregated DataFrame/Dataset in Complete output mode. Consider using " +
+              "approximate distinct aggregation (e.g. approx_count_distinct() instead of count()).")
 
         case _: Command =>
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
