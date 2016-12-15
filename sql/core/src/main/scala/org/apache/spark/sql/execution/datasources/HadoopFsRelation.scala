@@ -55,7 +55,7 @@ case class HadoopFsRelation(
       if (sparkSession.sessionState.conf.caseSensitiveAnalysis) _.name else _.name.toLowerCase
     val overlappedPartCols = mutable.Map.empty[String, StructField]
     partitionSchema.foreach { partitionField =>
-      dataSchema.find(getColName(_) == getColName(partitionField)).map { overlappedCol =>
+      if (dataSchema.exists(getColName(_) == getColName(partitionField))) {
         overlappedPartCols += getColName(partitionField) -> partitionField
       }
     }
