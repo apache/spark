@@ -819,7 +819,13 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
-  def warehousePath: String = new Path(getConf(StaticSQLConf.DEFAULT_WAREHOUSE_PATH)).toString
+  def warehousePath: String = {
+    if (contains(StaticSQLConf.WAREHOUSE_PATH.key)) {
+      new Path(getConf(StaticSQLConf.WAREHOUSE_PATH).get).toString
+    } else {
+      new Path(getConf(StaticSQLConf.DEFAULT_WAREHOUSE_PATH)).toString
+    }
+  }
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
