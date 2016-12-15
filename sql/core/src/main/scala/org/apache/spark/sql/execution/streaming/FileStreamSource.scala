@@ -62,6 +62,15 @@ class FileStreamSource(
   /** Maximum number of new files to be considered in each batch */
   private val maxFilesPerBatch = sourceOptions.maxFilesPerTrigger
 
+  private val fileSortOrder = if (sourceOptions.latestFirst) {
+      logWarning(
+        """'latestFirst' is true. New files will be processed first.
+          |It may affect the watermark value""".stripMargin)
+      implicitly[Ordering[Long]].reverse
+    } else {
+      implicitly[Ordering[Long]]
+    }
+
   /** A mapping from a file that we have processed to some timestamp it was last modified. */
   // Visible for testing and debugging in production.
   val seenFiles = new SeenFilesMap(sourceOptions.maxFileAgeMs)
@@ -155,7 +164,7 @@ class FileStreamSource(
     val startTime = System.nanoTime
     val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(qualifiedBasePath)
     val catalog = new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(new StructType))
-    val files = catalog.allFiles().sortBy(_.getModificationTime).map { status =>
+    val files = catalog.allFiles().sortBy(_.getModificationTime)(fileSortOrder).map { status =>
       (status.getPath.toUri.toString, status.getModificationTime)
     }
     val endTime = System.nanoTime
