@@ -743,6 +743,20 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       assert(option.compressionCodecClassName == "UNCOMPRESSED")
     }
   }
+
+  test("Pruned blocks within a file split do not get used") {
+    withSQLConf(ParquetOutputFormat.BLOCK_SIZE -> "1",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      withTempPath { f =>
+        // Create many blocks that will fit within the maxSplitSize.
+        // Ensure that non-contiguous blocks properly get removed within the vectorized reader.
+        val data = sparkContext.parallelize((1 to 100) ++ (100 to 200) ++ (1 to 100), 1).toDF()
+        data.write.parquet(f.getCanonicalPath)
+        val df = spark.read.parquet(f.getCanonicalPath)
+        assert(df.filter("value <=> 1").count() == 2)
+      }
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)

@@ -107,18 +107,19 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       // then we need to apply the predicate push down filter
       footer = readFooter(configuration, file, range(split.getStart(), split.getEnd()));
       FilterCompat.Filter filter = getFilter(configuration);
-      this.reader = ParquetFileReader.open(configuration, file, footer);
-      List<RowGroupFilter.FilterLevel> filterLevels =
-              ImmutableList.of(RowGroupFilter.FilterLevel.STATISTICS);
-      if (configuration.getBoolean(DICTIONARY_FILTERING_ENABLED, false)) {
-        filterLevels = ImmutableList.of(RowGroupFilter.FilterLevel.STATISTICS,
-                RowGroupFilter.FilterLevel.DICTIONARY);
+      try (ParquetFileReader reader = ParquetFileReader.open(configuration, file, footer)) {
+        List<RowGroupFilter.FilterLevel> filterLevels =
+                ImmutableList.of(RowGroupFilter.FilterLevel.STATISTICS);
+        if (configuration.getBoolean(DICTIONARY_FILTERING_ENABLED, false)) {
+          filterLevels = ImmutableList.of(RowGroupFilter.FilterLevel.STATISTICS,
+                  RowGroupFilter.FilterLevel.DICTIONARY);
+        }
+        blocks = filterRowGroups(
+                filterLevels,
+                filter,
+                footer.getBlocks(),
+                reader);
       }
-      blocks = filterRowGroups(
-              filterLevels,
-              filter,
-              footer.getBlocks(),
-              reader);
     } else {
       // otherwise we find the row groups that were selected on the client
       footer = readFooter(configuration, file, NO_FILTER);
@@ -147,7 +148,6 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
                 + " out of: " + Arrays.toString(foundRowGroupOffsets)
                 + " in range " + split.getStart() + ", " + split.getEnd());
       }
-      this.reader = new ParquetFileReader(configuration, file, footer);
     }
     this.fileSchema = footer.getFileMetaData().getSchema();
     Map<String, String> fileMetadata = footer.getFileMetaData().getKeyValueMetaData();
@@ -155,14 +155,12 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
-    reader.setRequestedSchema(requestedSchema);
+    this.reader = ParquetFileReader.open(configuration, file, new ParquetMetadata(footer.getFileMetaData(), blocks));
+    this.reader.setRequestedSchema(requestedSchema);
     String sparkRequestedSchemaString =
         configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
-    for (BlockMetaData block : blocks) {
-      this.totalRowCount += block.getRowCount();
-    }
-
+    this.totalRowCount = this.reader.getRecordCount();
     // For test purpose.
     // If the predefined accumulator exists, the row group number to read will be updated
     // to the accumulator. So we can check if the row groups are filtered or not in test case.
