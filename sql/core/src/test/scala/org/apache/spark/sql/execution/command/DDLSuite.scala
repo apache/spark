@@ -84,12 +84,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         serde = None,
         compressed = false,
         properties = Map())
+    val metadata = new MetadataBuilder()
+      .putString("key", "value")
+      .build()
     CatalogTable(
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
       schema = new StructType()
-        .add("col1", "int")
+        .add("col1", "int", nullable = true, metadata = metadata)
         .add("col2", "string")
         .add("a", "int")
         .add("b", "int"),
@@ -771,6 +774,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     testSetSerdePartition(isDatasourceTable = true)
   }
 
+  test("alter table: change column") {
+    testChangeColumn(isDatasourceTable = false)
+  }
+
+  test("alter table: change column (datasource table)") {
+    testChangeColumn(isDatasourceTable = true)
+  }
+
   test("alter table: bucketing is not supported") {
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
@@ -1366,6 +1377,26 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("ALTER TABLE tab1 PARTITION (A='10', B='p') RENAME TO PARTITION (A='1', B='p')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
       Set(Map("a" -> "1", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
+  }
+
+  private def testChangeColumn(isDatasourceTable: Boolean): Unit = {
+    val catalog = spark.sessionState.catalog
+    val resolver = spark.sessionState.conf.resolver
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    def getMetadata(colName: String): Metadata = {
+      val column = catalog.getTableMetadata(tableIdent).schema.fields.find { field =>
+        resolver(field.name, colName)
+      }
+      column.map(_.metadata).getOrElse(Metadata.empty)
+    }
+    // Ensure that change column will preserve other metadata fields.
+    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 INT COMMENT 'this is col1'")
+    assert(getMetadata("col1").getString("key") == "value")
   }
 
   test("drop build-in function") {
