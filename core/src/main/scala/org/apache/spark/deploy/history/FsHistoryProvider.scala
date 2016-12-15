@@ -390,6 +390,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         logError("Exception encountered when attempting to update last scan time", e)
         lastScanTime.get()
     } finally {
+      logDebug(s"deleting maxAged event log file: ${path}")
       if (!fs.delete(path, true)) {
         logWarning(s"Error deleting ${path}")
       }
@@ -541,12 +542,24 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private[history] def cleanLogs(): Unit = {
     try {
       val maxAge = conf.getTimeAsSeconds("spark.history.fs.cleaner.maxAge", "7d") * 1000
+      val inProgressNoUpdateMaxAge =
+          conf.getTimeAsSeconds("spark.history.fs.cleaner.noProgressMaxAge", "30d") * 1000
+      var deleteInProgressEnabled =
+          conf.getBoolean("spark.history.fs.cleaner.deleteInProgress.enabled", false)
+
+      logDebug(s"Cleaner Configs: fs.cleaner.maxAge: ${maxAge}," +
+                 s"fs.cleaner.noProgressMaxAge: ${inProgressNoUpdateMaxAge}," +
+                 s"fs.cleaner.deleteInProgress.enabled: ${deleteInProgressEnabled}")
 
       val now = clock.getTimeMillis()
       val appsToRetain = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
 
       def shouldClean(attempt: FsApplicationAttemptInfo): Boolean = {
-        now - attempt.lastUpdated > maxAge && attempt.completed
+        if (attempt.completed) {
+          return (now - attempt.lastUpdated > maxAge)
+        } else {
+          return deleteInProgressEnabled && (now - attempt.lastUpdated > inProgressNoUpdateMaxAge)
+        }
       }
 
       // Scan all logs from the log directory.

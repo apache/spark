@@ -257,10 +257,12 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
   test("log cleaner") {
     val maxAge = TimeUnit.SECONDS.toMillis(10)
+    val inProgressNoUpdateMaxAge = TimeUnit.SECONDS.toMillis(50)
     val clock = new ManualClock(maxAge / 2)
     val provider = new FsHistoryProvider(
-      createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms"), clock)
-
+      createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms")
+        .set("spark.history.fs.cleaner.deleteInProgress.enabled", s"true")
+        .set("spark.history.fs.cleaner.noProgressMaxAge",s"${inProgressNoUpdateMaxAge}ms"), clock)
     val log1 = newLogFile("app1", Some("attempt1"), inProgress = false)
     writeFile(log1, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
@@ -297,6 +299,27 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       list.size should be (0)
     }
     assert(!log2.exists())
+
+    // test cleaning up .inprogress files
+    val log3 = newLogFile("app3", Some("attempt3"), inProgress = true)
+    writeFile(log3, true, None,
+      SparkListenerApplicationStart("app3", Some("app3"), 5L, "test", Some("attempt3")),
+      SparkListenerApplicationEnd(6L)
+    )
+    log3.setLastModified(clock.getTimeMillis())
+
+    updateAndCheck(provider) { list =>
+      list.size should be (1)
+      list.head.attempts.size should be (1)
+      list.head.attempts.head.attemptId should be (Some("attempt3"))
+    }
+    assert(!log3.exists())
+    //Move the clock forward so log3 execeeds the inProgressNoUpdate Max Age
+    clock.advance(inProgressNoUpdateMaxAge)
+    updateAndCheck(provider) { list =>
+      list.size should be (0)
+    }
+    assert(!log3.exists())
   }
 
   test("Event log copy") {

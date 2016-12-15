@@ -200,6 +200,23 @@ The history server can be configured as follows:
       Number of threads that will be used by history server to process event logs.
     </td>
   </tr>
+  <tr>
+    <td>spark.history.fs.cleaner.deleteInProgress.enabled</td>
+    <td>false</td>
+    <td>
+      In some cases, the spark job abort unexpectly and leaves the .inprogress event log files.
+      Specifies whether the History Server should periodically clean up those .inprogress files
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.cleaner.noProgressMaxAg</td>
+    <td>30d</td>
+    <td>
+      Job history files stay untouch with .inprogress suffix , and older than this will be deleted
+      This also reuqires the filesystem history cleaner is enabled and deleteInProgress.enabled is
+      set to true.
+    </td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
