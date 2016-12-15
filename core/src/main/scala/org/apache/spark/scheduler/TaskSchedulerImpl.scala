@@ -51,13 +51,28 @@ import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
  * acquire a lock on us, so we need to make sure that we don't try to lock the backend while
  * we are holding a lock on ourselves.
  */
-private[spark] class TaskSchedulerImpl(
+private[spark] class TaskSchedulerImpl private[scheduler](
     val sc: SparkContext,
     val maxTaskFailures: Int,
+    blacklistTrackerOpt: Option[BlacklistTracker],
     isLocal: Boolean = false)
   extends TaskScheduler with Logging
 {
-  def this(sc: SparkContext) = this(sc, sc.conf.get(config.MAX_TASK_FAILURES))
+
+  def this(sc: SparkContext) = {
+    this(
+      sc,
+      sc.conf.get(config.MAX_TASK_FAILURES),
+      TaskSchedulerImpl.maybeCreateBlacklistTracker(sc.conf))
+  }
+
+  def this(sc: SparkContext, maxTaskFailures: Int, isLocal: Boolean) = {
+    this(
+      sc,
+      maxTaskFailures,
+      TaskSchedulerImpl.maybeCreateBlacklistTracker(sc.conf),
+      isLocal = isLocal)
+  }
 
   val conf = sc.conf
 
@@ -209,7 +224,7 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    new TaskSetManager(this, taskSet, maxTaskFailures)
+    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
@@ -256,6 +271,8 @@ private[spark] class TaskSchedulerImpl(
       availableCpus: Array[Int],
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]]) : Boolean = {
     var launchedTask = false
+    // nodes and executors that are blacklisted for the entire application have already been
+    // filtered out by this point
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
@@ -308,8 +325,20 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
+    // Before making any offers, remove any nodes from the blacklist whose blacklist has expired. Do
+    // this here to avoid a separate thread and added synchronization overhead, and also because
+    // updating the blacklist is only relevant when task offers are being made.
+    blacklistTrackerOpt.foreach(_.applyBlacklistTimeout())
+
+    val filteredOffers = blacklistTrackerOpt.map { blacklistTracker =>
+      offers.filter { offer =>
+        !blacklistTracker.isNodeBlacklisted(offer.host) &&
+          !blacklistTracker.isExecutorBlacklisted(offer.executorId)
+      }
+    }.getOrElse(offers)
+
     // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
-    val shuffledOffers = Random.shuffle(offers)
+    val shuffledOffers = Random.shuffle(filteredOffers)
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
@@ -574,6 +603,7 @@ private[spark] class TaskSchedulerImpl(
       executorIdToHost -= executorId
       rootPool.executorLost(executorId, host, reason)
     }
+    blacklistTrackerOpt.foreach(_.handleRemovedExecutor(executorId))
   }
 
   def executorAdded(execId: String, host: String) {
@@ -598,6 +628,14 @@ private[spark] class TaskSchedulerImpl(
 
   def isExecutorBusy(execId: String): Boolean = synchronized {
     executorIdToRunningTaskIds.get(execId).exists(_.nonEmpty)
+  }
+
+  /**
+   * Get a snapshot of the currently blacklisted nodes for the entire application.  This is
+   * thread-safe -- it can be called without a lock on the TaskScheduler.
+   */
+  def nodeBlacklist(): scala.collection.immutable.Set[String] = {
+    blacklistTrackerOpt.map(_.nodeBlacklist()).getOrElse(scala.collection.immutable.Set())
   }
 
   // By default, rack is unknown
@@ -678,4 +716,13 @@ private[spark] object TaskSchedulerImpl {
 
     retval.toList
   }
+
+  private def maybeCreateBlacklistTracker(conf: SparkConf): Option[BlacklistTracker] = {
+    if (BlacklistTracker.isBlacklistEnabled(conf)) {
+      Some(new BlacklistTracker(conf))
+    } else {
+      None
+    }
+  }
+
 }
