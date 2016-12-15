@@ -209,7 +209,7 @@ The history server can be configured as follows:
     </td>
   </tr>
   <tr>
-    <td>spark.history.fs.cleaner.noProgressMaxAg</td>
+    <td>spark.history.fs.cleaner.noProgressMaxAge</td>
     <td>30d</td>
     <td>
       Job history files stay untouch with .inprogress suffix , and older than this will be deleted
