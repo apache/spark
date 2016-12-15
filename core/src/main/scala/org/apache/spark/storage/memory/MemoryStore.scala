@@ -333,8 +333,9 @@ private[spark] class MemoryStore(
     val redirectableStream = new RedirectableOutputStream
     val chunkSize = if (initialMemoryThreshold > Int.MaxValue) {
       logWarning(s"Initial memory threshold of ${Utils.bytesToString(initialMemoryThreshold)} " +
-        s"is too large to be set as chunk size. It is safe to use 4MB as chunk size instead.")
-      4 * 1024 * 1024
+        s"is too large to be set as chunk size. It is safe to be cap at Int.MaxValue for chunk " +
+        s"size instead.")
+      Int.MaxValue
     } else {
       initialMemoryThreshold.toInt
     }
