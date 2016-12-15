@@ -17,22 +17,15 @@
 
 package org.apache.spark.broadcast
 
-import java.io.Serializable
-
-import scala.collection.immutable.HashMap
-import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.scalatest.Assertions
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
 import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage._
-import org.apache.spark.util.Utils
-
 
 // Dummy class that creates a broadcast variable but doesn't use it
 class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
@@ -50,58 +43,8 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
   }
 }
 
-class UserDefineBroadcast[T: ClassTag](obj: T, id: Long)
-  extends Broadcast[T](id) with Logging with Serializable {
-  var map = HashMap[Long, Any]()
-  @transient private lazy val _value: T = readBroadcastBlock()
-
-  map += id -> obj
-
-  private def readBroadcastBlock(): T = Utils.tryOrIOException {
-    map.get(id) match {
-      case Some(v) => v.asInstanceOf[T]
-      case _ =>
-        throw new SparkException(s"Failed to get $id from map")
-    }
-  }
-
-  override protected def getValue() = _value
-
-  override protected def doUnpersist(blocking: Boolean) = {}
-
-  override protected def doDestroy(blocking: Boolean) = {}
-
-}
-
-class UserDefineBroadcastFactory extends BroadcastFactory {
-
-  override def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) { }
-
-  override def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean, id: Long): Broadcast[T] = {
-    new UserDefineBroadcast[T](value_, id)
-  }
-
-  override def stop() {}
-
-  override def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {}
-}
 
 class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
-
-  test("Using user-defined local BroadcastFactory") {
-    val conf = new SparkConf
-    conf.set("spark.broadcast.factory", "org.apache.spark.broadcast.UserDefineBroadcastFactory")
-
-    sc = new SparkContext("local", "test user-define userDefineBroadcastFactory", conf)
-
-    val list = List[String]("a", "b", "c", "d")
-    val broadcast = sc.broadcast(list)
-
-    val results = sc.parallelize(1 to 10).map(x => (x, broadcast.value.mkString))
-
-    assert(results.collect().toSet === (1 to 10)
-      .map(x => (x, "abcd")).toSet)
-  }
 
   test("Using TorrentBroadcast locally") {
     sc = new SparkContext("local", "test")
