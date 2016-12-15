@@ -511,7 +511,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Returns the tree node at the specified number, used primarily for interactive debugging.
    * Numbers for each node can be found in the [[numberedTreeString]].
    *
-   * This is a variant of [[apply]] that either returns the node as BaseType (if the type matches).
+   * This is a variant of [[apply]] that returns the node as BaseType (if the type matches).
    */
   def p(number: Int): BaseType = apply(number).asInstanceOf[BaseType]
 
