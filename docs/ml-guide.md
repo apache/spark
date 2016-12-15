@@ -35,6 +35,18 @@ The primary Machine Learning API for Spark is now the [DataFrame](sql-programmin
 * The DataFrame-based API for MLlib provides a uniform API across ML algorithms and across multiple languages.
 * DataFrames facilitate practical ML Pipelines, particularly feature transformations.  See the [Pipelines guide](ml-pipeline.html) for details.
 
+*What is "Spark ML"?*
+
+* "Spark ML" is not an official name but occasionally used to refer to the MLlib DataFrame-based API.
+  This is majorly due to the `org.apache.spark.ml` Scala package name used by the DataFrame-based API, 
+  and the "Spark ML Pipelines" term we used initially to emphasize the pipeline concept.
+  
+*Is MLlib deprecated?*
+
+* No. MLlib includes both the RDD-based API and the DataFrame-based API.
+  The RDD-based API is now in maintenance mode.
+  But neither API is deprecated, nor MLlib as a whole.
+
 # Dependencies
 
 MLlib uses the linear algebra package [Breeze](http://www.scalanlp.org/), which depends on

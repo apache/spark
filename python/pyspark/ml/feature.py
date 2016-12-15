@@ -165,8 +165,8 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
               typeConverter=TypeConverters.toListFloat)
 
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
-                          "Options are skip (filter out rows with invalid values), " +
-                          "error (throw an error), or keep (keep invalid values in a special " +
+                          "Options are 'skip' (filter out rows with invalid values), " +
+                          "'error' (throw an error), or 'keep' (keep invalid values in a special " +
                           "additional bucket).",
                           typeConverter=TypeConverters.toString)
 
