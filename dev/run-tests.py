@@ -395,6 +395,8 @@ def run_scala_tests_sbt(test_modules, test_profiles):
     if not sbt_test_goals:
         return
 
+    sbt_test_goals = ['sql/testOnly *StreamingQueryListenerSuite']
+
     profiles_and_goals = test_profiles + sbt_test_goals
 
     print("[info] Running Spark tests using SBT with these arguments: ",
