@@ -522,14 +522,10 @@ Hive metastore. Persistent tables will still exist even after your Spark program
 long as you maintain your connection to the same metastore. A DataFrame for a persistent table can
 be created by calling the `table` method on a `SparkSession` with the name of the table.
 
-By default `saveAsTable` will create a "managed table", meaning that the location of the data will
-be controlled by the metastore. Managed tables will also have their data deleted automatically
-when a table is dropped.
-
-Currently, `saveAsTable` does not expose an API supporting the creation of an "External table" from a `DataFrame`, 
-however, this functionality can be achieved by providing a `path` option to the `DataFrameWriter` with `path` as the key 
-and location of the external table as its value (String) when saving the table with `saveAsTable`. When an External table 
-is dropped only its metadata is removed.
+You can specify the table path via the `path` option, e.g. `df.write.option("path", "/some/path").saveAsTable("t")`.
+When the table is dropped, the specified table path will not be removed and the table data is still there.
+If you do not specify a table path, Spark SQL will generate a default table path to store the table data.
+When the table is dropped, the default table path will be removed too.
 
 ## Parquet Files
 
@@ -946,6 +942,50 @@ adds support for finding tables in the MetaStore and writing queries using HiveQ
 
 </div>
 </div>
+
+### Specifying storage format for Hive tables
+
+When you create a Hive table, you need to define how this table should read/write data from/to file system,
+i.e. the "input format" and "output format". You also need to define how this table should deserialize the data
+to rows, or serialize rows to data, i.e. the "serde". The following options can be used to specify the storage
+format("serde", "input format", "output format"), e.g. `CREATE TABLE src(id int) USING hive OPTIONS(format 'parquet')`.
+By default, we will read the table files as plain text.
+
+<table class="table">
+  <tr><th>Property Name</th><th>Meaning</th></tr>
+  <tr>
+    <td><code>format</code></td>
+    <td>
+      A format is kind of a package of storage format specification, including "serde", "input format" and
+      "output format". Currently we supports 6 formats: 'sequencefile', 'rcfile', 'orc', 'parquet', 'textfile' and 'avro'.
+    </td>
+  </tr>
+
+  <tr>
+    <td><code>inputFormat, outputFormat</code></td>
+    <td>
+      These 2 options specify the name of a corresponding `InputFormat` and `OutputFormat` class as a string literal,
+      e.g. `org.apache.hadoop.hive.ql.io.orc.OrcInputFormat`. These 2 options must be appeared in pair, and you can not
+      specify them if you already specified the `format` option.
+    </td>
+  </tr>
+
+  <tr>
+    <td><code>serde</code></td>
+    <td>
+      This option specifies the name of a serde class. When the `format` option is specified, do not specify this option
+      if the given `format` already include the information of serde. Currently "sequencefile", "textfile" and "rcfile"
+      don't include the serde information and you can use this option with these 3 formats.
+    </td>
+  </tr>
+
+  <tr>
+    <td><code>fieldDelim, escapeDelim, collectionDelim, mapkeyDelim, lineDelim</code></td>
+    <td>
+      These options can only be used with "textfile" format. They define how to read delimited files into rows.
+    </td>
+  </tr>
+</table>
 
 ### Interacting with Different Versions of Hive Metastore
 

@@ -1198,4 +1198,23 @@ class HiveDDLSuite
       assert(e.message.contains("unknown is not a valid partition column"))
     }
   }
+
+  test("create hive serde table with new syntax") {
+    withTable("t", "t2") {
+      sql("CREATE TABLE t(id int) USING hive OPTIONS(format 'orc')")
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      assert(DDLUtils.isHiveTable(table))
+      assert(table.storage.serde == Some("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
+      assert(spark.table("t").collect().isEmpty)
+
+      sql("INSERT INTO t SELECT 1")
+      checkAnswer(spark.table("t"), Row(1))
+
+      sql("CREATE TABLE t2 USING HIVE AS SELECT 1 AS c1, 'a' AS c2")
+      val table2 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
+      assert(DDLUtils.isHiveTable(table2))
+      assert(table2.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+      checkAnswer(spark.table("t2"), Row(1, "a"))
+    }
+  }
 }

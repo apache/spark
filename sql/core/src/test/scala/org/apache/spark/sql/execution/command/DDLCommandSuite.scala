@@ -236,7 +236,7 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed4, expected4)
   }
 
-  test("create table - table file format") {
+  test("create hive table - table file format") {
     val allSources = Seq("parquet", "parquetfile", "orc", "orcfile", "avro", "avrofile",
       "sequencefile", "rcfile", "textfile")
 
@@ -251,7 +251,7 @@ class DDLCommandSuite extends PlanTest {
     }
   }
 
-  test("create table - row format and table file format") {
+  test("create hive table - row format and table file format") {
     val createTableStart = "CREATE TABLE my_tab ROW FORMAT"
     val fileFormat = s"STORED AS INPUTFORMAT 'inputfmt' OUTPUTFORMAT 'outputfmt'"
     val query1 = s"$createTableStart SERDE 'anything' $fileFormat"
@@ -268,7 +268,7 @@ class DDLCommandSuite extends PlanTest {
     assert(parsed2.tableDesc.storage.outputFormat == Some("outputfmt"))
   }
 
-  test("create table - row format serde and generic file format") {
+  test("create hive table - row format serde and generic file format") {
     val allSources = Seq("parquet", "orc", "avro", "sequencefile", "rcfile", "textfile")
     val supportedSources = Set("sequencefile", "rcfile", "textfile")
 
@@ -287,7 +287,7 @@ class DDLCommandSuite extends PlanTest {
     }
   }
 
-  test("create table - row format delimited and generic file format") {
+  test("create hive table - row format delimited and generic file format") {
     val allSources = Seq("parquet", "orc", "avro", "sequencefile", "rcfile", "textfile")
     val supportedSources = Set("textfile")
 
@@ -306,7 +306,7 @@ class DDLCommandSuite extends PlanTest {
     }
   }
 
-  test("create external table - location must be specified") {
+  test("create hive external table - location must be specified") {
     assertUnsupported(
       sql = "CREATE EXTERNAL TABLE my_tab",
       containsThesePhrases = Seq("create external table", "location"))
@@ -316,7 +316,7 @@ class DDLCommandSuite extends PlanTest {
     assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
   }
 
-  test("create table - property values must be set") {
+  test("create hive table - property values must be set") {
     assertUnsupported(
       sql = "CREATE TABLE my_tab TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
       containsThesePhrases = Seq("key_without_value"))
@@ -326,14 +326,14 @@ class DDLCommandSuite extends PlanTest {
       containsThesePhrases = Seq("key_without_value"))
   }
 
-  test("create table - location implies external") {
+  test("create hive table - location implies external") {
     val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
     assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
   }
 
-  test("create table using - with partitioned by") {
+  test("create table - with partitioned by") {
     val query = "CREATE TABLE my_tab(a INT comment 'test', b STRING) " +
       "USING parquet PARTITIONED BY (a)"
 
@@ -357,7 +357,7 @@ class DDLCommandSuite extends PlanTest {
     }
   }
 
-  test("create table using - with bucket") {
+  test("create table - with bucket") {
     val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
       "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
 
@@ -377,6 +377,57 @@ class DDLCommandSuite extends PlanTest {
         fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
           s"got ${other.getClass.getName}: $query")
     }
+  }
+
+  test("create table - with comment") {
+    val sql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet COMMENT 'abc'"
+
+    val expectedTableDesc = CatalogTable(
+      identifier = TableIdentifier("my_tab"),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType().add("a", IntegerType).add("b", StringType),
+      provider = Some("parquet"),
+      comment = Some("abc"))
+
+    parser.parsePlan(sql) match {
+      case CreateTable(tableDesc, _, None) =>
+        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $sql")
+    }
+  }
+
+  test("create table - with location") {
+    val v1 = "CREATE TABLE my_tab(a INT, b STRING) USING parquet LOCATION '/tmp/file'"
+
+    val expectedTableDesc = CatalogTable(
+      identifier = TableIdentifier("my_tab"),
+      tableType = CatalogTableType.EXTERNAL,
+      storage = CatalogStorageFormat.empty.copy(locationUri = Some("/tmp/file")),
+      schema = new StructType().add("a", IntegerType).add("b", StringType),
+      provider = Some("parquet"))
+
+    parser.parsePlan(v1) match {
+      case CreateTable(tableDesc, _, None) =>
+        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $v1")
+    }
+
+    val v2 =
+      """
+        |CREATE TABLE my_tab(a INT, b STRING)
+        |USING parquet
+        |OPTIONS (path '/tmp/file')
+        |LOCATION '/tmp/file'
+      """.stripMargin
+    val e = intercept[ParseException] {
+      parser.parsePlan(v2)
+    }
+    assert(e.message.contains("Cannot specify LOCATION when there is 'path' in OPTIONS"))
   }
 
   // ALTER TABLE table_name RENAME TO new_table_name;

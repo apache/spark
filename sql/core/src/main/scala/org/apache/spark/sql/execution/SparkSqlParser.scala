@@ -342,11 +342,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a data source table, returning a [[CreateTable]] logical plan.
+   * Create a table, returning a [[CreateTable]] logical plan.
    *
    * Expected format:
    * {{{
-   *   CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
+   *   CREATE [TEMPORARY] TABLE [IF NOT EXISTS] [db_name.]table_name
    *   USING table_provider
    *   [OPTIONS table_property_list]
    *   [PARTITIONED BY (col_name, col_name, ...)]
@@ -354,19 +354,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    *    [SORTED BY (col_name [ASC|DESC], ...)]
    *    INTO num_buckets BUCKETS
    *   ]
+   *   [TBLPROPERTIES (property_name=property_value, ...)]
+   *   [COMMENT table_comment]
    *   [AS select_statement];
    * }}}
    */
-  override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
+  override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
     if (external) {
       operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
     }
-    val options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
-    if (provider.toLowerCase == DDLUtils.HIVE_PROVIDER) {
-      throw new AnalysisException("Cannot create hive serde table with CREATE TABLE USING")
-    }
     val schema = Option(ctx.colTypeList()).map(createSchema)
     val partitionColumnNames =
       Option(ctx.partitionColumnNames)
@@ -374,10 +373,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         .getOrElse(Array.empty[String])
     val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
 
-    // TODO: this may be wrong for non file-based data source like JDBC, which should be external
-    // even there is no `path` in options. We should consider allow the EXTERNAL keyword.
+    val location = Option(ctx.locationSpec).map(visitLocationSpec)
     val storage = DataSource.buildStorageFormatFromOptions(options)
-    val tableType = if (storage.locationUri.isDefined) {
+
+    if (location.isDefined && storage.locationUri.isDefined) {
+      throw new ParseException("Cannot specify LOCATION when there is 'path' in OPTIONS.", ctx)
+    }
+    val customLocation = storage.locationUri.orElse(location)
+
+    val tableType = if (customLocation.isDefined) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED
@@ -386,12 +390,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val tableDesc = CatalogTable(
       identifier = table,
       tableType = tableType,
-      storage = storage,
+      storage = storage.copy(locationUri = customLocation),
       schema = schema.getOrElse(new StructType),
       provider = Some(provider),
       partitionColumnNames = partitionColumnNames,
-      bucketSpec = bucketSpec
-    )
+      bucketSpec = bucketSpec,
+      comment = Option(ctx.comment).map(string))
 
     // Determine the storage mode.
     val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
@@ -1011,10 +1015,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a table, returning a [[CreateTable]] logical plan.
+   * Create a Hive serde table, returning a [[CreateTable]] logical plan.
    *
-   * This is not used to create datasource tables, which is handled through
-   * "CREATE TABLE ... USING ...".
+   * This is a legacy syntax for Hive compatibility, we recommend users to use the Spark SQL
+   * CREATE TABLE syntax to create Hive serde table, e.g. "CREATE TABLE ... USING hive ..."
    *
    * Note: several features are currently not supported - temporary tables, bucketing,
    * skewed columns and storage handlers (STORED BY).
@@ -1032,7 +1036,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    *   [AS select_statement];
    * }}}
    */
-  override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
+  override def visitCreateHiveTable(ctx: CreateHiveTableContext): LogicalPlan = withOrigin(ctx) {
     val (name, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
     // TODO: implement temporary tables
     if (temp) {
@@ -1046,7 +1050,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (ctx.bucketSpec != null) {
       operationNotAllowed("CREATE TABLE ... CLUSTERED BY", ctx)
     }
-    val comment = Option(ctx.STRING).map(string)
     val dataCols = Option(ctx.columns).map(visitColTypeList).getOrElse(Nil)
     val partitionCols = Option(ctx.partitionColumns).map(visitColTypeList).getOrElse(Nil)
     val properties = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
@@ -1104,7 +1107,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       provider = Some(DDLUtils.HIVE_PROVIDER),
       partitionColumnNames = partitionCols.map(_.name),
       properties = properties,
-      comment = comment)
+      comment = Option(ctx.comment).map(string))
 
     val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
 
