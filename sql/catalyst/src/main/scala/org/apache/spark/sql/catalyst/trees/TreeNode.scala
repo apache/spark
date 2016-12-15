@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.UUID
 
 import scala.collection.Map
+import scala.collection.mutable.Stack
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.ClassUtils
