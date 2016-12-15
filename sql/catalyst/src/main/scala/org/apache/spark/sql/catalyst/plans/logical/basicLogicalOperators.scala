@@ -393,7 +393,7 @@ case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) 
     s"CTE $cteAliases"
   }
 
-  override def innerChildren: Seq[QueryPlan[_]] = cteRelations.map(_._2)
+  override def innerChildren: Seq[LogicalPlan] = cteRelations.map(_._2)
 }
 
 case class WithWindowDefinition(
