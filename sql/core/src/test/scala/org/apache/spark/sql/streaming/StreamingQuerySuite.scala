@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.{Collections, UUID}
+
 import org.apache.commons.lang3.RandomStringUtils
 import org.scalactic.TolerantNumerics
 import org.scalatest.concurrent.Eventually._
@@ -416,6 +418,37 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
         }
       )
     }
+  }
+
+  test("progress classes should be Serializable") {
+    // Fake the objects and verify that they can be serialized/deserialized.
+    val stateOperatorProgress = new StateOperatorProgress(numRowsTotal = 10, numRowsUpdated = 10)
+    val sourceProgress = new SourceProgress(
+      description = "test",
+      startOffset = "test-offset",
+      endOffset = "test-offset",
+      numInputRows = 1,
+      inputRowsPerSecond = 0.1,
+      processedRowsPerSecond = 0.1
+    )
+    val sinkProgress = new SinkProgress(description = "test")
+    val streamingQueryProgress = new StreamingQueryProgress(
+      id = UUID.randomUUID(),
+      runId = UUID.randomUUID(),
+      name = "test-query",
+      timestamp = "2016-12-05T20:54:20.827Z",
+      batchId = 100,
+      durationMs = Collections.singletonMap("test", 10L),
+      currentWatermark = 1000,
+      stateOperators = Array(stateOperatorProgress),
+      sources = Array(sourceProgress),
+      sink = sinkProgress
+    )
+    val array = spark.sparkContext.parallelize(Seq(streamingQueryProgress)).collect()
+    assert(array.length === 1)
+    // Make sure we did serialize and deserialize the object
+    assert(array(0) ne streamingQueryProgress)
+    assert(array(0).json === streamingQueryProgress.json)
   }
 
   /** Create a streaming DF that only execute one batch in which it returns the given static DF */

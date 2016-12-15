@@ -26,88 +26,82 @@ import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, 
  * get captured with normal usage. It's safe to capture the query but not use it in executors.
  * However, if the user tries to call its methods, it will throw `IllegalStateException`.
  */
-class StreamingQueryWrapper(
-    @transient val streamingQuery: StreamExecution) extends StreamingQuery with Serializable {
+class StreamingQueryWrapper(@transient private val _streamingQuery: StreamExecution)
+  extends StreamingQuery with Serializable {
+
+  def streamingQuery: StreamExecution = {
+    /** Assert the codes run in the driver. */
+    if (_streamingQuery == null) {
+      throw new IllegalStateException("StreamingQuery cannot be used in executors")
+    }
+    _streamingQuery
+  }
 
   override def name: String = {
-    assertRunInDriver()
     streamingQuery.name
   }
 
   override def id: UUID = {
-    assertRunInDriver()
     streamingQuery.id
   }
 
   override def runId: UUID = {
-    assertRunInDriver()
     streamingQuery.runId
   }
 
   override def awaitTermination(): Unit = {
-    assertRunInDriver()
     streamingQuery.awaitTermination()
   }
 
   override def awaitTermination(timeoutMs: Long): Boolean = {
-    assertRunInDriver()
     streamingQuery.awaitTermination(timeoutMs)
   }
 
   override def stop(): Unit = {
-    assertRunInDriver()
     streamingQuery.stop()
   }
 
   override def processAllAvailable(): Unit = {
-    assertRunInDriver()
     streamingQuery.processAllAvailable()
   }
 
   override def isActive: Boolean = {
-    assertRunInDriver()
     streamingQuery.isActive
   }
 
   override def lastProgress: StreamingQueryProgress = {
-    assertRunInDriver()
     streamingQuery.lastProgress
   }
 
   override def explain(): Unit = {
-    assertRunInDriver()
     streamingQuery.explain()
   }
 
   override def explain(extended: Boolean): Unit = {
-    assertRunInDriver()
     streamingQuery.explain(extended)
   }
 
+  /**
+   * This method is called in Python. Python cannot call "explain" directly as it outputs in the JVM
+   * process, which may not be visible in Python process.
+   */
+  def explainInternal(extended: Boolean): String = {
+    streamingQuery.explainInternal(extended)
+  }
+
   override def sparkSession: SparkSession = {
-    assertRunInDriver()
     streamingQuery.sparkSession
   }
 
   override def recentProgress: Array[StreamingQueryProgress] = {
-    assertRunInDriver()
     streamingQuery.recentProgress
   }
 
   override def status: StreamingQueryStatus = {
-    assertRunInDriver()
     streamingQuery.status
   }
 
   override def exception: Option[StreamingQueryException] = {
-    assertRunInDriver()
     streamingQuery.exception
-  }
-
-  /** Assert the codes run in the driver. */
-  private def assertRunInDriver(): Unit = {
-    if (streamingQuery == null) {
-      throw new IllegalStateException("StreamingQuery cannot be used in executors")
-    }
   }
 }
