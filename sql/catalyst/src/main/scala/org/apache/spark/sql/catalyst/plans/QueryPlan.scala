@@ -24,15 +24,6 @@ import org.apache.spark.sql.types.{DataType, StructType}
 abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
 
-  /**
-   * Override [[TreeNode.apply]] to so we can return a more narrow type.
-   *
-   * Note that this cannot return BaseType because logical plan's plan node might return
-   * physical plan for innerChildren, e.g. in-memory relation logical plan node has a reference
-   * to the physical plan node it is referencing.
-   */
-  override def apply(number: Int): QueryPlan[_] = super.apply(number).asInstanceOf[QueryPlan[_]]
-
   def output: Seq[Attribute]
 
   /**
