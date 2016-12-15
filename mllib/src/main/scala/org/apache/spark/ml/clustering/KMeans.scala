@@ -304,10 +304,10 @@ class KMeans @Since("1.5.0") (
   override def fit(dataset: Dataset[_]): KMeansModel = {
     transformSchema(dataset.schema, logging = true)
 
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     val instances: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
-    val handlePersistence = instances.getStorageLevel == StorageLevel.NONE
 
     if (handlePersistence) {
       instances.persist(StorageLevel.MEMORY_AND_DISK)
