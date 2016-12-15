@@ -52,7 +52,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     spark.sparkContext.listenerBus.waitUntilEmpty(10000)
   }
 
-  testQuietly(s"single listener, check trigger events are generated correctly- $i") {
+  testQuietly(s"single listener, check trigger events are generated correctly") {
     val clock = new StreamManualClock
     val inputData = new MemoryStream[Int](0, sqlContext)
     val df = inputData.toDS().as[Long].map {
