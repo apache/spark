@@ -681,18 +681,18 @@ windowedCounts = words.groupBy(
 ### Handling Late Data and Watermarking
 Now consider what happens if one of the events arrives late to the application.
 For example, a word that was generated at 12:04 but it was received at 12:11. 
-Since this windowing is based on the time in the data, the time 12:04 should be considered for windowing. This occurs naturally in our window-based grouping – the late data is automatically placed in the proper windows and the correct aggregates are updated as illustrated below.
+Since this windowing is based on the time in the data, the time 12:04 should be considered for 
+windowing. This occurs naturally in our window-based grouping – the late data is 
+automatically placed in the proper windows and the correct aggregates are updated as illustrated below.
 
 ![Handling Late Data](img/structured-streaming-late-data.png)
 
-Furthermore, since Spark 2.1, you can define a watermark on the event time, 
-and specify the threshold on how late the date can be in terms of the event 
-time. The engine will automatically track the event time and drop any state
-that is related to old windows that are not expected to receive older 
-than (max event time seen - late threshold). This allows the engine to bound
-the size of the state that is needed for calculating windowed aggregates.
-For example, we can apply watermarking to the previous example as follows.
-
+Furthermore, since Spark 2.1, you can define a watermark on the event time, and specify the threshold 
+on how late the date can be in terms of the event time. The engine will automatically track the 
+event time and drop any state that is related to old windows that are not expected to receive older 
+than (max event time seen - late threshold). This allows the engine to bound the size of the state 
+that is needed for calculating windowed aggregates. For example, we can apply watermarking to the 
+previous example as follows.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
@@ -704,7 +704,7 @@ val words = ... // streaming DataFrame of schema { timestamp: Timestamp, word: S
 
 // Group the data by window and word and compute the count of each group
 val windowedCounts = words
-    .withWatermark("timestamp", "20 minutes")
+    .withWatermark("timestamp", "10 minutes")
     .groupBy(
         window($"timestamp", "10 minutes", "5 minutes"),
         $"word")
@@ -719,7 +719,7 @@ Dataset<Row> words = ... // streaming DataFrame of schema { timestamp: Timestamp
 
 // Group the data by window and word and compute the count of each group
 Dataset<Row> windowedCounts = words
-    .withWatermark("timestamp", "20 minutes")
+    .withWatermark("timestamp", "10 minutes")
     .groupBy(
         functions.window(words.col("timestamp"), "10 minutes", "5 minutes"),
         words.col("word"))
@@ -733,7 +733,7 @@ words = ...  # streaming DataFrame of schema { timestamp: Timestamp, word: Strin
 
 # Group the data by window and word and compute the count of each group
 windowedCounts = words
-    .withWatermark("timestamp", "20 minutes")
+    .withWatermark("timestamp", "10 minutes")
     .groupBy(
         window(words.timestamp, "10 minutes", "5 minutes"),
         words.word)
@@ -743,28 +743,37 @@ windowedCounts = words
 </div>
 </div>
 
-In this example, we are defining the watermark of the query on the value 
-of the column "timestamp", and also defining "20 minutes" as the threshold
-of how late data is allowed to be. If this query is run in Append output 
-mode (discussed later in [Output Modes](#output-modes) section), 
-the engine will track the current event time from the column "timestamp"
-and add a windowed aggregate to the Result Table only when the window
-is more than 20 minutes older than the observed event time.
+In this example, we are defining the watermark of the query on the value of the column "timestamp", 
+and also defining "10 minutes" as the threshold of how late is the data allowed to be. If this query 
+is run in Append output mode (discussed later in [Output Modes](#output-modes) section), 
+the engine will track the current event time from the column "timestamp" and wait for additional
+"10 minutes" in event time before finalizing the windowed counts and adding them to the Result Table.
+Here is an illustration. 
 
-For example, in the above query, if the engine observes that the maximum 
-"timestamp" is `12:26`, then it will compute the final count of all windows 
-older than `12:26 - 10m = 12:16` (say, `[12:05, 12:15)`) and append 
-them to the Result Table.
+![Watermarking in Append Mode](img/structured-streaming-watermark.png)
 
-It is important to note that the following conditions must be satisfied
-for the watermarking to clean the data in aggregation queries.
+As shown in the illustration, the engine tracks the maximum event time seen in the data (blue line),
+and accordingly sets the watermark (red line) for the next trigger as 
+`max event time - late threshold`. So, when the engine observes the data `(12:14, dog)`, 
+it sets the watermark for the next interval. 
+For the window `12:00 - 12:10`, the partial counts are maintained as internal state while the system
+is waiting for late data. After the system finds data (i.e. (12:21, owl)) such that the 
+watermark exceeds 12:10, the partial count is finalized and appended to the table. This count will
+not change any further as all "too-late" data older than 12:10 will be ignored.  
 
-- Output mode must be Append. Complete mode requires all aggregate
-data to be preserved, and hence cannot use watermarking to drop 
-intermediate state.
+Note that in Append output mode, the system has to wait for "late threshold" time 
+before it can output the aggregation of a window. This may not be ideal if data can be very late, 
+(say 1 day) and you like to have partial counts without waiting for a day. In future, we will add
+Update output mode which would allows updated aggregates to be posted. 
 
-- The aggregation must have either the event-time column, or a `window`
-on the event-time column. 
+It is important to note that the following conditions must be satisfied for the watermarking to 
+clean the data in aggregation queries (as of Spark 2.1, subject to change in the future).
+
+- Output mode must be Append. Complete mode requires all aggregate data to be preserved, and hence 
+cannot use watermarking to drop intermediate state. See the [Output Modes](#output-modes) section 
+for detailed explanation of the semantics of each output mode.
+
+- The aggregation must have either the event-time column, or a `window` on the event-time column. 
 
 - `withWatermark` must be called on the 
 same column as the timestamp column used in the aggregate. For example, 
@@ -772,9 +781,9 @@ same column as the timestamp column used in the aggregate. For example,
 in Append output mode, as watermark is defined on a different column
 as the aggregation column.
 
-- `withWatermark` must be called before the aggregation. For example, 
-`df.groupBy("time").count().withWatermark("time", "1 min")` is invalid 
-in Append output mode.
+- `withWatermark` must be called before the aggregation for the watermark details to be used. 
+For example, `df.groupBy("time").count().withWatermark("time", "1 min")` is invalid in Append 
+output mode.
 
 
 ### Join Operations
@@ -863,7 +872,7 @@ returned through `Dataset.writeStream()`. You will have to specify one or more o
 - *Checkpoint location:* For some output sinks where the end-to-end fault-tolerance can be guaranteed, specify the location where the system will write all the checkpoint information. This should be a directory in an HDFS-compatible fault-tolerant file system. The semantics of checkpointing is discussed in more detail in the next section.
 
 #### Output Modes
-There are two types of output mode currently implemented.
+There are a few types of output modes.
 
 - **Append mode (default)** - This is the default mode, where only the 
 new rows added to the Result Table since the last trigger will be 
@@ -877,6 +886,9 @@ fault-tolerant sink). For example, queries with only `select`,
  This is supported for only those queries where the engine can maintain
  enough intermediate state that all the rows in Result Table is 
  returned every time.
+
+- **Update mode** - (*not available in Spark 2.1*) Only the rows in the Result Table since the 
+last trigger will be outputted to the sink. More information to be added in future releases.
 
 Different types of streaming queries support different output modes. 
 Here is the compatibility matrix.
