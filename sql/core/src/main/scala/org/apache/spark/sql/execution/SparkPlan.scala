@@ -22,11 +22,11 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
 
-import org.apache.spark.{broadcast, SparkEnv}
+import org.apache.spark.{broadcast, SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate, _}
@@ -49,9 +49,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * populated by the query planning infrastructure.
    */
   @transient
-  final val sqlContext = SparkSession.getActiveSession.map(_.sqlContext).orNull
+  final val sqlContext: SQLContext = SparkSession.getActiveSession.map(_.sqlContext).orNull
 
-  protected def sparkContext = sqlContext.sparkContext
+  protected def sparkContext: SparkContext = sqlContext.sparkContext
 
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
   // the value of subexpressionEliminationEnabled will be set by the deserializer after the
@@ -61,6 +61,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   } else {
     false
   }
+
+  /**
+   * Returns the tree node at the specified number, used primarily for interactive debugging.
+   * Numbers for each node can be found in the [[numberedTreeString]].
+   *
+   * This function force-casts the return value to [[SparkPlan]].
+   */
+  def pp(number: Int): SparkPlan = super.apply(number).asInstanceOf[SparkPlan]
 
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {

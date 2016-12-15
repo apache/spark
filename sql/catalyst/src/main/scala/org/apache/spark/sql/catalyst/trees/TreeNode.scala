@@ -498,7 +498,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     treeString.split("\n").zipWithIndex.map { case (line, i) => f"$i%02d $line" }.mkString("\n")
 
   /**
-   * Returns the tree node at the specified number.
+   * Returns the tree node at the specified number, used primarily for interactive debugging.
    * Numbers for each node can be found in the [[numberedTreeString]].
    *
    * Note that this cannot return BaseType because logical plan's plan node might return

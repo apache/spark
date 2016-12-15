@@ -36,6 +36,14 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   private[catalyst] def setAnalyzed(): Unit = { _analyzed = true }
 
   /**
+   * Returns the tree node at the specified number, used primarily for interactive debugging.
+   * Numbers for each node can be found in the [[numberedTreeString]].
+   *
+   * This function force-casts the return value to [[LogicalPlan]].
+   */
+  def lp(number: Int): LogicalPlan = super.apply(number).asInstanceOf[LogicalPlan]
+
+  /**
    * Returns true if this node and its children have already been gone through analysis and
    * verification.  Note that this is only an optimization used to avoid analyzing trees that
    * have already been analyzed, and can be reset by transformations.
