@@ -447,33 +447,31 @@ head(teenagers)
 
 SparkR supports the following machine learning models and algorithms.
 
-* Generalized Linear Model (GLM)
-
-* Random Forest
-
-* Gradient-Boosted Trees (GBT)
-
-* Naive Bayes Model
-
-* $k$-means Clustering
-
 * Accelerated Failure Time (AFT) Survival Model
-
-* Gaussian Mixture Model (GMM)
-
-* Latent Dirichlet Allocation (LDA)
-
-* Multilayer Perceptron Model
 
 * Collaborative Filtering with Alternating Least Squares (ALS)
 
+* Gaussian Mixture Model (GMM)
+
+* Generalized Linear Model (GLM)
+
+* Gradient-Boosted Trees (GBT)
+
 * Isotonic Regression Model
 
-* Logistic Regression Model
+* $k$-means Clustering
 
 * Kolmogorov-Smirnov Test
 
-More will be added in the future.
+* Latent Dirichlet Allocation (LDA)
+
+* Logistic Regression Model
+
+* Multilayer Perceptron Model
+
+* Naive Bayes Model
+
+* Random Forest
 
 ### R Formula
 
@@ -601,8 +599,6 @@ head(aftPredictions)
 
 #### Gaussian Mixture Model
 
-(Added in 2.1.0)
-
 `spark.gaussianMixture` fits multivariate [Gaussian Mixture Model](https://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model) (GMM) against a `SparkDataFrame`. [Expectation-Maximization](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm) (EM) is used to approximate the maximum likelihood estimator (MLE) of the model.
 
 We use a simulated example to demostrate the usage.
@@ -619,8 +615,6 @@ head(select(gmmFitted, "V1", "V2", "prediction"))
 
 
 #### Latent Dirichlet Allocation
-
-(Added in 2.1.0)
 
 `spark.lda` fits a [Latent Dirichlet Allocation](https://en.wikipedia.org/wiki/Latent_Dirichlet_allocation) model on a `SparkDataFrame`. It is often used in topic modeling in which topics are inferred from a collection of text documents. LDA can be thought of as a clustering algorithm as follows:
 
@@ -676,8 +670,6 @@ perplexity
 
 #### Multilayer Perceptron
 
-(Added in 2.1.0)
-
 Multilayer perceptron classifier (MLPC) is a classifier based on the [feedforward artificial neural network](https://en.wikipedia.org/wiki/Feedforward_neural_network). MLPC consists of multiple layers of nodes. Each layer is fully connected to the next layer in the network. Nodes in the input layer represent the input data. All other nodes map inputs to outputs by a linear combination of the inputs with the node’s weights $w$ and bias $b$ and applying an activation function. This can be written in matrix form for MLPC with $K+1$ layers as follows:
 $$
 y(x)=f_K(\ldots f_2(w_2^T f_1(w_1^T x + b_1) + b_2) \ldots + b_K).
@@ -726,8 +718,6 @@ head(select(predictions, predictions$prediction))
 
 #### Collaborative Filtering
 
-(Added in 2.1.0)
-
 `spark.als` learns latent factors in [collaborative filtering](https://en.wikipedia.org/wiki/Recommender_system#Collaborative_filtering) via [alternating least squares](http://dl.acm.org/citation.cfm?id=1608614).
 
 There are multiple options that can be configured in `spark.als`, including `rank`, `reg`, `nonnegative`. For a complete list, refer to the help file.
@@ -756,8 +746,6 @@ head(predicted)
 ```
 
 #### Isotonic Regression Model
-
-(Added in 2.1.0)
 
 `spark.isoreg` fits an [Isotonic Regression](https://en.wikipedia.org/wiki/Isotonic_regression) model against a `SparkDataFrame`. It solves a weighted univariate a regression problem under a complete order constraint. Specifically, given a set of real observed responses $y_1, \ldots, y_n$, corresponding real features $x_1, \ldots, x_n$, and optionally positive weights $w_1, \ldots, w_n$, we want to find a monotone (piecewise linear) function $f$ to  minimize
 $$
@@ -801,8 +789,6 @@ head(predict(isoregModel, newDF))
 ```
 
 #### Logistic Regression Model
-
-(Added in 2.1.0)
 
 [Logistic regression](https://en.wikipedia.org/wiki/Logistic_regression) is a widely-used model when the response is categorical. It can be seen as a special case of the [Generalized Linear Predictive Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
 We provide `spark.logit` on top of `spark.glm` to support logistic regression with advanced hyper-parameters.
