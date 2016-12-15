@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
  * input partition ordering requirements are met.
  */
 case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
-  private lazy val defaultNumPreShufflePartitions: Int = conf.numShufflePartitions
+  private def defaultNumPreShufflePartitions: Int = conf.numShufflePartitions
 
   private def targetPostShuffleInputSize: Long = conf.targetPostShuffleInputSize
 
@@ -186,7 +186,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       // don't try to make them match `defaultPartitions`, just use the existing partitioning.
       val maxChildrenNumPartitions = math.abs(newChildren.map {
         case (child, false) => child.outputPartitioning.numPartitions
-        case _ => -defaultNumPreShufflePartitions
+        case (child, true) => -child.outputPartitioning.numPartitions
       }.max)
       val numBuckets = children.map(_.outputPartitioning match {
         case p: OrderlessHashPartitioning => p.numBuckets
