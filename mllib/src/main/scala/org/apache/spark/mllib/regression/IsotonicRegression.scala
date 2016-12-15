@@ -236,9 +236,8 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
  * Only univariate (single feature) algorithm supported.
  *
  * Sequential PAV implementation based on:
- * Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
- *   "Nearly-isotonic regression." Technometrics 53.1 (2011): 54-61.
- *   Available from <a href="http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf">here</a>
+ * Grotzinger, S. J., and C. Witzgall.
+ *   "Projections onto order simplexes." Applied mathematics and Optimization 12.1 (1984): 247-270.
  *
  * Sequential PAV parallelization based on:
  * Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset.
@@ -312,18 +311,19 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
   }
 
   /**
-   * Performs a pool adjacent violators algorithm (PAV). Implements the algorithm originally described
-   * in [1], using the formulation from [2, 3]. Uses an array to keep track of start and end indices of
-   * blocks.
+   * Performs a pool adjacent violators algorithm (PAV). Implements the algorithm originally
+   * described in [1], using the formulation from [2, 3]. Uses an array to keep track of start
+   * and end indices of blocks.
    *
-   * [1] Grotzinger, S. J., and C. Witzgall. "Projections onto order simplexes." Applied mathematics and
-   * Optimization 12.1 (1984): 247-270.
-   * 
-   * [2] Best, Michael J., and Nilotpal Chakravarti. "Active set algorithms for isotonic regression; a
-   * unifying framework." Mathematical Programming 47.1-3 (1990): 425-439.
-   * 
-   * [3] Best, Michael J., Nilotpal Chakravarti, and Vasant A. Ubhaya. "Minimizing separable convex functions
-   * subject to simple chain constraints." SIAM Journal on Optimization 10.3 (2000): 658-672.
+   * [1] Grotzinger, S. J., and C. Witzgall. "Projections onto order simplexes." Applied
+   * mathematics and Optimization 12.1 (1984): 247-270.
+   *
+   * [2] Best, Michael J., and Nilotpal Chakravarti. "Active set algorithms for isotonic
+   * regression; a unifying framework." Mathematical Programming 47.1-3 (1990): 425-439.
+   *
+   * [3] Best, Michael J., Nilotpal Chakravarti, and Vasant A. Ubhaya. "Minimizing separable convex
+   * functions subject to simple chain constraints." SIAM Journal on Optimization 10.3 (2000):
+   * 658-672.
    *
    * @param input Input data of tuples (label, feature, weight).
    * @return Result tuples (label, feature, weight) where labels were updated
@@ -391,8 +391,9 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       if (input(blockEnd(i))._2 > input(i)._2) {
         output += ((average(i), input(i)._2, weights(i)._1 / 2))
         output += ((average(i), input(blockEnd(i))._2, weights(i)._1 / 2))
-      } else
+      } else {
         output += ((average(i), input(i)._2, weights(i)._1))
+      }
       i = nextBlock(i)
     }
 
