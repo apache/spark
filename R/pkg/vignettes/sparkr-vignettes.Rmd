@@ -636,22 +636,6 @@ To use LDA, we need to specify a `features` column in `data` where each entry re
 
 * libSVM: Each entry is a collection of words and will be processed directly.
 
-There are several parameters LDA takes for fitting the model.
-
-* `k`: number of topics (default 10).
-
-* `maxIter`: maximum iterations (default 20).
-
-* `optimizer`: optimizer to train an LDA model, "online" (default) uses [online variational inference](https://www.cs.princeton.edu/~blei/papers/HoffmanBleiBach2010b.pdf). "em" uses [expectation-maximization](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm).
-
-* `subsamplingRate`: For `optimizer = "online"`. Fraction of the corpus to be sampled and used in each iteration of mini-batch gradient descent, in range (0, 1] (default 0.05).
-
-* `topicConcentration`: concentration parameter (commonly named beta or eta) for the prior placed on topic distributions over terms, default -1 to set automatically on the Spark side. Use `summary` to retrieve the effective topicConcentration. Only 1-size numeric is accepted.
-
-* `docConcentration`: concentration parameter (commonly named alpha) for the prior placed on documents distributions over topics (theta), default -1 to set automatically on the Spark side. Use `summary` to retrieve the effective docConcentration. Only 1-size or k-size numeric is accepted.
-
-* `maxVocabSize`: maximum vocabulary size, default 1 << 18.
-
 Two more functions are provided for the fitted model.
 
 * `spark.posterior` returns a `SparkDataFrame` containing a column of posterior probabilities vectors named "topicDistribution".
@@ -690,7 +674,6 @@ perplexity <- spark.perplexity(model, corpusDF)
 perplexity
 ```
 
-
 #### Multilayer Perceptron
 
 (Added in 2.1.0)
@@ -714,19 +697,32 @@ The number of nodes $N$ in the output layer corresponds to the number of classes
 
 MLPC employs backpropagation for learning the model. We use the logistic loss function for optimization and L-BFGS as an optimization routine.
 
-`spark.mlp` requires at least two columns in `data`: one named `"label"` and the other one `"features"`. The `"features"` column should be in libSVM-format. According to the description above, there are several additional parameters that can be set:
+`spark.mlp` requires at least two columns in `data`: one named `"label"` and the other one `"features"`. The `"features"` column should be in libSVM-format.
 
-* `layers`: integer vector containing the number of nodes for each layer.
+We use iris data set to show how to use `spark.mlp` in classification.
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+# fit a Multilayer Perceptron Classification Model
+model <- spark.mlp(df, Species ~ ., blockSize = 128, layers = c(4, 3), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
+```
 
-* `solver`: solver parameter, supported options: `"gd"` (minibatch gradient descent) or `"l-bfgs"`.
-
-* `maxIter`: maximum iteration number.
-
-* `tol`: convergence tolerance of iterations.
-
-* `stepSize`: step size for `"gd"`.
-
-* `seed`: seed parameter for weights initialization.
+To avoid lengthy display, we only present partial results of the model summary. You can check the full result from your sparkR shell.
+```{r, include=FALSE}
+ops <- options()
+options(max.print=5)
+```
+```{r}
+# check the summary of the fitted model
+summary(model)
+```
+```{r, include=FALSE}
+options(ops)
+```
+```{r}
+# make predictions use the fitted model
+predictions <- predict(model, df)
+head(select(predictions, predictions$prediction))
+```
 
 #### Collaborative Filtering
 
@@ -821,7 +817,7 @@ Binomial logistic regression
 df <- createDataFrame(iris)
 # Create a DataFrame containing two classes
 training <- df[df$Species %in% c("versicolor", "virginica"), ]
-model <- spark.logit(training, Species ~ ., regParam = 0.5)
+model <- spark.logit(training, Species ~ ., regParam = 0.00042)
 summary(model)
 ```
 
@@ -834,7 +830,7 @@ Multinomial logistic regression against three classes
 ```{r, warning=FALSE}
 df <- createDataFrame(iris)
 # Note in this case, Spark infers it is multinomial logistic regression, so family = "multinomial" is optional.
-model <- spark.logit(df, Species ~ ., regParam = 0.5)
+model <- spark.logit(df, Species ~ ., regParam = 0.056)
 summary(model)
 ```
 
