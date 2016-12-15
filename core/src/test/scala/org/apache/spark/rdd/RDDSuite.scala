@@ -70,6 +70,10 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(!nums.isEmpty())
     assert(nums.max() === 4)
     assert(nums.min() === 1)
+
+    val nestedNums = sc.makeRDD(Array(Array(1, 2, 3), Array(4, 5), Array(6)), 2)
+    assert(nestedNums.flatten.collect().toList === List(1, 2, 3, 4, 5, 6))
+
     val partitionSums = nums.mapPartitions(iter => Iterator(iter.sum))
     assert(partitionSums.collect().toList === List(3, 7))
 
@@ -86,13 +90,6 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     intercept[UnsupportedOperationException] {
       nums.filter(_ > 5).reduce(_ + _)
     }
-  }
-
-  test("flatten") {
-    val nums = sc.makeRDD(Array(Array(1, 2, 3), Array(4, 5), Array(6)), 2)
-    assert(nums.flatten.collect().toList === List(1, 2, 3, 4, 5, 6))
-    val strs = sc.makeRDD(Array(Array("a", "b", "c"), Array("d", "e"), Array("f")), 2)
-    assert(strs.flatten.collect().toList === List("a", "b", "c", "d", "e", "f"))
   }
 
   test("serialization") {

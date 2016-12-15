@@ -381,11 +381,14 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-    *  Return a new RDD by flattening all elements from RDD with traversable elements
-    */
+   * Return a new RDD by flattening all elements from RDD with traversable elements
+   */
   def flatten[U: ClassTag](implicit asTraversable: T => TraversableOnce[U]): RDD[U] = withScope {
-    val f = (x: T) => asTraversable(x)
-    flatMap(f)
+    new MapPartitionsRDD[U, T](this, (context, pid, iter) => {
+      var newIter: Iterator[U] = Iterator.empty
+      for (x <- iter) newIter ++= asTraversable(x)
+      newIter
+    })
   }
 
   /**
