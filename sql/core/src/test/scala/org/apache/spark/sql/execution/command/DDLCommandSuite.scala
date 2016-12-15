@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 
 // TODO: merge this with DDLSuite (SPARK-14441)
@@ -660,6 +660,34 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
+  test("alter table: change column name/type/comment") {
+    val sql1 = "ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT"
+    val sql2 = "ALTER TABLE table_name CHANGE COLUMN col_name col_name INT COMMENT 'new_comment'"
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+    val tableIdent = TableIdentifier("table_name", None)
+    val expected1 = AlterTableChangeColumnCommand(
+      tableIdent,
+      "col_old_name",
+      StructField("col_new_name", IntegerType))
+    val expected2 = AlterTableChangeColumnCommand(
+      tableIdent,
+      "col_name",
+      StructField("col_name", IntegerType).withComment("new_comment"))
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("alter table: change column position (not supported)") {
+    assertUnsupported("ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT FIRST")
+    assertUnsupported(
+      "ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT AFTER other_col")
+  }
+
+  test("alter table: change column in partition spec") {
+    assertUnsupported("ALTER TABLE table_name PARTITION (a='1', a='2') CHANGE COLUMN a new_a INT")
+  }
+
   test("alter table: touch (not supported)") {
     assertUnsupported("ALTER TABLE table_name TOUCH")
     assertUnsupported("ALTER TABLE table_name TOUCH PARTITION (dt='2008-08-08', country='us')")
@@ -693,19 +721,6 @@ class DDLCommandSuite extends PlanTest {
     assertUnsupported("ALTER TABLE table_name NOT STORED AS DIRECTORIES")
     assertUnsupported("ALTER TABLE table_name SET SKEWED LOCATION (col_name1=\"location1\"")
     assertUnsupported("ALTER TABLE table_name SKEWED BY (key) ON (1,5,6) STORED AS DIRECTORIES")
-  }
-
-  test("alter table: change column name/type/position/comment (not allowed)") {
-    assertUnsupported("ALTER TABLE table_name CHANGE col_old_name col_new_name INT")
-    assertUnsupported(
-      """
-       |ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT
-       |COMMENT 'col_comment' FIRST CASCADE
-      """.stripMargin)
-    assertUnsupported("""
-       |ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT
-       |COMMENT 'col_comment' AFTER column_name RESTRICT
-      """.stripMargin)
   }
 
   test("alter table: add/replace columns (not allowed)") {
