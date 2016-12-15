@@ -49,9 +49,12 @@ case class HadoopFsRelation(
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
   val schema: StructType = {
-    val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
-    StructType(dataSchema ++ partitionSchema.filterNot { column =>
-      dataSchemaColumnNames.contains(column.name.toLowerCase)
+    val equality = sparkSession.sessionState.conf.resolver
+    val overriddenDataSchema = dataSchema.map { dataField =>
+      partitionSchema.find(f => equality(f.name, dataField.name)).getOrElse(dataField)
+    }
+    StructType(overriddenDataSchema++ partitionSchema.filterNot { partitionField =>
+      overriddenDataSchema.exists(f => equality(f.name, partitionField.name))
     })
   }
 
