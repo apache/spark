@@ -229,7 +229,9 @@ if [ "$MAKE_R" == "true" ]; then
   # Do not source the check-cran.sh - it should be run from where it is for it to set SPARK_HOME
   NO_TESTS=1 CLEAN_INSTALL=1 "$SPARK_HOME/"R/check-cran.sh
   # Make a copy of R source package matching the Spark release version.
-  cp $SPARK_HOME/R/SparkR_"$R_PACKAGE_VERSION".tar.gz $SPARK_HOME/R/SparkR_"$VERSION".tar.gz
+  if [ "$R_PACKAGE_VERSION" != "$VERSION" ]; then
+    cp $SPARK_HOME/R/SparkR_"$R_PACKAGE_VERSION".tar.gz $SPARK_HOME/R/SparkR_"$VERSION".tar.gz
+  fi
   popd > /dev/null
 else
   echo "Skipping building R source package"
