@@ -21,7 +21,6 @@ import java.util.{Collections, UUID}
 
 import scala.collection.JavaConverters._
 
-import com.google.common.collect.Maps
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
