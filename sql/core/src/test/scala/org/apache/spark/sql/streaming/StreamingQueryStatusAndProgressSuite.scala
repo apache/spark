@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql.streaming
 
-import java.util.UUID
+import java.util.{Collections, UUID}
 
 import scala.collection.JavaConverters._
 
+import com.google.common.collect.Maps
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
+import org.apache.spark.sql.test.SharedSQLContext
 
 
-class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
+class StreamingQueryStatusAndProgressSuite extends SharedSQLContext {
 
   test("StreamingQueryProgress - prettyJson") {
     val json1 = testProgress1.prettyJson
@@ -128,6 +129,14 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
   test("StreamingQueryStatus - toString") {
     assert(testStatus.toString === testStatus.prettyJson)
   }
+
+  test("progress classes should be Serializable") {
+    val array = spark.sparkContext.parallelize(Seq(testProgress1)).collect()
+    assert(array.length === 1)
+    // Make sure we did serialize and deserialize the object
+    assert(array(0) ne testProgress1)
+    assert(array(0).json === testProgress1.json)
+  }
 }
 
 object StreamingQueryStatusAndProgressSuite {
@@ -137,12 +146,13 @@ object StreamingQueryStatusAndProgressSuite {
     name = "myName",
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
-    durationMs = Map("total" -> 0L).mapValues(long2Long).asJava,
-    eventTime = Map(
-      "max" -> "2016-12-05T20:54:20.827Z",
-      "min" -> "2016-12-05T20:54:20.827Z",
-      "avg" -> "2016-12-05T20:54:20.827Z",
-      "watermark" -> "2016-12-05T20:54:20.827Z").asJava,
+    durationMs = Collections.singletonMap("total", 0L),
+    eventTime = new java.util.HashMap[String, String] {
+      put("max", "2016-12-05T20:54:20.827Z")
+      put("min", "2016-12-05T20:54:20.827Z")
+      put("avg", "2016-12-05T20:54:20.827Z")
+      put("watermark", "2016-12-05T20:54:20.827Z")
+    },
     stateOperators = Array(new StateOperatorProgress(numRowsTotal = 0, numRowsUpdated = 1)),
     sources = Array(
       new SourceProgress(
