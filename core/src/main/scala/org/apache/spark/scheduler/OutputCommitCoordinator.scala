@@ -164,6 +164,11 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
               s"partition=$partition")
             authorizedCommitters(partition) = attemptNumber
             true
+          case existingCommitter if existingCommitter == attemptNumber =>
+            logWarning(s"Authorizing duplicate request to commit for " +
+              s"attemptNumber=$attemptNumber to commit for stage=$stage, partition=$partition; " +
+              s"existingCommitter = $existingCommitter. This can indicate dropped network traffic.")
+            true
           case existingCommitter =>
             logDebug(s"Denying attemptNumber=$attemptNumber to commit for stage=$stage, " +
               s"partition=$partition; existingCommitter = $existingCommitter")
