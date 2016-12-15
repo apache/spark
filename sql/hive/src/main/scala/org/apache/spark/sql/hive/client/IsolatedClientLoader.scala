@@ -272,7 +272,7 @@ private[hive] class IsolatedClientLoader(
             "Please make sure that jars for your version of hive and hadoop are included in the " +
             s"paths passed to ${HiveUtils.HIVE_METASTORE_JARS.key}.", e)
         } else {
-          throw e
+          throw e.getCause()
         }
     } finally {
       Thread.currentThread.setContextClassLoader(origLoader)
