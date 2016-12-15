@@ -138,7 +138,7 @@ abstract class SQLImplicits {
     newLongSeqEncoder
 
   /** @since 2.2.0 */
-  implicit def newDoubleListEncoder[T <: Seq[Double] with Product : TypeTag]: Encoder[T] =
+  implicit def newDoubleSeqWithProductEncoder[T <: Seq[Double] with Product : TypeTag]: Encoder[T] =
     newDoubleSeqEncoder
 
   /** @since 2.2.0 */
