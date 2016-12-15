@@ -25,7 +25,7 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, OverwriteOptions}
+import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.execution.command.{AlterTableRecoverPartitionsCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.types.StructType
@@ -259,7 +259,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         table = UnresolvedRelation(tableIdent),
         partition = Map.empty[String, Option[String]],
         child = df.logicalPlan,
-        overwrite = OverwriteOptions(mode == SaveMode.Overwrite),
+        overwrite = mode == SaveMode.Overwrite,
         ifNotExists = false)).toRdd
   }
 

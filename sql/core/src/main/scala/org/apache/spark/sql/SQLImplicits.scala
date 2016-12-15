@@ -74,6 +74,19 @@ abstract class SQLImplicits {
   /** @since 1.6.0 */
   implicit def newStringEncoder: Encoder[String] = Encoders.STRING
 
+  /** @since 2.2.0 */
+  implicit def newJavaDecimalEncoder: Encoder[java.math.BigDecimal] = Encoders.DECIMAL
+
+  /** @since 2.2.0 */
+  implicit def newScalaDecimalEncoder: Encoder[scala.math.BigDecimal] = ExpressionEncoder()
+
+  /** @since 2.2.0 */
+  implicit def newDateEncoder: Encoder[java.sql.Date] = Encoders.DATE
+
+  /** @since 2.2.0 */
+  implicit def newTimeStampEncoder: Encoder[java.sql.Timestamp] = Encoders.TIMESTAMP
+
+
   // Boxed primitives
 
   /** @since 2.0.0 */
@@ -141,7 +154,7 @@ abstract class SQLImplicits {
   implicit def newFloatArrayEncoder: Encoder[Array[Float]] = ExpressionEncoder()
 
   /** @since 1.6.1 */
-  implicit def newByteArrayEncoder: Encoder[Array[Byte]] = ExpressionEncoder()
+  implicit def newByteArrayEncoder: Encoder[Array[Byte]] = Encoders.BINARY
 
   /** @since 1.6.1 */
   implicit def newShortArrayEncoder: Encoder[Array[Short]] = ExpressionEncoder()
