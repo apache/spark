@@ -142,4 +142,7 @@ if not (ENV['SKIP_API'] == '1')
   puts "cp -r R/pkg/html/. docs/api/R"
   cp_r("R/pkg/html/.", "docs/api/R")
 
+  puts "cp R/pkg/DESCRIPTION docs/api"
+  cp("R/pkg/DESCRIPTION", "docs/api")
+
 end
