@@ -26,6 +26,7 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
@@ -176,6 +177,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
  * when using the Hive external catalog) as well as in the sql/core module.
  */
 abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils {
+  import testImplicits._
 
   private val dec1 = new java.math.BigDecimal("1.000000000000000000")
   private val dec2 = new java.math.BigDecimal("8.000000000000000000")
@@ -239,6 +241,22 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
         withClue(s"column $k") {
           assert(table.stats.get.colStats(k) == v)
         }
+      }
+    }
+  }
+
+  // This test will be run twice: with and without Hive support
+  test("SPARK-18856: non-empty partitioned table should not report zero size") {
+    withTable("ds_tbl", "hive_tbl") {
+      spark.range(100).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("ds_tbl")
+      val stats = spark.table("ds_tbl").queryExecution.optimizedPlan.statistics
+      assert(stats.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
+
+      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
+        sql("CREATE TABLE hive_tbl(i int) PARTITIONED BY (j int)")
+        sql("INSERT INTO hive_tbl PARTITION(j=1) SELECT 1")
+        val stats2 = spark.table("hive_tbl").queryExecution.optimizedPlan.statistics
+        assert(stats2.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
       }
     }
   }
