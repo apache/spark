@@ -312,10 +312,18 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
   }
 
   /**
-   * Performs a pool adjacent violators algorithm (PAV).
-   * Iterate through data multiple times, fixing any monotonicity violations
-   * we find. Uses optimization of discovering monotonicity violating sequences (blocks).
-   * Typical complexity is linear, with quadratic worst-case.
+   * Performs a pool adjacent violators algorithm (PAV). Implements the algorithm originally described
+   * in [1], using the formulation from [2, 3]. Uses an array to keep track of start and end indices of
+   * blocks.
+   *
+   * [1] Grotzinger, S. J., and C. Witzgall. "Projections onto order simplexes." Applied mathematics and
+   * Optimization 12.1 (1984): 247-270.
+   * 
+   * [2] Best, Michael J., and Nilotpal Chakravarti. "Active set algorithms for isotonic regression; a
+   * unifying framework." Mathematical Programming 47.1-3 (1990): 425-439.
+   * 
+   * [3] Best, Michael J., Nilotpal Chakravarti, and Vasant A. Ubhaya. "Minimizing separable convex functions
+   * subject to simple chain constraints." SIAM Journal on Optimization 10.3 (2000): 658-672.
    *
    * @param input Input data of tuples (label, feature, weight).
    * @return Result tuples (label, feature, weight) where labels were updated
@@ -328,77 +336,67 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       return Array.empty
     }
 
-    // Pools sub array within given bounds assigning weighted average value to all elements.
-    def pool(input: Array[(Double, Double, Double)], start: Int, end: Int): Unit = {
-      val poolSubArray = input.slice(start, end + 1)
+    /*
+    Keeps track of the start and end indices of the blocks. blockBounds(start) gives the
+    index of the end of the block and blockBounds(end) gives the index of the start of the
+    block. Entries that are not the start or end of the block are meaningless.
+    */
+    val blockBounds = Array.range(0, input.length) // Initially, each data point is its own block
 
-      val weightedSum = poolSubArray.map(lp => lp._1 * lp._3).sum
-      val weight = poolSubArray.map(_._3).sum
+    /*
+    Keep track of the sum of weights and sum of weight * y for each block. weights(start)
+    gives the values for the block. Entries that are not at the start of a block
+    are meaningless.
+    */
+    val weights: Array[(Double, Double)] = input.map(x => (x._3, x._3 * x._1)) // (weight, weight * y)
 
-      var i = start
-      while (i <= end) {
-        input(i) = (weightedSum / weight, input(i)._2, input(i)._3)
-        i += 1
-      }
+    // a few convenience functions to make the code more readable
+    def blockEnd(start: Int) = blockBounds(start)
+    def blockStart(end: Int) = blockBounds(end)
+    def nextBlock(start: Int) = blockEnd(start) + 1
+    def prevBlock(start: Int) = blockStart(start - 1)
+    def merge(block1: Int, block2: Int): Int = {
+      assert(blockEnd(block1) + 1 == block2, "attempting to merge non-consecutive blocks")
+      blockBounds(block1) = blockEnd(block2)
+      blockBounds(blockEnd(block2)) = block1
+      val w1 = weights(block1)
+      val w2 = weights(block2)
+      weights(block1) = (w1._1 + w2._1, w1._2 + w2._2)
+      block1
     }
+    def average(start: Int) = weights(start)._2 / weights(start)._1
 
+    /*
+    Implement Algorithm PAV from [3].
+    Merge on >= instead of > because it elimnate adjacent blocks with the same average, and we want
+    to compress our output as much as possible. Both give correct results.
+    */
     var i = 0
-    val n = input.length - 1
-    var notFinished = true
-
-    while (notFinished) {
-      i = 0
-      notFinished = false
-
-      // Iterate through the data, fix any monotonicity violations we find
-      // We may need to do this multiple times, as pooling can introduce violations
-      // at locations that were previously fine.
-      while (i < n) {
-        var j = i
-
-        // Find next monotonicity violating sequence, if any.
-        while (j < n && input(j)._1 > input(j + 1)._1) {
-          j += 1
+    while (nextBlock(i) < input.length) {
+      if (average(i) >= average(nextBlock(i))) {
+        merge(i, nextBlock(i))
+        while((i > 0) && (average(prevBlock(i)) >= average(i))) {
+          i = merge(prevBlock(i), i)
         }
-
-        // Pool the violating sequence
-        if (input(i)._1 != input(j)._1) {
-          pool(input, i, j)
-          notFinished = true
-        }
-        i = j + 1
-      }
-    }
-
-    // For points having the same prediction, we only keep two boundary points.
-    val compressed = ArrayBuffer.empty[(Double, Double, Double)]
-
-    var (curLabel, curFeature, curWeight) = input.head
-    var rightBound = curFeature
-    def merge(): Unit = {
-      compressed += ((curLabel, curFeature, curWeight))
-      if (rightBound > curFeature) {
-        compressed += ((curLabel, rightBound, 0.0))
-      }
-    }
-    i = 1
-    while (i < input.length) {
-      val (label, feature, weight) = input(i)
-      if (label == curLabel) {
-        curWeight += weight
-        rightBound = feature
       } else {
-        merge()
-        curLabel = label
-        curFeature = feature
-        curWeight = weight
-        rightBound = curFeature
+        i = nextBlock(i)
       }
-      i += 1
     }
-    merge()
 
-    compressed.toArray
+    // construct the output by walking through the blocks in order
+    val output = ArrayBuffer.empty[(Double, Double, Double)]
+    i = 0
+    while(i < input.length) {
+      // If block size is > 1, a point at the start and end of the block, each receiving half the weight
+      if (input(blockEnd(i))._2 > input(i)._2) {
+        output += ((average(i), input(i)._2, weights(i)._1 / 2))
+        output += ((average(i), input(blockEnd(i))._2, weights(i)._1 / 2))
+      } else
+        output += ((average(i), input(i)._2, weights(i)._1))
+      i = nextBlock(i)
+    }
+
+    output.toArray
   }
 
   /**
