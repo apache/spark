@@ -22,7 +22,7 @@ import java.net.{InetAddress, InetSocketAddress, ServerSocket}
 import java.util.concurrent.TimeUnit
 
 import io.netty.bootstrap.ServerBootstrap
-import io.netty.channel.{ChannelFuture, ChannelInitializer, ChannelOption, EventLoopGroup}
+import io.netty.channel.{ChannelFuture, ChannelInitializer, EventLoopGroup}
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
@@ -41,6 +41,9 @@ private[spark] class RBackend {
   private[this] var channelFuture: ChannelFuture = null
   private[this] var bootstrap: ServerBootstrap = null
   private[this] var bossGroup: EventLoopGroup = null
+
+  /** Tracks JVM objects returned to R for this RBackend instance. */
+  private[r] val jvmObjectTracker = new JVMObjectTracker
 
   def init(): Int = {
     val conf = new SparkConf()
@@ -94,6 +97,7 @@ private[spark] class RBackend {
       bootstrap.childGroup().shutdownGracefully()
     }
     bootstrap = null
+    jvmObjectTracker.clear()
   }
 
 }

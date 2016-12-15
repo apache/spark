@@ -139,6 +139,7 @@ class FileScanRDD(
                     }
                   } catch {
                     case e: IOException =>
+                      logWarning(s"Skipped the rest content in the corrupted file: $currentFile", e)
                       finished = true
                       null
                   }
@@ -150,6 +151,9 @@ class FileScanRDD(
               currentIterator = readFunction(currentFile)
             }
           } catch {
+            case e: IOException if ignoreCorruptFiles =>
+              logWarning(s"Skipped the rest content in the corrupted file: $currentFile", e)
+              currentIterator = Iterator.empty
             case e: java.io.FileNotFoundException =>
               throw new java.io.FileNotFoundException(
                 e.getMessage + "\n" +

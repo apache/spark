@@ -461,7 +461,7 @@ class SparkSubmitSuite
     val tempDir = Utils.createTempDir()
     val srcDir = new File(tempDir, "sparkrtest")
     srcDir.mkdirs()
-    val excSource = new JavaSourceFromString(new File(srcDir, "DummyClass").getAbsolutePath,
+    val excSource = new JavaSourceFromString(new File(srcDir, "DummyClass").toURI.getPath,
       """package sparkrtest;
         |
         |public class DummyClass implements java.io.Serializable {

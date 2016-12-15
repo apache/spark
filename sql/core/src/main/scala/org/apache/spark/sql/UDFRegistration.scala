@@ -23,8 +23,6 @@ import java.lang.reflect.{ParameterizedType, Type}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
-import com.google.common.reflect.TypeToken
-
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.api.java._
@@ -446,7 +444,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
           val udfReturnType = udfInterfaces(0).getActualTypeArguments.last
           var returnType = returnDataType
           if (returnType == null) {
-            returnType = JavaTypeInference.inferDataType(TypeToken.of(udfReturnType))._1
+            returnType = JavaTypeInference.inferDataType(udfReturnType)._1
           }
 
           udfInterfaces(0).getActualTypeArguments.length match {

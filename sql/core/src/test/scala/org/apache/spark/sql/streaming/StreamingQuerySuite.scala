@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.concurrent.CountDownLatch
+
 import org.apache.commons.lang3.RandomStringUtils
 import org.scalactic.TolerantNumerics
 import org.scalatest.concurrent.Eventually._
@@ -29,6 +31,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.util.BlockingSource
 import org.apache.spark.util.ManualClock
 
 
@@ -152,7 +156,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
     )
   }
 
-  testQuietly("status, lastProgress, and recentProgresses") {
+  testQuietly("status, lastProgress, and recentProgress") {
     import StreamingQuerySuite._
     clock = new StreamManualClock
 
@@ -201,7 +205,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
-      AssertOnQuery(_.recentProgresses.count(_.numInputRows > 0) === 0),
+      AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
       // Test status and progress while offset is being fetched
       AddData(inputData, 1, 2),
@@ -210,7 +214,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message.startsWith("Getting offsets from")),
-      AssertOnQuery(_.recentProgresses.count(_.numInputRows > 0) === 0),
+      AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
       // Test status and progress while batch is being fetched
       AdvanceManualClock(200), // time = 300 to unblock getOffset, will block on getBatch
@@ -218,14 +222,14 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message === "Processing new data"),
-      AssertOnQuery(_.recentProgresses.count(_.numInputRows > 0) === 0),
+      AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
       // Test status and progress while batch is being processed
       AdvanceManualClock(300), // time = 600 to unblock getBatch, will block in Spark job
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message === "Processing new data"),
-      AssertOnQuery(_.recentProgresses.count(_.numInputRows > 0) === 0),
+      AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
       // Test status and progress while batch processing has completed
       AdvanceManualClock(500), // time = 1100 to unblock job
@@ -236,14 +240,14 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
       AssertOnQuery { query =>
         assert(query.lastProgress != null)
-        assert(query.recentProgresses.exists(_.numInputRows > 0))
-        assert(query.recentProgresses.last.eq(query.lastProgress))
+        assert(query.recentProgress.exists(_.numInputRows > 0))
+        assert(query.recentProgress.last.eq(query.lastProgress))
 
         val progress = query.lastProgress
         assert(progress.id === query.id)
         assert(progress.name === query.name)
         assert(progress.batchId === 0)
-        assert(progress.timestamp === 100)
+        assert(progress.timestamp === "1970-01-01T00:00:00.100Z") // 100 ms in UTC
         assert(progress.numInputRows === 2)
         assert(progress.processedRowsPerSecond === 2.0)
 
@@ -274,7 +278,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
       AssertOnQuery { query =>
-        assert(query.recentProgresses.last.eq(query.lastProgress))
+        assert(query.recentProgress.last.eq(query.lastProgress))
         assert(query.lastProgress.batchId === 1)
         assert(query.lastProgress.sources(0).inputRowsPerSecond === 1.818)
         true
@@ -307,6 +311,24 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message.startsWith("Terminated with exception"))
     )
+  }
+
+  test("lastProgress should be null when recentProgress is empty") {
+    BlockingSource.latch = new CountDownLatch(1)
+    withTempDir { tempDir =>
+      val sq = spark.readStream
+        .format("org.apache.spark.sql.streaming.util.BlockingSource")
+        .load()
+        .writeStream
+        .format("org.apache.spark.sql.streaming.util.BlockingSource")
+        .option("checkpointLocation", tempDir.toString)
+        .start()
+      // Creating source is blocked so recentProgress is empty and lastProgress should be null
+      assert(sq.lastProgress === null)
+      // Release the latch and stop the query
+      BlockingSource.latch.countDown()
+      sq.stop()
+    }
   }
 
   test("codahale metrics") {
@@ -369,25 +391,52 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
   testQuietly("StreamExecution metadata garbage collection") {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map(6 / _)
+    withSQLConf(SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
+      // Run 3 batches, and then assert that only 2 metadata files is are at the end
+      // since the first should have been purged.
+      testStream(mapped)(
+        AddData(inputData, 1, 2),
+        CheckAnswer(6, 3),
+        AddData(inputData, 1, 2),
+        CheckAnswer(6, 3, 6, 3),
+        AddData(inputData, 4, 6),
+        CheckAnswer(6, 3, 6, 3, 1, 1),
 
-    // Run 3 batches, and then assert that only 2 metadata files is are at the end
-    // since the first should have been purged.
-    testStream(mapped)(
-      AddData(inputData, 1, 2),
-      CheckAnswer(6, 3),
-      AddData(inputData, 1, 2),
-      CheckAnswer(6, 3, 6, 3),
-      AddData(inputData, 4, 6),
-      CheckAnswer(6, 3, 6, 3, 1, 1),
+        AssertOnQuery("metadata log should contain only two files") { q =>
+          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
+          val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
+          val toTest = logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
+          assert(toTest.size == 2 && toTest.head == "1")
+          true
+        }
+      )
+    }
 
-      AssertOnQuery("metadata log should contain only two files") { q =>
-        val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
-        val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
-        val toTest = logFileNames.filter(! _.endsWith(".crc")).sorted  // Workaround for SPARK-17475
-        assert(toTest.size == 2 && toTest.head == "1")
-        true
-      }
-    )
+    val inputData2 = MemoryStream[Int]
+    withSQLConf(SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2") {
+      // Run 5 batches, and then assert that 3 metadata files is are at the end
+      // since the two should have been purged.
+      testStream(inputData2.toDS())(
+        AddData(inputData2, 1, 2),
+        CheckAnswer(1, 2),
+        AddData(inputData2, 1, 2),
+        CheckAnswer(1, 2, 1, 2),
+        AddData(inputData2, 3, 4),
+        CheckAnswer(1, 2, 1, 2, 3, 4),
+        AddData(inputData2, 5, 6),
+        CheckAnswer(1, 2, 1, 2, 3, 4, 5, 6),
+        AddData(inputData2, 7, 8),
+        CheckAnswer(1, 2, 1, 2, 3, 4, 5, 6, 7, 8),
+
+        AssertOnQuery("metadata log should contain three files") { q =>
+          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
+          val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
+          val toTest = logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
+          assert(toTest.size == 3 && toTest.head == "2")
+          true
+        }
+      )
+    }
   }
 
   /** Create a streaming DF that only execute one batch in which it returns the given static DF */
@@ -408,7 +457,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
     try {
       val q = streamingDF.writeStream.format("memory").queryName("test").start()
       q.processAllAvailable()
-      q.recentProgresses.head
+      q.recentProgress.head
     } finally {
       spark.streams.active.map(_.stop())
     }

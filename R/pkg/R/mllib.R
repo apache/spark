@@ -191,7 +191,7 @@ predict_internal <- function(object, newData) {
 #' @param regParam regularization parameter for L2 regularization.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.glm,SparkDataFrame,formula-method
-#' @return \code{spark.glm} returns a fitted generalized linear model
+#' @return \code{spark.glm} returns a fitted generalized linear model.
 #' @rdname spark.glm
 #' @name spark.glm
 #' @export
@@ -277,12 +277,12 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
 #  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
 
 #' @param object a fitted generalized linear model.
-#' @return \code{summary} returns a summary object of the fitted model, a list of components
-#'         including at least the coefficients matrix (which includes coefficients, standard error
-#'         of coefficients, t value and p value), null/residual deviance, null/residual degrees of
-#'         freedom, AIC and number of iterations IRLS takes. If there are collinear columns
-#'         in you data, the coefficients matrix only provides coefficients.
-#'
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'         The list of components includes at least the \code{coefficients} (coefficients matrix, which includes
+#'         coefficients, standard error of coefficients, t value and p value),
+#'         \code{null.deviance} (null/residual degrees of freedom), \code{aic} (AIC)
+#'         and \code{iter} (number of iterations IRLS takes). If there are collinear columns in the data,
+#'         the coefficients matrix only provides coefficients.
 #' @rdname spark.glm
 #' @export
 #' @note summary(GeneralizedLinearRegressionModel) since 2.0.0
@@ -328,7 +328,7 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
 #  Prints the summary of GeneralizedLinearRegressionModel
 
 #' @rdname spark.glm
-#' @param x summary object of fitted generalized linear model returned by \code{summary} function
+#' @param x summary object of fitted generalized linear model returned by \code{summary} function.
 #' @export
 #' @note print.summary.GeneralizedLinearRegressionModel since 2.0.0
 print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
@@ -361,7 +361,7 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
 
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns a SparkDataFrame containing predicted labels in a column named
-#'         "prediction"
+#'         "prediction".
 #' @rdname spark.glm
 #' @export
 #' @note predict(GeneralizedLinearRegressionModel) since 1.5.0
@@ -375,7 +375,7 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
 
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
-#' "prediction"
+#' "prediction".
 #' @rdname spark.naiveBayes
 #' @export
 #' @note predict(NaiveBayesModel) since 2.0.0
@@ -387,8 +387,9 @@ setMethod("predict", signature(object = "NaiveBayesModel"),
 # Returns the summary of a naive Bayes model produced by \code{spark.naiveBayes}
 
 #' @param object a naive Bayes model fitted by \code{spark.naiveBayes}.
-#' @return \code{summary} returns a list containing \code{apriori}, the label distribution, and
-#'         \code{tables}, conditional probabilities given the target label.
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'         The list includes \code{apriori} (the label distribution) and
+#'         \code{tables} (conditional probabilities given the target label).
 #' @rdname spark.naiveBayes
 #' @export
 #' @note summary(NaiveBayesModel) since 2.0.0
@@ -409,9 +410,9 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 
 # Returns posterior probabilities from a Latent Dirichlet Allocation model produced by spark.lda()
 
-#' @param newData A SparkDataFrame for testing
+#' @param newData A SparkDataFrame for testing.
 #' @return \code{spark.posterior} returns a SparkDataFrame containing posterior probabilities
-#'         vectors named "topicDistribution"
+#'         vectors named "topicDistribution".
 #' @rdname spark.lda
 #' @aliases spark.posterior,LDAModel,SparkDataFrame-method
 #' @export
@@ -425,7 +426,8 @@ setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkData
 
 #' @param object A Latent Dirichlet Allocation model fitted by \code{spark.lda}.
 #' @param maxTermsPerTopic Maximum number of terms to collect for each topic. Default value of 10.
-#' @return \code{summary} returns a list containing
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'         The list includes
 #'         \item{\code{docConcentration}}{concentration parameter commonly named \code{alpha} for
 #'               the prior placed on documents distributions over topics \code{theta}}
 #'         \item{\code{topicConcentration}}{concentration parameter commonly named \code{beta} or
@@ -476,7 +478,7 @@ setMethod("spark.perplexity", signature(object = "LDAModel", data = "SparkDataFr
 
 # Saves the Latent Dirichlet Allocation model to the input path.
 
-#' @param path The directory where the model is saved
+#' @param path The directory where the model is saved.
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
@@ -495,16 +497,16 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #' Fits an Isotonic Regression model against a Spark DataFrame, similarly to R's isoreg().
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
-#' @param data SparkDataFrame for training
+#' @param data SparkDataFrame for training.
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param isotonic Whether the output sequence should be isotonic/increasing (TRUE) or
-#'                 antitonic/decreasing (FALSE)
+#'                 antitonic/decreasing (FALSE).
 #' @param featureIndex The index of the feature if \code{featuresCol} is a vector column
-#'                     (default: 0), no effect otherwise
+#'                     (default: 0), no effect otherwise.
 #' @param weightCol The weight column name.
 #' @param ... additional arguments passed to the method.
-#' @return \code{spark.isoreg} returns a fitted Isotonic Regression model
+#' @return \code{spark.isoreg} returns a fitted Isotonic Regression model.
 #' @rdname spark.isoreg
 #' @aliases spark.isoreg,SparkDataFrame,formula-method
 #' @name spark.isoreg
@@ -550,9 +552,9 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
 
 #  Predicted values based on an isotonicRegression model
 
-#' @param object a fitted IsotonicRegressionModel
-#' @param newData SparkDataFrame for testing
-#' @return \code{predict} returns a SparkDataFrame containing predicted values
+#' @param object a fitted IsotonicRegressionModel.
+#' @param newData SparkDataFrame for testing.
+#' @return \code{predict} returns a SparkDataFrame containing predicted values.
 #' @rdname spark.isoreg
 #' @aliases predict,IsotonicRegressionModel,SparkDataFrame-method
 #' @export
@@ -564,7 +566,9 @@ setMethod("predict", signature(object = "IsotonicRegressionModel"),
 
 #  Get the summary of an IsotonicRegressionModel model
 
-#' @return \code{summary} returns the model's boundaries and prediction as lists
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'         The list includes model's \code{boundaries} (boundaries in increasing order)
+#'         and \code{predictions} (predictions associated with the boundaries at the same index).
 #' @rdname spark.isoreg
 #' @aliases summary,IsotonicRegressionModel-method
 #' @export
@@ -661,7 +665,11 @@ setMethod("fitted", signature(object = "KMeansModel"),
 #  Get the summary of a k-means model
 
 #' @param object a fitted k-means model.
-#' @return \code{summary} returns the model's features, coefficients, k, size and cluster.
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'         The list includes the model's \code{k} (number of cluster centers),
+#'         \code{coefficients} (model cluster centers),
+#'         \code{size} (number of data points in each cluster), and \code{cluster}
+#'         (cluster centers of the transformed data).
 #' @rdname spark.kmeans
 #' @export
 #' @note summary(KMeansModel) since 2.0.0
@@ -681,7 +689,7 @@ setMethod("summary", signature(object = "KMeansModel"),
             } else {
               dataFrame(callJMethod(jobj, "cluster"))
             }
-            list(coefficients = coefficients, size = size,
+            list(k = k, coefficients = coefficients, size = size,
                  cluster = cluster, is.loaded = is.loaded)
           })
 
@@ -703,7 +711,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' with pivoting; "multinomial": Multinomial logistic (softmax) regression without pivoting, similar to glmnet.
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
-#' @param data SparkDataFrame for training
+#' @param data SparkDataFrame for training.
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param regParam the regularization parameter.
@@ -733,11 +741,8 @@ setMethod("predict", signature(object = "KMeansModel"),
 #'                  excepting that at most one value may be 0. The class with largest value p/t is predicted, where p
 #'                  is the original probability of that class and t is the class's threshold.
 #' @param weightCol The weight column name.
-#' @param aggregationDepth depth for treeAggregate (>= 2). If the dimensions of features or the number of partitions
-#'                         are large, this param could be adjusted to a larger size.
-#' @param probabilityCol column name for predicted class conditional probabilities.
 #' @param ... additional arguments passed to the method.
-#' @return \code{spark.logit} returns a fitted logistic regression model
+#' @return \code{spark.logit} returns a fitted logistic regression model.
 #' @rdname spark.logit
 #' @aliases spark.logit,SparkDataFrame,formula-method
 #' @name spark.logit
@@ -746,45 +751,35 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' \dontrun{
 #' sparkR.session()
 #' # binary logistic regression
-#' label <- c(0.0, 0.0, 0.0, 1.0, 1.0)
-#' features <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
-#' binary_data <- as.data.frame(cbind(label, features))
-#' binary_df <- createDataFrame(binary_data)
-#' blr_model <- spark.logit(binary_df, label ~ features, thresholds = 1.0)
-#' blr_predict <- collect(select(predict(blr_model, binary_df), "prediction"))
+#' df <- createDataFrame(iris)
+#' training <- df[df$Species %in% c("versicolor", "virginica"), ]
+#' model <- spark.logit(training, Species ~ ., regParam = 0.5)
+#' summary <- summary(model)
 #'
-#' # summary of binary logistic regression
-#' blr_summary <- summary(blr_model)
-#' blr_fmeasure <- collect(select(blr_summary$fMeasureByThreshold, "threshold", "F-Measure"))
+#' # fitted values on training data
+#' fitted <- predict(model, training)
+#'
 #' # save fitted model to input path
 #' path <- "path/to/model"
-#' write.ml(blr_model, path)
+#' write.ml(model, path)
 #'
 #' # can also read back the saved model and predict
 #' # Note that summary deos not work on loaded model
 #' savedModel <- read.ml(path)
-#' blr_predict2 <- collect(select(predict(savedModel, binary_df), "prediction"))
+#' summary(savedModel)
 #'
 #' # multinomial logistic regression
 #'
-#' label <- c(0.0, 1.0, 2.0, 0.0, 0.0)
-#' feature1 <- c(4.845940, 5.64480, 7.430381, 6.464263, 5.555667)
-#' feature2 <- c(2.941319, 2.614812, 2.162451, 3.339474, 2.970987)
-#' feature3 <- c(1.322733, 1.348044, 3.861237, 9.686976, 3.447130)
-#' feature4 <- c(1.3246388, 0.5510444, 0.9225810, 1.2147881, 1.6020842)
-#' data <- as.data.frame(cbind(label, feature1, feature2, feature3, feature4))
-#' df <- createDataFrame(data)
+#' df <- createDataFrame(iris)
+#' model <- spark.logit(df, Species ~ ., regParam = 0.5)
+#' summary <- summary(model)
 #'
-#' # Note that summary of multinomial logistic regression is not implemented yet
-#' model <- spark.logit(df, label ~ ., family = "multinomial", thresholds = c(0, 1, 1))
-#' predict1 <- collect(select(predict(model, df), "prediction"))
 #' }
 #' @note spark.logit since 2.1.0
 setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, elasticNetParam = 0.0, maxIter = 100,
                    tol = 1E-6, family = "auto", standardization = TRUE,
-                   thresholds = 0.5, weightCol = NULL, aggregationDepth = 2,
-                   probabilityCol = "probability") {
+                   thresholds = 0.5, weightCol = NULL) {
             formula <- paste(deparse(formula), collapse = "")
 
             if (is.null(weightCol)) {
@@ -796,8 +791,7 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
                                 as.numeric(elasticNetParam), as.integer(maxIter),
                                 as.numeric(tol), as.character(family),
                                 as.logical(standardization), as.array(thresholds),
-                                as.character(weightCol), as.integer(aggregationDepth),
-                                as.character(probabilityCol))
+                                as.character(weightCol))
             new("LogisticRegressionModel", jobj = jobj)
           })
 
@@ -816,11 +810,9 @@ setMethod("predict", signature(object = "LogisticRegressionModel"),
 
 #  Get the summary of an LogisticRegressionModel
 
-#' @param object an LogisticRegressionModel fitted by \code{spark.logit}
-#' @return \code{summary} returns the Binary Logistic regression results of a given model as list,
-#'         including roc, areaUnderROC, pr, fMeasureByThreshold, precisionByThreshold,
-#'         recallByThreshold, totalIterations, objectiveHistory. Note that Multinomial logistic
-#'         regression summary is not available now.
+#' @param object an LogisticRegressionModel fitted by \code{spark.logit}.
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'         The list includes \code{coefficients} (coefficients matrix of the fitted model).
 #' @rdname spark.logit
 #' @aliases summary,LogisticRegressionModel-method
 #' @export
@@ -828,33 +820,21 @@ setMethod("predict", signature(object = "LogisticRegressionModel"),
 setMethod("summary", signature(object = "LogisticRegressionModel"),
           function(object) {
             jobj <- object@jobj
-            is.loaded <- callJMethod(jobj, "isLoaded")
-
-            if (is.loaded) {
-              stop("Loaded model doesn't have training summary.")
+            features <- callJMethod(jobj, "rFeatures")
+            labels <- callJMethod(jobj, "labels")
+            coefficients <- callJMethod(jobj, "rCoefficients")
+            nCol <- length(coefficients) / length(features)
+            coefficients <- matrix(coefficients, ncol = nCol)
+            # If nCol == 1, means this is a binomial logistic regression model with pivoting.
+            # Otherwise, it's a multinomial logistic regression model without pivoting.
+            if (nCol == 1) {
+              colnames(coefficients) <- c("Estimate")
+            } else {
+              colnames(coefficients) <- unlist(labels)
             }
+            rownames(coefficients) <- unlist(features)
 
-            roc <- dataFrame(callJMethod(jobj, "roc"))
-
-            areaUnderROC <- callJMethod(jobj, "areaUnderROC")
-
-            pr <- dataFrame(callJMethod(jobj, "pr"))
-
-            fMeasureByThreshold <- dataFrame(callJMethod(jobj, "fMeasureByThreshold"))
-
-            precisionByThreshold <- dataFrame(callJMethod(jobj, "precisionByThreshold"))
-
-            recallByThreshold <- dataFrame(callJMethod(jobj, "recallByThreshold"))
-
-            totalIterations <- callJMethod(jobj, "totalIterations")
-
-            objectiveHistory <- callJMethod(jobj, "objectiveHistory")
-
-            list(roc = roc, areaUnderROC = areaUnderROC, pr = pr,
-                 fMeasureByThreshold = fMeasureByThreshold,
-                 precisionByThreshold = precisionByThreshold,
-                 recallByThreshold = recallByThreshold,
-                 totalIterations = totalIterations, objectiveHistory = objectiveHistory)
+            list(coefficients = coefficients)
           })
 
 #' Multilayer Perceptron Classification Model
@@ -871,7 +851,7 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param blockSize blockSize parameter.
-#' @param layers integer vector containing the number of nodes for each layer
+#' @param layers integer vector containing the number of nodes for each layer.
 #' @param solver solver parameter, supported options: "gd" (minibatch gradient descent) or "l-bfgs".
 #' @param maxIter maximum iteration number.
 #' @param tol convergence tolerance of iterations.
@@ -949,10 +929,12 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 # Returns the summary of a Multilayer Perceptron Classification Model produced by \code{spark.mlp}
 
 #' @param object a Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
-#' @return \code{summary} returns a list containing \code{numOfInputs}, \code{numOfOutputs},
-#'         \code{layers}, and \code{weights}. For \code{weights}, it is a numeric vector with
-#'         length equal to the expected given the architecture (i.e., for 8-10-2 network,
-#'         112 connection weights).
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'         The list includes \code{numOfInputs} (number of inputs), \code{numOfOutputs}
+#'         (number of outputs), \code{layers} (array of layer sizes including input
+#'         and output layers), and \code{weights} (the weights of layers).
+#'         For \code{weights}, it is a numeric vector with length equal to the expected
+#'         given the architecture (i.e., for 8-10-2 network, 112 connection weights).
 #' @rdname spark.mlp
 #' @export
 #' @aliases summary,MultilayerPerceptronClassificationModel-method
@@ -1017,7 +999,7 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
 
 # Saves the Bernoulli naive Bayes model to the input path.
 
-#' @param path the directory where the model is saved
+#' @param path the directory where the model is saved.
 #' @param overwrite overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
@@ -1091,7 +1073,7 @@ setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationMode
 
 #  Save fitted IsotonicRegressionModel to the input path
 
-#' @param path The directory where the model is saved
+#' @param path The directory where the model is saved.
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
@@ -1106,7 +1088,7 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 
 #  Save fitted LogisticRegressionModel to the input path
 
-#' @param path The directory where the model is saved
+#' @param path The directory where the model is saved.
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
@@ -1233,7 +1215,7 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' posterior probabilities on new data, \code{spark.perplexity} to compute log perplexity on new
 #' data and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
-#' @param data A SparkDataFrame for training
+#' @param data A SparkDataFrame for training.
 #' @param features Features column name. Either libSVM-format column or character-format column is
 #'        valid.
 #' @param k Number of topics.
@@ -1253,7 +1235,7 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #'        parameter if libSVM-format column is used as the features column.
 #' @param maxVocabSize maximum vocabulary size, default 1 << 18
 #' @param ... additional argument(s) passed to the method.
-#' @return \code{spark.lda} returns a fitted Latent Dirichlet Allocation model
+#' @return \code{spark.lda} returns a fitted Latent Dirichlet Allocation model.
 #' @rdname spark.lda
 #' @aliases spark.lda,SparkDataFrame-method
 #' @seealso topicmodels: \url{https://cran.r-project.org/package=topicmodels}
@@ -1301,8 +1283,9 @@ setMethod("spark.lda", signature(data = "SparkDataFrame"),
 # similarly to R's summary().
 
 #' @param object a fitted AFT survival regression model.
-#' @return \code{summary} returns a list containing the model's features, coefficients,
-#' intercept and log(scale)
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'         The list includes the model's \code{coefficients} (features, coefficients,
+#'         intercept and log(scale)).
 #' @rdname spark.survreg
 #' @export
 #' @note summary(AFTSurvivalRegressionModel) since 2.0.0
@@ -1322,7 +1305,7 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
 
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns a SparkDataFrame containing predicted values
-#' on the original scale of the data (mean predicted value at scale = 1.0).
+#'         on the original scale of the data (mean predicted value at scale = 1.0).
 #' @rdname spark.survreg
 #' @export
 #' @note predict(AFTSurvivalRegressionModel) since 2.0.0
@@ -1389,7 +1372,9 @@ setMethod("spark.gaussianMixture", signature(data = "SparkDataFrame", formula = 
 #  Get the summary of a multivariate gaussian mixture model
 
 #' @param object a fitted gaussian mixture model.
-#' @return \code{summary} returns the model's lambda, mu, sigma, k, dim and posterior.
+#' @return \code{summary} returns summary of the fitted model, which is a list.
+#'         The list includes the model's \code{lambda} (lambda), \code{mu} (mu),
+#'         \code{sigma} (sigma), and \code{posterior} (posterior).
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @rdname spark.gaussianMixture
 #' @export
@@ -1453,7 +1438,7 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @param userCol column name for user ids. Ids must be (or can be coerced into) integers.
 #' @param itemCol column name for item ids. Ids must be (or can be coerced into) integers.
 #' @param rank rank of the matrix factorization (> 0).
-#' @param reg regularization parameter (>= 0).
+#' @param regParam regularization parameter (>= 0).
 #' @param maxIter maximum number of iterations (>= 0).
 #' @param nonnegative logical value indicating whether to apply nonnegativity constraints.
 #' @param implicitPrefs logical value indicating whether to use implicit preference.
@@ -1463,7 +1448,7 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @param numItemBlocks number of item blocks used to parallelize computation (> 0).
 #' @param checkpointInterval number of checkpoint intervals (>= 1) or disable checkpoint (-1).
 #' @param ... additional argument(s) passed to the method.
-#' @return \code{spark.als} returns a fitted ALS model
+#' @return \code{spark.als} returns a fitted ALS model.
 #' @rdname spark.als
 #' @aliases spark.als,SparkDataFrame-method
 #' @name spark.als
@@ -1492,21 +1477,21 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #'
 #' # set other arguments
 #' modelS <- spark.als(df, "rating", "user", "item", rank = 20,
-#'                     reg = 0.1, nonnegative = TRUE)
+#'                     regParam = 0.1, nonnegative = TRUE)
 #' statsS <- summary(modelS)
 #' }
 #' @note spark.als since 2.1.0
 setMethod("spark.als", signature(data = "SparkDataFrame"),
           function(data, ratingCol = "rating", userCol = "user", itemCol = "item",
-                   rank = 10, reg = 0.1, maxIter = 10, nonnegative = FALSE,
+                   rank = 10, regParam = 0.1, maxIter = 10, nonnegative = FALSE,
                    implicitPrefs = FALSE, alpha = 1.0, numUserBlocks = 10, numItemBlocks = 10,
                    checkpointInterval = 10, seed = 0) {
 
             if (!is.numeric(rank) || rank <= 0) {
               stop("rank should be a positive number.")
             }
-            if (!is.numeric(reg) || reg < 0) {
-              stop("reg should be a nonnegative number.")
+            if (!is.numeric(regParam) || regParam < 0) {
+              stop("regParam should be a nonnegative number.")
             }
             if (!is.numeric(maxIter) || maxIter <= 0) {
               stop("maxIter should be a positive number.")
@@ -1514,7 +1499,7 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
 
             jobj <- callJStatic("org.apache.spark.ml.r.ALSWrapper",
                                 "fit", data@sdf, ratingCol, userCol, itemCol, as.integer(rank),
-                                reg, as.integer(maxIter), implicitPrefs, alpha, nonnegative,
+                                regParam, as.integer(maxIter), implicitPrefs, alpha, nonnegative,
                                 as.integer(numUserBlocks), as.integer(numItemBlocks),
                                 as.integer(checkpointInterval), as.integer(seed))
             new("ALSModel", jobj = jobj)
@@ -1523,9 +1508,11 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
 # Returns a summary of the ALS model produced by spark.als.
 
 #' @param object a fitted ALS model.
-#' @return \code{summary} returns a list containing the names of the user column,
-#'         the item column and the rating column, the estimated user and item factors,
-#'         rank, regularization parameter and maximum number of iterations used in training.
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'         The list includes \code{user} (the names of the user column),
+#'         \code{item} (the item column), \code{rating} (the rating column), \code{userFactors}
+#'         (the estimated user factors), \code{itemFactors} (the estimated item factors),
+#'         and \code{rank} (rank of the matrix factorization model).
 #' @rdname spark.als
 #' @aliases summary,ALSModel-method
 #' @export
@@ -1608,14 +1595,14 @@ setMethod("write.ml", signature(object = "ALSModel", path = "character"),
 #' \dontrun{
 #' data <- data.frame(test = c(0.1, 0.15, 0.2, 0.3, 0.25))
 #' df <- createDataFrame(data)
-#' test <- spark.ktest(df, "test", "norm", c(0, 1))
+#' test <- spark.kstest(df, "test", "norm", c(0, 1))
 #'
 #' # get a summary of the test result
 #' testSummary <- summary(test)
 #' testSummary
 #'
 #' # print out the summary in an organized way
-#' print.summary.KSTest(test)
+#' print.summary.KSTest(testSummary)
 #' }
 #' @note spark.kstest since 2.1.0
 setMethod("spark.kstest", signature(data = "SparkDataFrame"),
@@ -1638,9 +1625,10 @@ setMethod("spark.kstest", signature(data = "SparkDataFrame"),
 
 #  Get the summary of Kolmogorov-Smirnov (KS) Test.
 #' @param object test result object of KSTest by \code{spark.kstest}.
-#' @return \code{summary} returns a list containing the p-value, test statistic computed for the
-#'         test, the null hypothesis with its parameters tested against
-#'         and degrees of freedom of the test.
+#' @return \code{summary} returns summary information of KSTest object, which is a list.
+#'         The list includes the \code{p.value} (p-value), \code{statistic} (test statistic
+#'         computed for the test), \code{nullHypothesis} (the null hypothesis with its
+#'         parameters tested against) and \code{degreesOfFreedom} (degrees of freedom of the test).
 #' @rdname spark.kstest
 #' @aliases summary,KSTest-method
 #' @export
@@ -1712,8 +1700,6 @@ print.summary.KSTest <- function(x, ...) {
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
-#' @param probabilityCol column name for predicted class conditional probabilities, only for
-#'                       classification.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.randomForest,SparkDataFrame,formula-method
 #' @return \code{spark.randomForest} returns a fitted Random Forest model.
@@ -1748,7 +1734,7 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
                    maxDepth = 5, maxBins = 32, numTrees = 20, impurity = NULL,
                    featureSubsetStrategy = "auto", seed = NULL, subsamplingRate = 1.0,
                    minInstancesPerNode = 1, minInfoGain = 0.0, checkpointInterval = 10,
-                   maxMemoryInMB = 256, cacheNodeIds = FALSE, probabilityCol = "probability") {
+                   maxMemoryInMB = 256, cacheNodeIds = FALSE) {
             type <- match.arg(type)
             formula <- paste(deparse(formula), collapse = "")
             if (!is.null(seed)) {
@@ -1777,7 +1763,7 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
                                          impurity, as.integer(minInstancesPerNode),
                                          as.numeric(minInfoGain), as.integer(checkpointInterval),
                                          as.character(featureSubsetStrategy), seed,
-                                         as.numeric(subsamplingRate), as.character(probabilityCol),
+                                         as.numeric(subsamplingRate),
                                          as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
                      new("RandomForestClassificationModel", jobj = jobj)
                    }
@@ -1788,7 +1774,7 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
 
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
-#' "prediction"
+#'         "prediction".
 #' @rdname spark.randomForest
 #' @aliases predict,RandomForestRegressionModel-method
 #' @export
@@ -1809,8 +1795,8 @@ setMethod("predict", signature(object = "RandomForestClassificationModel"),
 
 # Save the Random Forest Regression or Classification model to the input path.
 
-#' @param object A fitted Random Forest regression model or classification model
-#' @param path The directory where the model is saved
+#' @param object A fitted Random Forest regression model or classification model.
+#' @param path The directory where the model is saved.
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
@@ -1852,9 +1838,11 @@ summary.treeEnsemble <- function(model) {
 
 #  Get the summary of a Random Forest Regression Model
 
-#' @return \code{summary} returns a summary object of the fitted model, a list of components
-#'         including formula, number of features, list of features, feature importances, number of
-#'         trees, and tree weights
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'         The list of components includes \code{formula} (formula),
+#'         \code{numFeatures} (number of features), \code{features} (list of features),
+#'         \code{featureImportances} (feature importances), \code{numTrees} (number of trees),
+#'         and \code{treeWeights} (tree weights).
 #' @rdname spark.randomForest
 #' @aliases summary,RandomForestRegressionModel-method
 #' @export
@@ -2031,7 +2019,7 @@ setMethod("spark.gbt", signature(data = "SparkDataFrame", formula = "formula"),
 
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
-#' "prediction"
+#'         "prediction".
 #' @rdname spark.gbt
 #' @aliases predict,GBTRegressionModel-method
 #' @export
@@ -2052,8 +2040,8 @@ setMethod("predict", signature(object = "GBTClassificationModel"),
 
 # Save the Gradient Boosted Tree Regression or Classification model to the input path.
 
-#' @param object A fitted Gradient Boosted Tree regression model or classification model
-#' @param path The directory where the model is saved
+#' @param object A fitted Gradient Boosted Tree regression model or classification model.
+#' @param path The directory where the model is saved.
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #' @aliases write.ml,GBTRegressionModel,character-method
@@ -2076,9 +2064,11 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 
 #  Get the summary of a Gradient Boosted Tree Regression Model
 
-#' @return \code{summary} returns a summary object of the fitted model, a list of components
-#'         including formula, number of features, list of features, feature importances, number of
-#'         trees, and tree weights
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'         The list of components includes \code{formula} (formula),
+#'         \code{numFeatures} (number of features), \code{features} (list of features),
+#'         \code{featureImportances} (feature importances), \code{numTrees} (number of trees),
+#'         and \code{treeWeights} (tree weights).
 #' @rdname spark.gbt
 #' @aliases summary,GBTRegressionModel-method
 #' @export

@@ -28,6 +28,7 @@ import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.junit.After;
@@ -43,7 +44,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class ExternalShuffleIntegrationSuite {
@@ -84,7 +85,7 @@ public class ExternalShuffleIntegrationSuite {
     dataContext0.create();
     dataContext0.insertSortShuffleData(0, 0, exec0Blocks);
 
-    conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+    conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
     handler = new ExternalShuffleBlockHandler(conf, null);
     TransportContext transportContext = new TransportContext(conf, handler);
     server = transportContext.createServer();
@@ -115,12 +116,16 @@ public class ExternalShuffleIntegrationSuite {
 
   // Fetch a set of blocks from a pre-registered executor.
   private FetchResult fetchBlocks(String execId, String[] blockIds) throws Exception {
-    return fetchBlocks(execId, blockIds, server.getPort());
+    return fetchBlocks(execId, blockIds, conf, server.getPort());
   }
 
   // Fetch a set of blocks from a pre-registered executor. Connects to the server on the given port,
   // to allow connecting to invalid servers.
-  private FetchResult fetchBlocks(String execId, String[] blockIds, int port) throws Exception {
+  private FetchResult fetchBlocks(
+      String execId,
+      String[] blockIds,
+      TransportConf clientConf,
+      int port) throws Exception {
     final FetchResult res = new FetchResult();
     res.successBlocks = Collections.synchronizedSet(new HashSet<String>());
     res.failedBlocks = Collections.synchronizedSet(new HashSet<String>());
@@ -128,7 +133,7 @@ public class ExternalShuffleIntegrationSuite {
 
     final Semaphore requestsRemaining = new Semaphore(0);
 
-    ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false, false);
+    ExternalShuffleClient client = new ExternalShuffleClient(clientConf, null, false, false);
     client.init(APP_ID);
     client.fetchBlocks(TestUtils.getLocalHost(), port, execId, blockIds,
       new BlockFetchingListener() {
@@ -227,16 +232,13 @@ public class ExternalShuffleIntegrationSuite {
 
   @Test
   public void testFetchNoServer() throws Exception {
-    System.setProperty("spark.shuffle.io.maxRetries", "0");
-    try {
-      registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-      FetchResult execFetch = fetchBlocks("exec-0",
-        new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, 1 /* port */);
-      assertTrue(execFetch.successBlocks.isEmpty());
-      assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
-    } finally {
-      System.clearProperty("spark.shuffle.io.maxRetries");
-    }
+    TransportConf clientConf = new TransportConf("shuffle",
+      new MapConfigProvider(ImmutableMap.of("spark.shuffle.io.maxRetries", "0")));
+    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+    FetchResult execFetch = fetchBlocks("exec-0",
+      new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, clientConf, 1 /* port */);
+    assertTrue(execFetch.successBlocks.isEmpty());
+    assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
   }
 
   private void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo)
