@@ -262,7 +262,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val provider = new FsHistoryProvider(
       createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms")
         .set("spark.history.fs.cleaner.deleteInProgress.enabled", s"true")
-        .set("spark.history.fs.cleaner.noProgressMaxAge",s"${inProgressNoUpdateMaxAge}ms"), clock)
+        .set("spark.history.fs.cleaner.noProgressMaxAge", s"${inProgressNoUpdateMaxAge}ms"), clock)
     val log1 = newLogFile("app1", Some("attempt1"), inProgress = false)
     writeFile(log1, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
@@ -314,7 +314,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       list.head.attempts.head.attemptId should be (Some("attempt3"))
     }
     assert(!log3.exists())
-    //Move the clock forward so log3 execeeds the inProgressNoUpdate Max Age
+    // Move the clock forward so log3 execeeds the inProgressNoUpdate Max Age
     clock.advance(inProgressNoUpdateMaxAge)
     updateAndCheck(provider) { list =>
       list.size should be (0)
