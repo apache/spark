@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming
 import java.io.File
 
 import org.scalatest.PrivateMethodTester
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql._
@@ -1058,6 +1059,52 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     import scala.io.Source
     val str = Source.fromFile(getClass.getResource(s"/structured-streaming/$file").toURI).mkString
     SerializedOffset(str.trim)
+  }
+
+  test("FileStreamSource - latestFirst") {
+    withTempDir { src =>
+      // Prepare two files: 1.txt, 2.txt, and make sure they have different modified time.
+      val f1 = stringToFile(new File(src, "1.txt"), "1")
+      val f2 = stringToFile(new File(src, "2.txt"), "2")
+      f2.setLastModified(f1.lastModified + 1000)
+
+      def runTwoBatchesAndVerifyResults(
+          latestFirst: Boolean,
+          firstBatch: String,
+          secondBatch: String): Unit = {
+        val fileStream = createFileStream(
+          "text",
+          src.getCanonicalPath,
+          options = Map("latestFirst" -> latestFirst.toString, "maxFilesPerTrigger" -> "1"))
+        val clock = new StreamManualClock()
+        testStream(fileStream)(
+          StartStream(trigger = ProcessingTime(10), triggerClock = clock),
+          AssertOnQuery { _ =>
+            // Block until the first batch finishes.
+            eventually(timeout(streamingTimeout)) {
+              assert(clock.isStreamWaitingAt(0))
+            }
+            true
+          },
+          CheckLastBatch(firstBatch),
+          AdvanceManualClock(10),
+          AssertOnQuery { _ =>
+            // Block until the second batch finishes.
+            eventually(timeout(streamingTimeout)) {
+              assert(clock.isStreamWaitingAt(10))
+            }
+            true
+          },
+          CheckLastBatch(secondBatch)
+        )
+      }
+
+      // Read oldest files first, so the first batch is "1", and the second batch is "2".
+      runTwoBatchesAndVerifyResults(latestFirst = false, firstBatch = "1", secondBatch = "2")
+
+      // Read latest files first, so the first batch is "2", and the second batch is "1".
+      runTwoBatchesAndVerifyResults(latestFirst = true, firstBatch = "2", secondBatch = "1")
+    }
   }
 }
 
