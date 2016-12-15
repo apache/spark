@@ -230,6 +230,7 @@ class TypeCoercionSuite extends PlanTest {
     checkTypeCasting(checkedType,
       castableTypes = allTypes.filterNot(nonCastableTypes.contains).map(ArrayType(_)))
     nonCastableTypes.map(ArrayType(_)).foreach(shouldNotCast(checkedType, _))
+    shouldNotCast(ArrayType(DoubleType, containsNull = false), ArrayType(LongType, containsNull = false))
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)

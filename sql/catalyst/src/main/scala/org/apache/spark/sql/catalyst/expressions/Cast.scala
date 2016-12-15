@@ -91,7 +91,7 @@ object Cast {
 
   private def resolvableNullability(from: Boolean, to: Boolean) = !from || to
 
-  private def forceNullable(from: DataType, to: DataType) = (from, to) match {
+  def forceNullable(from: DataType, to: DataType) = (from, to) match {
     case (NullType, _) => true
     case (_, _) if from == to => false
 

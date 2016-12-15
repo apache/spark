@@ -718,8 +718,9 @@ object TypeCoercion {
         case (_, TypeCollection(types)) =>
           types.flatMap(implicitCast(inType, _)).headOption.orNull
 
-        case (ArrayType(dt1, n1), ArrayType(dt2: DataType, n2)) if n2 || !n1 =>
-          implicitCast(dt1, dt2).map(ArrayType(_, n2)).orNull
+        case (ArrayType(fromType, fn), ArrayType(toType: DataType, tn))
+            if !(fn || Cast.forceNullable(fromType, toType)) || tn =>
+          implicitCast(fromType, toType).map(ArrayType(_, tn)).orNull
 
         case _ => null
       }
