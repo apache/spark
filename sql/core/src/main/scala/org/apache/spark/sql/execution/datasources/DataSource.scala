@@ -132,16 +132,14 @@ case class DataSource(
       }.toArray
       new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
     }
-
-    val fieldEquality = sparkSession.sessionState.conf.resolver
-
     val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
       // columns properly unless it is a Hive DataSource
       val resolved = tempFileIndex.partitionSchema.map { partitionField =>
+        val equality = sparkSession.sessionState.conf.resolver
         // SPARK-18510: try to get schema from userSpecifiedSchema, otherwise fallback to inferred
-        userSpecifiedSchema.flatMap(_.find(f => fieldEquality(f.name, partitionField.name)))
-          .getOrElse(partitionField)
+        userSpecifiedSchema.flatMap(_.find(f => equality(f.name, partitionField.name))).getOrElse(
+          partitionField)
       }
       StructType(resolved)
     } else {
@@ -152,9 +150,10 @@ case class DataSource(
         inferredPartitions
       } else {
         val partitionFields = partitionColumns.map { partitionColumn =>
-          userSpecifiedSchema.flatMap(_.find(c => fieldEquality(c.name, partitionColumn))).orElse {
+          val equality = sparkSession.sessionState.conf.resolver
+          userSpecifiedSchema.flatMap(_.find(c => equality(c.name, partitionColumn))).orElse {
             val inferredPartitions = tempFileIndex.partitionSchema
-            val inferredOpt = inferredPartitions.find(p => fieldEquality(p.name, partitionColumn))
+            val inferredOpt = inferredPartitions.find(p => equality(p.name, partitionColumn))
             if (inferredOpt.isDefined) {
               logDebug(
                 s"""Type of partition column: $partitionColumn not found in specified schema
@@ -175,12 +174,13 @@ case class DataSource(
         StructType(partitionFields)
       }
     }
-
     if (justPartitioning) {
       return (null, partitionSchema)
     }
-
-    val dataSchema = userSpecifiedSchema.orElse {
+    val dataSchema = userSpecifiedSchema.map { schema =>
+      val equality = sparkSession.sessionState.conf.resolver
+      StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
+    }.orElse {
       format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,
@@ -189,11 +189,7 @@ case class DataSource(
       throw new AnalysisException(
         s"Unable to infer schema for $format. It must be specified manually.")
     }
-
-    val dataWithoutPartitions = dataSchema.filterNot { field =>
-      partitionSchema.exists(p => fieldEquality(p.name, field.name))
-    }
-    (StructType(dataWithoutPartitions), partitionSchema)
+    (dataSchema, partitionSchema)
   }
 
   /** Returns the name and schema of the source that can be used to continually read data. */

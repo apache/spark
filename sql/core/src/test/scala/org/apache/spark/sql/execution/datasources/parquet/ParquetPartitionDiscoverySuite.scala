@@ -495,7 +495,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", "bar")
-          } yield Row(i, i.toString, pi, ps))
+          } yield Row(i, pi, i.toString, ps))
 
         checkAnswer(
           sql("SELECT intField, pi FROM t"),
@@ -510,14 +510,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
-          } yield Row(i, i.toString, 1, ps))
+          } yield Row(i, 1, i.toString, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield Row(i, i.toString, pi, "foo"))
+          } yield Row(i, pi, i.toString, "foo"))
       }
     }
   }
@@ -584,14 +584,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", null.asInstanceOf[String])
-          } yield Row(i, i.toString, pi, ps))
+          } yield Row(i, pi, i.toString, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield Row(i, i.toString, pi, null))
+          } yield Row(i, pi, i.toString, null))
       }
     }
   }
