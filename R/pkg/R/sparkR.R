@@ -363,6 +363,13 @@ sparkR.session <- function(
   ...) {
 
   sparkConfigMap <- convertNamedListToEnv(sparkConfig)
+
+  # NOTE(shivaram): Set default warehouse dir to tmpdir to meet CRAN requirements
+  # See SPARK-18817 for more details
+  if (!exists("spark.sql.default.warehouse.dir", envir = sparkConfigMap)) {
+    assign("spark.sql.default.warehouse.dir", tempdir(), envir = sparkConfigMap)
+  }
+
   namedParams <- list(...)
   if (length(namedParams) > 0) {
     paramMap <- convertNamedListToEnv(namedParams)

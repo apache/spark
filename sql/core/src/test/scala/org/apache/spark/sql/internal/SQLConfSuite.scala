@@ -221,6 +221,19 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       .sessionState.conf.warehousePath.stripSuffix("/"))
   }
 
+  test("changing default value of warehouse path") {
+    try {
+      val newWarehouseDefault = "spark-warehouse2"
+      val newWarehouseDefaultPath = new Path(Utils.resolveURI(newWarehouseDefault)).toString
+      sparkContext.conf.set("spark.sql.default.warehouse.dir", newWarehouseDefaultPath)
+      val spark = new SparkSession(sparkContext)
+      assert(newWarehouseDefaultPath.stripSuffix("/") === spark
+        .sessionState.conf.warehousePath.stripSuffix("/"))
+    } finally {
+      sparkContext.conf.remove("spark.sql.default.warehouse.dir")
+    }
+  }
+
   test("MAX_CASES_BRANCHES") {
     withTable("tab1") {
       spark.range(10).write.saveAsTable("tab1")

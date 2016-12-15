@@ -819,7 +819,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
-  def warehousePath: String = new Path(getConf(StaticSQLConf.WAREHOUSE_PATH)).toString
+  def warehousePath: String = new Path(getConf(StaticSQLConf.DEFAULT_WAREHOUSE_PATH)).toString
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
@@ -964,10 +964,16 @@ object StaticSQLConf {
     }
   }
 
-  val WAREHOUSE_PATH = buildConf("spark.sql.warehouse.dir")
-    .doc("The default location for managed databases and tables.")
+  val DEFAULT_WAREHOUSE_PATH = buildConf("spark.sql.default.warehouse.dir")
+    .doc("The default location for managed databases and tables. " +
+         "Used if spark.sql.warehouse.dir is not set")
     .stringConf
     .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
+
+  val WAREHOUSE_PATH = buildConf("spark.sql.warehouse.dir")
+    .doc("The location for managed databases and tables.")
+    .stringConf
+    .createOptional
 
   val CATALOG_IMPLEMENTATION = buildConf("spark.sql.catalogImplementation")
     .internal()
