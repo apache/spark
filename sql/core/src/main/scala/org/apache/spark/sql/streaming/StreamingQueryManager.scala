@@ -193,7 +193,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       useTempCheckpointLocation: Boolean,
       recoverFromCheckpointLocation: Boolean,
       trigger: Trigger,
-      triggerClock: Clock): StreamExecution = {
+      triggerClock: Clock): StreamingQueryWrapper = {
     val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
       new Path(userSpecified).toUri.toString
     }.orElse {
@@ -229,7 +229,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
     }
 
-    new StreamExecution(
+    new StreamingQueryWrapper(new StreamExecution(
       sparkSession,
       userSpecifiedName.orNull,
       checkpointLocation,
@@ -237,7 +237,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       sink,
       trigger,
       triggerClock,
-      outputMode)
+      outputMode))
   }
 
   /**
@@ -301,7 +301,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       // As it's provided by the user and can run arbitrary codes, we must not hold any lock here.
       // Otherwise, it's easy to cause dead-lock, or block too long if the user codes take a long
       // time to finish.
-      query.start()
+      query.streamingQuery.start()
     } catch {
       case e: Throwable =>
         activeQueriesLock.synchronized {
