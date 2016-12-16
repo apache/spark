@@ -521,8 +521,9 @@ private[spark] class SecurityManager(
    * Checks whether SASL encryption should be enabled.
    * @return Whether to enable SASL encryption when connecting to services that support it.
    */
-  def isSaslEncryptionEnabled(): Boolean = {
-    sparkConf.getBoolean("spark.authenticate.enableSaslEncryption", false)
+  def isEncryptionEnabled(): Boolean = {
+    sparkConf.getBoolean("spark.network.crypto.enabled", false) ||
+      sparkConf.getBoolean("spark.authenticate.enableSaslEncryption", false)
   }
 
   /**
