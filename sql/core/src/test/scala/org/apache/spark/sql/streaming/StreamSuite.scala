@@ -24,7 +24,6 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
-import org.apache.spark.util.ManualClock
 
 class StreamSuite extends StreamTest {
 
@@ -278,7 +277,8 @@ class StreamSuite extends StreamTest {
     // Test `explain` not throwing errors
     df.explain()
     val q = df.writeStream.queryName("memory_explain").format("memory").start()
-      .asInstanceOf[StreamExecution]
+      .asInstanceOf[StreamingQueryWrapper]
+      .streamingQuery
     try {
       assert("No physical plan. Waiting for data." === q.explainInternal(false))
       assert("No physical plan. Waiting for data." === q.explainInternal(true))

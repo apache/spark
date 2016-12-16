@@ -38,7 +38,7 @@ import org.apache.spark.annotation.Experimental
 @Experimental
 class StateOperatorProgress private[sql](
     val numRowsTotal: Long,
-    val numRowsUpdated: Long) {
+    val numRowsUpdated: Long) extends Serializable {
 
   /** The compact JSON representation of this progress. */
   def json: String = compact(render(jsonValue))
@@ -90,7 +90,7 @@ class StreamingQueryProgress private[sql](
   val eventTime: ju.Map[String, String],
   val stateOperators: Array[StateOperatorProgress],
   val sources: Array[SourceProgress],
-  val sink: SinkProgress) {
+  val sink: SinkProgress) extends Serializable {
 
   /** The aggregate (across all sources) number of records processed in a trigger. */
   def numInputRows: Long = sources.map(_.numInputRows).sum
@@ -157,7 +157,7 @@ class SourceProgress protected[sql](
   val endOffset: String,
   val numInputRows: Long,
   val inputRowsPerSecond: Double,
-  val processedRowsPerSecond: Double) {
+  val processedRowsPerSecond: Double) extends Serializable {
 
   /** The compact JSON representation of this progress. */
   def json: String = compact(render(jsonValue))
@@ -197,7 +197,7 @@ class SourceProgress protected[sql](
  */
 @Experimental
 class SinkProgress protected[sql](
-    val description: String) {
+    val description: String) extends Serializable {
 
   /** The compact JSON representation of this progress. */
   def json: String = compact(render(jsonValue))

@@ -355,7 +355,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                   outputMode,
                   trigger = trigger,
                   triggerClock = triggerClock)
-                .asInstanceOf[StreamExecution]
+                .asInstanceOf[StreamingQueryWrapper]
+                .streamingQuery
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {
                 override def uncaughtException(t: Thread, e: Throwable): Unit = {
