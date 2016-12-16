@@ -21,32 +21,109 @@ import breeze.linalg.{DenseVector => BDV}
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.classification.LinearSVCSuite._
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.{Dataset, Row}
+
 
 class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
-  test("SVM binary classification") {
-    val nPoints = 100
+  import testImplicits._
+
+  private val nPoints = 50
+  @transient var smallBinaryDataset: Dataset[_] = _
+  @transient var smallValidationDataset: Dataset[_] = _
+  private val eps: Double = 1e-5
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+
     // NOTE: Intercept should be small for generating equal 0s and 1s
     val A = 0.01
     val B = -1.5
     val C = 1.0
-    val binaryDataset = {
-      val testData = LinearSVCSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
-      spark.createDataFrame(sc.parallelize(testData, 4))
-    }
-    val svm = new LinearSVC().setMaxIter(10)
-    val model = svm.fit(binaryDataset)
-
-    val validationData = LinearSVCSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 17)
-    val validationDataFrame = spark.createDataFrame(sc.parallelize(validationData, 4))
-
-    assert(model.transform(validationDataFrame).where("prediction=label").count() > nPoints * 0.8)
+    smallBinaryDataset = generateSVMInput(A, Array[Double](B, C), nPoints, 42).toDF()
+    smallValidationDataset = generateSVMInput(A, Array[Double](B, C), nPoints, 17).toDF()
   }
 
+  test("Linear SVC binary classification") {
+    val svm = new LinearSVC()
+    val model = svm.fit(smallBinaryDataset)
+    assert(model.transform(smallValidationDataset)
+      .where("prediction=label").count() > nPoints * 0.8)
+  }
+
+  test("Linear SVC binary classification with regularization") {
+    val svm = new LinearSVC()
+    val model = svm.setRegParam(0.1).fit(smallBinaryDataset)
+    assert(model.transform(smallValidationDataset)
+      .where("prediction=label").count() > nPoints * 0.8)
+  }
+
+  test("params") {
+    ParamsSuite.checkParams(new LogisticRegression)
+    val model = new LinearSVCModel("linearSVC", Vectors.dense(0.0), 0.0)
+    ParamsSuite.checkParams(model)
+  }
+
+  test("linear svc: default params") {
+    val lsvc = new LinearSVC()
+    assert(lsvc.getLabelCol === "label")
+    assert(lsvc.getFeaturesCol === "features")
+    assert(lsvc.getPredictionCol === "prediction")
+    assert(lsvc.getRawPredictionCol === "rawPrediction")
+    assert(!lsvc.isDefined(lsvc.weightCol))
+    assert(lsvc.getFitIntercept)
+    assert(lsvc.getStandardization)
+    val model = lsvc.fit(smallBinaryDataset)
+    model.transform(smallBinaryDataset)
+      .select("label", "prediction", "rawPrediction")
+      .collect()
+    assert(model.getThreshold === 0.0)
+    assert(model.getFeaturesCol === "features")
+    assert(model.getPredictionCol === "prediction")
+    assert(model.getRawPredictionCol === "rawPrediction")
+    assert(model.intercept !== 0.0)
+    assert(model.hasParent)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
+  }
+
+  test("linear svc doesn't fit intercept when fitIntercept is off") {
+    val lsvc = new LinearSVC().setFitIntercept(false)
+    val model = lsvc.fit(smallBinaryDataset)
+    assert(model.intercept === 0.0)
+  }
+
+  test("Linear SVC with weighted data") {
+    val numClasses = 2
+    val numPoints = 40
+    val outlierData = MLTestingUtils.genClassificationInstancesWithWeightedOutliers(spark,
+      numClasses, numPoints)
+    val testData = Array.tabulate[LabeledPoint](numClasses) { i =>
+      LabeledPoint(i.toDouble, Vectors.dense(i.toDouble))
+    }.toSeq.toDF()
+    val lsvc = new LinearSVC().setWeightCol("weight")
+    val model = lsvc.fit(outlierData)
+    val results = model.transform(testData).select("label", "prediction").collect()
+
+    // check that the predictions are the one to one mapping
+    results.foreach { case Row(label: Double, pred: Double) =>
+      assert(label === pred)
+    }
+    val (overSampledData, weightedData) =
+      MLTestingUtils.genEquivalentOversampledAndWeightedInstances(outlierData, "label", "features",
+        42L)
+    val weightedModel = lsvc.fit(weightedData)
+    val overSampledModel = lsvc.setWeightCol("").fit(overSampledData)
+    assert(weightedModel.weights ~== overSampledModel.weights relTol 0.01)
+  }
 
   test("read/write: SVM") {
     def checkModelData(model: LinearSVCModel, model2: LinearSVCModel): Unit = {
