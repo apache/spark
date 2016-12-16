@@ -122,13 +122,13 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
         42L)
     val weightedModel = lsvc.fit(weightedData)
     val overSampledModel = lsvc.setWeightCol("").fit(overSampledData)
-    assert(weightedModel.weights ~== overSampledModel.weights relTol 0.01)
+    assert(weightedModel.coefficients ~== overSampledModel.coefficients relTol 0.01)
   }
 
   test("read/write: SVM") {
     def checkModelData(model: LinearSVCModel, model2: LinearSVCModel): Unit = {
       assert(model.intercept === model2.intercept)
-      assert(model.weights.toArray === model2.weights.toArray)
+      assert(model.coefficients.toArray === model2.coefficients.toArray)
       assert(model.numFeatures === model2.numFeatures)
     }
     val svm = new LinearSVC()

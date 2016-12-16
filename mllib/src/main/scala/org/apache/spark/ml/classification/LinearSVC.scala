@@ -250,7 +250,7 @@ object LinearSVC extends DefaultParamsReadable[LinearSVC] {
 @Experimental
 class LinearSVCModel private[ml](
     @Since("2.2.0") override val uid: String,
-    @Since("2.2.0") val weights: Vector,
+    @Since("2.2.0") val coefficients: Vector,
     @Since("2.2.0") val intercept: Double)
   extends ClassificationModel[Vector, LinearSVCModel]
   with LinearSVCParams with MLWritable {
@@ -265,18 +265,18 @@ class LinearSVCModel private[ml](
    * This internal method is used to implement [[transform()]] and output [[predictionCol]].
    */
   override protected def predict(features: Vector): Double = {
-    val margin = features.asBreeze.dot(weights.asBreeze) + intercept
+    val margin = BLAS.dot(features, coefficients) + intercept
     if (margin > $(threshold)) 1.0 else 0.0
   }
 
   override protected def predictRaw(features: Vector): Vector = {
-    val margin = features.asBreeze.dot(weights.asBreeze) + intercept
+    val margin = BLAS.dot(features, coefficients) + intercept
     Vectors.dense(-margin, margin)
   }
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVCModel = {
-    copyValues(new LinearSVCModel(uid, weights, intercept), extra).setParent(parent)
+    copyValues(new LinearSVCModel(uid, coefficients, intercept), extra).setParent(parent)
   }
 
   /**
@@ -308,7 +308,7 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       // Save model data: numClasses, numFeatures, intercept, coefficients
-      val data = Data(instance.weights, instance.intercept)
+      val data = Data(instance.coefficients, instance.intercept)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
