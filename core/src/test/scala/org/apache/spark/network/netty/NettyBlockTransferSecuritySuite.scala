@@ -28,8 +28,8 @@ import scala.util.{Failure, Success, Try}
 
 import com.google.common.io.CharStreams
 import org.mockito.Mockito._
-import org.scalatest.mock.MockitoSugar
-import org.scalatest.ShouldMatchers
+import org.scalatest.mockito.MockitoSugar
+import org.scalatest.Matchers
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
@@ -37,7 +37,7 @@ import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.storage.{BlockId, ShuffleBlockId}
 
-class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar with ShouldMatchers {
+class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar with Matchers {
   test("security default off") {
     val conf = new SparkConf()
       .set("spark.app.id", "app-id")
@@ -78,7 +78,7 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
     val conf1 = conf0.clone.set("spark.authenticate", "false")
     testConnection(conf0, conf1) match {
       case Success(_) => fail("Should have failed")
-      case Failure(t) => // any funny error may occur, sever will interpret SASL token as RPC
+      case Failure(_) => // any funny error may occur, sever will interpret SASL token as RPC
     }
   }
 

@@ -480,8 +480,8 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
   }
 
   // we make the write requests in separate threads so that we don't block the test thread
-  private def writeAsync(wal: WriteAheadLog, event: String, time: Long): Promise[Unit] = {
-    val p = Promise[Unit]()
+  private def writeAsync(wal: WriteAheadLog, event: String, time: Long): Promise[Any] = {
+    val p = Promise[Any]()
     p.completeWith(Future {
       val v = wal.write(event, time)
       assert(v === walHandle)
