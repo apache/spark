@@ -138,24 +138,29 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
   }
 
   test("delay in years handled correctly") {
+
+    val currentTimeMs = System.currentTimeMillis
+    val currentTime = new Date(currentTimeMs)
+
+    def monthsSinceEpoch(date: Date): Int = { date.getYear * 12 + date.getMonth }
+
     val input = MemoryStream[Long]
     val aggWithWatermark = input.toDF()
       .withColumn("eventTime", $"value".cast("timestamp"))
-      .withWatermark("eventTime", "1 month")
+      .withWatermark("eventTime", "2 years 5 months")
       .groupBy(window($"eventTime", "5 seconds") as 'window)
       .agg(count("*") as 'count)
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-    val currentTimeMs = System.currentTimeMillis
-    val millisPerYear = 1000L * 60 * 60 * 24 * 366  // assume leap year
-
     testStream(aggWithWatermark)(
+      AddData(input, currentTimeMs / 1000),
+      CheckAnswer(),
       AddData(input, currentTimeMs / 1000),
       CheckAnswer(),
       assertEventStats { e =>
         assert(timestampFormat.parse(e.get("max")).getTime === (currentTimeMs / 1000) * 1000)
         val watermarkTime = timestampFormat.parse(e.get("watermark"))
-        assert(currentTimeMs - watermarkTime.getTime >= 2 * millisPerYear)
+        assert(monthsSinceEpoch(currentTime) - monthsSinceEpoch(watermarkTime) === 29)
       }
     )
   }
