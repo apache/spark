@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
-import java.util.TimeZone
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow

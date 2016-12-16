@@ -67,5 +67,5 @@ case class SimpleCatalystConf(
     runSQLonFile: Boolean = true,
     crossJoinEnabled: Boolean = false,
     warehousePath: String = "/user/hive/warehouse",
-    sessionLocalTimeZone: String = TimeZone.getDefault.getID)
+    sessionLocalTimeZone: String = TimeZone.getDefault().getID)
   extends CatalystConf
