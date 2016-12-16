@@ -38,7 +38,8 @@ private[v1] class AllOutputOperationsResource(listener: StreamingJobProgressList
 private[v1] object AllOutputOperationsResource {
 
   def outputOperationInfoList(
-      listener: StreamingJobProgressListener, batchId: Long): Seq[OutputOperationInfo] = {
+      listener: StreamingJobProgressListener,
+      batchId: Long): Seq[OutputOperationInfo] = {
 
     listener.synchronized {
       listener.getBatchUIData(Time(batchId)) match {

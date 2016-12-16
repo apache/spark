@@ -24,8 +24,7 @@ import javax.ws.rs.core.MediaType
 import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class StreamingStatisticsResource(
-    listener: StreamingJobProgressListener) {
+private[v1] class StreamingStatisticsResource(listener: StreamingJobProgressListener) {
 
   @GET
   def streamingStatistics(): StreamingStatistics = {

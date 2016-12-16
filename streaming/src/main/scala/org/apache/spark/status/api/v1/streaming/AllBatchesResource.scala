@@ -37,13 +37,11 @@ private[v1] object AllBatchesResource {
 
   def batchInfoList(
       listener: StreamingJobProgressListener,
-      statusParams: JList[BatchStatus] = new JArrayList[BatchStatus]()
-  ): Seq[BatchInfo] = {
+      statusParams: JList[BatchStatus] = new JArrayList[BatchStatus]()): Seq[BatchInfo] = {
 
     listener.synchronized {
       val statuses =
-        if (statusParams.isEmpty) JArrays.asList(BatchStatus.values(): _*)
-        else statusParams
+        if (statusParams.isEmpty) JArrays.asList(BatchStatus.values(): _*) else statusParams
       val statusToBatches = Seq(
         BatchStatus.COMPLETED -> listener.retainedCompletedBatches,
         BatchStatus.QUEUED -> listener.waitingBatches,

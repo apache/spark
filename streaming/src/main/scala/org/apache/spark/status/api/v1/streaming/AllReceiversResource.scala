@@ -40,11 +40,10 @@ private[v1] object AllReceiversResource {
       listener.receivedRecordRateWithBatchTime.map { case (streamId, eventRates) =>
 
         val receiverInfo = listener.receiverInfo(streamId)
-        val streamName = receiverInfo.map(_.name).
-          orElse(listener.streamName(streamId)).getOrElse(s"Stream-$streamId")
+        val streamName = receiverInfo.map(_.name)
+          .orElse(listener.streamName(streamId)).getOrElse(s"Stream-$streamId")
         val avgEventRate =
-          if (eventRates.isEmpty) None
-          else Some(eventRates.map(_._2).sum / eventRates.size)
+          if (eventRates.isEmpty) None else Some(eventRates.map(_._2).sum / eventRates.size)
 
         val (errorTime, errorMessage, error) = receiverInfo match {
           case None => (None, None, None)
