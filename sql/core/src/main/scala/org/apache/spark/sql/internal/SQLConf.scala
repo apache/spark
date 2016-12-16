@@ -971,13 +971,13 @@ object StaticSQLConf {
   }
 
   val DEFAULT_WAREHOUSE_PATH = buildConf("spark.sql.default.warehouse.dir")
-    .doc("The default location for managed databases and tables. " +
-         "Used if spark.sql.warehouse.dir is not set")
+    .doc("Default location used for managed databases and tables " +
+         "if spark.sql.warehouse.dir is not set")
     .stringConf
     .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
 
   val WAREHOUSE_PATH = buildConf("spark.sql.warehouse.dir")
-    .doc("The location for managed databases and tables.")
+    .doc("The default location for managed databases and tables.")
     .stringConf
     .createOptional
 

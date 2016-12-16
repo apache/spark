@@ -56,7 +56,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
         s"hive.metastore.warehouse.dir ('$hiveWarehouseDir').")
       hiveWarehouseDir
     } else if (sparkContext.conf.contains(WAREHOUSE_PATH.key) &&
-               sparkContext.conf.get(WAREHOUSE_PATH).isDefined) {
+        sparkContext.conf.get(WAREHOUSE_PATH).isDefined) {
       // If spark.sql.warehouse.dir is set, we will override hive.metastore.warehouse.dir using
       // the value of spark.sql.warehouse.dir.
       val sparkWarehouseDir = sparkContext.conf.get(WAREHOUSE_PATH).get
