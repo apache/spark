@@ -324,7 +324,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("data type casting") {
     val sd = "1970-01-01"
-    val d = withDefaultTimeZone(TimeZoneGMT)(Date.valueOf(sd))
+    val d = Date.valueOf(sd)
     val zts = sd + " 00:00:00"
     val sts = sd + " 00:00:02"
     val nts = sts + ".1"
@@ -477,7 +477,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast from date") {
-    val d = withDefaultTimeZone(TimeZoneGMT)(Date.valueOf("1970-01-01"))
+    val d = Date.valueOf("1970-01-01")
     checkEvaluation(cast(d, ShortType), null)
     checkEvaluation(cast(d, IntegerType), null)
     checkEvaluation(cast(d, LongType), null)
