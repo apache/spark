@@ -572,6 +572,10 @@ class Dataset[T] private[sql](
     val parsedDelay =
       Option(CalendarInterval.fromString("interval " + delayThreshold))
         .getOrElse(throw new AnalysisException(s"Unable to parse time delay '$delayThreshold'"))
+    // Threshold specified in months/years is non-deterministic
+    if (parsedDelay.months > 0) {
+      throw new AnalysisException(s"Cannot specify time delay in months or years, use days instead")
+    }
     EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
   }
 

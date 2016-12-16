@@ -252,6 +252,9 @@ public final class CalendarInterval implements Serializable {
   public final int months;
   public final long microseconds;
 
+  /**
+   * Return the interval in miliseconds, not including the months in interval.
+   */
   public final long milliseconds() {
     return this.microseconds / MICROS_PER_MILLI;
   }
