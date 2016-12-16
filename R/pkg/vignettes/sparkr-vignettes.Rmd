@@ -481,7 +481,7 @@ SparkR supports the following machine learning models and algorithms.
 
 * Alternating Least Squares (ALS)
 
-#### Test
+#### Statistics
 
 * Kolmogorov-Smirnov Test
 
@@ -603,7 +603,7 @@ naiveBayesPrediction <- predict(naiveBayesModel, titanicDF)
 head(select(naiveBayesPrediction, "Class", "Sex", "Age", "Survived", "prediction"))
 ```
 
-#### AFT Survival Model
+#### Accelerated Failure Time Survival Model
 Survival analysis studies the expected duration of time until an event happens, and often the relationship with risk factors or treatment taken on the subject. In contrast to standard regression analysis, survival modeling has to deal with special characteristics in the data including non-negative survival time and censoring.
 
 Accelerated Failure Time (AFT) model is a parametric survival model for censored data that assumes the effect of a covariate is to accelerate or decelerate the life course of an event by some constant. For more information, refer to the Wikipedia page [AFT Model](https://en.wikipedia.org/wiki/Accelerated_failure_time_model) and the references there. Different from a [Proportional Hazards Model](https://en.wikipedia.org/wiki/Proportional_hazards_model) designed for the same purpose, the AFT model is easier to parallelize because each instance contributes to the objective function independently.
