@@ -114,9 +114,9 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
         """
         Applies transformation on a vector or an RDD[Vector].
 
-        Note: In Python, transform cannot currently be used within
-              an RDD transformation or action.
-              Call transform directly on the RDD instead.
+        .. note:: In Python, transform cannot currently be used within
+            an RDD transformation or action.
+            Call transform directly on the RDD instead.
 
         :param vector: Vector or RDD of Vector to be transformed.
         """
@@ -139,9 +139,9 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         Applies standardization transformation on a vector.
 
-        Note: In Python, transform cannot currently be used within
-              an RDD transformation or action.
-              Call transform directly on the RDD instead.
+        .. note:: In Python, transform cannot currently be used within
+            an RDD transformation or action.
+            Call transform directly on the RDD instead.
 
         :param vector: Vector or RDD of Vector to be standardized.
         :return: Standardized vector. If the variance of a column is
@@ -274,52 +274,48 @@ class ChiSqSelectorModel(JavaVectorTransformer):
 class ChiSqSelector(object):
     """
     Creates a ChiSquared feature selector.
-    The selector supports three selection methods: `KBest`, `Percentile` and `FPR`.
-    `kbest` chooses the `k` top features according to a chi-squared test.
+    The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`.
+    `numTopFeatures` chooses a fixed number of top features according to a chi-squared test.
     `percentile` is similar but chooses a fraction of all features instead of a fixed number.
-    `fpr` chooses all features whose false positive rate meets some threshold.
-    By default, the selection method is `kbest`, the default number of top features is 50.
+    `fpr` chooses all features whose p-value is below a threshold, thus controlling the false
+    positive rate of selection.
+    By default, the selection method is `numTopFeatures`, with the default number of top features
+    set to 50.
 
-    >>> data = [
+    >>> data = sc.parallelize([
     ...     LabeledPoint(0.0, SparseVector(3, {0: 8.0, 1: 7.0})),
     ...     LabeledPoint(1.0, SparseVector(3, {1: 9.0, 2: 6.0})),
     ...     LabeledPoint(1.0, [0.0, 9.0, 8.0]),
-    ...     LabeledPoint(2.0, [8.0, 9.0, 5.0])
-    ... ]
-    >>> model = ChiSqSelector().setNumTopFeatures(1).fit(sc.parallelize(data))
+    ...     LabeledPoint(2.0, [7.0, 9.0, 5.0]),
+    ...     LabeledPoint(2.0, [8.0, 7.0, 3.0])
+    ... ])
+    >>> model = ChiSqSelector(numTopFeatures=1).fit(data)
     >>> model.transform(SparseVector(3, {1: 9.0, 2: 6.0}))
     SparseVector(1, {})
-    >>> model.transform(DenseVector([8.0, 9.0, 5.0]))
-    DenseVector([8.0])
-    >>> model = ChiSqSelector().setSelectorType("percentile").setPercentile(0.34).fit(
-    ...     sc.parallelize(data))
+    >>> model.transform(DenseVector([7.0, 9.0, 5.0]))
+    DenseVector([7.0])
+    >>> model = ChiSqSelector(selectorType="fpr", fpr=0.2).fit(data)
     >>> model.transform(SparseVector(3, {1: 9.0, 2: 6.0}))
     SparseVector(1, {})
-    >>> model.transform(DenseVector([8.0, 9.0, 5.0]))
-    DenseVector([8.0])
-    >>> data = [
-    ...     LabeledPoint(0.0, SparseVector(4, {0: 8.0, 1: 7.0})),
-    ...     LabeledPoint(1.0, SparseVector(4, {1: 9.0, 2: 6.0, 3: 4.0})),
-    ...     LabeledPoint(1.0, [0.0, 9.0, 8.0, 4.0]),
-    ...     LabeledPoint(2.0, [8.0, 9.0, 5.0, 9.0])
-    ... ]
-    >>> model = ChiSqSelector().setSelectorType("fpr").setAlpha(0.1).fit(sc.parallelize(data))
-    >>> model.transform(DenseVector([1.0,2.0,3.0,4.0]))
-    DenseVector([4.0])
+    >>> model.transform(DenseVector([7.0, 9.0, 5.0]))
+    DenseVector([7.0])
+    >>> model = ChiSqSelector(selectorType="percentile", percentile=0.34).fit(data)
+    >>> model.transform(DenseVector([7.0, 9.0, 5.0]))
+    DenseVector([7.0])
 
     .. versionadded:: 1.4.0
     """
-    def __init__(self, numTopFeatures=50, selectorType="kbest", percentile=0.1, alpha=0.05):
+    def __init__(self, numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1, fpr=0.05):
         self.numTopFeatures = numTopFeatures
         self.selectorType = selectorType
         self.percentile = percentile
-        self.alpha = alpha
+        self.fpr = fpr
 
     @since('2.1.0')
     def setNumTopFeatures(self, numTopFeatures):
         """
         set numTopFeature for feature selection by number of top features.
-        Only applicable when selectorType = "kbest".
+        Only applicable when selectorType = "numTopFeatures".
         """
         self.numTopFeatures = int(numTopFeatures)
         return self
@@ -334,19 +330,19 @@ class ChiSqSelector(object):
         return self
 
     @since('2.1.0')
-    def setAlpha(self, alpha):
+    def setFpr(self, fpr):
         """
-        set alpha [0.0, 1.0] for feature selection by FPR.
+        set FPR [0.0, 1.0] for feature selection by FPR.
         Only applicable when selectorType = "fpr".
         """
-        self.alpha = float(alpha)
+        self.fpr = float(fpr)
         return self
 
     @since('2.1.0')
     def setSelectorType(self, selectorType):
         """
         set the selector type of the ChisqSelector.
-        Supported options: "kbest" (default), "percentile" and "fpr".
+        Supported options: "numTopFeatures" (default), "percentile", "fpr".
         """
         self.selectorType = str(selectorType)
         return self
@@ -362,7 +358,7 @@ class ChiSqSelector(object):
                      Apply feature discretizer before using this function.
         """
         jmodel = callMLlibFunc("fitChiSqSelector", self.selectorType, self.numTopFeatures,
-                               self.percentile, self.alpha, data)
+                               self.percentile, self.fpr, data)
         return ChiSqSelectorModel(jmodel)
 
 
@@ -411,7 +407,7 @@ class HashingTF(object):
     Maps a sequence of terms to their term frequencies using the hashing
     trick.
 
-    Note: the terms must be hashable (can not be dict/set/list...).
+    .. note:: The terms must be hashable (can not be dict/set/list...).
 
     :param numFeatures: number of features (default: 2^20)
 
@@ -473,9 +469,9 @@ class IDFModel(JavaVectorTransformer):
         the terms which occur in fewer than `minDocFreq`
         documents will have an entry of 0.
 
-        Note: In Python, transform cannot currently be used within
-              an RDD transformation or action.
-              Call transform directly on the RDD instead.
+        .. note:: In Python, transform cannot currently be used within
+            an RDD transformation or action.
+            Call transform directly on the RDD instead.
 
         :param x: an RDD of term frequency vectors or a term frequency
                   vector
@@ -555,7 +551,7 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         """
         Transforms a word to its vector representation
 
-        Note: local use only
+        .. note:: Local use only
 
         :param word: a word
         :return: vector representation of word(s)
@@ -574,7 +570,7 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         :param num: number of synonyms to find
         :return: array of (word, cosineSimilarity)
 
-        Note: local use only
+        .. note:: Local use only
         """
         if not isinstance(word, basestring):
             word = _convert_to_vector(word)

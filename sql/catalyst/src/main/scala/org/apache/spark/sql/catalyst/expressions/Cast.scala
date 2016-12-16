@@ -114,8 +114,12 @@ object Cast {
 
 /** Cast the child expression to the target data type. */
 @ExpressionDescription(
-  usage = " - Cast value v to the target data type.",
-  extended = "> SELECT _FUNC_('10' as int);\n 10")
+  usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('10' as int);
+       10
+  """)
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with NullIntolerant {
 
   override def toString: String = s"cast($child as ${dataType.simpleString})"

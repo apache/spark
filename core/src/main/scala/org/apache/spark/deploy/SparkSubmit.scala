@@ -41,12 +41,11 @@ import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
-import org.apache.spark.{SPARK_REVISION, SPARK_VERSION, SparkException, SparkUserAppException}
-import org.apache.spark.{SPARK_BRANCH, SPARK_BUILD_DATE, SPARK_BUILD_USER, SPARK_REPO_URL}
+import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
+import org.apache.spark.util._
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -63,7 +62,7 @@ private[deploy] object SparkSubmitAction extends Enumeration {
  * This program handles setting up the classpath with relevant Spark dependencies and provides
  * a layer over the different cluster managers and deploy modes that Spark supports.
  */
-object SparkSubmit {
+object SparkSubmit extends CommandLineUtils {
 
   // Cluster managers
   private val YARN = 1
@@ -87,15 +86,6 @@ object SparkSubmit {
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // scalastyle:off println
-  // Exposed for testing
-  private[spark] var exitFn: Int => Unit = (exitCode: Int) => System.exit(exitCode)
-  private[spark] var printStream: PrintStream = System.err
-  private[spark] def printWarning(str: String): Unit = printStream.println("Warning: " + str)
-  private[spark] def printErrorAndExit(str: String): Unit = {
-    printStream.println("Error: " + str)
-    printStream.println("Run with --help for usage help or --verbose for debug output")
-    exitFn(1)
-  }
   private[spark] def printVersionAndExit(): Unit = {
     printStream.println("""Welcome to
       ____              __
@@ -115,7 +105,7 @@ object SparkSubmit {
   }
   // scalastyle:on println
 
-  def main(args: Array[String]): Unit = {
+  override def main(args: Array[String]): Unit = {
     val appArgs = new SparkSubmitArguments(args)
     if (appArgs.verbose) {
       // scalastyle:off println
@@ -322,7 +312,7 @@ object SparkSubmit {
     }
 
     // Require all R files to be local
-    if (args.isR && !isYarnCluster) {
+    if (args.isR && !isYarnCluster && !isMesosCluster) {
       if (Utils.nonLocalPaths(args.primaryResource).nonEmpty) {
         printErrorAndExit(s"Only local R files are supported: ${args.primaryResource}")
       }
@@ -330,9 +320,6 @@ object SparkSubmit {
 
     // The following modes are not supported or applicable
     (clusterManager, deployMode) match {
-      case (MESOS, CLUSTER) if args.isR =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for R " +
-          "applications on Mesos clusters.")
       case (STANDALONE, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python " +
           "applications on standalone clusters.")
@@ -410,9 +397,9 @@ object SparkSubmit {
       printErrorAndExit("Distributing R packages with standalone cluster is not supported.")
     }
 
-    // TODO: Support SparkR with mesos cluster
-    if (args.isR && clusterManager == MESOS) {
-      printErrorAndExit("SparkR is not supported for Mesos cluster.")
+    // TODO: Support distributing R packages with mesos cluster
+    if (args.isR && clusterManager == MESOS && !RUtils.rPackages.isEmpty) {
+      printErrorAndExit("Distributing R packages with mesos cluster is not supported.")
     }
 
     // If we're running an R app, set the main class to our specific R runner
@@ -598,6 +585,9 @@ object SparkSubmit {
         if (args.pyFiles != null) {
           sysProps("spark.submit.pyFiles") = args.pyFiles
         }
+      } else if (args.isR) {
+        // Second argument is main class
+        childArgs += (args.primaryResource, "")
       } else {
         childArgs += (args.primaryResource, args.mainClass)
       }

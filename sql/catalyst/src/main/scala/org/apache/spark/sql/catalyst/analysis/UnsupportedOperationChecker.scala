@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.{AnalysisException, InternalOutputModes}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.streaming.OutputMode
@@ -55,9 +57,20 @@ object UnsupportedOperationChecker {
     // Disallow some output mode
     outputMode match {
       case InternalOutputModes.Append if aggregates.nonEmpty =>
-        throwError(
-          s"$outputMode output mode not supported when there are streaming aggregations on " +
-            s"streaming DataFrames/DataSets")(plan)
+        val aggregate = aggregates.head
+
+        // Find any attributes that are associated with an eventTime watermark.
+        val watermarkAttributes = aggregate.groupingExpressions.collect {
+          case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => a
+        }
+
+        // We can append rows to the sink once the group is under the watermark. Without this
+        // watermark a group is never "finished" so we would never output anything.
+        if (watermarkAttributes.isEmpty) {
+          throwError(
+            s"$outputMode output mode not supported when there are streaming aggregations on " +
+                s"streaming DataFrames/DataSets")(plan)
+        }
 
       case InternalOutputModes.Complete | InternalOutputModes.Update if aggregates.isEmpty =>
         throwError(
@@ -82,6 +95,16 @@ object UnsupportedOperationChecker {
 
       // Operations that cannot exists anywhere in a streaming plan
       subPlan match {
+
+        case Aggregate(_, aggregateExpressions, child) =>
+          val distinctAggExprs = aggregateExpressions.flatMap { expr =>
+            expr.collect { case ae: AggregateExpression if ae.isDistinct => ae }
+          }
+          throwErrorIf(
+            child.isStreaming && distinctAggExprs.nonEmpty,
+            "Distinct aggregations are not supported on streaming DataFrames/Datasets, unless " +
+              "it is on aggregated DataFrame/Dataset in Complete output mode. Consider using " +
+              "approximate distinct aggregation (e.g. approx_count_distinct() instead of count()).")
 
         case _: Command =>
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
@@ -131,7 +154,7 @@ object UnsupportedOperationChecker {
           throwError("Union between streaming and batch DataFrames/Datasets is not supported")
 
         case Except(left, right) if right.isStreaming =>
-          throwError("Except with a streaming DataFrame/Dataset on the right is not supported")
+          throwError("Except on a streaming DataFrame/Dataset on the right is not supported")
 
         case Intersect(left, right) if left.isStreaming && right.isStreaming =>
           throwError("Intersect between two streaming DataFrames/Datasets is not supported")
@@ -144,7 +167,7 @@ object UnsupportedOperationChecker {
 
         case Sort(_, _, _) | SortPartitions(_, _) if !containsCompleteData(subPlan) =>
           throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on" +
-            "aggregated DataFrame/Dataset in Complete mode")
+            "aggregated DataFrame/Dataset in Complete output mode")
 
         case Sample(_, _, _, _, child) if child.isStreaming =>
           throwError("Sampling is not supported on streaming DataFrames/Datasets")

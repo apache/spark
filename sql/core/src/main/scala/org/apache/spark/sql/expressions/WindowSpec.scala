@@ -85,14 +85,40 @@ class WindowSpec private[sql](
    * "current row", while "-1" means the row before the current row, and "5" means the fifth row
    * after the current row.
    *
-   * We recommend users use [[Window.unboundedPreceding]], [[Window.unboundedFollowing]],
-   * and [[Window.currentRow]] to specify special boundary values, rather than using integral
+   * We recommend users use `Window.unboundedPreceding`, `Window.unboundedFollowing`,
+   * and `[Window.currentRow` to specify special boundary values, rather than using integral
    * values directly.
    *
+   * A row based boundary is based on the position of the row within the partition.
+   * An offset indicates the number of rows above or below the current row, the frame for the
+   * current row starts or ends. For instance, given a row based sliding frame with a lower bound
+   * offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
+   * index 4 to index 6.
+   *
+   * {{{
+   *   import org.apache.spark.sql.expressions.Window
+   *   val df = Seq((1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b"))
+   *     .toDF("id", "category")
+   *   df.withColumn("sum",
+   *       sum('id) over Window.partitionBy('category).orderBy('id).rowsBetween(0,1))
+   *     .show()
+   *
+   *   +---+--------+---+
+   *   | id|category|sum|
+   *   +---+--------+---+
+   *   |  1|       b|  3|
+   *   |  2|       b|  5|
+   *   |  3|       b|  3|
+   *   |  1|       a|  2|
+   *   |  1|       a|  3|
+   *   |  2|       a|  2|
+   *   +---+--------+---+
+   * }}}
+   *
    * @param start boundary start, inclusive. The frame is unbounded if this is
-   *              the minimum long value ([[Window.unboundedPreceding]]).
+   *              the minimum long value (`Window.unboundedPreceding`).
    * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value  ([[Window.unboundedFollowing]]).
+   *            maximum long value  (`Window.unboundedFollowing`).
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rowsBetween.
@@ -107,14 +133,43 @@ class WindowSpec private[sql](
    * while "-1" means one off before the current row, and "5" means the five off after the
    * current row.
    *
-   * We recommend users use [[Window.unboundedPreceding]], [[Window.unboundedFollowing]],
-   * and [[Window.currentRow]] to specify special boundary values, rather than using integral
+   * We recommend users use `Window.unboundedPreceding`, `Window.unboundedFollowing`,
+   * and `[Window.currentRow` to specify special boundary values, rather than using integral
    * values directly.
    *
+   * A range based boundary is based on the actual value of the ORDER BY
+   * expression(s). An offset is used to alter the value of the ORDER BY expression, for
+   * instance if the current order by expression has a value of 10 and the lower bound offset
+   * is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
+   * number of constraints on the ORDER BY expressions: there can be only one expression and this
+   * expression must have a numerical data type. An exception can be made when the offset is 0,
+   * because no value modification is needed, in this case multiple and non-numeric ORDER BY
+   * expression are allowed.
+   *
+   * {{{
+   *   import org.apache.spark.sql.expressions.Window
+   *   val df = Seq((1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b"))
+   *     .toDF("id", "category")
+   *   df.withColumn("sum",
+   *       sum('id) over Window.partitionBy('category).orderBy('id).rangeBetween(0,1))
+   *     .show()
+   *
+   *   +---+--------+---+
+   *   | id|category|sum|
+   *   +---+--------+---+
+   *   |  1|       b|  3|
+   *   |  2|       b|  5|
+   *   |  3|       b|  3|
+   *   |  1|       a|  4|
+   *   |  1|       a|  4|
+   *   |  2|       a|  2|
+   *   +---+--------+---+
+   * }}}
+   *
    * @param start boundary start, inclusive. The frame is unbounded if this is
-   *              the minimum long value ([[Window.unboundedPreceding]]).
+   *              the minimum long value (`Window.unboundedPreceding`).
    * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value  ([[Window.unboundedFollowing]]).
+   *            maximum long value  (`Window.unboundedFollowing`).
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rangeBetween.

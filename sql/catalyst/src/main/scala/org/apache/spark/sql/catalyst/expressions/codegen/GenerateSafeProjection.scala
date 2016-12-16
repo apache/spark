@@ -173,6 +173,10 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           ${ctx.initMutableStates()}
         }
 
+        public void initialize(int partitionIndex) {
+          ${ctx.initPartition()}
+        }
+
         ${ctx.declareAddedFunctions()}
 
         public java.lang.Object apply(java.lang.Object _i) {

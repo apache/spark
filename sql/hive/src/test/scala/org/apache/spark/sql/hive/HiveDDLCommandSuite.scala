@@ -577,5 +577,19 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
       assert(output == Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
       assert(serde == Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
     }
-   }
+  }
+
+  test("table name with schema") {
+    // regression test for SPARK-11778
+    spark.sql("create schema usrdb")
+    spark.sql("create table usrdb.test(c int)")
+    spark.read.table("usrdb.test")
+    spark.sql("drop table usrdb.test")
+    spark.sql("drop schema usrdb")
+  }
+
+  test("SPARK-15887: hive-site.xml should be loaded") {
+    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+    assert(hiveClient.getConf("hive.in.test", "") == "true")
+  }
 }

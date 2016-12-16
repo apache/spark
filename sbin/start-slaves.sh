@@ -32,7 +32,14 @@ if [ "$SPARK_MASTER_PORT" = "" ]; then
 fi
 
 if [ "$SPARK_MASTER_HOST" = "" ]; then
-  SPARK_MASTER_HOST="`hostname -f`"
+  case `uname` in
+      (SunOS)
+	  SPARK_MASTER_HOST="`/usr/sbin/check-hostname | awk '{print $NF}'`"
+	  ;;
+      (*)
+	  SPARK_MASTER_HOST="`hostname -f`"
+	  ;;
+  esac
 fi
 
 # Launch the slaves

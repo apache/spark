@@ -249,8 +249,10 @@ object FunctionRegistry {
     expression[Max]("max"),
     expression[Average]("mean"),
     expression[Min]("min"),
+    expression[Percentile]("percentile"),
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
+    expression[ApproximatePercentile]("approx_percentile"),
     expression[StddevSamp]("std"),
     expression[StddevSamp]("stddev"),
     expression[StddevPop]("stddev_pop"),
@@ -261,6 +263,7 @@ object FunctionRegistry {
     expression[VarianceSamp]("var_samp"),
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
+    expression[CountMinSketchAgg]("count_min_sketch"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -357,7 +360,7 @@ object FunctionRegistry {
     expression[MapValues]("map_values"),
     expression[Size]("size"),
     expression[SortArray]("sort_array"),
-    expression[CreateStruct]("struct"),
+    CreateStruct.registryEntry,
 
     // misc functions
     expression[AssertTrue]("assert_true"),
@@ -369,6 +372,8 @@ object FunctionRegistry {
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
+    expression[InputFileBlockStart]("input_file_block_start"),
+    expression[InputFileBlockLength]("input_file_block_length"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
     expression[CurrentDatabase]("current_database"),
     expression[CallMethodViaReflection]("reflect"),
@@ -446,7 +451,10 @@ object FunctionRegistry {
         // If there is an apply method that accepts Seq[Expression], use that one.
         Try(varargCtor.get.newInstance(expressions).asInstanceOf[Expression]) match {
           case Success(e) => e
-          case Failure(e) => throw new AnalysisException(e.getMessage)
+          case Failure(e) =>
+            // the exception is an invocation exception. To get a meaningful message, we need the
+            // cause.
+            throw new AnalysisException(e.getCause.getMessage)
         }
       } else {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
@@ -495,7 +503,7 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
-      new ExpressionInfo(clazz.getCanonicalName, name, df.usage(), df.extended())
+      new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
     } else {
       new ExpressionInfo(clazz.getCanonicalName, name)
     }

@@ -1485,7 +1485,7 @@ setMethod("soundex",
 
 #' Return the partition ID as a column
 #'
-#' Return the partition ID of the Spark task as a SparkDataFrame column.
+#' Return the partition ID as a SparkDataFrame column.
 #' Note that this is nondeterministic because it depends on data partitioning and
 #' task scheduling.
 #'
@@ -2296,7 +2296,7 @@ setMethod("n", signature(x = "Column"),
 #' A pattern could be for instance \preformatted{dd.MM.yyyy} and could return a string like '18.03.1993'. All
 #' pattern letters of \code{java.text.SimpleDateFormat} can be used.
 #'
-#' NOTE: Use when ever possible specialized functions like \code{year}. These benefit from a
+#' Note: Use when ever possible specialized functions like \code{year}. These benefit from a
 #' specialized implementation.
 #'
 #' @param y Column to compute on.
@@ -2317,7 +2317,8 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 
 #' from_utc_timestamp
 #'
-#' Assumes given timestamp is UTC and converts to given timezone.
+#' Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
+#' that corresponds to the same time of day in the given timezone.
 #'
 #' @param y Column to compute on.
 #' @param x time zone to use.
@@ -2340,7 +2341,7 @@ setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
 #' Locate the position of the first occurrence of substr column in the given string.
 #' Returns null if either of the arguments are null.
 #'
-#' NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+#' Note: The position is not zero based, but 1 based index. Returns 0 if substr
 #' could not be found in str.
 #'
 #' @param y column to check
@@ -2391,7 +2392,8 @@ setMethod("next_day", signature(y = "Column", x = "character"),
 
 #' to_utc_timestamp
 #'
-#' Assumes given timestamp is in given timezone and converts to UTC.
+#' Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
+#' another timestamp that corresponds to the same time of day in UTC.
 #'
 #' @param y Column to compute on
 #' @param x timezone to use
@@ -2539,7 +2541,7 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
 
 #' shiftRight
 #'
-#' Shift the given value numBits right. If the given value is a long value, it will return
+#' (Signed) shift the given value numBits right. If the given value is a long value, it will return
 #' a long value else it will return an integer value.
 #'
 #' @param y column to compute on.
@@ -2777,7 +2779,8 @@ setMethod("window", signature(x = "Column"),
 #' locate
 #'
 #' Locate the position of the first occurrence of substr.
-#' NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+#'
+#' Note: The position is not zero based, but 1 based index. Returns 0 if substr
 #' could not be found in str.
 #'
 #' @param substr a character string to be matched.
@@ -2823,7 +2826,8 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 
 #' rand
 #'
-#' Generate a random column with i.i.d. samples from U[0.0, 1.0].
+#' Generate a random column with independent and identically distributed (i.i.d.) samples
+#' from U[0.0, 1.0].
 #'
 #' @param seed a random seed. Can be missing.
 #' @family normal_funcs
@@ -2852,7 +2856,8 @@ setMethod("rand", signature(seed = "numeric"),
 
 #' randn
 #'
-#' Generate a column with i.i.d. samples from the standard normal distribution.
+#' Generate a column with independent and identically distributed (i.i.d.) samples from
+#' the standard normal distribution.
 #'
 #' @param seed a random seed. Can be missing.
 #' @family normal_funcs
@@ -3442,8 +3447,8 @@ setMethod("size",
 
 #' sort_array
 #'
-#' Sorts the input array for the given column in ascending order,
-#' according to the natural ordering of the array elements.
+#' Sorts the input array in ascending or descending order according
+#' to the natural ordering of the array elements.
 #'
 #' @param x A Column to sort
 #' @param asc A logical flag indicating the sorting order.

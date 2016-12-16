@@ -117,32 +117,58 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis(s"Window specification $s is not valid because $m")
               case None => w
             }
+          case s @ ScalarSubquery(query, conditions, _)
+            // If no correlation, the output must be exactly one column
+            if (conditions.isEmpty && query.output.size != 1) =>
+              failAnalysis(
+                s"Scalar subquery must return only one column, but got ${query.output.size}")
 
           case s @ ScalarSubquery(query, conditions, _) if conditions.nonEmpty =>
-            // Make sure we are using equi-joins.
-            conditions.foreach {
-              case _: EqualTo | _: EqualNullSafe => // ok
-              case e => failAnalysis(
-                s"The correlated scalar subquery can only contain equality predicates: $e")
-            }
 
-            // Make sure correlated scalar subqueries contain one row for every outer row by
-            // enforcing that they are aggregates which contain exactly one aggregate expressions.
-            // The analyzer has already checked that subquery contained only one output column, and
-            // added all the grouping expressions to the aggregate.
-            def checkAggregate(a: Aggregate): Unit = {
-              val aggregates = a.expressions.flatMap(_.collect {
+            // Collect the columns from the subquery for further checking.
+            var subqueryColumns = conditions.flatMap(_.references).filter(query.output.contains)
+
+            def checkAggregate(agg: Aggregate): Unit = {
+              // Make sure correlated scalar subqueries contain one row for every outer row by
+              // enforcing that they are aggregates which contain exactly one aggregate expressions.
+              // The analyzer has already checked that subquery contained only one output column,
+              // and added all the grouping expressions to the aggregate.
+              val aggregates = agg.expressions.flatMap(_.collect {
                 case a: AggregateExpression => a
               })
               if (aggregates.isEmpty) {
                 failAnalysis("The output of a correlated scalar subquery must be aggregated")
               }
+
+              // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
+              // are not part of the correlated columns.
+              val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
+              val correlatedCols = AttributeSet(subqueryColumns)
+              val invalidCols = groupByCols -- correlatedCols
+              // GROUP BY columns must be a subset of columns in the predicates
+              if (invalidCols.nonEmpty) {
+                failAnalysis(
+                  "A GROUP BY clause in a scalar correlated subquery " +
+                    "cannot contain non-correlated columns: " +
+                    invalidCols.mkString(","))
+              }
             }
 
-            // Skip projects and subquery aliases added by the Analyzer and the SQLBuilder.
+            // Skip subquery aliases added by the Analyzer and the SQLBuilder.
+            // For projects, do the necessary mapping and skip to its child.
             def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
               case s: SubqueryAlias => cleanQuery(s.child)
-              case p: Project => cleanQuery(p.child)
+              case p: Project =>
+                // SPARK-18814: Map any aliases to their AttributeReference children
+                // for the checking in the Aggregate operators below this Project.
+                subqueryColumns = subqueryColumns.map {
+                  xs => p.projectList.collectFirst {
+                    case e @ Alias(child : AttributeReference, _) if e.exprId == xs.exprId =>
+                      child
+                  }.getOrElse(xs)
+                }
+
+                cleanQuery(p.child)
               case child => child
             }
 
@@ -155,6 +181,16 @@ trait CheckAnalysis extends PredicateHelper {
         }
 
         operator match {
+          case etw: EventTimeWatermark =>
+            etw.eventTime.dataType match {
+              case s: StructType
+                if s.find(_.name == "end").map(_.dataType) == Some(TimestampType) =>
+              case _: TimestampType =>
+              case _ =>
+                failAnalysis(
+                  s"Event time must be defined on a window or a timestamp, but " +
+                  s"${etw.eventTime.name} is of type ${etw.eventTime.dataType.simpleString}")
+            }
           case f: Filter if f.condition.dataType != BooleanType =>
             failAnalysis(
               s"filter expression '${f.condition.sql}' " +
@@ -169,31 +205,10 @@ trait CheckAnalysis extends PredicateHelper {
               case e =>
             }
 
-          case j @ Join(_, _, UsingJoin(_, cols), _) =>
-            val from = operator.inputSet.map(_.name).mkString(", ")
-            failAnalysis(
-              s"using columns [${cols.mkString(",")}] " +
-                s"can not be resolved given input columns: [$from] ")
-
           case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
             failAnalysis(
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.simpleString} is not a boolean.")
-
-          case j @ Join(_, _, _, Some(condition)) =>
-            def checkValidJoinConditionExprs(expr: Expression): Unit = expr match {
-              case p: Predicate =>
-                p.asInstanceOf[Expression].children.foreach(checkValidJoinConditionExprs)
-              case e if e.dataType.isInstanceOf[BinaryType] =>
-                failAnalysis(s"binary type expression ${e.sql} cannot be used " +
-                  "in join conditions")
-              case e if e.dataType.isInstanceOf[MapType] =>
-                failAnalysis(s"map type expression ${e.sql} cannot be used " +
-                  "in join conditions")
-              case _ => // OK
-            }
-
-            checkValidJoinConditionExprs(condition)
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
@@ -214,6 +229,18 @@ trait CheckAnalysis extends PredicateHelper {
                         s"appear in the arguments of an aggregate function.")
                   }
                 }
+              case e: Attribute if groupingExprs.isEmpty =>
+                // Collect all [[AggregateExpressions]]s.
+                val aggExprs = aggregateExprs.filter(_.collect {
+                  case a: AggregateExpression => a
+                }.nonEmpty)
+                failAnalysis(
+                  s"grouping expressions sequence is empty, " +
+                    s"and '${e.sql}' is not an aggregate function. " +
+                    s"Wrap '${aggExprs.map(_.sql).mkString("(", ", ", ")")}' in windowing " +
+                    s"function(s) or wrap '${e.sql}' in first() (or first_value) " +
+                    s"if you don't care which value you get."
+                )
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
                 failAnalysis(
                   s"expression '${e.sql}' is neither present in the group by, " +
@@ -287,7 +314,8 @@ trait CheckAnalysis extends PredicateHelper {
               }
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
-                if (dt1 != dt2) {
+                // SPARK-18058: we shall not care about the nullability of columns
+                if (!dt1.sameType(dt2)) {
                   failAnalysis(
                     s"""
                       |${operator.nodeName} can only be performed on tables with the compatible

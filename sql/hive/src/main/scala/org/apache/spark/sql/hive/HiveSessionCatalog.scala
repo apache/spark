@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, Gener
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchTableException}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo}
@@ -57,7 +57,13 @@ private[sql] class HiveSessionCatalog(
 
   override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
     val table = formatTableName(name.table)
-    if (name.database.isDefined || !tempTables.contains(table)) {
+    val db = formatDatabaseName(name.database.getOrElse(currentDb))
+    if (db == globalTempViewManager.database) {
+      val relationAlias = alias.getOrElse(table)
+      globalTempViewManager.get(table).map { viewDef =>
+        SubqueryAlias(relationAlias, viewDef, Some(name))
+      }.getOrElse(throw new NoSuchTableException(db, table))
+    } else if (name.database.isDefined || !tempTables.contains(table)) {
       val database = name.database.map(formatDatabaseName)
       val newName = name.copy(database = database, table = table)
       metastoreCatalog.lookupRelation(newName, alias)
@@ -226,9 +232,8 @@ private[sql] class HiveSessionCatalog(
   // current_user, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
   // in_file, index, matchpath, ngrams, noop, noopstreaming, noopwithmap,
   // noopwithmapstreaming, parse_url_tuple, reflect2, windowingtablefunction.
+  // Note: don't forget to update SessionCatalog.isTemporaryFunction
   private val hiveFunctions = Seq(
-    "hash",
-    "histogram_numeric",
-    "percentile"
+    "histogram_numeric"
   )
 }

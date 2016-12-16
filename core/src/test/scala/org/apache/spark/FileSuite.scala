@@ -22,6 +22,7 @@ import java.util.zip.GZIPOutputStream
 
 import scala.io.Source
 
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io._
 import org.apache.hadoop.io.compress.DefaultCodec
 import org.apache.hadoop.mapred.{FileAlreadyExistsException, FileSplit, JobConf, TextInputFormat, TextOutputFormat}
@@ -58,10 +59,15 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     nums.saveAsTextFile(outputDir)
     // Read the plain text file and check it's OK
     val outputFile = new File(outputDir, "part-00000")
-    val content = Source.fromFile(outputFile).mkString
-    assert(content === "1\n2\n3\n4\n")
-    // Also try reading it in as a text file RDD
-    assert(sc.textFile(outputDir).collect().toList === List("1", "2", "3", "4"))
+    val bufferSrc = Source.fromFile(outputFile)
+    Utils.tryWithSafeFinally {
+      val content = bufferSrc.mkString
+      assert(content === "1\n2\n3\n4\n")
+      // Also try reading it in as a text file RDD
+      assert(sc.textFile(outputDir).collect().toList === List("1", "2", "3", "4"))
+    } {
+      bufferSrc.close()
+    }
   }
 
   test("text files (compressed)") {
@@ -250,7 +256,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val (infile: String, indata: PortableDataStream) = inRdd.collect.head
 
     // Make sure the name and array match
-    assert(infile.contains(outFileName)) // a prefix may get added
+    assert(infile.contains(outFile.toURI.getPath)) // a prefix may get added
     assert(indata.toArray === testOutput)
   }
 
@@ -527,7 +533,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
         .mapPartitionsWithInputSplit { (split, part) =>
           Iterator(split.asInstanceOf[FileSplit].getPath.toUri.getPath)
         }.collect()
-    assert(inputPaths.toSet === Set(s"$outDir/part-00000", s"$outDir/part-00001"))
+    val outPathOne = new Path(outDir, "part-00000").toUri.getPath
+    val outPathTwo = new Path(outDir, "part-00001").toUri.getPath
+    assert(inputPaths.toSet === Set(outPathOne, outPathTwo))
   }
 
   test("Get input files via new Hadoop API") {
@@ -541,7 +549,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
         .mapPartitionsWithInputSplit { (split, part) =>
           Iterator(split.asInstanceOf[NewFileSplit].getPath.toUri.getPath)
         }.collect()
-    assert(inputPaths.toSet === Set(s"$outDir/part-00000", s"$outDir/part-00001"))
+    val outPathOne = new Path(outDir, "part-00000").toUri.getPath
+    val outPathTwo = new Path(outDir, "part-00001").toUri.getPath
+    assert(inputPaths.toSet === Set(outPathOne, outPathTwo))
   }
 
   test("spark.files.ignoreCorruptFiles should work both HadoopRDD and NewHadoopRDD") {

@@ -11,6 +11,7 @@ description: GraphX graph processing library guide for Spark SPARK_VERSION_SHORT
 <!-- All the documentation links  -->
 
 [EdgeRDD]: api/scala/index.html#org.apache.spark.graphx.EdgeRDD
+[VertexRDD]: api/scala/index.html#org.apache.spark.graphx.VertexRDD
 [Edge]: api/scala/index.html#org.apache.spark.graphx.Edge
 [EdgeTriplet]: api/scala/index.html#org.apache.spark.graphx.EdgeTriplet
 [Graph]: api/scala/index.html#org.apache.spark.graphx.Graph
@@ -35,7 +36,6 @@ description: GraphX graph processing library guide for Spark SPARK_VERSION_SHORT
 [Graph.fromEdgeTuples]: api/scala/index.html#org.apache.spark.graphx.Graph$@fromEdgeTuples[VD](RDD[(VertexId,VertexId)],VD,Option[PartitionStrategy])(ClassTag[VD]):Graph[VD,Int]
 [Graph.fromEdges]: api/scala/index.html#org.apache.spark.graphx.Graph$@fromEdges[VD,ED](RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
 [PartitionStrategy]: api/scala/index.html#org.apache.spark.graphx.PartitionStrategy
-[Graph.partitionBy]: api/scala/index.html#org.apache.spark.graphx.Graph$@partitionBy(partitionStrategy:org.apache.spark.graphx.PartitionStrategy):org.apache.spark.graphx.Graph[VD,ED]
 [PageRank]: api/scala/index.html#org.apache.spark.graphx.lib.PageRank$
 [ConnectedComponents]: api/scala/index.html#org.apache.spark.graphx.lib.ConnectedComponents$
 [TriangleCount]: api/scala/index.html#org.apache.spark.graphx.lib.TriangleCount$
@@ -89,7 +89,7 @@ with user defined objects attached to each vertex and edge.  A directed multigra
 graph with potentially multiple parallel edges sharing the same source and destination vertex.  The
 ability to support parallel edges simplifies modeling scenarios where there can be multiple
 relationships (e.g., co-worker and friend) between the same vertices.  Each vertex is keyed by a
-*unique* 64-bit long identifier (`VertexID`).  GraphX does not impose any ordering constraints on
+*unique* 64-bit long identifier (`VertexId`).  GraphX does not impose any ordering constraints on
 the vertex identifiers.  Similarly, edges have corresponding source and destination vertex
 identifiers.
 
@@ -130,12 +130,12 @@ class Graph[VD, ED] {
 }
 {% endhighlight %}
 
-The classes `VertexRDD[VD]` and `EdgeRDD[ED]` extend and are optimized versions of `RDD[(VertexID,
+The classes `VertexRDD[VD]` and `EdgeRDD[ED]` extend and are optimized versions of `RDD[(VertexId,
 VD)]` and `RDD[Edge[ED]]` respectively.  Both `VertexRDD[VD]` and `EdgeRDD[ED]` provide  additional
 functionality built around graph computation and leverage internal optimizations.  We discuss the
-`VertexRDD` and `EdgeRDD` API in greater detail in the section on [vertex and edge
+`VertexRDD`[VertexRDD] and `EdgeRDD`[EdgeRDD] API in greater detail in the section on [vertex and edge
 RDDs](#vertex_and_edge_rdds) but for now they can be thought of as simply RDDs of the form:
-`RDD[(VertexID, VD)]` and `RDD[Edge[ED]]`.
+`RDD[(VertexId, VD)]` and `RDD[Edge[ED]]`.
 
 ### Example Property Graph
 
@@ -197,7 +197,7 @@ graph.edges.filter(e => e.srcId > e.dstId).count
 {% endhighlight %}
 
 > Note that `graph.vertices` returns an `VertexRDD[(String, String)]` which extends
-> `RDD[(VertexID, (String, String))]` and so we use the scala `case` expression to deconstruct the
+> `RDD[(VertexId, (String, String))]` and so we use the scala `case` expression to deconstruct the
 > tuple.  On the other hand, `graph.edges` returns an `EdgeRDD` containing `Edge[String]` objects.
 > We could have also used the case class type constructor as in the following:
 > {% highlight scala %}
@@ -287,7 +287,7 @@ class Graph[VD, ED] {
   // Change the partitioning heuristic  ============================================================
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
   // Transform vertex and edge attributes ==========================================================
-  def mapVertices[VD2](map: (VertexID, VD) => VD2): Graph[VD2, ED]
+  def mapVertices[VD2](map: (VertexId, VD) => VD2): Graph[VD2, ED]
   def mapEdges[ED2](map: Edge[ED] => ED2): Graph[VD, ED2]
   def mapEdges[ED2](map: (PartitionID, Iterator[Edge[ED]]) => Iterator[ED2]): Graph[VD, ED2]
   def mapTriplets[ED2](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
@@ -297,18 +297,18 @@ class Graph[VD, ED] {
   def reverse: Graph[VD, ED]
   def subgraph(
       epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
-      vpred: (VertexID, VD) => Boolean = ((v, d) => true))
+      vpred: (VertexId, VD) => Boolean = ((v, d) => true))
     : Graph[VD, ED]
   def mask[VD2, ED2](other: Graph[VD2, ED2]): Graph[VD, ED]
   def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED]
   // Join RDDs with the graph ======================================================================
-  def joinVertices[U](table: RDD[(VertexID, U)])(mapFunc: (VertexID, VD, U) => VD): Graph[VD, ED]
-  def outerJoinVertices[U, VD2](other: RDD[(VertexID, U)])
-      (mapFunc: (VertexID, VD, Option[U]) => VD2)
+  def joinVertices[U](table: RDD[(VertexId, U)])(mapFunc: (VertexId, VD, U) => VD): Graph[VD, ED]
+  def outerJoinVertices[U, VD2](other: RDD[(VertexId, U)])
+      (mapFunc: (VertexId, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
   // Aggregate information about adjacent triplets =================================================
-  def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexID]]
-  def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexID, VD)]]
+  def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexId]]
+  def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexId, VD)]]
   def aggregateMessages[Msg: ClassTag](
       sendMsg: EdgeContext[VD, ED, Msg] => Unit,
       mergeMsg: (Msg, Msg) => Msg,
@@ -316,15 +316,15 @@ class Graph[VD, ED] {
     : VertexRDD[A]
   // Iterative graph-parallel computation ==========================================================
   def pregel[A](initialMsg: A, maxIterations: Int, activeDirection: EdgeDirection)(
-      vprog: (VertexID, VD, A) => VD,
-      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexID,A)],
+      vprog: (VertexId, VD, A) => VD,
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId,A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED]
   // Basic graph algorithms ========================================================================
   def pageRank(tol: Double, resetProb: Double = 0.15): Graph[Double, Double]
-  def connectedComponents(): Graph[VertexID, ED]
+  def connectedComponents(): Graph[VertexId, ED]
   def triangleCount(): Graph[Int, ED]
-  def stronglyConnectedComponents(numIter: Int): Graph[VertexID, ED]
+  def stronglyConnectedComponents(numIter: Int): Graph[VertexId, ED]
 }
 {% endhighlight %}
 
@@ -481,7 +481,7 @@ original value.
 > is therefore recommended that the input RDD be made unique using the following which will
 > also *pre-index* the resulting values to substantially accelerate the subsequent join.
 > {% highlight scala %}
-val nonUniqueCosts: RDD[(VertexID, Double)]
+val nonUniqueCosts: RDD[(VertexId, Double)]
 val uniqueCosts: VertexRDD[Double] =
   graph.vertices.aggregateUsingIndex(nonUnique, (a,b) => a + b)
 val joinedGraph = graph.joinVertices(uniqueCosts)(
@@ -511,7 +511,7 @@ val degreeGraph = graph.outerJoinVertices(outDegrees) { (id, oldAttr, outDegOpt)
 > provide type annotation for the user defined function:
 > {% highlight scala %}
 val joinedGraph = graph.joinVertices(uniqueCosts,
-  (id: VertexID, oldCost: Double, extraCost: Double) => oldCost + extraCost)
+  (id: VertexId, oldCost: Double, extraCost: Double) => oldCost + extraCost)
 {% endhighlight %}
 
 >
@@ -558,7 +558,7 @@ The user defined `mergeMsg` function takes two messages destined to the same ver
 yields a single message.  Think of `mergeMsg` as the <i>reduce</i> function in map-reduce.
 The  [`aggregateMessages`][Graph.aggregateMessages] operator returns a `VertexRDD[Msg]`
 containing the aggregate message (of type `Msg`) destined to each vertex.  Vertices that did not
-receive a message are not included in the returned `VertexRDD`.
+receive a message are not included in the returned `VertexRDD`[VertexRDD].
 
 <!--
 > An [`EdgeContext`][EdgeContext] is provided in place of a [`EdgeTriplet`][EdgeTriplet] to
@@ -815,21 +815,22 @@ object Graph {
 
 GraphX exposes `RDD` views of the vertices and edges stored within the graph.  However, because
 GraphX maintains the vertices and edges in optimized data structures and these data structures
-provide additional functionality, the vertices and edges are returned as `VertexRDD` and `EdgeRDD`
+provide additional functionality, the vertices and edges are returned as `VertexRDD`[VertexRDD] and `EdgeRDD`[EdgeRDD]
 respectively.  In this section we review some of the additional useful functionality in these types.
+Note that this is just an incomplete list, please refer to the API docs for the official list of operations. 
 
 ## VertexRDDs
 
-The `VertexRDD[A]` extends `RDD[(VertexID, A)]` and adds the additional constraint that each
-`VertexID` occurs only *once*.  Moreover, `VertexRDD[A]` represents a *set* of vertices each with an
+The `VertexRDD[A]` extends `RDD[(VertexId, A)]` and adds the additional constraint that each
+`VertexId` occurs only *once*.  Moreover, `VertexRDD[A]` represents a *set* of vertices each with an
 attribute of type `A`.  Internally, this is achieved by storing the vertex attributes in a reusable
 hash-map data-structure.  As a consequence if two `VertexRDD`s are derived from the same base
-`VertexRDD` (e.g., by `filter` or `mapValues`) they can be joined in constant time without hash
-evaluations. To leverage this indexed data structure, the `VertexRDD` exposes the following
+`VertexRDD`[VertexRDD] (e.g., by `filter` or `mapValues`) they can be joined in constant time without hash
+evaluations. To leverage this indexed data structure, the `VertexRDD`[VertexRDD] exposes the following
 additional functionality:
 
 {% highlight scala %}
-class VertexRDD[VD] extends RDD[(VertexID, VD)] {
+class VertexRDD[VD] extends RDD[(VertexId, VD)] {
   // Filter the vertex set but preserves the internal index
   def filter(pred: Tuple2[VertexId, VD] => Boolean): VertexRDD[VD]
   // Transform the values without changing the ids (preserves the internal index)
@@ -847,17 +848,17 @@ class VertexRDD[VD] extends RDD[(VertexID, VD)] {
 }
 {% endhighlight %}
 
-Notice, for example,  how the `filter` operator returns an `VertexRDD`.  Filter is actually
+Notice, for example,  how the `filter` operator returns an `VertexRDD`[VertexRDD].  Filter is actually
 implemented using a `BitSet` thereby reusing the index and preserving the ability to do fast joins
 with other `VertexRDD`s.  Likewise, the `mapValues` operators do not allow the `map` function to
-change the `VertexID` thereby enabling the same `HashMap` data structures to be reused.  Both the
+change the `VertexId` thereby enabling the same `HashMap` data structures to be reused.  Both the
 `leftJoin` and `innerJoin` are able to identify when joining two `VertexRDD`s derived from the same
 `HashMap` and implement the join by linear scan rather than costly point lookups.
 
-The `aggregateUsingIndex` operator is useful for efficient construction of a new `VertexRDD` from an
-`RDD[(VertexID, A)]`.  Conceptually, if I have constructed a `VertexRDD[B]` over a set of vertices,
-*which is a super-set* of the vertices in some `RDD[(VertexID, A)]` then I can reuse the index to
-both aggregate and then subsequently index the `RDD[(VertexID, A)]`.  For example:
+The `aggregateUsingIndex` operator is useful for efficient construction of a new `VertexRDD`[VertexRDD] from an
+`RDD[(VertexId, A)]`.  Conceptually, if I have constructed a `VertexRDD[B]` over a set of vertices,
+*which is a super-set* of the vertices in some `RDD[(VertexId, A)]` then I can reuse the index to
+both aggregate and then subsequently index the `RDD[(VertexId, A)]`.  For example:
 
 {% highlight scala %}
 val setA: VertexRDD[Int] = VertexRDD(sc.parallelize(0L until 100L).map(id => (id, 1)))
@@ -878,7 +879,7 @@ of the various partitioning strategies defined in [`PartitionStrategy`][Partitio
 each partition, edge attributes and adjacency structure, are stored separately enabling maximum
 reuse when changing attribute values.
 
-The three additional functions exposed by the `EdgeRDD` are:
+The three additional functions exposed by the `EdgeRDD`[EdgeRDD] are:
 {% highlight scala %}
 // Transform the edge attributes while preserving the structure
 def mapValues[ED2](f: Edge[ED] => ED2): EdgeRDD[ED2]
@@ -888,7 +889,7 @@ def reverse: EdgeRDD[ED]
 def innerJoin[ED2, ED3](other: EdgeRDD[ED2])(f: (VertexId, VertexId, ED, ED2) => ED3): EdgeRDD[ED3]
 {% endhighlight %}
 
-In most applications we have found that operations on the `EdgeRDD` are accomplished through the
+In most applications we have found that operations on the `EdgeRDD`[EdgeRDD] are accomplished through the
 graph operators or rely on operations defined in the base `RDD` class.
 
 # Optimized Representation

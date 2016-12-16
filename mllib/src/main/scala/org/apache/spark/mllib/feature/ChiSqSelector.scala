@@ -161,7 +161,7 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
       Loader.checkSchema[Data](dataFrame.schema)
 
       val features = dataArray.rdd.map {
-        case Row(feature: Int) => (feature)
+        case Row(feature: Int) => feature
       }.collect()
 
       new ChiSqSelectorModel(features)
@@ -171,18 +171,20 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
 
 /**
  * Creates a ChiSquared feature selector.
- * The selector supports three selection methods: `kbest`, `percentile` and `fpr`.
- * `kbest` chooses the `k` top features according to a chi-squared test.
- * `percentile` is similar but chooses a fraction of all features instead of a fixed number.
- * `fpr` chooses all features whose false positive rate meets some threshold.
- * By default, the selection method is `kbest`, the default number of top features is 50.
+ * The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`.
+ *  - `numTopFeatures` chooses a fixed number of top features according to a chi-squared test.
+ *  - `percentile` is similar but chooses a fraction of all features instead of a fixed number.
+ *  - `fpr` chooses all features whose p-value is below a threshold, thus controlling the false
+ *    positive rate of selection.
+ * By default, the selection method is `numTopFeatures`, with the default number of top features
+ * set to 50.
  */
 @Since("1.3.0")
 class ChiSqSelector @Since("2.1.0") () extends Serializable {
   var numTopFeatures: Int = 50
   var percentile: Double = 0.1
-  var alpha: Double = 0.05
-  var selectorType = ChiSqSelector.KBest
+  var fpr: Double = 0.05
+  var selectorType = ChiSqSelector.NumTopFeatures
 
   /**
    * The is the same to call this() and setNumTopFeatures(numTopFeatures)
@@ -207,15 +209,15 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
   }
 
   @Since("2.1.0")
-  def setAlpha(value: Double): this.type = {
-    require(0.0 <= value && value <= 1.0, "Alpha must be in [0,1]")
-    alpha = value
+  def setFpr(value: Double): this.type = {
+    require(0.0 <= value && value <= 1.0, "FPR must be in [0,1]")
+    fpr = value
     this
   }
 
   @Since("2.1.0")
   def setSelectorType(value: String): this.type = {
-    require(ChiSqSelector.supportedSelectorTypes.toSeq.contains(value),
+    require(ChiSqSelector.supportedSelectorTypes.contains(value),
       s"ChiSqSelector Type: $value was not supported.")
     selectorType = value
     this
@@ -232,7 +234,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
   def fit(data: RDD[LabeledPoint]): ChiSqSelectorModel = {
     val chiSqTestResult = Statistics.chiSqTest(data).zipWithIndex
     val features = selectorType match {
-      case ChiSqSelector.KBest =>
+      case ChiSqSelector.NumTopFeatures =>
         chiSqTestResult
           .sortBy { case (res, _) => res.pValue }
           .take(numTopFeatures)
@@ -242,7 +244,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
           .take((chiSqTestResult.length * percentile).toInt)
       case ChiSqSelector.FPR =>
         chiSqTestResult
-          .filter { case (res, _) => res.pValue < alpha }
+          .filter { case (res, _) => res.pValue < fpr }
       case errorType =>
         throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
     }
@@ -251,22 +253,21 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
   }
 }
 
-@Since("2.1.0")
-object ChiSqSelector {
+private[spark] object ChiSqSelector {
 
-  /** String name for `kbest` selector type. */
-  private[spark] val KBest: String = "kbest"
+  /**
+   * String name for `numTopFeatures` selector type.
+   */
+  val NumTopFeatures: String = "numTopFeatures"
 
-  /** String name for `percentile` selector type. */
-  private[spark] val Percentile: String = "percentile"
+  /**
+   * String name for `percentile` selector type.
+   */
+  val Percentile: String = "percentile"
 
   /** String name for `fpr` selector type. */
-  private[spark] val FPR: String = "fpr"
-
-  /** Set of selector type and param pairs that ChiSqSelector supports. */
-  private[spark] val supportedTypeAndParamPairs = Set(KBest -> "numTopFeatures",
-    Percentile -> "percentile", FPR -> "alpha")
+  val FPR: String = "fpr"
 
   /** Set of selector types that ChiSqSelector supports. */
-  private[spark] val supportedSelectorTypes = supportedTypeAndParamPairs.map(_._1)
+  val supportedSelectorTypes: Array[String] = Array(NumTopFeatures, Percentile, FPR)
 }
