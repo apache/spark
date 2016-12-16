@@ -2165,14 +2165,6 @@ test_that("SQL error message is returned from JVM", {
   expect_equal(grepl("blah", retError), TRUE)
 })
 
-test_that("Default warehouse dir should be set to tempdir", {
-  # nothing should be written outside tempdir() without explicit user permission
-  inital_working_directory_files <- list.files()
-  result <- sql("CREATE TABLE warehouse")
-  expect_equal(inital_working_directory_files, list.files())
-  result <- sql("DROP TABLE warehouse")
-})
-
 irisDF <- suppressWarnings(createDataFrame(iris))
 
 test_that("Method as.data.frame as a synonym for collect()", {

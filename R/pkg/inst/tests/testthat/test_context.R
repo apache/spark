@@ -72,6 +72,20 @@ test_that("repeatedly starting and stopping SparkSession", {
   }
 })
 
+test_that("Default warehouse dir should be set to tempdir", {
+  sparkR.session.stop()
+  sparkR.session(enableHiveSupport = FALSE)
+
+  # Create a temporary table
+  sql("CREATE TABLE people_warehouse_test")
+  # spark-warehouse should be written only tempdir() and not current working directory
+  res <- list.files(path = ".", pattern = ".*spark-warehouse.*",
+                    recursive = TRUE, include.dirs = TRUE)
+  expect_equal(length(res), 0)
+  result <- sql("DROP TABLE people_warehouse_test")
+  sparkR.session.stop()
+})
+
 test_that("rdd GC across sparkR.stop", {
   sc <- sparkR.sparkContext() # sc should get id 0
   rdd1 <- parallelize(sc, 1:20, 2L) # rdd1 should get id 1
