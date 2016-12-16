@@ -29,7 +29,6 @@ import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
  *
  * Generates association rules from frequent itemsets ("items", "freq"). This method only generates
  * association rules which have a single item as the consequent.
- *
  */
 @Since("2.1.0")
 @Experimental
@@ -39,29 +38,35 @@ class AssociationRules(override val uid: String) extends Params {
   def this() = this(Identifiable.randomUID("AssociationRules"))
 
   /**
-   * Param for items column name.
+   * Param for items column name. Items must be array of Integers.
+   * Default: "items"
    * @group param
    */
   final val itemsCol: Param[String] = new Param[String](this, "itemsCol", "items column name")
 
 
   /** @group getParam */
+  @Since("2.1.0")
   final def getItemsCol: String = $(itemsCol)
 
   /** @group setParam */
+  @Since("2.1.0")
   def setItemsCol(value: String): this.type = set(itemsCol, value)
 
   /**
-   * Param for frequency column name.
+   * Param for frequency column name. Data type should be Long.
+   * Default: "freq"
    * @group param
    */
   final val freqCol: Param[String] = new Param[String](this, "freqCol", "frequency column name")
 
 
   /** @group getParam */
+  @Since("2.1.0")
   final def getFreqCol: String = $(freqCol)
 
   /** @group setParam */
+  @Since("2.1.0")
   def setFreqCol(value: String): this.type = set(freqCol, value)
 
   /**
@@ -71,33 +76,33 @@ class AssociationRules(override val uid: String) extends Params {
   final val minConfidence: DoubleParam = new DoubleParam(this, "minConfidence", "min confidence")
 
   /** @group getParam */
+  @Since("2.1.0")
   final def getMinConfidence: Double = $(minConfidence)
 
   /** @group setParam */
+  @Since("2.1.0")
   def setMinConfidence(value: Double): this.type = set(minConfidence, value)
 
+  setDefault(itemsCol -> "items", freqCol -> "freq", minConfidence -> 0.8)
+
   /**
-   * Param for minimum support, range [0.0, 1.0].
-   * @group param
+   * Computes the association rules with confidence above [[minConfidence]].
+   * @param freqItemsets DataFrame containing frequent itemset obtained from algorithms like
+   *                     [[FPGrowth]]. Users can set itemsCol (frequent itemSet, Array[String])
+   *                     and freqCol (appearance count, Long) names in the DataFrame.
+   * @return a DataFrame("antecedent", "consequent", "confidence") containing the association
+    *         rules.
+   *
    */
-  final val minSupport: DoubleParam = new DoubleParam(this, "minSupport", "minimum support")
-
-  /** @group getParam */
-  final def getMinSupport: Double = $(minSupport)
-
-  /** @group setParam */
-  def setMinSupport(value: Double): this.type = set(minSupport, value)
-
-  setDefault(itemsCol -> "items", freqCol -> "freq", minSupport -> 0.3, minConfidence -> 0.8)
-
-  def run(dataset: Dataset[_]): DataFrame = {
-    val freqItemSetRdd = dataset.select($(itemsCol), $(freqCol)).rdd
+  @Since("2.1.0")
+  def run(freqItemsets: Dataset[_]): DataFrame = {
+    val freqItemSetRdd = freqItemsets.select($(itemsCol), $(freqCol)).rdd
       .map(row => new FreqItemset(row.getSeq[String](0).toArray, row.getLong(1)))
 
     val sqlContext = SparkSession.builder().getOrCreate()
     import sqlContext.implicits._
-    val associationRules = new MLlibAssociationRules().setMinConfidence($(minConfidence))
-    associationRules
+    new MLlibAssociationRules()
+      .setMinConfidence($(minConfidence))
       .run(freqItemSetRdd)
       .map(r => (r.antecedent, r.consequent, r.confidence))
       .toDF("antecedent", "consequent", "confidence")
