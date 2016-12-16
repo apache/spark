@@ -24,11 +24,12 @@ import scala.collection.JavaConverters._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
 
 
-class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
+class StreamingQueryStatusAndProgressSuite extends StreamTest {
 
   test("StreamingQueryProgress - prettyJson") {
     val json1 = testProgress1.prettyJson
@@ -128,6 +129,42 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
   test("StreamingQueryStatus - toString") {
     assert(testStatus.toString === testStatus.prettyJson)
   }
+
+  test("progress classes should be Serializable") {
+    import testImplicits._
+
+    val inputData = MemoryStream[Int]
+
+    val query = inputData.toDS()
+      .groupBy($"value")
+      .agg(count("*"))
+      .writeStream
+      .queryName("progress_serializable_test")
+      .format("memory")
+      .outputMode("complete")
+      .start()
+    try {
+      inputData.addData(1, 2, 3)
+      query.processAllAvailable()
+
+      val progress = query.recentProgress
+
+      // Make sure it generates the progress objects we want to test
+      assert(progress.exists { p =>
+        p.sources.size >= 1 && p.stateOperators.size >= 1 && p.sink != null
+      })
+
+      val array = spark.sparkContext.parallelize(progress).collect()
+      assert(array.length === progress.length)
+      array.zip(progress).foreach { case (p1, p2) =>
+        // Make sure we did serialize and deserialize the object
+        assert(p1 ne p2)
+        assert(p1.json === p2.json)
+      }
+    } finally {
+      query.stop()
+    }
+  }
 }
 
 object StreamingQueryStatusAndProgressSuite {
@@ -137,12 +174,12 @@ object StreamingQueryStatusAndProgressSuite {
     name = "myName",
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
-    durationMs = Map("total" -> 0L).mapValues(long2Long).asJava,
-    eventTime = Map(
+    durationMs = new java.util.HashMap(Map("total" -> 0L).mapValues(long2Long).asJava),
+    eventTime = new java.util.HashMap(Map(
       "max" -> "2016-12-05T20:54:20.827Z",
       "min" -> "2016-12-05T20:54:20.827Z",
       "avg" -> "2016-12-05T20:54:20.827Z",
-      "watermark" -> "2016-12-05T20:54:20.827Z").asJava,
+      "watermark" -> "2016-12-05T20:54:20.827Z").asJava),
     stateOperators = Array(new StateOperatorProgress(numRowsTotal = 0, numRowsUpdated = 1)),
     sources = Array(
       new SourceProgress(
@@ -163,8 +200,9 @@ object StreamingQueryStatusAndProgressSuite {
     name = null, // should not be present in the json
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
-    durationMs = Map("total" -> 0L).mapValues(long2Long).asJava,
-    eventTime = Map.empty[String, String].asJava,  // empty maps should be handled correctly
+    durationMs = new java.util.HashMap(Map("total" -> 0L).mapValues(long2Long).asJava),
+    // empty maps should be handled correctly
+    eventTime = new java.util.HashMap(Map.empty[String, String].asJava),
     stateOperators = Array(new StateOperatorProgress(numRowsTotal = 0, numRowsUpdated = 1)),
     sources = Array(
       new SourceProgress(
