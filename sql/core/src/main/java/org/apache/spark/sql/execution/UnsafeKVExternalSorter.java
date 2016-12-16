@@ -104,27 +104,26 @@ public final class UnsafeKVExternalSorter {
       // To insert a record into `UnsafeInMemorySorter` will consume two spaces in the array.
       // We must have half of the array as empty. There are totally `map.numValues()` records
       // to be inserted.
+
+      // During spilling, the array in map will not be used, so if the array is large enough,
+      // we can borrow that and use it as the underlying array for in-memory sorter. In this
+      // case as we will not grow the array, it's fine to pass `null` as consumer, however,
+      // if we have allocated array instead of using the map's array, we still need
+      // to pass the map as consumer in order to release the allocated array.
       LongArray sortArray = null;
-      boolean useAllocatedArray = false;
+      MemoryConsumer consumer = null;
       if (map.numValues() > map.numKeys() && map.numValues() * 2 > map.getArray().size() / 2) {
         sortArray = map.allocateArray(map.numValues() * 2 * 2);
-        useAllocatedArray = true;
+        consumer = map;
       } else {
         // The array will be used to do in-place sort, which require half of the space to be empty.
         if (map.numKeys() * 2 <= map.getArray().size() / 2) {
           sortArray = map.getArray();
         } else {
           sortArray = map.allocateArray(map.numKeys() * 2 * 2);
-          useAllocatedArray = true;
+          consumer = map;
         }
       }
-
-      // During spilling, the array in map will not be used, so we can borrow that and use it
-      // as the underlying array for in-memory sorter (it's always large enough).
-      // Although we will not grow the array, it's fine to pass `null` as consumer, however,
-      // if we have allocated array instead of using the map's array, we still need
-      // to pass the map as consumer in order to release the allocated array.
-      MemoryConsumer consumer = useAllocatedArray ? map : null;
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
         consumer, taskMemoryManager, recordComparator, prefixComparator, sortArray,
         canUseRadixSort);
