@@ -53,13 +53,15 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
     assert(e.getMessage contains "int")
   }
 
-  test("error on threshold in months/years") {
+  test("error on delay in months/years") {
     val inputData = MemoryStream[Int].toDF()
 
     def check(delayThreshold: String): Unit = {
       val e = intercept[AnalysisException] {
         inputData.withWatermark("value", delayThreshold)
       }
+      assert(e.getMessage.contains("month"))
+      assert(e.getMessage.contains("year"))
     }
     check("1 year")
     check("2 months")
