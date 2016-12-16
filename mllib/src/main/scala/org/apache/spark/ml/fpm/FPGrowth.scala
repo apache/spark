@@ -49,12 +49,12 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
    * Default: 0.3
    * @group param
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   val minSupport: DoubleParam = new DoubleParam(this, "minSupport",
-    "the minimal support level of the frequent pattern")
+    "the minimal support level of the frequent pattern (Default: 0.3)")
 
   /** @group getParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def getMinSupport: Double = $(minSupport)
 
 }
@@ -66,38 +66,35 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
  * @see [[http://dx.doi.org/10.1145/1454008.1454027 Li et al., PFP: Parallel FP-Growth for Query
  *  Recommendation]]
  */
-@Since("2.1.0")
+@Since("2.2.0")
 @Experimental
-class FPGrowth @Since("2.1.0") (
-    @Since("2.1.0") override val uid: String)
+class FPGrowth @Since("2.2.0") (
+    @Since("2.2.0") override val uid: String)
   extends Estimator[FPGrowthModel] with FPGrowthParams with DefaultParamsWritable {
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   def this() = this(Identifiable.randomUID("FPGrowth"))
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setMinSupport(value: Double): this.type = set(minSupport, value)
   setDefault(minSupport -> 0.3)
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   def fit(dataset: Dataset[_]): FPGrowthModel = {
-    val data = dataset.select($(featuresCol)).rdd.map(r =>
-      r.getSeq[String](0).toArray)
-    val parentModel = new MLlibFPGrowth()
-      .setMinSupport($(minSupport))
-      .run(data)
+    val data = dataset.select($(featuresCol)).rdd.map(r => r.getSeq[String](0).toArray)
+    val parentModel = new MLlibFPGrowth().setMinSupport($(minSupport)).run(data)
     copyValues(new FPGrowthModel(uid, parentModel))
   }
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
@@ -106,10 +103,10 @@ class FPGrowth @Since("2.1.0") (
 }
 
 
-@Since("2.1.0")
+@Since("2.2.0")
 object FPGrowth extends DefaultParamsReadable[FPGrowth] {
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   override def load(path: String): FPGrowth = super.load(path)
 }
 
@@ -119,10 +116,10 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
  *
  * @param parentModel a model trained by spark.mllib.fpm.FPGrowth
  */
-@Since("2.1.0")
+@Since("2.2.0")
 @Experimental
 class FPGrowthModel private[ml] (
-    @Since("2.1.0") override val uid: String,
+    @Since("2.2.0") override val uid: String,
     private val parentModel: MLlibFPGrowthModel[_])
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
@@ -131,20 +128,20 @@ class FPGrowthModel private[ml] (
    * Default: 0.8
    * @group param
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   val minConfidence: DoubleParam = new DoubleParam(this, "minConfidence",
-    "minimal confidence for generating Association Rule")
+    "minimal confidence for generating Association Rule (Default: 0.8)")
   setDefault(minConfidence -> 0.8)
 
   /** @group getParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def getMinConfidence: Double = $(minConfidence)
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setMinConfidence(value: Double): this.type = set(minConfidence, value)
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val associationRules = getAssociationRules.rdd.map(r =>
       (r.getSeq[String](0), r.getSeq[String](1))
@@ -157,12 +154,12 @@ class FPGrowthModel private[ml] (
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   override def copy(extra: ParamMap): FPGrowthModel = {
     val copied = new FPGrowthModel(uid, parentModel)
     copyValues(copied, extra)
@@ -171,7 +168,7 @@ class FPGrowthModel private[ml] (
   /**
    * Get frequent items fitted by FPGrowth, in the format of DataFrame("items", "freq")
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def getFreqItems: DataFrame = {
     val sqlContext = SparkSession.builder().getOrCreate()
     import sqlContext.implicits._
@@ -183,7 +180,7 @@ class FPGrowthModel private[ml] (
    * Get association rules fitted by AssociationRules using the minConfidence, in the format
    * of DataFrame("antecedent", "consequent", "confidence")
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def getAssociationRules: DataFrame = {
     val freqItems = getFreqItems
 
@@ -194,17 +191,15 @@ class FPGrowthModel private[ml] (
     associationRules.run(freqItems)
   }
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   override def write: MLWriter = new FPGrowthModel.FPGrowthModelWriter(this)
-
 }
 
-
 object FPGrowthModel extends MLReadable[FPGrowthModel] {
-  @Since("2.1.0")
+  @Since("2.2.0")
   override def read: MLReader[FPGrowthModel] = new FPGrowthModelReader
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   override def load(path: String): FPGrowthModel = super.load(path)
 
   /** [[MLWriter]] instance for [[FPGrowthModel]] */
