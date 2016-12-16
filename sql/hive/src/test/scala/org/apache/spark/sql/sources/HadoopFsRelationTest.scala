@@ -446,7 +446,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     // Using only a subset of all partition columns
-    intercept[Throwable] {
+    intercept[AnalysisException] {
       partitionedTestDF2.write
         .format(dataSourceName)
         .mode(SaveMode.Append)
@@ -459,7 +459,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   test("saveAsTable()/load() - partitioned table - ErrorIfExists") {
     Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
-    withTempView("t") {
+    withTable("t") {
       intercept[AnalysisException] {
         partitionedTestDF.write
           .format(dataSourceName)
@@ -474,7 +474,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   test("saveAsTable()/load() - partitioned table - Ignore") {
     Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
-    withTempView("t") {
+    withTable("t") {
       partitionedTestDF.write
         .format(dataSourceName)
         .mode(SaveMode.Ignore)
