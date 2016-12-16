@@ -61,9 +61,9 @@ import org.apache.spark.sql.types._
   """,
   extended = """
     Examples:
-      > SELECT percentile_approx(10.0, array(0.5, 0.4, 0.1), 100);
+      > SELECT _FUNC_(10.0, array(0.5, 0.4, 0.1), 100);
        [10.0,10.0,10.0]
-      > SELECT percentile_approx(10.0, 0.5, 100);
+      > SELECT _FUNC_(10.0, 0.5, 100);
        10.0
   """)
 case class ApproximatePercentile(
