@@ -252,6 +252,7 @@ object FunctionRegistry {
     expression[Percentile]("percentile"),
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
+    expression[ApproximatePercentile]("approx_percentile"),
     expression[StddevSamp]("std"),
     expression[StddevSamp]("stddev"),
     expression[StddevPop]("stddev_pop"),
