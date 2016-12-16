@@ -81,8 +81,6 @@ case class TypedAggregateExpression(
 
   override def references: AttributeSet = AttributeSet(inputDeserializer.toSeq)
 
-  override def inputTypes: Seq[AbstractDataType] = Nil
-
   private def aggregatorLiteral =
     Literal.create(aggregator, ObjectType(classOf[Aggregator[Any, Any, Any]]))
 

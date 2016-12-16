@@ -84,7 +84,7 @@ case class DataSource(
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
   lazy val providingClass: Class[_] = DataSource.lookupDataSource(className)
-  lazy val sourceInfo = sourceSchema()
+  lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = new CaseInsensitiveMap(options)
 
   /**
@@ -132,7 +132,7 @@ case class DataSource(
       }.toArray
       new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
     }
-    val partitionSchema = if (partitionColumns.isEmpty && catalogTable.isEmpty) {
+    val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
       // columns properly unless it is a Hive DataSource
       val resolved = tempFileIndex.partitionSchema.map { partitionField =>
@@ -388,10 +388,11 @@ case class DataSource(
 
         val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
             catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog) {
+          val defaultTableSize = sparkSession.sessionState.conf.defaultSizeInBytes
           new CatalogFileIndex(
             sparkSession,
             catalogTable.get,
-            catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(0L))
+            catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
         } else {
           new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(partitionSchema))
         }
@@ -478,7 +479,7 @@ case class DataSource(
         val plan =
           InsertIntoHadoopFsRelationCommand(
             outputPath = outputPath,
-            staticPartitionKeys = Map.empty,
+            staticPartitions = Map.empty,
             customPartitionLocations = Map.empty,
             partitionColumns = columns,
             bucketSpec = bucketSpec,

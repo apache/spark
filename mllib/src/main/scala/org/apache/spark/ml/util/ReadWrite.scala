@@ -26,7 +26,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
@@ -76,16 +76,13 @@ private[util] sealed trait BaseReadWrite {
    */
   protected final def sqlContext: SQLContext = sparkSession.sqlContext
 
-  /** Returns the underlying [[SparkContext]]. */
+  /** Returns the underlying `SparkContext`. */
   protected final def sc: SparkContext = sparkSession.sparkContext
 }
 
 /**
- * :: Experimental ::
- *
  * Abstract class for utility classes that can save ML instances.
  */
-@Experimental
 @Since("1.6.0")
 abstract class MLWriter extends BaseReadWrite with Logging {
 
@@ -138,11 +135,8 @@ abstract class MLWriter extends BaseReadWrite with Logging {
 }
 
 /**
- * :: Experimental ::
- *
  * Trait for classes that provide [[MLWriter]].
  */
-@Experimental
 @Since("1.6.0")
 trait MLWritable {
 
@@ -169,7 +163,7 @@ trait MLWritable {
  * This only handles simple [[org.apache.spark.ml.param.Param]] types; e.g., it will not handle
  * [[org.apache.spark.sql.Dataset]].
  *
- * @see  [[DefaultParamsReadable]], the counterpart to this trait
+ * @see `DefaultParamsReadable`, the counterpart to this trait
  */
 @DeveloperApi
 trait DefaultParamsWritable extends MLWritable { self: Params =>
@@ -178,13 +172,10 @@ trait DefaultParamsWritable extends MLWritable { self: Params =>
 }
 
 /**
- * :: Experimental ::
- *
  * Abstract class for utility classes that can load ML instances.
  *
  * @tparam T ML instance type
  */
-@Experimental
 @Since("1.6.0")
 abstract class MLReader[T] extends BaseReadWrite {
 
@@ -202,13 +193,10 @@ abstract class MLReader[T] extends BaseReadWrite {
 }
 
 /**
- * :: Experimental ::
- *
  * Trait for objects that provide [[MLReader]].
  *
  * @tparam T ML instance type
  */
-@Experimental
 @Since("1.6.0")
 trait MLReadable[T] {
 
@@ -238,7 +226,7 @@ trait MLReadable[T] {
  * [[org.apache.spark.sql.Dataset]].
  *
  * @tparam T ML instance type
- * @see  [[DefaultParamsWritable]], the counterpart to this trait
+ * @see `DefaultParamsWritable`, the counterpart to this trait
  */
 @DeveloperApi
 trait DefaultParamsReadable[T] extends MLReadable[T] {
@@ -345,7 +333,7 @@ private[ml] object DefaultParamsReader {
   /**
    * All info from metadata file.
    *
-   * @param params  paramMap, as a [[JValue]]
+   * @param params  paramMap, as a `JValue`
    * @param metadata  All metadata, including the other fields
    * @param metadataJson  Full metadata file String (for debugging)
    */

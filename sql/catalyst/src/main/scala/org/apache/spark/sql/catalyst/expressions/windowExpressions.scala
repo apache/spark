@@ -443,7 +443,6 @@ abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowF
 
 abstract class RowNumberLike extends AggregateWindowFunction {
   override def children: Seq[Expression] = Nil
-  override def inputTypes: Seq[AbstractDataType] = Nil
   protected val zero = Literal(0)
   protected val one = Literal(1)
   protected val rowNumber = AttributeReference("rowNumber", IntegerType, nullable = false)()
@@ -600,7 +599,6 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
  */
 abstract class RankLike extends AggregateWindowFunction {
-  override def inputTypes: Seq[AbstractDataType] = children.map(_ => AnyDataType)
 
   /** Store the values of the window 'order' expressions. */
   protected val orderAttrs = children.map { expr =>

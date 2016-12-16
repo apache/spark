@@ -277,7 +277,9 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
 object GraphImpl {
 
-  /** Create a graph from edges, setting referenced vertices to `defaultVertexAttr`. */
+  /**
+   * Create a graph from edges, setting referenced vertices to `defaultVertexAttr`.
+   */
   def apply[VD: ClassTag, ED: ClassTag](
       edges: RDD[Edge[ED]],
       defaultVertexAttr: VD,
@@ -286,7 +288,9 @@ object GraphImpl {
     fromEdgeRDD(EdgeRDD.fromEdges(edges), defaultVertexAttr, edgeStorageLevel, vertexStorageLevel)
   }
 
-  /** Create a graph from EdgePartitions, setting referenced vertices to `defaultVertexAttr`. */
+  /**
+   * Create a graph from EdgePartitions, setting referenced vertices to `defaultVertexAttr`.
+   */
   def fromEdgePartitions[VD: ClassTag, ED: ClassTag](
       edgePartitions: RDD[(PartitionID, EdgePartition[ED, VD])],
       defaultVertexAttr: VD,
@@ -296,7 +300,9 @@ object GraphImpl {
       vertexStorageLevel)
   }
 
-  /** Create a graph from vertices and edges, setting missing vertices to `defaultVertexAttr`. */
+  /**
+   * Create a graph from vertices and edges, setting missing vertices to `defaultVertexAttr`.
+   */
   def apply[VD: ClassTag, ED: ClassTag](
       vertices: RDD[(VertexId, VD)],
       edges: RDD[Edge[ED]],

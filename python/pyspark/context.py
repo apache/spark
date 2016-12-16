@@ -26,6 +26,8 @@ import warnings
 from threading import RLock
 from tempfile import NamedTemporaryFile
 
+from py4j.protocol import Py4JError
+
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast
@@ -373,8 +375,19 @@ class SparkContext(object):
         Shut down the SparkContext.
         """
         if getattr(self, "_jsc", None):
-            self._jsc.stop()
-            self._jsc = None
+            try:
+                self._jsc.stop()
+            except Py4JError:
+                # Case: SPARK-18523
+                warnings.warn(
+                    'Unable to cleanly shutdown Spark JVM process.'
+                    ' It is possible that the process has crashed,'
+                    ' been killed or may also be in a zombie state.',
+                    RuntimeWarning
+                )
+                pass
+            finally:
+                self._jsc = None
         if getattr(self, "_accumulatorServer", None):
             self._accumulatorServer.shutdown()
             self._accumulatorServer = None

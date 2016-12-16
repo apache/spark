@@ -32,7 +32,8 @@ import org.apache.spark.sql.types._
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns Pearson coefficient of correlation between a set of number pairs.")
 // scalastyle:on line.size.limit
-case class Corr(x: Expression, y: Expression) extends DeclarativeAggregate {
+case class Corr(x: Expression, y: Expression)
+  extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(x, y)
   override def nullable: Boolean = true

@@ -27,7 +27,7 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
 
 /**
  * Description of a task that gets passed onto executors to be executed, usually created by
- * [[TaskSetManager.resourceOffer]].
+  * `TaskSetManager.resourceOffer`.
  *
  * TaskDescriptions and the associated Task need to be serialized carefully for two reasons:
  *

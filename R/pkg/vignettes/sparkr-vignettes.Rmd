@@ -94,13 +94,13 @@ sparkR.session.stop()
 
 Different from many other R packages, to use SparkR, you need an additional installation of Apache Spark. The Spark installation will be used to run a backend process that will compile and execute SparkR programs.
 
-If you don't have Spark installed on the computer, you may download it from [Apache Spark Website](http://spark.apache.org/downloads.html). Alternatively, we provide an easy-to-use function `install.spark` to complete this process. You don't have to call it explicitly. We will check the installation when `sparkR.session` is called and `install.spark` function will be  triggered automatically if no installation is found.
+After installing the SparkR package, you can call `sparkR.session` as explained in the previous section to start and it will check for the Spark installation. If you are working with SparkR from an interactive shell (eg. R, RStudio) then Spark is downloaded and cached automatically if it is not found. Alternatively, we provide an easy-to-use function `install.spark` for running this manually. If you don't have Spark installed on the computer, you may download it from [Apache Spark Website](http://spark.apache.org/downloads.html).
 
 ```{r, eval=FALSE}
 install.spark()
 ```
 
-If you already have Spark installed, you don't have to install again and can pass the `sparkHome` argument to `sparkR.session` to let SparkR know where the Spark installation is.
+If you already have Spark installed, you don't have to install again and can pass the `sparkHome` argument to `sparkR.session` to let SparkR know where the existing Spark installation is.
 
 ```{r, eval=FALSE}
 sparkR.session(sparkHome = "/HOME/spark")
@@ -447,25 +447,31 @@ head(teenagers)
 
 SparkR supports the following machine learning models and algorithms.
 
-* Generalized Linear Model (GLM)
-
-* Naive Bayes Model
-
-* $k$-means Clustering
-
 * Accelerated Failure Time (AFT) Survival Model
-
-* Gaussian Mixture Model (GMM)
-
-* Latent Dirichlet Allocation (LDA)
-
-* Multilayer Perceptron Model
 
 * Collaborative Filtering with Alternating Least Squares (ALS)
 
+* Gaussian Mixture Model (GMM)
+
+* Generalized Linear Model (GLM)
+
+* Gradient-Boosted Trees (GBT)
+
 * Isotonic Regression Model
 
-More will be added in the future.
+* $k$-means Clustering
+
+* Kolmogorov-Smirnov Test
+
+* Latent Dirichlet Allocation (LDA)
+
+* Logistic Regression Model
+
+* Multilayer Perceptron Model
+
+* Naive Bayes Model
+
+* Random Forest
 
 ### R Formula
 
@@ -526,6 +532,34 @@ gaussianFitted <- predict(gaussianGLM, carsDF)
 head(select(gaussianFitted, "model", "prediction", "mpg", "wt", "hp"))
 ```
 
+#### Random Forest
+
+`spark.randomForest` fits a [random forest](https://en.wikipedia.org/wiki/Random_forest) classification or regression model on a `SparkDataFrame`.
+Users can call `summary` to get a summary of the fitted model, `predict` to make predictions, and `write.ml`/`read.ml` to save/load fitted models.
+
+In the following example, we use the `longley` dataset to train a random forest and make predictions:
+
+```{r, warning=FALSE}
+df <- createDataFrame(longley)
+rfModel <- spark.randomForest(df, Employed ~ ., type = "regression", maxDepth = 2, numTrees = 2)
+summary(rfModel)
+predictions <- predict(rfModel, df)
+```
+
+#### Gradient-Boosted Trees
+
+`spark.gbt` fits a [gradient-boosted tree](https://en.wikipedia.org/wiki/Gradient_boosting) classification or regression model on a `SparkDataFrame`.
+Users can call `summary` to get a summary of the fitted model, `predict` to make predictions, and `write.ml`/`read.ml` to save/load fitted models.
+
+Similar to the random forest example above, we use the `longley` dataset to train a gradient-boosted tree and make predictions:
+
+```{r, warning=FALSE}
+df <- createDataFrame(longley)
+gbtModel <- spark.gbt(df, Employed ~ ., type = "regression", maxDepth = 2, maxIter = 2)
+summary(gbtModel)
+predictions <- predict(gbtModel, df)
+```
+
 #### Naive Bayes Model
 
 Naive Bayes model assumes independence among the features. `spark.naiveBayes` fits a [Bernoulli naive Bayes model](https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Bernoulli_naive_Bayes) against a SparkDataFrame. The data should be all categorical. These models are often used for document classification.
@@ -565,8 +599,6 @@ head(aftPredictions)
 
 #### Gaussian Mixture Model
 
-(Coming in 2.1.0)
-
 `spark.gaussianMixture` fits multivariate [Gaussian Mixture Model](https://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model) (GMM) against a `SparkDataFrame`. [Expectation-Maximization](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm) (EM) is used to approximate the maximum likelihood estimator (MLE) of the model.
 
 We use a simulated example to demostrate the usage.
@@ -584,8 +616,6 @@ head(select(gmmFitted, "V1", "V2", "prediction"))
 
 #### Latent Dirichlet Allocation
 
-(Coming in 2.1.0)
-
 `spark.lda` fits a [Latent Dirichlet Allocation](https://en.wikipedia.org/wiki/Latent_Dirichlet_allocation) model on a `SparkDataFrame`. It is often used in topic modeling in which topics are inferred from a collection of text documents. LDA can be thought of as a clustering algorithm as follows:
 
 * Topics correspond to cluster centers, and documents correspond to examples (rows) in a dataset.
@@ -599,22 +629,6 @@ To use LDA, we need to specify a `features` column in `data` where each entry re
 * character string: This can be a string of the whole document. It will be parsed automatically. Additional stop words can be added in `customizedStopWords`.
 
 * libSVM: Each entry is a collection of words and will be processed directly.
-
-There are several parameters LDA takes for fitting the model.
-
-* `k`: number of topics (default 10).
-
-* `maxIter`: maximum iterations (default 20).
-
-* `optimizer`: optimizer to train an LDA model, "online" (default) uses [online variational inference](https://www.cs.princeton.edu/~blei/papers/HoffmanBleiBach2010b.pdf). "em" uses [expectation-maximization](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm).
-
-* `subsamplingRate`: For `optimizer = "online"`. Fraction of the corpus to be sampled and used in each iteration of mini-batch gradient descent, in range (0, 1] (default 0.05).
-
-* `topicConcentration`: concentration parameter (commonly named beta or eta) for the prior placed on topic distributions over terms, default -1 to set automatically on the Spark side. Use `summary` to retrieve the effective topicConcentration. Only 1-size numeric is accepted.
-
-* `docConcentration`: concentration parameter (commonly named alpha) for the prior placed on documents distributions over topics (theta), default -1 to set automatically on the Spark side. Use `summary` to retrieve the effective docConcentration. Only 1-size or k-size numeric is accepted.
-
-* `maxVocabSize`: maximum vocabulary size, default 1 << 18.
 
 Two more functions are provided for the fitted model.
 
@@ -654,10 +668,7 @@ perplexity <- spark.perplexity(model, corpusDF)
 perplexity
 ```
 
-
 #### Multilayer Perceptron
-
-(Coming in 2.1.0)
 
 Multilayer perceptron classifier (MLPC) is a classifier based on the [feedforward artificial neural network](https://en.wikipedia.org/wiki/Feedforward_neural_network). MLPC consists of multiple layers of nodes. Each layer is fully connected to the next layer in the network. Nodes in the input layer represent the input data. All other nodes map inputs to outputs by a linear combination of the inputs with the node’s weights $w$ and bias $b$ and applying an activation function. This can be written in matrix form for MLPC with $K+1$ layers as follows:
 $$
@@ -678,23 +689,34 @@ The number of nodes $N$ in the output layer corresponds to the number of classes
 
 MLPC employs backpropagation for learning the model. We use the logistic loss function for optimization and L-BFGS as an optimization routine.
 
-`spark.mlp` requires at least two columns in `data`: one named `"label"` and the other one `"features"`. The `"features"` column should be in libSVM-format. According to the description above, there are several additional parameters that can be set:
+`spark.mlp` requires at least two columns in `data`: one named `"label"` and the other one `"features"`. The `"features"` column should be in libSVM-format.
 
-* `layers`: integer vector containing the number of nodes for each layer.
+We use iris data set to show how to use `spark.mlp` in classification.
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+# fit a Multilayer Perceptron Classification Model
+model <- spark.mlp(df, Species ~ ., blockSize = 128, layers = c(4, 3), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
+```
 
-* `solver`: solver parameter, supported options: `"gd"` (minibatch gradient descent) or `"l-bfgs"`.
-
-* `maxIter`: maximum iteration number.
-
-* `tol`: convergence tolerance of iterations.
-
-* `stepSize`: step size for `"gd"`.
-
-* `seed`: seed parameter for weights initialization.
+To avoid lengthy display, we only present partial results of the model summary. You can check the full result from your sparkR shell.
+```{r, include=FALSE}
+ops <- options()
+options(max.print=5)
+```
+```{r}
+# check the summary of the fitted model
+summary(model)
+```
+```{r, include=FALSE}
+options(ops)
+```
+```{r}
+# make predictions use the fitted model
+predictions <- predict(model, df)
+head(select(predictions, predictions$prediction))
+```
 
 #### Collaborative Filtering
-
-(Coming in 2.1.0)
 
 `spark.als` learns latent factors in [collaborative filtering](https://en.wikipedia.org/wiki/Recommender_system#Collaborative_filtering) via [alternating least squares](http://dl.acm.org/citation.cfm?id=1608614).
 
@@ -724,8 +746,6 @@ head(predicted)
 ```
 
 #### Isotonic Regression Model
-
-(Coming in 2.1.0)
 
 `spark.isoreg` fits an [Isotonic Regression](https://en.wikipedia.org/wiki/Isotonic_regression) model against a `SparkDataFrame`. It solves a weighted univariate a regression problem under a complete order constraint. Specifically, given a set of real observed responses $y_1, \ldots, y_n$, corresponding real features $x_1, \ldots, x_n$, and optionally positive weights $w_1, \ldots, w_n$, we want to find a monotone (piecewise linear) function $f$ to  minimize
 $$
@@ -768,8 +788,60 @@ newDF <- createDataFrame(data.frame(x = c(1.5, 3.2)))
 head(predict(isoregModel, newDF))
 ```
 
-#### What's More?
-We also expect Decision Tree, Random Forest, Kolmogorov-Smirnov Test coming in the next version 2.1.0.
+#### Logistic Regression Model
+
+[Logistic regression](https://en.wikipedia.org/wiki/Logistic_regression) is a widely-used model when the response is categorical. It can be seen as a special case of the [Generalized Linear Predictive Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
+We provide `spark.logit` on top of `spark.glm` to support logistic regression with advanced hyper-parameters.
+It supports both binary and multiclass classification with elastic-net regularization and feature standardization, similar to `glmnet`.
+
+We use a simple example to demonstrate `spark.logit` usage. In general, there are three steps of using `spark.logit`:
+1). Create a dataframe from a proper data source; 2). Fit a logistic regression model using `spark.logit` with a proper parameter setting;
+and 3). Obtain the coefficient matrix of the fitted model using `summary` and use the model for prediction with `predict`.
+
+Binomial logistic regression
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+# Create a DataFrame containing two classes
+training <- df[df$Species %in% c("versicolor", "virginica"), ]
+model <- spark.logit(training, Species ~ ., regParam = 0.00042)
+summary(model)
+```
+
+Predict values on training data
+```{r}
+fitted <- predict(model, training)
+```
+
+Multinomial logistic regression against three classes
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+# Note in this case, Spark infers it is multinomial logistic regression, so family = "multinomial" is optional.
+model <- spark.logit(df, Species ~ ., regParam = 0.056)
+summary(model)
+```
+
+#### Kolmogorov-Smirnov Test
+
+`spark.kstest` runs a two-sided, one-sample [Kolmogorov-Smirnov (KS) test](https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test).
+Given a `SparkDataFrame`, the test compares continuous data in a given column `testCol` with the theoretical distribution
+specified by parameter `nullHypothesis`.
+Users can call `summary` to get a summary of the test results.
+
+In the following example, we test whether the `longley` dataset's `Armed_Forces` column
+follows a normal distribution.  We set the parameters of the normal distribution using
+the mean and standard deviation of the sample.
+
+```{r, warning=FALSE}
+df <- createDataFrame(longley)
+afStats <- head(select(df, mean(df$Armed_Forces), sd(df$Armed_Forces)))
+afMean <- afStats[1]
+afStd <- afStats[2]
+
+test <- spark.kstest(df, "Armed_Forces", "norm", c(afMean, afStd))
+testSummary <- summary(test)
+testSummary
+```
+
 
 ### Model Persistence
 The following example shows how to save/load an ML model by SparkR.

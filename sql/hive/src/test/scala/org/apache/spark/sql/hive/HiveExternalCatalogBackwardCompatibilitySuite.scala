@@ -205,7 +205,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
   test("make sure we can read table created by old version of Spark") {
     for ((tbl, expectedSchema) <- rawTablesAndExpectations) {
       val readBack = getTableMetadata(tbl.identifier.table)
-      assert(readBack.schema == expectedSchema)
+      assert(readBack.schema.sameType(expectedSchema))
 
       if (tbl.tableType == CatalogTableType.EXTERNAL) {
         // trim the URI prefix
@@ -235,7 +235,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
       sql(s"ALTER TABLE ${tbl.identifier} RENAME TO $newName")
 
       val readBack = getTableMetadata(newName)
-      assert(readBack.schema == expectedSchema)
+      assert(readBack.schema.sameType(expectedSchema))
 
       // trim the URI prefix
       val actualTableLocation = new URI(readBack.storage.locationUri.get).getPath
