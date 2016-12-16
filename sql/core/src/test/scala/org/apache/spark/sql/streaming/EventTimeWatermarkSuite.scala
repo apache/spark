@@ -138,11 +138,8 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
   }
 
   test("delay in years handled correctly") {
-
     val currentTimeMs = System.currentTimeMillis
     val currentTime = new Date(currentTimeMs)
-
-    def monthsSinceEpoch(date: Date): Int = { date.getYear * 12 + date.getMonth }
 
     val input = MemoryStream[Long]
     val aggWithWatermark = input.toDF()
@@ -151,6 +148,8 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       .groupBy(window($"eventTime", "5 seconds") as 'window)
       .agg(count("*") as 'count)
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    def monthsSinceEpoch(date: Date): Int = { date.getYear * 12 + date.getMonth }
 
     testStream(aggWithWatermark)(
       AddData(input, currentTimeMs / 1000),
