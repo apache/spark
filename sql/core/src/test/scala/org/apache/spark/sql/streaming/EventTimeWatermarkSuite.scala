@@ -137,7 +137,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
     )
   }
 
-  test("delay in years handled correctly") {
+  test("delay in months and years handled correctly") {
     val currentTimeMs = System.currentTimeMillis
     val currentTime = new Date(currentTimeMs)
 
