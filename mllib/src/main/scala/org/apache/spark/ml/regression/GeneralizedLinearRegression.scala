@@ -48,7 +48,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   /**
    * Param for the name of family which is a description of the error distribution
    * to be used in the model.
-   * Supported options: "gaussian", "binomial", "poisson" and "gamma".
+   * Supported options: "gaussian", "binomial", "poisson", "gamma" and "tweedie".
    * Default is "gaussian".
    *
    * @group param
@@ -62,6 +62,18 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   /** @group getParam */
   @Since("2.0.0")
   def getFamily: String = $(family)
+
+
+  /**
+   * Param for the power value in the tweedie distribution which provides the relationship
+   * between the variance function and the mean of the distribution function.
+   * Supported options: 1 < p < 2.
+   *
+   * @group param
+   */
+  final val variancePower: Param[Double] = new Param(this, "tweediePower",
+    "The power value of the power in the Tweedie distribution which provides the relationship " +
+    s"between the variance function and the mean of the distribution function. ")
 
   /**
    * Param for the name of link function which provides the relationship
@@ -158,6 +170,15 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   setDefault(family -> Gaussian.name)
 
   /**
+    * Sets the value of param [[variancePower]].
+    * Default is 1.5.
+    *
+    * @group setParam
+    */
+  @Since("2.2.0")
+  def setVariancePower(value: Double): this.type = set(variancePower, value)
+
+  /**
    * Sets the value of param [[link]].
    *
    * @group setParam
@@ -243,6 +264,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
   override protected def train(dataset: Dataset[_]): GeneralizedLinearRegressionModel = {
     val familyObj = Family.fromName($(family))
+    if (familyObj == Tweedie)
+      Tweedie.variancePower = $(variancePower)
     val linkObj = if (isDefined(link)) {
       Link.fromName($(link))
     } else {
@@ -306,7 +329,8 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     Gaussian -> Identity, Gaussian -> Log, Gaussian -> Inverse,
     Binomial -> Logit, Binomial -> Probit, Binomial -> CLogLog,
     Poisson -> Log, Poisson -> Identity, Poisson -> Sqrt,
-    Gamma -> Inverse, Gamma -> Identity, Gamma -> Log
+    Gamma -> Inverse, Gamma -> Identity, Gamma -> Log,
+    Tweedie -> Identity, Tweedie -> Log
   )
 
   /** Set of family names that GeneralizedLinearRegression supports. */
@@ -412,6 +436,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         case Binomial.name => Binomial
         case Poisson.name => Poisson
         case Gamma.name => Gamma
+        case Tweedie.name => Tweedie
       }
     }
   }
@@ -591,6 +616,50 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     }
   }
 
+  /**
+    * Tweedie exponential family distribution.
+    * The default link for the Tweedie family is the log link.
+    */
+  private[regression] object Tweedie extends Family("tweedie") {
+
+    val defaultLink: Link = Log
+
+    var variancePower: Double = 1.5
+
+    override def initialize(y: Double, weight: Double): Double = {
+      require(y >= 0.0, "The response variable of Tweedie family " +
+        s"should be non-negative, but got $y")
+      /*
+        Force Poisson mean > 0 to avoid numerical instability in IRLS.
+        R uses y + 0.1 for initialization. See poisson()$initialize.
+       */
+      math.max(y, 0.1)
+    }
+
+    override def variance(mu: Double): Double = math.pow(mu, variancePower)
+
+    override def deviance(y: Double, mu: Double, weight: Double): Double = {
+      1.0
+    }
+
+    override def aic(
+                      predictions: RDD[(Double, Double, Double)],
+                      deviance: Double,
+                      numInstances: Double,
+                      weightSum: Double): Double = {
+      1.0
+    }
+
+    override def project(mu: Double): Double = {
+      if (mu < epsilon) {
+        epsilon
+      } else if (mu.isInfinity) {
+        Double.MaxValue
+      } else {
+        mu
+      }
+    }
+  }
   /**
    * A description of the link function to be used in the model.
    * The link function provides the relationship between the linear predictor
