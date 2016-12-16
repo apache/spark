@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.{util => ju}
 import java.text.SimpleDateFormat
+import java.util.{Calendar, Date}
 
 import org.scalatest.BeforeAndAfter
 
@@ -53,26 +54,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
     assert(e.getMessage contains "int")
   }
 
-  test("error on delay in months/years") {
-    val inputData = MemoryStream[Int].toDF()
-
-    def check(delayThreshold: String): Unit = {
-      val e = intercept[AnalysisException] {
-        inputData.withWatermark("value", delayThreshold)
-      }
-      assert(e.getMessage.contains("month"))
-      assert(e.getMessage.contains("year"))
-    }
-    check("1 year")
-    check("2 months")
-  }
-
   test("event time and watermark metrics") {
-    def assertEventStats(body: ju.Map[String, String] => Unit): AssertOnQuery = AssertOnQuery { q =>
-      body(q.recentProgress.filter(_.numInputRows > 0).lastOption.get.eventTime)
-      true
-    }
-
     // No event time metrics when there is no watermarking
     val inputData1 = MemoryStream[Int]
     val aggWithoutWatermark = inputData1.toDF()
@@ -152,6 +134,29 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       CheckAnswer(),
       AddData(inputData, 25), // Evict items less than previous watermark.
       CheckAnswer((10, 5))
+    )
+  }
+
+  test("delay in years handled correctly") {
+    val input = MemoryStream[Long]
+    val aggWithWatermark = input.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "1 month")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    val currentTimeMs = System.currentTimeMillis
+    val millisPerYear = 1000L * 60 * 60 * 24 * 366  // assume leap year
+
+    testStream(aggWithWatermark)(
+      AddData(input, currentTimeMs / 1000),
+      CheckAnswer(),
+      assertEventStats { e =>
+        assert(timestampFormat.parse(e.get("max")).getTime === (currentTimeMs / 1000) * 1000)
+        val watermarkTime = timestampFormat.parse(e.get("watermark"))
+        assert(currentTimeMs - watermarkTime.getTime >= 2 * millisPerYear)
+      }
     )
   }
 
@@ -260,6 +265,13 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       AddData(inputData, 25), // Evict items less than previous watermark.
       CheckAnswer((10, 1))
     )
+  }
+
+  private def assertEventStats(body: ju.Map[String, String] => Unit): AssertOnQuery = {
+    AssertOnQuery { q =>
+      body(q.recentProgress.filter(_.numInputRows > 0).lastOption.get.eventTime)
+      true
+    }
   }
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
