@@ -541,7 +541,7 @@ SparkR supports the following machine learning algorithms currently:
 
 #### Collaborative Filtering
 
-* [`spark.als`](api/R/spark.als.html): [`Alternating Least Squares (ALS) matrix factorization Model`](ml-collaborative-filtering.html#collaborative-filtering)
+* [`spark.als`](api/R/spark.als.html): [`Alternating Least Squares (ALS)`](ml-collaborative-filtering.html#collaborative-filtering)
 
 #### Statistics
 
