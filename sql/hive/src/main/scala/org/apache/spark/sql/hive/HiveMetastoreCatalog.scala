@@ -110,8 +110,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     if (DDLUtils.isDatasourceTable(table)) {
       val dataSourceTable = cachedDataSourceTables(qualifiedTableName) match {
         case l: LogicalRelation if l.catalogTable.isDefined =>
-          l.copy(catalogTable = Some(
-            l.catalogTable.get.withStats(sessionState.conf.cboStatsEnabled)))
+          l.copy(
+            expectedOutputAttributes = Some(l.expectedOutputAttributes.getOrElse(l.output)),
+            catalogTable = Some(l.catalogTable.get.withStats(sessionState.conf.cboStatsEnabled)))
         case plan =>
           plan
       }
