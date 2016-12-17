@@ -238,6 +238,20 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
             predict_internal(object, newData)
           })
 
+#  Saves the generalized linear model to the input path.
+
+#' @param path the directory where the model is saved.
+#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.glm
+#' @export
+#' @note write.ml(GeneralizedLinearRegressionModel, character) since 2.0.0
+setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
 #' Isotonic Regression Model
 #'
 #' Fits an Isotonic Regression model against a Spark DataFrame, similarly to R's isoreg().
@@ -327,6 +341,21 @@ setMethod("predict", signature(object = "IsotonicRegressionModel"),
             predict_internal(object, newData)
           })
 
+#  Save fitted IsotonicRegressionModel to the input path
+
+#' @param path The directory where the model is saved.
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.isoreg
+#' @aliases write.ml,IsotonicRegressionModel,character-method
+#' @export
+#' @note write.ml(IsotonicRegression, character) since 2.1.0
+setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
 #' Accelerated Failure Time (AFT) Survival Regression Model
 #'
 #' \code{spark.survreg} fits an accelerated failure time (AFT) survival regression model on
@@ -402,4 +431,18 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
 setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
           function(object, newData) {
             predict_internal(object, newData)
+          })
+
+#  Saves the AFT survival regression model to the input path.
+
+#' @param path the directory where the model is saved.
+#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#' @rdname spark.survreg
+#' @export
+#' @note write.ml(AFTSurvivalRegressionModel, character) since 2.0.0
+#' @seealso \link{write.ml}
+setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
           })

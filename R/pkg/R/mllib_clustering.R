@@ -147,6 +147,21 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
             predict_internal(object, newData)
           })
 
+#  Save fitted MLlib model to the input path
+
+#' @param path the directory where the model is saved.
+#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @aliases write.ml,GaussianMixtureModel,character-method
+#' @rdname spark.gaussianMixture
+#' @export
+#' @note write.ml(GaussianMixtureModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
 #' K-Means Clustering Model
 #'
 #' Fits a k-means clustering model against a Spark DataFrame, similarly to R's kmeans().
@@ -269,6 +284,20 @@ setMethod("fitted", signature(object = "KMeansModel"),
             } else {
               dataFrame(callJMethod(jobj, "fitted", method))
             }
+          })
+
+#  Save fitted MLlib model to the input path
+
+#' @param path the directory where the model is saved.
+#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.kmeans
+#' @export
+#' @note write.ml(KMeansModel, character) since 2.0.0
+setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
           })
 
 #' Latent Dirichlet Allocation
@@ -408,4 +437,20 @@ setMethod("spark.perplexity", signature(object = "LDAModel", data = "SparkDataFr
 setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkDataFrame"),
           function(object, newData) {
             predict_internal(object, newData)
+          })
+
+#  Saves the Latent Dirichlet Allocation model to the input path.
+
+#' @param path The directory where the model is saved.
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.lda
+#' @aliases write.ml,LDAModel,character-method
+#' @export
+#' @seealso \link{read.ml}
+#' @note write.ml(LDAModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "LDAModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
           })

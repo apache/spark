@@ -143,3 +143,20 @@ setMethod("predict", signature(object = "ALSModel"),
           function(object, newData) {
             predict_internal(object, newData)
           })
+
+#  Saves the ALS model to the input path.
+
+#' @param path the directory where the model is saved.
+#' @param overwrite logical value indicating whether to overwrite if the output path
+#'                  already exists. Default is FALSE which means throw exception
+#'                  if the output path exists.
+#'
+#' @rdname spark.als
+#' @aliases write.ml,ALSModel,character-method
+#' @export
+#' @seealso \link{read.ml}
+#' @note write.ml(ALSModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "ALSModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })

@@ -265,6 +265,30 @@ setMethod("predict", signature(object = "GBTClassificationModel"),
             predict_internal(object, newData)
           })
 
+#  Save the Gradient Boosted Tree Regression or Classification model to the input path.
+
+#' @param object A fitted Gradient Boosted Tree regression model or classification model.
+#' @param path The directory where the model is saved.
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#' @aliases write.ml,GBTRegressionModel,character-method
+#' @rdname spark.gbt
+#' @export
+#' @note write.ml(GBTRegressionModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "GBTRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
+#' @aliases write.ml,GBTClassificationModel,character-method
+#' @rdname spark.gbt
+#' @export
+#' @note write.ml(GBTClassificationModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "GBTClassificationModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
 #' Random Forest Model for Regression and Classification
 #'
 #' \code{spark.randomForest} fits a Random Forest Regression model or Classification model on
@@ -444,4 +468,29 @@ setMethod("predict", signature(object = "RandomForestRegressionModel"),
 setMethod("predict", signature(object = "RandomForestClassificationModel"),
           function(object, newData) {
             predict_internal(object, newData)
+          })
+
+#  Save the Random Forest Regression or Classification model to the input path.
+
+#' @param object A fitted Random Forest regression model or classification model.
+#' @param path The directory where the model is saved.
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @aliases write.ml,RandomForestRegressionModel,character-method
+#' @rdname spark.randomForest
+#' @export
+#' @note write.ml(RandomForestRegressionModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "RandomForestRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
+#' @aliases write.ml,RandomForestClassificationModel,character-method
+#' @rdname spark.randomForest
+#' @export
+#' @note write.ml(RandomForestClassificationModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "RandomForestClassificationModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
           })
