@@ -449,11 +449,11 @@ SparkR supports the following machine learning models and algorithms.
 
 #### Classification
 
-* Logistic Regression Model
+* Logistic Regression
 
-* Multilayer Perceptron Model
+* Multilayer Perceptron (MLP)
 
-* Naive Bayes Model
+* Naive Bayes
 
 #### Regression
 
@@ -461,7 +461,7 @@ SparkR supports the following machine learning models and algorithms.
 
 * Generalized Linear Model (GLM)
 
-* Isotonic Regression Model
+* Isotonic Regression
 
 #### Tree - Classification and Regression
 
@@ -510,7 +510,7 @@ head(carsDF_test)
 
 ### Models and Algorithms
 
-#### Logistic Regression Model
+#### Logistic Regression
 
 [Logistic regression](https://en.wikipedia.org/wiki/Logistic_regression) is a widely-used model when the response is categorical. It can be seen as a special case of the [Generalized Linear Predictive Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
 We provide `spark.logit` on top of `spark.glm` to support logistic regression with advanced hyper-parameters.
@@ -590,7 +590,7 @@ predictions <- predict(model, df)
 head(select(predictions, predictions$prediction))
 ```
 
-#### Naive Bayes Model
+#### Naive Bayes
 
 Naive Bayes model assumes independence among the features. `spark.naiveBayes` fits a [Bernoulli naive Bayes model](https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Bernoulli_naive_Bayes) against a SparkDataFrame. The data should be all categorical. These models are often used for document classification.
 
@@ -604,6 +604,7 @@ head(select(naiveBayesPrediction, "Class", "Sex", "Age", "Survived", "prediction
 ```
 
 #### Accelerated Failure Time Survival Model
+
 Survival analysis studies the expected duration of time until an event happens, and often the relationship with risk factors or treatment taken on the subject. In contrast to standard regression analysis, survival modeling has to deal with special characteristics in the data including non-negative survival time and censoring.
 
 Accelerated Failure Time (AFT) model is a parametric survival model for censored data that assumes the effect of a covariate is to accelerate or decelerate the life course of an event by some constant. For more information, refer to the Wikipedia page [AFT Model](https://en.wikipedia.org/wiki/Accelerated_failure_time_model) and the references there. Different from a [Proportional Hazards Model](https://en.wikipedia.org/wiki/Proportional_hazards_model) designed for the same purpose, the AFT model is easier to parallelize because each instance contributes to the objective function independently.
@@ -649,7 +650,7 @@ gaussianFitted <- predict(gaussianGLM, carsDF)
 head(select(gaussianFitted, "model", "prediction", "mpg", "wt", "hp"))
 ```
 
-#### Isotonic Regression Model
+#### Isotonic Regression
 
 `spark.isoreg` fits an [Isotonic Regression](https://en.wikipedia.org/wiki/Isotonic_regression) model against a `SparkDataFrame`. It solves a weighted univariate a regression problem under a complete order constraint. Specifically, given a set of real observed responses $y_1, \ldots, y_n$, corresponding real features $x_1, \ldots, x_n$, and optionally positive weights $w_1, \ldots, w_n$, we want to find a monotone (piecewise linear) function $f$ to  minimize
 $$
