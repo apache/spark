@@ -516,18 +516,35 @@ head(teenagers)
 
 SparkR supports the following machine learning algorithms currently:
 
-* [`spark.glm`](api/R/spark.glm.html) or [`glm`](api/R/glm.html): [`Generalized Linear Model`](ml-classification-regression.html#generalized-linear-regression)
-* [`spark.survreg`](api/R/spark.survreg.html): [`Accelerated Failure Time (AFT) Survival Regression Model`](ml-classification-regression.html#survival-regression)
-* [`spark.naiveBayes`](api/R/spark.naiveBayes.html): [`Naive Bayes Model`](ml-classification-regression.html#naive-bayes)
-* [`spark.kmeans`](api/R/spark.kmeans.html): [`K-Means Model`](ml-clustering.html#k-means)
-* [`spark.logit`](api/R/spark.logit.html): [`Logistic Regression Model`](ml-classification-regression.html#logistic-regression)
-* [`spark.isoreg`](api/R/spark.isoreg.html): [`Isotonic Regression Model`](ml-classification-regression.html#isotonic-regression)
-* [`spark.gaussianMixture`](api/R/spark.gaussianMixture.html): [`Gaussian Mixture Model`](ml-clustering.html#gaussian-mixture-model-gmm)
-* [`spark.lda`](api/R/spark.lda.html): [`Latent Dirichlet Allocation (LDA) Model`](ml-clustering.html#latent-dirichlet-allocation-lda)
-* [`spark.mlp`](api/R/spark.mlp.html): [`Multilayer Perceptron Classification Model`](ml-classification-regression.html#multilayer-perceptron-classifier)
-* [`spark.gbt`](api/R/spark.gbt.html): `Gradient Boosted Tree Model for` [`Regression`](ml-classification-regression.html#gradient-boosted-tree-regression) `and` [`Classification`](ml-classification-regression.html#gradient-boosted-tree-classifier)
-* [`spark.randomForest`](api/R/spark.randomForest.html): `Random Forest Model for` [`Regression`](ml-classification-regression.html#random-forest-regression) `and` [`Classification`](ml-classification-regression.html#random-forest-classifier)
-* [`spark.als`](api/R/spark.als.html): [`Alternating Least Squares (ALS) matrix factorization Model`](ml-collaborative-filtering.html#collaborative-filtering)
+#### Classification
+
+* [`spark.logit`](api/R/spark.logit.html): [`Logistic Regression`](ml-classification-regression.html#logistic-regression)
+* [`spark.mlp`](api/R/spark.mlp.html): [`Multilayer Perceptron (MLP)`](ml-classification-regression.html#multilayer-perceptron-classifier)
+* [`spark.naiveBayes`](api/R/spark.naiveBayes.html): [`Naive Bayes`](ml-classification-regression.html#naive-bayes)
+
+#### Regression
+
+* [`spark.survreg`](api/R/spark.survreg.html): [`Accelerated Failure Time (AFT) Survival  Model`](ml-classification-regression.html#survival-regression)
+* [`spark.glm`](api/R/spark.glm.html) or [`glm`](api/R/glm.html): [`Generalized Linear Model (GLM)`](ml-classification-regression.html#generalized-linear-regression)
+* [`spark.isoreg`](api/R/spark.isoreg.html): [`Isotonic Regression`](ml-classification-regression.html#isotonic-regression)
+
+#### Tree
+
+* [`spark.gbt`](api/R/spark.gbt.html): `Gradient Boosted Trees for` [`Regression`](ml-classification-regression.html#gradient-boosted-tree-regression) `and` [`Classification`](ml-classification-regression.html#gradient-boosted-tree-classifier)
+* [`spark.randomForest`](api/R/spark.randomForest.html): `Random Forest for` [`Regression`](ml-classification-regression.html#random-forest-regression) `and` [`Classification`](ml-classification-regression.html#random-forest-classifier)
+
+#### Clustering
+
+* [`spark.gaussianMixture`](api/R/spark.gaussianMixture.html): [`Gaussian Mixture Model (GMM)`](ml-clustering.html#gaussian-mixture-model-gmm)
+* [`spark.kmeans`](api/R/spark.kmeans.html): [`K-Means`](ml-clustering.html#k-means)
+* [`spark.lda`](api/R/spark.lda.html): [`Latent Dirichlet Allocation (LDA)`](ml-clustering.html#latent-dirichlet-allocation-lda)
+
+#### Collaborative Filtering
+
+* [`spark.als`](api/R/spark.als.html): [`Alternating Least Squares (ALS)`](ml-collaborative-filtering.html#collaborative-filtering)
+
+#### Statistics
+
 * [`spark.kstest`](api/R/spark.kstest.html): `Kolmogorov-Smirnov Test`
 
 Under the hood, SparkR uses MLlib to train the model. Please refer to the corresponding section of MLlib user guide for example code.

@@ -447,31 +447,43 @@ head(teenagers)
 
 SparkR supports the following machine learning models and algorithms.
 
+#### Classification
+
+* Logistic Regression
+
+* Multilayer Perceptron (MLP)
+
+* Naive Bayes
+
+#### Regression
+
 * Accelerated Failure Time (AFT) Survival Model
-
-* Collaborative Filtering with Alternating Least Squares (ALS)
-
-* Gaussian Mixture Model (GMM)
 
 * Generalized Linear Model (GLM)
 
+* Isotonic Regression
+
+#### Tree - Classification and Regression
+
 * Gradient-Boosted Trees (GBT)
 
-* Isotonic Regression Model
+* Random Forest
+
+#### Clustering
+
+* Gaussian Mixture Model (GMM)
 
 * $k$-means Clustering
 
-* Kolmogorov-Smirnov Test
-
 * Latent Dirichlet Allocation (LDA)
 
-* Logistic Regression Model
+#### Collaborative Filtering
 
-* Multilayer Perceptron Model
+* Alternating Least Squares (ALS)
 
-* Naive Bayes Model
+#### Statistics
 
-* Random Forest
+* Kolmogorov-Smirnov Test
 
 ### R Formula
 
@@ -496,8 +508,114 @@ count(carsDF_test)
 head(carsDF_test)
 ```
 
-
 ### Models and Algorithms
+
+#### Logistic Regression
+
+[Logistic regression](https://en.wikipedia.org/wiki/Logistic_regression) is a widely-used model when the response is categorical. It can be seen as a special case of the [Generalized Linear Predictive Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
+We provide `spark.logit` on top of `spark.glm` to support logistic regression with advanced hyper-parameters.
+It supports both binary and multiclass classification with elastic-net regularization and feature standardization, similar to `glmnet`.
+
+We use a simple example to demonstrate `spark.logit` usage. In general, there are three steps of using `spark.logit`:
+1). Create a dataframe from a proper data source; 2). Fit a logistic regression model using `spark.logit` with a proper parameter setting;
+and 3). Obtain the coefficient matrix of the fitted model using `summary` and use the model for prediction with `predict`.
+
+Binomial logistic regression
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+# Create a DataFrame containing two classes
+training <- df[df$Species %in% c("versicolor", "virginica"), ]
+model <- spark.logit(training, Species ~ ., regParam = 0.00042)
+summary(model)
+```
+
+Predict values on training data
+```{r}
+fitted <- predict(model, training)
+```
+
+Multinomial logistic regression against three classes
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+# Note in this case, Spark infers it is multinomial logistic regression, so family = "multinomial" is optional.
+model <- spark.logit(df, Species ~ ., regParam = 0.056)
+summary(model)
+```
+
+#### Multilayer Perceptron
+
+Multilayer perceptron classifier (MLPC) is a classifier based on the [feedforward artificial neural network](https://en.wikipedia.org/wiki/Feedforward_neural_network). MLPC consists of multiple layers of nodes. Each layer is fully connected to the next layer in the network. Nodes in the input layer represent the input data. All other nodes map inputs to outputs by a linear combination of the inputs with the node’s weights $w$ and bias $b$ and applying an activation function. This can be written in matrix form for MLPC with $K+1$ layers as follows:
+$$
+y(x)=f_K(\ldots f_2(w_2^T f_1(w_1^T x + b_1) + b_2) \ldots + b_K).
+$$
+
+Nodes in intermediate layers use sigmoid (logistic) function:
+$$
+f(z_i) = \frac{1}{1+e^{-z_i}}.
+$$
+
+Nodes in the output layer use softmax function:
+$$
+f(z_i) = \frac{e^{z_i}}{\sum_{k=1}^N e^{z_k}}.
+$$
+
+The number of nodes $N$ in the output layer corresponds to the number of classes.
+
+MLPC employs backpropagation for learning the model. We use the logistic loss function for optimization and L-BFGS as an optimization routine.
+
+`spark.mlp` requires at least two columns in `data`: one named `"label"` and the other one `"features"`. The `"features"` column should be in libSVM-format.
+
+We use iris data set to show how to use `spark.mlp` in classification.
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+# fit a Multilayer Perceptron Classification Model
+model <- spark.mlp(df, Species ~ ., blockSize = 128, layers = c(4, 3), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
+```
+
+To avoid lengthy display, we only present partial results of the model summary. You can check the full result from your sparkR shell.
+```{r, include=FALSE}
+ops <- options()
+options(max.print=5)
+```
+```{r}
+# check the summary of the fitted model
+summary(model)
+```
+```{r, include=FALSE}
+options(ops)
+```
+```{r}
+# make predictions use the fitted model
+predictions <- predict(model, df)
+head(select(predictions, predictions$prediction))
+```
+
+#### Naive Bayes
+
+Naive Bayes model assumes independence among the features. `spark.naiveBayes` fits a [Bernoulli naive Bayes model](https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Bernoulli_naive_Bayes) against a SparkDataFrame. The data should be all categorical. These models are often used for document classification.
+
+```{r}
+titanic <- as.data.frame(Titanic)
+titanicDF <- createDataFrame(titanic[titanic$Freq > 0, -5])
+naiveBayesModel <- spark.naiveBayes(titanicDF, Survived ~ Class + Sex + Age)
+summary(naiveBayesModel)
+naiveBayesPrediction <- predict(naiveBayesModel, titanicDF)
+head(select(naiveBayesPrediction, "Class", "Sex", "Age", "Survived", "prediction"))
+```
+
+#### Accelerated Failure Time Survival Model
+
+Survival analysis studies the expected duration of time until an event happens, and often the relationship with risk factors or treatment taken on the subject. In contrast to standard regression analysis, survival modeling has to deal with special characteristics in the data including non-negative survival time and censoring.
+
+Accelerated Failure Time (AFT) model is a parametric survival model for censored data that assumes the effect of a covariate is to accelerate or decelerate the life course of an event by some constant. For more information, refer to the Wikipedia page [AFT Model](https://en.wikipedia.org/wiki/Accelerated_failure_time_model) and the references there. Different from a [Proportional Hazards Model](https://en.wikipedia.org/wiki/Proportional_hazards_model) designed for the same purpose, the AFT model is easier to parallelize because each instance contributes to the objective function independently.
+```{r, warning=FALSE}
+library(survival)
+ovarianDF <- createDataFrame(ovarian)
+aftModel <- spark.survreg(ovarianDF, Surv(futime, fustat) ~ ecog_ps + rx)
+summary(aftModel)
+aftPredictions <- predict(aftModel, ovarianDF)
+head(aftPredictions)
+```
 
 #### Generalized Linear Model
 
@@ -532,18 +650,47 @@ gaussianFitted <- predict(gaussianGLM, carsDF)
 head(select(gaussianFitted, "model", "prediction", "mpg", "wt", "hp"))
 ```
 
-#### Random Forest
+#### Isotonic Regression
 
-`spark.randomForest` fits a [random forest](https://en.wikipedia.org/wiki/Random_forest) classification or regression model on a `SparkDataFrame`.
-Users can call `summary` to get a summary of the fitted model, `predict` to make predictions, and `write.ml`/`read.ml` to save/load fitted models.
+`spark.isoreg` fits an [Isotonic Regression](https://en.wikipedia.org/wiki/Isotonic_regression) model against a `SparkDataFrame`. It solves a weighted univariate a regression problem under a complete order constraint. Specifically, given a set of real observed responses $y_1, \ldots, y_n$, corresponding real features $x_1, \ldots, x_n$, and optionally positive weights $w_1, \ldots, w_n$, we want to find a monotone (piecewise linear) function $f$ to  minimize
+$$
+\ell(f) = \sum_{i=1}^n w_i (y_i - f(x_i))^2.
+$$
 
-In the following example, we use the `longley` dataset to train a random forest and make predictions:
+There are a few more arguments that may be useful.
 
-```{r, warning=FALSE}
-df <- createDataFrame(longley)
-rfModel <- spark.randomForest(df, Employed ~ ., type = "regression", maxDepth = 2, numTrees = 2)
-summary(rfModel)
-predictions <- predict(rfModel, df)
+* `weightCol`: a character string specifying the weight column.
+
+* `isotonic`: logical value indicating whether the output sequence should be isotonic/increasing (`TRUE`) or antitonic/decreasing (`FALSE`).
+
+* `featureIndex`: the index of the feature on the right hand side of the formula if it is a vector column (default: 0), no effect otherwise.
+
+We use an artificial example to show the use.
+
+```{r}
+y <- c(3.0, 6.0, 8.0, 5.0, 7.0)
+x <- c(1.0, 2.0, 3.5, 3.0, 4.0)
+w <- rep(1.0, 5)
+data <- data.frame(y = y, x = x, w = w)
+df <- createDataFrame(data)
+isoregModel <- spark.isoreg(df, y ~ x, weightCol = "w")
+isoregFitted <- predict(isoregModel, df)
+head(select(isoregFitted, "x", "y", "prediction"))
+```
+
+In the prediction stage, based on the fitted monotone piecewise function, the rules are:
+
+* If the prediction input exactly matches a training feature then associated prediction is returned. In case there are multiple predictions with the same feature then one of them is returned. Which one is undefined.
+
+* If the prediction input is lower or higher than all training features then prediction with lowest or highest feature is returned respectively. In case there are multiple predictions with the same feature then the lowest or highest is returned respectively.
+
+* If the prediction input falls between two training features then prediction is treated as piecewise linear function and interpolated value is calculated from the predictions of the two closest features. In case there are multiple values with the same feature then the same rules as in previous point are used.
+
+For example, when the input is $3.2$, the two closest feature values are $3.0$ and $3.5$, then predicted value would be a linear interpolation between the predicted values at $3.0$ and $3.5$.
+
+```{r}
+newDF <- createDataFrame(data.frame(x = c(1.5, 3.2)))
+head(predict(isoregModel, newDF))
 ```
 
 #### Gradient-Boosted Trees
@@ -560,41 +707,18 @@ summary(gbtModel)
 predictions <- predict(gbtModel, df)
 ```
 
-#### Naive Bayes Model
+#### Random Forest
 
-Naive Bayes model assumes independence among the features. `spark.naiveBayes` fits a [Bernoulli naive Bayes model](https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Bernoulli_naive_Bayes) against a SparkDataFrame. The data should be all categorical. These models are often used for document classification.
+`spark.randomForest` fits a [random forest](https://en.wikipedia.org/wiki/Random_forest) classification or regression model on a `SparkDataFrame`.
+Users can call `summary` to get a summary of the fitted model, `predict` to make predictions, and `write.ml`/`read.ml` to save/load fitted models.
 
-```{r}
-titanic <- as.data.frame(Titanic)
-titanicDF <- createDataFrame(titanic[titanic$Freq > 0, -5])
-naiveBayesModel <- spark.naiveBayes(titanicDF, Survived ~ Class + Sex + Age)
-summary(naiveBayesModel)
-naiveBayesPrediction <- predict(naiveBayesModel, titanicDF)
-head(select(naiveBayesPrediction, "Class", "Sex", "Age", "Survived", "prediction"))
-```
+In the following example, we use the `longley` dataset to train a random forest and make predictions:
 
-#### k-Means Clustering
-
-`spark.kmeans` fits a $k$-means clustering model against a `SparkDataFrame`. As an unsupervised learning method, we don't need a response variable. Hence, the left hand side of the R formula should be left blank. The clustering is based only on the variables on the right hand side.
-
-```{r}
-kmeansModel <- spark.kmeans(carsDF, ~ mpg + hp + wt, k = 3)
-summary(kmeansModel)
-kmeansPredictions <- predict(kmeansModel, carsDF)
-head(select(kmeansPredictions, "model", "mpg", "hp", "wt", "prediction"), n = 20L)
-```
-
-#### AFT Survival Model
-Survival analysis studies the expected duration of time until an event happens, and often the relationship with risk factors or treatment taken on the subject. In contrast to standard regression analysis, survival modeling has to deal with special characteristics in the data including non-negative survival time and censoring.
-
-Accelerated Failure Time (AFT) model is a parametric survival model for censored data that assumes the effect of a covariate is to accelerate or decelerate the life course of an event by some constant. For more information, refer to the Wikipedia page [AFT Model](https://en.wikipedia.org/wiki/Accelerated_failure_time_model) and the references there. Different from a [Proportional Hazards Model](https://en.wikipedia.org/wiki/Proportional_hazards_model) designed for the same purpose, the AFT model is easier to parallelize because each instance contributes to the objective function independently.
 ```{r, warning=FALSE}
-library(survival)
-ovarianDF <- createDataFrame(ovarian)
-aftModel <- spark.survreg(ovarianDF, Surv(futime, fustat) ~ ecog_ps + rx)
-summary(aftModel)
-aftPredictions <- predict(aftModel, ovarianDF)
-head(aftPredictions)
+df <- createDataFrame(longley)
+rfModel <- spark.randomForest(df, Employed ~ ., type = "regression", maxDepth = 2, numTrees = 2)
+summary(rfModel)
+predictions <- predict(rfModel, df)
 ```
 
 #### Gaussian Mixture Model
@@ -613,6 +737,16 @@ gmmFitted <- predict(gmmModel, df)
 head(select(gmmFitted, "V1", "V2", "prediction"))
 ```
 
+#### k-Means Clustering
+
+`spark.kmeans` fits a $k$-means clustering model against a `SparkDataFrame`. As an unsupervised learning method, we don't need a response variable. Hence, the left hand side of the R formula should be left blank. The clustering is based only on the variables on the right hand side.
+
+```{r}
+kmeansModel <- spark.kmeans(carsDF, ~ mpg + hp + wt, k = 3)
+summary(kmeansModel)
+kmeansPredictions <- predict(kmeansModel, carsDF)
+head(select(kmeansPredictions, "model", "mpg", "hp", "wt", "prediction"), n = 20L)
+```
 
 #### Latent Dirichlet Allocation
 
@@ -668,55 +802,7 @@ perplexity <- spark.perplexity(model, corpusDF)
 perplexity
 ```
 
-#### Multilayer Perceptron
-
-Multilayer perceptron classifier (MLPC) is a classifier based on the [feedforward artificial neural network](https://en.wikipedia.org/wiki/Feedforward_neural_network). MLPC consists of multiple layers of nodes. Each layer is fully connected to the next layer in the network. Nodes in the input layer represent the input data. All other nodes map inputs to outputs by a linear combination of the inputs with the node’s weights $w$ and bias $b$ and applying an activation function. This can be written in matrix form for MLPC with $K+1$ layers as follows:
-$$
-y(x)=f_K(\ldots f_2(w_2^T f_1(w_1^T x + b_1) + b_2) \ldots + b_K).
-$$
-
-Nodes in intermediate layers use sigmoid (logistic) function:
-$$
-f(z_i) = \frac{1}{1+e^{-z_i}}.
-$$
-
-Nodes in the output layer use softmax function:
-$$
-f(z_i) = \frac{e^{z_i}}{\sum_{k=1}^N e^{z_k}}.
-$$
-
-The number of nodes $N$ in the output layer corresponds to the number of classes.
-
-MLPC employs backpropagation for learning the model. We use the logistic loss function for optimization and L-BFGS as an optimization routine.
-
-`spark.mlp` requires at least two columns in `data`: one named `"label"` and the other one `"features"`. The `"features"` column should be in libSVM-format.
-
-We use iris data set to show how to use `spark.mlp` in classification.
-```{r, warning=FALSE}
-df <- createDataFrame(iris)
-# fit a Multilayer Perceptron Classification Model
-model <- spark.mlp(df, Species ~ ., blockSize = 128, layers = c(4, 3), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
-```
-
-To avoid lengthy display, we only present partial results of the model summary. You can check the full result from your sparkR shell.
-```{r, include=FALSE}
-ops <- options()
-options(max.print=5)
-```
-```{r}
-# check the summary of the fitted model
-summary(model)
-```
-```{r, include=FALSE}
-options(ops)
-```
-```{r}
-# make predictions use the fitted model
-predictions <- predict(model, df)
-head(select(predictions, predictions$prediction))
-```
-
-#### Collaborative Filtering
+#### Alternating Least Squares
 
 `spark.als` learns latent factors in [collaborative filtering](https://en.wikipedia.org/wiki/Recommender_system#Collaborative_filtering) via [alternating least squares](http://dl.acm.org/citation.cfm?id=1608614).
 
@@ -743,81 +829,6 @@ Make predictions.
 ```{r}
 predicted <- predict(model, df)
 head(predicted)
-```
-
-#### Isotonic Regression Model
-
-`spark.isoreg` fits an [Isotonic Regression](https://en.wikipedia.org/wiki/Isotonic_regression) model against a `SparkDataFrame`. It solves a weighted univariate a regression problem under a complete order constraint. Specifically, given a set of real observed responses $y_1, \ldots, y_n$, corresponding real features $x_1, \ldots, x_n$, and optionally positive weights $w_1, \ldots, w_n$, we want to find a monotone (piecewise linear) function $f$ to  minimize
-$$
-\ell(f) = \sum_{i=1}^n w_i (y_i - f(x_i))^2.
-$$
-
-There are a few more arguments that may be useful.
-
-* `weightCol`: a character string specifying the weight column.
-
-* `isotonic`: logical value indicating whether the output sequence should be isotonic/increasing (`TRUE`) or antitonic/decreasing (`FALSE`).
-
-* `featureIndex`: the index of the feature on the right hand side of the formula if it is a vector column (default: 0), no effect otherwise.
-
-We use an artificial example to show the use.
-
-```{r}
-y <- c(3.0, 6.0, 8.0, 5.0, 7.0)
-x <- c(1.0, 2.0, 3.5, 3.0, 4.0)
-w <- rep(1.0, 5)
-data <- data.frame(y = y, x = x, w = w)
-df <- createDataFrame(data)
-isoregModel <- spark.isoreg(df, y ~ x, weightCol = "w")
-isoregFitted <- predict(isoregModel, df)
-head(select(isoregFitted, "x", "y", "prediction"))
-```
-
-In the prediction stage, based on the fitted monotone piecewise function, the rules are:
-
-* If the prediction input exactly matches a training feature then associated prediction is returned. In case there are multiple predictions with the same feature then one of them is returned. Which one is undefined.
-
-* If the prediction input is lower or higher than all training features then prediction with lowest or highest feature is returned respectively. In case there are multiple predictions with the same feature then the lowest or highest is returned respectively.
-
-* If the prediction input falls between two training features then prediction is treated as piecewise linear function and interpolated value is calculated from the predictions of the two closest features. In case there are multiple values with the same feature then the same rules as in previous point are used.
-
-For example, when the input is $3.2$, the two closest feature values are $3.0$ and $3.5$, then predicted value would be a linear interpolation between the predicted values at $3.0$ and $3.5$.
-
-```{r}
-newDF <- createDataFrame(data.frame(x = c(1.5, 3.2)))
-head(predict(isoregModel, newDF))
-```
-
-#### Logistic Regression Model
-
-[Logistic regression](https://en.wikipedia.org/wiki/Logistic_regression) is a widely-used model when the response is categorical. It can be seen as a special case of the [Generalized Linear Predictive Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
-We provide `spark.logit` on top of `spark.glm` to support logistic regression with advanced hyper-parameters.
-It supports both binary and multiclass classification with elastic-net regularization and feature standardization, similar to `glmnet`.
-
-We use a simple example to demonstrate `spark.logit` usage. In general, there are three steps of using `spark.logit`:
-1). Create a dataframe from a proper data source; 2). Fit a logistic regression model using `spark.logit` with a proper parameter setting;
-and 3). Obtain the coefficient matrix of the fitted model using `summary` and use the model for prediction with `predict`.
-
-Binomial logistic regression
-```{r, warning=FALSE}
-df <- createDataFrame(iris)
-# Create a DataFrame containing two classes
-training <- df[df$Species %in% c("versicolor", "virginica"), ]
-model <- spark.logit(training, Species ~ ., regParam = 0.00042)
-summary(model)
-```
-
-Predict values on training data
-```{r}
-fitted <- predict(model, training)
-```
-
-Multinomial logistic regression against three classes
-```{r, warning=FALSE}
-df <- createDataFrame(iris)
-# Note in this case, Spark infers it is multinomial logistic regression, so family = "multinomial" is optional.
-model <- spark.logit(df, Species ~ ., regParam = 0.056)
-summary(model)
 ```
 
 #### Kolmogorov-Smirnov Test
