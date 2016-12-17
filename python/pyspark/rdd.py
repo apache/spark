@@ -138,12 +138,9 @@ def _load_from_socket(port, serializer):
     # The RDD materialization time is unpredicable, if we set a timeout for socket reading
     # operation, it will very possibly fail. See SPARK-18281.
     sock.settimeout(None)
-    try:
-        rf = sock.makefile("rb", 65536)
-        for item in serializer.load_stream(rf):
-            yield item
-    finally:
-        sock.close()
+    # The socket will be automatically closed when garbage-collected.
+    rf = sock.makefile("rb", 65536)
+    return serializer.load_stream(sock.makefile("rb", 65536))
 
 
 def ignore_unicode_prefix(f):
@@ -2352,12 +2349,7 @@ class RDD(object):
         """
         with SCCallSiteSync(self.context) as css:
             port = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
-        # We set a timeout for connecting socket. The connection only begins when we start
-        # to consume the first element. If we do not begin to consume the returned iterator
-        # immediately, there will be a failure.
-        iter = _load_from_socket(port, self._jrdd_deserializer)
-        peek = next(iter)
-        return chain([peek], iter)
+        return _load_from_socket(port, self._jrdd_deserializer)
 
 
 def _prepare_for_python_RDD(sc, command):

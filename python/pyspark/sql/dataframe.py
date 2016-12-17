@@ -26,8 +26,6 @@ if sys.version >= '3':
 else:
     from itertools import imap as map
 
-from itertools import chain
-
 from pyspark import copy_func, since
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
@@ -405,12 +403,7 @@ class DataFrame(object):
         """
         with SCCallSiteSync(self._sc) as css:
             port = self._jdf.toPythonIterator()
-        # We set a timeout for connecting socket. The connection only begins when we start
-        # to consume the first element. If we do not begin to consume the returned iterator
-        # immediately, there will be a failure.
-        iter = _load_from_socket(port, BatchedSerializer(PickleSerializer()))
-        peek = next(iter)
-        return chain([peek], iter)
+        return _load_from_socket(port, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
     @since(1.3)

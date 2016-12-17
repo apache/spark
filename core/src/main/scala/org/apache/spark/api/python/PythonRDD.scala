@@ -454,16 +454,7 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def toLocalIteratorAndServe[T](rdd: RDD[T]): Int = {
-    // To prevent the materilization of the RDD takes too long to cause timeout in writing the
-    // first element, we fetch the first element manually and re-construct the iterator.
-    val localIter = rdd.toLocalIterator
-    val iter = if (localIter.hasNext) {
-      val peek = localIter.next()
-      Seq(peek).iterator ++ localIter
-    } else {
-      localIter
-    }
-    serveIterator(iter, s"serve toLocalIterator")
+    serveIterator(rdd.toLocalIterator, s"serve toLocalIterator")
   }
 
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
