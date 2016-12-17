@@ -820,7 +820,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       withTempDir { case src =>
         def testMaxFilePerTriggerValue(value: String): Unit = {
           val df = spark.readStream.option("maxFilesPerTrigger", value).text(src.getCanonicalPath)
-          val e = intercept[IllegalArgumentException] {
+          val e = intercept[StreamingQueryException] {
             // Note: `maxFilesPerTrigger` is checked in the stream thread when creating the source
             val q = df.writeStream.format("memory").queryName(testTable).start()
             try {
@@ -829,6 +829,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
               q.stop()
             }
           }
+          assert(e.getCause.isInstanceOf[IllegalArgumentException])
           Seq("maxFilesPerTrigger", value, "positive integer").foreach { s =>
             assert(e.getMessage.contains(s))
           }
