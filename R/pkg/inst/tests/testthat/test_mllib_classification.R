@@ -337,5 +337,3 @@ test_that("spark.naiveBayes", {
   expect_equal(sum(s$apriori), 1)
   expect_equal(as.double(s$tables[1, "Age_Adult"]), 0.5714286, tolerance = 1e-6)
 })
-
-sparkR.session.stop()

@@ -61,5 +61,3 @@ test_that("spark.als", {
 
   unlink(modelPath)
 })
-
-sparkR.session.stop()

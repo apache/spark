@@ -199,5 +199,3 @@ test_that("spark.randomForest", {
   model <- spark.randomForest(data, label ~ features, "classification")
   expect_equal(summary(model)$numFeatures, 4)
 })
-
-sparkR.session.stop()

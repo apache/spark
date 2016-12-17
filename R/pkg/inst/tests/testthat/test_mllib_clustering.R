@@ -220,5 +220,3 @@ test_that("spark.posterior and spark.perplexity", {
   local.posterior <- collect(posterior)$topicDistribution
   expect_equal(length(local.posterior), sum(unlist(local.posterior)))
 })
-
-sparkR.session.stop()
