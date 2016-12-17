@@ -636,6 +636,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val CBO_STATS_ENABLED = SQLConfigBuilder("spark.sql.cbo.statistics.enabled")
+    .doc("When true, table and column level statistics will be enabled for estimation.")
+    .booleanConf
+    .createWithDefault(true)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -828,6 +833,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
 
   override def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
+
+  override def cboStatsEnabled: Boolean = getConf(SQLConf.CBO_STATS_ENABLED)
 
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
   /** ********************** SQLConf functionality methods ************ */

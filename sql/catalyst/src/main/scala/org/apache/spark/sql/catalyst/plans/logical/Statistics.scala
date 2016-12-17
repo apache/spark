@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.types._
@@ -41,13 +43,13 @@ import org.apache.spark.sql.types._
  * @param sizeInBytes Physical size in bytes. For leaf operators this defaults to 1, otherwise it
  *                    defaults to the product of children's `sizeInBytes`.
  * @param rowCount Estimated number of rows.
- * @param colStats Column-level statistics.
+ * @param attributeStats Statistics for Attributes.
  * @param isBroadcastable If true, output is small enough to be used in a broadcast join.
  */
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
-    colStats: Map[String, ColumnStat] = Map.empty,
+    attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil),
     isBroadcastable: Boolean = false) {
 
   override def toString: String = "Statistics(" + simpleString + ")"
@@ -57,6 +59,37 @@ case class Statistics(
     Seq(s"sizeInBytes=$sizeInBytes",
       if (rowCount.isDefined) s"rowCount=${rowCount.get}" else "",
       s"isBroadcastable=$isBroadcastable"
+    ).filter(_.nonEmpty).mkString(", ")
+  }
+}
+
+/**
+ * This class of Statistics is used in [[CatalogTable]] to interact with metastore.
+ */
+case class CatalogStatistics(
+    sizeInBytes: BigInt,
+    rowCount: Option[BigInt] = None,
+    colStats: Map[String, ColumnStat] = Map.empty) {
+
+  /**
+   * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
+   * on column names.
+   */
+  def convert(attributes: Seq[Attribute]): Statistics = {
+    val matched = mutable.HashMap[Attribute, ColumnStat]()
+    attributes.foreach { attr =>
+      if (colStats.contains(attr.name)) {
+        matched.put(attr, colStats(attr.name))
+      }
+    }
+    Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
+      attributeStats = AttributeMap(matched.toSeq))
+  }
+
+  /** Readable string representation for the CatalogStatistics. */
+  def simpleString: String = {
+    Seq(s"sizeInBytes=$sizeInBytes",
+      if (rowCount.isDefined) s"rowCount=${rowCount.get}" else ""
     ).filter(_.nonEmpty).mkString(", ")
   }
 }

@@ -24,6 +24,7 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.StaticSQLConf
@@ -39,7 +40,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   import testImplicits._
 
   private def checkTableStats(tableName: String, expectedRowCount: Option[Int])
-    : Option[Statistics] = {
+    : Option[CatalogStatistics] = {
     val df = spark.table(tableName)
     val stats = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
       assert(rel.catalogTable.get.stats.flatMap(_.rowCount) === expectedRowCount)
@@ -169,6 +170,14 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
     checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
   }
+
+  test("test cbo switch for data source table") {
+    val tableName = "cbo_switch_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (c1 INT) USING PARQUET")
+      checkEnablingStats(tableName, Seq("c1"))
+    }
+  }
 }
 
 
@@ -259,5 +268,39 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
         assert(stats2.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
       }
     }
+  }
+
+  /**
+   * Check both statistics in CatalogTable and relation when cbo stats is enabled and disabled.
+   */
+  def checkEnablingStats(tableName: String, cols: Seq[String]): Unit = {
+    sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS ${cols.mkString(", ")}")
+    withSQLConf("spark.sql.cbo.statistics.enabled" -> "true") {
+      val (relation, catalogTable) = getRelationAndTable(tableName)
+      // Check the existence of catalog statistics
+      assert(catalogTable.stats.isDefined)
+      assert(catalogTable.stats.get.rowCount.isDefined)
+      assert(catalogTable.stats.get.colStats.size == cols.length)
+      // Check the existence of plan statistics except sizeInBytes, because it will always be set
+      // no matter cbo stats is enabled or not.
+      assert(relation.statistics.rowCount.isDefined)
+      assert(relation.statistics.attributeStats.size == cols.length)
+    }
+    withSQLConf("spark.sql.cbo.statistics.enabled" -> "false") {
+      // Don't have catalog stats and attribute stats because cbo stats is turned off.
+      val (relation, catalogTable) = getRelationAndTable(tableName)
+      assert(catalogTable.stats.isEmpty)
+      assert(relation.statistics.rowCount.isEmpty)
+      assert(relation.statistics.attributeStats.size == 0)
+    }
+  }
+
+  private def getRelationAndTable(tableName: String): (LogicalPlan, CatalogTable) = {
+    val rst = spark.table(tableName).queryExecution.analyzed.collect {
+      case catalogRel: CatalogRelation => (catalogRel, catalogRel.catalogTable)
+      case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
+    }
+    assert(rst.size == 1)
+    rst.head
   }
 }

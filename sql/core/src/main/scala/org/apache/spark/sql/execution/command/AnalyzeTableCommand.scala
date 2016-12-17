@@ -26,7 +26,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
+import org.apache.spark.sql.catalyst.plans.logical.CatalogStatistics
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.SessionState
 
@@ -62,9 +62,9 @@ case class AnalyzeTableCommand(
     def updateTableStats(catalogTable: CatalogTable, newTotalSize: Long): Unit = {
       val oldTotalSize = catalogTable.stats.map(_.sizeInBytes.toLong).getOrElse(0L)
       val oldRowCount = catalogTable.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
-      var newStats: Option[Statistics] = None
+      var newStats: Option[CatalogStatistics] = None
       if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-        newStats = Some(Statistics(sizeInBytes = newTotalSize))
+        newStats = Some(CatalogStatistics(sizeInBytes = newTotalSize))
       }
       // We only set rowCount when noscan is false, because otherwise:
       // 1. when total size is not changed, we don't need to alter the table;
@@ -76,7 +76,8 @@ case class AnalyzeTableCommand(
           newStats = if (newStats.isDefined) {
             newStats.map(_.copy(rowCount = Some(BigInt(newRowCount))))
           } else {
-            Some(Statistics(sizeInBytes = oldTotalSize, rowCount = Some(BigInt(newRowCount))))
+            Some(CatalogStatistics(
+              sizeInBytes = oldTotalSize, rowCount = Some(BigInt(newRowCount))))
           }
         }
       }

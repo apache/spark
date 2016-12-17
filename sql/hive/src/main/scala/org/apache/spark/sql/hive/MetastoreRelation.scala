@@ -113,7 +113,7 @@ private[hive] case class MetastoreRelation(
   }
 
   @transient override lazy val statistics: Statistics = {
-    catalogTable.stats.getOrElse(Statistics(
+    catalogTable.stats.map(_.convert(output)).getOrElse(Statistics(
       sizeInBytes = {
         val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
         val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)

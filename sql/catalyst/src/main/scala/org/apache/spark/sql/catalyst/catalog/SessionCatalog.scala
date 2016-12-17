@@ -569,7 +569,7 @@ class SessionCatalog(
           SubqueryAlias(relationAlias, viewDef, Some(name))
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempTables.contains(table)) {
-        val metadata = externalCatalog.getTable(db, table)
+        val metadata = externalCatalog.getTable(db, table).withStats(conf.cboStatsEnabled)
         val view = Option(metadata.tableType).collect {
           case CatalogTableType.VIEW => name
         }

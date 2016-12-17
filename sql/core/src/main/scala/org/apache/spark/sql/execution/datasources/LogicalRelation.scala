@@ -73,7 +73,7 @@ case class LogicalRelation(
   override lazy val cleanArgs: Seq[Any] = Seq(relation)
 
   @transient override lazy val statistics: Statistics = {
-    catalogTable.flatMap(_.stats.map(_.copy(sizeInBytes = relation.sizeInBytes))).getOrElse(
+    catalogTable.flatMap(_.stats.map(_.convert(output))).getOrElse(
       Statistics(sizeInBytes = relation.sizeInBytes))
   }
 

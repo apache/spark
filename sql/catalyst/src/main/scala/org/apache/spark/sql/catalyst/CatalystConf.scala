@@ -43,6 +43,11 @@ trait CatalystConf {
   def crossJoinEnabled: Boolean
 
   /**
+   * When true, table and column level statistics will be enabled for estimation.
+   */
+  def cboStatsEnabled: Boolean
+
+  /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
    * identifiers are equal.
    */
@@ -62,5 +67,6 @@ case class SimpleCatalystConf(
     maxCaseBranchesForCodegen: Int = 20,
     runSQLonFile: Boolean = true,
     crossJoinEnabled: Boolean = false,
+    cboStatsEnabled: Boolean = true,
     warehousePath: String = "/user/hive/warehouse")
   extends CatalystConf
