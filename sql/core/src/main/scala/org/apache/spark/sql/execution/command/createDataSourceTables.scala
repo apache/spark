@@ -157,9 +157,6 @@ case class CreateDataSourceTableAsSelectCommand(
           return Seq.empty[Row]
         case SaveMode.Append =>
           val existingTable = sessionState.catalog.getTableMetadata(tableIdentWithDB)
-          if (existingTable.tableType == CatalogTableType.VIEW) {
-            throw new AnalysisException("Saving data into a view is not allowed.")
-          }
 
           if (existingTable.provider.get == DDLUtils.HIVE_PROVIDER) {
             throw new AnalysisException(s"Saving data in the Hive serde table $tableName is " +

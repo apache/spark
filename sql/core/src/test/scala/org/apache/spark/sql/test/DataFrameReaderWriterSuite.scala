@@ -457,8 +457,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   }
 
   test("column nullability and comment - write and then read") {
-    import testImplicits._
-
     Seq("json", "parquet", "csv").foreach { format =>
       val schema = StructType(
         StructField("cl1", IntegerType, nullable = false).withComment("test") ::
@@ -574,7 +572,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
 
   test("SPARK-18510: use user specified types for partition columns in file sources") {
     import org.apache.spark.sql.functions.udf
-    import testImplicits._
     withTempDir { src =>
       val createArray = udf { (length: Long) =>
         for (i <- 1 to length.toInt) yield i.toString
