@@ -39,7 +39,8 @@ import org.apache.spark.sql.{Row, SparkSession}
 class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vector])
   extends Saveable with Serializable with PMMLExportable {
 
-  private val clusterCentersWithNorm = clusterCenters.map(new VectorWithNorm(_))
+  private val clusterCentersWithNorm =
+    if (clusterCenters == null) null else clusterCenters.map(new VectorWithNorm(_))
 
   /**
    * A Java-friendly constructor that takes an Iterable of Vectors.
