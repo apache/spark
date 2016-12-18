@@ -1340,7 +1340,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.stage.maxFailedTasksPerExecutor</code>
+  <td><code>spark.blacklist.stage.maxFailedTasksPerExecutor</code></td>
   <td>2</td>
   <td>
     (Experimental) How many different tasks must fail on one executor, within one stage, before the
