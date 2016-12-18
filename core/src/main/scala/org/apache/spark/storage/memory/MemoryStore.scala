@@ -692,7 +692,7 @@ private[storage] class PartiallyUnrolledIterator[T](
   }
 
   override def next(): T = {
-    if (unrolled == null) {
+    if (unrolled == null || !unrolled.hasNext) {
       rest.next()
     } else {
       unrolled.next()
