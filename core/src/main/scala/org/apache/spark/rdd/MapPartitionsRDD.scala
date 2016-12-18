@@ -42,12 +42,3 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     prev = null
   }
 }
-
-private[spark] final class PreserveLocationsRDD[U: ClassTag, T: ClassTag](
-    prev: RDD[T],
-    f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)
-    preservesPartitioning: Boolean = false, p: (Int) => Seq[String])
-    extends MapPartitionsRDD[U, T](prev, f, preservesPartitioning) {
-
-  override def getPreferredLocations(split: Partition): Seq[String] = p(split.index)
-}

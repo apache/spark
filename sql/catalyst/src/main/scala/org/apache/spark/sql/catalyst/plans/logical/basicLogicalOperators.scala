@@ -517,7 +517,8 @@ case class Aggregate(
     if (groupingExpressions.isEmpty) {
       super.statistics.copy(sizeInBytes = 1)
     } else {
-      super.statistics
+      val stats = super.statistics
+      stats.copy(sizeInBytes = stats.sizeInBytes / 2)
     }
   }
 }
