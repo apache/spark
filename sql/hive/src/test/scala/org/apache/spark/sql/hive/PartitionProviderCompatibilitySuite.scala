@@ -83,15 +83,14 @@ class PartitionProviderCompatibilitySuite
     }
   }
 
-  test("when partition management is enabled, new tables have partition provider hive") {
-    withTable("test") {
-      withTempDir { dir =>
-        withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
-          setupPartitionedDatasourceTable("test", dir)
-          spark.sql("show partitions test").count()  // check we are a new table
-          assert(spark.sql("select * from test").count() == 0)  // needs repair
-          spark.sql("msck repair table test")
-          assert(spark.sql("select * from test").count() == 5)
+  test("Return correct results no matter whether partition management is enabled") {
+    for (enabled <- Seq("false")) {
+      withTable("test") {
+        withTempDir { dir =>
+          withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> enabled) {
+            setupPartitionedDatasourceTable("test", dir)
+            assert(spark.sql("select * from test").count() == 5)
+          }
         }
       }
     }
@@ -116,7 +115,7 @@ class PartitionProviderCompatibilitySuite
           setupPartitionedDatasourceTable("test", dir)
           spark.sql("show partitions test").count()  // check we are a new table
           spark.sql("refresh table test")
-          assert(spark.sql("select * from test").count() == 0)
+          assert(spark.sql("select * from test").count() == 5)
         }
         // disabled
         withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
@@ -130,7 +129,7 @@ class PartitionProviderCompatibilitySuite
         // then enabled again
         withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
           spark.sql("refresh table test")
-          assert(spark.sql("select * from test").count() == 0)
+          assert(spark.sql("select * from test").count() == 5)
         }
       }
     }

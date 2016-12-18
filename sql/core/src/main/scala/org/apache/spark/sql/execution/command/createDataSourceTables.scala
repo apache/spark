@@ -106,6 +106,13 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
     // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
     sessionState.catalog.createTable(newTable, ignoreIfExists = false)
 
+    // Need to recover partitions into the metastore so the data in the path is visible.
+    if (partitionColumnNames.nonEmpty && pathOption.nonEmpty &&
+        sparkSession.sessionState.conf.manageFilesourcePartitions) {
+      sparkSession.sessionState.executePlan(
+        AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
+    }
+
     Seq.empty[Row]
   }
 }
