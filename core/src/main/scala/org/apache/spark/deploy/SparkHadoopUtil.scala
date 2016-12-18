@@ -105,6 +105,12 @@ class SparkHadoopUtil extends Logging {
       }
       val bufferSize = conf.get("spark.buffer.size", "65536")
       hadoopConf.set("io.file.buffer.size", bufferSize)
+
+      if (conf.contains("spark.sql.default.derby.dir")) {
+        val jdoDir = conf.get("spark.sql.default.derby.dir")
+        val jdoConf = s"jdbc:derby:;databaseName=${jdoDir}/metastore_db;create=true"
+        hadoopConf.setIfUnset("javax.jdo.option.ConnectionURL", jdoConf)
+      }
     }
   }
 
