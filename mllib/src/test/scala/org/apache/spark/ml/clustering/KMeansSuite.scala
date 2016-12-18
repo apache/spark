@@ -24,6 +24,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.storage.StorageLevel
 
 private[clustering] case class TestRow(features: Vector)
 
@@ -141,6 +142,14 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     }
     assert(model.getFeaturesCol == featuresColName)
     assert(model.getPredictionCol == predictionColName)
+  }
+
+  test("DataFrame storage level check") {
+    val df = KMeansSuite.generateKMeansData(spark, 5, 3, 2)
+    assert(df.storageLevel == StorageLevel.NONE)
+    df.persist(StorageLevel.MEMORY_AND_DISK)
+    assert(df.storageLevel != StorageLevel.NONE)
+    df.unpersist()
   }
 
   test("read/write") {

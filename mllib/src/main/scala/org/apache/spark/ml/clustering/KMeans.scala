@@ -302,7 +302,7 @@ class KMeans @Since("1.5.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     fit(dataset, handlePersistence)
   }
 
@@ -330,10 +330,10 @@ class KMeans @Since("1.5.0") (
     val summary = new KMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
     model.setSummary(Some(summary))
-    instr.logSuccess(model)
     if (handlePersistence) {
       instances.unpersist()
     }
+    instr.logSuccess(model)
     model
   }
 
