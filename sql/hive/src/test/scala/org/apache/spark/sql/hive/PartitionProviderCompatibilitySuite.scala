@@ -108,7 +108,7 @@ class PartitionProviderCompatibilitySuite
     }
   }
 
-  test("when partition management is disabled, we preserve the old behavior even for new tables") {
+  test("When partition management is disabled, we preserve the old behavior even for new tables") {
     withTable("test") {
       withTempDir { dir =>
         withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
