@@ -222,6 +222,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("changing default value of warehouse path") {
+    // Set sql.default.warehouse.dir but not sql.warehouse.dir
     try {
       val newWarehouseDefault = "spark-warehouse2"
       val newWarehouseDefaultPath = new Path(Utils.resolveURI(newWarehouseDefault)).toString
@@ -229,9 +230,52 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       val spark = new SparkSession(sparkContext)
       assert(newWarehouseDefaultPath.stripSuffix("/") === spark
         .sessionState.conf.warehousePath.stripSuffix("/"))
+      assert(newWarehouseDefaultPath.stripSuffix("/") === spark
+        .sharedState.warehousePath.stripSuffix("/"))
     } finally {
       sparkContext.conf.remove("spark.sql.default.warehouse.dir")
     }
+
+    // Set sql.warehouse.dir and sql.default.warehouse.dir. The first one should be used
+    try {
+      val newWarehouseDefault = "spark-warehouse2"
+      val newWarehouseDefaultPath = new Path(Utils.resolveURI(newWarehouseDefault)).toString
+      sparkContext.conf.set("spark.sql.default.warehouse.dir", newWarehouseDefaultPath)
+
+      val newWarehouse = "spark-warehouse3"
+      val newWarehousePath = new Path(Utils.resolveURI(newWarehouse)).toString
+      sparkContext.conf.set("spark.sql.warehouse.dir", newWarehousePath)
+      val spark = new SparkSession(sparkContext)
+      assert(newWarehousePath.stripSuffix("/") === spark
+        .sessionState.conf.warehousePath.stripSuffix("/"))
+      assert(newWarehousePath.stripSuffix("/") === spark
+        .sharedState.warehousePath.stripSuffix("/"))
+    } finally {
+      sparkContext.conf.remove("spark.sql.default.warehouse.dir")
+      sparkContext.conf.remove("spark.sql.warehouse.dir")
+    }
+
+    // Set sql.warehouse.dir but not sql.default.warehouse.dir
+    try {
+      val newWarehouse = "spark-warehouse4"
+      val newWarehousePath = new Path(Utils.resolveURI(newWarehouse)).toString
+      sparkContext.conf.set("spark.sql.warehouse.dir", newWarehousePath)
+      val spark = new SparkSession(sparkContext)
+      assert(newWarehousePath.stripSuffix("/") === spark
+        .sessionState.conf.warehousePath.stripSuffix("/"))
+      assert(newWarehousePath.stripSuffix("/") === spark
+        .sharedState.warehousePath.stripSuffix("/"))
+    } finally {
+      sparkContext.conf.remove("spark.sql.warehouse.dir")
+    }
+
+    // Set neither of the two configs. The default value should be "spark-warehouse"
+
+    val spark = new SparkSession(sparkContext)
+    assert(new Path(Utils.resolveURI("spark-warehouse")).toString.stripSuffix("/") === spark
+      .sessionState.conf.warehousePath.stripSuffix("/"))
+    assert(new Path(Utils.resolveURI("spark-warehouse")).toString.stripSuffix("/") === spark
+      .sharedState.warehousePath.stripSuffix("/"))
   }
 
   test("MAX_CASES_BRANCHES") {
