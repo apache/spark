@@ -25,6 +25,31 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.types.StringType
 
+// Attribute Reference extractor
+object ExtractAttrRef {
+  def unapply(exp: Expression): Option[AttributeReference] = exp match {
+    case ar: AttributeReference =>
+      Some(ar)
+    case Cast(ar: AttributeReference, dataType) =>
+      Some(ar)
+    case _ =>
+      None
+  }
+}
+
+// method toBigInt() in BigDecimal uses round-down, we need more accurate rounding mode
+object RoundingToBigInt {
+  def apply(bigValue: BigDecimal): BigInt = {
+    if (bigValue > 0 && bigValue <= 1) {
+      // do not use rounding if the value is in (0, 1]
+      BigInt(1)
+    } else {
+      val tmp = bigValue.setScale(0, RoundingMode.HALF_UP)
+      tmp.toBigInt()
+    }
+  }
+}
+
 
 object EstimationUtils extends Logging {
 

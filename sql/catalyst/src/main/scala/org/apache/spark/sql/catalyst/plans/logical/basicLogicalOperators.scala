@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.immutable
+import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
@@ -106,6 +109,7 @@ case class Generate(
 
 case class Filter(condition: Expression, child: LogicalPlan)
   extends UnaryNode with PredicateHelper {
+
   override def output: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows
@@ -114,6 +118,24 @@ case class Filter(condition: Expression, child: LogicalPlan)
     val predicates = splitConjunctivePredicates(condition)
       .filterNot(SubqueryExpression.hasCorrelatedSubquery)
     child.constraints.union(predicates.toSet)
+  }
+
+  // We use a mutable map because we need to update the corresponding ColumnStat
+  // for a column after we apply a predicate condition.
+  val filterColStats: mutable.Map[String, ColumnStat] = mutable.Map.empty[String, ColumnStat]
+  // save local copy of colStats so that we may update it
+  def copyFromColStats(colStats: Map[String, ColumnStat]): Unit = {
+    for ( (k, v) <- colStats ) {
+      filterColStats += (k -> v)
+    }
+  }
+  // return the updated colStats to the calling method.
+  def copyToColStats: immutable.Map[String, ColumnStat] = {
+    var stats: immutable.Map[String, ColumnStat] = immutable.Map.empty[String, ColumnStat]
+    for ( (k, v) <- filterColStats ) {
+      stats = stats + (k -> v)
+    }
+    stats
   }
 }
 
