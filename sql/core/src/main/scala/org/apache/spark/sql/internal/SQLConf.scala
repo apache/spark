@@ -546,6 +546,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val SKIP_PARTITION_CHECK_ON_APPEND =
+    SQLConfigBuilder("spark.sql.execution.skipPartitionCheckOnAppend")
+    .internal()
+    .doc("Decides if we need to skip Partition Check on Append Mode. +" +
+      "Enable this is when writing to Object Stores to avoid time out issues")
+    .booleanConf
+    .createWithDefault(false)
+
   val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")
@@ -812,6 +820,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
 
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
+
+  def skipPartitionCheckOnAppend: Boolean = getConf(SKIP_PARTITION_CHECK_ON_APPEND)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 
