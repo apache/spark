@@ -59,7 +59,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       "(select id from range(2) union all select id from range(2))")
 
     // The depth first traversal of the plan tree
-    val dfs = Seq("Project", "Filter", "Union", "Project", "Range", "Project", "Range", "Range")
+    val dfs = Seq("Project", "Filter", "SubqueryAlias", "Union", "Project", "Range", "Project",
+      "Range", "Range")
     val numbered = df.queryExecution.analyzed.numberedTreeString.split("\n")
 
     // There should be 8 plan nodes in total
