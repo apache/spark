@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.util.concurrent.{Executors, TimeUnit}
 
 import org.scalatest.BeforeAndAfterEach
 
@@ -391,6 +392,36 @@ class PartitionedTablePerfStatsSuite
           assert(spark.sql("select * from test").count() == 5)
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 0)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
+        }
+      }
+    }
+  }
+
+  test("SPARK-18700: table loaded only once even when resolved concurrently") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
+      withTable("test") {
+        withTempDir { dir =>
+          HiveCatalogMetrics.reset()
+          setupPartitionedHiveTable("test", dir, 50)
+          // select the table in multi-threads
+          val executorPool = Executors.newFixedThreadPool(10)
+          (1 to 10).map(threadId => {
+            val runnable = new Runnable {
+              override def run(): Unit = {
+                spark.sql("select * from test where partCol1 = 999").count()
+              }
+            }
+            executorPool.execute(runnable)
+            None
+          })
+          executorPool.shutdown()
+          executorPool.awaitTermination(30, TimeUnit.SECONDS)
+          // check the cache hit, we use the metric of METRIC_FILES_DISCOVERED and
+          // METRIC_PARALLEL_LISTING_JOB_COUNT to check this, while the lock take effect,
+          // only one thread can really do the build, so the listing job count is 2, the other
+          // one is cache.load func. Also METRIC_FILES_DISCOVERED is $partition_num * 2
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 100)
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 2)
         }
       }
     }
