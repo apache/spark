@@ -144,4 +144,12 @@ private[history] abstract class ApplicationHistoryProvider {
    * @return html text to display when the application list is empty
    */
   def getEmptyListingHtml(): Seq[Node] = Seq.empty
+
+  /**
+   * Deletes the given application attempt event log file from the History Server event log
+   * directory. This action cannot be undone.
+   * @param appId The application ID.
+   * @param attemptId The application attempt ID (or None if there is no attempt ID).
+   */
+  def deleteLog(appId: String, attemptId: Option[String]): Unit
 }

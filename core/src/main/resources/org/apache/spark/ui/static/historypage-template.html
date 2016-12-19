@@ -77,7 +77,12 @@
       <td><span title="{{duration}}" class="durationClass">{{duration}}</span></td>
       <td>{{sparkUser}}</td>
       <td>{{lastUpdated}}</td>
-      <td><a href="{{uiroot}}/api/v1/applications/{{id}}/{{num}}/logs" class="btn btn-info btn-mini">Download</a></td>
+      <td>
+        <a href="{{uiroot}}/api/v1/applications/{{id}}/{{num}}/logs" class="btn btn-info btn-mini">Download</a>
+        <a href="{{uiroot}}/logs/delete/?appId={{id}}&attemptId={{attemptId}}"
+           onclick="if (window.confirm('Are you sure you want to delete the Event Log for {{id}} from the server?\n\nThis can not be undone!')) { this.parentNode.submit(); return true; } else { return false; }"
+           class="btn btn-danger btn-mini delete-app">Delete</a>
+      </td>
       {{/attempts}}
     </tr>
   {{/applications}}
