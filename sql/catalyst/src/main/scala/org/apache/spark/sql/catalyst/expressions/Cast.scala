@@ -119,6 +119,19 @@ object Cast {
     case (TimestampType, StringType) => true
     case (DateType, TimestampType) => true
     case (TimestampType, DateType) => true
+
+    case (ArrayType(fromType, _), ArrayType(toType, _)) =>
+      needTimeZone(fromType, toType)
+
+    case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
+      needTimeZone(fromKey, toKey) || needTimeZone(fromValue, toValue)
+
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.zip(toFields).exists {
+        case (fromField, toField) =>
+          needTimeZone(fromField.dataType, toField.dataType)
+      }
+
     case _ => false
   }
 }
