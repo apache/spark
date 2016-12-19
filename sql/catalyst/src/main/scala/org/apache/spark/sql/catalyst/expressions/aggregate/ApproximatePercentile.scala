@@ -85,7 +85,7 @@ case class ApproximatePercentile(
   private lazy val accuracy: Int = accuracyExpression.eval().asInstanceOf[Int]
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(DoubleType, TypeCollection(DoubleType, ArrayType(DoubleType, false)), IntegerType)
+    Seq(DoubleType, TypeCollection(DoubleType, ArrayType(DoubleType)), IntegerType)
   }
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.

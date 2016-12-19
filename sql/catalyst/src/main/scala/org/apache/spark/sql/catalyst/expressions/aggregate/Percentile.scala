@@ -92,7 +92,7 @@ case class Percentile(
   }
 
   override def inputTypes: Seq[AbstractDataType] = percentageExpression.dataType match {
-    case _: ArrayType => Seq(NumericType, ArrayType(DoubleType, false))
+    case _: ArrayType => Seq(NumericType, ArrayType(DoubleType))
     case _ => Seq(NumericType, DoubleType)
   }
 
