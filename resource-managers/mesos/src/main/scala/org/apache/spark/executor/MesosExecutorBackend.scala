@@ -30,7 +30,7 @@ import org.apache.spark.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.TaskDescription
-import org.apache.spark.scheduler.cluster.mesos.{MesosSchedulerUtils, MesosTaskLaunchData}
+import org.apache.spark.scheduler.cluster.mesos.MesosSchedulerUtils
 import org.apache.spark.util.Utils
 
 private[spark] class MesosExecutorBackend
