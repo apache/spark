@@ -164,7 +164,7 @@ private[spark] class Executor(
     val taskRunner = runningTasks.get(taskId)
     if (taskRunner != null) {
       if (taskReaperEnabled) {
-        taskReaperForTask.synchronized {
+        val maybeNewTaskReaper: Option[TaskReaper] = taskReaperForTask.synchronized {
           val shouldCreateReaper = taskReaperForTask.get(taskId) match {
             case None => true
             case Some(existingReaper) => interruptThread && !existingReaper.interruptThread
@@ -172,9 +172,13 @@ private[spark] class Executor(
           if (shouldCreateReaper) {
             val taskReaper = new TaskReaper(taskRunner, interruptThread = interruptThread)
             taskReaperForTask(taskId) = taskReaper
-            taskReaperPool.execute(taskReaper)
+            Some(taskReaper)
+          } else {
+            None
           }
         }
+        // Execute the TaskReaper from outside of the synchronized block.
+        maybeNewTaskReaper.foreach(taskReaperPool.execute)
       } else {
         taskRunner.kill(interruptThread = interruptThread)
       }
