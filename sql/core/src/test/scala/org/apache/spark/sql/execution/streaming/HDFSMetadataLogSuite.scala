@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{Closeable, File, FileNotFoundException, IOException}
+import java.io.{File, FileNotFoundException, IOException}
 import java.net.URI
 import java.util.ConcurrentModificationException
 
@@ -33,7 +33,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.execution.streaming.FakeFileSystem._
 import org.apache.spark.sql.execution.streaming.HDFSMetadataLog.{FileContextManager, FileManager, FileSystemManager}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.{UninterruptibleThread, Utils}
+import org.apache.spark.util.{UninterruptibleThread}
 
 class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
 
