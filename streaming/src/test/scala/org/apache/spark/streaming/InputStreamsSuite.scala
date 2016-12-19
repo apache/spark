@@ -43,71 +43,74 @@ import org.apache.spark.util.{ManualClock, Utils}
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
-  test("socket input stream") {
-    withTestServer(new TestServer()) { testServer =>
-      // Start the server
-      testServer.start()
+  for (i <- 0 to 2000) {
+    test(s"socket input stream - $i") {
+      withTestServer(new TestServer()) { testServer =>
+        // Start the server
+        testServer.start()
 
-      // Set up the streaming context and input streams
-      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
-        ssc.addStreamingListener(ssc.progressListener)
+        // Set up the streaming context and input streams
+        withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+          ssc.addStreamingListener(ssc.progressListener)
 
-        val input = Seq(1, 2, 3, 4, 5)
-        // Use "batchCount" to make sure we check the result after all batches finish
-        val batchCounter = new BatchCounter(ssc)
-        val networkStream = ssc.socketTextStream(
-          "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
-        val outputQueue = new ConcurrentLinkedQueue[Seq[String]]
-        val outputStream = new TestOutputStream(networkStream, outputQueue)
-        outputStream.register()
-        ssc.start()
+          val input = Seq(1, 2, 3, 4, 5)
+          // Use "batchCount" to make sure we check the result after all batches finish
+          val batchCounter = new BatchCounter(ssc)
+          val networkStream = ssc.socketTextStream(
+            "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
+          val outputQueue = new ConcurrentLinkedQueue[Seq[String]]
+          val outputStream = new TestOutputStream(networkStream, outputQueue)
+          outputStream.register()
+          ssc.start()
 
-        // Feed data to the server to send to the network receiver
-        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-        val expectedOutput = input.map(_.toString)
-        for (i <- input.indices) {
-          testServer.send(input(i).toString + "\n")
-          Thread.sleep(500)
-          clock.advance(batchDuration.milliseconds)
-        }
-        // Make sure we finish all batches before "stop"
-        if (!batchCounter.waitUntilBatchesCompleted(input.size, 30000)) {
-          fail("Timeout: cannot finish all batches in 30 seconds")
-        }
+          // Feed data to the server to send to the network receiver
+          val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+          val expectedOutput = input.map(_.toString)
+          for (i <- input.indices) {
+            testServer.send(input(i).toString + "\n")
+            Thread.sleep(500)
+            clock.advance(batchDuration.milliseconds)
+          }
+          // Make sure we finish all batches before "stop"
+          if (!batchCounter.waitUntilBatchesCompleted(input.size, 30000)) {
+            fail("Timeout: cannot finish all batches in 30 seconds")
+          }
 
-        // Ensure progress listener has been notified of all events
-        ssc.sparkContext.listenerBus.waitUntilEmpty(500)
+          // Ensure progress listener has been notified of all events
+          ssc.sparkContext.listenerBus.waitUntilEmpty(500)
 
-        // Verify all "InputInfo"s have been reported
-        assert(ssc.progressListener.numTotalReceivedRecords === input.size)
-        assert(ssc.progressListener.numTotalProcessedRecords === input.size)
+          // Verify all "InputInfo"s have been reported
+          assert(ssc.progressListener.numTotalReceivedRecords === input.size)
+          assert(ssc.progressListener.numTotalProcessedRecords === input.size)
 
-        logInfo("Stopping server")
-        testServer.stop()
-        logInfo("Stopping context")
-        ssc.stop()
+          logInfo("Stopping server")
+          testServer.stop()
+          logInfo("Stopping context")
+          ssc.stop()
 
-        // Verify whether data received was as expected
-        logInfo("--------------------------------")
-        logInfo("output.size = " + outputQueue.size)
-        logInfo("output")
-        outputQueue.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-        logInfo("expected output.size = " + expectedOutput.size)
-        logInfo("expected output")
-        expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-        logInfo("--------------------------------")
+          // Verify whether data received was as expected
+          logInfo("--------------------------------")
+          logInfo("output.size = " + outputQueue.size)
+          logInfo("output")
+          outputQueue.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+          logInfo("expected output.size = " + expectedOutput.size)
+          logInfo("expected output")
+          expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+          logInfo("--------------------------------")
 
-        // Verify whether all the elements received are as expected
-        // (whether the elements were received one in each interval is not verified)
-        val output: Array[String] = outputQueue.asScala.flatMap(x => x).toArray
-        assert(output.length === expectedOutput.size)
-        for (i <- output.indices) {
-          assert(output(i) === expectedOutput(i))
+          // Verify whether all the elements received are as expected
+          // (whether the elements were received one in each interval is not verified)
+          val output: Array[String] = outputQueue.asScala.flatMap(x => x).toArray
+          assert(output.length === expectedOutput.size)
+          for (i <- output.indices) {
+            assert(output(i) === expectedOutput(i))
+          }
         }
       }
     }
   }
 
+  /*
   test("socket input stream - no block in a batch") {
     withTestServer(new TestServer()) { testServer =>
       testServer.start()
@@ -422,6 +425,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       assert(receiverInputStreams.map(_.id) === Array(0, 1))
     }
   }
+  */
 
   def testFileStream(newFilesOnly: Boolean) {
     var testDir: File = null
