@@ -110,7 +110,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
-  /*
   test("socket input stream - no block in a batch") {
     withTestServer(new TestServer()) { testServer =>
       testServer.start()
@@ -425,7 +424,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       assert(receiverInputStreams.map(_.id) === Array(0, 1))
     }
   }
-  */
 
   def testFileStream(newFilesOnly: Boolean) {
     var testDir: File = null
