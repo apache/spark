@@ -42,7 +42,8 @@ import org.apache.spark.rdd.RDD
  * @param outputId index of the task in this job (a job can launch tasks on only a subset of the
  *                 input RDD's partitions).
  * @param localProperties copy of thread-local properties set by the user on the driver side.
- * @param metrics a `TaskMetrics` that is created at driver side and sent to executor side.
+ * @param serializedTaskMetrics a `TaskMetrics` that is created and serialized on the driver side
+ *                              and sent to executor side.
  *
  * The parameters below are optional:
  * @param jobId id of the job this task belongs to
@@ -57,12 +58,12 @@ private[spark] class ResultTask[T, U](
     locs: Seq[TaskLocation],
     val outputId: Int,
     localProperties: Properties,
-    metrics: TaskMetrics,
+    serializedTaskMetrics: Array[Byte],
     jobId: Option[Int] = None,
     appId: Option[String] = None,
     appAttemptId: Option[String] = None)
-  extends Task[U](stageId, stageAttemptId, partition.index, metrics, localProperties, jobId,
-    appId, appAttemptId)
+  extends Task[U](stageId, stageAttemptId, partition.index, localProperties, serializedTaskMetrics,
+    jobId, appId, appAttemptId)
   with Serializable {
 
   @transient private[this] val preferredLocs: Seq[TaskLocation] = {

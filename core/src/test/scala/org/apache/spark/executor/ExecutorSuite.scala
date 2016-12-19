@@ -51,9 +51,11 @@ class ExecutorSuite extends SparkFunSuite {
     when(mockEnv.metricsSystem).thenReturn(mockMetricsSystem)
     when(mockEnv.memoryManager).thenReturn(mockMemoryManager)
     when(mockEnv.closureSerializer).thenReturn(serializer)
+    val fakeTaskMetrics = serializer.newInstance().serialize(TaskMetrics.registered).array()
+
     val serializedTask =
       Task.serializeWithDependencies(
-        new FakeTask(0, 0),
+        new FakeTask(0, 0, Nil, fakeTaskMetrics),
         HashMap[String, Long](),
         HashMap[String, Long](),
         serializer.newInstance())
