@@ -120,13 +120,9 @@ case class Filter(condition: Expression, child: LogicalPlan)
   }
 
   override lazy val statistics: Statistics = {
-    val filterEstimate = FilterEstimation.apply(this)
-    filterEstimate match {
-      case Some(s) => s
-      case None => Statistics(sizeInBytes = 0)  // TODO: discuss with wzh
-    }
-
+    val filterEstimate = FilterEstimation(this).getOrElse(super.statistics)
   }
+
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {

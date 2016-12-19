@@ -169,7 +169,7 @@ object FilterEstimation extends Logging {
     val aColStat = planStat.colStats(attrRef.name)
     val percent: BigDecimal = planStat.rowCount match {
       case Some(r) =>
-        if (r == 0.asInstanceOf[BigInt]) 0.asInstanceOf[BigDecimal]
+        if (r == 0) 0.asInstanceOf[BigDecimal]
         else BigDecimal(aColStat.nullCount) / BigDecimal(r)
       case None => 0.asInstanceOf[BigDecimal]
     }
