@@ -927,6 +927,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         expectedCompactInterval: Int): Boolean = {
       import CompactibleFileStreamLog._
 
+      // Make sure `logicalPlan` is created
+      execution.logicalPlan
       val fileSource = (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
       val metadataLog = fileSource invokePrivate _metadataLog()
 

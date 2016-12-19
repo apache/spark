@@ -118,13 +118,6 @@ class StreamExecution(
     Option(name).map(_ + " ").getOrElse("") + s"[id = $id, runId = $runId]"
 
   /**
-   * The lock is used to generate `_logicalPlan` lazily.
-   */
-  private val localPlanLock = new Object
-
-  @volatile private var _logicalPlan: LogicalPlan = null
-
-  /**
    * All stream sources present in the query plan. This will be set when generating logical plan.
    */
   @volatile protected var sources: Seq[Source] = Seq.empty
@@ -133,6 +126,23 @@ class StreamExecution(
    * A list of unique sources in the query plan. This will be set when generating logical plan.
    */
   @volatile private var uniqueSources: Seq[Source] = Seq.empty
+
+  override lazy val logicalPlan: LogicalPlan = {
+    var nextSourceId = 0L
+    val _logicalPlan = analyzedPlan.transform {
+      case StreamingRelation(dataSource, _, output) =>
+        // Materialize source to avoid creating it in every batch
+        val metadataPath = s"$checkpointRoot/sources/$nextSourceId"
+        val source = dataSource.createSource(metadataPath)
+        nextSourceId += 1
+        // We still need to use the previous `output` instead of `source.schema` as attributes in
+        // "df.logicalPlan" has already used attributes of the previous `output`.
+        StreamingExecutionRelation(source, output)
+    }
+    sources = _logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
+    uniqueSources = sources.distinct
+    _logicalPlan
+  }
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
@@ -201,36 +211,6 @@ class StreamExecution(
     startLatch.await()  // Wait until thread started and QueryStart event has been posted
   }
 
-  private def generateLogicalPlan: LogicalPlan = {
-    var nextSourceId = 0L
-    val internalLogicalPlan = analyzedPlan.transform {
-      case StreamingRelation(dataSource, _, output) =>
-        // Materialize source to avoid creating it in every batch
-        val metadataPath = s"$checkpointRoot/sources/$nextSourceId"
-        val source = dataSource.createSource(metadataPath)
-        nextSourceId += 1
-        // We still need to use the previous `output` instead of `source.schema` as attributes in
-        // "df.logicalPlan" has already used attributes of the previous `output`.
-        StreamingExecutionRelation(source, output)
-    }
-    sources = internalLogicalPlan.collect { case s: StreamingExecutionRelation => s.source }
-    uniqueSources = sources.distinct
-    internalLogicalPlan
-  }
-
-  override def logicalPlan: LogicalPlan = {
-    if (_logicalPlan == null) {
-      localPlanLock.synchronized {
-        if (_logicalPlan == null) {
-          _logicalPlan = generateLogicalPlan
-        }
-      }
-    }
-    _logicalPlan
-  }
-
-  private def isLogicalPlanGenerated: Boolean = _logicalPlan != null
-
   /**
    * Repeatedly attempts to run batches as data arrives.
    *
@@ -240,6 +220,7 @@ class StreamExecution(
    * `start()` method returns.
    */
   private def runBatches(): Unit = {
+    var logicalPlanInitilized = false
     try {
       // Mark ACTIVE and then post the event. QueryStarted event is synchronously sent to listeners,
       // so must mark this as ACTIVE first.
@@ -260,6 +241,7 @@ class StreamExecution(
       updateStatusMessage("Initializing sources")
       // force initialization of the logical plan so that the sources can be created
       logicalPlan
+      logicalPlanInitilized = true
 
       triggerExecutor.execute(() => {
         startTrigger()
@@ -307,7 +289,7 @@ class StreamExecution(
         updateStatusMessage("Stopped")
       case e: Throwable =>
         streamDeathCause = new StreamingQueryException(
-          this.toDebugString,
+          toDebugString(includeLogicalPlan = logicalPlanInitilized),
           s"Query $prettyIdString terminated with exception: ${e.getMessage}",
           e,
           committedOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString,
@@ -651,19 +633,20 @@ class StreamExecution(
     s"Streaming Query $prettyIdString [state = $state]"
   }
 
-  private def toDebugString: String = {
-    s"""
-       |=== Streaming Query ===
-       |Identifier: $prettyIdString
-       |Current Committed Offsets: $committedOffsets
-       |Current Available Offsets: $availableOffsets
-       |
-       |Current State: $state
-       |Thread State: ${microBatchThread.getState}
-       |
-       |Logical Plan:
-       |${if (isLogicalPlanGenerated) logicalPlan else "N/A"}
-     """.stripMargin
+  private def toDebugString(includeLogicalPlan: Boolean): String = {
+    val debugString =
+      s"""|=== Streaming Query ===
+          |Identifier: $prettyIdString
+          |Current Committed Offsets: $committedOffsets
+          |Current Available Offsets: $availableOffsets
+          |
+          |Current State: $state
+          |Thread State: ${microBatchThread.getState}""".stripMargin
+    if (includeLogicalPlan) {
+      debugString + s"\n\nLogical Plan:\n$logicalPlan"
+    } else {
+      debugString
+    }
   }
 
   trait State
