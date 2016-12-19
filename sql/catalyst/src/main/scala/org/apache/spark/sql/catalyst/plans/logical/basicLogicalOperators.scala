@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.estimation.JoinEstimation
+import org.apache.spark.sql.catalyst.plans.logical.estimation.{FilterEstimation, JoinEstimation}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -109,7 +109,6 @@ case class Generate(
 
 case class Filter(condition: Expression, child: LogicalPlan)
   extends UnaryNode with PredicateHelper {
-
   override def output: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows
@@ -120,22 +119,13 @@ case class Filter(condition: Expression, child: LogicalPlan)
     child.constraints.union(predicates.toSet)
   }
 
-  // We use a mutable map because we need to update the corresponding ColumnStat
-  // for a column after we apply a predicate condition.
-  val filterColStats: mutable.Map[String, ColumnStat] = mutable.Map.empty[String, ColumnStat]
-  // save local copy of colStats so that we may update it
-  def copyFromColStats(colStats: Map[String, ColumnStat]): Unit = {
-    for ( (k, v) <- colStats ) {
-      filterColStats += (k -> v)
+  override lazy val statistics: Statistics = {
+    val filterEstimate = FilterEstimation.apply(this)
+    filterEstimate match {
+      case Some(s) => s
+      case None => Statistics(sizeInBytes = 0)  // TODO: discuss with wzh
     }
-  }
-  // return the updated colStats to the calling method.
-  def copyToColStats: immutable.Map[String, ColumnStat] = {
-    var stats: immutable.Map[String, ColumnStat] = immutable.Map.empty[String, ColumnStat]
-    for ( (k, v) <- filterColStats ) {
-      stats = stats + (k -> v)
-    }
-    stats
+
   }
 }
 
