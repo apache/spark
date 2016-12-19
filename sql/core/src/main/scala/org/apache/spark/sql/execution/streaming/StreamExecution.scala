@@ -118,53 +118,22 @@ class StreamExecution(
   private val prettyIdString =
     Option(name).map(_ + " ").getOrElse("") + s"[id = $id, runId = $runId]"
 
+  /**
+   * The lock is used to generate `_logicalPlan` lazily.
+   */
   private val localPlanLock = new Object
 
   @volatile private var _logicalPlan: LogicalPlan = null
 
-  override def logicalPlan: LogicalPlan = {
-    if (_logicalPlan == null) {
-      localPlanLock.synchronized {
-        if (_logicalPlan == null) {
-          _logicalPlan = createLogicalPlan
-        }
-      }
-    }
-    _logicalPlan
-  }
+  /**
+   * All stream sources present in the query plan. This will be set when generating logical plan.
+   */
+  @volatile protected var sources: Seq[Source] = Seq.empty
 
-  private def prettyCommittedOffsets: String = {
-    Option(_logicalPlan).map { _ =>
-      committedOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString
-    }.getOrElse("[-]")
-  }
-
-  private def prettyAvailableOffsets: String = {
-    Option(_logicalPlan).map { _ =>
-      availableOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString
-    }.getOrElse("[-]")
-  }
-
-  private def createLogicalPlan: LogicalPlan = {
-    var nextSourceId = 0L
-    analyzedPlan.transform {
-      case StreamingRelation(dataSource, _, output) =>
-        // Materialize source to avoid creating it in every batch
-        val metadataPath = s"$checkpointRoot/sources/$nextSourceId"
-        val source = dataSource.createSource(metadataPath)
-        nextSourceId += 1
-        // We still need to use the previous `output` instead of `source.schema` as attributes in
-        // "df.logicalPlan" has already used attributes of the previous `output`.
-        StreamingExecutionRelation(source, output)
-    }
-  }
-
-  /** All stream sources present in the query plan. */
-  protected lazy val sources =
-    logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
-
-  /** A list of unique sources in the query plan. */
-  private lazy val uniqueSources = sources.distinct
+  /**
+   * A list of unique sources in the query plan. This will be set when generating logical plan.
+   */
+  @volatile private var uniqueSources: Seq[Source] = Seq.empty
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
@@ -232,6 +201,36 @@ class StreamExecution(
     microBatchThread.start()
     startLatch.await()  // Wait until thread started and QueryStart event has been posted
   }
+
+  private def generateLogicalPlan: LogicalPlan = {
+    var nextSourceId = 0L
+    val internalLogicalPlan = analyzedPlan.transform {
+      case StreamingRelation(dataSource, _, output) =>
+        // Materialize source to avoid creating it in every batch
+        val metadataPath = s"$checkpointRoot/sources/$nextSourceId"
+        val source = dataSource.createSource(metadataPath)
+        nextSourceId += 1
+        // We still need to use the previous `output` instead of `source.schema` as attributes in
+        // "df.logicalPlan" has already used attributes of the previous `output`.
+        StreamingExecutionRelation(source, output)
+    }
+    sources = internalLogicalPlan.collect { case s: StreamingExecutionRelation => s.source }
+    uniqueSources = sources.distinct
+    internalLogicalPlan
+  }
+
+  override def logicalPlan: LogicalPlan = {
+    if (_logicalPlan == null) {
+      localPlanLock.synchronized {
+        if (_logicalPlan == null) {
+          _logicalPlan = generateLogicalPlan
+        }
+      }
+    }
+    _logicalPlan
+  }
+
+  private def isLogicalPlanGenerated: Boolean = _logicalPlan != null
 
   /**
    * Repeatedly attempts to run batches as data arrives.
@@ -312,8 +311,8 @@ class StreamExecution(
           this.toDebugString,
           s"Query $prettyIdString terminated with exception: ${e.getMessage}",
           e,
-          prettyCommittedOffsets,
-          prettyAvailableOffsets)
+          committedOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString,
+          availableOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString)
         logError(s"Query $prettyIdString terminated with error", e)
         updateStatusMessage(s"Terminated with exception: ${e.getMessage}")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
@@ -555,7 +554,7 @@ class StreamExecution(
       microBatchThread.interrupt()
       microBatchThread.join()
     }
-    if (_logicalPlan != null) {
+    if (isLogicalPlanGenerated) {
       uniqueSources.foreach(_.stop())
     }
     logInfo(s"Query $prettyIdString was stopped")
@@ -659,14 +658,14 @@ class StreamExecution(
     s"""
        |=== Streaming Query ===
        |Identifier: $prettyIdString
-       |Current Committed Offsets: $prettyCommittedOffsets
-       |Current Available Offsets: $prettyAvailableOffsets
+       |Current Committed Offsets: $committedOffsets
+       |Current Available Offsets: $availableOffsets
        |
        |Current State: $state
        |Thread State: ${microBatchThread.getState}
        |
        |Logical Plan:
-       |${if (_logicalPlan == null) null else _logicalPlan}
+       |${if (isLogicalPlanGenerated) logicalPlan else null}
      """.stripMargin
   }
 

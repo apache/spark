@@ -43,6 +43,5 @@ class StreamingQueryException private[sql](
 
   override def toString(): String =
     s"""${classOf[StreamingQueryException].getName}: ${cause.getMessage}
-       |$queryDebugString
-       |""".stripMargin
+       |$queryDebugString""".stripMargin
 }
