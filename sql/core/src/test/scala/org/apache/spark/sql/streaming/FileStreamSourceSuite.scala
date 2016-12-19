@@ -1212,7 +1212,8 @@ class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
   }
 }
 
-/** Fake FileSystem to test whether the method `fs.exists` is called during
+/**
+ * Fake FileSystem to test whether the method `fs.exists` is called during
  * `DataSource.resolveRelation`.
  */
 class ExistsThrowsExceptionFileSystem extends RawLocalFileSystem {
