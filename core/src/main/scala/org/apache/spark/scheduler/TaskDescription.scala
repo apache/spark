@@ -21,6 +21,7 @@ import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 import java.util.Properties
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, Map}
 
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
@@ -82,9 +83,11 @@ private[spark] object TaskDescription {
     }
 
     // Write properties.
-    val propBytes = Utils.serialize(taskDescription.properties)
-    dataOut.writeInt(propBytes.length)
-    dataOut.write(propBytes)
+    dataOut.writeInt(taskDescription.properties.size())
+    taskDescription.properties.stringPropertyNames.asScala.foreach { name =>
+      dataOut.writeUTF(name)
+      dataOut.writeUTF(taskDescription.properties.getProperty(name))
+    }
 
     // Write the task. The task is already serialized, so write it directly to the byte buffer
     // (this requires first flushing the data output stream, so that all of the data has been
@@ -121,10 +124,11 @@ private[spark] object TaskDescription {
     }
 
     // Read properties.
-    val propsLength = dataIn.readInt()
-    val propBytes = new Array[Byte](propsLength)
-    dataIn.readFully(propBytes, 0, propsLength)
-    val properties = Utils.deserialize[Properties](propBytes)
+    val properties = new Properties()
+    val numProperties = dataIn.readInt()
+    for (i <- 0 until numProperties) {
+      properties.setProperty(dataIn.readUTF(), dataIn.readUTF())
+    }
 
     // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
     val serializedTask = byteBuffer.slice()
