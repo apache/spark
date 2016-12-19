@@ -485,7 +485,7 @@ private[spark] class Executor(
     private[this] val killPollingIntervalMs: Long =
       conf.getTimeAsMs("spark.task.reaper.pollingInterval", "10s")
 
-    private[this] val killTimeoutMs: Long = conf.getTimeAsMs("spark.task.reaper.killTimeout", "2m")
+    private[this] val killTimeoutMs: Long = conf.getTimeAsMs("spark.task.reaper.killTimeout", "-1")
 
     private[this] val takeThreadDump: Boolean =
       conf.getBoolean("spark.task.reaper.threadDump", true)
