@@ -209,19 +209,25 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
 
     // Open and delete
-    if (Utils.isWindows) {
-      fm.open(path).close()
-      fm.delete(path)
-      fm.delete(path) // should not throw exception
-    } else {
-      Utils.tryWithResource(fm.open(path)) { _ =>
-        fm.delete(path)
-        assert(!fm.exists(path))
-        intercept[IOException] {
-          fm.open(path)
+    def handleResource(f: => Unit): Unit = {
+      if (Utils.isWindows) {
+        // Windows does not allow remove opened files.
+        fm.open(path).close()
+        f
+      } else {
+        Utils.tryWithResource(fm.open(path)) { _ =>
+          f
         }
-        fm.delete(path) // should not throw exception
       }
+    }
+
+    handleResource {
+      fm.delete(path)
+      assert(!fm.exists(path))
+      intercept[IOException] {
+        fm.open(path)
+      }
+      fm.delete(path) // should not throw exception
     }
 
     // Rename
