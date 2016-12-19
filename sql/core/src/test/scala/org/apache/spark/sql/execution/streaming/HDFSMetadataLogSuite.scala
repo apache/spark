@@ -209,24 +209,13 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
 
     // Open and delete
-    def closeOnWindows[R <: Closeable](res: => R)(f: => Unit): Unit = {
-      if (Utils.isWindows) {
-        // Windows does not allow deleting opened files.
-        res.close()
-        f
-      } else {
-        Utils.tryWithResource(res)(_ => f)
-      }
+    fm.open(path).close()
+    fm.delete(path)
+    assert(!fm.exists(path))
+    intercept[IOException] {
+      fm.open(path)
     }
-
-    closeOnWindows(fm.open(path)) {
-      fm.delete(path)
-      assert(!fm.exists(path))
-      intercept[IOException] {
-        fm.open(path)
-      }
-      fm.delete(path) // should not throw exception
-    }
+    fm.delete(path) // should not throw exception
 
     // Rename
     val path1 = new Path(s"$dir/file1")
