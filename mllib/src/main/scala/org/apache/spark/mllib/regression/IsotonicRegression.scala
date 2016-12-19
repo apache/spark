@@ -336,25 +336,26 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       return Array.empty
     }
 
-    /*
-    Keeps track of the start and end indices of the blocks. blockBounds(start) gives the
-    index of the end of the block and blockBounds(end) gives the index of the start of the
-    block. Entries that are not the start or end of the block are meaningless.
-    */
+
+    // Keeps track of the start and end indices of the blocks. blockBounds(start) gives the
+    // index of the end of the block and blockBounds(end) gives the index of the start of the
+    // block. Entries that are not the start or end of the block are meaningless. The idea is that
+    // if you know the index s at which a block starts, blockBounds(s) gives you the index
+    // of the end of the block, and vice versa.
     val blockBounds = Array.range(0, input.length) // Initially, each data point is its own block
 
-    /*
-    Keep track of the sum of weights and sum of weight * y for each block. weights(start)
-    gives the values for the block. Entries that are not at the start of a block
-    are meaningless.
-    */
-    val weights: Array[(Double, Double)] = input.map(x => (x._3, x._3 * x._1)) // (weight, weight * y)
+    // Keep track of the sum of weights and sum of weight * y for each block. weights(start)
+    // gives the values for the block. Entries that are not at the start of a block
+    // are meaningless.
+    val weights: Array[(Double, Double)] = input.map {
+      case (y, _, weight) => (weight, weight * y)
+    }
 
     // a few convenience functions to make the code more readable
-    def blockEnd(start: Int) = blockBounds(start)
-    def blockStart(end: Int) = blockBounds(end)
-    def nextBlock(start: Int) = blockEnd(start) + 1
-    def prevBlock(start: Int) = blockStart(start - 1)
+    def blockEnd(start: Int): Int = blockBounds(start)
+    def blockStart(end: Int): Int = blockBounds(end)
+    def nextBlock(start: Int): Int = blockEnd(start) + 1
+    def prevBlock(start: Int): Int = blockStart(start - 1)
     def merge(block1: Int, block2: Int): Int = {
       assert(blockEnd(block1) + 1 == block2, "attempting to merge non-consecutive blocks")
       blockBounds(block1) = blockEnd(block2)
@@ -364,13 +365,11 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       weights(block1) = (w1._1 + w2._1, w1._2 + w2._2)
       block1
     }
-    def average(start: Int) = weights(start)._2 / weights(start)._1
+    def average(start: Int): Double = weights(start)._2 / weights(start)._1
 
-    /*
-    Implement Algorithm PAV from [3].
-    Merge on >= instead of > because it elimnate adjacent blocks with the same average, and we want
-    to compress our output as much as possible. Both give correct results.
-    */
+    // Implement Algorithm PAV from [3].
+    // Merge on >= instead of > because it eliminates adjacent blocks with the same average, and we
+    // want to compress our output as much as possible. Both give correct results.
     var i = 0
     while (nextBlock(i) < input.length) {
       if (average(i) >= average(nextBlock(i))) {
@@ -386,8 +385,10 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     // construct the output by walking through the blocks in order
     val output = ArrayBuffer.empty[(Double, Double, Double)]
     i = 0
-    while(i < input.length) {
-      // If block size is > 1, a point at the start and end of the block, each receiving half the weight
+    while (i < input.length) {
+      // If block size is > 1, a point at the start and end of the block,
+      // each receiving half the weight. Otherwise, a single point with
+      // all the weight.
       if (input(blockEnd(i))._2 > input(i)._2) {
         output += ((average(i), input(i)._2, weights(i)._1 / 2))
         output += ((average(i), input(blockEnd(i))._2, weights(i)._1 / 2))
