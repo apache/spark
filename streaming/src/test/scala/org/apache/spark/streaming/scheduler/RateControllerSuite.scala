@@ -25,13 +25,14 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
 
 class RateControllerSuite extends TestSuiteBase {
 
-  override def useManualClock: Boolean = false
+  override def extraSparkConf: Map[String, String] = Map(
+    "spark.streaming.clock" -> "org.apache.spark.util.SystemClock",
+    "spark.streaming.stopSparkContextByDefault" -> "false")
 
   override def batchDuration: Duration = Milliseconds(50)
 
   test("RateController - rate controller publishes updates after batches complete") {
-    val ssc = new StreamingContext(conf, batchDuration)
-    withStreamingContext(ssc) { ssc =>
+    withStreamingContext { ssc =>
       val dstream = new RateTestInputDStream(ssc)
       dstream.register()
       ssc.start()
@@ -43,8 +44,7 @@ class RateControllerSuite extends TestSuiteBase {
   }
 
   test("ReceiverRateController - published rates reach receivers") {
-    val ssc = new StreamingContext(conf, batchDuration)
-    withStreamingContext(ssc) { ssc =>
+    withStreamingContext { ssc =>
       val estimator = new ConstantEstimator(100)
       val dstream = new RateTestInputDStream(ssc) {
         override val rateController =

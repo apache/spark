@@ -32,8 +32,10 @@ import org.apache.spark.streaming.receiver._
 /** Testsuite for receiver scheduling */
 class ReceiverTrackerSuite extends TestSuiteBase {
 
+  override def batchDuration: Duration = Milliseconds(100)
+
   test("send rate update to receivers") {
-    withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
+    withStreamingContext { ssc =>
       val newRateLimit = 100L
       val inputDStream = new RateTestInputDStream(ssc)
       val tracker = new ReceiverTracker(ssc)
@@ -62,7 +64,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
   }
 
   test("should restart receiver after stopping it") {
-    withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
+    withStreamingContext { ssc =>
       @volatile var startTimes = 0
       ssc.addStreamingListener(new StreamingListener {
         override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
@@ -82,10 +84,11 @@ class ReceiverTrackerSuite extends TestSuiteBase {
   }
 
   test("SPARK-11063: TaskSetManager should use Receiver RDD's preferredLocations") {
-    // Use ManualClock to prevent from starting batches so that we can make sure the only task is
-    // for starting the Receiver
-    val _conf = conf.clone.set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
-    withStreamingContext(new StreamingContext(_conf, Milliseconds(100))) { ssc =>
+    withStreamingContext { ssc =>
+      // Make sure we use ManualClock to prevent from starting batches so that we can make sure the
+      // only task is for starting the Receiver
+      assert(ssc.sc.conf.get("spark.streaming.clock") == "org.apache.spark.util.ManualClock")
+
       @volatile var receiverTaskLocality: TaskLocality = null
       ssc.sparkContext.addSparkListener(new SparkListener {
         override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
@@ -105,7 +108,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
 
   test("get allocated executors") {
     // Test get allocated executors when 1 receiver is registered
-    withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
+    withStreamingContext { ssc =>
       val input = ssc.receiverStream(new TestReceiver)
       val output = new TestOutputStream(input)
       output.register()
@@ -114,7 +117,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
     }
 
     // Test get allocated executors when there's no receiver registered
-    withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
+    withStreamingContext { ssc =>
       val rdd = ssc.sc.parallelize(1 to 10)
       val input = new ConstantInputDStream(ssc, rdd)
       val output = new TestOutputStream(input)

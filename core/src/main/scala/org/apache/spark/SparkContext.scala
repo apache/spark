@@ -2496,6 +2496,16 @@ object SparkContext extends Logging {
     }
   }
 
+  private[spark] def getActiveContext(): Option[SparkContext] = {
+    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+      Option(activeContext.get())
+    }
+  }
+
+  private[spark] def stopActiveContext(): Unit = {
+    getActiveContext().foreach(_.stop())
+  }
+
   /**
    * Called at the end of the SparkContext constructor to ensure that no other SparkContext has
    * raced with this constructor and started.

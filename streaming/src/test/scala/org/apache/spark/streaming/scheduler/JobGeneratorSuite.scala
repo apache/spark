@@ -30,6 +30,10 @@ import org.apache.spark.util.{ManualClock, Utils}
 
 class JobGeneratorSuite extends TestSuiteBase {
 
+  override def extraSparkConf: Map[String, String] = super.extraSparkConf ++ Map(
+    "spark.streaming.clock" -> "org.apache.spark.streaming.util.ManualClock",
+    "spark.streaming.receiver.writeAheadLog.rollingInterval" -> "1")
+
   // SPARK-6222 is a tricky regression bug which causes received block metadata
   // to be deleted before the corresponding batch has completed. This occurs when
   // the following conditions are met.
@@ -59,11 +63,8 @@ class JobGeneratorSuite extends TestSuiteBase {
   test("SPARK-6222: Do not clear received block data too soon") {
     import JobGeneratorSuite._
     val checkpointDir = Utils.createTempDir()
-    val testConf = conf
-    testConf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
-    testConf.set("spark.streaming.receiver.writeAheadLog.rollingInterval", "1")
 
-    withStreamingContext(new StreamingContext(testConf, batchDuration)) { ssc =>
+    withStreamingContext { ssc =>
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
       val numBatches = 10
       val longBatchNumber = 3 // 3rd batch will take a long time

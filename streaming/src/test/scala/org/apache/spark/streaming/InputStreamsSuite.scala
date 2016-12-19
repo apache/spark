@@ -49,7 +49,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       testServer.start()
 
       // Set up the streaming context and input streams
-      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+      withStreamingContext { ssc =>
         ssc.addStreamingListener(ssc.progressListener)
 
         val input = Seq(1, 2, 3, 4, 5)
@@ -112,7 +112,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     withTestServer(new TestServer()) { testServer =>
       testServer.start()
 
-      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+      withStreamingContext { ssc =>
         ssc.addStreamingListener(ssc.progressListener)
 
         val batchCounter = new BatchCounter(ssc)
@@ -149,7 +149,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       assert(existingFile.setLastModified(10000) && existingFile.lastModified === 10000)
 
       // Set up the streaming context and input streams
-      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+      withStreamingContext(batchDuration) { ssc =>
         val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         // This `setTime` call ensures that the clock is past the creation time of `existingFile`
         clock.setTime(existingFile.lastModified + batchDuration.milliseconds)
@@ -213,7 +213,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       val pathWithWildCard = testDir.toString + "/*/"
 
       // Set up the streaming context and input streams
-      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+      withStreamingContext(batchDuration) { ssc =>
         val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         clock.setTime(existingFile.lastModified + batchDuration.milliseconds)
         val batchCounter = new BatchCounter(ssc)
@@ -270,7 +270,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     def output: Iterable[Long] = outputQueue.asScala.flatMap(x => x)
 
     // set up the network stream using the test receiver
-    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+    withStreamingContext { ssc =>
       val networkStream = ssc.receiverStream[Int](testReceiver)
       val countStream = networkStream.count
 
@@ -305,7 +305,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     def output: Iterable[Seq[String]] = outputQueue.asScala.filter(_.nonEmpty)
 
     // Set up the streaming context and input streams
-    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+    withStreamingContext { ssc =>
       val queue = new mutable.Queue[RDD[String]]()
       val queueStream = ssc.queueStream(queue, oneAtATime = true)
       val outputStream = new TestOutputStream(queueStream, outputQueue)
@@ -350,7 +350,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val expectedOutput = Seq(Seq("1", "2", "3"), Seq("4", "5"))
 
     // Set up the streaming context and input streams
-    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+    withStreamingContext { ssc =>
       val queue = new mutable.Queue[RDD[String]]()
       val queueStream = ssc.queueStream(queue, oneAtATime = false)
       val outputStream = new TestOutputStream(queueStream, outputQueue)
@@ -396,7 +396,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   test("test track the number of input stream") {
-    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+    withStreamingContext { ssc =>
 
       class TestInputDStream extends InputDStream[String](ssc) {
         def start() {}
@@ -434,7 +434,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       assert(existingFile.setLastModified(10000) && existingFile.lastModified === 10000)
 
       // Set up the streaming context and input streams
-      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+      withStreamingContext(batchDuration) { ssc =>
         val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         // This `setTime` call ensures that the clock is past the creation time of `existingFile`
         clock.setTime(existingFile.lastModified + batchDuration.milliseconds)

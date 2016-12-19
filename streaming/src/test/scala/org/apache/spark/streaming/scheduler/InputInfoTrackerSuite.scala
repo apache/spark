@@ -17,27 +17,21 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.scalatest.BeforeAndAfter
+import org.apache.spark.streaming._
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.streaming.{Duration, StreamingContext, Time}
-
-class InputInfoTrackerSuite extends SparkFunSuite with BeforeAndAfter {
+class InputInfoTrackerSuite extends ReuseableSparkContext {
 
   private var ssc: StreamingContext = _
 
   before {
-    val conf = new SparkConf().setMaster("local[2]").setAppName("DirectStreamTacker")
-    if (ssc == null) {
-      ssc = new StreamingContext(conf, Duration(1000))
-    }
+    assert(ssc == null)
+    ssc = new StreamingContext(sc, Duration(1000))
   }
 
   after {
-    if (ssc != null) {
-      ssc.stop()
-      ssc = null
-    }
+    assert(ssc != null)
+    ssc.stop()
+    ssc = null
   }
 
   test("test report and get InputInfo from InputInfoTracker") {

@@ -75,6 +75,11 @@ class ReceivedBlockHandlerSuite
   var storageLevel: StorageLevel = null
   var tempDirectory: File = null
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    SparkContext.getActiveContext().foreach(_.stop())
+  }
+
   before {
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
     conf.set("spark.driver.port", rpcEnv.address.port.toString)
@@ -106,6 +111,8 @@ class ReceivedBlockHandlerSuite
     rpcEnv.shutdown()
     rpcEnv.awaitTermination()
     rpcEnv = null
+
+    sc.stop()
 
     Utils.deleteRecursively(tempDirectory)
   }
