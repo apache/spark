@@ -228,7 +228,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
    */
   def testStream(
       _stream: Dataset[_],
-      outputMode: OutputMode = OutputMode.Append)(actions: StreamAction*): Unit = {
+      outputMode: OutputMode = OutputMode.Append,
+      ignoreThreadDeathCause: Boolean = false)(actions: StreamAction*): Unit = {
 
     val stream = _stream.toDF()
     val sparkSession = stream.sparkSession  // use the session in DF, not the default session
@@ -240,7 +241,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     val resetConfValues = mutable.Map[String, Option[String]]()
 
     @volatile
-    var streamDeathCause: Throwable = null
+    var streamThreadDeathCause: Throwable = null
 
     // If the test doesn't manually start the stream, we do it automatically at the beginning.
     val startedManually =
@@ -271,7 +272,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
          |Output Mode: $outputMode
          |Stream state: $currentOffsets
          |Thread state: $threadState
-         |${if (streamDeathCause != null) stackTraceToString(streamDeathCause) else ""}
+         |${if (streamThreadDeathCause != null) stackTraceToString(streamThreadDeathCause) else ""}
          |
          |== Sink ==
          |${sink.toDebugString}
@@ -360,7 +361,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {
                 override def uncaughtException(t: Thread, e: Throwable): Unit = {
-                  streamDeathCause = e
+                  streamThreadDeathCause = e
                 }
               })
 
@@ -396,8 +397,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                   currentStream.exception.map(_.toString()).getOrElse(""))
             } catch {
               case _: InterruptedException =>
-              case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
-                failTest("Timed out while stopping and waiting for microbatchthread to terminate.")
+              case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
+                failTest(
+                  "Timed out while stopping and waiting for microbatchthread to terminate.", e)
               case t: Throwable =>
                 failTest("Error while stopping stream", t)
             } finally {
@@ -423,14 +425,13 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                   s"\tExpected: ${ef.causeClass}\n\tReturned: ${exception.cause.getClass}")
             } catch {
               case _: InterruptedException =>
-              case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
-                failTest("Timed out while waiting for failure")
+              case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
+                failTest("Timed out while waiting for failure", e)
               case t: Throwable =>
                 failTest("Error while checking stream failure", t)
             } finally {
               lastStream = currentStream
               currentStream = null
-              streamDeathCause = null
             }
 
           case a: AssertOnQuery =>
@@ -508,11 +509,14 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
         }
         pos += 1
       }
+      if (!ignoreThreadDeathCause && streamThreadDeathCause != null) {
+        failTest("Stream Thread Died", streamThreadDeathCause)
+      }
     } catch {
-      case _: InterruptedException if streamDeathCause != null =>
-        failTest("Stream Thread Died")
-      case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
-        failTest("Timed out waiting for stream")
+      case _: InterruptedException if streamThreadDeathCause != null =>
+        failTest("Stream Thread Died", streamThreadDeathCause)
+      case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
+        failTest("Timed out waiting for stream", e)
     } finally {
       if (currentStream != null && currentStream.microBatchThread.isAlive) {
         currentStream.stop()
