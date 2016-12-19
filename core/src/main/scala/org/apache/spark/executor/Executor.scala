@@ -495,7 +495,10 @@ private[spark] class Executor(
         // attempt would be a no-op and if interruptThread = true then it may not be safe or
         // effective to interrupt multiple times:
         taskRunner.kill(interruptThread = interruptThread)
-        // Monitor the killed task until it exits:
+        // Monitor the killed task until it exits. The synchronization logic here is complicated
+        // because we don't want to synchronize on the taskRunner while possibly taking a thread
+        // dump, but we also need to be careful to avoid races between checking whether the task
+        // has finished and wait()ing for it to finish.
         var finished: Boolean = false
         while (!finished && !timeoutExceeded()) {
           taskRunner.synchronized {
