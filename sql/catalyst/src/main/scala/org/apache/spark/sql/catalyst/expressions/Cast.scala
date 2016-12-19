@@ -89,9 +89,7 @@ object Cast {
     case _ => false
   }
 
-  private def resolvableNullability(from: Boolean, to: Boolean) = !from || to
-
-  private def forceNullable(from: DataType, to: DataType) = (from, to) match {
+  def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {
     case (NullType, _) => true
     case (_, _) if from == to => false
 
@@ -110,6 +108,8 @@ object Cast {
     case (_: FractionalType, _: IntegralType) => true  // NaN, infinity
     case _ => false
   }
+
+  private def resolvableNullability(from: Boolean, to: Boolean) = !from || to
 }
 
 /** Cast the child expression to the target data type. */

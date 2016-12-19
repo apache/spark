@@ -86,23 +86,16 @@ case class ApproximatePercentile(
   private lazy val accuracy: Int = accuracyExpression.eval().asInstanceOf[Int]
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(DoubleType, TypeCollection(DoubleType, ArrayType), IntegerType)
+    Seq(DoubleType, TypeCollection(DoubleType, ArrayType(DoubleType)), IntegerType)
   }
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
-  private lazy val (returnPercentileArray: Boolean, percentages: Array[Double]) = {
-    (percentageExpression.dataType, percentageExpression.eval()) match {
+  private lazy val (returnPercentileArray: Boolean, percentages: Array[Double]) =
+    percentageExpression.eval() match {
       // Rule ImplicitTypeCasts can cast other numeric types to double
-      case (_, num: Double) => (false, Array(num))
-      case (ArrayType(baseType: NumericType, _), arrayData: ArrayData) =>
-         val numericArray = arrayData.toObjectArray(baseType)
-        (true, numericArray.map { x =>
-          baseType.numeric.toDouble(x.asInstanceOf[baseType.InternalType])
-        })
-      case other =>
-        throw new AnalysisException(s"Invalid data type ${other._1} for parameter percentage")
+      case num: Double => (false, Array(num))
+      case arrayData: ArrayData => (true, arrayData.toDoubleArray())
     }
-  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -162,7 +155,7 @@ case class ApproximatePercentile(
   override def nullable: Boolean = true
 
   override def dataType: DataType = {
-    if (returnPercentileArray) ArrayType(DoubleType) else DoubleType
+    if (returnPercentileArray) ArrayType(DoubleType, false) else DoubleType
   }
 
   override def prettyName: String = "percentile_approx"

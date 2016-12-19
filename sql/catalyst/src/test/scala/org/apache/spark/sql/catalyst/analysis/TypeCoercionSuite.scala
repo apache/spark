@@ -57,14 +57,43 @@ class TypeCoercionSuite extends PlanTest {
   // scalastyle:on line.size.limit
 
   private def shouldCast(from: DataType, to: AbstractDataType, expected: DataType): Unit = {
-    val got = TypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
-    assert(got.map(_.dataType) == Option(expected),
+    // Check default value
+    val castDefault = TypeCoercion.ImplicitTypeCasts.implicitCast(default(from), to)
+    assert(DataType.equalsIgnoreCompatibleNullability(
+      castDefault.map(_.dataType).getOrElse(null), expected),
+      s"Failed to cast $from to $to")
+
+    // Check null value
+    val castNull = TypeCoercion.ImplicitTypeCasts.implicitCast(createNull(from), to)
+    assert(DataType.equalsIgnoreCaseAndNullability(
+      castNull.map(_.dataType).getOrElse(null), expected),
       s"Failed to cast $from to $to")
   }
 
   private def shouldNotCast(from: DataType, to: AbstractDataType): Unit = {
-    val got = TypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
-    assert(got.isEmpty, s"Should not be able to cast $from to $to, but got $got")
+    // Check default value
+    val castDefault = TypeCoercion.ImplicitTypeCasts.implicitCast(default(from), to)
+    assert(castDefault.isEmpty, s"Should not be able to cast $from to $to, but got $castDefault")
+
+    // Check null value
+    val castNull = TypeCoercion.ImplicitTypeCasts.implicitCast(createNull(from), to)
+    assert(castNull.isEmpty, s"Should not be able to cast $from to $to, but got $castNull")
+  }
+
+  private def default(dataType: DataType): Expression = dataType match {
+    case ArrayType(internalType: DataType, _) =>
+      CreateArray(Seq(Literal.default(internalType)))
+    case MapType(keyDataType: DataType, valueDataType: DataType, _) =>
+      CreateMap(Seq(Literal.default(keyDataType), Literal.default(valueDataType)))
+    case _ => Literal.default(dataType)
+  }
+
+  private def createNull(dataType: DataType): Expression = dataType match {
+    case ArrayType(internalType: DataType, _) =>
+      CreateArray(Seq(Literal.create(null, internalType)))
+    case MapType(keyDataType: DataType, valueDataType: DataType, _) =>
+      CreateMap(Seq(Literal.create(null, keyDataType), Literal.create(null, valueDataType)))
+    case _ => Literal.create(null, dataType)
   }
 
   val integralTypes: Seq[DataType] =
@@ -196,7 +225,13 @@ class TypeCoercionSuite extends PlanTest {
 
   test("implicit type cast - ArrayType(StringType)") {
     val checkedType = ArrayType(StringType)
-    checkTypeCasting(checkedType, castableTypes = Seq(checkedType))
+    val nonCastableTypes =
+      complexTypes ++ Seq(BooleanType, NullType, CalendarIntervalType)
+    checkTypeCasting(checkedType,
+      castableTypes = allTypes.filterNot(nonCastableTypes.contains).map(ArrayType(_)))
+    nonCastableTypes.map(ArrayType(_)).foreach(shouldNotCast(checkedType, _))
+    shouldNotCast(ArrayType(DoubleType, containsNull = false),
+      ArrayType(LongType, containsNull = false))
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
