@@ -17,11 +17,12 @@
 
 package org.apache.spark.streaming.dstream
 
+import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.rdd.{EmptyRDD, RDD}
+import org.apache.spark.rdd.{BlockRDD, EmptyRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream.InternalMapWithStateDStream._
@@ -162,6 +163,43 @@ class InternalMapWithStateDStream[K: ClassTag, V: ClassTag, S: ClassTag, E: Clas
     }
     Some(new MapWithStateRDD(
       prevStateRDD, partitionedDataRDD, mappingFunction, validTime, timeoutThresholdTime))
+  }
+
+  /** Returns all oldRDDs except current and last checkpointed */
+  def caclucateOldRDDs(time: Time): HashMap[Time, RDD[MapWithStateRDDRecord[K,S,E]]] = {
+    val oldRDDs = generatedRDDs.filter(_._1 <= (time - slideDuration))
+    val checkpointedKeys = oldRDDs.filter(_._2.isCheckpointed).keys
+    if (checkpointedKeys.nonEmpty) {
+      oldRDDs -= checkpointedKeys.max
+    }
+    oldRDDs
+  }
+
+  /** Clear oldRDDs metadata of this DStream. */
+  override private[streaming] def clearMetadata(time: Time): Unit = {
+    val unpersistData = ssc.conf.getBoolean("spark.streaming.unpersist", true)
+
+    val oldRDDs = caclucateOldRDDs(time)
+
+    logDebug("Clearing references to old RDDs: [" +
+      oldRDDs.map(x => s"${x._1} -> ${x._2.id}").mkString(", ") + "]")
+    generatedRDDs --= oldRDDs.keys
+    if (unpersistData) {
+      logDebug(s"Unpersisting old RDDs: ${oldRDDs.values.map(_.id).mkString(", ")}")
+      oldRDDs.values.foreach { rdd =>
+        rdd.unpersist(false)
+        // Explicitly remove blocks of BlockRDD
+        rdd match {
+          case b: BlockRDD[_] =>
+            logInfo(s"Removing blocks of RDD $b of time $time")
+            b.removeBlocks()
+          case _ =>
+        }
+      }
+    }
+    logDebug(s"Cleared ${oldRDDs.size} RDDs that were older than " +
+      s"${time - rememberDuration}: ${oldRDDs.keys.mkString(", ")}")
+    dependencies.foreach(_.clearMetadata(time))
   }
 }
 
