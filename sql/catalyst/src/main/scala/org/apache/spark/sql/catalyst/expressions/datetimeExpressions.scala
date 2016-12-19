@@ -40,7 +40,7 @@ trait TimeZoneAwareExpression extends Expression {
 
   def withTimeZone(timeZoneId: String): TimeZoneAwareExpression
 
-  def timeZone: TimeZone = TimeZone.getTimeZone(timeZoneId)
+  @transient lazy val timeZone: TimeZone = TimeZone.getTimeZone(timeZoneId)
 }
 
 /**
