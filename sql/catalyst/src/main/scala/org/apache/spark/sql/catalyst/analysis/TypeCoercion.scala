@@ -718,9 +718,23 @@ object TypeCoercion {
         case (_, TypeCollection(types)) =>
           types.flatMap(implicitCast(inType, _)).headOption.orNull
 
-        case (ArrayType(fromType, fn), ArrayType(toType: DataType, tn))
-            if !(fn || Cast.forceNullable(fromType, toType)) || tn =>
-          implicitCast(fromType, toType).map(ArrayType(_, tn)).orNull
+        // Implicit cast between array types.
+        //
+        // Compare the nullabilities of the from type and the to type, check whether the cast of
+        // the nullability is resolvable by the following rules:
+        // 1. If the nullability of the to type is true, the cast is always allowed;
+        // 2. If the nullability of the to type is false, and the nullability of the from type is
+        // true, the cast is never allowed;
+        // 3. If the nullabilities of both the from type and the to type are false, the cast is
+        // allowed only when Cast.forceNullable(fromType, toType) is false.
+        case (ArrayType(fromType, fn), ArrayType(toType: DataType, true)) =>
+          implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
+
+        case (ArrayType(fromType, true), ArrayType(toType: DataType, false)) => null
+
+        case (ArrayType(fromType, false), ArrayType(toType: DataType, false))
+            if !Cast.forceNullable(fromType, toType) =>
+          implicitCast(fromType, toType).map(ArrayType(_, false)).orNull
 
         case _ => null
       }
