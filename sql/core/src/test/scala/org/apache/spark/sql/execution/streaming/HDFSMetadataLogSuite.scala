@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{File, FileNotFoundException, IOException}
+import java.io.{Closeable, File, FileNotFoundException, IOException}
 import java.net.URI
 import java.util.ConcurrentModificationException
 
@@ -209,19 +209,17 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
 
     // Open and delete
-    def handleResource(f: => Unit): Unit = {
+    def closeOnWindows[R <: Closeable](res: => R)(f: => Unit): Unit = {
       if (Utils.isWindows) {
         // Windows does not allow deleting opened files.
-        fm.open(path).close()
+        res.close()
         f
       } else {
-        Utils.tryWithResource(fm.open(path)) { _ =>
-          f
-        }
+        Utils.tryWithResource(res)(_ => f)
       }
     }
 
-    handleResource {
+    closeOnWindows(fm.open(path)) {
       fm.delete(path)
       assert(!fm.exists(path))
       intercept[IOException] {
