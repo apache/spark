@@ -611,8 +611,8 @@ object DataSource {
    * [[CatalogStorageFormat]]. Note that, the `path` option is removed from options after this.
    */
   def buildStorageFormatFromOptions(options: Map[String, String]): CatalogStorageFormat = {
-    val path = new CaseInsensitiveMap(options).get("path")
+    val uri = new CaseInsensitiveMap(options).get("path").map(new Path(_).toUri)
     val optionsWithoutPath = options.filterKeys(_.toLowerCase != "path")
-    CatalogStorageFormat.empty.copy(locationUri = path, properties = optionsWithoutPath)
+    CatalogStorageFormat.empty.copy(locationUri = uri, properties = optionsWithoutPath)
   }
 }

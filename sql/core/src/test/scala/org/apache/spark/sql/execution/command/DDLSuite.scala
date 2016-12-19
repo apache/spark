@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.io.File
+import java.net.URI
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -71,14 +72,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   private def createDatabase(catalog: SessionCatalog, name: String): Unit = {
     catalog.createDatabase(
-      CatalogDatabase(name, "", spark.sessionState.conf.warehousePath, Map()),
+      CatalogDatabase(name, "", new Path(spark.sessionState.conf.warehousePath).toUri, Map()),
       ignoreIfExists = false)
   }
 
   private def generateTable(catalog: SessionCatalog, name: TableIdentifier): CatalogTable = {
     val storage =
       CatalogStorageFormat(
-        locationUri = Some(catalog.defaultTablePath(name)),
+        locationUri = Some(new Path(catalog.defaultTablePath(name)).toUri),
         inputFormat = None,
         outputFormat = None,
         serde = None,
@@ -129,11 +130,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  private def makeQualifiedPath(path: String): String = {
+  private def makeQualifiedPath(path: String): URI = {
     // copy-paste from SessionCatalog
     val hadoopPath = new Path(path)
     val fs = hadoopPath.getFileSystem(sparkContext.hadoopConfiguration)
-    fs.makeQualified(hadoopPath).toString
+    fs.makeQualified(hadoopPath).toUri
   }
 
   test("Create Database using Default Warehouse Path") {

@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -877,10 +878,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create location string.
+   * Create location path.
    */
-  override def visitLocationSpec(ctx: LocationSpecContext): String = withOrigin(ctx) {
-    string(ctx.STRING)
+  override def visitLocationSpec(ctx: LocationSpecContext): Path = withOrigin(ctx) {
+    new Path(string(ctx.STRING))
   }
 
   /**
@@ -1044,7 +1045,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)
     }
     val storage = CatalogStorageFormat(
-      locationUri = location,
+      locationUri = location.map(_.toUri),
       inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
       outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
       serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
@@ -1095,7 +1096,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties
           // are empty Maps.
           val newTableDesc = tableDesc.copy(
-            storage = CatalogStorageFormat.empty.copy(locationUri = location),
+            storage = CatalogStorageFormat.empty.copy(locationUri = location.map(_.toUri)),
             provider = Some(conf.defaultDataSourceName))
           CreateTable(newTableDesc, mode, Some(q))
         } else {

@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import scala.reflect.{classTag, ClassTag}
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -62,7 +64,7 @@ class DDLCommandSuite extends PlanTest {
     val expected = CreateDatabaseCommand(
       "database_name",
       ifNotExists = true,
-      Some("/home/user/db"),
+      Some(new Path("/home/user/db")),
       Some("database_comment"),
       Map("a" -> "a", "b" -> "b", "c" -> "c"))
     comparePlans(parsed, expected)
@@ -535,12 +537,12 @@ class DDLCommandSuite extends PlanTest {
     val expected1 = AlterTableAddPartitionCommand(
       TableIdentifier("table_name", None),
       Seq(
-        (Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
+        (Map("dt" -> "2008-08-08", "country" -> "us"), Some(new Path("location1"))),
         (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
       ifNotExists = true)
     val expected2 = AlterTableAddPartitionCommand(
       TableIdentifier("table_name", None),
-      Seq((Map("dt" -> "2008-08-08"), Some("loc"))),
+      Seq((Map("dt" -> "2008-08-08"), Some(new Path("loc")))),
       ifNotExists = false)
 
     comparePlans(parsed1, expected1)
@@ -651,11 +653,11 @@ class DDLCommandSuite extends PlanTest {
     val expected1 = AlterTableSetLocationCommand(
       tableIdent,
       None,
-      "new location")
+      new Path("new location"))
     val expected2 = AlterTableSetLocationCommand(
       tableIdent,
       Some(Map("dt" -> "2008-08-08", "country" -> "us")),
-      "new location")
+      new Path("new location"))
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
   }
@@ -874,7 +876,7 @@ class DDLCommandSuite extends PlanTest {
     val expected = CreateDatabaseCommand(
       "database_name",
       ifNotExists = false,
-      Some("/home/user/db"),
+      Some(new Path("/home/user/db")),
       None,
       Map("a" -> "1", "b" -> "0.1", "c" -> "true"))
 

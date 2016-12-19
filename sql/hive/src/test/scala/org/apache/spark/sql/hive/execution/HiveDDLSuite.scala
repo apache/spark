@@ -630,7 +630,7 @@ class HiveDDLSuite
       assert(db1 == CatalogDatabase(
         dbName,
         "",
-        if (dbPath.endsWith(File.separator)) dbPath.dropRight(1) else dbPath,
+        new Path(if (dbPath.endsWith(File.separator)) dbPath.dropRight(1) else dbPath).toUri,
         Map.empty))
       sql("USE db1")
 
@@ -675,7 +675,7 @@ class HiveDDLSuite
     assert(db1 == CatalogDatabase(
       dbName,
       "",
-      expectedDBLocation,
+      new Path(expectedDBLocation).toUri,
       Map.empty))
     // the database directory was created
     assert(fs.exists(dbPath) && fs.isDirectory(dbPath))

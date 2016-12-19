@@ -55,7 +55,7 @@ import org.apache.spark.util.SerializableConfiguration
 case class CreateDatabaseCommand(
     databaseName: String,
     ifNotExists: Boolean,
-    path: Option[String],
+    path: Option[Path],
     comment: Option[String],
     props: Map[String, String])
   extends RunnableCommand {
@@ -66,7 +66,7 @@ case class CreateDatabaseCommand(
       CatalogDatabase(
         databaseName,
         comment.getOrElse(""),
-        path.getOrElse(catalog.getDefaultDBPath(databaseName)),
+        path.getOrElse(new Path(catalog.getDefaultDBPath(databaseName))).toUri,
         props),
       ifNotExists)
     Seq.empty[Row]
@@ -340,7 +340,7 @@ case class AlterTableSerDePropertiesCommand(
  */
 case class AlterTableAddPartitionCommand(
     tableName: TableIdentifier,
-    partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
+    partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[Path])],
     ifNotExists: Boolean)
   extends RunnableCommand {
 
@@ -349,14 +349,14 @@ case class AlterTableAddPartitionCommand(
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE ADD PARTITION")
-    val parts = partitionSpecsAndLocs.map { case (spec, location) =>
+    val parts = partitionSpecsAndLocs.map { case (spec, path) =>
       val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
         spec,
         table.partitionColumnNames,
         table.identifier.quotedString,
         sparkSession.sessionState.conf.resolver)
       // inherit table storage format (possibly except for location)
-      CatalogTablePartition(normalizedSpec, table.storage.copy(locationUri = location))
+      CatalogTablePartition(normalizedSpec, table.storage.copy(locationUri = path.map(_.toUri)))
     }
     catalog.createPartitions(table.identifier, parts, ignoreIfExists = ifNotExists)
     Seq.empty[Row]
@@ -640,7 +640,7 @@ case class AlterTableRecoverPartitionsCommand(
         // inherit table storage format (possibly except for location)
         CatalogTablePartition(
           spec,
-          table.storage.copy(locationUri = Some(location.toUri.toString)),
+          table.storage.copy(locationUri = Some(location.toUri)),
           params)
       }
       spark.sessionState.catalog.createPartitions(tableName, parts, ignoreIfExists = true)
@@ -665,7 +665,7 @@ case class AlterTableRecoverPartitionsCommand(
 case class AlterTableSetLocationCommand(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],
-    location: String)
+    path: Path)
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -678,11 +678,11 @@ case class AlterTableSetLocationCommand(
           sparkSession, table, "ALTER TABLE ... SET LOCATION")
         // Partition spec is specified, so we set the location only for this partition
         val part = catalog.getPartition(table.identifier, spec)
-        val newPart = part.copy(storage = part.storage.copy(locationUri = Some(location)))
+        val newPart = part.copy(storage = part.storage.copy(locationUri = Some(path.toUri)))
         catalog.alterPartitions(table.identifier, Seq(newPart))
       case None =>
         // No partition spec is specified, so we set the location for the table itself
-        catalog.alterTable(table.withNewStorage(locationUri = Some(location)))
+        catalog.alterTable(table.withNewStorage(locationUri = Some(path.toUri)))
     }
     Seq.empty[Row]
   }

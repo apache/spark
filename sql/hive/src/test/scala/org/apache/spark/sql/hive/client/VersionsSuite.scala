@@ -18,8 +18,10 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.{ByteArrayOutputStream, File, PrintStream}
+import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
@@ -52,7 +54,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
   test("success sanity check") {
     val badClient = buildClient(HiveUtils.hiveExecutionVersion, new Configuration())
-    val db = new CatalogDatabase("default", "desc", "loc", Map())
+    val db = new CatalogDatabase("default", "desc", new URI("loc"), Map())
     badClient.createDatabase(db, ignoreIfExists = true)
   }
 
@@ -121,10 +123,10 @@ class VersionsSuite extends SparkFunSuite with Logging {
     val tempDatabasePath = Utils.createTempDir().getCanonicalPath
 
     test(s"$version: createDatabase") {
-      val defaultDB = CatalogDatabase("default", "desc", "loc", Map())
+      val defaultDB = CatalogDatabase("default", "desc", new URI("loc"), Map())
       client.createDatabase(defaultDB, ignoreIfExists = true)
       val tempDB = CatalogDatabase(
-        "temporary", description = "test create", tempDatabasePath, Map())
+        "temporary", description = "test create", new Path(tempDatabasePath).toUri, Map())
       client.createDatabase(tempDB, ignoreIfExists = true)
     }
 
@@ -339,7 +341,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: alterPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "2")
-      val newLocation = Utils.createTempDir().getPath()
+      val newLocation = new Path(Utils.createTempDir().getPath()).toUri
       val storage = storageFormat.copy(
         locationUri = Some(newLocation),
         // needed for 0.12 alter partitions

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog._
@@ -57,7 +59,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     // Create the relation to validate the arguments before writing the metadata to the metastore,
     // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
-    val pathOption = table.storage.locationUri.map("path" -> _)
+    val pathOption = table.storage.locationUri.map("path" -> new Path(_).toString)
     // Fill in some default table options from the session conf
     val tableWithDefaultOptions = table.copy(
       identifier = table.identifier.copy(
@@ -208,13 +210,13 @@ case class CreateDataSourceTableAsSelectCommand(
     }
 
     val tableLocation = if (table.tableType == CatalogTableType.MANAGED) {
-      Some(sessionState.catalog.defaultTablePath(table.identifier))
+      Some(new Path(sessionState.catalog.defaultTablePath(table.identifier)).toUri)
     } else {
       table.storage.locationUri
     }
 
     // Create the relation based on the data of df.
-    val pathOption = tableLocation.map("path" -> _)
+    val pathOption = tableLocation.map("path" -> new Path(_).toString)
     val dataSource = DataSource(
       sparkSession,
       className = provider,
