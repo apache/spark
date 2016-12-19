@@ -34,10 +34,16 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  */
 trait TimeZoneAwareExpression extends Expression {
 
+  /** the timezone ID. */
   def timeZoneId: String
 
+  /**
+   * Returns true if the timezone ID is resolved.
+   * If not resolved, the analyzer [[ResolveTimeZone]] will resolve with session local timezone.
+   */
   def timeZoneResolved: Boolean = timeZoneId != null
 
+  /** Returns a copy of this expression with the specified timeZoneId. */
   def withTimeZone(timeZoneId: String): TimeZoneAwareExpression
 
   @transient lazy val timeZone: TimeZone = TimeZone.getTimeZone(timeZoneId)

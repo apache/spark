@@ -111,6 +111,9 @@ object Cast {
     case _ => false
   }
 
+  /**
+   * Returns true iff we need timeZoneId to cast `from` type to `to` type.
+   */
   def needTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
     case (StringType, TimestampType) => true
     case (TimestampType, StringType) => true
@@ -120,7 +123,12 @@ object Cast {
   }
 }
 
-/** Cast the child expression to the target data type. */
+/**
+ * Cast the child expression to the target data type.
+ *
+ * When cast from/to timezone related types, we need timeZoneId, which will be resolved with
+ * session local timezone by an analyzer [[ResolveTimeZone]].
+ */
 @ExpressionDescription(
   usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
   extended = """
