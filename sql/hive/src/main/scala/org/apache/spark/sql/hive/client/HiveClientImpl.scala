@@ -300,7 +300,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
-    if (getDatabaseOption(databaseName).isDefined) {
+    if (databaseExists(databaseName)) {
       state.setCurrentDatabase(databaseName)
     } else {
       throw new NoSuchDatabaseException(databaseName)
@@ -336,14 +336,18 @@ private[hive] class HiveClientImpl(
         Option(database.properties).map(_.asJava).orNull))
   }
 
-  override def getDatabaseOption(name: String): Option[CatalogDatabase] = withHiveState {
-    Option(client.getDatabase(name)).map { d =>
+  override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
+    Option(client.getDatabase(dbName)).map { d =>
       CatalogDatabase(
         name = d.getName,
         description = d.getDescription,
         locationUri = d.getLocationUri,
         properties = Option(d.getParameters).map(_.asScala.toMap).orNull)
-    }
+    }.getOrElse(throw new NoSuchDatabaseException(dbName))
+  }
+
+  override def databaseExists(dbName: String): Boolean = withHiveState {
+    client.databaseExists(dbName)
   }
 
   override def listDatabases(pattern: String): Seq[String] = withHiveState {
