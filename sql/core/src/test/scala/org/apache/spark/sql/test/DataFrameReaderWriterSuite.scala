@@ -611,7 +611,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       val e = intercept[AnalysisException] {
         Seq(3 -> "c").toDF("i", "j").write.bucketBy(3, "i").mode("append").saveAsTable("t")
       }
-      assert(e.message.contains("Specified bucketing does not match the existing table"))
+      assert(e.message.contains("Specified bucketing does not match that of the existing table"))
     }
   }
 

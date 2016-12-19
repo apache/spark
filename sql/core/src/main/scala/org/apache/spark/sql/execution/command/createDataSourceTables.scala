@@ -160,7 +160,7 @@ case class CreateDataSourceTableAsSelectCommand(
 
           if (existingTable.provider.get == DDLUtils.HIVE_PROVIDER) {
             throw new AnalysisException(s"Saving data in the Hive serde table $tableName is " +
-              s"not supported yet. Please use the insertInto() API as an alternative.")
+              "not supported yet. Please use the insertInto() API as an alternative.")
           }
 
           // Check if the specified data source match the data source of the existing table.
@@ -192,13 +192,18 @@ case class CreateDataSourceTableAsSelectCommand(
             }
           })
 
+          // In `AnalyzeCreateTable`, we verified the consistency between the user-specified table
+          // definition(partition columns, bucketing) and the SELECT query, here we also need to
+          // verify the the consistency between the user-specified table definition and the existing
+          // table definition.
+
           // Check if the specified partition columns match the existing table.
           val specifiedPartCols = CatalogUtils.normalizePartCols(
             tableName, tableCols, table.partitionColumnNames, resolver)
           if (specifiedPartCols != existingTable.partitionColumnNames) {
             throw new AnalysisException(
               s"""
-                |Specified partitioning does not match the existing table $tableName.
+                |Specified partitioning does not match that of the existing table $tableName.
                 |Specified partition columns: [${specifiedPartCols.mkString(", ")}]
                 |Existing partition columns: [${existingTable.partitionColumnNames.mkString(", ")}]
               """.stripMargin)
@@ -215,7 +220,7 @@ case class CreateDataSourceTableAsSelectCommand(
               existingTable.bucketSpec.map(_.toString).getOrElse("not bucketed")
             throw new AnalysisException(
               s"""
-                |Specified bucketing does not match the existing table $tableName.
+                |Specified bucketing does not match that of the existing table $tableName.
                 |Specified bucketing: $specifiedBucketString
                 |Existing bucketing: $existingBucketString
               """.stripMargin)
