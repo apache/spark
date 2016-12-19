@@ -28,7 +28,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPermanentFunctionException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.util.quietly
@@ -137,11 +137,12 @@ class VersionsSuite extends SparkFunSuite with SQLTestUtils with TestHiveSinglet
     test(s"$version: getDatabase") {
       // No exception should be thrown
       client.getDatabase("default")
+      intercept[NoSuchDatabaseException](client.getDatabase("nonexist"))
     }
 
-    test(s"$version: getDatabaseOption") {
-      assert(client.getDatabaseOption("default").isDefined)
-      assert(client.getDatabaseOption("nonexist") == None)
+    test(s"$version: databaseExists") {
+      assert(client.databaseExists("default") == true)
+      assert(client.databaseExists("nonexist") == false)
     }
 
     test(s"$version: listDatabases") {
@@ -155,9 +156,9 @@ class VersionsSuite extends SparkFunSuite with SQLTestUtils with TestHiveSinglet
     }
 
     test(s"$version: dropDatabase") {
-      assert(client.getDatabaseOption("temporary").isDefined)
+      assert(client.databaseExists("temporary") == true)
       client.dropDatabase("temporary", ignoreIfNotExists = false, cascade = true)
-      assert(client.getDatabaseOption("temporary").isEmpty)
+      assert(client.databaseExists("temporary") == false)
     }
 
     ///////////////////////////////////////////////////////////////////////////
