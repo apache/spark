@@ -399,6 +399,10 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
   }
 }
 
+/**
+ * A special manual clock that provide `isStreamWaitingAt` to allow the user to check if the clock
+ * is blocking.
+ */
 class StreamManualClock(time: Long = 0L) extends ManualClock(time) with Serializable {
   private var waitStartTime: Option[Long] = None
 
@@ -411,6 +415,9 @@ class StreamManualClock(time: Long = 0L) extends ManualClock(time) with Serializ
     }
   }
 
+  /**
+   * Returns if the clock is blocking and the time it started to block is the parameter `time`.
+   */
   def isStreamWaitingAt(time: Long): Boolean = synchronized {
     waitStartTime == Some(time)
   }
