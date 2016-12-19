@@ -1,5 +1,5 @@
 -- A test suite for IN predicate subquery
--- It includes correlated and non-correlated cases.
+-- It includes correlated cases.
 
 -- tables and data types
 
