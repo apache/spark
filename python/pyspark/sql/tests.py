@@ -558,18 +558,6 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(df.dtypes, [("key", "bigint"), ("value", "string")])
         self.assertEqual(df.first(), Row(key=1, value="1"))
 
-    def test_to_localiterator_for_dataframe(self):
-        from time import sleep
-        df = self.spark.createDataFrame([[1], [2], [3]])
-        it = df.toLocalIterator()
-        sleep(5)
-        self.assertEqual([Row(_1=1), Row(_1=2), Row(_1=3)], sorted(it))
-
-        df2 = df.repartition(1000)
-        it2 = df2.toLocalIterator()
-        sleep(5)
-        self.assertEqual([Row(_1=1), Row(_1=2), Row(_1=3)], sorted(it2))
-
     def test_select_null_literal(self):
         df = self.spark.sql("select null as col")
         self.assertEqual(Row(col=None), df.first())

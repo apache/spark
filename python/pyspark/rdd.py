@@ -139,7 +139,6 @@ def _load_from_socket(port, serializer):
     # operation, it will very possibly fail. See SPARK-18281.
     sock.settimeout(None)
     # The socket will be automatically closed when garbage-collected.
-    rf = sock.makefile("rb", 65536)
     return serializer.load_stream(sock.makefile("rb", 65536))
 
 
