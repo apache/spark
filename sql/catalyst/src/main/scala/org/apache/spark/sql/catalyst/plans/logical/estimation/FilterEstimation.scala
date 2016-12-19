@@ -34,7 +34,7 @@ object FilterEstimation extends Logging {
   // for a column after we apply a predicate condition.
   private val mutableColStats: mutable.Map[String, ColumnStat] = mutable.Map.empty[String, ColumnStat]
 
-  def apply(plan: Filter)
+  def estimate(plan: Filter)
     : Option[Statistics] = {
     val stats: Statistics = plan.child.statistics
     if (stats.rowCount.isEmpty) return None
@@ -42,8 +42,8 @@ object FilterEstimation extends Logging {
     copyFromColStats(stats.colStats)
     // estimate selectivity for this filter
     val percent: Double = calculateConditions(stats, plan.condition)
-    val filteredSizeInBytes = RoundingToBigInt(BigDecimal(plan.statistics.sizeInBytes) * percent)
-    val filteredRowCount = plan.statistics.rowCount.map(
+    val filteredSizeInBytes = RoundingToBigInt(BigDecimal(stats.sizeInBytes) * percent)
+    val filteredRowCount = stats.rowCount.map(
       r => RoundingToBigInt(BigDecimal(r) * percent)
     )
 

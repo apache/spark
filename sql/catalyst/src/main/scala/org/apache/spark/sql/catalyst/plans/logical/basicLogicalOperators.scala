@@ -119,9 +119,8 @@ case class Filter(condition: Expression, child: LogicalPlan)
     child.constraints.union(predicates.toSet)
   }
 
-  override lazy val statistics: Statistics = {
-    val filterEstimate = FilterEstimation(this).getOrElse(super.statistics)
-  }
+  override lazy val statistics: Statistics =
+    FilterEstimation.estimate(this).getOrElse(super.statistics)
 
 }
 

@@ -47,7 +47,8 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
         sql(s"select * from $table1 where key1=2").queryExecution.optimizedPlan
       val filterNodes = logicalPlan.collect {
         case filter: Filter =>
-          assert(filter.statistics == expectedFilterStats)
+          assert(filter.statistics.rowCount == expectedFilterStats.rowCount)
+          assert(filter.statistics.colStats == expectedFilterStats.colStats)
           filter
       }
       assert(filterNodes.size == 1)
