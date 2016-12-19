@@ -44,10 +44,8 @@ The spark jobs themselves must be configured to log events, and to log them to t
 writable directory. For example, if the server was configured with a log directory of
 `hdfs://namenode/shared/spark-logs`, then the client-side options would be:
 
-```
-spark.eventLog.enabled true
-spark.eventLog.dir hdfs://namenode/shared/spark-logs
-```
+    spark.eventLog.enabled true
+    spark.eventLog.dir hdfs://namenode/shared/spark-logs
 
 The history server can be configured as follows:
 
