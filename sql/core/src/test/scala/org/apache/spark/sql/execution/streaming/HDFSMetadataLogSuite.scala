@@ -33,7 +33,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.execution.streaming.FakeFileSystem._
 import org.apache.spark.sql.execution.streaming.HDFSMetadataLog.{FileContextManager, FileManager, FileSystemManager}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.UninterruptibleThread
+import org.apache.spark.util.{UninterruptibleThread, Utils}
 
 class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
 
@@ -88,14 +88,14 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       s"fs.$scheme.impl",
       classOf[FakeFileSystem].getName)
     withTempDir { temp =>
-      val metadataLog = new HDFSMetadataLog[String](spark, s"$scheme://$temp")
+      val metadataLog = new HDFSMetadataLog[String](spark, s"$scheme://${temp.toURI.getPath}")
       assert(metadataLog.add(0, "batch0"))
       assert(metadataLog.getLatest() === Some(0 -> "batch0"))
       assert(metadataLog.get(0) === Some("batch0"))
       assert(metadataLog.get(None, Some(0)) === Array(0 -> "batch0"))
 
 
-      val metadataLog2 = new HDFSMetadataLog[String](spark, s"$scheme://$temp")
+      val metadataLog2 = new HDFSMetadataLog[String](spark, s"$scheme://${temp.toURI.getPath}")
       assert(metadataLog2.get(0) === Some("batch0"))
       assert(metadataLog2.getLatest() === Some(0 -> "batch0"))
       assert(metadataLog2.get(None, Some(0)) === Array(0 -> "batch0"))
@@ -209,14 +209,21 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
 
     // Open and delete
-    val f1 = fm.open(path)
-    fm.delete(path)
-    assert(!fm.exists(path))
-    intercept[IOException] {
-      fm.open(path)
+    // Open and delete
+    if (Utils.isWindows) {
+      Utils.tryWithResource(fm.open(path))(_ => ())
+      fm.delete(path)
+      fm.delete(path) // should not throw exception
+    } else {
+      Utils.tryWithResource(fm.open(path)) { _ =>
+        fm.delete(path)
+        assert(!fm.exists(path))
+        intercept[IOException] {
+          fm.open(path)
+        }
+        fm.delete(path) // should not throw exception
+      }
     }
-    fm.delete(path)  // should not throw exception
-    f1.close()
 
     // Rename
     val path1 = new Path(s"$dir/file1")
