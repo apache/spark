@@ -482,7 +482,7 @@ class StreamExecution(
           ct.dataType)
       case cd: CurrentDate =>
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
-          cd.dataType, cd.zoneId)
+          cd.dataType, cd.timeZoneId)
     }
 
     reportTimeTaken("queryPlanning") {

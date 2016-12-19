@@ -34,13 +34,13 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  */
 trait TimeZoneAwareExpression extends Expression {
 
-  def zoneId: String
+  def timeZoneId: String
 
-  def timeZoneResolved: Boolean = zoneId != null
+  def timeZoneResolved: Boolean = timeZoneId != null
 
-  def withTimeZone(zoneId: String): TimeZoneAwareExpression
+  def withTimeZone(timeZoneId: String): TimeZoneAwareExpression
 
-  def timeZone: TimeZone = TimeZone.getTimeZone(zoneId)
+  def timeZone: TimeZone = TimeZone.getTimeZone(timeZoneId)
 }
 
 /**
@@ -51,7 +51,7 @@ trait TimeZoneAwareExpression extends Expression {
  */
 @ExpressionDescription(
   usage = "_FUNC_() - Returns the current date at the start of query evaluation.")
-case class CurrentDate(zoneId: String = null)
+case class CurrentDate(timeZoneId: String = null)
   extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
 
   def this() = this(null)
@@ -64,7 +64,8 @@ case class CurrentDate(zoneId: String = null)
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
 
-  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = timeZoneId)
 
   override def eval(input: InternalRow): Any = {
     DateTimeUtils.millisToDays(System.currentTimeMillis(), timeZone)
@@ -101,7 +102,7 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
  *
  * There is no code generation since this expression should be replaced with a literal.
  */
-case class CurrentBatchTimestamp(timestampMs: Long, dataType: DataType, zoneId: String = null)
+case class CurrentBatchTimestamp(timestampMs: Long, dataType: DataType, timeZoneId: String = null)
   extends LeafExpression with TimeZoneAwareExpression with Nondeterministic with CodegenFallback {
 
   def this(timestampMs: Long, dataType: DataType) = this(timestampMs, dataType, null)
@@ -113,7 +114,8 @@ case class CurrentBatchTimestamp(timestampMs: Long, dataType: DataType, zoneId: 
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
 
-  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = timeZoneId)
 
   override def prettyName: String = "current_batch_timestamp"
 
@@ -204,7 +206,7 @@ case class DateSub(startDate: Expression, days: Expression)
       > SELECT _FUNC_('2009-07-30 12:58:59');
        12
   """)
-case class Hour(child: Expression, zoneId: String = null)
+case class Hour(child: Expression, timeZoneId: String = null)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
   def this(child: Expression) = this(child, null)
@@ -216,7 +218,8 @@ case class Hour(child: Expression, zoneId: String = null)
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
 
-  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = timeZoneId)
 
   override protected def nullSafeEval(timestamp: Any): Any = {
     DateTimeUtils.getHours(timestamp.asInstanceOf[Long], timeZone)
@@ -236,7 +239,7 @@ case class Hour(child: Expression, zoneId: String = null)
       > SELECT _FUNC_('2009-07-30 12:58:59');
        58
   """)
-case class Minute(child: Expression, zoneId: String = null)
+case class Minute(child: Expression, timeZoneId: String = null)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
   def this(child: Expression) = this(child, null)
@@ -248,7 +251,8 @@ case class Minute(child: Expression, zoneId: String = null)
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
 
-  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = timeZoneId)
 
   override protected def nullSafeEval(timestamp: Any): Any = {
     DateTimeUtils.getMinutes(timestamp.asInstanceOf[Long], timeZone)
@@ -268,7 +272,7 @@ case class Minute(child: Expression, zoneId: String = null)
       > SELECT _FUNC_('2009-07-30 12:58:59');
        59
   """)
-case class Second(child: Expression, zoneId: String = null)
+case class Second(child: Expression, timeZoneId: String = null)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
   def this(child: Expression) = this(child, null)
@@ -280,7 +284,8 @@ case class Second(child: Expression, zoneId: String = null)
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
 
-  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = timeZoneId)
 
   override protected def nullSafeEval(timestamp: Any): Any = {
     DateTimeUtils.getSeconds(timestamp.asInstanceOf[Long], timeZone)
@@ -460,7 +465,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
        2016
   """)
 // scalastyle:on line.size.limit
-case class DateFormatClass(left: Expression, right: Expression, zoneId: String = null)
+case class DateFormatClass(left: Expression, right: Expression, timeZoneId: String = null)
   extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
   def this(left: Expression, right: Expression) = this(left, right, null)
@@ -472,7 +477,8 @@ case class DateFormatClass(left: Expression, right: Expression, zoneId: String =
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
 
-  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = timeZoneId)
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
     val sdf = new SimpleDateFormat(format.toString, Locale.US)
@@ -507,7 +513,7 @@ case class DateFormatClass(left: Expression, right: Expression, zoneId: String =
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
        1460041200
   """)
-case class ToUnixTimestamp(timeExp: Expression, format: Expression, zoneId: String = null)
+case class ToUnixTimestamp(timeExp: Expression, format: Expression, timeZoneId: String = null)
   extends UnixTime {
 
   def this(timeExp: Expression, format: Expression) = this(timeExp, format, null)
@@ -515,7 +521,8 @@ case class ToUnixTimestamp(timeExp: Expression, format: Expression, zoneId: Stri
   override def left: Expression = timeExp
   override def right: Expression = format
 
-  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = timeZoneId)
 
   def this(time: Expression) = {
     this(time, Literal("yyyy-MM-dd HH:mm:ss"))
@@ -543,7 +550,7 @@ case class ToUnixTimestamp(timeExp: Expression, format: Expression, zoneId: Stri
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
        1460041200
   """)
-case class UnixTimestamp(timeExp: Expression, format: Expression, zoneId: String = null)
+case class UnixTimestamp(timeExp: Expression, format: Expression, timeZoneId: String = null)
   extends UnixTime {
 
   def this(timeExp: Expression, format: Expression) = this(timeExp, format, null)
@@ -551,7 +558,8 @@ case class UnixTimestamp(timeExp: Expression, format: Expression, zoneId: String
   override def left: Expression = timeExp
   override def right: Expression = format
 
-  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = timeZoneId)
 
   def this(time: Expression) = {
     this(time, Literal("yyyy-MM-dd HH:mm:ss"))
@@ -700,7 +708,7 @@ abstract class UnixTime
       > SELECT _FUNC_(0, 'yyyy-MM-dd HH:mm:ss');
        1970-01-01 00:00:00
   """)
-case class FromUnixTime(sec: Expression, format: Expression, zoneId: String = null)
+case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: String = null)
   extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
   def this(sec: Expression, format: Expression) = this(sec, format, null)
@@ -722,7 +730,8 @@ case class FromUnixTime(sec: Expression, format: Expression, zoneId: String = nu
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
 
-  override def withTimeZone(zoneId: String): TimeZoneAwareExpression = copy(zoneId = zoneId)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = timeZoneId)
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: SimpleDateFormat =

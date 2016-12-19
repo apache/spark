@@ -177,7 +177,7 @@ class Column(val expr: Expression) extends Logging {
     // NamedExpression under this Cast.
     case c: Cast =>
       c.transformUp {
-        case Cast(ne: NamedExpression, to, zoneId) => UnresolvedAlias(Cast(ne, to, zoneId))
+        case Cast(ne: NamedExpression, to, timeZoneId) => UnresolvedAlias(Cast(ne, to, timeZoneId))
       } match {
         case ne: NamedExpression => ne
         case other => Alias(expr, usePrettyExpression(expr).sql)()
