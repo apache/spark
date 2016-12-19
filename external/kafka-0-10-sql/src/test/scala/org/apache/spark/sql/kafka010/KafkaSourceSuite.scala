@@ -27,7 +27,6 @@ import scala.util.Random
 
 import org.apache.kafka.clients.producer.RecordMetadata
 import org.apache.kafka.common.TopicPartition
-import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
@@ -803,8 +802,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
   }
 }
 
-class KafkaSourceStressForDontFailOnDataLossSuite
-  extends StreamTest with SharedSQLContext with BeforeAndAfter {
+class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with SharedSQLContext {
 
   import testImplicits._
 
@@ -819,7 +817,8 @@ class KafkaSourceStressForDontFailOnDataLossSuite
     new TestSparkSession(new SparkContext("local[2,3]", "test-sql-context", sparkConf))
   }
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     testUtils = new KafkaTestUtils {
       override def brokerConfiguration: Properties = {
         val props = super.brokerConfiguration
@@ -838,15 +837,15 @@ class KafkaSourceStressForDontFailOnDataLossSuite
     testUtils.setup()
   }
 
-  after {
+  override def afterAll(): Unit = {
     if (testUtils != null) {
       testUtils.teardown()
       testUtils = null
+      super.afterAll()
     }
   }
 
-  for (i <- 0 to 120) {
-  test(s"stress test for failOnDataLoss=false $i") {
+  test("stress test for failOnDataLoss=false") {
     val reader = spark
       .readStream
       .format("kafka")
@@ -925,6 +924,5 @@ class KafkaSourceStressForDontFailOnDataLossSuite
     if (query.exception.nonEmpty) {
       throw query.exception.get
     }
-  }
   }
 }

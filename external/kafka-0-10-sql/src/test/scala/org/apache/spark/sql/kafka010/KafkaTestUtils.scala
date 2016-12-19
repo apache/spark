@@ -152,13 +152,6 @@ class KafkaTestUtils extends Logging {
       zookeeper.shutdown()
       zookeeper = null
     }
-
-    // Clean the JMX metrics used by Kafka cluster to avoid OOM
-    com.yammer.metrics.reporting.JmxReporter.shutdownDefault()
-    val metrics = com.yammer.metrics.Metrics.defaultRegistry().allMetrics()
-    val f = metrics.getClass.getDeclaredField("m")
-    f.setAccessible(true)
-    f.get(metrics).asInstanceOf[java.util.Map[String, String]].clear()
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
