@@ -28,8 +28,8 @@ object UserDefinedUntypedAggregation {
 
   // $example on:untyped_custom_aggregation$
   object MyAverage extends UserDefinedAggregateFunction {
-    // Data types of input arguments
-    def inputSchema: StructType = StructType(StructField("salary", LongType) :: Nil)
+    // Data types of input arguments of this aggregate function
+    def inputSchema: StructType = StructType(StructField("inputColumn", LongType) :: Nil)
     // Data types of values in the aggregation buffer
     def bufferSchema: StructType = {
       StructType(StructField("sum", LongType) :: StructField("count", LongType) :: Nil)
@@ -38,7 +38,10 @@ object UserDefinedUntypedAggregation {
     def dataType: DataType = DoubleType
     // Whether this function always returns the same output on the identical input
     def deterministic: Boolean = true
-    // Initializes the given aggregation buffer
+    // Initializes the given aggregation buffer. The buffer itself is a `Row` that in addition to
+    // standard methods like retrieving a value at an index (e.g., get(), getBoolean()), provides
+    // the opportunity to update its values. Note that arrays and maps inside the buffer are still
+    // immutable.
     def initialize(buffer: MutableAggregationBuffer): Unit = {
       buffer(0) = 0L
       buffer(1) = 0L

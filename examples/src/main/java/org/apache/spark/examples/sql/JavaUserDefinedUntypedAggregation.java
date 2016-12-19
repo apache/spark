@@ -41,7 +41,7 @@ public class JavaUserDefinedUntypedAggregation {
 
     public MyAverage() {
       List<StructField> inputFields = new ArrayList<>();
-      inputFields.add(DataTypes.createStructField("salary", DataTypes.LongType, true));
+      inputFields.add(DataTypes.createStructField("inputColumn", DataTypes.LongType, true));
       inputSchema = DataTypes.createStructType(inputFields);
 
       List<StructField> bufferFields = new ArrayList<>();
@@ -49,7 +49,7 @@ public class JavaUserDefinedUntypedAggregation {
       bufferFields.add(DataTypes.createStructField("count", DataTypes.LongType, true));
       bufferSchema = DataTypes.createStructType(bufferFields);
     }
-    // Data types of input arguments
+    // Data types of input arguments of this aggregate function
     public StructType inputSchema() {
       return inputSchema;
     }
@@ -65,7 +65,10 @@ public class JavaUserDefinedUntypedAggregation {
     public boolean deterministic() {
       return true;
     }
-    // Initializes the given aggregation buffer
+    // Initializes the given aggregation buffer. The buffer itself is a `Row` that in addition to
+    // standard methods like retrieving a value at an index (e.g., get(), getBoolean()), provides
+    // the opportunity to update its values. Note that arrays and maps inside the buffer are still
+    // immutable.
     public void initialize(MutableAggregationBuffer buffer) {
       buffer.update(0, 0L);
       buffer.update(1, 0L);
