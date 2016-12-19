@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.util.Date
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{CatalogStatistics, LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Cast, Literal}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -237,6 +239,38 @@ case class CatalogTable(
         if (tracksPartitionsInCatalog) "Partition Provider: Catalog" else "")
 
     output.filter(_.nonEmpty).mkString("CatalogTable(\n\t", "\n\t", ")")
+  }
+}
+
+
+/**
+ * This class of statistics is used in [[CatalogTable]] to interact with metastore.
+ */
+case class CatalogStatistics(
+    sizeInBytes: BigInt,
+    rowCount: Option[BigInt] = None,
+    colStats: Map[String, ColumnStat] = Map.empty) {
+
+  /**
+   * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
+   * on column names.
+   */
+  def convert(attributes: Seq[Attribute]): Statistics = {
+    val matched = mutable.HashMap[Attribute, ColumnStat]()
+    attributes.foreach { attr =>
+      if (colStats.contains(attr.name)) {
+        matched.put(attr, colStats(attr.name))
+      }
+    }
+    Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
+      attributeStats = AttributeMap(matched.toSeq))
+  }
+
+  /** Readable string representation for the CatalogStatistics. */
+  def simpleString: String = {
+    Seq(s"sizeInBytes=$sizeInBytes",
+      if (rowCount.isDefined) s"rowCount=${rowCount.get}" else ""
+    ).filter(_.nonEmpty).mkString(", ")
   }
 }
 
