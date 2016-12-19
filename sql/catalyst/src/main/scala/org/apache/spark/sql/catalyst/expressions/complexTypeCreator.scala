@@ -74,17 +74,13 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
         evals.zipWithIndex.map { case (eval, i) =>
           eval.code +
             (if (isPrimitiveArray) {
-              (if (!children(i).nullable) {
-                s"\n$arrayWriter.write($i, ${eval.value});"
+              s"""
+              if (${eval.isNull}) {
+                $arrayWriter.setNull$primitiveTypeName($i);
               } else {
-                s"""
-                if (${eval.isNull}) {
-                  $arrayWriter.setNull$primitiveTypeName($i);
-                } else {
-                  $arrayWriter.write($i, ${eval.value});
-                }
-               """
-              })
+                $arrayWriter.write($i, ${eval.value});
+              }
+             """
             } else {
               s"""
               if (${eval.isNull}) {
