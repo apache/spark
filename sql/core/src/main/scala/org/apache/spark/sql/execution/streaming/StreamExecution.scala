@@ -309,7 +309,7 @@ class StreamExecution(
         updateStatusMessage("Stopped")
       case e: Throwable =>
         streamDeathCause = new StreamingQueryException(
-          this,
+          this.toDebugString,
           s"Query $prettyIdString terminated with exception: ${e.getMessage}",
           e,
           prettyCommittedOffsets,
@@ -655,10 +655,7 @@ class StreamExecution(
     s"Streaming Query $prettyIdString [state = $state]"
   }
 
-  def toDebugString: String = {
-    val deathCauseStr = if (streamDeathCause != null) {
-      "Error:\n" + stackTraceToString(streamDeathCause.cause)
-    } else ""
+  private def toDebugString: String = {
     s"""
        |=== Streaming Query ===
        |Identifier: $prettyIdString
@@ -670,8 +667,6 @@ class StreamExecution(
        |
        |Logical Plan:
        |${if (_logicalPlan == null) null else _logicalPlan}
-       |
-       |$deathCauseStr
      """.stripMargin
   }
 
