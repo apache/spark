@@ -23,13 +23,13 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
   private int numHashFunctions;
 
-  private BitArray bits;
+  private RoaringBitmapArray bits;
 
   BloomFilterImpl(int numHashFunctions, long numBits) {
-    this(new BitArray(numBits), numHashFunctions);
+    this(new RoaringBitmapArray(numBits), numHashFunctions);
   }
 
-  private BloomFilterImpl(BitArray bits, int numHashFunctions) {
+  private BloomFilterImpl(RoaringBitmapArray bits, int numHashFunctions) {
     this.bits = bits;
     this.numHashFunctions = numHashFunctions;
   }
@@ -48,7 +48,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
     BloomFilterImpl that = (BloomFilterImpl) other;
 
-    return this.numHashFunctions == that.numHashFunctions && this.bits.equals(that.bits);
+    return (this.numHashFunctions == that.numHashFunctions) && this.bits.equals(that.bits);
   }
 
   @Override
@@ -84,18 +84,19 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
   @Override
   public boolean putBinary(byte[] item) {
-    int h1 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, 0);
-    int h2 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, h1);
+    // Strategy is taken from guava`s  BloomFilterStrategies.MURMUR128_MITZ_64
+    long[] hashes = new long[2];
+    Murmur3_128.hashBytes(item, 0, hashes);
+    long h1 = hashes[0];
+    long h2 = hashes[1];
 
     long bitSize = bits.bitSize();
     boolean bitsChanged = false;
+    long combinedHash = h1;
     for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
-      // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      bitsChanged |= bits.set(combinedHash % bitSize);
+      // Make combinedHash positive and indexable
+      bitsChanged |= bits.set((combinedHash & Long.MAX_VALUE) % bitSize);
+      combinedHash += h2;
     }
     return bitsChanged;
   }
@@ -107,61 +108,59 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
   @Override
   public boolean mightContainBinary(byte[] item) {
-    int h1 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, 0);
-    int h2 = Murmur3_x86_32.hashUnsafeBytes(item, Platform.BYTE_ARRAY_OFFSET, item.length, h1);
+    // Strategy is taken from guava`s  BloomFilterStrategies.MURMUR128_MITZ_64
+    long[] hashes = new long[2];
+    Murmur3_128.hashBytes(item, 0, hashes);
+
+    long h1 = hashes[0];
+    long h2 = hashes[1];
 
     long bitSize = bits.bitSize();
+    long combinedHash = h1;
     for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
-      // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      if (!bits.get(combinedHash % bitSize)) {
+      // Make combinedHash positive and indexable
+      if (!bits.get((combinedHash & Long.MAX_VALUE) % bitSize)) {
         return false;
       }
+      combinedHash += h2;
     }
     return true;
   }
 
   @Override
   public boolean putLong(long item) {
-    // Here we first hash the input long element into 2 int hash values, h1 and h2, then produce n
-    // hash values by `h1 + i * h2` with 1 <= i <= numHashFunctions.
-    // Note that `CountMinSketch` use a different strategy, it hash the input long element with
-    // every i to produce n hash values.
-    // TODO: the strategy of `CountMinSketch` looks more advanced, should we follow it here?
-    int h1 = Murmur3_x86_32.hashLong(item, 0);
-    int h2 = Murmur3_x86_32.hashLong(item, h1);
+    // Strategy is taken from guava`s  BloomFilterStrategies.MURMUR128_MITZ_64
+    long[] hashes = new long[2];
+    Murmur3_128.hashLong(item, 0, hashes);
+    long h1 = hashes[0];
+    long h2 = hashes[1];
 
     long bitSize = bits.bitSize();
     boolean bitsChanged = false;
+    long combinedHash = h1;
     for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
-      // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      bitsChanged |= bits.set(combinedHash % bitSize);
+      // Make combinedHash positive and indexable
+      bitsChanged |= bits.set((combinedHash & Long.MAX_VALUE) % bitSize);
+      combinedHash += h2;
     }
     return bitsChanged;
   }
 
   @Override
   public boolean mightContainLong(long item) {
-    int h1 = Murmur3_x86_32.hashLong(item, 0);
-    int h2 = Murmur3_x86_32.hashLong(item, h1);
+    // Strategy is taken from guava`s  BloomFilterStrategies.MURMUR128_MITZ_64
+    long[] hashes = new long[2];
+    Murmur3_128.hashLong(item, 0, hashes);
+    long h1 = hashes[0];
+    long h2 = hashes[1];
 
     long bitSize = bits.bitSize();
+    long combinedHash = h1;
     for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = h1 + (i * h2);
-      // Flip all the bits if it's negative (guaranteed positive number)
-      if (combinedHash < 0) {
-        combinedHash = ~combinedHash;
-      }
-      if (!bits.get(combinedHash % bitSize)) {
+      if (!bits.get((combinedHash & Long.MAX_VALUE) % bitSize)) {
         return false;
       }
+      combinedHash += h2;
     }
     return true;
   }
@@ -238,7 +237,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     }
 
     this.numHashFunctions = dis.readInt();
-    this.bits = BitArray.readFrom(dis);
+    this.bits = RoaringBitmapArray.readFrom(dis);
   }
 
   public static BloomFilterImpl readFrom(InputStream in) throws IOException {
