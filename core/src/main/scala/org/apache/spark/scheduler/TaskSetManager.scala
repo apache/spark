@@ -168,7 +168,7 @@ private[spark] class TaskSetManager(
   // last launched a task at that level, and move up a level when localityWaits[curLevel] expires.
   // We then move down if we manage to launch a "more local" task.
   var currentLocalityIndex = 0    // Index of our current locality level in validLocalityLevels
-  var lastLaunchTime = clock.getTimeMillis()  // Time we last launched a task at this level
+  var localityLevelUpdateTime = Long.MaxValue
 
   override def schedulableQueue: ConcurrentLinkedQueue[Schedulable] = null
 
@@ -429,7 +429,8 @@ private[spark] class TaskSetManager(
         }
       }
 
-      dequeueTask(execId, host, allowedLocality).map { case ((index, taskLocality, speculative)) =>
+      val taskOpt = dequeueTask(execId, host, allowedLocality)
+      val taskDescOpt = taskOpt.map { case ((index, taskLocality, speculative)) =>
         // Found a task; do some bookkeeping and return a task description
         val task = tasks(index)
         val taskId = sched.newTaskId()
@@ -440,12 +441,6 @@ private[spark] class TaskSetManager(
           execId, host, taskLocality, speculative)
         taskInfos(taskId) = info
         taskAttempts(index) = info :: taskAttempts(index)
-        // Update our locality level for delay scheduling
-        // NO_PREF will not affect the variables related to delay scheduling
-        if (maxLocality != TaskLocality.NO_PREF) {
-          currentLocalityIndex = getLocalityIndex(taskLocality)
-          lastLaunchTime = curTime
-        }
         // Serialize and return the task
         val startTime = clock.getTimeMillis()
         val serializedTask: ByteBuffer = try {
@@ -479,6 +474,18 @@ private[spark] class TaskSetManager(
         new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,
           taskName, index, serializedTask)
       }
+      if (taskDescOpt.isEmpty) {
+        // SPARK-18886.  We didn't schedule anything against this resource offer, so we should start
+        // the delay scheduling timer to move up to the next locality level.  Note that we may also
+        // end up here because everything has already been scheduled -- then this isn't necessary,
+        // but also isn't harmful.
+        val prevLocalityUpdateTime = localityLevelUpdateTime
+        localityLevelUpdateTime =
+          math.min(localityLevelUpdateTime, curTime + localityWaits(currentLocalityIndex))
+        logInfo(s"failed to schedule anything, so updating localityUpdateTime " +
+          s"from $prevLocalityUpdateTime to $localityLevelUpdateTime")
+      }
+      taskDescOpt
     } else {
       None
     }
@@ -538,18 +545,16 @@ private[spark] class TaskSetManager(
         // This is a performance optimization: if there are no more tasks that can
         // be scheduled at a particular locality level, there is no point in waiting
         // for the locality wait timeout (SPARK-4939).
-        lastLaunchTime = curTime
-        logDebug(s"No tasks for locality level ${myLocalityLevels(currentLocalityIndex)}, " +
+        logInfo(s"No tasks for locality level ${myLocalityLevels(currentLocalityIndex)}, " +
           s"so moving to locality level ${myLocalityLevels(currentLocalityIndex + 1)}")
         currentLocalityIndex += 1
-      } else if (curTime - lastLaunchTime >= localityWaits(currentLocalityIndex)) {
-        // Jump to the next locality level, and reset lastLaunchTime so that the next locality
-        // wait timer doesn't immediately expire
-        lastLaunchTime += localityWaits(currentLocalityIndex)
-        logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
+      } else if (curTime > localityLevelUpdateTime) {
+        localityLevelUpdateTime += localityWaits(currentLocalityIndex)
+        logInfo(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
           s"${localityWaits(currentLocalityIndex)}ms")
         currentLocalityIndex += 1
       } else {
+        logInfo(s"found tasks for locality $currentLocalityIndex")
         return myLocalityLevels(currentLocalityIndex)
       }
     }
