@@ -364,6 +364,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                   streamThreadDeathCause = e
                 }
               })
+            currentStream.awaitInitialization(streamingTimeout.toMillis)
 
           case AdvanceManualClock(timeToAdd) =>
             verify(currentStream != null,

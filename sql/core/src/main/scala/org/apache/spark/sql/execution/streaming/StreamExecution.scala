@@ -66,6 +66,7 @@ class StreamExecution(
   private val awaitBatchLock = new ReentrantLock(true)
   private val awaitBatchLockCondition = awaitBatchLock.newCondition()
 
+  private val initializationLatch = new CountDownLatch(1)
   private val startLatch = new CountDownLatch(1)
   private val terminationLatch = new CountDownLatch(1)
 
@@ -128,6 +129,9 @@ class StreamExecution(
   @volatile private var uniqueSources: Seq[Source] = Seq.empty
 
   override lazy val logicalPlan: LogicalPlan = {
+    assert(microBatchThread eq Thread.currentThread,
+      "logicalPlan must be initialized in StreamExecutionThread " +
+        s"but the current thread was ${Thread.currentThread}")
     var nextSourceId = 0L
     val _logicalPlan = analyzedPlan.transform {
       case StreamingRelation(dataSource, _, output) =>
@@ -150,7 +154,7 @@ class StreamExecution(
 
   /** Defines the internal state of execution */
   @volatile
-  private var state: State = INITIALIZED
+  private var state: State = INITIALIZING
 
   @volatile
   var lastExecution: QueryExecution = _
@@ -191,8 +195,11 @@ class StreamExecution(
    */
   val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
 
+  /** Whether all fields of the query have been initialized */
+  private def isInitialized: Boolean = state != INITIALIZING
+
   /** Whether the query is currently active or not */
-  override def isActive: Boolean = state == ACTIVE
+  override def isActive: Boolean = state != TERMINATED
 
   /** Returns the [[StreamingQueryException]] if the query was terminated by an exception. */
   override def exception: Option[StreamingQueryException] = Option(streamDeathCause)
@@ -220,11 +227,7 @@ class StreamExecution(
    * `start()` method returns.
    */
   private def runBatches(): Unit = {
-    var logicalPlanInitilized = false
     try {
-      // Mark ACTIVE and then post the event. QueryStarted event is synchronously sent to listeners,
-      // so must mark this as ACTIVE first.
-      state = ACTIVE
       if (sparkSession.sessionState.conf.streamingMetricsEnabled) {
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
@@ -241,7 +244,9 @@ class StreamExecution(
       updateStatusMessage("Initializing sources")
       // force initialization of the logical plan so that the sources can be created
       logicalPlan
-      logicalPlanInitilized = true
+      state = ACTIVE
+      // Unblock `awaitInitialization`
+      initializationLatch.countDown()
 
       triggerExecutor.execute(() => {
         startTrigger()
@@ -289,7 +294,7 @@ class StreamExecution(
         updateStatusMessage("Stopped")
       case e: Throwable =>
         streamDeathCause = new StreamingQueryException(
-          toDebugString(includeLogicalPlan = logicalPlanInitilized),
+          toDebugString(includeLogicalPlan = isInitialized),
           s"Query $prettyIdString terminated with exception: ${e.getMessage}",
           e,
           committedOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString,
@@ -302,17 +307,25 @@ class StreamExecution(
           throw e
         }
     } finally {
-      state = TERMINATED
-      currentStatus = status.copy(isTriggerActive = false, isDataAvailable = false)
+      // Release latches to unblock the user codes since exception can happen in any place and we
+      // may not get a chance to release them
+      startLatch.countDown()
+      initializationLatch.countDown()
 
-      // Update metrics and status
-      sparkSession.sparkContext.env.metricsSystem.removeSource(streamMetrics)
+      try {
+        state = TERMINATED
+        currentStatus = status.copy(isTriggerActive = false, isDataAvailable = false)
 
-      // Notify others
-      sparkSession.streams.notifyQueryTermination(StreamExecution.this)
-      postEvent(
-       new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString)))
-      terminationLatch.countDown()
+        // Update metrics and status
+        sparkSession.sparkContext.env.metricsSystem.removeSource(streamMetrics)
+
+        // Notify others
+        sparkSession.streams.notifyQueryTermination(StreamExecution.this)
+        postEvent(
+          new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString)))
+      } finally {
+        terminationLatch.countDown()
+      }
     }
   }
 
@@ -544,6 +557,7 @@ class StreamExecution(
    * least the given `Offset`. This method is intended for use primarily when writing tests.
    */
   private[sql] def awaitOffset(source: Source, newOffset: Offset): Unit = {
+    assertAwaitThread()
     def notDone = {
       val localCommittedOffsets = committedOffsets
       !localCommittedOffsets.contains(source) || localCommittedOffsets(source) != newOffset
@@ -566,7 +580,33 @@ class StreamExecution(
   /** A flag to indicate that a batch has completed with no new data available. */
   @volatile private var noNewData = false
 
+  /**
+   * Assert that the await APIs should not be called in the stream thread. Otherwise, it may cause
+   * dead-lock.
+   */
+  private def assertAwaitThread(): Unit = {
+    if (microBatchThread eq Thread.currentThread) {
+      throw new IllegalStateException("Cannot wait inside a stream thread")
+    }
+  }
+
+  /**
+   * Await until all fields of the query have been initialized.
+   */
+  def awaitInitialization(timeoutMs: Long): Unit = {
+    assertAwaitThread()
+    require(timeoutMs > 0, "Timeout has to be positive")
+    if (streamDeathCause != null) {
+      throw streamDeathCause
+    }
+    initializationLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
+    if (streamDeathCause != null) {
+      throw streamDeathCause
+    }
+  }
+
   override def processAllAvailable(): Unit = {
+    assertAwaitThread()
     if (streamDeathCause != null) {
       throw streamDeathCause
     }
@@ -588,9 +628,7 @@ class StreamExecution(
   }
 
   override def awaitTermination(): Unit = {
-    if (state == INITIALIZED) {
-      throw new IllegalStateException("Cannot wait for termination on a query that has not started")
-    }
+    assertAwaitThread()
     terminationLatch.await()
     if (streamDeathCause != null) {
       throw streamDeathCause
@@ -598,9 +636,7 @@ class StreamExecution(
   }
 
   override def awaitTermination(timeoutMs: Long): Boolean = {
-    if (state == INITIALIZED) {
-      throw new IllegalStateException("Cannot wait for termination on a query that has not started")
-    }
+    assertAwaitThread()
     require(timeoutMs > 0, "Timeout has to be positive")
     terminationLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
     if (streamDeathCause != null) {
@@ -650,7 +686,7 @@ class StreamExecution(
   }
 
   trait State
-  case object INITIALIZED extends State
+  case object INITIALIZING extends State
   case object ACTIVE extends State
   case object TERMINATED extends State
 }
