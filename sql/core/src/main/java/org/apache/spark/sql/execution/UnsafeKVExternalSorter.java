@@ -24,7 +24,6 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
-import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
@@ -34,7 +33,6 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.unsafe.sort.*;
@@ -98,34 +96,15 @@ public final class UnsafeKVExternalSorter {
         numElementsForSpillThreshold,
         canUseRadixSort);
     } else {
-      // Becasue we insert the number of values in the map into `UnsafeInMemorySorter`, if
-      // the number of values is more than the number of keys, and the array in the map is
-      // not big enough to do in-place sort, we must acquire new array.
-      // To insert a record into `UnsafeInMemorySorter` will consume two spaces in the array.
-      // We must have half of the array as empty. There are totally `map.numValues()` records
-      // to be inserted.
-
-      // During spilling, the array in map will not be used, so if the array is large enough,
-      // we can borrow that and use it as the underlying array for in-memory sorter. In this
-      // case as we will not grow the array, it's fine to pass `null` as consumer, however,
-      // if we have allocated array instead of using the map's array, we still need
-      // to pass the map as consumer in order to release the allocated array.
-      LongArray sortArray = null;
-      MemoryConsumer consumer = null;
-      if (map.numValues() > map.numKeys() && map.numValues() * 2 > map.getArray().size() / 2) {
-        sortArray = map.allocateArray(map.numValues() * 2 * 2);
-        consumer = map;
-      } else {
-        // The array will be used to do in-place sort, which require half of the space to be empty.
-        if (map.numKeys() * 2 <= map.getArray().size() / 2) {
-          sortArray = map.getArray();
-        } else {
-          sortArray = map.allocateArray(map.numKeys() * 2 * 2);
-          consumer = map;
-        }
-      }
+      // The array will be used to do in-place sort, which require half of the space to be empty.
+      // Note: each record in the map takes two entries in the array, one is record pointer,
+      // another is the key prefix.
+      assert(map.numKeys() * 2 <= map.getArray().size() / 2);
+      // During spilling, the array in map will not be used, so we can borrow that and use it
+      // as the underlying array for in-memory sorter (it's always large enough).
+      // Since we will not grow the array, it's fine to pass `null` as consumer.
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
-        consumer, taskMemoryManager, recordComparator, prefixComparator, sortArray,
+        null, taskMemoryManager, recordComparator, prefixComparator, map.getArray(),
         canUseRadixSort);
 
       // We cannot use the destructive iterator here because we are reusing the existing memory

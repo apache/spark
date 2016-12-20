@@ -28,8 +28,6 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 /**
@@ -206,88 +204,4 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
       spill = true
     )
   }
-
-  test("SPARK-18800: pass BytesToBytesMap which contains numValues is more than numKeys") {
-    val PAGE_SIZE_BYTES = 1L << 26
-    val memoryManager =
-      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"))
-    val taskMemMgr = new TaskMemoryManager(memoryManager, 0)
-    TaskContext.setTaskContext(new TaskContextImpl(
-      stageId = 0,
-      partitionId = 0,
-      taskAttemptId = 98456,
-      attemptNumber = 0,
-      taskMemoryManager = taskMemMgr,
-      localProperties = new Properties,
-      metricsSystem = null))
-
-    val schema = StructType(StructField("b", BinaryType) :: Nil)
-    val externalConverter = CatalystTypeConverters.createToCatalystConverter(schema)
-    val converter = UnsafeProjection.create(schema)
-
-    val rand = new Random()
-    val recordLengthInBytes = 80
-    val kBytes = new Array[Byte](recordLengthInBytes)
-    rand.nextBytes(kBytes)
-    val key = converter(externalConverter.apply(Row(kBytes)).asInstanceOf[InternalRow])
-      .asInstanceOf[InternalRow].copy()
-    val inputData = Seq.fill(1024) {
-      val vBytes = new Array[Byte](recordLengthInBytes)
-      rand.nextBytes(vBytes)
-      val v = converter(externalConverter.apply(Row(vBytes)).asInstanceOf[InternalRow])
-        .asInstanceOf[InternalRow].copy()
-      (key, v)
-    }
-
-    val map =
-      prepareMapFilledSameKey(recordLengthInBytes, PAGE_SIZE_BYTES, inputData, taskMemMgr)
-    val sorter = new UnsafeKVExternalSorter(
-      schema, schema, SparkEnv.get.blockManager, SparkEnv.get.serializerManager,
-      PAGE_SIZE_BYTES, UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD, map)
-
-    sorter.cleanupResources()
-   // Make sure there is no memory leak
-    assert(0 === taskMemMgr.cleanUpAllAllocatedMemory)
-    TaskContext.unset()
-  }
-
-  // A helper function used to insert kv pairs into BytesToBytesMap.
-  // Those kv pairs have the same key.
-  private def prepareMapFilledSameKey(
-      recordLengthInBytes: Int,
-      pageSize: Long,
-      inputData: Seq[(InternalRow, InternalRow)],
-      taskMemoryManager: TaskMemoryManager): BytesToBytesMap = {
-    val map = new BytesToBytesMap(taskMemoryManager, 64, pageSize)
-    var afterFirst = false
-    inputData.foreach { case (key, value) =>
-      val keyBytes = key.asInstanceOf[UnsafeRow].getBytes()
-      val valueBytes = value.asInstanceOf[UnsafeRow].getBytes()
-      val loc = map.lookup(keyBytes, Platform.BYTE_ARRAY_OFFSET, recordLengthInBytes)
-      if (!afterFirst) {
-        assert(!loc.isDefined())
-        afterFirst = true
-      } else {
-        assert(loc.isDefined())
-      }
-      val putResult = loc.append(
-        keyBytes,
-        Platform.BYTE_ARRAY_OFFSET,
-        recordLengthInBytes,
-        valueBytes,
-        Platform.BYTE_ARRAY_OFFSET,
-        recordLengthInBytes
-      )
-      assert(putResult)
-    }
-    var count = 0
-    val iter = map.iterator()
-    while (iter.hasNext()) {
-      iter.next()
-      count += 1
-    }
-    assert(count == inputData.size)
-    map
-  }
-
 }
