@@ -261,7 +261,7 @@ class Catalog(object):
     @since(2.2)
     def recoverPartitions(self, tableName):
         """Recover all the partitions of the given table and update the catalog."""
-        self._jcatalog.refreshTable(tableName)
+        self._jcatalog.recoverPartitions(tableName)
 
     def _reset(self):
         """(Internal use only) Drop all existing databases (except "default"), tables,
