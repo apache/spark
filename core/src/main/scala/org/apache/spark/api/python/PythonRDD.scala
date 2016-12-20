@@ -275,6 +275,11 @@ private[spark] class PythonRunner(
         dataOut.writeInt(partitionIndex)
         // Python version of driver
         PythonRDD.writeUTF(pythonVer, dataOut)
+        // Write out the TaskContextInfo
+        dataOut.writeInt(context.stageId())
+        dataOut.writeInt(context.partitionId())
+        dataOut.writeInt(context.attemptNumber())
+        dataOut.writeLong(context.taskAttemptId())
         // sparkFilesDir
         PythonRDD.writeUTF(SparkFiles.getRootDirectory(), dataOut)
         // Python includes (*.zip and *.egg files)
