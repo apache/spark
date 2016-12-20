@@ -60,3 +60,29 @@ object CodegenMetrics extends Source {
   val METRIC_GENERATED_METHOD_BYTECODE_SIZE =
     metricRegistry.histogram(MetricRegistry.name("generatedMethodSize"))
 }
+
+/**
+ * :: Experimental ::
+ * Metrics for access to the hive external catalog.
+ */
+@Experimental
+object HiveCatalogMetrics extends Source {
+  override val sourceName: String = "HiveExternalCatalog"
+  override val metricRegistry: MetricRegistry = new MetricRegistry()
+
+  /**
+   * Tracks the total number of Spark jobs launched for parallel file listing.
+   */
+  val METRIC_PARALLEL_LISTING_JOB_COUNT = metricRegistry.counter(
+    MetricRegistry.name("parallelListingJobCount"))
+
+  /**
+   * Resets the values of all metrics to zero. This is useful in tests.
+   */
+  def reset(): Unit = {
+    METRIC_PARALLEL_LISTING_JOB_COUNT.dec(METRIC_PARALLEL_LISTING_JOB_COUNT.getCount())
+  }
+
+  // clients can use these to avoid classloader issues with the codahale classes
+  def incrementParallelListingJobCount(n: Int): Unit = METRIC_PARALLEL_LISTING_JOB_COUNT.inc(n)
+}
