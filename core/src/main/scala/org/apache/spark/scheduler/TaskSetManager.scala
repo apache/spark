@@ -548,7 +548,7 @@ private[spark] class TaskSetManager(
         logInfo(s"No tasks for locality level ${myLocalityLevels(currentLocalityIndex)}, " +
           s"so moving to locality level ${myLocalityLevels(currentLocalityIndex + 1)}")
         currentLocalityIndex += 1
-      } else if (curTime > localityLevelUpdateTime) {
+      } else if (curTime >= localityLevelUpdateTime) {
         localityLevelUpdateTime += localityWaits(currentLocalityIndex)
         logInfo(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
           s"${localityWaits(currentLocalityIndex)}ms")
