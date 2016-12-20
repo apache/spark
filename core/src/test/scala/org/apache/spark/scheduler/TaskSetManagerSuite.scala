@@ -325,12 +325,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Offer host2: fifth task (also on host2) should get chosen
     assert(manager.resourceOffer("exec2", "host2", ANY).get.index === 4)
 
-    // Now that we've launched a local task, we should no longer launch the task for host3
-    assert(manager.resourceOffer("exec2", "host2", ANY) === None)
-
-    clock.advance(LOCALITY_WAIT_MS)
-
-    // After another delay, we can go ahead and launch that task non-locally
+    // SPARK-18886: after we launch one task non-local in this taskset, we can launch all of the
+    // non-local tasks without any additional delay, even if tasks get launched locally
+    // in-between.
     assert(manager.resourceOffer("exec2", "host2", ANY).get.index === 3)
   }
 
@@ -582,6 +579,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY)))
+    // Make one offer (which can't be scheduled) to start the locality timer
+    assert(manager.resourceOffer("execC", "host3", RACK_LOCAL) === None)
     // Set allowed locality to ANY
     clock.advance(LOCALITY_WAIT_MS * 3)
     // Offer host3
