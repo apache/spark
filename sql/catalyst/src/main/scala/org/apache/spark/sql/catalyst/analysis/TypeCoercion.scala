@@ -673,48 +673,69 @@ object TypeCoercion {
      * If the expression has an incompatible type that cannot be implicitly cast, return None.
      */
     def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] = {
-      val inType = e.dataType
+      implicitCast(e.dataType, expectedType).map { dt =>
+        if (dt == e.dataType) e else Cast(e, dt)
+      }
+    }
 
+    private def implicitCast(inType: DataType, expectedType: AbstractDataType): Option[DataType] = {
       // Note that ret is nullable to avoid typing a lot of Some(...) in this local scope.
       // We wrap immediately an Option after this.
-      @Nullable val ret: Expression = (inType, expectedType) match {
-
+      @Nullable val ret: DataType = (inType, expectedType) match {
         // If the expected type is already a parent of the input type, no need to cast.
-        case _ if expectedType.acceptsType(inType) => e
+        case _ if expectedType.acceptsType(inType) => inType
 
         // Cast null type (usually from null literals) into target types
-        case (NullType, target) => Cast(e, target.defaultConcreteType)
+        case (NullType, target) => target.defaultConcreteType
 
         // If the function accepts any numeric type and the input is a string, we follow the hive
         // convention and cast that input into a double
-        case (StringType, NumericType) => Cast(e, NumericType.defaultConcreteType)
+        case (StringType, NumericType) => NumericType.defaultConcreteType
 
         // Implicit cast among numeric types. When we reach here, input type is not acceptable.
 
         // If input is a numeric type but not decimal, and we expect a decimal type,
         // cast the input to decimal.
-        case (d: NumericType, DecimalType) => Cast(e, DecimalType.forType(d))
+        case (d: NumericType, DecimalType) => DecimalType.forType(d)
         // For any other numeric types, implicitly cast to each other, e.g. long -> int, int -> long
-        case (_: NumericType, target: NumericType) => Cast(e, target)
+        case (_: NumericType, target: NumericType) => target
 
         // Implicit cast between date time types
-        case (DateType, TimestampType) => Cast(e, TimestampType)
-        case (TimestampType, DateType) => Cast(e, DateType)
+        case (DateType, TimestampType) => TimestampType
+        case (TimestampType, DateType) => DateType
 
         // Implicit cast from/to string
-        case (StringType, DecimalType) => Cast(e, DecimalType.SYSTEM_DEFAULT)
-        case (StringType, target: NumericType) => Cast(e, target)
-        case (StringType, DateType) => Cast(e, DateType)
-        case (StringType, TimestampType) => Cast(e, TimestampType)
-        case (StringType, BinaryType) => Cast(e, BinaryType)
+        case (StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
+        case (StringType, target: NumericType) => target
+        case (StringType, DateType) => DateType
+        case (StringType, TimestampType) => TimestampType
+        case (StringType, BinaryType) => BinaryType
         // Cast any atomic type to string.
-        case (any: AtomicType, StringType) if any != StringType => Cast(e, StringType)
+        case (any: AtomicType, StringType) if any != StringType => StringType
 
         // When we reach here, input type is not acceptable for any types in this type collection,
         // try to find the first one we can implicitly cast.
-        case (_, TypeCollection(types)) => types.flatMap(implicitCast(e, _)).headOption.orNull
+        case (_, TypeCollection(types)) =>
+          types.flatMap(implicitCast(inType, _)).headOption.orNull
 
-        // Else, just return the same input expression
+        // Implicit cast between array types.
+        //
+        // Compare the nullabilities of the from type and the to type, check whether the cast of
+        // the nullability is resolvable by the following rules:
+        // 1. If the nullability of the to type is true, the cast is always allowed;
+        // 2. If the nullability of the to type is false, and the nullability of the from type is
+        // true, the cast is never allowed;
+        // 3. If the nullabilities of both the from type and the to type are false, the cast is
+        // allowed only when Cast.forceNullable(fromType, toType) is false.
+        case (ArrayType(fromType, fn), ArrayType(toType: DataType, true)) =>
+          implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
+
+        case (ArrayType(fromType, true), ArrayType(toType: DataType, false)) => null
+
+        case (ArrayType(fromType, false), ArrayType(toType: DataType, false))
+            if !Cast.forceNullable(fromType, toType) =>
+          implicitCast(fromType, toType).map(ArrayType(_, false)).orNull
+
         case _ => null
       }
       Option(ret)

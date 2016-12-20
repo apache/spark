@@ -205,6 +205,7 @@ test_that("create DataFrame from RDD", {
                c(16))
   expect_equal(collect(sql("SELECT height from people WHERE name ='Bob'"))$height,
                c(176.5))
+  sql("DROP TABLE people")
   unsetHiveContext()
 })
 
