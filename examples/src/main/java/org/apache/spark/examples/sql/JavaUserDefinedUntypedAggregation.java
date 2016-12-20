@@ -106,11 +106,11 @@ public class JavaUserDefinedUntypedAggregation {
     // Register the function to access it
     spark.udf().register("myAverage", new MyAverage());
 
-    Dataset<Row> df = spark.read().json("examples/src/main/resources/salaries.json");
-    df.createOrReplaceTempView("salaries");
+    Dataset<Row> df = spark.read().json("examples/src/main/resources/employees.json");
+    df.createOrReplaceTempView("employees");
     df.show();
     // +-------+------+
-    // | person|salary|
+    // |   name|salary|
     // +-------+------+
     // |Michael|  3000|
     // |   Andy|  4500|
@@ -118,7 +118,7 @@ public class JavaUserDefinedUntypedAggregation {
     // |  Berta|  4000|
     // +-------+------+
 
-    Dataset<Row> result = spark.sql("SELECT myAverage(salary) as average_salary FROM salaries");
+    Dataset<Row> result = spark.sql("SELECT myAverage(salary) as average_salary FROM employees");
     result.show();
     // +--------------+
     // |average_salary|

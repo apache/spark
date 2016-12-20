@@ -26,15 +26,19 @@ import org.apache.spark.sql.SparkSession
 object UserDefinedTypedAggregation {
 
   // $example on:typed_custom_aggregation$
-  case class Salary(person: String, salary: Long)
-  case class Average(sum: Long, count: Long)
+  case class Employee(name: String, salary: Long)
+  case class Average(var sum: Long, var count: Long)
 
-  object MyAverage extends Aggregator[Salary, Average, Double] {
+  object MyAverage extends Aggregator[Employee, Average, Double] {
     // A zero value for this aggregation. Should satisfy the property that any b + zero = b
     def zero: Average = Average(0L, 0L)
-    // Combine two values to produce a new value. For performance, the function may modify `b` and
-    // return it instead of constructing a new object for b
-    def reduce(b: Average, a: Salary): Average = Average(b.sum + a.salary, b.count + 1)
+    // Combine two values to produce a new value. For performance, the function may modify `buffer`
+    // and return it instead of constructing a new object
+    def reduce(buffer: Average, employee: Employee): Average = {
+      buffer.sum += employee.salary
+      buffer.count += 1
+      buffer
+    }
     // Merge two intermediate values
     def merge(b1: Average, b2: Average): Average = Average(b1.sum + b2.sum, b1.count + b2.count)
     // Transform the output of the reduction
@@ -55,10 +59,10 @@ object UserDefinedTypedAggregation {
     import spark.implicits._
 
     // $example on:typed_custom_aggregation$
-    val ds = spark.read.json("examples/src/main/resources/salaries.json").as[Salary]
+    val ds = spark.read.json("examples/src/main/resources/employees.json").as[Employee]
     ds.show()
     // +-------+------+
-    // | person|salary|
+    // |   name|salary|
     // +-------+------+
     // |Michael|  3000|
     // |   Andy|  4500|
@@ -66,6 +70,7 @@ object UserDefinedTypedAggregation {
     // |  Berta|  4000|
     // +-------+------+
 
+    // Convert the function to a `TypedColumn` and give it a name
     val averageSalary = MyAverage.toColumn.name("average_salary")
     val result = ds.select(averageSalary)
     result.show()
