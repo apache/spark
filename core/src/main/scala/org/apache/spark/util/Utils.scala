@@ -18,7 +18,7 @@
 package org.apache.spark.util
 
 import java.io._
-import java.lang.management.ManagementFactory
+import java.lang.management.{ManagementFactory, ThreadInfo}
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
@@ -2112,11 +2112,27 @@ private[spark] object Utils extends Logging {
     // We need to filter out null values here because dumpAllThreads() may return null array
     // elements for threads that are dead / don't exist.
     val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
-    threadInfos.sortBy(_.getThreadId).map { case threadInfo =>
-      val stackTrace = threadInfo.getStackTrace.map(_.toString).mkString("\n")
-      ThreadStackTrace(threadInfo.getThreadId, threadInfo.getThreadName,
-        threadInfo.getThreadState, stackTrace)
+    threadInfos.sortBy(_.getThreadId).map(threadInfoToThreadStackTrace)
+  }
+
+  def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {
+    if (threadId <= 0) {
+      None
+    } else {
+      // The Int.MaxValue here requests the entire untruncated stack trace of the thread:
+      val threadInfo =
+        Option(ManagementFactory.getThreadMXBean.getThreadInfo(threadId, Int.MaxValue))
+      threadInfo.map(threadInfoToThreadStackTrace)
     }
+  }
+
+  private def threadInfoToThreadStackTrace(threadInfo: ThreadInfo): ThreadStackTrace = {
+    val stackTrace = threadInfo.getStackTrace.map(_.toString).mkString("\n")
+    ThreadStackTrace(
+      threadId = threadInfo.getThreadId,
+      threadName = threadInfo.getThreadName,
+      threadState = threadInfo.getThreadState,
+      stackTrace = stackTrace)
   }
 
   /**
