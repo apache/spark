@@ -27,6 +27,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
 
+import scala.util.control.NonFatal
+
 import scala.collection.JavaConverters._
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -61,6 +63,7 @@ case class InsertIntoHiveTable(
   @transient private lazy val hiveContext = new Context(sc.hiveconf)
   @transient private lazy val catalog = sc.catalog
 
+  @transient var createdTempDir: Option[Path] = None
   val stagingDir = new HiveConf().getVar(HiveConf.ConfVars.STAGINGDIR)
 
   private def executionId: String = {
@@ -88,6 +91,7 @@ case class InsertIntoHiveTable(
       if (!FileUtils.mkdir(fs, dir, true, hadoopConf)) {
         throw new IllegalStateException("Cannot create staging directory  '" + dir.toString + "'")
       }
+      createdTempDir = Some(dir)
       fs.deleteOnExit(dir)
     }
     catch {
@@ -321,6 +325,15 @@ case class InsertIntoHiveTable(
         qualifiedTableName,
         overwrite,
         holdDDLTime)
+    }
+
+    // Attempt to delete the staging directory and the inclusive files. If failed, the files are
+    // expected to be dropped at the normal termination of VM since deleteOnExit is used.
+    try {
+      createdTempDir.foreach { path => path.getFileSystem(jobConf).delete(path, true) }
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
     }
 
     // Invalidate the cache.
