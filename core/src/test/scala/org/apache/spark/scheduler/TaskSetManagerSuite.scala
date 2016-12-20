@@ -543,11 +543,16 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       Seq(TaskLocation("host1", "execB")),
       Seq(TaskLocation("host2", "execC")),
       Seq())
-    val manager = new TaskSetManager(sched, taskSet, 1, new ManualClock)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, 1, clock)
     sched.addExecutor("execA", "host1")
     manager.executorAdded()
     sched.addExecutor("execC", "host2")
     manager.executorAdded()
+    // TODO: I don't understand why this scheduling ever succeeded in the past
+    // need one resource offer which doesn't schedule anything to start delay scheduling timer
+    assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+    clock.advance(sc.getConf.getTimeAsMs("spark.locality.wait", "3s") * 4)
     assert(manager.resourceOffer("exec1", "host1", ANY).isDefined)
     sched.removeExecutor("execA")
     manager.executorLost(
@@ -770,6 +775,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Valid locality should contain PROCESS_LOCAL, NODE_LOCAL and ANY
     assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
     assert(manager.resourceOffer("execA", "host1", ANY) !== None)
+    // SPARK-18886 -- try to schedule once to trigger delay scheduling timeout
+    assert(manager.resourceOffer("execB.2", "host2", ANY) === None)
+    // after waiting long enough, scheduling should succeed
     clock.advance(LOCALITY_WAIT_MS * 4)
     assert(manager.resourceOffer("execB.2", "host2", ANY) !== None)
     sched.removeExecutor("execA")
