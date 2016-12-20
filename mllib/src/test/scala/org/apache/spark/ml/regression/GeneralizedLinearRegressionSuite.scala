@@ -644,16 +644,16 @@ class GeneralizedLinearRegressionSuite
 
     var idx = 0
     for (fitIntercept <- Seq(false, true); link <- Seq("log", "identity")) {
-      for (variancePower <- Seq(1.6, 2.5, 3.0, 4.0)) {
+      for (varPower <- Seq(1.6, 2.5, 3.0, 4.0)) {
         val trainer = new GeneralizedLinearRegression().setFamily("tweedie")
           .setFitIntercept(fitIntercept).setLink(link).setLinkPredictionCol("linkPrediction")
-          .setVariancePower(variancePower)
+          .setVarPower(varPower)
         val model = trainer.fit(datasetTweedie)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with tweedie family, " +
-          s"$link link, fitIntercept = $fitIntercept and variancePower = $variancePower.")
+          s"$link link, fitIntercept = $fitIntercept and varPower = $varPower.")
 
-        val familyLink = new FamilyAndLink(Tweedie, Link.fromName(link))
+        val familyLink = new FamilyAndLink(new Tweedie(varPower), Link.fromName(link))
         model.transform(datasetTweedie).select("features", "prediction", "linkPrediction").collect()
           .foreach {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
@@ -662,10 +662,10 @@ class GeneralizedLinearRegressionSuite
               val linkPrediction2 = eta
               assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
                 s"tweedie family, $link link, fitIntercept = $fitIntercept " +
-                s"and variancePower = $variancePower.")
+                s"and varPower = $varPower.")
               assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
                 s"GLM with tweedie family, $link link and fitIntercept = $fitIntercept " +
-                s"and variancePower = $variancePower.")
+                s"and varPower = $varPower.")
           }
         idx += 1
       }
@@ -1196,7 +1196,7 @@ class GeneralizedLinearRegressionSuite
 
     val trainer = new GeneralizedLinearRegression()
       .setFamily("tweedie")
-      .setVariancePower(1.6)
+      .setVarPower(1.6)
       .setWeightCol("weight")
       .setFitIntercept(false)
 
