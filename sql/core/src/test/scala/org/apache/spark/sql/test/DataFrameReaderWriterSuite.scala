@@ -108,16 +108,14 @@ class DefaultSourceWithoutUserSpecifiedSchema
 }
 
 class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
-
+  import testImplicits._
 
   private val userSchema = new StructType().add("s", StringType)
   private val textSchema = new StructType().add("value", StringType)
   private val data = Seq("1", "2", "3")
   private val dir = Utils.createTempDir(namePrefix = "input").getCanonicalPath
-  private implicit var enc: Encoder[String] = _
 
   before {
-    enc = spark.implicits.newStringEncoder
     Utils.deleteRecursively(new File(dir))
   }
 
@@ -459,8 +457,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   }
 
   test("column nullability and comment - write and then read") {
-    import testImplicits._
-
     Seq("json", "parquet", "csv").foreach { format =>
       val schema = StructType(
         StructField("cl1", IntegerType, nullable = false).withComment("test") ::
@@ -576,7 +572,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
 
   test("SPARK-18510: use user specified types for partition columns in file sources") {
     import org.apache.spark.sql.functions.udf
-    import testImplicits._
     withTempDir { src =>
       val createArray = udf { (length: Long) =>
         for (i <- 1 to length.toInt) yield i.toString
@@ -607,6 +602,37 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         Row(Array("1"), 0, "0") :: Row(Array("1", "2"), 1, "1") ::
           Row(Array("1", "2", "3"), 2, "2") :: Row(Array("1", "2", "3", "4"), 3, "3") :: Nil
       )
+    }
+  }
+
+  test("SPARK-18899: append to a bucketed table using DataFrameWriter with mismatched bucketing") {
+    withTable("t") {
+      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.bucketBy(2, "i").saveAsTable("t")
+      val e = intercept[AnalysisException] {
+        Seq(3 -> "c").toDF("i", "j").write.bucketBy(3, "i").mode("append").saveAsTable("t")
+      }
+      assert(e.message.contains("Specified bucketing does not match that of the existing table"))
+    }
+  }
+
+  test("SPARK-18912: number of columns mismatch for non-file-based data source table") {
+    withTable("t") {
+      sql("CREATE TABLE t USING org.apache.spark.sql.test.DefaultSource")
+
+      val e = intercept[AnalysisException] {
+        Seq(1 -> "a").toDF("a", "b").write
+          .format("org.apache.spark.sql.test.DefaultSource")
+          .mode("append").saveAsTable("t")
+      }
+      assert(e.message.contains("The column number of the existing table"))
+    }
+  }
+
+  test("SPARK-18913: append to a table with special column names") {
+    withTable("t") {
+      Seq(1 -> "a").toDF("x.x", "y.y").write.saveAsTable("t")
+      Seq(2 -> "b").toDF("x.x", "y.y").write.mode("append").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Nil)
     }
   }
 }
