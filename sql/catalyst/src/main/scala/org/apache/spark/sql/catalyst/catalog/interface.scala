@@ -133,6 +133,16 @@ case class BucketSpec(
   if (numBuckets <= 0) {
     throw new AnalysisException(s"Expected positive number of buckets, but got `$numBuckets`.")
   }
+
+  override def toString: String = {
+    val bucketString = s"bucket columns: [${bucketColumnNames.mkString(", ")}]"
+    val sortString = if (sortColumnNames.nonEmpty) {
+      s", sort columns: [${sortColumnNames.mkString(", ")}]"
+    } else {
+      ""
+    }
+    s"$numBuckets buckets, $bucketString$sortString"
+  }
 }
 
 /**
