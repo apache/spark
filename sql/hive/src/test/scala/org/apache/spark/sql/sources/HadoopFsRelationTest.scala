@@ -446,7 +446,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     // Using only a subset of all partition columns
-    intercept[Throwable] {
+    intercept[AnalysisException] {
       partitionedTestDF2.write
         .format(dataSourceName)
         .mode(SaveMode.Append)

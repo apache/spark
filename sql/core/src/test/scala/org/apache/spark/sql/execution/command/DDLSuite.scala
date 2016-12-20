@@ -345,7 +345,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
     }
-    assert(e.message == "partition column c is not defined in table `tbl`, " +
+    assert(e.message == "partition column c is not defined in table tbl, " +
       "defined table columns are: a, b")
   }
 
@@ -353,7 +353,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
     }
-    assert(e.message == "bucket column c is not defined in table `tbl`, " +
+    assert(e.message == "bucket column c is not defined in table tbl, " +
       "defined table columns are: a, b")
   }
 
