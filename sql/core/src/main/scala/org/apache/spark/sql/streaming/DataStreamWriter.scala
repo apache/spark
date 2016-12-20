@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.InternalOutputModes._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink}
 
-
 /**
  * :: Experimental ::
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
@@ -102,7 +101,6 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     this.trigger = trigger
     this
   }
-
 
   /**
    * Specifies the name of the [[StreamingQuery]] that can be started with `start()`.

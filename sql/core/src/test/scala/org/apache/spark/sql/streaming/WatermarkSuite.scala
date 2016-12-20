@@ -142,8 +142,8 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
       CheckLastBatch((10, 5), (15, 1)),
       AddData(inputData, 25), // Advance watermark to 15 seconds
       CheckLastBatch((25, 1)),
-      AddData(inputData, 10, 25), // Ignore 10 as its less than previous watermark.
       assertNumStateRows(3),
+      AddData(inputData, 10, 25), // Ignore 10 as its less than previous watermark.
       CheckLastBatch((25, 2)),
       assertNumStateRows(2)
     )
