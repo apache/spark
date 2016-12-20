@@ -305,7 +305,7 @@ abstract class Catalog {
    *
    * @since 2.2.0
    */
-  def repairTable(tableName: String): Unit
+  def recoverPartitions(tableName: String): Unit
 
   /**
    * Returns true if the table is currently cached in-memory.

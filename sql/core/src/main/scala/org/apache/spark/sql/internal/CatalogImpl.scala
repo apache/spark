@@ -401,7 +401,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @group ddl_ops
    * @since 2.2.0
    */
-  override def repairTable(tableName: String): Unit = {
+  override def recoverPartitions(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     sparkSession.sessionState.executePlan(
       AlterTableRecoverPartitionsCommand(tableIdent)).toRdd
