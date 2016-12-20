@@ -1366,6 +1366,48 @@ Apart from these, the following properties are also available, and may be useful
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
+<tr>
+  <td><code>spark.task.reaper.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enables monitoring of killed / interrupted tasks. When set to true, any task which is killed
+    will be monitored by the executor until that task actually finishes executing. See the other
+    <code>spark.task.reaper.*</code> configurations for details on how to control the exact behavior
+    of this monitoring</code>. When set to false (the default), task killing will use an older code
+    path which lacks such monitoring.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.task.reaper.pollingInterval</code></td>
+  <td>10s</td>
+  <td>
+    When <code>spark.task.reaper.enabled = true</code>, this setting controls the frequency at which
+    executors will poll the status of killed tasks. If a killed task is still running when polled
+    then a warning will be logged and, by default, a thread-dump of the task will be logged
+    (this thread dump can be disabled via the <code>spark.task.reaper.threadDump</code> setting,
+    which is documented below).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.task.reaper.threadDump</code></td>
+  <td>true</td>
+  <td>
+    When <code>spark.task.reaper.enabled = true</code>, this setting controls whether task thread
+    dumps are logged during periodic polling of killed tasks. Set this to false to disable
+    collection of thread dumps.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.task.reaper.killTimeout</code></td>
+  <td>-1</td>
+  <td>
+    When <code>spark.task.reaper.enabled = true</code>, this setting specifies a timeout after
+    which the executor JVM will kill itself if a killed task has not stopped running. The default
+    value, -1, disables this mechanism and prevents the executor from self-destructing. The purpose
+    of this setting is to act as a safety-net to prevent runaway uncancellable tasks from rendering
+    an executor unusable.
+  </td>
+</tr>
 </table>
 
 #### Dynamic Allocation
