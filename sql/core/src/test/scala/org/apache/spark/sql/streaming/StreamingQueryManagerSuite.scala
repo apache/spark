@@ -244,7 +244,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
     failAfter(streamingTimeout) {
       val queries = withClue("Error starting queries") {
         datasets.zipWithIndex.map { case (ds, i) =>
-          @volatile var query: StreamExecution = null
+          var query: StreamingQuery = null
           try {
             val df = ds.toDF
             val metadataRoot =
@@ -256,7 +256,6 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
                 .option("checkpointLocation", metadataRoot)
                 .outputMode("append")
                 .start()
-                .asInstanceOf[StreamExecution]
           } catch {
             case NonFatal(e) =>
               if (query != null) query.stop()
@@ -304,7 +303,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       Thread.sleep(stopAfter.toMillis)
       if (withError) {
         logDebug(s"Terminating query ${queryToStop.name} with error")
-        queryToStop.asInstanceOf[StreamExecution].logicalPlan.collect {
+        queryToStop.asInstanceOf[StreamingQueryWrapper].streamingQuery.logicalPlan.collect {
           case StreamingExecutionRelation(source, _) =>
             source.asInstanceOf[MemoryStream[Int]].addData(0)
         }

@@ -18,15 +18,21 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.net.URI
 
+import scala.util.Random
+
+import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.scalatest.PrivateMethodTester
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.FileStreamSource.FileEntry
+import org.apache.spark.sql.execution.streaming.FileStreamSource.{FileEntry, SeenFilesMap}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.ExistsThrowsExceptionFileSystem._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -745,7 +751,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         .format("memory")
         .queryName("file_data")
         .start()
-        .asInstanceOf[StreamExecution]
+        .asInstanceOf[StreamingQueryWrapper]
+        .streamingQuery
       q.processAllAvailable()
       val memorySink = q.sink.asInstanceOf[MemorySink]
       val fileSource = q.logicalPlan.collect {
@@ -835,7 +842,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       df.explain()
 
       val q = df.writeStream.queryName("file_explain").format("memory").start()
-        .asInstanceOf[StreamExecution]
+        .asInstanceOf[StreamingQueryWrapper]
+        .streamingQuery
       try {
         assert("No physical plan. Waiting for data." === q.explainInternal(false))
         assert("No physical plan. Waiting for data." === q.explainInternal(true))
@@ -1059,6 +1067,120 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val str = Source.fromFile(getClass.getResource(s"/structured-streaming/$file").toURI).mkString
     SerializedOffset(str.trim)
   }
+
+  test("FileStreamSource - latestFirst") {
+    withTempDir { src =>
+      // Prepare two files: 1.txt, 2.txt, and make sure they have different modified time.
+      val f1 = stringToFile(new File(src, "1.txt"), "1")
+      val f2 = stringToFile(new File(src, "2.txt"), "2")
+      f2.setLastModified(f1.lastModified + 1000)
+
+      def runTwoBatchesAndVerifyResults(
+          latestFirst: Boolean,
+          firstBatch: String,
+          secondBatch: String): Unit = {
+        val fileStream = createFileStream(
+          "text",
+          src.getCanonicalPath,
+          options = Map("latestFirst" -> latestFirst.toString, "maxFilesPerTrigger" -> "1"))
+        val clock = new StreamManualClock()
+        testStream(fileStream)(
+          StartStream(trigger = ProcessingTime(10), triggerClock = clock),
+          AssertOnQuery { _ =>
+            // Block until the first batch finishes.
+            eventually(timeout(streamingTimeout)) {
+              assert(clock.isStreamWaitingAt(0))
+            }
+            true
+          },
+          CheckLastBatch(firstBatch),
+          AdvanceManualClock(10),
+          AssertOnQuery { _ =>
+            // Block until the second batch finishes.
+            eventually(timeout(streamingTimeout)) {
+              assert(clock.isStreamWaitingAt(10))
+            }
+            true
+          },
+          CheckLastBatch(secondBatch)
+        )
+      }
+
+      // Read oldest files first, so the first batch is "1", and the second batch is "2".
+      runTwoBatchesAndVerifyResults(latestFirst = false, firstBatch = "1", secondBatch = "2")
+
+      // Read latest files first, so the first batch is "2", and the second batch is "1".
+      runTwoBatchesAndVerifyResults(latestFirst = true, firstBatch = "2", secondBatch = "1")
+    }
+  }
+
+  test("SeenFilesMap") {
+    val map = new SeenFilesMap(maxAgeMs = 10)
+
+    map.add("a", 5)
+    assert(map.size == 1)
+    map.purge()
+    assert(map.size == 1)
+
+    // Add a new entry and purge should be no-op, since the gap is exactly 10 ms.
+    map.add("b", 15)
+    assert(map.size == 2)
+    map.purge()
+    assert(map.size == 2)
+
+    // Add a new entry that's more than 10 ms than the first entry. We should be able to purge now.
+    map.add("c", 16)
+    assert(map.size == 3)
+    map.purge()
+    assert(map.size == 2)
+
+    // Override existing entry shouldn't change the size
+    map.add("c", 25)
+    assert(map.size == 2)
+
+    // Not a new file because we have seen c before
+    assert(!map.isNewFile("c", 20))
+
+    // Not a new file because timestamp is too old
+    assert(!map.isNewFile("d", 5))
+
+    // Finally a new file: never seen and not too old
+    assert(map.isNewFile("e", 20))
+  }
+
+  test("SeenFilesMap should only consider a file old if it is earlier than last purge time") {
+    val map = new SeenFilesMap(maxAgeMs = 10)
+
+    map.add("a", 20)
+    assert(map.size == 1)
+
+    // Timestamp 5 should still considered a new file because purge time should be 0
+    assert(map.isNewFile("b", 9))
+    assert(map.isNewFile("b", 10))
+
+    // Once purge, purge time should be 10 and then b would be a old file if it is less than 10.
+    map.purge()
+    assert(!map.isNewFile("b", 9))
+    assert(map.isNewFile("b", 10))
+  }
+
+  testWithUninterruptibleThread("do not recheck that files exist during getBatch") {
+    withTempDir { temp =>
+      spark.conf.set(
+        s"fs.$scheme.impl",
+        classOf[ExistsThrowsExceptionFileSystem].getName)
+      // add the metadata entries as a pre-req
+      val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
+    val metadataLog =
+      new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, dir.getAbsolutePath)
+      assert(metadataLog.add(0, Array(FileEntry(s"$scheme:///file1", 100L, 0))))
+
+      val newSource = new FileStreamSource(spark, s"$scheme:///", "parquet", StructType(Nil), Nil,
+        dir.getAbsolutePath, Map.empty)
+      // this method should throw an exception if `fs.exists` is called during resolveRelation
+      newSource.getBatch(None, FileStreamSourceOffset(1))
+    }
+  }
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
@@ -1078,4 +1200,28 @@ class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
     Utils.deleteRecursively(src)
     Utils.deleteRecursively(tmp)
   }
+}
+
+/** Fake FileSystem to test whether the method `fs.exists` is called during
+ * `DataSource.resolveRelation`.
+ */
+class ExistsThrowsExceptionFileSystem extends RawLocalFileSystem {
+  override def getUri: URI = {
+    URI.create(s"$scheme:///")
+  }
+
+  override def exists(f: Path): Boolean = {
+    throw new IllegalArgumentException("Exists shouldn't have been called!")
+  }
+
+  /** Simply return an empty file for now. */
+  override def listStatus(file: Path): Array[FileStatus] = {
+    val emptyFile = new FileStatus()
+    emptyFile.setPath(file)
+    Array(emptyFile)
+  }
+}
+
+object ExistsThrowsExceptionFileSystem {
+  val scheme = s"FileStreamSourceSuite${math.abs(Random.nextInt)}fs"
 }
