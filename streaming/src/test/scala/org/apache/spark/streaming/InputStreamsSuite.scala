@@ -82,7 +82,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
           // Verify all "InputInfo"s have been reported
           assert(ssc.progressListener.numTotalReceivedRecords > 0)
-          assert(ssc.progressListener.numTotalProcessedRecords > input.size)
+          assert(ssc.progressListener.numTotalProcessedRecords > 0)
 
           logInfo("Stopping server")
           testServer.stop()
