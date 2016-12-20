@@ -79,11 +79,11 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
   }
 
   test("SPARK-18700: table loaded only once even when resolved concurrently") {
-    withTable("test") {
+    withTable("test_table") {
       withTempDir { dir =>
         HiveCatalogMetrics.reset()
         assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
-        setupPartitionedHiveTable("test", dir, 50)
+        setupPartitionedHiveTable("test_table", dir, 50)
         // select the table in multi-threads
         val executorPool = Executors.newFixedThreadPool(10)
         (1 to 10).map(threadId => {
@@ -97,11 +97,9 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
         })
         executorPool.shutdown()
         executorPool.awaitTermination(30, TimeUnit.SECONDS)
-        // check the cache hit, we use the metric of METRIC_FILES_DISCOVERED and
-        // METRIC_PARALLEL_LISTING_JOB_COUNT to check this, while the lock take effect,
-        // only one thread can really do the build, so the listing job count is 2, the other
-        // one is cache.load func. Also METRIC_FILES_DISCOVERED is $partition_num * 2
-        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 2)
+        // check the cache hit, we use the metric of METRIC_PARALLEL_LISTING_JOB_COUNT
+        // to check this, while the lock take effect,only one thread can really do the build.
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 1)
       }
     }
   }
