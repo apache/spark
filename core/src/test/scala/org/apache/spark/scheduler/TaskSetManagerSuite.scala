@@ -1084,11 +1084,25 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // Now lets advance the clock further, so that all of our other executors have been sitting
     // idle for longer than the locality wait time.  We have managed to schedule *something* at a
-    // lower locality level within the time, but regardless, we *should* still schedule on the all
+    // lower locality level within the time, but regardless, we *should* still schedule on all
     // the other resources by this point
     clock.advance(10)
     // this would pass if we advanced the clock by this much instead
-//    clock.advance(processWait + nodeWait + 10)
+    // clock.advance(processWait + nodeWait + 10)
+    logInfo(s"trying to schedule everyting at ${clock.getTimeMillis()}")
+    execs.foreach { case (exec, host) =>
+      if (exec != "exec0") {
+        withClue(s"trying to schedule on $exec:$host at time ${clock.getTimeMillis()}") {
+          assert(manager.resourceOffer(execId = exec, host = host, ANY).isDefined)
+        }
+      }
+    }
+
+    // If we schedule one process-local task after scheduling the non-local tasks ...
+    logInfo("scheduling one process-local task")
+    clock.advance(1)
+    assert(manager.resourceOffer(execId = "exec0", host = "host0", ANY).isDefined)
+    // ... we should still immediately be able to schedule more non-local tasks.
     logInfo(s"trying to schedule everyting at ${clock.getTimeMillis()}")
     execs.foreach { case (exec, host) =>
       if (exec != "exec0") {
