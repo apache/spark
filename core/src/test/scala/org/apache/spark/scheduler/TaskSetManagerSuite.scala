@@ -552,7 +552,6 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     manager.executorAdded()
     sched.addExecutor("execC", "host2")
     manager.executorAdded()
-    // TODO: I don't understand why this scheduling ever succeeded in the past
     // need one resource offer which doesn't schedule anything to start delay scheduling timer
     assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
     clock.advance(sc.getConf.getTimeAsMs("spark.locality.wait", "3s") * 4)
