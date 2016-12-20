@@ -176,30 +176,6 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(nonNullExpr, "100", row1)
   }
 
-  test("regexes fail codegen when used as aggregation keys due to bad forward-slash escapes") {
-    val row1 = create_row("100-200", "(\\d+)", "num")
-    val row2 = create_row("100-200", "(\\d+)", "###")
-    val row3 = create_row("100-200", "(-)", "###")
-    val row4 = create_row(null, "(\\d+)", "###")
-    val row5 = create_row("100-200", null, "###")
-    val row6 = create_row("100-200", "(-)", null)
-
-    val s = 's.string.at(0)
-    val p = 'p.string.at(1)
-    val r = 'r.string.at(2)
-
-    val expr = RegExpReplace(s, p, r)
-    checkEvaluation(expr, "num-num", row1)
-    checkEvaluation(expr, "###-###", row2)
-    checkEvaluation(expr, "100###200", row3)
-    checkEvaluation(expr, null, row4)
-    checkEvaluation(expr, null, row5)
-    checkEvaluation(expr, null, row6)
-
-    val nonNullExpr = RegExpReplace(Literal("100-200"), Literal("(\\d+)"), Literal("num"))
-    checkEvaluation(nonNullExpr, "num-num", row1)
-  }
-
   test("SPLIT") {
     val s1 = 'a.string.at(0)
     val s2 = 'b.string.at(1)
