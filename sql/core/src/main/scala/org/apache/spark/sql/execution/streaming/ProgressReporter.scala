@@ -84,8 +84,6 @@ trait ProgressReporter extends Logging {
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
   timestampFormat.setTimeZone(TimeZone.getTimeZone("UTC"))
 
-  private val hasEventTime = logicalPlan.collect { case e: EventTimeWatermark => e }.nonEmpty
-
   @volatile
   protected var currentStatus: StreamingQueryStatus = {
     new StreamingQueryStatus(
@@ -184,6 +182,7 @@ trait ProgressReporter extends Logging {
 
   /** Extracts statistics from the most recent query execution. */
   private def extractExecutionStats(hasNewData: Boolean): ExecutionStats = {
+    val hasEventTime = logicalPlan.collect { case e: EventTimeWatermark => e }.nonEmpty
     val watermarkTimestamp =
       if (hasEventTime) Map("watermark" -> formatTimestamp(offsetSeqMetadata.batchWatermarkMs))
       else Map.empty[String, String]
