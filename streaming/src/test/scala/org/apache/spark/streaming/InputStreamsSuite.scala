@@ -32,6 +32,7 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -80,8 +81,10 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
           ssc.sparkContext.listenerBus.waitUntilEmpty(500)
 
           // Verify all "InputInfo"s have been reported
-          assert(ssc.progressListener.numTotalReceivedRecords === input.size)
-          assert(ssc.progressListener.numTotalProcessedRecords === input.size)
+          eventually(timeout(1 minute)) {
+            assert(ssc.progressListener.numTotalReceivedRecords === input.size)
+            assert(ssc.progressListener.numTotalProcessedRecords === input.size)
+          }
 
           logInfo("Stopping server")
           testServer.stop()
