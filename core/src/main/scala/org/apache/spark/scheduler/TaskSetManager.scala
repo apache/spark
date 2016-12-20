@@ -482,8 +482,10 @@ private[spark] class TaskSetManager(
         val prevLocalityUpdateTime = localityLevelUpdateTime
         localityLevelUpdateTime =
           math.min(localityLevelUpdateTime, curTime + localityWaits(currentLocalityIndex))
-        logInfo(s"failed to schedule anything, so updating localityUpdateTime " +
-          s"from $prevLocalityUpdateTime to $localityLevelUpdateTime")
+        if (localityLevelUpdateTime != prevLocalityUpdateTime) {
+          logInfo(s"failed to schedule anything, so updating localityUpdateTime " +
+            s"from $prevLocalityUpdateTime to $localityLevelUpdateTime")
+        }
       }
       taskDescOpt
     } else {
@@ -534,6 +536,7 @@ private[spark] class TaskSetManager(
       hasTasks
     }
 
+    logInfo(s"checking locality at time = $curTime; locality = $currentLocalityIndex")
     while (currentLocalityIndex < myLocalityLevels.length - 1) {
       val moreTasks = myLocalityLevels(currentLocalityIndex) match {
         case TaskLocality.PROCESS_LOCAL => moreTasksToRunIn(pendingTasksForExecutor)
