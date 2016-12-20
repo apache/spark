@@ -21,11 +21,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratePredicate, GenerateUnsafeProjection}
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution
-import org.apache.spark.sql.InternalOutputModes._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.InternalOutputModes._
+import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.SparkPlan
@@ -180,11 +180,32 @@ case class StateStoreSaveExec(
 
           // Update and output modified rows from the StateStore.
           case Some(Update) =>
+            val watermarkAttribute =
+              keyExpressions.find(_.metadata.contains(EventTimeWatermark.delayKey)).get
+            // If we are evicting based on a window, use the end of the window.  Otherwise just
+            // use the attribute itself.
+            val evictionExpression =
+            if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
+              LessThanOrEqual(
+                GetStructField(watermarkAttribute, 1),
+                Literal(eventTimeWatermark.get * 1000))
+            } else {
+              LessThanOrEqual(
+                watermarkAttribute,
+                Literal(eventTimeWatermark.get * 1000))
+            }
+
+            logInfo(s"Filtering state store on: $evictionExpression")
+            val predicate = newPredicate(evictionExpression, keyExpressions)
+
             new Iterator[InternalRow] {
-              private[this] val baseIterator = iter
+              private[this] val baseIterator = {
+                iter.filter((row: InternalRow) => !predicate.eval(row))
+              }
 
               override def hasNext: Boolean = {
                 if (!baseIterator.hasNext) {
+                  store.remove(predicate.eval)
                   store.commit()
                   numTotalStateRows += store.numKeys()
                   false

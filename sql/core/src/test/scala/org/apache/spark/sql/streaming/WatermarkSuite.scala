@@ -23,7 +23,7 @@ import java.text.SimpleDateFormat
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
 
@@ -119,8 +119,33 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
       CheckAnswer(),
       AddData(inputData, 25), // Advance watermark to 15 seconds
       CheckAnswer(),
+      assertNumStateRows(3),
       AddData(inputData, 25), // Evict items less than previous watermark.
-      CheckAnswer((10, 5))
+      CheckAnswer((10, 5)),
+      assertNumStateRows(2)
+    )
+  }
+
+  test("update mode") {
+    val inputData = MemoryStream[Int]
+    spark.conf.set("spark.sql.shuffle.partitions", "10")
+
+    val windowedAggregation = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    testStream(windowedAggregation, OutputMode.Update)(
+      AddData(inputData, 10, 11, 12, 13, 14, 15),
+      CheckLastBatch((10, 5), (15, 1)),
+      AddData(inputData, 25), // Advance watermark to 15 seconds
+      CheckLastBatch((25, 1)),
+      AddData(inputData, 10, 25), // Ignore 10 as its less than previous watermark.
+      assertNumStateRows(3),
+      CheckLastBatch((25, 2)),
+      assertNumStateRows(2)
     )
   }
 
@@ -229,6 +254,12 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
       AddData(inputData, 25), // Evict items less than previous watermark.
       CheckAnswer((10, 1))
     )
+  }
+
+  private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>
+    val progressWithData = q.recentProgress.filter(_.numInputRows > 0).lastOption.get
+    assert(progressWithData.stateOperators(0).numRowsTotal === numTotalRows)
+    true
   }
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
