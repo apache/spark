@@ -41,7 +41,7 @@ abstract class StreamingQueryListener {
    *       don't block this method as it will block your query.
    * @since 2.0.0
    */
-  def onQueryStarted(queryStarted: QueryStarted): Unit
+  def onQueryStarted(event: QueryStartedEvent): Unit
 
   /**
    * Called when there is some status update (ingestion rate updated, etc.)
@@ -49,16 +49,16 @@ abstract class StreamingQueryListener {
    * @note This method is asynchronous. The status in [[StreamingQuery]] will always be
    *       latest no matter when this method is called. Therefore, the status of [[StreamingQuery]]
    *       may be changed before/when you process the event. E.g., you may find [[StreamingQuery]]
-   *       is terminated when you are processing [[QueryProgress]].
+   *       is terminated when you are processing [[QueryProgressEvent]].
    * @since 2.0.0
    */
-  def onQueryProgress(queryProgress: QueryProgress): Unit
+  def onQueryProgress(event: QueryProgressEvent): Unit
 
   /**
    * Called when a query is stopped, with or without error.
    * @since 2.0.0
    */
-  def onQueryTerminated(queryTerminated: QueryTerminated): Unit
+  def onQueryTerminated(event: QueryTerminatedEvent): Unit
 }
 
 
@@ -84,7 +84,7 @@ object StreamingQueryListener {
    * @since 2.0.0
    */
   @Experimental
-  class QueryStarted private[sql](val queryInfo: StreamingQueryInfo) extends Event
+  class QueryStartedEvent private[sql](val queryStatus: StreamingQueryStatus) extends Event
 
   /**
    * :: Experimental ::
@@ -92,19 +92,19 @@ object StreamingQueryListener {
    * @since 2.0.0
    */
   @Experimental
-  class QueryProgress private[sql](val queryInfo: StreamingQueryInfo) extends Event
+  class QueryProgressEvent private[sql](val queryStatus: StreamingQueryStatus) extends Event
 
   /**
    * :: Experimental ::
    * Event representing that termination of a query
    *
-   * @param queryInfo Information about the status of the query.
+   * @param queryStatus Information about the status of the query.
    * @param exception The exception message of the [[StreamingQuery]] if the query was terminated
    *                  with an exception. Otherwise, it will be `None`.
    * @since 2.0.0
    */
   @Experimental
-  class QueryTerminated private[sql](
-      val queryInfo: StreamingQueryInfo,
+  class QueryTerminatedEvent private[sql](
+      val queryStatus: StreamingQueryStatus,
       val exception: Option[String]) extends Event
 }

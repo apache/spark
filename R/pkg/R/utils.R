@@ -338,20 +338,40 @@ varargsToEnv <- function(...) {
 # into string.
 varargsToStrEnv <- function(...) {
   pairs <- list(...)
+  nameList <- names(pairs)
   env <- new.env()
-  for (name in names(pairs)) {
-    value <- pairs[[name]]
-    if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
-      stop(paste0("Unsupported type for ", name, " : ", class(value),
-           ". Supported types are logical, numeric, character and NULL."))
+  ignoredNames <- list()
+
+  if (is.null(nameList)) {
+    # When all arguments are not named, names(..) returns NULL.
+    ignoredNames <- pairs
+  } else {
+    for (i in seq_along(pairs)) {
+      name <- nameList[i]
+      value <- pairs[i]
+      if (identical(name, "")) {
+        # When some of arguments are not named, name is "".
+        ignoredNames <- append(ignoredNames, value)
+      } else {
+        value <- pairs[[name]]
+        if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
+          stop(paste0("Unsupported type for ", name, " : ", class(value),
+               ". Supported types are logical, numeric, character and NULL."), call. = FALSE)
+        }
+        if (is.logical(value)) {
+          env[[name]] <- tolower(as.character(value))
+        } else if (is.null(value)) {
+          env[[name]] <- value
+        } else {
+          env[[name]] <- as.character(value)
+        }
+      }
     }
-    if (is.logical(value)) {
-      env[[name]] <- tolower(as.character(value))
-    } else if (is.null(value)) {
-      env[[name]] <- value
-    } else {
-      env[[name]] <- as.character(value)
-    }
+  }
+
+  if (length(ignoredNames) != 0) {
+    warning(paste0("Unnamed arguments ignored: ", paste(ignoredNames, collapse = ", "), "."),
+            call. = FALSE)
   }
   env
 }
@@ -383,6 +403,47 @@ getStorageLevel <- function(newLevel = c("DISK_ONLY",
                          "MEMORY_ONLY_SER" = callJStatic(storageLevelClass, "MEMORY_ONLY_SER"),
                          "MEMORY_ONLY_SER_2" = callJStatic(storageLevelClass, "MEMORY_ONLY_SER_2"),
                          "OFF_HEAP" = callJStatic(storageLevelClass, "OFF_HEAP"))
+}
+
+storageLevelToString <- function(levelObj) {
+  useDisk <- callJMethod(levelObj, "useDisk")
+  useMemory <- callJMethod(levelObj, "useMemory")
+  useOffHeap <- callJMethod(levelObj, "useOffHeap")
+  deserialized <- callJMethod(levelObj, "deserialized")
+  replication <- callJMethod(levelObj, "replication")
+  shortName <- if (!useDisk && !useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "NONE"
+  } else if (useDisk && !useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "DISK_ONLY"
+  } else if (useDisk && !useMemory && !useOffHeap && !deserialized && replication == 2) {
+    "DISK_ONLY_2"
+  } else if (!useDisk && useMemory && !useOffHeap && deserialized && replication == 1) {
+    "MEMORY_ONLY"
+  } else if (!useDisk && useMemory && !useOffHeap && deserialized && replication == 2) {
+    "MEMORY_ONLY_2"
+  } else if (!useDisk && useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "MEMORY_ONLY_SER"
+  } else if (!useDisk && useMemory && !useOffHeap && !deserialized && replication == 2) {
+    "MEMORY_ONLY_SER_2"
+  } else if (useDisk && useMemory && !useOffHeap && deserialized && replication == 1) {
+    "MEMORY_AND_DISK"
+  } else if (useDisk && useMemory && !useOffHeap && deserialized && replication == 2) {
+    "MEMORY_AND_DISK_2"
+  } else if (useDisk && useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "MEMORY_AND_DISK_SER"
+  } else if (useDisk && useMemory && !useOffHeap && !deserialized && replication == 2) {
+    "MEMORY_AND_DISK_SER_2"
+  } else if (useDisk && useMemory && useOffHeap && !deserialized && replication == 1) {
+    "OFF_HEAP"
+  } else {
+    NULL
+  }
+  fullInfo <- callJMethod(levelObj, "toString")
+  if (is.null(shortName)) {
+    fullInfo
+  } else {
+    paste(shortName, "-", fullInfo)
+  }
 }
 
 # Utility function for functions where an argument needs to be integer but we want to allow
@@ -714,6 +775,10 @@ getSparkContext <- function() {
 
 isMasterLocal <- function(master) {
   grepl("^local(\\[([0-9]+|\\*)\\])?$", master, perl = TRUE)
+}
+
+isClientMode <- function(master) {
+  grepl("([a-z]+)-client$", master, perl = TRUE)
 }
 
 isSparkRShell <- function() {

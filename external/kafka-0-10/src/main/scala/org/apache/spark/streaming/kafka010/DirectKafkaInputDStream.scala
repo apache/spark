@@ -57,7 +57,8 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
 private[spark] class DirectKafkaInputDStream[K, V](
     _ssc: StreamingContext,
     locationStrategy: LocationStrategy,
-    consumerStrategy: ConsumerStrategy[K, V]
+    consumerStrategy: ConsumerStrategy[K, V],
+    ppc: PerPartitionConfig
   ) extends InputDStream[ConsumerRecord[K, V]](_ssc) with Logging with CanCommitOffsets {
 
   val executorKafkaParams = {
@@ -128,12 +129,9 @@ private[spark] class DirectKafkaInputDStream[K, V](
     }
   }
 
-  private val maxRateLimitPerPartition: Int = context.sparkContext.getConf.getInt(
-    "spark.streaming.kafka.maxRatePerPartition", 0)
-
   protected[streaming] def maxMessagesPerPartition(
     offsets: Map[TopicPartition, Long]): Option[Map[TopicPartition, Long]] = {
-    val estimatedRateLimit = rateController.map(_.getLatestRate().toInt)
+    val estimatedRateLimit = rateController.map(_.getLatestRate())
 
     // calculate a per-partition rate limit based on current lag
     val effectiveRateLimitPerPartition = estimatedRateLimit.filter(_ > 0) match {
@@ -144,11 +142,12 @@ private[spark] class DirectKafkaInputDStream[K, V](
         val totalLag = lagPerPartition.values.sum
 
         lagPerPartition.map { case (tp, lag) =>
+          val maxRateLimitPerPartition = ppc.maxRatePerPartition(tp)
           val backpressureRate = Math.round(lag / totalLag.toFloat * rate)
           tp -> (if (maxRateLimitPerPartition > 0) {
             Math.min(backpressureRate, maxRateLimitPerPartition)} else backpressureRate)
         }
-      case None => offsets.map { case (tp, offset) => tp -> maxRateLimitPerPartition }
+      case None => offsets.map { case (tp, offset) => tp -> ppc.maxRatePerPartition(tp) }
     }
 
     if (effectiveRateLimitPerPartition.values.sum > 0) {
@@ -162,11 +161,30 @@ private[spark] class DirectKafkaInputDStream[K, V](
   }
 
   /**
+   * The concern here is that poll might consume messages despite being paused,
+   * which would throw off consumer position.  Fix position if this happens.
+   */
+  private def paranoidPoll(c: Consumer[K, V]): Unit = {
+    val msgs = c.poll(0)
+    if (!msgs.isEmpty) {
+      // position should be minimum offset per topicpartition
+      msgs.asScala.foldLeft(Map[TopicPartition, Long]()) { (acc, m) =>
+        val tp = new TopicPartition(m.topic, m.partition)
+        val off = acc.get(tp).map(o => Math.min(o, m.offset)).getOrElse(m.offset)
+        acc + (tp -> off)
+      }.foreach { case (tp, off) =>
+          logInfo(s"poll(0) returned messages, seeking $tp to $off to compensate")
+          c.seek(tp, off)
+      }
+    }
+  }
+
+  /**
    * Returns the latest (highest) available offsets, taking new partitions into account.
    */
   protected def latestOffsets(): Map[TopicPartition, Long] = {
     val c = consumer
-    c.poll(0)
+    paranoidPoll(c)
     val parts = c.assignment().asScala
 
     // make sure new partitions are reflected in currentOffsets
@@ -223,7 +241,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
   override def start(): Unit = {
     val c = consumer
-    c.poll(0)
+    paranoidPoll(c)
     if (currentOffsets.isEmpty) {
       currentOffsets = c.assignment().asScala.map { tp =>
         tp -> c.position(tp)
@@ -263,13 +281,13 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
   protected def commitAll(): Unit = {
     val m = new ju.HashMap[TopicPartition, OffsetAndMetadata]()
-    val it = commitQueue.iterator()
-    while (it.hasNext) {
-      val osr = it.next
+    var osr = commitQueue.poll()
+    while (null != osr) {
       val tp = osr.topicPartition
       val x = m.get(tp)
       val offset = if (null == x) { osr.untilOffset } else { Math.max(x.offset, osr.untilOffset) }
       m.put(tp, new OffsetAndMetadata(offset))
+      osr = commitQueue.poll()
     }
     if (!m.isEmpty) {
       consumer.commitAsync(m, commitCallback.get)

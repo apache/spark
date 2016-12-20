@@ -149,8 +149,7 @@ class HadoopTableReader(
    *     subdirectory of each partition being read. If None, then all files are accepted.
    */
   def makeRDDForPartitionedTable(
-      partitionToDeserializer: Map[HivePartition,
-      Class[_ <: Deserializer]],
+      partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]],
       filterOpt: Option[PathFilter]): RDD[InternalRow] = {
 
     // SPARK-5068:get FileStatus and do the filtering locally when the path is not exists

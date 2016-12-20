@@ -21,9 +21,15 @@ import scala.math.Ordering
 
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.util.ArrayData
 
+/**
+ * Companion object for ArrayType.
+ *
+ * @since 1.3.0
+ */
+@InterfaceStability.Stable
 object ArrayType extends AbstractDataType {
   /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
   def apply(elementType: DataType): ArrayType = ArrayType(elementType, containsNull = true)
@@ -37,9 +43,7 @@ object ArrayType extends AbstractDataType {
   override private[sql] def simpleString: String = "array"
 }
 
-
 /**
- * :: DeveloperApi ::
  * The data type for collections of multiple values.
  * Internally these are represented as columns that contain a ``scala.collection.Seq``.
  *
@@ -51,8 +55,10 @@ object ArrayType extends AbstractDataType {
  *
  * @param elementType The data type of values.
  * @param containsNull Indicates if values have `null` values
+ *
+ * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {
 
   /** No-arg constructor for kryo. */

@@ -119,7 +119,11 @@ $(document).ready(function() {
         }
       }
 
-      var data = {"applications": array}
+      var data = {
+        "uiroot": uiRoot,
+        "applications": array
+        }
+
       $.get("static/historypage-template.html", function(template) {
         historySummary.append(Mustache.render($(template).filter("#history-summary-template").html(),data));
         var selector = "#history-summary-table";
@@ -133,6 +137,10 @@ $(document).ready(function() {
                         {name: 'sixth', type: "title-numeric"},
                         {name: 'seventh'},
                         {name: 'eighth'},
+                        {name: 'ninth'},
+                    ],
+                    "columnDefs": [
+                        {"searchable": false, "targets": [5]}
                     ],
                     "autoWidth": false,
                     "order": [[ 4, "desc" ]]

@@ -21,19 +21,18 @@ import java.{lang => jl, util => ju}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.stat._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
 /**
- * :: Experimental ::
  * Statistic functions for [[DataFrame]]s.
  *
  * @since 1.4.0
  */
-@Experimental
+@InterfaceStability.Stable
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
@@ -49,10 +48,9 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *
    * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
    * optimizations).
-   * The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670 Space-efficient
-   * Online Computation of Quantile Summaries]] by Greenwald and Khanna.
+   * The algorithm was first present in <a href="http://dx.doi.org/10.1145/375663.375670">
+   * Space-efficient Online Computation of Quantile Summaries</a> by Greenwald and Khanna.
    *
-   * Note that NaN values will be removed from the numerical column before calculation
    * @param col the name of the numerical column
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].
@@ -61,6 +59,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *   If set to zero, the exact quantiles are computed, which could be very expensive.
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities
+   *
+   * @note NaN values will be removed from the numerical column before calculation
    *
    * @since 2.0.0
    */
@@ -184,7 +184,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
-   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * <a href="http://dx.doi.org/10.1145/762471.762473">here</a>, proposed by Karp,
+   * Schenker, and Papadimitriou.
    * The `support` should be greater than 1e-4.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
@@ -230,7 +231,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
-   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * <a href="http://dx.doi.org/10.1145/762471.762473">here</a>, proposed by Karp,
+   * Schenker, and Papadimitriou.
    * Uses a `default` support of 1%.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
@@ -248,7 +250,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
-   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * <a href="http://dx.doi.org/10.1145/762471.762473">here</a>, proposed by Karp, Schenker,
+   * and Papadimitriou.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
    * backward compatibility of the schema of the resulting [[DataFrame]].
@@ -291,7 +294,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
-   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * <a href="http://dx.doi.org/10.1145/762471.762473">here</a>, proposed by Karp, Schenker,
+   * and Papadimitriou.
    * Uses a `default` support of 1%.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the

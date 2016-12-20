@@ -27,8 +27,8 @@ import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
 
 /**
- * Interface used to load a streaming [[Dataset]] from external storage systems (e.g. file systems,
- * key-value stores, etc). Use [[SparkSession.readStream]] to access this.
+ * Interface used to load a streaming `Dataset` from external storage systems (e.g. file systems,
+ * key-value stores, etc). Use `SparkSession.readStream` to access this.
  *
  * @since 2.0.0
  */
@@ -109,7 +109,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
 
 
   /**
-   * Loads input data stream in as a [[DataFrame]], for data streams that don't require a path
+   * Loads input data stream in as a `DataFrame`, for data streams that don't require a path
    * (e.g. external key-value stores).
    *
    * @since 2.0.0
@@ -125,7 +125,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   }
 
   /**
-   * Loads input in as a [[DataFrame]], for data streams that read from some path.
+   * Loads input in as a `DataFrame`, for data streams that read from some path.
    *
    * @since 2.0.0
    */
@@ -134,7 +134,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   }
 
   /**
-   * Loads a JSON file stream (one object per line) and returns the result as a [[DataFrame]].
+   * Loads a JSON file stream (<a href="http://jsonlines.org/">JSON Lines text format or
+   * newline-delimited JSON</a>) and returns the result as a `DataFrame`.
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
@@ -180,7 +181,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   def json(path: String): DataFrame = format("json").load(path)
 
   /**
-   * Loads a CSV file stream and returns the result as a [[DataFrame]].
+   * Loads a CSV file stream and returns the result as a `DataFrame`.
    *
    * This function will go through the input once to determine the input schema if `inferSchema`
    * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
@@ -242,7 +243,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   def csv(path: String): DataFrame = format("csv").load(path)
 
   /**
-   * Loads a Parquet file stream, returning the result as a [[DataFrame]].
+   * Loads a Parquet file stream, returning the result as a `DataFrame`.
    *
    * You can set the following Parquet-specific option(s) for reading Parquet files:
    * <ul>
@@ -261,7 +262,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   }
 
   /**
-   * Loads text files and returns a [[DataFrame]] whose schema starts with a string column named
+   * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
    *
    * Each line in the text files is a new row in the resulting DataFrame. For example:
@@ -284,7 +285,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   def text(path: String): DataFrame = format("text").load(path)
 
   /**
-   * Loads text file(s) and returns a [[Dataset]] of String. The underlying schema of the Dataset
+   * Loads text file(s) and returns a `Dataset` of String. The underlying schema of the Dataset
    * contains a single string column named "value".
    *
    * If the directory structure of the text files contains partitioning information, those are

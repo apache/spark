@@ -13,6 +13,7 @@ redirect_from: "building-with-maven.html"
 
 The Maven-based build is the build of reference for Apache Spark.
 Building Spark using Maven requires Maven 3.3.9 or newer and Java 7+.
+Note that support for Java 7 is deprecated as of Spark 2.0.0 and may be removed in Spark 2.2.0.
 
 ### Setting up Maven's Memory Usage
 
@@ -79,6 +80,9 @@ Because HDFS is not protocol-compatible across versions, if you want to read fro
   </tbody>
 </table>
 
+Note that support for versions of Hadoop before 2.6 are deprecated as of Spark 2.1.0 and may be 
+removed in Spark 2.2.0.
+
 
 You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different from `hadoop.version`. Spark only supports YARN versions 2.2.0 and later.
 
@@ -91,13 +95,13 @@ Examples:
     ./build/mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
 
     # Apache Hadoop 2.4.X or 2.5.X
-    ./build/mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=VERSION -DskipTests clean package
+    ./build/mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
 
     # Apache Hadoop 2.6.X
     ./build/mvn -Pyarn -Phadoop-2.6 -Dhadoop.version=2.6.0 -DskipTests clean package
 
     # Apache Hadoop 2.7.X and later
-    ./build/mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=VERSION -DskipTests clean package
+    ./build/mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.0 -DskipTests clean package
 
     # Different versions of HDFS and YARN.
     ./build/mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=2.2.0 -DskipTests clean package
@@ -129,6 +133,8 @@ To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` prop
 
     ./dev/change-scala-version.sh 2.10
     ./build/mvn -Pyarn -Phadoop-2.4 -Dscala-2.10 -DskipTests clean package
+    
+Note that support for Scala 2.10 is deprecated as of Spark 2.1.0 and may be removed in Spark 2.2.0.
 
 ## Building submodules individually
 
@@ -191,7 +197,7 @@ can be set to control the SBT build. For example:
 To avoid the overhead of launching sbt each time you need to re-compile, you can launch sbt
 in interactive mode by running `build/sbt`, and then run all build commands at the command
 prompt. For more recommendations on reducing build time, refer to the
-[wiki page](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-ReducingBuildTimes).
+[Useful Developer Tools page](http://spark.apache.org/developer-tools.html).
 
 ## Encrypted Filesystems
 
@@ -209,7 +215,7 @@ to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/
 ## IntelliJ IDEA or Eclipse
 
 For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troubleshooting, refer to the
-[wiki page for IDE setup](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-IDESetup).
+[Useful Developer Tools page](http://spark.apache.org/developer-tools.html).
 
 
 # Running Tests
@@ -217,9 +223,8 @@ For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troub
 Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin).
 Note that tests should not be run as root or an admin user.
 
-Some of the tests require Spark to be packaged first, so always run `mvn package` with `-DskipTests` the first time.  The following is an example of a correct (build, test) sequence:
+The following is an example of a command to run the tests:
 
-    ./build/mvn -Pyarn -Phadoop-2.3 -DskipTests -Phive -Phive-thriftserver clean package
     ./build/mvn -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver test
 
 The ScalaTest plugin also supports running only a specific Scala test suite as follows:
@@ -233,9 +238,8 @@ or a Java test:
 
 ## Testing with SBT
 
-Some of the tests require Spark to be packaged first, so always run `build/sbt package` the first time.  The following is an example of a correct (build, test) sequence:
+The following is an example of a command to run the tests:
 
-    ./build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver package
     ./build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver test
 
 To run only a specific test suite as follows:
@@ -260,6 +264,14 @@ or
 
 Java 8 tests are automatically enabled when a Java 8 JDK is detected.
 If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.
+
+## PySpark pip installable
+
+If you are building Spark for use in a Python environment and you wish to pip install it, you will first need to build the Spark JARs as described above. Then you can construct an sdist package suitable for setup.py and pip installable package.
+
+    cd python; python setup.py sdist
+
+**Note:** Due to packaging requirements you can not directly pip install from the Python directory, rather you must first build the sdist package as described above.
 
 ## PySpark Tests with Maven
 

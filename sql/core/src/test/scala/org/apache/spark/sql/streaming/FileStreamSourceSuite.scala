@@ -19,6 +19,8 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
+import scala.collection.mutable
+
 import org.scalatest.PrivateMethodTester
 import org.scalatest.time.SpanSugar._
 
@@ -99,12 +101,6 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext with Private
       tmpDir.listFiles().foreach { f =>
         f.renameTo(new File(src, s"${f.getName}"))
       }
-    }
-  }
-
-  case class DeleteFile(file: File) extends ExternalAction {
-    def runAction(): Unit = {
-      Utils.deleteRecursively(file)
     }
   }
 
@@ -286,7 +282,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           createFileStreamSourceAndGetSchema(
             format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
         }
-        assert("Unable to infer schema. It must be specified manually.;" === e.getMessage)
+        assert("Unable to infer schema for JSON. It must be specified manually.;" === e.getMessage)
       }
     }
   }
@@ -664,7 +660,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     def createFile(content: String, src: File, tmp: File): Unit = {
       val tempFile = Utils.tempFileWith(new File(tmp, "text"))
       val finalFile = new File(src, tempFile.getName)
-      src.mkdirs()
+      require(!src.exists(), s"$src exists, dir: ${src.isDirectory}, file: ${src.isFile}")
+      require(src.mkdirs(), s"Cannot create $src")
+      require(src.isDirectory(), s"$src is not a directory")
       require(stringToFile(tempFile, content).renameTo(finalFile))
     }
 
@@ -694,10 +692,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           // Append to same partition=bar sub dir
           AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar")),
-
-          // Delete the two partition dirs
-          DeleteFile(partitionFooSubDir),
-          DeleteFile(partitionBarSubDir),
 
           AddTextFileData("{'value': 'keep6'}", partitionBarSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar"),
@@ -877,7 +871,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val numFiles = 10000
 
     // This is to avoid running a spark job to list of files in parallel
-    // by the ListingFileCatalog.
+    // by the InMemoryFileIndex.
     spark.sessionState.conf.setConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD, numFiles * 2)
 
     withTempDirs { case (root, tmp) =>
@@ -904,32 +898,38 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("compacat metadata log") {
+  test("compact interval metadata log") {
     val _sources = PrivateMethod[Seq[Source]]('sources)
     val _metadataLog = PrivateMethod[FileStreamSourceLog]('metadataLog)
 
-    def verify(execution: StreamExecution)
-      (batchId: Long, expectedBatches: Int): Boolean = {
+    def verify(
+        execution: StreamExecution,
+        batchId: Long,
+        expectedBatches: Int,
+        expectedCompactInterval: Int): Boolean = {
       import CompactibleFileStreamLog._
 
       val fileSource = (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
       val metadataLog = fileSource invokePrivate _metadataLog()
 
-      if (isCompactionBatch(batchId, 2)) {
+      if (isCompactionBatch(batchId, expectedCompactInterval)) {
         val path = metadataLog.batchIdToPath(batchId)
 
         // Assert path name should be ended with compact suffix.
-        assert(path.getName.endsWith(COMPACT_FILE_SUFFIX))
+        assert(path.getName.endsWith(COMPACT_FILE_SUFFIX),
+          "path does not end with compact file suffix")
 
         // Compacted batch should include all entries from start.
         val entries = metadataLog.get(batchId)
-        assert(entries.isDefined)
-        assert(entries.get.length === metadataLog.allFiles().length)
-        assert(metadataLog.get(None, Some(batchId)).flatMap(_._2).length === entries.get.length)
+        assert(entries.isDefined, "Entries not defined")
+        assert(entries.get.length === metadataLog.allFiles().length, "clean up check")
+        assert(metadataLog.get(None, Some(batchId)).flatMap(_._2).length ===
+          entries.get.length, "Length check")
       }
 
       assert(metadataLog.allFiles().sortBy(_.batchId) ===
-        metadataLog.get(None, Some(batchId)).flatMap(_._2).sortBy(_.batchId))
+        metadataLog.get(None, Some(batchId)).flatMap(_._2).sortBy(_.batchId),
+        "Batch id mismatch")
 
       metadataLog.get(None, Some(batchId)).flatMap(_._2).length === expectedBatches
     }
@@ -940,26 +940,27 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       ) {
         val fileStream = createFileStream("text", src.getCanonicalPath)
         val filtered = fileStream.filter($"value" contains "keep")
+        val updateConf = Map(SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "5")
 
         testStream(filtered)(
           AddTextFileData("drop1\nkeep2\nkeep3", src, tmp),
           CheckAnswer("keep2", "keep3"),
-          AssertOnQuery(verify(_)(0L, 1)),
+          AssertOnQuery(verify(_, 0L, 1, 2)),
           AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
           CheckAnswer("keep2", "keep3", "keep5", "keep6"),
-          AssertOnQuery(verify(_)(1L, 2)),
+          AssertOnQuery(verify(_, 1L, 2, 2)),
           AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
           CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9"),
-          AssertOnQuery(verify(_)(2L, 3)),
+          AssertOnQuery(verify(_, 2L, 3, 2)),
           StopStream,
-          StartStream(),
-          AssertOnQuery(verify(_)(2L, 3)),
+          StartStream(additionalConfs = updateConf),
+          AssertOnQuery(verify(_, 2L, 3, 2)),
           AddTextFileData("drop10\nkeep11", src, tmp),
           CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9", "keep11"),
-          AssertOnQuery(verify(_)(3L, 4)),
+          AssertOnQuery(verify(_, 3L, 4, 2)),
           AddTextFileData("drop12\nkeep13", src, tmp),
           CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9", "keep11", "keep13"),
-          AssertOnQuery(verify(_)(4L, 5))
+          AssertOnQuery(verify(_, 4L, 5, 2))
         )
       }
     }
@@ -997,6 +998,25 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         )
       }
     }
+  }
+
+  test("input row metrics") {
+    withTempDirs { case (src, tmp) =>
+      val input = spark.readStream.format("text").load(src.getCanonicalPath)
+      testStream(input)(
+        AddTextFileData("100", src, tmp),
+        CheckAnswer("100"),
+        AssertOnLastQueryStatus { status =>
+          assert(status.triggerDetails.get("numRows.input.total") === "1")
+          assert(status.sourceStatuses(0).processingRate > 0.0)
+        }
+      )
+    }
+  }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    val options = new FileStreamOptions(Map("maxfilespertrigger" -> "1"))
+    assert(options.maxFilesPerTrigger == Some(1))
   }
 }
 

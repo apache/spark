@@ -24,7 +24,7 @@ import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vector, Vectors}
-import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.random._
@@ -44,6 +44,7 @@ class GeneralizedLinearRegressionSuite
   @transient var datasetGaussianInverse: DataFrame = _
   @transient var datasetBinomial: DataFrame = _
   @transient var datasetPoissonLog: DataFrame = _
+  @transient var datasetPoissonLogWithZero: DataFrame = _
   @transient var datasetPoissonIdentity: DataFrame = _
   @transient var datasetPoissonSqrt: DataFrame = _
   @transient var datasetGammaInverse: DataFrame = _
@@ -87,6 +88,12 @@ class GeneralizedLinearRegressionSuite
       intercept = 0.25, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
       family = "poisson", link = "log").toDF()
+
+    datasetPoissonLogWithZero = generateGeneralizedLinearRegressionInput(
+      intercept = -1.5, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
+      xVariance = Array(0.7, 1.2), nPoints = 100, seed, noiseLevel = 0.01,
+      family = "poisson", link = "log")
+      .map{x => LabeledPoint(if (x.label < 0.7) 0.0 else x.label, x.features)}.toDF()
 
     datasetPoissonIdentity = generateGeneralizedLinearRegressionInput(
       intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
@@ -139,6 +146,10 @@ class GeneralizedLinearRegressionSuite
       label + "," + features.toArray.mkString(",")
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonLog")
+    datasetPoissonLogWithZero.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonLogWithZero")
     datasetPoissonIdentity.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
     }.repartition(1).saveAsTextFile(
@@ -183,6 +194,11 @@ class GeneralizedLinearRegressionSuite
 
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(model)
+    assert(model.hasSummary)
+    val copiedModel = model.copy(ParamMap.empty)
+    assert(copiedModel.hasSummary)
+    model.setSummary(None)
+    assert(!model.hasSummary)
 
     assert(model.getFeaturesCol === "features")
     assert(model.getPredictionCol === "prediction")
@@ -450,6 +466,40 @@ class GeneralizedLinearRegressionSuite
 
         idx += 1
       }
+    }
+  }
+
+  test("generalized linear regression: poisson family against glm (with zero values)") {
+    /*
+       R code:
+       f1 <- data$V1 ~ data$V2 + data$V3 - 1
+       f2 <- data$V1 ~ data$V2 + data$V3
+
+       data <- read.csv("path", header=FALSE)
+       for (formula in c(f1, f2)) {
+         model <- glm(formula, family="poisson", data=data)
+         print(as.vector(coef(model)))
+       }
+       [1]  0.4272661 -0.1565423
+       [1] -3.6911354  0.6214301  0.1295814
+     */
+    val expected = Seq(
+      Vectors.dense(0.0, 0.4272661, -0.1565423),
+      Vectors.dense(-3.6911354, 0.6214301, 0.1295814))
+
+    import GeneralizedLinearRegression._
+
+    var idx = 0
+    val link = "log"
+    val dataset = datasetPoissonLogWithZero
+    for (fitIntercept <- Seq(false, true)) {
+      val trainer = new GeneralizedLinearRegression().setFamily("poisson").setLink(link)
+        .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
+      val model = trainer.fit(dataset)
+      val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
+      assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with poisson family, " +
+        s"$link link and fitIntercept = $fitIntercept (with zero values).")
+      idx += 1
     }
   }
 
@@ -996,6 +1046,27 @@ class GeneralizedLinearRegressionSuite
     assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
     assert(summary.aic ~== aicR absTol 1E-3)
     assert(summary.solver === "irls")
+  }
+
+  test("glm handle collinear features") {
+    val collinearInstances = Seq(
+      Instance(1.0, 1.0, Vectors.dense(1.0, 2.0)),
+      Instance(2.0, 1.0, Vectors.dense(2.0, 4.0)),
+      Instance(3.0, 1.0, Vectors.dense(3.0, 6.0)),
+      Instance(4.0, 1.0, Vectors.dense(4.0, 8.0))
+    ).toDF()
+    val trainer = new GeneralizedLinearRegression()
+    val model = trainer.fit(collinearInstances)
+    // to make it clear that underlying WLS did not solve analytically
+    intercept[UnsupportedOperationException] {
+      model.summary.coefficientStandardErrors
+    }
+    intercept[UnsupportedOperationException] {
+      model.summary.pValues
+    }
+    intercept[UnsupportedOperationException] {
+      model.summary.tValues
+    }
   }
 
   test("read/write") {

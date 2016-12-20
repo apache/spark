@@ -142,8 +142,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(hiveTable.storage.serde === Some(serde))
 
           assert(hiveTable.tableType === CatalogTableType.EXTERNAL)
-          assert(hiveTable.storage.locationUri ===
-            Some(path.toURI.toString.stripSuffix(File.separator)))
+          assert(hiveTable.storage.locationUri === Some(path.toString))
 
           val columns = hiveTable.schema
           assert(columns.map(_.name) === Seq("d1", "d2"))

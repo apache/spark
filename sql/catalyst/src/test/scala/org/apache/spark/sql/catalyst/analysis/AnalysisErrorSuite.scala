@@ -465,34 +465,22 @@ class AnalysisErrorSuite extends AnalysisTest {
         "another aggregate function." :: Nil)
   }
 
-  test("Join can't work on binary and map types") {
-    val plan =
-      Join(
-        LocalRelation(
-          AttributeReference("a", BinaryType)(exprId = ExprId(2)),
-          AttributeReference("b", IntegerType)(exprId = ExprId(1))),
-        LocalRelation(
-          AttributeReference("c", BinaryType)(exprId = ExprId(4)),
-          AttributeReference("d", IntegerType)(exprId = ExprId(3))),
-        Cross,
-        Some(EqualTo(AttributeReference("a", BinaryType)(exprId = ExprId(2)),
-          AttributeReference("c", BinaryType)(exprId = ExprId(4)))))
+  test("Join can work on binary types but can't work on map types") {
+    val left = LocalRelation('a.binary, 'b.map(StringType, StringType))
+    val right = LocalRelation('c.binary, 'd.map(StringType, StringType))
 
-    assertAnalysisError(plan, "binary type expression `a` cannot be used in join conditions" :: Nil)
+    val plan1 = left.join(
+      right,
+      joinType = Cross,
+      condition = Some('a === 'c))
 
-    val plan2 =
-      Join(
-        LocalRelation(
-          AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
-          AttributeReference("b", IntegerType)(exprId = ExprId(1))),
-        LocalRelation(
-          AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)),
-          AttributeReference("d", IntegerType)(exprId = ExprId(3))),
-        Cross,
-        Some(EqualTo(AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
-          AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)))))
+    assertAnalysisSuccess(plan1)
 
-    assertAnalysisError(plan2, "map type expression `a` cannot be used in join conditions" :: Nil)
+    val plan2 = left.join(
+      right,
+      joinType = Cross,
+      condition = Some('b === 'd))
+    assertAnalysisError(plan2, "Cannot use map type in EqualTo" :: Nil)
   }
 
   test("PredicateSubQuery is used outside of a filter") {

@@ -533,7 +533,7 @@ trait Params extends Identifiable with Serializable {
    * Returns all params sorted by their names. The default implementation uses Java reflection to
    * list all public methods that have no arguments and return [[Param]].
    *
-   * Note: Developer should not use this method in constructor because we cannot guarantee that
+   * @note Developer should not use this method in constructor because we cannot guarantee that
    * this variable gets initialized before other params.
    */
   lazy val params: Array[Param[_]] = {
@@ -544,21 +544,6 @@ trait Params extends Identifiable with Serializable {
           m.getParameterTypes.isEmpty
       }.sortBy(_.getName)
       .map(m => m.invoke(this).asInstanceOf[Param[_]])
-  }
-
-  /**
-   * Validates parameter values stored internally.
-   * Raise an exception if any parameter value is invalid.
-   *
-   * This only needs to check for interactions between parameters.
-   * Parameter value checks which do not depend on other parameters are handled by
-   * `Param.validate()`. This method does not handle input/output column parameters;
-   * those are checked during schema validation.
-   * @deprecated Will be removed in 2.1.0. All the checks should be merged into transformSchema
-   */
-  @deprecated("Will be removed in 2.1.0. Checks should be merged into transformSchema.", "2.0.0")
-  def validateParams(): Unit = {
-    // Do nothing by default.  Override to handle Param interactions.
   }
 
   /**

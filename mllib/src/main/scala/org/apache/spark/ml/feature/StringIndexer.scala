@@ -113,11 +113,11 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
 /**
  * Model fitted by [[StringIndexer]].
  *
- * NOTE: During transformation, if the input column does not exist,
+ * @param labels  Ordered list of labels, corresponding to indices to be assigned.
+ *
+ * @note During transformation, if the input column does not exist,
  * [[StringIndexerModel.transform]] would return the input dataset unmodified.
  * This is a temporary fix for the case when target labels do not exist during prediction.
- *
- * @param labels  Ordered list of labels, corresponding to indices to be assigned.
  */
 @Since("1.4.0")
 class StringIndexerModel (

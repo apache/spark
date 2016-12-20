@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.util.Properties
-
-import scala.collection.JavaConverters.mapAsJavaMapConverter
-
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
@@ -39,16 +35,16 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val upperBound = jdbcOptions.upperBound
     val numPartitions = jdbcOptions.numPartitions
 
-    val partitionInfo = if (partitionColumn == null) {
+    val partitionInfo = if (partitionColumn.isEmpty) {
+      assert(lowerBound.isEmpty && upperBound.isEmpty)
       null
     } else {
+      assert(lowerBound.nonEmpty && upperBound.nonEmpty && numPartitions.nonEmpty)
       JDBCPartitioningInfo(
-        partitionColumn, lowerBound.toLong, upperBound.toLong, numPartitions.toInt)
+        partitionColumn.get, lowerBound.get, upperBound.get, numPartitions.get)
     }
     val parts = JDBCRelation.columnPartition(partitionInfo)
-    val properties = new Properties() // Additional properties that we will pass to getConnection
-    parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
-    JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties)(sqlContext.sparkSession)
+    JDBCRelation(parts, jdbcOptions)(sqlContext.sparkSession)
   }
 
   override def createRelation(
@@ -56,15 +52,13 @@ class JdbcRelationProvider extends CreatableRelationProvider
       mode: SaveMode,
       parameters: Map[String, String],
       df: DataFrame): BaseRelation = {
-    val options = new JDBCOptions(parameters)
-    val url = options.url
-    val table = options.table
-    val createTableOptions = options.createTableOptions
-    val isTruncate = options.isTruncate
-    val props = new Properties()
-    props.putAll(parameters.asJava)
+    val jdbcOptions = new JDBCOptions(parameters)
+    val url = jdbcOptions.url
+    val table = jdbcOptions.table
+    val createTableOptions = jdbcOptions.createTableOptions
+    val isTruncate = jdbcOptions.isTruncate
 
-    val conn = JdbcUtils.createConnectionFactory(url, props)()
+    val conn = JdbcUtils.createConnectionFactory(jdbcOptions)()
     try {
       val tableExists = JdbcUtils.tableExists(conn, url, table)
       if (tableExists) {
@@ -73,16 +67,16 @@ class JdbcRelationProvider extends CreatableRelationProvider
             if (isTruncate && isCascadingTruncateTable(url) == Some(false)) {
               // In this case, we should truncate table and then load.
               truncateTable(conn, table)
-              saveTable(df, url, table, props)
+              saveTable(df, url, table, jdbcOptions)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, table)
               createTable(df.schema, url, table, createTableOptions, conn)
-              saveTable(df, url, table, props)
+              saveTable(df, url, table, jdbcOptions)
             }
 
           case SaveMode.Append =>
-            saveTable(df, url, table, props)
+            saveTable(df, url, table, jdbcOptions)
 
           case SaveMode.ErrorIfExists =>
             throw new AnalysisException(
@@ -95,7 +89,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
         }
       } else {
         createTable(df.schema, url, table, createTableOptions, conn)
-        saveTable(df, url, table, props)
+        saveTable(df, url, table, jdbcOptions)
       }
     } finally {
       conn.close()

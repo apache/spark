@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.{AnalysisException, InternalOutputModes}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.streaming.OutputMode
@@ -55,9 +56,20 @@ object UnsupportedOperationChecker {
     // Disallow some output mode
     outputMode match {
       case InternalOutputModes.Append if aggregates.nonEmpty =>
-        throwError(
-          s"$outputMode output mode not supported when there are streaming aggregations on " +
-            s"streaming DataFrames/DataSets")(plan)
+        val aggregate = aggregates.head
+
+        // Find any attributes that are associated with an eventTime watermark.
+        val watermarkAttributes = aggregate.groupingExpressions.collect {
+          case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => a
+        }
+
+        // We can append rows to the sink once the group is under the watermark. Without this
+        // watermark a group is never "finished" so we would never output anything.
+        if (watermarkAttributes.isEmpty) {
+          throwError(
+            s"$outputMode output mode not supported when there are streaming aggregations on " +
+                s"streaming DataFrames/DataSets")(plan)
+        }
 
       case InternalOutputModes.Complete | InternalOutputModes.Update if aggregates.isEmpty =>
         throwError(

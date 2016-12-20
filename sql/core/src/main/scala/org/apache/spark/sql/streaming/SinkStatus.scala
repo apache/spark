@@ -17,18 +17,50 @@
 
 package org.apache.spark.sql.streaming
 
+import org.json4s._
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.streaming.Sink
+import org.apache.spark.sql.streaming.StreamingQueryStatus.indent
 
 /**
  * :: Experimental ::
- * Status and metrics of a streaming [[Sink]].
+ * Status and metrics of a streaming sink.
  *
- * @param description Description of the source corresponding to this status
- * @param offsetDesc Description of the current offset up to which data has been written by the sink
+ * @param description Description of the source corresponding to this status.
+ * @param offsetDesc Description of the current offsets up to which data has been written
+ *                   by the sink.
  * @since 2.0.0
  */
 @Experimental
-class SinkStatus private[sql](
+class SinkStatus private(
     val description: String,
-    val offsetDesc: String)
+    val offsetDesc: String) {
+
+  /** The compact JSON representation of this status. */
+  def json: String = compact(render(jsonValue))
+
+  /** The pretty (i.e. indented) JSON representation of this status. */
+  def prettyJson: String = pretty(render(jsonValue))
+
+  override def toString: String =
+    "Status of sink " + indent(prettyString).trim
+
+  private[sql] def jsonValue: JValue = {
+    ("description" -> JString(description)) ~
+    ("offsetDesc" -> JString(offsetDesc))
+  }
+
+  private[sql] def prettyString: String = {
+    s"""$description
+       |Committed offsets: $offsetDesc
+       |""".stripMargin
+  }
+}
+
+/** Companion object, primarily for creating SinkStatus instances internally */
+private[sql] object SinkStatus {
+  def apply(desc: String, offsetDesc: String): SinkStatus = new SinkStatus(desc, offsetDesc)
+}

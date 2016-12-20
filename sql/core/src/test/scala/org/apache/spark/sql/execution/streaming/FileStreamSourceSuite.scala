@@ -94,7 +94,7 @@ class FileStreamSourceSuite extends SparkFunSuite with SharedSQLContext {
         new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, dir.getAbsolutePath)
       assert(metadataLog.add(0, Array(FileEntry(s"$scheme:///file1", 100L, 0))))
 
-      val newSource = new FileStreamSource(spark, s"$scheme:///", "parquet", StructType(Nil),
+      val newSource = new FileStreamSource(spark, s"$scheme:///", "parquet", StructType(Nil), Nil,
         dir.getAbsolutePath, Map.empty)
       // this method should throw an exception if `fs.exists` is called during resolveRelation
       newSource.getBatch(None, LongOffset(1))

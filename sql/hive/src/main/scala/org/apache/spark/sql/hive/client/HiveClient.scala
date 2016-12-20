@@ -184,12 +184,12 @@ private[hive] trait HiveClient {
    * If no partition spec is specified, all partitions are returned.
    */
   def getPartitions(
-      table: CatalogTable,
+      catalogTable: CatalogTable,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition]
 
   /** Returns partitions filtered by predicates for the given table. */
   def getPartitionsByFilter(
-      table: CatalogTable,
+      catalogTable: CatalogTable,
       predicates: Seq[Expression]): Seq[CatalogTablePartition]
 
   /** Loads a static partition into an existing table. */

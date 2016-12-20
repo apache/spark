@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.annotation.implicitNotFound
 import scala.reflect.ClassTag
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.types._
 
 
@@ -67,6 +67,7 @@ import org.apache.spark.sql.types._
  * @since 1.6.0
  */
 @Experimental
+@InterfaceStability.Evolving
 @implicitNotFound("Unable to find encoder for type stored in a Dataset.  Primitive types " +
   "(Int, String, etc) and Product types (case classes) are supported by importing " +
   "spark.implicits._  Support for serializing other types will be added in future " +

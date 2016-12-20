@@ -128,6 +128,7 @@ def run_tests(tests_timeout):
         ERROR_CODES["BLOCK_MIMA"]: 'MiMa tests',
         ERROR_CODES["BLOCK_SPARK_UNIT_TESTS"]: 'Spark unit tests',
         ERROR_CODES["BLOCK_PYSPARK_UNIT_TESTS"]: 'PySpark unit tests',
+        ERROR_CODES["BLOCK_PYSPARK_PIP_TESTS"]: 'PySpark pip packaging tests',
         ERROR_CODES["BLOCK_SPARKR_UNIT_TESTS"]: 'SparkR unit tests',
         ERROR_CODES["BLOCK_TIMEOUT"]: 'from timeout after a configured wait of \`%s\`' % (
             tests_timeout)

@@ -59,6 +59,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   // Maximum number of cores to acquire (TODO: we'll need more flexible controls here)
   val maxCores = conf.get("spark.cores.max", Int.MaxValue.toString).toInt
 
+  val useFetcherCache = conf.getBoolean("spark.mesos.fetcherCache.enable", false)
+
+  val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
+
   private[this] val shutdownTimeoutMS =
     conf.getTimeAsMs("spark.mesos.coarse.shutdownTimeout", "10s")
       .ensuring(_ >= 0, "spark.mesos.coarse.shutdownTimeout must be >= 0")
@@ -72,7 +76,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   // Cores we have acquired with each Mesos task ID
   val coresByTaskId = new mutable.HashMap[String, Int]
+  val gpusByTaskId = new mutable.HashMap[String, Int]
   var totalCoresAcquired = 0
+  var totalGpusAcquired = 0
 
   // SlaveID -> Slave
   // This map accumulates entries for the duration of the job.  Slaves are never deleted, because
@@ -152,7 +158,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       sc.sparkUser,
       sc.appName,
       sc.conf,
-      sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.appUIAddress)),
+      sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.webUrl)),
       None,
       None,
       sc.conf.getOption("spark.mesos.driver.frameworkId")
@@ -207,7 +213,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           .format(prefixEnv, runScript) +
         s" --driver-url $driverURL" +
         s" --executor-id $taskId" +
-        s" --hostname ${offer.getHostname}" +
+        s" --hostname ${executorHostname(offer)}" +
         s" --cores $numCores" +
         s" --app-id $appId")
     } else {
@@ -219,13 +225,13 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend" +
         s" --driver-url $driverURL" +
         s" --executor-id $taskId" +
-        s" --hostname ${offer.getHostname}" +
+        s" --hostname ${executorHostname(offer)}" +
         s" --cores $numCores" +
         s" --app-id $appId")
-      command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get))
+      command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get).setCache(useFetcherCache))
     }
 
-    conf.getOption("spark.mesos.uris").foreach(setupUris(_, command))
+    conf.getOption("spark.mesos.uris").foreach(setupUris(_, command, useFetcherCache))
 
     command.build()
   }
@@ -396,6 +402,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           launchTasks = true
           val taskId = newMesosTaskId()
           val offerCPUs = getResource(resources, "cpus").toInt
+          val taskGPUs = Math.min(
+            Math.max(0, maxGpus - totalGpusAcquired), getResource(resources, "gpus").toInt)
 
           val taskCPUs = executorCores(offerCPUs)
           val taskMemory = executorMemory(sc)
@@ -403,28 +411,24 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           slaves.getOrElseUpdate(slaveId, new Slave(offer.getHostname)).taskIDs.add(taskId)
 
           val (resourcesLeft, resourcesToUse) =
-            partitionTaskResources(resources, taskCPUs, taskMemory)
+            partitionTaskResources(resources, taskCPUs, taskMemory, taskGPUs)
 
           val taskBuilder = MesosTaskInfo.newBuilder()
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
             .setSlaveId(offer.getSlaveId)
             .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId))
             .setName("Task " + taskId)
-
           taskBuilder.addAllResources(resourcesToUse.asJava)
-
-          sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
-            MesosSchedulerBackendUtil.setupContainerBuilderDockerInfo(
-              image,
-              sc.conf,
-              taskBuilder.getContainerBuilder
-            )
-          }
+          taskBuilder.setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
 
           tasks(offer.getId) ::= taskBuilder.build()
           remainingResources(offerId) = resourcesLeft.asJava
           totalCoresAcquired += taskCPUs
           coresByTaskId(taskId) = taskCPUs
+          if (taskGPUs > 0) {
+            totalGpusAcquired += taskGPUs
+            gpusByTaskId(taskId) = taskGPUs
+          }
         }
       }
     }
@@ -432,21 +436,28 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   /** Extracts task needed resources from a list of available resources. */
-  private def partitionTaskResources(resources: JList[Resource], taskCPUs: Int, taskMemory: Int)
+  private def partitionTaskResources(
+      resources: JList[Resource],
+      taskCPUs: Int,
+      taskMemory: Int,
+      taskGPUs: Int)
     : (List[Resource], List[Resource]) = {
 
     // partition cpus & mem
     val (afterCPUResources, cpuResourcesToUse) = partitionResources(resources, "cpus", taskCPUs)
     val (afterMemResources, memResourcesToUse) =
       partitionResources(afterCPUResources.asJava, "mem", taskMemory)
+    val (afterGPUResources, gpuResourcesToUse) =
+      partitionResources(afterMemResources.asJava, "gpus", taskGPUs)
 
     // If user specifies port numbers in SparkConfig then consecutive tasks will not be launched
     // on the same host. This essentially means one executor per host.
     // TODO: handle network isolator case
     val (nonPortResources, portResourcesToUse) =
-      partitionPortResources(nonZeroPortValuesFromConfig(sc.conf), afterMemResources)
+      partitionPortResources(nonZeroPortValuesFromConfig(sc.conf), afterGPUResources)
 
-    (nonPortResources, cpuResourcesToUse ++ memResourcesToUse ++ portResourcesToUse)
+    (nonPortResources,
+      cpuResourcesToUse ++ memResourcesToUse ++ portResourcesToUse ++ gpuResourcesToUse)
   }
 
   private def canLaunchTask(slaveId: String, resources: JList[Resource]): Boolean = {
@@ -512,6 +523,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         for (cores <- coresByTaskId.get(taskId)) {
           totalCoresAcquired -= cores
           coresByTaskId -= taskId
+        }
+        // Also remove the gpus we have remembered for this task, if it's in the hashmap
+        for (gpus <- gpusByTaskId.get(taskId)) {
+          totalGpusAcquired -= gpus
+          gpusByTaskId -= taskId
         }
         // If it was a failure, mark the slave as failed for blacklisting purposes
         if (TaskState.isFailed(state)) {
@@ -633,6 +649,15 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private def numExecutors(): Int = {
     slaves.values.map(_.taskIDs.size).sum
+  }
+
+  private def executorHostname(offer: Offer): String = {
+    if (sc.conf.getOption("spark.mesos.network.name").isDefined) {
+      // The agent's IP is not visible in a CNI container, so we bind to 0.0.0.0
+      "0.0.0.0"
+    } else {
+      offer.getHostname
+    }
   }
 }
 

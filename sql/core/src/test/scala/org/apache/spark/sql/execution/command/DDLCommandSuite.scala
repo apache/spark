@@ -387,20 +387,22 @@ class DDLCommandSuite extends PlanTest {
     val parsed_table = parser.parsePlan(sql_table)
     val parsed_view = parser.parsePlan(sql_view)
     val expected_table = AlterTableRenameCommand(
-      TableIdentifier("table_name", None),
-      "new_table_name",
+      TableIdentifier("table_name"),
+      TableIdentifier("new_table_name"),
       isView = false)
     val expected_view = AlterTableRenameCommand(
-      TableIdentifier("table_name", None),
-      "new_table_name",
+      TableIdentifier("table_name"),
+      TableIdentifier("new_table_name"),
       isView = true)
     comparePlans(parsed_table, expected_table)
     comparePlans(parsed_view, expected_view)
+  }
 
-    val e = intercept[ParseException](
-      parser.parsePlan("ALTER TABLE db1.tbl RENAME TO db1.tbl2")
-    )
-    assert(e.getMessage.contains("Can not specify database in table/view name after RENAME TO"))
+  test("alter table: rename table with database") {
+    val query = "ALTER TABLE db1.tbl RENAME TO db1.tbl2"
+    val plan = parseAs[AlterTableRenameCommand](query)
+    assert(plan.oldName == TableIdentifier("tbl", Some("db1")))
+    assert(plan.newName == TableIdentifier("tbl2", Some("db1")))
   }
 
   // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
@@ -822,21 +824,23 @@ class DDLCommandSuite extends PlanTest {
     val sql1 = "SHOW COLUMNS FROM t1"
     val sql2 = "SHOW COLUMNS IN db1.t1"
     val sql3 = "SHOW COLUMNS FROM t1 IN db1"
-    val sql4 = "SHOW COLUMNS FROM db1.t1 IN db1"
-    val sql5 = "SHOW COLUMNS FROM db1.t1 IN db2"
+    val sql4 = "SHOW COLUMNS FROM db1.t1 IN db2"
 
     val parsed1 = parser.parsePlan(sql1)
-    val expected1 = ShowColumnsCommand(TableIdentifier("t1", None))
+    val expected1 = ShowColumnsCommand(None, TableIdentifier("t1", None))
     val parsed2 = parser.parsePlan(sql2)
-    val expected2 = ShowColumnsCommand(TableIdentifier("t1", Some("db1")))
+    val expected2 = ShowColumnsCommand(None, TableIdentifier("t1", Some("db1")))
     val parsed3 = parser.parsePlan(sql3)
-    val parsed4 = parser.parsePlan(sql3)
+    val expected3 = ShowColumnsCommand(Some("db1"), TableIdentifier("t1", None))
+    val parsed4 = parser.parsePlan(sql4)
+    val expected4 = ShowColumnsCommand(Some("db2"), TableIdentifier("t1", Some("db1")))
+
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected2)
-    comparePlans(parsed4, expected2)
-    assertUnsupported(sql5)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
   }
+
 
   test("show partitions") {
     val sql1 = "SHOW PARTITIONS t1"

@@ -29,8 +29,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JdbcUtils}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -84,7 +83,7 @@ class JDBCSuite extends SparkFunSuite
         |CREATE TEMPORARY TABLE fetchtwo
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
-        |         ${JdbcUtils.JDBC_BATCH_FETCH_SIZE} '2')
+        |         ${JDBCOptions.JDBC_BATCH_FETCH_SIZE} '2')
       """.stripMargin.replaceAll("\n", " "))
 
     sql(
@@ -354,8 +353,8 @@ class JDBCSuite extends SparkFunSuite
 
   test("Basic API with illegal fetchsize") {
     val properties = new Properties()
-    properties.setProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, "-1")
-    val e = intercept[SparkException] {
+    properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "-1")
+    val e = intercept[IllegalArgumentException] {
       spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
     }.getMessage
     assert(e.contains("Invalid value `-1` for parameter `fetchsize`"))
@@ -364,7 +363,7 @@ class JDBCSuite extends SparkFunSuite
   test("Basic API with FetchSize") {
     (0 to 4).foreach { size =>
       val properties = new Properties()
-      properties.setProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, size.toString)
+      properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, size.toString)
       assert(spark.read.jdbc(
         urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
     }
@@ -620,6 +619,8 @@ class JDBCSuite extends SparkFunSuite
     assert(doCompileFilter(GreaterThan("col0", 3)) === "col0 > 3")
     assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === "col0 >= 3")
     assert(doCompileFilter(In("col1", Array("jkl"))) === "col1 IN ('jkl')")
+    assert(doCompileFilter(In("col1", Array.empty)) ===
+      "CASE WHEN col1 IS NULL THEN NULL ELSE FALSE END")
     assert(doCompileFilter(Not(In("col1", Array("mno", "pqr"))))
       === "(NOT (col1 IN ('mno', 'pqr')))")
     assert(doCompileFilter(IsNull("col1")) === "col1 IS NULL")
@@ -730,6 +731,38 @@ class JDBCSuite extends SparkFunSuite
     val explain = ExplainCommand(df.queryExecution.logical, extended = true)
     spark.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       r => assert(!List("testPass", "testUser").exists(r.toString.contains))
+    }
+  }
+
+  test("hide credentials in create and describe a persistent/temp table") {
+    val password = "testPass"
+    val tableName = "tab1"
+    Seq("TABLE", "TEMPORARY VIEW").foreach { tableType =>
+      withTable(tableName) {
+        val df = sql(
+          s"""
+             |CREATE $tableType $tableName
+             |USING org.apache.spark.sql.jdbc
+             |OPTIONS (
+             | url '$urlWithUserAndPass',
+             | dbtable 'TEST.PEOPLE',
+             | user 'testUser',
+             | password '$password')
+           """.stripMargin)
+
+        val explain = ExplainCommand(df.queryExecution.logical, extended = true)
+        spark.sessionState.executePlan(explain).executedPlan.executeCollect().foreach { r =>
+          assert(!r.toString.contains(password))
+        }
+
+        sql(s"DESC FORMATTED $tableName").collect().foreach { r =>
+          assert(!r.toString().contains(password))
+        }
+
+        sql(s"DESC EXTENDED $tableName").collect().foreach { r =>
+          assert(!r.toString().contains(password))
+        }
+      }
     }
   }
 

@@ -49,21 +49,23 @@ import org.apache.spark.sql.types._
  *                           DEFAULT_PERCENTILE_ACCURACY.
  */
 @ExpressionDescription(
-  usage =
-    """
-      _FUNC_(col, percentage [, accuracy]) - Returns the approximate percentile value of numeric
+  usage = """
+    _FUNC_(col, percentage [, accuracy]) - Returns the approximate percentile value of numeric
       column `col` at the given percentage. The value of percentage must be between 0.0
-      and 1.0. The `accuracy` parameter (default: 10000) is a positive integer literal which
+      and 1.0. The `accuracy` parameter (default: 10000) is a positive numeric literal which
       controls approximation accuracy at the cost of memory. Higher value of `accuracy` yields
       better accuracy, `1.0/accuracy` is the relative error of the approximation.
-
-      _FUNC_(col, array(percentage1 [, percentage2]...) [, accuracy]) - Returns the approximate
-      percentile array of column `col` at the given percentage array. Each value of the
-      percentage array must be between 0.0 and 1.0. The `accuracy` parameter (default: 10000) is
-       a positive integer literal which controls approximation accuracy at the cost of memory.
-       Higher value of `accuracy` yields better accuracy, `1.0/accuracy` is the relative error of
-       the approximation.
-    """)
+      When `percentage` is an array, each value of the percentage array must be between 0.0 and 1.0.
+      In this case, returns the approximate percentile array of column `col` at the given
+      percentage array.
+  """,
+  extended = """
+    Examples:
+      > SELECT percentile_approx(10.0, array(0.5, 0.4, 0.1), 100);
+       [10.0,10.0,10.0]
+      > SELECT percentile_approx(10.0, 0.5, 100);
+       10.0
+  """)
 case class ApproximatePercentile(
     child: Expression,
     percentageExpression: Expression,

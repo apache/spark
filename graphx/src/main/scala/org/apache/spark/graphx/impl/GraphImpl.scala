@@ -42,7 +42,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
   @transient override val edges: EdgeRDDImpl[ED, VD] = replicatedVertexView.edges
 
-  /** Return a RDD that brings edges together with their source and destination vertices. */
+  /** Return an RDD that brings edges together with their source and destination vertices. */
   @transient override lazy val triplets: RDD[EdgeTriplet[VD, ED]] = {
     replicatedVertexView.upgrade(vertices, true, true)
     replicatedVertexView.edges.partitionsRDD.mapPartitions(_.flatMap {

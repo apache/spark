@@ -23,12 +23,13 @@ import scala.xml.Node
 
 import org.apache.mesos.Protos.TaskStatus
 
+import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.mesos.MesosDriverDescription
 import org.apache.spark.scheduler.cluster.mesos.MesosClusterSubmissionState
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage("") {
-  private val historyServerURL = parent.conf.getOption("spark.mesos.dispatcher.historyServer.url")
+  private val historyServerURL = parent.conf.get(HISTORY_SERVER_URL)
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val state = parent.scheduler.getSchedulerState()

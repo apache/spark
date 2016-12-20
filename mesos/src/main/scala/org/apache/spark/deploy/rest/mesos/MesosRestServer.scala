@@ -19,7 +19,7 @@ package org.apache.spark.deploy.rest.mesos
 
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Date, Locale}
 import java.util.concurrent.atomic.AtomicLong
 import javax.servlet.http.HttpServletResponse
 
@@ -62,11 +62,10 @@ private[mesos] class MesosSubmitRequestServlet(
   private val DEFAULT_CORES = 1.0
 
   private val nextDriverNumber = new AtomicLong(0)
-  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
-  private def newDriverId(submitDate: Date): String = {
-    "driver-%s-%04d".format(
-      createDateFormat.format(submitDate), nextDriverNumber.incrementAndGet())
-  }
+  // For application IDs
+  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
+  private def newDriverId(submitDate: Date): String =
+    f"driver-${createDateFormat.format(submitDate)}-${nextDriverNumber.incrementAndGet()}%04d"
 
   /**
    * Build a driver description from the fields specified in the submit request.

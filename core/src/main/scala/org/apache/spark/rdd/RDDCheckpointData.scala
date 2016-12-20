@@ -32,7 +32,7 @@ private[spark] object CheckpointState extends Enumeration {
 
 /**
  * This class contains all the information related to RDD checkpointing. Each instance of this
- * class is associated with a RDD. It manages process of checkpointing of the associated RDD,
+ * class is associated with an RDD. It manages process of checkpointing of the associated RDD,
  * as well as, manages the post-checkpoint state by providing the updated partitions,
  * iterator and preferred locations of the checkpointed RDD.
  */

@@ -24,11 +24,12 @@ import scala.collection.JavaConverters._
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.InferSchema
 import org.apache.spark.sql.types.StructType
 
@@ -38,6 +39,7 @@ import org.apache.spark.sql.types.StructType
  *
  * @since 1.4.0
  */
+@InterfaceStability.Stable
 class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
@@ -229,18 +231,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       table: String,
       parts: Array[Partition],
       connectionProperties: Properties): DataFrame = {
-    val props = new Properties()
-    extraOptions.foreach { case (key, value) =>
-      props.put(key, value)
-    }
-    // connectionProperties should override settings in extraOptions
-    props.putAll(connectionProperties)
-    val relation = JDBCRelation(url, table, parts, props)(sparkSession)
-    sparkSession.baseRelationToDataFrame(relation)
+    // connectionProperties should override settings in extraOptions.
+    this.extraOptions = this.extraOptions ++ connectionProperties.asScala
+    // explicit url and dbtable should override all
+    this.extraOptions += ("url" -> url, "dbtable" -> table)
+    format("jdbc").load()
   }
 
   /**
-   * Loads a JSON file (one object per line) and returns the result as a [[DataFrame]].
+   * Loads a JSON file (<a href="http://jsonlines.org/">JSON Lines text format or
+   * newline-delimited JSON</a>) and returns the result as a [[DataFrame]].
    * See the documentation on the overloaded `json()` method with varargs for more details.
    *
    * @since 1.4.0
@@ -251,7 +251,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a JSON file (one object per line) and returns the result as a [[DataFrame]].
+   * Loads a JSON file (<a href="http://jsonlines.org/">JSON Lines text format or
+   * newline-delimited JSON</a>) and returns the result as a [[DataFrame]].
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
@@ -296,8 +297,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def json(paths: String*): DataFrame = format("json").load(paths : _*)
 
   /**
-   * Loads a `JavaRDD[String]` storing JSON objects (one object per record) and
-   * returns the result as a [[DataFrame]].
+   * Loads a `JavaRDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON
+   * Lines text format or newline-delimited JSON</a>) and returns the result as
+   * a [[DataFrame]].
    *
    * Unless the schema is specified using [[schema]] function, this function goes through the
    * input once to determine the input schema.
@@ -308,8 +310,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def json(jsonRDD: JavaRDD[String]): DataFrame = json(jsonRDD.rdd)
 
   /**
-   * Loads an `RDD[String]` storing JSON objects (one object per record) and
-   * returns the result as a [[DataFrame]].
+   * Loads an `RDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
+   * text format or newline-delimited JSON</a>) and returns the result as a [[DataFrame]].
    *
    * Unless the schema is specified using [[schema]] function, this function goes through the
    * input once to determine the input schema.
@@ -364,7 +366,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * type.</li>
    * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
    * the separator can be part of the value. If you would like to turn off quotations, you need to
-   * set not `null` but an empty string. This behaviour is different form
+   * set not `null` but an empty string. This behaviour is different from
    * `com.databricks.spark.csv`.</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>

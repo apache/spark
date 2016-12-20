@@ -155,8 +155,16 @@ class KafkaTestUtils extends Logging {
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
-  def createTopic(topic: String, partitions: Int): Unit = {
-    AdminUtils.createTopic(zkUtils, topic, partitions, 1)
+  def createTopic(topic: String, partitions: Int, overwrite: Boolean = false): Unit = {
+    var created = false
+    while (!created) {
+      try {
+        AdminUtils.createTopic(zkUtils, topic, partitions, 1)
+        created = true
+      } catch {
+        case e: kafka.common.TopicExistsException if overwrite => deleteTopic(topic)
+      }
+    }
     // wait until metadata is propagated
     (0 until partitions).foreach { p =>
       waitUntilMetadataIsPropagated(topic, p)
@@ -201,11 +209,23 @@ class KafkaTestUtils extends Logging {
 
   /** Send the array of messages to the Kafka broker */
   def sendMessages(topic: String, messages: Array[String]): Seq[(String, RecordMetadata)] = {
+    sendMessages(topic, messages, None)
+  }
+
+  /** Send the array of messages to the Kafka broker using specified partition */
+  def sendMessages(
+      topic: String,
+      messages: Array[String],
+      partition: Option[Int]): Seq[(String, RecordMetadata)] = {
     producer = new KafkaProducer[String, String](producerConfiguration)
     val offsets = try {
       messages.map { m =>
+        val record = partition match {
+          case Some(p) => new ProducerRecord[String, String](topic, p, null, m)
+          case None => new ProducerRecord[String, String](topic, m)
+        }
         val metadata =
-          producer.send(new ProducerRecord[String, String](topic, m)).get(10, TimeUnit.SECONDS)
+          producer.send(record).get(10, TimeUnit.SECONDS)
           logInfo(s"\tSent $m to partition ${metadata.partition}, offset ${metadata.offset}")
         (m, metadata)
       }
@@ -232,7 +252,7 @@ class KafkaTestUtils extends Logging {
     offsets
   }
 
-  private def brokerConfiguration: Properties = {
+  protected def brokerConfiguration: Properties = {
     val props = new Properties()
     props.put("broker.id", "0")
     props.put("host.name", "localhost")
@@ -290,9 +310,11 @@ class KafkaTestUtils extends Logging {
         }
         checkpoints.forall(checkpointsPerLogDir => !checkpointsPerLogDir.contains(tp))
       })
-      deletePath && topicPath && replicaManager && logManager && cleaner
+      // ensure the topic is gone
+      val deleted = !zkUtils.getAllTopics().contains(topic)
+      deletePath && topicPath && replicaManager && logManager && cleaner && deleted
     }
-    eventually(timeout(10.seconds)) {
+    eventually(timeout(60.seconds)) {
       assert(isDeleted, s"$topic not deleted after timeout")
     }
   }

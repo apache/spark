@@ -38,7 +38,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 
 /**
- * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
+ * <a href="http://en.wikipedia.org/wiki/Gradient_boosting">Gradient-Boosted Trees (GBTs)</a>
  * learning algorithm for regression.
  * It supports both continuous and categorical features.
  *
@@ -123,9 +123,16 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
+
+    val instr = Instrumentation.create(this, oldDataset)
+    instr.logParams(params: _*)
+    instr.logNumFeatures(numFeatures)
+
     val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
       $(seed))
-    new GBTRegressionModel(uid, baseLearners, learnerWeights, numFeatures)
+    val m = new GBTRegressionModel(uid, baseLearners, learnerWeights, numFeatures)
+    instr.logSuccess(m)
+    m
   }
 
   @Since("1.4.0")
@@ -144,7 +151,7 @@ object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
 }
 
 /**
- * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
+ * <a href="http://en.wikipedia.org/wiki/Gradient_boosting">Gradient-Boosted Trees (GBTs)</a>
  * model for regression.
  * It supports both continuous and categorical features.
  * @param _trees  Decision trees in the ensemble.
@@ -175,6 +182,12 @@ class GBTRegressionModel private[ml](
 
   @Since("1.4.0")
   override def trees: Array[DecisionTreeRegressionModel] = _trees
+
+  /**
+   * Number of trees in ensemble
+   */
+  @Since("2.0.0")
+  val getNumTrees: Int = trees.length
 
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights

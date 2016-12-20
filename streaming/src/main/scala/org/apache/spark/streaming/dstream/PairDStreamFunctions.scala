@@ -453,9 +453,12 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
   def updateStateByKey[S: ClassTag](
       updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
       partitioner: Partitioner,
-      rememberPartitioner: Boolean
-    ): DStream[(K, S)] = ssc.withScope {
-     new StateDStream(self, ssc.sc.clean(updateFunc), partitioner, rememberPartitioner, None)
+      rememberPartitioner: Boolean): DStream[(K, S)] = ssc.withScope {
+    val cleanedFunc = ssc.sc.clean(updateFunc)
+    val newUpdateFunc = (_: Time, it: Iterator[(K, Seq[V], Option[S])]) => {
+      cleanedFunc(it)
+    }
+    new StateDStream(self, newUpdateFunc, partitioner, rememberPartitioner, None)
   }
 
   /**
@@ -499,10 +502,33 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
       updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
       partitioner: Partitioner,
       rememberPartitioner: Boolean,
-      initialRDD: RDD[(K, S)]
-    ): DStream[(K, S)] = ssc.withScope {
-     new StateDStream(self, ssc.sc.clean(updateFunc), partitioner,
-       rememberPartitioner, Some(initialRDD))
+      initialRDD: RDD[(K, S)]): DStream[(K, S)] = ssc.withScope {
+    val cleanedFunc = ssc.sc.clean(updateFunc)
+    val newUpdateFunc = (_: Time, it: Iterator[(K, Seq[V], Option[S])]) => {
+      cleanedFunc(it)
+    }
+    new StateDStream(self, newUpdateFunc, partitioner, rememberPartitioner, Some(initialRDD))
+  }
+
+  /**
+   * Return a new "state" DStream where the state for each key is updated by applying
+   * the given function on the previous state of the key and the new values of the key.
+   * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
+   * @param updateFunc State update function. If `this` function returns None, then
+   *                   corresponding state key-value pair will be eliminated.
+   * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
+   *                    DStream.
+   * @tparam S State type
+   */
+  def updateStateByKey[S: ClassTag](updateFunc: (Time, K, Seq[V], Option[S]) => Option[S],
+      partitioner: Partitioner,
+      rememberPartitioner: Boolean,
+      initialRDD: Option[RDD[(K, S)]] = None): DStream[(K, S)] = ssc.withScope {
+    val cleanedFunc = ssc.sc.clean(updateFunc)
+    val newUpdateFunc = (time: Time, iterator: Iterator[(K, Seq[V], Option[S])]) => {
+      iterator.flatMap(t => cleanedFunc(time, t._1, t._2, t._3).map(s => (t._1, s)))
+    }
+    new StateDStream(self, newUpdateFunc, partitioner, rememberPartitioner, initialRDD)
   }
 
   /**

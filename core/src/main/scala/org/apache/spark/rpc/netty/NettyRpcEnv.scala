@@ -408,9 +408,12 @@ private[netty] class NettyRpcEnv(
 
   }
 
+  override def isInRPCThread: Boolean = NettyRpcEnv.rpcThreadFlag.value
 }
 
 private[netty] object NettyRpcEnv extends Logging {
+
+  private[netty] val rpcThreadFlag = new DynamicVariable[Boolean](false)
 
   /**
    * When deserializing the [[NettyRpcEndpointRef]], it needs a reference to [[NettyRpcEnv]].

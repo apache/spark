@@ -43,7 +43,6 @@ import org.apache.spark.sql.types.DoubleType
  * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
  * learning algorithm for classification.
  * It supports binary labels, as well as both continuous and categorical features.
- * Note: Multiclass labels are not currently supported.
  *
  * The implementation is based upon: J.H. Friedman. "Stochastic Gradient Boosting." 1999.
  *
@@ -54,6 +53,8 @@ import org.apache.spark.sql.types.DoubleType
  *    based on the loss function, whereas the original gradient boosting method does not.
  *  - We expect to implement TreeBoost in the future:
  *    [https://issues.apache.org/jira/browse/SPARK-4240]
+ *
+ * @note Multiclass labels are not currently supported.
  */
 @Since("1.4.0")
 class GBTClassifier @Since("1.4.0") (
@@ -128,7 +129,7 @@ class GBTClassifier @Since("1.4.0") (
     // We copy and modify this from Classifier.extractLabeledPoints since GBT only supports
     // 2 classes now.  This lets us provide a more precise error message.
     val oldDataset: RDD[LabeledPoint] =
-      dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
+      dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
         case Row(label: Double, features: Vector) =>
           require(label == 0 || label == 1, s"GBTClassifier was given" +
             s" dataset with invalid label $label.  Labels must be in {0,1}; note that" +
@@ -137,9 +138,17 @@ class GBTClassifier @Since("1.4.0") (
       }
     val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
+
+    val instr = Instrumentation.create(this, oldDataset)
+    instr.logParams(params: _*)
+    instr.logNumFeatures(numFeatures)
+    instr.logNumClasses(2)
+
     val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
       $(seed))
-    new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
+    val m = new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
+    instr.logSuccess(m)
+    m
   }
 
   @Since("1.4.1")
@@ -161,10 +170,11 @@ object GBTClassifier extends DefaultParamsReadable[GBTClassifier] {
  * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
  * model for classification.
  * It supports binary labels, as well as both continuous and categorical features.
- * Note: Multiclass labels are not currently supported.
  *
  * @param _trees  Decision trees in the ensemble.
  * @param _treeWeights  Weights for the decision trees in the ensemble.
+ *
+ * @note Multiclass labels are not currently supported.
  */
 @Since("1.6.0")
 class GBTClassificationModel private[ml](
@@ -192,6 +202,12 @@ class GBTClassificationModel private[ml](
 
   @Since("1.4.0")
   override def trees: Array[DecisionTreeRegressionModel] = _trees
+
+  /**
+   * Number of trees in ensemble
+   */
+  @Since("2.0.0")
+  val getNumTrees: Int = trees.length
 
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights

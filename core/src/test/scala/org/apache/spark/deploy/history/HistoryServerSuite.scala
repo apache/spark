@@ -29,6 +29,8 @@ import com.codahale.metrics.Counter
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.eclipse.jetty.proxy.ProxyServlet
+import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
@@ -258,8 +260,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     getContentAndCode("foobar")._1 should be (HttpServletResponse.SC_NOT_FOUND)
   }
 
-  test("relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
-    val proxyBaseBeforeTest = System.getProperty("spark.ui.proxyBase")
+  test("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
     val uiRoot = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("/testwebproxybase")
     val page = new HistoryPage(server)
     val request = mock[HttpServletRequest]
@@ -267,12 +268,85 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     // when
     System.setProperty("spark.ui.proxyBase", uiRoot)
     val response = page.render(request)
-    System.setProperty("spark.ui.proxyBase", Option(proxyBaseBeforeTest).getOrElse(""))
 
     // then
     val urls = response \\ "@href" map (_.toString)
     val siteRelativeLinks = urls filter (_.startsWith("/"))
     all (siteRelativeLinks) should startWith (uiRoot)
+  }
+
+  test("ajax rendered relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
+    val uiRoot = "/testwebproxybase"
+    System.setProperty("spark.ui.proxyBase", uiRoot)
+
+    server.stop()
+
+    val conf = new SparkConf()
+      .set("spark.history.fs.logDirectory", logDir)
+      .set("spark.history.fs.update.interval", "0")
+      .set("spark.testing", "true")
+
+    provider = new FsHistoryProvider(conf)
+    provider.checkForLogs()
+    val securityManager = new SecurityManager(conf)
+
+    server = new HistoryServer(conf, provider, securityManager, 18080)
+    server.initialize()
+    server.bind()
+
+    val port = server.boundPort
+
+    val servlet = new ProxyServlet {
+      override def rewriteTarget(request: HttpServletRequest): String = {
+        // servlet acts like a proxy that redirects calls made on
+        // spark.ui.proxyBase context path to the normal servlet handlers operating off "/"
+        val sb = request.getRequestURL()
+
+        if (request.getQueryString() != null) {
+          sb.append(s"?${request.getQueryString()}")
+        }
+
+        val proxyidx = sb.indexOf(uiRoot)
+        sb.delete(proxyidx, proxyidx + uiRoot.length).toString
+      }
+    }
+
+    val contextHandler = new ServletContextHandler
+    val holder = new ServletHolder(servlet)
+    contextHandler.setContextPath(uiRoot)
+    contextHandler.addServlet(holder, "/")
+    server.attachHandler(contextHandler)
+
+    implicit val webDriver: WebDriver = new HtmlUnitDriver(true) {
+      getWebClient.getOptions.setThrowExceptionOnScriptError(false)
+    }
+
+    try {
+      val url = s"http://localhost:$port"
+
+      go to s"$url$uiRoot"
+
+      // expect the ajax call to finish in 5 seconds
+      implicitlyWait(org.scalatest.time.Span(5, org.scalatest.time.Seconds))
+
+      // once this findAll call returns, we know the ajax load of the table completed
+      findAll(ClassNameQuery("odd"))
+
+      val links = findAll(TagNameQuery("a"))
+        .map(_.attribute("href"))
+        .filter(_.isDefined)
+        .map(_.get)
+        .filter(_.startsWith(url)).toList
+
+      // there are atleast some URL links that were generated via javascript,
+      // and they all contain the spark.ui.proxyBase (uiRoot)
+      links.length should be > 4
+      all(links) should startWith(url + uiRoot)
+    } finally {
+      contextHandler.stop()
+      quit()
+    }
+
   }
 
   test("incomplete apps get refreshed") {

@@ -33,13 +33,13 @@ import org.apache.spark.sql.types.{DataType, LongType}
  * Since this expression is stateful, it cannot be a case object.
  */
 @ExpressionDescription(
-  usage =
-    """_FUNC_() - Returns monotonically increasing 64-bit integers.
-      The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
-      The current implementation puts the partition ID in the upper 31 bits, and the lower 33 bits
-      represent the record number within each partition. The assumption is that the data frame has
-      less than 1 billion partitions, and each partition has less than 8 billion records.""",
-  extended = "> SELECT _FUNC_();\n 0")
+  usage = """
+    _FUNC_() - Returns monotonically increasing 64-bit integers. The generated ID is guaranteed
+      to be monotonically increasing and unique, but not consecutive. The current implementation
+      puts the partition ID in the upper 31 bits, and the lower 33 bits represent the record number
+      within each partition. The assumption is that the data frame has less than 1 billion
+      partitions, and each partition has less than 8 billion records.
+  """)
 case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterministic {
 
   /**
@@ -50,9 +50,9 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterminis
 
   @transient private[this] var partitionMask: Long = _
 
-  override protected def initInternal(): Unit = {
+  override protected def initializeInternal(partitionIndex: Int): Unit = {
     count = 0L
-    partitionMask = TaskContext.getPartitionId().toLong << 33
+    partitionMask = partitionIndex.toLong << 33
   }
 
   override def nullable: Boolean = false
@@ -68,9 +68,10 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterminis
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val countTerm = ctx.freshName("count")
     val partitionMaskTerm = ctx.freshName("partitionMask")
-    ctx.addMutableState(ctx.JAVA_LONG, countTerm, s"$countTerm = 0L;")
-    ctx.addMutableState(ctx.JAVA_LONG, partitionMaskTerm,
-      s"$partitionMaskTerm = ((long) org.apache.spark.TaskContext.getPartitionId()) << 33;")
+    ctx.addMutableState(ctx.JAVA_LONG, countTerm, "")
+    ctx.addMutableState(ctx.JAVA_LONG, partitionMaskTerm, "")
+    ctx.addPartitionInitializationStatement(s"$countTerm = 0L;")
+    ctx.addPartitionInitializationStatement(s"$partitionMaskTerm = ((long) partitionIndex) << 33;")
 
     ev.copy(code = s"""
       final ${ctx.javaType(dataType)} ${ev.value} = $partitionMaskTerm + $countTerm;

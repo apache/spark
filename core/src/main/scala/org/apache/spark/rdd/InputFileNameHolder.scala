@@ -22,6 +22,8 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * This holds file names of the current Spark task. This is used in HadoopRDD,
  * FileScanRDD, NewHadoopRDD and InputFileName function in Spark SQL.
+ *
+ * The returned value should never be null but empty string if it is unknown.
  */
 private[spark] object InputFileNameHolder {
   /**
@@ -32,9 +34,15 @@ private[spark] object InputFileNameHolder {
     override protected def initialValue(): UTF8String = UTF8String.fromString("")
   }
 
+  /**
+   * Returns the holding file name or empty string if it is unknown.
+   */
   def getInputFileName(): UTF8String = inputFileName.get()
 
-  private[spark] def setInputFileName(file: String) = inputFileName.set(UTF8String.fromString(file))
+  private[spark] def setInputFileName(file: String) = {
+    require(file != null, "The input file name cannot be null")
+    inputFileName.set(UTF8String.fromString(file))
+  }
 
   private[spark] def unsetInputFileName(): Unit = inputFileName.remove()
 
