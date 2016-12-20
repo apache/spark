@@ -303,7 +303,7 @@ abstract class Catalog {
   /**
    * Recover all the partitions in the directory of a table and update the catalog.
    *
-   * @since 2.2.0
+   * @since 2.1.1
    */
   def recoverPartitions(tableName: String): Unit
 

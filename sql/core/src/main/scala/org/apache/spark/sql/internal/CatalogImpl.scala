@@ -399,7 +399,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @param tableName the name of the table to be repaired.
    * @group ddl_ops
-   * @since 2.2.0
+   * @since 2.1.1
    */
   override def recoverPartitions(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
