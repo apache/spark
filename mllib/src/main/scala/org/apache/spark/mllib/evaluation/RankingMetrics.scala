@@ -109,6 +109,33 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   }
 
   /**
+   * Compute the mean percentile rank (MPR) of all the queries.
+   *
+   * See the following paper for detail:
+   * Hu, Y., Y. Koren, and C. Volinsky. "Collaborative Filtering for Implicit Feedback Datasets."
+   * In 2008 Eighth IEEE International Conference on Data Mining, 263-72, 2008.
+   * doi:10.1109/ICDM.2008.22.
+   */
+  @Since("2.2.0")
+  lazy val meanPercentileRank: Double = {
+    val rank_ui: (Seq[T], T) => Double = (pred: Seq[T], label: T) => {
+      val l_i = pred.indexOf(label)
+
+      if (l_i == -1) {
+        1
+      } else {
+        l_i.toDouble / pred.size
+      }
+    }
+
+    val ranks = predictionAndLabels.map { case (pred, lab) =>
+      lab.map(label => rank_ui(pred, label))
+    }
+    ranks.flatMap(rank => rank)
+      .mean()
+  }
+
+  /**
    * Compute the average NDCG value of all the queries, truncated at ranking position k.
    * The discounted cumulative gain at position k is computed as:
    *    sum,,i=1,,^k^ (2^{relevance of ''i''th item}^ - 1) / log(i + 1),
