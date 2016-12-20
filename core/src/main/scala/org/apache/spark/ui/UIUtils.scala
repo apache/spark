@@ -231,6 +231,7 @@ private[spark] object UIUtils extends Logging {
             <p class="navbar-text pull-right">
               <strong title={appName}>{shortAppName}</strong> application UI
             </p>
+            {getProductDocLinkNode()}
             <ul class="nav">{header}</ul>
           </div>
         </div>
@@ -286,6 +287,7 @@ private[spark] object UIUtils extends Logging {
             <p class="navbar-text pull-right">
               <strong title={appName}>{shortAppName}</strong> application UI
             </p>
+            {getProductDocLinkNode()}
             <ul class="nav">{header}</ul>
           </div>
         </div>
@@ -555,13 +557,19 @@ private[spark] object UIUtils extends Logging {
   def getTimeZoneOffset() : Int =
     TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
 
-  def getProductVersionNode(): Unit = {
+  def getProductVersionNode(): Node = {
     val versionTooltipText =
       "SnappyData Ver. " + SparkUI.getProductVersion + " ( Underlying Spark Ver. " +
           org.apache.spark.SPARK_VERSION + " )"
 
     <span class="version" style="font-size: 14px;" data-toggle="tooltip" data-placement="bottom"
           data-original-title={versionTooltipText} > {SparkUI.getProductVersion} </span>
+  }
+
+  def getProductDocLinkNode(): Node = {
+    <p class="navbar-text pull-right " style="padding-right:20px;">
+      <a href="http://snappydatainc.github.io/snappydata/" target="_blank">Docs</a>
+    </p>
   }
 
 }
