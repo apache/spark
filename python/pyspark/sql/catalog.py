@@ -258,7 +258,7 @@ class Catalog(object):
         """Invalidate and refresh all the cached metadata of the given table."""
         self._jcatalog.refreshTable(tableName)
 
-    @since(2.1.1)
+    @since(2.1)
     def recoverPartitions(self, tableName):
         """Recover all the partitions of the given table and update the catalog."""
         self._jcatalog.recoverPartitions(tableName)
