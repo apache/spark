@@ -470,24 +470,22 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     sq.stop()
   }
 
-  test("MemorySink can recover from a checkpoint in Complete Mode") {
+  private def testMemorySinkCheckpointRecovery(chkLoc: String, provideInWriter: Boolean): Unit = {
     import testImplicits._
     val ms = new MemoryStream[Int](0, sqlContext)
     val df = ms.toDF().toDF("a")
-    val checkpointLoc = newMetadataDir
-    val checkpointDir = new File(checkpointLoc, "offsets")
-    checkpointDir.mkdirs()
-    assert(checkpointDir.exists())
     val tableName = "test"
     def startQuery: StreamingQuery = {
-      df.groupBy("a")
+      val writer = df.groupBy("a")
         .count()
         .writeStream
         .format("memory")
         .queryName(tableName)
-        .option("checkpointLocation", checkpointLoc)
         .outputMode("complete")
-        .start()
+      if (provideInWriter) {
+        writer.option("checkpointLocation", chkLoc)
+      }
+      writer.start()
     }
     // no exception here
     val q = startQuery
@@ -511,6 +509,24 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     )
 
     q2.stop()
+  }
+
+  test("MemorySink can recover from a checkpoint in Complete Mode") {
+    val checkpointLoc = newMetadataDir
+    val checkpointDir = new File(checkpointLoc, "offsets")
+    checkpointDir.mkdirs()
+    assert(checkpointDir.exists())
+    testMemorySinkCheckpointRecovery(checkpointLoc, provideInWriter = true)
+  }
+
+  test("SPARK-18927: MemorySink can recover from a checkpoint provided in conf in Complete Mode") {
+    val checkpointLoc = newMetadataDir
+    val checkpointDir = new File(checkpointLoc, "offsets")
+    checkpointDir.mkdirs()
+    assert(checkpointDir.exists())
+    withSQLConf(SQLConf.CHECKPOINT_LOCATION.key -> checkpointLoc) {
+      testMemorySinkCheckpointRecovery(checkpointLoc, provideInWriter = false)
+    }
   }
 
   test("append mode memory sink's do not support checkpoint recovery") {
