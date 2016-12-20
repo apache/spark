@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.net.URI
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
@@ -67,7 +69,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.identifier.database == Some("mydb"))
     assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.storage.locationUri == Some("/user/external/page_view"))
+    assert(desc.storage.locationUri == Some(new URI("/user/external/page_view")))
     assert(desc.schema.isEmpty) // will be populated later when the table is actually created
     assert(desc.comment == Some("This is the staging page view table"))
     // TODO will be SQLText
@@ -98,7 +100,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.identifier.database == Some("mydb"))
     assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.storage.locationUri == Some("/user/external/page_view"))
+    assert(desc.storage.locationUri == Some(new URI("/user/external/page_view")))
     assert(desc.schema.isEmpty) // will be populated later when the table is actually created
     // TODO will be SQLText
     assert(desc.comment == Some("This is the staging page view table"))
@@ -330,7 +332,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     val query = "CREATE EXTERNAL TABLE tab1 (id int, name string) LOCATION '/path/to/nowhere'"
     val (desc, _) = extractTableDesc(query)
     assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.storage.locationUri == Some("/path/to/nowhere"))
+    assert(desc.storage.locationUri == Some(new URI("/path/to/nowhere")))
   }
 
   test("create table - if not exists") {
@@ -460,7 +462,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
-    assert(desc.storage.locationUri == Some("/path/to/mercury"))
+    assert(desc.storage.locationUri == Some(new URI("/path/to/mercury")))
     assert(desc.storage.inputFormat == Some("winput"))
     assert(desc.storage.outputFormat == Some("wowput"))
     assert(desc.storage.serde == Some("org.apache.poof.serde.Baff"))

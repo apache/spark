@@ -529,7 +529,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
         userSpecifiedLocation match {
           case Some(location) =>
-            assert(r.options("path") === location)
+            assert(r.options("path").toString === location)
           case None => // OK.
         }
         assert(catalogTable.provider.get === format)
@@ -542,7 +542,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
         userSpecifiedLocation match {
           case Some(location) =>
-            assert(r.catalogTable.location === location)
+            assert(r.catalogTable.location === new URI(location))
           case None => // OK.
         }
         // Also make sure that the format and serde are as desired.

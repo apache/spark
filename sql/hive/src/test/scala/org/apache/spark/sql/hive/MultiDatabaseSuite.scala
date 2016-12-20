@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.net.URI
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -29,7 +31,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     val expectedPath =
       spark.sharedState.externalCatalog.getDatabase(dbName).locationUri + "/" + tableName
 
-    assert(metastoreTable.location === expectedPath)
+    assert(metastoreTable.location === new URI(expectedPath))
   }
 
   private def getTableNames(dbName: Option[String] = None): Array[String] = {
