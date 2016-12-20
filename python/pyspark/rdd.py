@@ -135,12 +135,11 @@ def _load_from_socket(port, serializer):
         break
     if not sock:
         raise Exception("could not open socket")
-    try:
-        rf = sock.makefile("rb", 65536)
-        for item in serializer.load_stream(rf):
-            yield item
-    finally:
-        sock.close()
+    # The RDD materialization time is unpredicable, if we set a timeout for socket reading
+    # operation, it will very possibly fail. See SPARK-18281.
+    sock.settimeout(None)
+    # The socket will be automatically closed when garbage-collected.
+    return serializer.load_stream(sock.makefile("rb", 65536))
 
 
 def ignore_unicode_prefix(f):
