@@ -18,7 +18,7 @@
 package org.apache.spark.sql.types
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 import org.json4s.JsonDSL._
 
@@ -469,9 +469,16 @@ object StructType extends AbstractDataType {
           case leftField @ StructField(leftName, leftType, leftNullable, _) =>
             rightMapped.get(leftName)
               .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
-                leftField.copy(
-                  dataType = merge(leftType, rightType),
-                  nullable = leftNullable || rightNullable)
+                Try {
+                  merge(leftType, rightType)
+                } match {
+                  case Success(dataType) =>
+                    leftField.copy(
+                      dataType = dataType,
+                      nullable = leftNullable || rightNullable)
+                  case Failure(e) =>
+                    throw new SparkException(s"Failed to merge field $leftName: " + e.getMessage)
+                }
               }
               .orElse {
                 optionalMeta.putBoolean(metadataKeyForOptionalField, value = true)
