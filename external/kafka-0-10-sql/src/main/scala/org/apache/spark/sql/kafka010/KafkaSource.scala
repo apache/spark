@@ -574,8 +574,7 @@ private[kafka010] object KafkaSource {
     extends ConsumerStrategy {
     override def createConsumer(
         kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
-      val consumer =
-        new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
+      val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
       consumer.subscribe(
         ju.regex.Pattern.compile(topicPattern),
         new NoOpConsumerRebalanceListener())
