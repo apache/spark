@@ -71,7 +71,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         OutputMode.Update
       case _ =>
         throw new IllegalArgumentException(s"Unknown output mode $outputMode. " +
-          "Accepted output modes are 'append' and 'complete'")
+          "Accepted output modes are 'append', 'complete', 'update'")
     }
     this
   }
