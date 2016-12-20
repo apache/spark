@@ -77,7 +77,7 @@ sealed trait Vector extends Serializable {
 
   /**
    * Returns a hash code value for the vector. The hash code is based on its size and its first 128
-   * nonzero entries, using a hash algorithm similar to [[java.util.Arrays.hashCode]].
+   * nonzero entries, using a hash algorithm similar to `java.util.Arrays.hashCode`.
    */
   override def hashCode(): Int = {
     // This is a reference implementation. It calls return in foreachActive, which is slow.
@@ -351,7 +351,7 @@ object Vectors {
   }
 
   /**
-   * Parses a string resulted from [[Vector.toString]] into a [[Vector]].
+   * Parses a string resulted from `Vector.toString` into a [[Vector]].
    */
   @Since("1.1.0")
   def parse(s: String): Vector = {

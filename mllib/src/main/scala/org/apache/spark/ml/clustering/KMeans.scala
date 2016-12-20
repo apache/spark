@@ -96,13 +96,11 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 }
 
 /**
- * :: Experimental ::
  * Model fitted by KMeans.
  *
  * @param parentModel a model trained by spark.mllib.clustering.KMeans.
  */
 @Since("1.5.0")
-@Experimental
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
     private val parentModel: MLlibKMeansModel)
@@ -248,13 +246,11 @@ object KMeansModel extends MLReadable[KMeansModel] {
 }
 
 /**
- * :: Experimental ::
  * K-means clustering with support for k-means|| initialization proposed by Bahmani et al.
  *
  * @see <a href="http://dx.doi.org/10.14778/2180912.2180915">Bahmani et al., Scalable k-means++.</a>
  */
 @Since("1.5.0")
-@Experimental
 class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends Estimator[KMeansModel] with KMeansParams with DefaultParamsWritable {
@@ -306,22 +302,19 @@ class KMeans @Since("1.5.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-    fit(dataset, handlePersistence)
-  }
-
-  @Since("2.2.0")
-  protected def fit(dataset: Dataset[_], handlePersistence: Boolean): KMeansModel = {
     transformSchema(dataset.schema, logging = true)
+
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     val instances: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
+
     if (handlePersistence) {
       instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
+
     val instr = Instrumentation.create(this, instances)
     instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
-
     val algo = new MLlibKMeans()
       .setK($(k))
       .setInitializationMode($(initMode))
@@ -333,6 +326,7 @@ class KMeans @Since("1.5.0") (
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
+
     model.setSummary(Some(summary))
     instr.logSuccess(model)
     if (handlePersistence) {

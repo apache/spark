@@ -92,13 +92,13 @@ object NameAgg extends Aggregator[AggData, String, String] {
 }
 
 
-object SeqAgg extends Aggregator[AggData, Seq[Int], Seq[Int]] {
+object SeqAgg extends Aggregator[AggData, Seq[Int], Seq[(Int, Int)]] {
   def zero: Seq[Int] = Nil
   def reduce(b: Seq[Int], a: AggData): Seq[Int] = a.a +: b
   def merge(b1: Seq[Int], b2: Seq[Int]): Seq[Int] = b1 ++ b2
-  def finish(r: Seq[Int]): Seq[Int] = r
+  def finish(r: Seq[Int]): Seq[(Int, Int)] = r.map(i => i -> i)
   override def bufferEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
-  override def outputEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
+  override def outputEncoder: Encoder[Seq[(Int, Int)]] = ExpressionEncoder()
 }
 
 
@@ -281,7 +281,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
     checkDataset(
       ds.groupByKey(_.b).agg(SeqAgg.toColumn),
-      "a" -> Seq(1, 2)
+      "a" -> Seq(1 -> 1, 2 -> 2)
     )
   }
 

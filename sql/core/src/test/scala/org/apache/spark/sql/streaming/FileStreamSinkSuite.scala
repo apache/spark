@@ -86,7 +86,7 @@ class FileStreamSinkSuite extends StreamTest {
 
       val outputDf = spark.read.parquet(outputDir)
       val expectedSchema = new StructType()
-        .add(StructField("value", IntegerType))
+        .add(StructField("value", IntegerType, nullable = false))
         .add(StructField("id", IntegerType))
       assert(outputDf.schema === expectedSchema)
 

@@ -18,7 +18,7 @@
 package org.apache.spark.util
 
 import java.io._
-import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo}
+import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
@@ -1249,7 +1249,7 @@ private[spark] object Utils extends Logging {
         val currentThreadName = Thread.currentThread().getName
         if (sc != null) {
           logError(s"uncaught error in thread $currentThreadName, stopping SparkContext", t)
-          sc.stop()
+          sc.stopInNewThread()
         }
         if (!NonFatal(t)) {
           logError(s"throw uncaught fatal error in thread $currentThreadName", t)
@@ -1674,7 +1674,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * NaN-safe version of `java.lang.Double.compare()` which allows NaN values to be compared
-   * according to semantics where NaN == NaN and NaN &gt; any non-NaN double.
+   * according to semantics where NaN == NaN and NaN is greater than any non-NaN double.
    */
   def nanSafeCompareDoubles(x: Double, y: Double): Int = {
     val xIsNan: Boolean = java.lang.Double.isNaN(x)
@@ -1688,7 +1688,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * NaN-safe version of `java.lang.Float.compare()` which allows NaN values to be compared
-   * according to semantics where NaN == NaN and NaN &gt; any non-NaN float.
+   * according to semantics where NaN == NaN and NaN is greater than any non-NaN float.
    */
   def nanSafeCompareFloats(x: Float, y: Float): Int = {
     val xIsNan: Boolean = java.lang.Float.isNaN(x)
@@ -2131,26 +2131,44 @@ private[spark] object Utils extends Logging {
     // We need to filter out null values here because dumpAllThreads() may return null array
     // elements for threads that are dead / don't exist.
     val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
-    threadInfos.sortBy(_.getThreadId).map { case threadInfo =>
-      val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackFrame -> m).toMap
-      val stackTrace = threadInfo.getStackTrace.map { frame =>
-        monitors.get(frame) match {
-          case Some(monitor) =>
-            monitor.getLockedStackFrame.toString + s" => holding ${monitor.lockString}"
-          case None =>
-            frame.toString
-        }
-      }.mkString("\n")
+    threadInfos.sortBy(_.getThreadId).map(threadInfoToThreadStackTrace)
+  }
 
-      // use a set to dedup re-entrant locks that are held at multiple places
-      val heldLocks = (threadInfo.getLockedSynchronizers.map(_.lockString)
-          ++ threadInfo.getLockedMonitors.map(_.lockString)
-        ).toSet
-
-      ThreadStackTrace(threadInfo.getThreadId, threadInfo.getThreadName, threadInfo.getThreadState,
-        stackTrace, if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
-        Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""), heldLocks.toSeq)
+  def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {
+    if (threadId <= 0) {
+      None
+    } else {
+      // The Int.MaxValue here requests the entire untruncated stack trace of the thread:
+      val threadInfo =
+        Option(ManagementFactory.getThreadMXBean.getThreadInfo(threadId, Int.MaxValue))
+      threadInfo.map(threadInfoToThreadStackTrace)
     }
+  }
+
+  private def threadInfoToThreadStackTrace(threadInfo: ThreadInfo): ThreadStackTrace = {
+    val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackFrame -> m).toMap
+    val stackTrace = threadInfo.getStackTrace.map { frame =>
+      monitors.get(frame) match {
+        case Some(monitor) =>
+          monitor.getLockedStackFrame.toString + s" => holding ${monitor.lockString}"
+        case None =>
+          frame.toString
+      }
+    }.mkString("\n")
+
+    // use a set to dedup re-entrant locks that are held at multiple places
+    val heldLocks =
+      (threadInfo.getLockedSynchronizers ++ threadInfo.getLockedMonitors).map(_.lockString).toSet
+
+    ThreadStackTrace(
+      threadId = threadInfo.getThreadId,
+      threadName = threadInfo.getThreadName,
+      threadState = threadInfo.getThreadState,
+      stackTrace = stackTrace,
+      blockedByThreadId =
+        if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
+      blockedByLock = Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
+      holdingLocks = heldLocks.toSeq)
   }
 
   /**
@@ -2354,8 +2372,9 @@ private[spark] object Utils extends Logging {
    * A spark url (`spark://host:port`) is a special URI that its scheme is `spark` and only contains
    * host and port.
    *
-   * @note Throws `SparkException` if sparkUrl is invalid.
+   * @throws org.apache.spark.SparkException if sparkUrl is invalid.
    */
+  @throws(classOf[SparkException])
   def extractHostPortFromSparkUrl(sparkUrl: String): (String, Int) = {
     try {
       val uri = new java.net.URI(sparkUrl)

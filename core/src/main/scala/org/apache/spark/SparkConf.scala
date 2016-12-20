@@ -262,7 +262,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then seconds are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException
    */
   def getTimeAsSeconds(key: String): Long = {
     Utils.timeStringAsSeconds(get(key))
@@ -279,7 +279,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a time parameter as milliseconds; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then milliseconds are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException
    */
   def getTimeAsMs(key: String): Long = {
     Utils.timeStringAsMs(get(key))
@@ -296,7 +296,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as bytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then bytes are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException
    */
   def getSizeAsBytes(key: String): Long = {
     Utils.byteStringAsBytes(get(key))
@@ -320,7 +320,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Kibibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Kibibytes are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException
    */
   def getSizeAsKb(key: String): Long = {
     Utils.byteStringAsKb(get(key))
@@ -337,7 +337,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Mebibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Mebibytes are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException
    */
   def getSizeAsMb(key: String): Long = {
     Utils.byteStringAsMb(get(key))
@@ -354,7 +354,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Gibibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Gibibytes are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException
    */
   def getSizeAsGb(key: String): Long = {
     Utils.byteStringAsGb(get(key))
@@ -378,7 +378,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     settings.entrySet().asScala.map(x => (x.getKey, x.getValue)).toArray
   }
 
-  /** Get all parameters that start with `prefix` */
+  /**
+   * Get all parameters that start with `prefix`
+   */
   def getAllWithPrefix(prefix: String): Array[(String, String)] = {
     getAll.filter { case (k, v) => k.startsWith(prefix) }
       .map { case (k, v) => (k.substring(prefix.length), v) }

@@ -131,7 +131,6 @@ options for deployment:
 **External Resources:**
 
 * [Spark Homepage](http://spark.apache.org)
-* [Spark Wiki](https://cwiki.apache.org/confluence/display/SPARK)
 * [Spark Community](http://spark.apache.org/community.html) resources, including local meetups
 * [StackOverflow tag `apache-spark`](http://stackoverflow.com/questions/tagged/apache-spark)
 * [Mailing Lists](http://spark.apache.org/mailing-lists.html): ask questions about Spark here

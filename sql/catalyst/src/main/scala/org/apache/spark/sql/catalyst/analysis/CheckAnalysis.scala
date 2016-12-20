@@ -124,6 +124,10 @@ trait CheckAnalysis extends PredicateHelper {
                 s"Scalar subquery must return only one column, but got ${query.output.size}")
 
           case s @ ScalarSubquery(query, conditions, _) if conditions.nonEmpty =>
+
+            // Collect the columns from the subquery for further checking.
+            var subqueryColumns = conditions.flatMap(_.references).filter(query.output.contains)
+
             def checkAggregate(agg: Aggregate): Unit = {
               // Make sure correlated scalar subqueries contain one row for every outer row by
               // enforcing that they are aggregates which contain exactly one aggregate expressions.
@@ -136,24 +140,35 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis("The output of a correlated scalar subquery must be aggregated")
               }
 
-              // SPARK-18504: block cases where GROUP BY columns
-              // are not part of the correlated columns
-              val groupByCols = ExpressionSet.apply(agg.groupingExpressions.flatMap(_.references))
-              val predicateCols = ExpressionSet.apply(conditions.flatMap(_.references))
-              val invalidCols = groupByCols.diff(predicateCols)
+              // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
+              // are not part of the correlated columns.
+              val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
+              val correlatedCols = AttributeSet(subqueryColumns)
+              val invalidCols = groupByCols -- correlatedCols
               // GROUP BY columns must be a subset of columns in the predicates
               if (invalidCols.nonEmpty) {
                 failAnalysis(
-                  "a GROUP BY clause in a scalar correlated subquery " +
+                  "A GROUP BY clause in a scalar correlated subquery " +
                     "cannot contain non-correlated columns: " +
                     invalidCols.mkString(","))
               }
             }
 
-            // Skip projects and subquery aliases added by the Analyzer and the SQLBuilder.
+            // Skip subquery aliases added by the Analyzer and the SQLBuilder.
+            // For projects, do the necessary mapping and skip to its child.
             def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
               case s: SubqueryAlias => cleanQuery(s.child)
-              case p: Project => cleanQuery(p.child)
+              case p: Project =>
+                // SPARK-18814: Map any aliases to their AttributeReference children
+                // for the checking in the Aggregate operators below this Project.
+                subqueryColumns = subqueryColumns.map {
+                  xs => p.projectList.collectFirst {
+                    case e @ Alias(child : AttributeReference, _) if e.exprId == xs.exprId =>
+                      child
+                  }.getOrElse(xs)
+                }
+
+                cleanQuery(p.child)
               case child => child
             }
 
@@ -189,12 +204,6 @@ trait CheckAnalysis extends PredicateHelper {
                   s" conditions: $e")
               case e =>
             }
-
-          case j @ Join(_, _, UsingJoin(_, cols), _) =>
-            val from = operator.inputSet.map(_.name).mkString(", ")
-            failAnalysis(
-              s"using columns [${cols.mkString(",")}] " +
-                s"can not be resolved given input columns: [$from] ")
 
           case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
             failAnalysis(
@@ -306,7 +315,7 @@ trait CheckAnalysis extends PredicateHelper {
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
-                if (dt1.asNullable != dt2.asNullable) {
+                if (!dt1.sameType(dt2)) {
                   failAnalysis(
                     s"""
                       |${operator.nodeName} can only be performed on tables with the compatible
