@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import scala.collection.generic.Growable
-import scala.collection.mutable
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+
+import scala.collection.mutable.{ArrayBuffer, HashSet}
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
@@ -34,7 +35,7 @@ import org.apache.spark.sql.types._
  * collected elements are stored on heap, and that too many elements can cause GC pauses and
  * eventually Out of Memory Errors.
  */
-abstract class Collect extends ImperativeAggregate {
+abstract class Collect[T] extends TypedImperativeAggregate[T] {
 
   val child: Expression
 
@@ -44,40 +45,54 @@ abstract class Collect extends ImperativeAggregate {
 
   override def dataType: DataType = ArrayType(child.dataType)
 
-  override def supportsPartial: Boolean = false
-
-  override def aggBufferAttributes: Seq[AttributeReference] = Nil
-
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
-
-  override def inputAggBufferAttributes: Seq[AttributeReference] = Nil
-
   // Both `CollectList` and `CollectSet` are non-deterministic since their results depend on the
   // actual order of input rows.
   override def deterministic: Boolean = false
 
-  protected[this] val buffer: Growable[Any] with Iterable[Any]
+  def _serialize(obj: Iterable[Any]): Array[Byte] = {
+    val buffer = new Array[Byte](4 << 10)  // 4K
+    val bos = new ByteArrayOutputStream()
+    val out = new DataOutputStream(bos)
+    try {
+      val projection = UnsafeProjection.create(Array[DataType](child.dataType))
+      obj.foreach { value =>
+        val row = InternalRow.apply(value)
+        val unsafeRow = projection.apply(row)
+        out.writeInt(unsafeRow.getSizeInBytes)
+        unsafeRow.writeToStream(out, buffer)
+      }
+      out.writeInt(-1)
+      out.flush()
 
-  override def initialize(b: InternalRow): Unit = {
-    buffer.clear()
-  }
-
-  override def update(b: InternalRow, input: InternalRow): Unit = {
-    // Do not allow null values. We follow the semantics of Hive's collect_list/collect_set here.
-    // See: org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMkCollectionEvaluator
-    val value = child.eval(input)
-    if (value != null) {
-      buffer += value
+      bos.toByteArray
+    } finally {
+      out.close()
+      bos.close()
     }
   }
 
-  override def merge(buffer: InternalRow, input: InternalRow): Unit = {
-    sys.error("Collect cannot be used in partial aggregations.")
+  def _deserialize(bytes: Array[Byte], updater: (Any) => Any): Unit = {
+    val bis = new ByteArrayInputStream(bytes)
+    val ins = new DataInputStream(bis)
+    try {
+      // Read unsafeRow size and content in bytes.
+      var sizeOfNextRow = ins.readInt()
+      while (sizeOfNextRow >= 0) {
+        val bs = new Array[Byte](sizeOfNextRow)
+        ins.readFully(bs)
+        val row = new UnsafeRow(2)
+        row.pointTo(bs, sizeOfNextRow)
+
+        val value = row.get(0, child.dataType)
+        updater(value)
+        sizeOfNextRow = ins.readInt()
+      }
+    } finally {
+      ins.close()
+      bis.close()
+    }
   }
 
-  override def eval(input: InternalRow): Any = {
-    new GenericArrayData(buffer.toArray)
-  }
 }
 
 /**
@@ -88,19 +103,53 @@ abstract class Collect extends ImperativeAggregate {
 case class CollectList(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect {
+    inputAggBufferOffset: Int = 0) extends Collect[ArrayBuffer[Any]] {
 
   def this(child: Expression) = this(child, 0, 0)
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): CollectList =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
+  override def createAggregationBuffer(): ArrayBuffer[Any] = new ArrayBuffer[Any]()
+
   override def prettyName: String = "collect_list"
 
-  override protected[this] val buffer: mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
+  override def update(buffer: ArrayBuffer[Any], input: InternalRow): Unit = {
+    val value = child.eval(input).asInstanceOf[Any]
+
+    // Do not allow null values. We follow the semantics of Hive's collect_list/collect_set here.
+    // See: org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMkCollectionEvaluator
+    if (value != null) {
+      buffer += value
+    }
+  }
+
+  override def merge(buffer: ArrayBuffer[Any], other: ArrayBuffer[Any]): Unit = {
+    buffer ++= other
+  }
+
+  override def eval(buffer: ArrayBuffer[Any]): Any = {
+    generateOutput(buffer)
+  }
+
+  private def generateOutput(results: ArrayBuffer[Any]): Any = {
+    if (results.isEmpty) {
+      null
+    } else {
+      new GenericArrayData(results.toArray)
+    }
+  }
+
+  override def serialize(obj: ArrayBuffer[Any]): Array[Byte] = _serialize(obj)
+  override def deserialize(bytes: Array[Byte]): ArrayBuffer[Any] = {
+    val buffer = new ArrayBuffer[Any]()
+    val updater = (value: Any) => buffer += value
+    _deserialize(bytes, updater)
+    buffer
+  }
 }
 
 /**
@@ -111,7 +160,7 @@ case class CollectList(
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect {
+    inputAggBufferOffset: Int = 0) extends Collect[HashSet[Any]] {
 
   def this(child: Expression) = this(child, 0, 0)
 
@@ -131,5 +180,39 @@ case class CollectSet(
 
   override def prettyName: String = "collect_set"
 
-  override protected[this] val buffer: mutable.HashSet[Any] = mutable.HashSet.empty
+  override def createAggregationBuffer(): HashSet[Any] = new HashSet[Any]()
+
+  override def update(buffer: HashSet[Any], input: InternalRow): Unit = {
+    val value = child.eval(input).asInstanceOf[Any]
+
+    // Do not allow null values. We follow the semantics of Hive's collect_list/collect_set here.
+    // See: org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMkCollectionEvaluator
+    if (value != null) {
+      buffer += value
+    }
+  }
+
+  override def merge(buffer: HashSet[Any], other: HashSet[Any]): Unit = {
+    buffer ++= other
+  }
+
+  override def eval(buffer: HashSet[Any]): Any = {
+    generateOutput(buffer)
+  }
+
+  private def generateOutput(results: HashSet[Any]): Any = {
+    if (results.isEmpty) {
+      null
+    } else {
+      new GenericArrayData(results.toArray)
+    }
+  }
+
+  override def serialize(obj: HashSet[Any]): Array[Byte] = _serialize(obj)
+  override def deserialize(bytes: Array[Byte]): HashSet[Any] = {
+    val buffer = new HashSet[Any]()
+    val updater = (value: Any) => buffer += value
+    _deserialize(bytes, updater)
+    buffer
+  }
 }
