@@ -1694,7 +1694,8 @@ test_that("toJSON() on DataFrame", {
   df_json <- toJSON(df)
   expect_is(df_json, "SparkDataFrame")
   expect_equal(colnames(df_json), c("value"))
-  expect_equal(head(df_json, 1), "{\"speed\":4.0,\"dist\":2.0}")
+  expect_equal(head(df_json, 1),
+              data.frame(value = "{\"speed\":4.0,\"dist\":2.0}", stringsAsFactors = FALSE))
 })
 
 test_that("showDF()", {
