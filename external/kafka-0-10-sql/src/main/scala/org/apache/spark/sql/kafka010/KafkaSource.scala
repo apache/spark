@@ -24,7 +24,7 @@ import java.nio.charset.StandardCharsets
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer, OffsetOutOfRangeException}
+import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsumer, OffsetOutOfRangeException}
 import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
@@ -81,14 +81,16 @@ import org.apache.spark.util.UninterruptibleThread
  * To avoid this issue, you should make sure stopping the query before stopping the Kafka brokers
  * and not use wrong broker addresses.
  */
-private[kafka010] case class KafkaSource(
+private[kafka010] class KafkaSource(
     sqlContext: SQLContext,
     consumerStrategy: ConsumerStrategy,
+    driverKafkaParams: ju.Map[String, Object],
     executorKafkaParams: ju.Map[String, Object],
     sourceOptions: Map[String, String],
     metadataPath: String,
     startingOffsets: StartingOffsets,
-    failOnDataLoss: Boolean)
+    failOnDataLoss: Boolean,
+    driverGroupIdPrefix: String)
   extends Source with Logging {
 
   private val sc = sqlContext.sparkContext
@@ -107,11 +109,31 @@ private[kafka010] case class KafkaSource(
   private val maxOffsetsPerTrigger =
     sourceOptions.get("maxOffsetsPerTrigger").map(_.toLong)
 
+  private var groupId: String = null
+
+  private var nextId = 0
+
+  private def nextGroupId(): String = {
+    groupId = driverGroupIdPrefix + "-" + nextId
+    nextId += 1
+    groupId
+  }
+
   /**
    * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the
    * offsets and never commits them.
    */
-  private val consumer = consumerStrategy.createConsumer()
+  private var consumer: Consumer[Array[Byte], Array[Byte]] = createConsumer()
+
+  /**
+   * Create a consumer using the new generated group id. We always use a new consumer to avoid
+   * just using a broken consumer to retry on Kafka errors, which likely will fail again.
+   */
+  private def createConsumer(): Consumer[Array[Byte], Array[Byte]] = synchronized {
+    val newKafkaParams = new ju.HashMap[String, Object](driverKafkaParams)
+    newKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, nextGroupId())
+    consumerStrategy.createConsumer(newKafkaParams)
+  }
 
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
@@ -169,6 +191,11 @@ private[kafka010] case class KafkaSource(
     currentPartitionOffsets = Some(offsets)
     logDebug(s"GetOffset: ${offsets.toSeq.map(_.toString).sorted}")
     Some(KafkaSourceOffset(offsets))
+  }
+
+  private def resetConsumer(): Unit = synchronized {
+    consumer.close()
+    consumer = createConsumer()
   }
 
   /** Proportionally distribute limit number of offsets among topicpartitions */
@@ -441,13 +468,12 @@ private[kafka010] case class KafkaSource(
               try {
                 result = Some(body)
               } catch {
-                case x: OffsetOutOfRangeException =>
-                  reportDataLoss(x.getMessage)
                 case NonFatal(e) =>
                   lastException = e
                   logWarning(s"Error in attempt $attempt getting Kafka offsets: ", e)
                   attempt += 1
                   Thread.sleep(offsetFetchAttemptIntervalMs)
+                  resetConsumer()
               }
             }
           case _ =>
@@ -511,12 +537,12 @@ private[kafka010] object KafkaSource {
   ))
 
   sealed trait ConsumerStrategy {
-    def createConsumer(): Consumer[Array[Byte], Array[Byte]]
+    def createConsumer(kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]]
   }
 
-  case class AssignStrategy(partitions: Array[TopicPartition], kafkaParams: ju.Map[String, Object])
-    extends ConsumerStrategy {
-    override def createConsumer(): Consumer[Array[Byte], Array[Byte]] = {
+  case class AssignStrategy(partitions: Array[TopicPartition]) extends ConsumerStrategy {
+    override def createConsumer(
+        kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
       val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
       consumer.assign(ju.Arrays.asList(partitions: _*))
       consumer
@@ -525,9 +551,9 @@ private[kafka010] object KafkaSource {
     override def toString: String = s"Assign[${partitions.mkString(", ")}]"
   }
 
-  case class SubscribeStrategy(topics: Seq[String], kafkaParams: ju.Map[String, Object])
-    extends ConsumerStrategy {
-    override def createConsumer(): Consumer[Array[Byte], Array[Byte]] = {
+  case class SubscribeStrategy(topics: Seq[String]) extends ConsumerStrategy {
+    override def createConsumer(
+        kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
       val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
       consumer.subscribe(topics.asJava)
       consumer
@@ -536,10 +562,10 @@ private[kafka010] object KafkaSource {
     override def toString: String = s"Subscribe[${topics.mkString(", ")}]"
   }
 
-  case class SubscribePatternStrategy(
-    topicPattern: String, kafkaParams: ju.Map[String, Object])
+  case class SubscribePatternStrategy(topicPattern: String)
     extends ConsumerStrategy {
-    override def createConsumer(): Consumer[Array[Byte], Array[Byte]] = {
+    override def createConsumer(
+        kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
       val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
       consumer.subscribe(
         ju.regex.Pattern.compile(topicPattern),
