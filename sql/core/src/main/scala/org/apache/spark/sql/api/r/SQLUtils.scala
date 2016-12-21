@@ -278,7 +278,7 @@ private[sql] object SQLUtils extends Logging {
   def getTableNames(sparkSession: SparkSession, databaseName: String): Array[String] = {
     val db = databaseName match {
       case _ if databaseName != null && databaseName.trim.nonEmpty =>
-        databaseName.trim
+        databaseName
       case _ =>
         sparkSession.catalog.currentDatabase
     }
