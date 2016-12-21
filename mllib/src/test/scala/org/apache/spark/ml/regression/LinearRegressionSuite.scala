@@ -28,6 +28,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.lit
 
 class LinearRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -36,6 +37,7 @@ class LinearRegressionSuite
 
   private val seed: Int = 42
   @transient var datasetWithDenseFeature: DataFrame = _
+  @transient var weightedDatasetWithDenseFeature: DataFrame = _
   @transient var datasetWithDenseFeatureWithoutIntercept: DataFrame = _
   @transient var datasetWithSparseFeature: DataFrame = _
   @transient var datasetWithWeight: DataFrame = _
@@ -47,6 +49,11 @@ class LinearRegressionSuite
     datasetWithDenseFeature = sc.parallelize(LinearDataGenerator.generateLinearInput(
       intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2).map(_.asML).toDF()
+
+    weightedDatasetWithDenseFeature = sc.parallelize(LinearDataGenerator.generateLinearInput(
+      intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
+      xVariance = Array(0.7, 1.2), nPoints = 100, seed, eps = 5.0), 2).map(_.asML).toDF()
+
     /*
        datasetWithDenseFeatureWithoutIntercept is not needed for correctness testing
        but is useful for illustrating training model without intercept
@@ -95,6 +102,7 @@ class LinearRegressionSuite
       Instance(17.0, 3.0, Vectors.dense(2.0, 11.0)),
       Instance(17.0, 4.0, Vectors.dense(3.0, 13.0))
     ), 2).toDF()
+
     datasetWithWeightZeroLabel = sc.parallelize(Seq(
       Instance(0.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
       Instance(0.0, 2.0, Vectors.dense(1.0, 7.0)),
@@ -807,9 +815,8 @@ class LinearRegressionSuite
   test("linear regression with weighted samples") {
     val sqlContext = spark.sqlContext
     import sqlContext.implicits._
-    val numFeatures = 5
     val numClasses = 0
-    val numPoints = 50
+    val dataset = weightedDatasetWithDenseFeature.withColumn("weight", lit(1.0))
     def modelEquals(m1: LinearRegressionModel, m2: LinearRegressionModel): Unit = {
       assert(m1.coefficients ~== m2.coefficients relTol 0.01)
       assert(m1.intercept ~== m2.intercept relTol 0.01)
@@ -830,11 +837,11 @@ class LinearRegressionSuite
         .setRegParam(regParam)
         .setElasticNetParam(elasticNetParam)
       MLTestingUtils.testArbitrarilyScaledWeights[LinearRegressionModel, LinearRegression](
-        datasetWithDenseFeature.as[LabeledPoint], new LinearRegression(), modelEquals)
-      MLTestingUtils.testOutliersWithSmallWeights[LinearRegressionModel, LinearRegression](spark,
-        estimator, Map.empty[Int, Int], numPoints, numClasses, numFeatures, modelEquals, seed)
-      MLTestingUtils.testOversamplingVsWeighting[LinearRegressionModel, LinearRegression](spark,
-        estimator, Map.empty[Int, Int], numPoints, numClasses, numFeatures, modelEquals, seed)
+        dataset.as[LabeledPoint], estimator, modelEquals)
+      MLTestingUtils.testOutliersWithSmallWeights[LinearRegressionModel, LinearRegression](
+        dataset.as[Instance], estimator, numClasses, modelEquals)
+      MLTestingUtils.testOversamplingVsWeighting[LinearRegressionModel, LinearRegression](
+        dataset, estimator, modelEquals, seed)
     }
   }
 

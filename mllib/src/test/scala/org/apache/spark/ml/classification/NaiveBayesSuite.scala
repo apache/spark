@@ -25,13 +25,14 @@ import breeze.stats.distributions.{Multinomial => BrzMultinomial}
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.classification.NaiveBayes.{Bernoulli, Multinomial}
 import org.apache.spark.ml.classification.NaiveBayesSuite._
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.functions.lit
 
 class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -45,11 +46,11 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    val pi = Array(0.5, 0.1, 0.4).map(math.log)
+    val pi = Array(0.3, 0.3, 0.4).map(math.log)
     val theta = Array(
-      Array(0.70, 0.10, 0.10, 0.10), // label 0
-      Array(0.10, 0.70, 0.10, 0.10), // label 1
-      Array(0.10, 0.10, 0.70, 0.10)  // label 2
+      Array(0.30, 0.30, 0.30, 0.30), // label 0
+      Array(0.30, 0.30, 0.30, 0.30), // label 1
+      Array(0.40, 0.40, 0.40, 0.40)  // label 2
     ).map(_.map(math.log))
 
     dataset = generateNaiveBayesInput(pi, theta, 100, seed).toDF()
@@ -162,28 +163,24 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   }
 
   test("Naive Bayes with weighted samples") {
-    val numFeatures = 3
     val numClasses = 3
-    val numPoints = 50
-    val multinomialFeaturesInfo = Map(0 -> 3, 1 -> 3, 2 -> 3)
-    val binomialFeaturesInfo = Map(0 -> 2, 1 -> 2, 2 -> 2)
     def modelEquals(m1: NaiveBayesModel, m2: NaiveBayesModel): Unit = {
       assert(m1.pi ~== m2.pi relTol 0.01)
       assert(m1.theta ~== m2.theta relTol 0.01)
     }
     val testParams = Seq(
-      (binomialFeaturesInfo, "bernoulli", bernoulliDataset),
-      (multinomialFeaturesInfo, "multinomial", dataset)
+      ("bernoulli", bernoulliDataset),
+      ("multinomial", dataset)
     )
-    testParams.foreach { case (categoricalFeaturesInfo, family, dataset) =>
+    testParams.foreach { case (family, dataset) =>
       // NaiveBayes is sensitive to constant scaling of the weights unless smoothing is set to 0
       val estimator = new NaiveBayes().setSmoothing(0.0).setModelType(family)
       MLTestingUtils.testArbitrarilyScaledWeights[NaiveBayesModel, NaiveBayes](
         dataset.as[LabeledPoint], estimator, modelEquals)
-      MLTestingUtils.testOutliersWithSmallWeights[NaiveBayesModel, NaiveBayes](spark,
-        estimator, categoricalFeaturesInfo, numPoints, numClasses, numFeatures, modelEquals, seed)
-      MLTestingUtils.testOversamplingVsWeighting[NaiveBayesModel, NaiveBayes](spark,
-        estimator, categoricalFeaturesInfo, numPoints, numClasses, numFeatures, modelEquals, seed)
+      MLTestingUtils.testOutliersWithSmallWeights[NaiveBayesModel, NaiveBayes](
+        dataset.withColumn("weight", lit(1.0)).as[Instance], estimator, numClasses, modelEquals)
+      MLTestingUtils.testOversamplingVsWeighting[NaiveBayesModel, NaiveBayes](
+        dataset.toDF(), estimator, modelEquals, seed)
     }
   }
 

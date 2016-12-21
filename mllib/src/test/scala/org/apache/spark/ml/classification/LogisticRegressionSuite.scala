@@ -1811,27 +1811,21 @@ class LogisticRegressionSuite
   }
 
   test("logistic regression with sample weights") {
-    val sqlContext = spark.sqlContext
-    import sqlContext.implicits._
-    val numFeatures = 5
-    val numPoints = 50
     def modelEquals(m1: LogisticRegressionModel, m2: LogisticRegressionModel): Unit = {
       assert(m1.coefficientMatrix ~== m2.coefficientMatrix absTol 0.01)
     }
     val testParams = Seq(
       ("binomial", smallBinaryDataset, 2),
-      ("multinomial", smallMultinomialDataset, 4)
+      ("multinomial", smallMultinomialDataset, 3)
     )
     testParams.foreach { case (family, dataset, numClasses) =>
       val estimator = new LogisticRegression().setFamily(family)
       MLTestingUtils.testArbitrarilyScaledWeights[LogisticRegressionModel, LogisticRegression](
         dataset.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LogisticRegressionModel, LogisticRegression](
-        spark, estimator, Map.empty[Int, Int], numPoints, numClasses, numFeatures, modelEquals,
-        seed)
-      MLTestingUtils.testOversamplingVsWeighting[LogisticRegressionModel, LogisticRegression](spark,
-        estimator, Map.empty[Int, Int], numPoints, numClasses, numFeatures,
-        modelEquals, seed)
+        dataset.withColumn("weight", lit(1.0)).as[Instance], estimator, numClasses, modelEquals)
+      MLTestingUtils.testOversamplingVsWeighting[LogisticRegressionModel, LogisticRegression](
+        dataset.toDF(), estimator, modelEquals, seed)
     }
   }
 

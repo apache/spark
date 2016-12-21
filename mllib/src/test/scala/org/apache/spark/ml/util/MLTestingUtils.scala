@@ -210,88 +210,14 @@ object MLTestingUtils extends SparkFunSuite {
   }
 
   /**
-   * Generates a linear prediction function where the coefficients are generated randomly.
-   * The function produces a continuous (numClasses = 0) or categorical (numClasses > 0) label.
-   */
-  def getRandomLinearPredictionFunction(
-      numFeatures: Int,
-      numClasses: Int,
-      seed: Long): (Vector => Double) = {
-    val rng = new scala.util.Random(seed)
-    val trueNumClasses = if (numClasses == 0) 1 else numClasses
-    val coefArray = Array.fill(numFeatures * trueNumClasses)(rng.nextDouble - 0.5)
-    (features: Vector) => {
-      if (numClasses == 0) {
-        BLAS.dot(features, new DenseVector(coefArray))
-      } else {
-        val margins = new DenseVector(new Array[Double](numClasses))
-        val coefMat = new DenseMatrix(numClasses, numFeatures, coefArray)
-        BLAS.gemv(1.0, coefMat, features, 1.0, margins)
-        margins.argmax.toDouble
-      }
-    }
-  }
-
-  /**
-   * A helper function to generate synthetic data. Generates random feature values,
-   * both categorical and continuous, according to `categoricalFeaturesInfo`. The label is generated
-   * from a random prediction function, and noise is added to the true label.
-   *
-   * @param numPoints The number of data points to generate.
-   * @param numClasses The number of classes the outcome can take on. 0 for continuous labels.
-   * @param numFeatures The number of features in the data.
-   * @param categoricalFeaturesInfo Map of (featureIndex -> numCategories) for categorical features.
-   * @param seed Random seed.
-   * @param noiseLevel A number in [0.0, 1.0] indicating how much noise to add to the label.
-   * @return Generated sequence of noisy instances.
-   */
-  def generateNoisyData(
-      numPoints: Int,
-      numClasses: Int,
-      numFeatures: Int,
-      categoricalFeaturesInfo: Map[Int, Int],
-      seed: Long,
-      noiseLevel: Double = 0.3): Seq[Instance] = {
-    require(noiseLevel >= 0.0 && noiseLevel <= 1.0, "noiseLevel must be in range [0.0, 1.0]")
-    val rng = new scala.util.Random(seed)
-    val predictionFunc = getRandomLinearPredictionFunction(numFeatures, numClasses, seed)
-    Range(0, numPoints).map { i =>
-      val features = Vectors.dense(Array.tabulate(numFeatures) { j =>
-        val numCategories = categoricalFeaturesInfo.getOrElse(j, 0)
-        if (numCategories > 0) {
-          rng.nextInt(numCategories)
-        } else {
-          rng.nextDouble() - 0.5
-        }
-      })
-      val label = predictionFunc(features)
-      val noisyLabel = if (numClasses > 0) {
-        // with probability equal to noiseLevel, select a random class instead of the true class
-        if (rng.nextDouble < noiseLevel) rng.nextInt(numClasses) else label
-      } else {
-        // add noise to the label proportional to the noise level
-        label + noiseLevel * rng.nextGaussian()
-      }
-      Instance(noisyLabel, 1.0, features)
-    }
-  }
-
-  /**
    * Helper function for testing sample weights. Tests that oversampling each point is equivalent
    * to assigning a sample weight proportional to the number of samples for each point.
    */
   def testOversamplingVsWeighting[M <: Model[M], E <: Estimator[M]](
-        spark: SparkSession,
-        estimator: E with HasWeightCol with HasLabelCol with HasFeaturesCol,
-        categoricalFeaturesInfo: Map[Int, Int],
-        numPoints: Int,
-        numClasses: Int,
-        numFeatures: Int,
-        modelEquals: (M, M) => Unit,
-        seed: Long): Unit = {
-    import spark.implicits._
-    val df = generateNoisyData(numPoints, numClasses, numFeatures, categoricalFeaturesInfo,
-      seed).toDF()
+      df: DataFrame,
+      estimator: E with HasWeightCol with HasLabelCol with HasFeaturesCol,
+      modelEquals: (M, M) => Unit,
+      seed: Long): Unit = {
     val (overSampledData, weightedData) = genEquivalentOversampledAndWeightedInstances(
       df, estimator.getLabelCol, estimator.getFeaturesCol, seed)
     val weightedModel = estimator.set(estimator.weightCol, "weight").fit(weightedData)
@@ -305,23 +231,17 @@ object MLTestingUtils extends SparkFunSuite {
    * model despite the outliers.
    */
   def testOutliersWithSmallWeights[M <: Model[M], E <: Estimator[M]](
-        spark: SparkSession,
-        estimator: E with HasWeightCol with HasLabelCol with HasFeaturesCol,
-        categoricalFeaturesInfo: Map[Int, Int],
-        numPoints: Int,
-        numClasses: Int,
-        numFeatures: Int,
-        modelEquals: (M, M) => Unit,
-        seed: Long): Unit = {
-    import spark.implicits._
-    val df = generateNoisyData(numPoints, numClasses, numFeatures, categoricalFeaturesInfo,
-      seed).toDF()
-    val outlierFunction = getRandomLinearPredictionFunction(numFeatures, numClasses, seed - 1)
-    val outlierDF = df.as[Instance].flatMap { case Instance(l, w, f) =>
-      List.fill(3)(Instance(outlierFunction(f), 0.0001, f)) ++ List(Instance(l, w, f))
+      ds: Dataset[Instance],
+      estimator: E with HasWeightCol with HasLabelCol with HasFeaturesCol,
+      numClasses: Int,
+      modelEquals: (M, M) => Unit): Unit = {
+    import ds.sqlContext.implicits._
+    val outlierDS = ds.flatMap { case Instance(l, w, f) =>
+      val outlierLabel = if (numClasses == 0) -l else numClasses - l - 1
+      List.fill(3)(Instance(outlierLabel, 0.0001, f)) ++ List(Instance(l, w, f))
     }
-    val trueModel = estimator.set(estimator.weightCol, "").fit(df)
-    val outlierModel = estimator.set(estimator.weightCol, "weight").fit(outlierDF)
+    val trueModel = estimator.set(estimator.weightCol, "").fit(ds)
+    val outlierModel = estimator.set(estimator.weightCol, "weight").fit(outlierDS)
     modelEquals(trueModel, outlierModel)
   }
 
@@ -338,7 +258,7 @@ object MLTestingUtils extends SparkFunSuite {
       .set(estimator.featuresCol, "features")
       .set(estimator.weightCol, "weight")
     val models = Seq(0.001, 1.0, 1000.0).map { w =>
-      val df = data.withColumn("weight", lit(w)).toDF()
+      val df = data.withColumn("weight", lit(w))
       estimator.fit(df)
     }
     models.sliding(2).foreach { case Seq(m1, m2) => modelEquals(m1, m2)}
