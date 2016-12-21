@@ -339,8 +339,9 @@ private object BisectingKMeans extends Serializable {
     assignments.map { case (index, v) =>
       if (divisibleIndices.contains(index)) {
         val children = Seq(leftChildIndex(index), rightChildIndex(index))
-        if (children.length > 0) {
-          val selected = children.minBy { child =>
+        val newClusterChildren = children.filter(newClusterCenters.contains(_))
+        if (newClusterChildren.nonEmpty) {
+          val selected = newClusterChildren.minBy { child =>
             KMeans.fastSquaredDistance(newClusterCenters(child), v)
           }
           (selected, v)
