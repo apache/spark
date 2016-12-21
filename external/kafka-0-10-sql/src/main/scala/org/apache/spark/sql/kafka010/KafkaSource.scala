@@ -538,14 +538,6 @@ private[kafka010] object KafkaSource {
 
   sealed trait ConsumerStrategy {
     def createConsumer(kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]]
-
-    def newKafkaParams(
-        kafkaParams: ju.Map[String, Object],
-        groupId: String): ju.Map[String, Object] = {
-      val newKafkaParams = new ju.HashMap[String, Object](kafkaParams)
-      newKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, groupId)
-      newKafkaParams
-    }
   }
 
   case class AssignStrategy(partitions: Array[TopicPartition]) extends ConsumerStrategy {
