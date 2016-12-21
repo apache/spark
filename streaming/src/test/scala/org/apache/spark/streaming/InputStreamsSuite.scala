@@ -77,35 +77,31 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
             fail("Timeout: cannot finish all batches in 30 seconds")
           }
 
+          eventually(eventuallyTimeout) {
+            // Verify whether data received was as expected
+            logInfo("--------------------------------")
+            logInfo("output.size = " + outputQueue.size)
+            logInfo("output")
+            outputQueue.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+            logInfo("expected output.size = " + expectedOutput.size)
+            logInfo("expected output")
+            expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+            logInfo("--------------------------------")
+
+            // Verify whether all the elements received are as expected
+            // (whether the elements were received one in each interval is not verified)
+            val output: Array[String] = outputQueue.asScala.flatMap(x => x).toArray
+            assert(output.length === expectedOutput.size)
+            for (i <- output.indices) {
+              assert(output(i) === expectedOutput(i))
+            }
+          }
+
           // Ensure progress listener has been notified of all events
           ssc.sparkContext.listenerBus.waitUntilEmpty(500)
 
-          // Verify all "InputInfo"s have been reported
-          assert(ssc.progressListener.numTotalReceivedRecords === input.length)
+          assert(ssc.progressListener.numTotalReceivedRecordsRecords === input.length)
           assert(ssc.progressListener.numTotalProcessedRecords === input.length)
-
-          logInfo("Stopping server")
-          testServer.stop()
-          logInfo("Stopping context")
-          ssc.stop()
-
-          // Verify whether data received was as expected
-          logInfo("--------------------------------")
-          logInfo("output.size = " + outputQueue.size)
-          logInfo("output")
-          outputQueue.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-          logInfo("expected output.size = " + expectedOutput.size)
-          logInfo("expected output")
-          expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-          logInfo("--------------------------------")
-
-          // Verify whether all the elements received are as expected
-          // (whether the elements were received one in each interval is not verified)
-          val output: Array[String] = outputQueue.asScala.flatMap(x => x).toArray
-          assert(output.length === expectedOutput.size)
-          for (i <- output.indices) {
-            assert(output(i) === expectedOutput(i))
-          }
         }
       }
     }
