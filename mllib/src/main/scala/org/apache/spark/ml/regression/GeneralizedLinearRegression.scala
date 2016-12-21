@@ -66,23 +66,23 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   /**
    * Param for the power in the variance function of the Tweedie distribution which provides
    * the relationship between the variance and mean of the distribution.
-   * Used only for the tweedie family.
+   * Used only for the Tweedie family.
    * (see <a href="https://en.wikipedia.org/wiki/Tweedie_distribution">
    * Tweedie Distribution (Wikipedia)</a>)
-   * Supported value: (1, 2) and (2, Inf).
+   * Supported value: 0 and [1, Inf).
    *
    * @group param
    */
   @Since("2.2.0")
-  final val varPower: Param[Double] = new Param(this, "varPower",
+  final val variancePower: Param[Double] = new Param(this, "variancePower",
     "The power in the variance function of the Tweedie distribution which characterizes " +
     "the relationship between the variance and mean of the distribution. " +
-    "Used only for the tweedie family. Supported value: (1, 2) and (2, Inf).",
-    (x: Double) => if (x > 1.0 && x != 2.0) true else false)
+    "Used for the Tweedie family. Supported value: 0 and [1, Inf).",
+    (x: Double) => x == 0.0 || x >= 1.0)
 
   /** @group getParam */
   @Since("2.2.0")
-  def getVarPower: Double = $(varPower)
+  def getVariancePower: Double = $(variancePower)
 
   /**
    * Param for the name of link function which provides the relationship
@@ -181,14 +181,14 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   setDefault(family -> Gaussian.name)
 
   /**
-    * Sets the value of param [[varPower]].
+    * Sets the value of param [[variancePower]].
     * Used only when family is "tweedie".
     *
     * @group setParam
     */
   @Since("2.2.0")
-  def setVarPower(value: Double): this.type = set(varPower, value)
-  setDefault(varPower -> 1.5)
+  def setVariancePower(value: Double): this.type = set(variancePower, value)
+  setDefault(variancePower -> 1.5)
 
   /**
    * Sets the value of param [[link]].
@@ -275,12 +275,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   def setLinkPredictionCol(value: String): this.type = set(linkPredictionCol, value)
 
   override protected def train(dataset: Dataset[_]): GeneralizedLinearRegressionModel = {
-    val familyObj = if ($(family) == "tweedie") {
-      new Tweedie($(varPower))
-    } else {
-      Family.fromName($(family))
-    }
-
+    val familyObj = Family.fromModel(this)
     val linkObj = if (isDefined(link)) {
       Link.fromName($(link))
     } else {
@@ -355,6 +350,9 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
   private[regression] lazy val supportedLinkNames = supportedFamilyAndLinkPairs.map(_._2.name)
 
   private[regression] val epsilon: Double = 1E-16
+
+  /** Constant used in initialization and deviance to avoid numerical issues. */
+  private[regression] val delta: Double = 0.1
 
   /**
    * Wrapper of family and link combination used in the model.
@@ -437,25 +435,30 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     /** Trim the fitted value so that it will be in valid range. */
     def project(mu: Double): Double = mu
 
-    /** Constant added to y = 0 for initialization or deviance to avoid numerical issues. */
-    val delta: Double = 0.1
   }
 
   private[regression] object Family {
 
     /**
-     * Gets the [[Family]] object from its name.
+     * Gets the [[Family]] object based on family and variancePower.
      * This does not work for the tweedie family as it depends on the variance power
      * that is set by the user.
      *
-     * @param name family name: "gaussian", "binomial", "poisson" and "gamma".
+     * @param model a GenerealizedLinearRegressionBase object
      */
-    def fromName(name: String): Family = {
-      name match {
-        case Gaussian.name => Gaussian
-        case Binomial.name => Binomial
-        case Poisson.name => Poisson
-        case Gamma.name => Gamma
+    def fromModel(model: GeneralizedLinearRegressionBase): Family = {
+      model.getFamily match {
+        case "gaussian" => Gaussian
+        case "binomial" => Binomial
+        case "poisson" => Poisson
+        case "gamma" => Gamma
+        case "tweedie" =>
+          model.getVariancePower match {
+            case 0.0 => Gaussian
+            case 1.0 => Poisson
+            case 2.0 => Gamma
+            case default => new Tweedie(default)
+          }
       }
     }
   }
@@ -641,14 +644,14 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     * Define a class that takes the variance power as argument, as opposed to
     * a global object for the other families.
     */
-  private[regression] class Tweedie(private val varPower: Double)
+  private[regression] class Tweedie(private val variancePower: Double)
     extends Family("tweedie") {
 
-    // The canonical link is 1 - varPower, which is barely used.
+    // The canonical link is 1 - variancePower, which is barely used.
     val defaultLink: Link = Log
 
     override def initialize(y: Double, weight: Double): Double = {
-      if (varPower > 1.0 && varPower < 2.0) {
+      if (variancePower > 1.0 && variancePower < 2.0) {
         require(y >= 0.0, "The response variable of the specified Tweedie distribution " +
           s"should be non-negative, but got $y")
         math.max(y, delta)
@@ -659,16 +662,16 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
       }
     }
 
-    override def variance(mu: Double): Double = math.pow(mu, varPower)
+    override def variance(mu: Double): Double = math.pow(mu, variancePower)
 
     private def yp(y: Double, mu: Double, p: Double): Double = {
       (math.pow(y, p) - math.pow(mu, p)) / p
     }
 
-    // Force y >= 0.1 for deviance to work for (1 - varPower). see tweedie()$dev.resid
+    // Force y >= 0.1 for deviance to work for (1 - variancePower). see tweedie()$dev.resid
     override def deviance(y: Double, mu: Double, weight: Double): Double = {
       2.0 * weight *
-        (y * yp(math.max(y, delta), mu, 1.0 - varPower) - yp(y, mu, 2.0 - varPower))
+        (y * yp(math.max(y, delta), mu, 1.0 - variancePower) - yp(y, mu, 2.0 - variancePower))
     }
 
     // This depends on the density of the tweedie distribution. Not yet implemented.
@@ -820,11 +823,8 @@ class GeneralizedLinearRegressionModel private[ml] (
 
   import GeneralizedLinearRegression._
 
-  private lazy val familyObj = if ($(family) == "tweedie") {
-    new Tweedie($(varPower))
-  } else {
-    Family.fromName($(family))
-  }
+  private lazy val familyObj = Family.fromModel(this)
+
   private lazy val linkObj = if (isDefined(link)) {
     Link.fromName($(link))
   } else {
@@ -1009,11 +1009,8 @@ class GeneralizedLinearRegressionSummary private[regression] (
    */
   @Since("2.0.0") @transient val predictions: DataFrame = model.transform(dataset)
 
-  private[regression] lazy val family: Family = if (model.getFamily == "tweedie") {
-    new Tweedie(model.getVarPower)
-  } else {
-    Family.fromName(model.getFamily)
-  }
+  private[regression] lazy val family: Family = Family.fromModel(model)
+
   private[regression] lazy val link: Link = if (model.isDefined(model.link)) {
     Link.fromName(model.getLink)
   } else {
