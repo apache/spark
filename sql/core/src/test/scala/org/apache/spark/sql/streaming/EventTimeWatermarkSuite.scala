@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.{util => ju}
 import java.text.SimpleDateFormat
+import java.util.{Calendar, Date}
 
 import org.scalatest.BeforeAndAfter
 
@@ -26,8 +27,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.InternalOutputModes.Complete
 
-class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
+class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
 
   import testImplicits._
 
@@ -52,24 +54,35 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
     assert(e.getMessage contains "int")
   }
 
-
   test("event time and watermark metrics") {
-    val inputData = MemoryStream[Int]
+    // No event time metrics when there is no watermarking
+    val inputData1 = MemoryStream[Int]
+    val aggWithoutWatermark = inputData1.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-    val windowedAggregation = inputData.toDF()
+    testStream(aggWithoutWatermark, outputMode = Complete)(
+      AddData(inputData1, 15),
+      CheckAnswer((15, 1)),
+      assertEventStats { e => assert(e.isEmpty) },
+      AddData(inputData1, 10, 12, 14),
+      CheckAnswer((10, 3), (15, 1)),
+      assertEventStats { e => assert(e.isEmpty) }
+    )
+
+    // All event time metrics where watermarking is set
+    val inputData2 = MemoryStream[Int]
+    val aggWithWatermark = inputData2.toDF()
         .withColumn("eventTime", $"value".cast("timestamp"))
         .withWatermark("eventTime", "10 seconds")
         .groupBy(window($"eventTime", "5 seconds") as 'window)
         .agg(count("*") as 'count)
         .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-    def assertEventStats(body: ju.Map[String, String] => Unit): AssertOnQuery = AssertOnQuery { q =>
-      body(q.recentProgress.filter(_.numInputRows > 0).lastOption.get.eventTime)
-      true
-    }
-
-    testStream(windowedAggregation)(
-      AddData(inputData, 15),
+    testStream(aggWithWatermark)(
+      AddData(inputData2, 15),
       CheckAnswer(),
       assertEventStats { e =>
         assert(e.get("max") === formatTimestamp(15))
@@ -77,7 +90,7 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
         assert(e.get("avg") === formatTimestamp(15))
         assert(e.get("watermark") === formatTimestamp(0))
       },
-      AddData(inputData, 10, 12, 14),
+      AddData(inputData2, 10, 12, 14),
       CheckAnswer(),
       assertEventStats { e =>
         assert(e.get("max") === formatTimestamp(14))
@@ -85,7 +98,7 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
         assert(e.get("avg") === formatTimestamp(12))
         assert(e.get("watermark") === formatTimestamp(5))
       },
-      AddData(inputData, 25),
+      AddData(inputData2, 25),
       CheckAnswer(),
       assertEventStats { e =>
         assert(e.get("max") === formatTimestamp(25))
@@ -93,7 +106,7 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
         assert(e.get("avg") === formatTimestamp(25))
         assert(e.get("watermark") === formatTimestamp(5))
       },
-      AddData(inputData, 25),
+      AddData(inputData2, 25),
       CheckAnswer((10, 3)),
       assertEventStats { e =>
         assert(e.get("max") === formatTimestamp(25))
@@ -121,6 +134,33 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
       CheckAnswer(),
       AddData(inputData, 25), // Evict items less than previous watermark.
       CheckAnswer((10, 5))
+    )
+  }
+
+  test("delay in months and years handled correctly") {
+    val currentTimeMs = System.currentTimeMillis
+    val currentTime = new Date(currentTimeMs)
+
+    val input = MemoryStream[Long]
+    val aggWithWatermark = input.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "2 years 5 months")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    def monthsSinceEpoch(date: Date): Int = { date.getYear * 12 + date.getMonth }
+
+    testStream(aggWithWatermark)(
+      AddData(input, currentTimeMs / 1000),
+      CheckAnswer(),
+      AddData(input, currentTimeMs / 1000),
+      CheckAnswer(),
+      assertEventStats { e =>
+        assert(timestampFormat.parse(e.get("max")).getTime === (currentTimeMs / 1000) * 1000)
+        val watermarkTime = timestampFormat.parse(e.get("watermark"))
+        assert(monthsSinceEpoch(currentTime) - monthsSinceEpoch(watermarkTime) === 29)
+      }
     )
   }
 
@@ -229,6 +269,13 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
       AddData(inputData, 25), // Evict items less than previous watermark.
       CheckAnswer((10, 1))
     )
+  }
+
+  private def assertEventStats(body: ju.Map[String, String] => Unit): AssertOnQuery = {
+    AssertOnQuery { q =>
+      body(q.recentProgress.filter(_.numInputRows > 0).lastOption.get.eventTime)
+      true
+    }
   }
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
