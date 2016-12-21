@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import java.io.File
+
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -60,5 +62,40 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
       Seq(1 -> "a").toDF("i", "j").write.partitionBy("i").parquet(path)
       assert(spark.read.parquet(path).schema.map(_.name) == Seq("j", "i"))
     }
+  }
+
+  test("maxRecordsPerFile setting in non-partitioned write path") {
+    withTempDir { f =>
+      spark.range(start = 0, end = 4, step = 1, numPartitions = 1)
+        .write.option("maxRecordsPerFile", 1).mode("overwrite").parquet(f.getAbsolutePath)
+      assert(recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 4)
+
+      spark.range(start = 0, end = 4, step = 1, numPartitions = 1)
+        .write.option("maxRecordsPerFile", 2).mode("overwrite").parquet(f.getAbsolutePath)
+      assert(recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 2)
+
+      spark.range(start = 0, end = 4, step = 1, numPartitions = 1)
+        .write.option("maxRecordsPerFile", -1).mode("overwrite").parquet(f.getAbsolutePath)
+      assert(recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 1)
+    }
+  }
+
+  test("maxRecordsPerFile setting in dynamic partition writes") {
+    withTempDir { f =>
+      spark.range(start = 0, end = 4, step = 1, numPartitions = 1).selectExpr("id", "id id1")
+        .write
+        .partitionBy("id")
+        .option("maxRecordsPerFile", 1)
+        .mode("overwrite")
+        .parquet(f.getAbsolutePath)
+      assert(recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 4)
+    }
+  }
+
+  /** Lists files recursively. */
+  private def recursiveList(f: File): Array[File] = {
+    require(f.isDirectory)
+    val current = f.listFiles
+    current ++ current.filter(_.isDirectory).flatMap(recursiveList)
   }
 }
