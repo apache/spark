@@ -176,8 +176,14 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private def workerRow(worker: WorkerInfo): Seq[Node] = {
     <tr>
       <td>
-          <a href={UIUtils.makeHref(parent.master.reverseProxy,
-            worker.id, worker.webUiAddress)}>{worker.id}</a>
+        {
+          if (worker.state == WorkerState.DEAD) {
+            worker.id
+          } else {
+            <a href={UIUtils.makeHref(parent.master.reverseProxy,
+              worker.id, worker.webUiAddress)}>{worker.id}</a>
+          }
+        }
       </td>
       <td>{worker.host}:{worker.port}</td>
       <td>{worker.state}</td>
