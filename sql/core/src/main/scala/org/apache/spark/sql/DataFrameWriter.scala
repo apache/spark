@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
-import org.apache.spark.sql.execution.command.{AlterTableRecoverPartitionsCommand, DDLUtils}
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, HadoopFsRelation}
+import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -214,6 +214,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     dataSource.write(mode, df)
   }
+
   /**
    * Inserts the content of the `DataFrame` to the specified table. It requires that
    * the schema of the `DataFrame` is the same as the schema of the table.

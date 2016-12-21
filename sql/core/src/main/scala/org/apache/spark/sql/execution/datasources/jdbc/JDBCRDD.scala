@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -301,6 +301,7 @@ private[jdbc] class JDBCRDD(
     rs = stmt.executeQuery()
     val rowsIterator = JdbcUtils.resultSetToSparkInternalRows(rs, schema, inputMetrics)
 
-    CompletionIterator[InternalRow, Iterator[InternalRow]](rowsIterator, close())
+    CompletionIterator[InternalRow, Iterator[InternalRow]](
+      new InterruptibleIterator(context, rowsIterator), close())
   }
 }

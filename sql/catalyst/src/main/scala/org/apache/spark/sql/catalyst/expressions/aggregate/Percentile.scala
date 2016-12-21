@@ -77,15 +77,9 @@ case class Percentile(
   private lazy val returnPercentileArray = percentageExpression.dataType.isInstanceOf[ArrayType]
 
   @transient
-  private lazy val percentages =
-    (percentageExpression.dataType, percentageExpression.eval()) match {
-      case (_, num: Double) => Seq(num)
-      case (ArrayType(baseType: NumericType, _), arrayData: ArrayData) =>
-        val numericArray = arrayData.toObjectArray(baseType)
-        numericArray.map { x =>
-          baseType.numeric.toDouble(x.asInstanceOf[baseType.InternalType])}.toSeq
-      case other =>
-        throw new AnalysisException(s"Invalid data type ${other._1} for parameter percentages")
+  private lazy val percentages = percentageExpression.eval() match {
+      case num: Double => Seq(num)
+      case arrayData: ArrayData => arrayData.toDoubleArray().toSeq
   }
 
   override def children: Seq[Expression] = child :: percentageExpression :: Nil
@@ -99,7 +93,7 @@ case class Percentile(
   }
 
   override def inputTypes: Seq[AbstractDataType] = percentageExpression.dataType match {
-    case _: ArrayType => Seq(NumericType, ArrayType)
+    case _: ArrayType => Seq(NumericType, ArrayType(DoubleType))
     case _ => Seq(NumericType, DoubleType)
   }
 

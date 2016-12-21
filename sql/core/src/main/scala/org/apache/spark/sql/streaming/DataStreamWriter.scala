@@ -234,7 +234,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
       val chkpointLoc = extraOptions.get("checkpointLocation")
-      val recoverFromChkpoint = chkpointLoc.isDefined && outputMode == OutputMode.Complete()
+      val recoverFromChkpoint = outputMode == OutputMode.Complete()
       val query = df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
         chkpointLoc,
