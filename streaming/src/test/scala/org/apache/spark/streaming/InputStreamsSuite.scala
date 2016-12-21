@@ -93,11 +93,10 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
             }
           }
 
-          // Ensure progress listener has been notified of all events
-          ssc.sparkContext.listenerBus.waitUntilEmpty(500)
-
-          assert(ssc.progressListener.numTotalReceivedRecords === input.length)
-          assert(ssc.progressListener.numTotalProcessedRecords === input.length)
+          eventually(eventuallyTimeout) {
+            assert(ssc.progressListener.numTotalReceivedRecords === input.length)
+            assert(ssc.progressListener.numTotalProcessedRecords === input.length)
+          }
         }
       }
     }
