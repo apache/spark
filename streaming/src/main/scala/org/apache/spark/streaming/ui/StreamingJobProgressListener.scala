@@ -95,9 +95,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     val batchUIData = BatchUIData(batchStarted.batchInfo)
     runningBatchUIData(batchStarted.batchInfo.batchTime) = batchUIData
     waitingBatchUIData.remove(batchStarted.batchInfo.batchTime)
-    // scalastyle:off println
-    println(s"\n\nReceived batch started: $batchUIData\n\n")
-    // scalastyle:on println
+
     totalReceivedRecords += batchUIData.numRecords
   }
 
@@ -112,9 +110,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
         batchTimeToOutputOpIdSparkJobIdPair.remove(removedBatch.batchTime)
       }
       totalCompletedBatches += 1L
-      // scalastyle:off println
-      println(s"\n\nReceived batch completed: $batchUIData\n\n")
-      // scalastyle:on println
+
       totalProcessedRecords += batchUIData.numRecords
     }
   }

@@ -98,9 +98,6 @@ class TestOutputStream[T: ClassTag](
       new ConcurrentLinkedQueue[Seq[T]]()
   ) extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.collect()
-    // scalastyle:off println
-    println(s"\n\nAdded output: ${collected.toList}\n\n")
-    // scalastyle:on println
     output.add(collected)
   }, false) {
 

@@ -44,59 +44,57 @@ import org.apache.spark.util.{ManualClock, Utils}
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
-  for (j <- 0 to 2000) {
-    test(s"socket input stream - $j") {
-      withTestServer(new TestServer()) { testServer =>
-        // Start the server
-        testServer.start()
+  test("socket input stream") {
+    withTestServer(new TestServer()) { testServer =>
+      // Start the server
+      testServer.start()
 
-        // Set up the streaming context and input streams
-        withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
-          ssc.addStreamingListener(ssc.progressListener)
+      // Set up the streaming context and input streams
+      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+        ssc.addStreamingListener(ssc.progressListener)
 
-          val input = Seq(1, 2, 3, 4, 5)
-          // Use "batchCount" to make sure we check the result after all batches finish
-          val batchCounter = new BatchCounter(ssc)
-          val networkStream = ssc.socketTextStream(
-            "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
-          val outputQueue = new ConcurrentLinkedQueue[Seq[String]]
-          val outputStream = new TestOutputStream(networkStream, outputQueue)
-          outputStream.register()
-          ssc.start()
+        val input = Seq(1, 2, 3, 4, 5)
+        // Use "batchCount" to make sure we check the result after all batches finish
+        val batchCounter = new BatchCounter(ssc)
+        val networkStream = ssc.socketTextStream(
+          "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
+        val outputQueue = new ConcurrentLinkedQueue[Seq[String]]
+        val outputStream = new TestOutputStream(networkStream, outputQueue)
+        outputStream.register()
+        ssc.start()
 
-          // Feed data to the server to send to the network receiver
-          val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-          val expectedOutput = input.map(_.toString)
-          for (i <- input.indices) {
-            testServer.send(input(i).toString + "\n")
-            clock.advance(batchDuration.milliseconds)
+        // Feed data to the server to send to the network receiver
+        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+        val expectedOutput = input.map(_.toString)
+        for (i <- input.indices) {
+          testServer.send(input(i).toString + "\n")
+          clock.advance(batchDuration.milliseconds)
+        }
+
+        eventually(eventuallyTimeout) {
+          clock.advance(batchDuration.milliseconds)
+          // Verify whether data received was as expected
+          logInfo("--------------------------------")
+          logInfo("output.size = " + outputQueue.size)
+          logInfo("output")
+          outputQueue.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+          logInfo("expected output.size = " + expectedOutput.size)
+          logInfo("expected output")
+          expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+          logInfo("--------------------------------")
+
+          // Verify whether all the elements received are as expected
+          // (whether the elements were received one in each interval is not verified)
+          val output: Array[String] = outputQueue.asScala.flatMap(x => x).toArray
+          assert(output.length === expectedOutput.size)
+          for (i <- output.indices) {
+            assert(output(i) === expectedOutput(i))
           }
+        }
 
-          eventually(eventuallyTimeout) {
-            clock.advance(batchDuration.milliseconds)
-            // Verify whether data received was as expected
-            logInfo("--------------------------------")
-            logInfo("output.size = " + outputQueue.size)
-            logInfo("output")
-            outputQueue.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-            logInfo("expected output.size = " + expectedOutput.size)
-            logInfo("expected output")
-            expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-            logInfo("--------------------------------")
-
-            // Verify whether all the elements received are as expected
-            // (whether the elements were received one in each interval is not verified)
-            val output: Array[String] = outputQueue.asScala.flatMap(x => x).toArray
-            assert(output.length === expectedOutput.size)
-            for (i <- output.indices) {
-              assert(output(i) === expectedOutput(i))
-            }
-          }
-
-          eventually(eventuallyTimeout) {
-            assert(ssc.progressListener.numTotalReceivedRecords === input.length)
-            assert(ssc.progressListener.numTotalProcessedRecords === input.length)
-          }
+        eventually(eventuallyTimeout) {
+          assert(ssc.progressListener.numTotalReceivedRecords === input.length)
+          assert(ssc.progressListener.numTotalProcessedRecords === input.length)
         }
       }
     }
