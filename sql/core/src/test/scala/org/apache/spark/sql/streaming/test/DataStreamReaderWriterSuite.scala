@@ -411,7 +411,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
   }
 
   test("unsupported strings in outputMode(string") {
-    def testError(outputMode: String): Unit = {
+    def testMode(outputMode: String): Unit = {
       val acceptedModes = Seq("append", "update", "complete")
       val df = spark.readStream
         .format("org.apache.spark.sql.streaming.test")
@@ -422,7 +422,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
         assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
       }
     }
-    testError("Xyz")
+    testMode("Xyz")
   }
 
   test("check foreach() catches null writers") {
