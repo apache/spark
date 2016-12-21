@@ -81,8 +81,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
           ssc.sparkContext.listenerBus.waitUntilEmpty(500)
 
           // Verify all "InputInfo"s have been reported
-          assert(ssc.progressListener.numTotalReceivedRecords > 0)
-          assert(ssc.progressListener.numTotalProcessedRecords > 0)
+          assert(ssc.progressListener.numTotalReceivedRecords === input.length)
+          assert(ssc.progressListener.numTotalProcessedRecords === input.length)
 
           logInfo("Stopping server")
           testServer.stop()
