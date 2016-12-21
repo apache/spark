@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
@@ -26,9 +25,8 @@ import com.google.common.cache._
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.util.{SerializableConfiguration, SizeEstimator}
+import org.apache.spark.util.SizeEstimator
 
 /**
  * A cache of the leaf files of partition directories. We cache these files in order to speed
@@ -56,13 +54,13 @@ abstract class FileStatusCache {
 }
 
 object FileStatusCache {
-  private var sharedCache: SharedInMemoryCache = null
+  private var sharedCache: SharedInMemoryCache = _
 
   /**
    * @return a new FileStatusCache based on session configuration. Cache memory quota is
    *         shared across all clients.
    */
-  def newCache(session: SparkSession): FileStatusCache = {
+  def getOrCreate(session: SparkSession): FileStatusCache = {
     synchronized {
       if (session.sqlContext.conf.manageFilesourcePartitions &&
           session.sqlContext.conf.filesourcePartitionFileCacheSize > 0) {
@@ -70,7 +68,7 @@ object FileStatusCache {
           sharedCache = new SharedInMemoryCache(
             session.sqlContext.conf.filesourcePartitionFileCacheSize)
         }
-        sharedCache.getForNewClient()
+        sharedCache.createForNewClient()
       } else {
         NoopCache
       }
@@ -88,7 +86,6 @@ object FileStatusCache {
  * @param maxSizeInBytes max allowable cache size before entries start getting evicted
  */
 private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
-  import FileStatusCache._
 
   // Opaque object that uniquely identifies a shared cache user
   private type ClientId = Object
@@ -102,8 +99,9 @@ private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
         (SizeEstimator.estimate(key) + SizeEstimator.estimate(value)).toInt
       }})
     .removalListener(new RemovalListener[(ClientId, Path), Array[FileStatus]]() {
-      override def onRemoval(removed: RemovalNotification[(ClientId, Path), Array[FileStatus]]) = {
-        if (removed.getCause() == RemovalCause.SIZE &&
+      override def onRemoval(removed: RemovalNotification[(ClientId, Path), Array[FileStatus]])
+        : Unit = {
+        if (removed.getCause == RemovalCause.SIZE &&
             warnedAboutEviction.compareAndSet(false, true)) {
           logWarning(
             "Evicting cached table partition metadata from memory due to size constraints " +
@@ -112,13 +110,13 @@ private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
         }
       }})
     .maximumWeight(maxSizeInBytes)
-    .build()
+    .build[(ClientId, Path), Array[FileStatus]]()
 
   /**
    * @return a FileStatusCache that does not share any entries with any other client, but does
    *         share memory resources for the purpose of cache eviction.
    */
-  def getForNewClient(): FileStatusCache = new FileStatusCache {
+  def createForNewClient(): FileStatusCache = new FileStatusCache {
     val clientId = new Object()
 
     override def getLeafFiles(path: Path): Option[Array[FileStatus]] = {
@@ -126,7 +124,7 @@ private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
     }
 
     override def putLeafFiles(path: Path, leafFiles: Array[FileStatus]): Unit = {
-      cache.put((clientId, path), leafFiles.toArray)
+      cache.put((clientId, path), leafFiles)
     }
 
     override def invalidateAll(): Unit = {
