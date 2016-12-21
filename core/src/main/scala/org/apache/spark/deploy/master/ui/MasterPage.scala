@@ -177,11 +177,12 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     <tr>
       <td>
         {
-          if (worker.state != WorkerState.ALIVE) {
-            worker.id
+          if (worker.isAlive()) {
+            <a href={UIUtils.makeHref(parent.master.reverseProxy, worker.id, worker.webUiAddress)}>
+              {worker.id}
+            </a>
           } else {
-            <a href={UIUtils.makeHref(parent.master.reverseProxy,
-              worker.id, worker.webUiAddress)}>{worker.id}</a>
+            worker.id
           }
         }
       </td>
@@ -253,10 +254,13 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>{driver.id} {killLink}</td>
       <td>{driver.submitDate}</td>
       <td>{driver.worker.map(w =>
-        <a href=
-          {UIUtils.makeHref(parent.master.reverseProxy, w.id, w.webUiAddress)}>
-          {w.id.toString}</a>
-        ).getOrElse("None")}
+        if (w.isAlive()) {
+          <a href={UIUtils.makeHref(parent.master.reverseProxy, w.id, w.webUiAddress)}>
+            {w.id.toString}
+          </a>
+        } else {
+          w.id.toString
+        }).getOrElse("None")}
       </td>
       <td>{driver.state}</td>
       <td sorttable_customkey={driver.desc.cores.toString}>
