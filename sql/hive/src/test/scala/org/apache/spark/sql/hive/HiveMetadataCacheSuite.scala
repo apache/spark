@@ -17,13 +17,9 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
-import java.util.concurrent.{Executors, TimeUnit}
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -32,20 +28,6 @@ import org.apache.spark.sql.test.SQLTestUtils
  * Test suite to handle metadata cache related.
  */
 class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-
-  private def setupPartitionedHiveTable(tableName: String, dir: File, scale: Int): Unit = {
-    spark.range(scale).selectExpr("id as fieldone", "id as partCol1", "id as partCol2").write
-      .partitionBy("partCol1", "partCol2")
-      .mode("overwrite")
-      .parquet(dir.getAbsolutePath)
-
-    spark.sql(s"""
-                 |create external table $tableName (fieldone long)
-                 |partitioned by (partCol1 int, partCol2 int)
-                 |stored as parquet
-                 |location "${dir.getAbsolutePath}"""".stripMargin)
-    spark.sql(s"msck repair table $tableName")
-  }
 
   test("SPARK-16337 temporary view refresh") {
     withTempView("view_refresh") {
@@ -74,32 +56,6 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
         spark.catalog.refreshTable("view_refresh")
         val newCount = sql("select count(*) from view_refresh").first().getLong(0)
         assert(newCount > 0 && newCount < 100)
-      }
-    }
-  }
-
-  test("SPARK-18700: table loaded only once even when resolved concurrently") {
-    withTable("test_table") {
-      withTempDir { dir =>
-        HiveCatalogMetrics.reset()
-        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
-        setupPartitionedHiveTable("test_table", dir, 50)
-        // select the table in multi-threads
-        val executorPool = Executors.newFixedThreadPool(10)
-        (1 to 10).map(threadId => {
-          val runnable = new Runnable {
-            override def run(): Unit = {
-              spark.sql("select * from test where partCol1 = 999").count()
-            }
-          }
-          executorPool.execute(runnable)
-          None
-        })
-        executorPool.shutdown()
-        executorPool.awaitTermination(30, TimeUnit.SECONDS)
-        // check the cache hit, we use the metric of METRIC_PARALLEL_LISTING_JOB_COUNT
-        // to check this, while the lock take effect,only one thread can really do the build.
-        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 1)
       }
     }
   }
