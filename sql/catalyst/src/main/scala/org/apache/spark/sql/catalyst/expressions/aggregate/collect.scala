@@ -30,10 +30,8 @@ import org.apache.spark.sql.types._
 /**
  * The Collect aggregate function collects all seen expression values into a list of values.
  *
- * The operator is bound to the slower sort based aggregation path because the number of
- * elements (and their memory usage) can not be determined in advance. This also means that the
- * collected elements are stored on heap, and that too many elements can cause GC pauses and
- * eventually Out of Memory Errors.
+ * We have to store all the collected elements in memory, and that too many elements can cause GC
+ * paused and eventually OutOfMemory Errors.
  */
 abstract class Collect[T] extends TypedImperativeAggregate[T] {
 
