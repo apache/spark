@@ -301,6 +301,13 @@ abstract class Catalog {
   def dropGlobalTempView(viewName: String): Boolean
 
   /**
+   * Recover all the partitions in the directory of a table and update the catalog.
+   *
+   * @since 2.1.1
+   */
+  def recoverPartitions(tableName: String): Unit
+
+  /**
    * Returns true if the table is currently cached in-memory.
    *
    * @since 2.0.0

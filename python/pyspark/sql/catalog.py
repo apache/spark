@@ -258,6 +258,11 @@ class Catalog(object):
         """Invalidate and refresh all the cached metadata of the given table."""
         self._jcatalog.refreshTable(tableName)
 
+    @since('2.1.1')
+    def recoverPartitions(self, tableName):
+        """Recover all the partitions of the given table and update the catalog."""
+        self._jcatalog.recoverPartitions(tableName)
+
     def _reset(self):
         """(Internal use only) Drop all existing databases (except "default"), tables,
         partitions and functions, and set the current database to "default".

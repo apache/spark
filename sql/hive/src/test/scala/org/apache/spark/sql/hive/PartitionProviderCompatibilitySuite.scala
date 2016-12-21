@@ -70,7 +70,7 @@ class PartitionProviderCompatibilitySuite
         }
         withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
           verifyIsLegacyTable("test")
-          spark.sql("msck repair table test")
+          spark.catalog.recoverPartitions("test")
           spark.sql("show partitions test").count()  // check we are a new table
 
           // sanity check table performance
@@ -90,7 +90,7 @@ class PartitionProviderCompatibilitySuite
           setupPartitionedDatasourceTable("test", dir)
           spark.sql("show partitions test").count()  // check we are a new table
           assert(spark.sql("select * from test").count() == 0)  // needs repair
-          spark.sql("msck repair table test")
+          spark.catalog.recoverPartitions("test")
           assert(spark.sql("select * from test").count() == 5)
         }
       }
@@ -160,7 +160,7 @@ class PartitionProviderCompatibilitySuite
       withTable("test") {
         withTempDir { dir =>
           setupPartitionedDatasourceTable("test", dir)
-          sql("msck repair table test")
+          spark.catalog.recoverPartitions("test")
           spark.sql(
             """insert overwrite table test
               |partition (partCol=1)
