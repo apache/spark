@@ -820,7 +820,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(taskScheduler.getExecutorsAliveOnHost("host0").isEmpty)
   }
 
-  test("Locality should be optimized across task sets even with delay scheduling off") {
+  test("Locality should be used for bulk offers even with delay scheduling off") {
     // for testing, we create a task scheduler which lets us control how offers are shuffled
     val conf = new SparkConf()
       .set("spark.locality.wait", "0")
