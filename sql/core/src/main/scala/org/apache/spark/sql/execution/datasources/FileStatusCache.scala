@@ -28,6 +28,36 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.SizeEstimator
 
+
+/**
+ * Use [[FileStatusCache.getOrCreate()]] to construct a globally shared file status cache.
+ */
+object FileStatusCache {
+  private var sharedCache: SharedInMemoryCache = _
+
+  /**
+   * @return a new FileStatusCache based on session configuration. Cache memory quota is
+   *         shared across all clients.
+   */
+  def getOrCreate(session: SparkSession): FileStatusCache = synchronized {
+    if (session.sqlContext.conf.manageFilesourcePartitions &&
+      session.sqlContext.conf.filesourcePartitionFileCacheSize > 0) {
+      if (sharedCache == null) {
+        sharedCache = new SharedInMemoryCache(
+          session.sqlContext.conf.filesourcePartitionFileCacheSize)
+      }
+      sharedCache.createForNewClient()
+    } else {
+      NoopCache
+    }
+  }
+
+  def resetForTesting(): Unit = synchronized {
+    sharedCache = null
+  }
+}
+
+
 /**
  * A cache of the leaf files of partition directories. We cache these files in order to speed
  * up iterated queries over the same set of partitions. Otherwise, each query would have to
@@ -53,32 +83,6 @@ abstract class FileStatusCache {
   def invalidateAll(): Unit
 }
 
-object FileStatusCache {
-  private var sharedCache: SharedInMemoryCache = _
-
-  /**
-   * @return a new FileStatusCache based on session configuration. Cache memory quota is
-   *         shared across all clients.
-   */
-  def getOrCreate(session: SparkSession): FileStatusCache = {
-    synchronized {
-      if (session.sqlContext.conf.manageFilesourcePartitions &&
-          session.sqlContext.conf.filesourcePartitionFileCacheSize > 0) {
-        if (sharedCache == null) {
-          sharedCache = new SharedInMemoryCache(
-            session.sqlContext.conf.filesourcePartitionFileCacheSize)
-        }
-        sharedCache.createForNewClient()
-      } else {
-        NoopCache
-      }
-    }
-  }
-
-  def resetForTesting(): Unit = synchronized {
-    sharedCache = null
-  }
-}
 
 /**
  * An implementation that caches partition file statuses in memory.
