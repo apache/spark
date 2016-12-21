@@ -26,6 +26,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite.NodeData
+import org.apache.spark.ml.tree.impl.{CallableVectorDouble, CodeGenerationDecisionTreeModel}
 import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter}
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
@@ -43,6 +44,16 @@ private[spark] trait DecisionTreeModel {
 
   /** Root of the decision tree */
   def rootNode: Node
+
+  /** Returns a predictor based on the root node */
+  def predictor(): Vector => Double = {
+    ((f: Vector) => rootNode.predictImpl(f).prediction)
+  }
+
+  /** Returns a predictor based on the root node using code generation */
+  def codeGenPredictor(): CallableVectorDouble = {
+    CodeGenerationDecisionTreeModel.getScorer(rootNode)
+  }
 
   /** Number of nodes in tree, including leaf nodes. */
   def numNodes: Int = {

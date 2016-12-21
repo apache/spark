@@ -21,7 +21,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.Since
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.feature.LabeledPoint
@@ -201,7 +201,8 @@ class GBTClassificationModel private[ml](
     @Since("1.6.0") override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
     private val _treeWeights: Array[Double],
-    @Since("1.6.0") override val numFeatures: Int)
+    @Since("1.6.0") override val numFeatures: Int,
+    val useCodeGen: Boolean = false)
   extends PredictionModel[Vector, GBTClassificationModel]
   with GBTClassifierParams with TreeEnsembleModel[DecisionTreeRegressionModel]
   with MLWritable with Serializable {
@@ -232,6 +233,14 @@ class GBTClassificationModel private[ml](
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
+  // We use two vals with options rather than lazy vals since we want
+  // the codeGen to be eagerly evaluated.
+  val (treePredictors, codeGenPredictors) = if (useCodeGen) {
+    (None, Some(_trees.map(_.codeGenPredictor())))
+  } else {
+    (Some(_trees.map(_.predictor())), None)
+  }
+
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
     val predictUDF = udf { (features: Any) =>
@@ -243,7 +252,11 @@ class GBTClassificationModel private[ml](
   override protected def predict(features: Vector): Double = {
     // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
-    val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
+    val treePredictions: Array[Double] = if (useCodeGen) {
+      codeGenPredictors.get.map(_.apply(features))
+    } else {
+      treePredictors.get.map(_(features))
+    }
     val prediction = blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
     if (prediction > 0.0) 1.0 else 0.0
   }
@@ -255,6 +268,24 @@ class GBTClassificationModel private[ml](
   override def copy(extra: ParamMap): GBTClassificationModel = {
     copyValues(new GBTClassificationModel(uid, _trees, _treeWeights, numFeatures),
       extra).setParent(parent)
+  }
+
+  /**
+   * Convert this GBT Model to a model using code generation.
+   * There is diminishing returns as the number of trees in the model increases, in DB's testing
+   * around ~400 is where it starts to make sense to not use code generation.
+   * This may be replaced with a different mechanism to control code generation in future versions.
+   */
+  @Experimental
+  @Since("2.1.0")
+  def toCodeGen(): GBTClassificationModel = {
+    if (!useCodeGen) {
+      val extra = ParamMap.empty
+      copyValues(new GBTClassificationModel(uid, _trees, _treeWeights, numFeatures, true),
+        extra).setParent(parent)
+    } else {
+      this
+    }
   }
 
   @Since("1.4.0")

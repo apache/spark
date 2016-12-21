@@ -185,7 +185,8 @@ class GBTRegressionModel private[ml](
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
     private val _treeWeights: Array[Double],
-    override val numFeatures: Int)
+    override val numFeatures: Int,
+    val useCodeGen: Boolean = false)
   extends PredictionModel[Vector, GBTRegressionModel]
   with GBTRegressorParams with TreeEnsembleModel[DecisionTreeRegressionModel]
   with MLWritable with Serializable {
@@ -215,6 +216,14 @@ class GBTRegressionModel private[ml](
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
+  // We use two vals with options rather than lazy vals since we want the codeGen to be
+  // eagerly evaluated.
+  private val (treePredictors, codeGenPredictors) = if (useCodeGen) {
+    (None, Some(_trees.map(_.codeGenPredictor())))
+  } else {
+    (Some(_trees.map(_.predictor())), None)
+  }
+
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
     val predictUDF = udf { (features: Any) =>
@@ -226,7 +235,11 @@ class GBTRegressionModel private[ml](
   override protected def predict(features: Vector): Double = {
     // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
-    val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
+    val treePredictions: Array[Double] = if (useCodeGen) {
+      codeGenPredictors.get.map(_.apply(features))
+    } else {
+      treePredictors.get.map(_(features))
+    }
     blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
   }
 
@@ -242,6 +255,24 @@ class GBTRegressionModel private[ml](
   @Since("1.4.0")
   override def toString: String = {
     s"GBTRegressionModel (uid=$uid) with $numTrees trees"
+  }
+
+  /**
+   * Convert this GBT Model to a model using code generation.
+   * There is diminishing returns as the number of trees in the model increases, in DB's testing
+   * around ~400 is where it starts to make sense to not use code generation.
+   * This may be replaced with a different mechanism to control code generation in future versions.
+   */
+  @Experimental
+  @Since("2.1.0")
+  def toCodeGen(): GBTRegressionModel = {
+    if (!useCodeGen) {
+      val extra = ParamMap.empty
+      copyValues(new GBTRegressionModel(uid, _trees, _treeWeights, numFeatures, true),
+        extra).setParent(parent)
+    } else {
+      this
+    }
   }
 
   /**
