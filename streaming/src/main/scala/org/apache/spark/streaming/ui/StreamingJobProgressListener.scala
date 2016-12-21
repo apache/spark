@@ -95,7 +95,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     val batchUIData = BatchUIData(batchStarted.batchInfo)
     runningBatchUIData(batchStarted.batchInfo.batchTime) = batchUIData
     waitingBatchUIData.remove(batchStarted.batchInfo.batchTime)
-
+    println(s"\n\nReceived: $batchUIData\n\n")
     totalReceivedRecords += batchUIData.numRecords
   }
 
