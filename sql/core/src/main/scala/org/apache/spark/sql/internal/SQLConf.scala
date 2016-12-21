@@ -466,6 +466,19 @@ object SQLConf {
     .longConf
     .createWithDefault(4 * 1024 * 1024)
 
+  val IGNORE_CORRUPT_FILES = SQLConfigBuilder("spark.sql.files.ignoreCorruptFiles")
+    .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
+      "encountering corrupted or non-existing and contents that have been read will still be " +
+      "returned.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val MAX_RECORDS_PER_FILE = SQLConfigBuilder("spark.sql.files.maxRecordsPerFile")
+    .doc("Maximum number of records to write out to a single file. " +
+      "If this value is zero or negative, there is no limit.")
+    .longConf
+    .createWithDefault(0)
+
   val EXCHANGE_REUSE_ENABLED = SQLConfigBuilder("spark.sql.exchange.reuse")
     .internal()
     .doc("When true, the planner will try to find out duplicated exchanges and re-use them.")
@@ -629,13 +642,6 @@ object SQLConf {
       .doubleConf
       .createWithDefault(0.05)
 
-  val IGNORE_CORRUPT_FILES = SQLConfigBuilder("spark.sql.files.ignoreCorruptFiles")
-    .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
-      "encountering corrupted or non-existing and contents that have been read will still be " +
-      "returned.")
-    .booleanConf
-    .createWithDefault(false)
-
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -699,6 +705,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
+
+  def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
+
+  def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
@@ -820,8 +830,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
   def warehousePath: String = new Path(getConf(StaticSQLConf.WAREHOUSE_PATH)).toString
-
-  def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
