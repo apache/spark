@@ -387,7 +387,7 @@ class StreamExecution(
         lastExecution.executedPlan.collect {
           case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>
             logDebug(s"Observed event time stats: ${e.eventTimeStats.value}")
-            math.max(0, e.eventTimeStats.value.max - e.delayMs)
+            e.eventTimeStats.value.max - e.delayMs
         }.headOption.foreach { newWatermarkMs =>
           if (newWatermarkMs > offsetSeqMetadata.batchWatermarkMs) {
             logInfo(s"Updating eventTime watermark to: $newWatermarkMs ms")
