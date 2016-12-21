@@ -42,6 +42,11 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
+  public void initFromPage(int valueCount, ByteBuffer page, int offset) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public void initFromPage(int valueCount, byte[] bytes, int offset) throws IOException {
     this.buffer = bytes;
     this.offset = offset + Platform.BYTE_ARRAY_OFFSET;
