@@ -57,14 +57,6 @@ public class BufferHolder {
     this.row.pointTo(buffer, buffer.length);
   }
 
-  // This is a special constructor for writing data to UnsafeArray for a primitive array
-  // that do not require to grow buffer (not to call grow()) during write operations
-  public BufferHolder(int initialSizeInBytes) {
-    this.fixedSize = 0;
-    this.buffer = new byte[initialSizeInBytes];
-    this.row = null;
-  }
-
   /**
    * Grows the buffer by at least neededSize and points the row to the buffer.
    */

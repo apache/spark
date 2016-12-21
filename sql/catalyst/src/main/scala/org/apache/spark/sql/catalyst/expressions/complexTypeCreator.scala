@@ -67,30 +67,30 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     val (preprocess, arrayData, arrayWriter) =
       GenArrayData.getCodeArrayData(ctx, et, children.size, isPrimitiveArray, array)
 
+    val assigns = if (isPrimitiveArray) {
+      evals.zipWithIndex.map { case (eval, i) =>
+        eval.code + s"""
+         if (${eval.isNull}) {
+           $arrayWriter.setNull$primitiveTypeName($i);
+         } else {
+           $arrayWriter.write($i, ${eval.value});
+         }
+       """
+      }
+    } else {
+      evals.zipWithIndex.map { case (eval, i) =>
+        eval.code + s"""
+         if (${eval.isNull}) {
+           $array[$i] = null;
+         } else {
+           $array[$i] = ${eval.value};
+         }
+       """
+      }
+    }
     ev.copy(code =
       preprocess +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        evals.zipWithIndex.map { case (eval, i) =>
-          eval.code +
-            (if (isPrimitiveArray) {
-              s"""
-              if (${eval.isNull}) {
-                $arrayWriter.setNull$primitiveTypeName($i);
-              } else {
-                $arrayWriter.write($i, ${eval.value});
-              }
-             """
-            } else {
-              s"""
-              if (${eval.isNull}) {
-                $array[$i] = null;
-              } else {
-                $array[$i] = ${eval.value};
-              }
-             """
-            })
-        }) +
+      ctx.splitExpressions(ctx.INPUT_ROW, assigns) +
       s"\nfinal ArrayData ${ev.value} = $arrayData;\n",
       isNull = "false")
   }
@@ -113,27 +113,38 @@ private [sql] object GenArrayData {
         s"this.$array = new Object[${size}];")
       ("", s"new $arrayClass($array)", null)
     } else {
+      val row = ctx.freshName("row")
       val holder = ctx.freshName("holder")
+      val rowWriter = ctx.freshName("createRowWriter")
       val arrayWriter = ctx.freshName("createArrayWriter")
+      val unsafeRowClass = classOf[UnsafeRow].getName
       val unsafeArrayClass = classOf[UnsafeArrayData].getName
       val holderClass = classOf[BufferHolder].getName
+      val rowWriterClass = classOf[UnsafeRowWriter].getName
       val arrayWriterClass = classOf[UnsafeArrayWriter].getName
+      ctx.addMutableState(unsafeRowClass, row, "")
       ctx.addMutableState(unsafeArrayClass, array, "")
       ctx.addMutableState(holderClass, holder, "")
+      ctx.addMutableState(rowWriterClass, rowWriter, "")
       ctx.addMutableState(arrayWriterClass, arrayWriter, "")
-      val baseOffset = Platform.BYTE_ARRAY_OFFSET
       val unsafeArraySizeInBytes =
         UnsafeArrayData.calculateHeaderPortionInBytes(size) +
         ByteArrayMethods.roundNumberOfBytesToNearestWord(dt.defaultSize * size)
 
+      // To write data to UnsafeArrayData, we create UnsafeRow with a single array field
+      // and then prepare BufferHolder for the array.
+      // In summary, this does not use UnsafeRow and wastes some bits in an byte array
       (s"""
-        $array = new $unsafeArrayClass();
-        $holder = new $holderClass($unsafeArraySizeInBytes);
+        $row = new $unsafeRowClass(1);
+        $holder = new $holderClass($row, $unsafeArraySizeInBytes);
+        $rowWriter = new $rowWriterClass($holder, 1);
         $arrayWriter = new $arrayWriterClass();
+        $rowWriter.reset();
+        $rowWriter.setOffsetAndSize(0, $unsafeArraySizeInBytes);
         $holder.reset();
-        $arrayWriter.initialize($holder, ${size});
-        $array.pointTo($holder.buffer, $baseOffset, $holder.buffer.length);
-      """,
+        $arrayWriter.initialize($holder, ${size}, ${dt.defaultSize});
+        $array = $row.getArray(0);
+       """,
        array,
        arrayWriter
       )
