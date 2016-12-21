@@ -69,15 +69,11 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
           val expectedOutput = input.map(_.toString)
           for (i <- input.indices) {
             testServer.send(input(i).toString + "\n")
-            Thread.sleep(500)
             clock.advance(batchDuration.milliseconds)
-          }
-          // Make sure we finish all batches before "stop"
-          if (!batchCounter.waitUntilBatchesCompleted(input.size, 30000)) {
-            fail("Timeout: cannot finish all batches in 30 seconds")
           }
 
           eventually(eventuallyTimeout) {
+            clock.advance(batchDuration.milliseconds)
             // Verify whether data received was as expected
             logInfo("--------------------------------")
             logInfo("output.size = " + outputQueue.size)
