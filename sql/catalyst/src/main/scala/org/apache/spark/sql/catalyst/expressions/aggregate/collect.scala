@@ -47,7 +47,7 @@ abstract class Collect[T] extends TypedImperativeAggregate[T] {
   // actual order of input rows.
   override def deterministic: Boolean = false
 
-  def _serialize(obj: Iterable[Any]): Array[Byte] = {
+  protected def _serialize(obj: Iterable[Any]): Array[Byte] = {
     val buffer = new Array[Byte](4 << 10)  // 4K
     val bos = new ByteArrayOutputStream()
     val out = new DataOutputStream(bos)
@@ -69,7 +69,7 @@ abstract class Collect[T] extends TypedImperativeAggregate[T] {
     }
   }
 
-  def _deserialize(bytes: Array[Byte], updater: (Any) => Any): Unit = {
+  protected def _deserialize(bytes: Array[Byte], updater: (Any) => Unit): Unit = {
     val bis = new ByteArrayInputStream(bytes)
     val ins = new DataInputStream(bis)
     try {
@@ -90,7 +90,6 @@ abstract class Collect[T] extends TypedImperativeAggregate[T] {
       bis.close()
     }
   }
-
 }
 
 /**
@@ -144,7 +143,7 @@ case class CollectList(
   override def serialize(obj: ArrayBuffer[Any]): Array[Byte] = _serialize(obj)
   override def deserialize(bytes: Array[Byte]): ArrayBuffer[Any] = {
     val buffer = new ArrayBuffer[Any]()
-    val updater = (value: Any) => buffer += value
+    val updater: (Any) => Unit = (value) => buffer += value
     _deserialize(bytes, updater)
     buffer
   }
@@ -209,7 +208,7 @@ case class CollectSet(
   override def serialize(obj: HashSet[Any]): Array[Byte] = _serialize(obj)
   override def deserialize(bytes: Array[Byte]): HashSet[Any] = {
     val buffer = new HashSet[Any]()
-    val updater = (value: Any) => buffer += value
+    val updater: (Any) => Unit = (value) => buffer += value
     _deserialize(bytes, updater)
     buffer
   }
