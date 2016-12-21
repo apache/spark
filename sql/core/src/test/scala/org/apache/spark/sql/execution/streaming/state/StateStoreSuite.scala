@@ -395,6 +395,8 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       }
     }
 
+    val timeoutDuration = 60 seconds
+
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
@@ -403,7 +405,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
           // Generate sufficient versions of store for snapshots
           generateStoreVersions()
 
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
             // Store should have been reported to the coordinator
             assert(coordinatorRef.getLocation(storeId).nonEmpty, "active instance was not reported")
 
@@ -422,14 +424,14 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
           generateStoreVersions()
 
           // Earliest delta file should get cleaned up
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
             assert(!fileExists(provider, 1, isSnapshot = false), "earliest file not deleted")
           }
 
           // If driver decides to deactivate all instances of the store, then this instance
           // should be unloaded
           coordinatorRef.deactivateInstances(dir)
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
             assert(!StateStore.isLoaded(storeId))
           }
 
@@ -439,7 +441,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
           // If some other executor loads the store, then this instance should be unloaded
           coordinatorRef.reportActiveInstance(storeId, "other-host", "other-exec")
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
             assert(!StateStore.isLoaded(storeId))
           }
 
@@ -450,7 +452,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       }
 
       // Verify if instance is unloaded if SparkContext is stopped
-      eventually(timeout(10 seconds)) {
+      eventually(timeout(timeoutDuration)) {
         require(SparkEnv.get === null)
         assert(!StateStore.isLoaded(storeId))
         assert(!StateStore.isMaintenanceRunning)
