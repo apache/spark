@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.{Partition, SparkContext, TaskContext, TaskKilledException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -541,6 +541,13 @@ private[jdbc] class JDBCRDD(
     }
 
     override def hasNext: Boolean = {
+      // Kill the task in case it has been marked as killed. This logic is from
+      // InterruptibleIterator, but we inline it here instead of wrapping the iterator in order
+      // to avoid performance overhead and to minimize modified code since it's not easy to
+      // wrap this Iterator without re-indenting tons of code.
+      if (context.isInterrupted()) {
+        throw new TaskKilledException
+      }
       if (!finished) {
         if (!gotNext) {
           nextValue = getNext()
