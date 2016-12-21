@@ -17,17 +17,14 @@
 
 package org.apache.spark.network.util;
 
+import java.util.Properties;
+
 import com.google.common.primitives.Ints;
 
 /**
  * A central location that tracks all the settings we expose to users.
  */
 public class TransportConf {
-
-  static {
-    // Set this due to Netty PR #5661 for Netty 4.0.37+ to work
-    System.setProperty("io.netty.maxDirectMemory", "0");
-  }
 
   private final String SPARK_NETWORK_IO_MODE_KEY;
   private final String SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY;
@@ -179,21 +176,22 @@ public class TransportConf {
    * The trigger for enabling AES encryption.
    */
   public boolean aesEncryptionEnabled() {
-    return conf.getBoolean("spark.authenticate.encryption.aes.enabled", false);
+    return conf.getBoolean("spark.network.aes.enabled", false);
   }
 
   /**
-   * The implementation class for crypto cipher
-   */
-  public String aesCipherClass() {
-    return conf.get("spark.authenticate.encryption.aes.cipher.class", null);
-  }
-
-  /**
-   * The bytes of AES cipher key which is effective when AES cipher is enabled. Notice that
-   * the length should be 16, 24 or 32 bytes.
+   * The key size to use when AES cipher is enabled. Notice that the length should be 16, 24 or 32
+   * bytes.
    */
   public int aesCipherKeySize() {
-    return conf.getInt("spark.authenticate.encryption.aes.cipher.keySize", 16);
+    return conf.getInt("spark.network.aes.keySize", 16);
   }
+
+  /**
+   * The commons-crypto configuration for the module.
+   */
+  public Properties cryptoConf() {
+    return CryptoUtils.toCryptoConf("spark.network.aes.config.", conf.getAll());
+  }
+
 }

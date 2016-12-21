@@ -31,8 +31,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BinaryComparison}
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, Expression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -275,6 +274,77 @@ case class AlterTableUnsetPropertiesCommand(
 
 }
 
+
+/**
+ * A command to change the column for a table, only support changing the comment of a non-partition
+ * column for now.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   ALTER TABLE table_identifier
+ *   CHANGE [COLUMN] column_old_name column_new_name column_dataType [COMMENT column_comment]
+ *   [FIRST | AFTER column_name];
+ * }}}
+ */
+case class AlterTableChangeColumnCommand(
+    tableName: TableIdentifier,
+    columnName: String,
+    newColumn: StructField) extends RunnableCommand {
+
+  // TODO: support change column name/dataType/metadata/position.
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+    val resolver = sparkSession.sessionState.conf.resolver
+    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
+
+    // Find the origin column from schema by column name.
+    val originColumn = findColumnByName(table.schema, columnName, resolver)
+    // Throw an AnalysisException if the column name/dataType is changed.
+    if (!columnEqual(originColumn, newColumn, resolver)) {
+      throw new AnalysisException(
+        "ALTER TABLE CHANGE COLUMN is not supported for changing column " +
+          s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
+          s"'${newColumn.name}' with type '${newColumn.dataType}'")
+    }
+
+    val newSchema = table.schema.fields.map { field =>
+      if (field.name == originColumn.name) {
+        // Create a new column from the origin column with the new comment.
+        addComment(field, newColumn.getComment)
+      } else {
+        field
+      }
+    }
+    val newTable = table.copy(schema = StructType(newSchema))
+    catalog.alterTable(newTable)
+
+    Seq.empty[Row]
+  }
+
+  // Find the origin column from schema by column name, throw an AnalysisException if the column
+  // reference is invalid.
+  private def findColumnByName(
+      schema: StructType, name: String, resolver: Resolver): StructField = {
+    schema.fields.collectFirst {
+      case field if resolver(field.name, name) => field
+    }.getOrElse(throw new AnalysisException(
+      s"Invalid column reference '$name', table schema is '${schema}'"))
+  }
+
+  // Add the comment to a column, if comment is empty, return the original column.
+  private def addComment(column: StructField, comment: Option[String]): StructField = {
+    comment.map(column.withComment(_)).getOrElse(column)
+  }
+
+  // Compare a [[StructField]] to another, return true if they have the same column
+  // name(by resolver) and dataType.
+  private def columnEqual(
+      field: StructField, other: StructField, resolver: Resolver): Boolean = {
+    resolver(field.name, other.name) && field.dataType == other.dataType
+  }
+}
+
 /**
  * A command that sets the serde class and/or serde properties of a table/view.
  *
@@ -420,55 +490,29 @@ case class AlterTableRenamePartitionCommand(
  */
 case class AlterTableDropPartitionCommand(
     tableName: TableIdentifier,
-    specs: Seq[Expression],
+    specs: Seq[TablePartitionSpec],
     ifExists: Boolean,
-    purge: Boolean)
-  extends RunnableCommand with PredicateHelper {
-
-  private def isRangeComparison(expr: Expression): Boolean = {
-    expr.find(e => e.isInstanceOf[BinaryComparison] && !e.isInstanceOf[EqualTo]).isDefined
-  }
+    purge: Boolean,
+    retainData: Boolean)
+  extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
-    specs.foreach { expr =>
-      expr.references.foreach { attr =>
-        if (!table.partitionColumnNames.exists(resolver(_, attr.name))) {
-          throw new AnalysisException(s"${attr.name} is not a valid partition column " +
-            s"in table ${table.identifier.quotedString}.")
-        }
-      }
+    val normalizedSpecs = specs.map { spec =>
+      PartitioningUtils.normalizePartitionSpec(
+        spec,
+        table.partitionColumnNames,
+        table.identifier.quotedString,
+        sparkSession.sessionState.conf.resolver)
     }
 
-    if (specs.exists(isRangeComparison)) {
-      val partitionSet = specs.flatMap { spec =>
-        val partitions = catalog.listPartitionsByFilter(table.identifier, Seq(spec)).map(_.spec)
-        if (partitions.isEmpty && !ifExists) {
-          throw new AnalysisException(s"There is no partition for ${spec.sql}")
-        }
-        partitions
-      }.distinct
-      catalog.dropPartitions(
-        table.identifier, partitionSet, ignoreIfNotExists = ifExists, purge = purge)
-    } else {
-      val normalizedSpecs = specs.map { expr =>
-        val spec = splitConjunctivePredicates(expr).map {
-          case BinaryComparison(AttributeReference(name, _, _, _), right) => name -> right.toString
-        }.toMap
-        PartitioningUtils.normalizePartitionSpec(
-          spec,
-          table.partitionColumnNames,
-          table.identifier.quotedString,
-          resolver)
-      }
-      catalog.dropPartitions(
-        table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge)
-    }
+    catalog.dropPartitions(
+      table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge,
+      retainData = retainData)
     Seq.empty[Row]
   }
 

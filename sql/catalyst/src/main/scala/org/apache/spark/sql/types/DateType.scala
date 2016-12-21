@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 /**
  * A date type, supporting "0001-01-01" through "9999-12-31".
  *
- * Please use the singleton [[DataTypes.DateType]].
+ * Please use the singleton `DataTypes.DateType`.
  *
  * Internally, this is represented as the number of days from 1970-01-01.
  *

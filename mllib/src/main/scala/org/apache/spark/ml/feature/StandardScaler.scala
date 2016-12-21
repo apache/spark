@@ -79,8 +79,8 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
  * statistics on the samples in the training set.
  *
  * The "unit std" is computed using the
- * [[https://en.wikipedia.org/wiki/Standard_deviation#Corrected_sample_standard_deviation
- *   corrected sample standard deviation]],
+ * <a href="https://en.wikipedia.org/wiki/Standard_deviation#Corrected_sample_standard_deviation">
+ * corrected sample standard deviation</a>,
  * which is computed as the square root of the unbiased sample variance.
  */
 @Since("1.2.0")

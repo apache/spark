@@ -294,9 +294,7 @@ private[spark] object ChiSqSelector {
   /** String name for `percentile` selector type. */
   val Percentile: String = "percentile"
 
-  /** String name for `fpr` selector type.
-   *  Choose all features whose false positive rate meets some threshold.
-   */
+  /** String name for `fpr` selector type. */
   private[spark] val FPR: String = "fpr"
 
   /** String name for `fdr` selector type. */

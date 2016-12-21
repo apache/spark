@@ -44,7 +44,7 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   with HasSeed with HasPredictionCol with HasProbabilityCol with HasTol {
 
   /**
-   * Number of independent Gaussians in the mixture model. Must be > 1. Default: 2.
+   * Number of independent Gaussians in the mixture model. Must be greater than 1. Default: 2.
    * @group param
    */
   @Since("2.0.0")
@@ -68,24 +68,33 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
 }
 
 /**
- * :: Experimental ::
- *
  * Multivariate Gaussian Mixture Model (GMM) consisting of k Gaussians, where points
  * are drawn from each Gaussian i with probability weights(i).
  *
  * @param weights Weight for each Gaussian distribution in the mixture.
  *                This is a multinomial probability distribution over the k Gaussians,
  *                where weights(i) is the weight for Gaussian i, and weights sum to 1.
- * @param gaussians Array of [[MultivariateGaussian]] where gaussians(i) represents
+ * @param gaussians Array of `MultivariateGaussian` where gaussians(i) represents
  *                  the Multivariate Gaussian (Normal) Distribution for Gaussian i
  */
 @Since("2.0.0")
-@Experimental
 class GaussianMixtureModel private[ml] (
     @Since("2.0.0") override val uid: String,
     @Since("2.0.0") val weights: Array[Double],
     @Since("2.0.0") val gaussians: Array[MultivariateGaussian])
   extends Model[GaussianMixtureModel] with GaussianMixtureParams with MLWritable {
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setProbabilityCol(value: String): this.type = set(probabilityCol, value)
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): GaussianMixtureModel = {
@@ -253,7 +262,6 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
 }
 
 /**
- * :: Experimental ::
  * Gaussian Mixture clustering.
  *
  * This class performs expectation maximization for multivariate Gaussian
@@ -272,7 +280,6 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
  * on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
  */
 @Since("2.0.0")
-@Experimental
 class GaussianMixture @Since("2.0.0") (
     @Since("2.0.0") override val uid: String)
   extends Estimator[GaussianMixtureModel] with GaussianMixtureParams with DefaultParamsWritable {
@@ -362,7 +369,7 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
  * :: Experimental ::
  * Summary of GaussianMixture.
  *
- * @param predictions  [[DataFrame]] produced by [[GaussianMixtureModel.transform()]].
+ * @param predictions  `DataFrame` produced by `GaussianMixtureModel.transform()`.
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param probabilityCol  Name for column of predicted probability of each cluster
  *                        in `predictions`.

@@ -417,10 +417,8 @@ class RDD(object):
             with replacement: expected number of times each element is chosen; fraction must be >= 0
         :param seed: seed for the random number generator
 
-        .. note::
-
-            This is not guaranteed to provide exactly the fraction specified of the total count
-            of the given :class:`DataFrame`.
+        .. note:: This is not guaranteed to provide exactly the fraction specified of the total
+            count of the given :class:`DataFrame`.
 
         >>> rdd = sc.parallelize(range(100), 4)
         >>> 6 <= rdd.sample(False, 0.1, 81).count() <= 14
@@ -460,8 +458,8 @@ class RDD(object):
         """
         Return a fixed-size sampled subset of this RDD.
 
-        Note that this method should only be used if the resulting array is expected
-        to be small, as all the data is loaded into the driver's memory.
+        .. note:: This method should only be used if the resulting array is expected
+            to be small, as all the data is loaded into the driver's memory.
 
         >>> rdd = sc.parallelize(range(0, 10))
         >>> len(rdd.takeSample(True, 20, 1))
@@ -572,7 +570,7 @@ class RDD(object):
         Return the intersection of this RDD and another one. The output will
         not contain any duplicate elements, even if the input RDDs did.
 
-        Note that this method performs a shuffle internally.
+        .. note:: This method performs a shuffle internally.
 
         >>> rdd1 = sc.parallelize([1, 10, 2, 3, 4, 5])
         >>> rdd2 = sc.parallelize([1, 6, 2, 3, 7, 8])
@@ -803,8 +801,9 @@ class RDD(object):
     def collect(self):
         """
         Return a list that contains all of the elements in this RDD.
-        Note that this method should only be used if the resulting array is expected
-        to be small, as all the data is loaded into the driver's memory.
+
+        .. note:: This method should only be used if the resulting array is expected
+            to be small, as all the data is loaded into the driver's memory.
         """
         with SCCallSiteSync(self.context) as css:
             port = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
@@ -1251,10 +1250,10 @@ class RDD(object):
         """
         Get the top N elements from an RDD.
 
-        Note that this method should only be used if the resulting array is expected
-        to be small, as all the data is loaded into the driver's memory.
+        .. note:: This method should only be used if the resulting array is expected
+            to be small, as all the data is loaded into the driver's memory.
 
-        Note: It returns the list sorted in descending order.
+        .. note:: It returns the list sorted in descending order.
 
         >>> sc.parallelize([10, 4, 2, 12, 3]).top(1)
         [12]
@@ -1276,8 +1275,8 @@ class RDD(object):
         Get the N elements from an RDD ordered in ascending order or as
         specified by the optional key function.
 
-        Note that this method should only be used if the resulting array is expected
-        to be small, as all the data is loaded into the driver's memory.
+        .. note:: this method should only be used if the resulting array is expected
+            to be small, as all the data is loaded into the driver's memory.
 
         >>> sc.parallelize([10, 1, 2, 9, 3, 4, 5, 6, 7]).takeOrdered(6)
         [1, 2, 3, 4, 5, 6]
@@ -1298,10 +1297,10 @@ class RDD(object):
         that partition to estimate the number of additional partitions needed
         to satisfy the limit.
 
-        Note that this method should only be used if the resulting array is expected
-        to be small, as all the data is loaded into the driver's memory.
-
         Translated from the Scala implementation in RDD#take().
+
+        .. note:: this method should only be used if the resulting array is expected
+            to be small, as all the data is loaded into the driver's memory.
 
         >>> sc.parallelize([2, 3, 4, 5, 6]).cache().take(2)
         [2, 3]
@@ -1366,8 +1365,9 @@ class RDD(object):
 
     def isEmpty(self):
         """
-        Returns true if and only if the RDD contains no elements at all. Note that an RDD
-        may be empty even when it has at least 1 partition.
+        Returns true if and only if the RDD contains no elements at all.
+
+        .. note:: an RDD may be empty even when it has at least 1 partition.
 
         >>> sc.parallelize([]).isEmpty()
         True
@@ -1558,8 +1558,8 @@ class RDD(object):
         """
         Return the key-value pairs in this RDD to the master as a dictionary.
 
-        Note that this method should only be used if the resulting data is expected
-        to be small, as all the data is loaded into the driver's memory.
+        .. note:: this method should only be used if the resulting data is expected
+            to be small, as all the data is loaded into the driver's memory.
 
         >>> m = sc.parallelize([(1, 2), (3, 4)]).collectAsMap()
         >>> m[1]
@@ -1796,8 +1796,7 @@ class RDD(object):
         set of aggregation functions.
 
         Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined
-        type" C.  Note that V and C can be different -- for example, one might
-        group an RDD of type (Int, Int) into an RDD of type (Int, List[Int]).
+        type" C.
 
         Users provide three functions:
 
@@ -1808,6 +1807,9 @@ class RDD(object):
             - C{mergeCombiners}, to combine two C's into a single one.
 
         In addition, users can control the partitioning of the output RDD.
+
+        .. note:: V and C can be different -- for example, one might group an RDD of type
+            (Int, Int) into an RDD of type (Int, List[Int]).
 
         >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
         >>> def add(a, b): return a + str(b)
@@ -1880,9 +1882,9 @@ class RDD(object):
         Group the values for each key in the RDD into a single sequence.
         Hash-partitions the resulting RDD with numPartitions partitions.
 
-        Note: If you are grouping in order to perform an aggregation (such as a
-        sum or average) over each key, using reduceByKey or aggregateByKey will
-        provide much better performance.
+        .. note:: If you are grouping in order to perform an aggregation (such as a
+            sum or average) over each key, using reduceByKey or aggregateByKey will
+            provide much better performance.
 
         >>> rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
         >>> sorted(rdd.groupByKey().mapValues(len).collect())

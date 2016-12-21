@@ -54,7 +54,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   // Common RDD functions
 
-  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
+  /**
+   * Persist this RDD with the default storage level (`MEMORY_ONLY`).
+   */
   def cache(): JavaPairRDD[K, V] = new JavaPairRDD[K, V](rdd.cache())
 
   /**
@@ -405,7 +407,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * partitioning of the resulting key-value pair RDD by passing a Partitioner.
    *
    * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
-   * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
+   * each key, using `JavaPairRDD.reduceByKey` or `JavaPairRDD.combineByKey`
    * will provide much better performance.
    */
   def groupByKey(partitioner: Partitioner): JavaPairRDD[K, JIterable[V]] =
@@ -416,7 +418,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * resulting RDD with into `numPartitions` partitions.
    *
    * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
-   * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
+   * each key, using `JavaPairRDD.reduceByKey` or `JavaPairRDD.combineByKey`
    * will provide much better performance.
    */
   def groupByKey(numPartitions: Int): JavaPairRDD[K, JIterable[V]] =
@@ -454,13 +456,17 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
     fromRDD(rdd.subtractByKey(other))
   }
 
-  /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
+  /**
+   * Return an RDD with the pairs from `this` whose keys are not in `other`.
+   */
   def subtractByKey[W](other: JavaPairRDD[K, W], numPartitions: Int): JavaPairRDD[K, V] = {
     implicit val ctag: ClassTag[W] = fakeClassTag
     fromRDD(rdd.subtractByKey(other, numPartitions))
   }
 
-  /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
+  /**
+   * Return an RDD with the pairs from `this` whose keys are not in `other`.
+   */
   def subtractByKey[W](other: JavaPairRDD[K, W], p: Partitioner): JavaPairRDD[K, V] = {
     implicit val ctag: ClassTag[W] = fakeClassTag
     fromRDD(rdd.subtractByKey(other, p))
@@ -546,7 +552,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * resulting RDD with the existing partitioner/parallelism level.
    *
    * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
-   * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
+   * each key, using `JavaPairRDD.reduceByKey` or `JavaPairRDD.combineByKey`
    * will provide much better performance.
    */
   def groupByKey(): JavaPairRDD[K, JIterable[V]] =

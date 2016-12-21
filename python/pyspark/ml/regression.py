@@ -245,9 +245,9 @@ class LinearRegressionSummary(JavaWrapper):
         .. seealso:: `Wikipedia explain variation \
         <http://en.wikipedia.org/wiki/Explained_variation>`_
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("explainedVariance")
 
@@ -259,9 +259,9 @@ class LinearRegressionSummary(JavaWrapper):
         corresponding to the expected value of the absolute error
         loss or l1-norm loss.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("meanAbsoluteError")
 
@@ -273,9 +273,9 @@ class LinearRegressionSummary(JavaWrapper):
         corresponding to the expected value of the squared error
         loss or quadratic loss.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("meanSquaredError")
 
@@ -286,9 +286,9 @@ class LinearRegressionSummary(JavaWrapper):
         Returns the root mean squared error, which is defined as the
         square root of the mean squared error.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("rootMeanSquaredError")
 
@@ -301,9 +301,9 @@ class LinearRegressionSummary(JavaWrapper):
         .. seealso:: `Wikipedia coefficient of determination \
         <http://en.wikipedia.org/wiki/Coefficient_of_determination>`
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("r2")
 
@@ -822,7 +822,7 @@ class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReada
             where gain is scaled by the number of instances passing through node
           - Normalize importances for tree to sum to 1.
 
-        Note: Feature importance for single decision trees can have high variance due to
+        .. note:: Feature importance for single decision trees can have high variance due to
               correlated predictor variables. Consider using a :py:class:`RandomForestRegressor`
               to determine feature importance instead.
         """

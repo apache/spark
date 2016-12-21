@@ -22,7 +22,7 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Matrix, Vector, Vectors, VectorUDT}
@@ -50,7 +50,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   with HasSeed with HasCheckpointInterval {
 
   /**
-   * Param for the number of topics (clusters) to infer. Must be > 1. Default: 10.
+   * Param for the number of topics (clusters) to infer. Must be &gt; 1. Default: 10.
    *
    * @group param
    */
@@ -78,13 +78,13 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *  - EM
    *     - Currently only supports symmetric distributions, so all values in the vector should be
    *       the same.
-   *     - Values should be > 1.0
+   *     - Values should be greater than 1.0
    *     - default = uniformly (50 / k) + 1, where 50/k is common in LDA libraries and +1 follows
    *       from Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Values should be >= 0
+   *     - Values should be greater than or equal to 0
    *     - default = uniformly (1.0 / k), following the implementation from
-   *       [[https://github.com/Blei-Lab/onlineldavb]].
+   *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    *
    * @group param
    */
@@ -120,13 +120,13 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *
    * Optimizer-specific parameter settings:
    *  - EM
-   *     - Value should be > 1.0
+   *     - Value should be greater than 1.0
    *     - default = 0.1 + 1, where 0.1 gives a small amount of smoothing and +1 follows
    *       Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Value should be >= 0
+   *     - Value should be greater than or equal to 0
    *     - default = (1.0 / k), following the implementation from
-   *       [[https://github.com/Blei-Lab/onlineldavb]].
+   *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    *
    * @group param
    */
@@ -162,11 +162,11 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *  - Online LDA:
    *     Hoffman, Blei and Bach.  "Online Learning for Latent Dirichlet Allocation."
    *     Neural Information Processing Systems, 2010.
-   *     [[http://www.cs.columbia.edu/~blei/papers/HoffmanBleiBach2010b.pdf]]
+   *     See <a href="http://www.cs.columbia.edu/~blei/papers/HoffmanBleiBach2010b.pdf">here</a>
    *  - EM:
    *     Asuncion et al.  "On Smoothing and Inference for Topic Models."
    *     Uncertainty in Artificial Intelligence, 2009.
-   *     [[http://arxiv.org/pdf/1205.2662.pdf]]
+   *     See <a href="http://arxiv.org/pdf/1205.2662.pdf">here</a>
    *
    * @group param
    */
@@ -245,9 +245,9 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * Fraction of the corpus to be sampled and used in each iteration of mini-batch gradient descent,
    * in range (0, 1].
    *
-   * Note that this should be adjusted in synch with [[LDA.maxIter]]
+   * Note that this should be adjusted in synch with `LDA.maxIter`
    * so the entire corpus is used.  Specifically, set both so that
-   * maxIterations * miniBatchFraction >= 1.
+   * maxIterations * miniBatchFraction greater than or equal to 1.
    *
    * Note: This is the same as the `miniBatchFraction` parameter in
    *       [[org.apache.spark.mllib.clustering.OnlineLDAOptimizer]].
@@ -293,8 +293,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * cause failures if a data partition is lost, so set this bit with care.
    * Note that checkpoints will be cleaned up via reference counting, regardless.
    *
-   * See [[DistributedLDAModel.getCheckpointFiles]] for getting remaining checkpoints and
-   * [[DistributedLDAModel.deleteCheckpointFiles]] for removing remaining checkpoints.
+   * See `DistributedLDAModel.getCheckpointFiles` for getting remaining checkpoints and
+   * `DistributedLDAModel.deleteCheckpointFiles` for removing remaining checkpoints.
    *
    * Default: true
    *
@@ -396,15 +396,13 @@ private object LDAParams {
 
 
 /**
- * :: Experimental ::
  * Model fitted by [[LDA]].
  *
  * @param vocabSize  Vocabulary size (number of terms or words in the vocabulary)
  * @param sparkSession  Used to construct local DataFrames for returning query results
  */
 @Since("1.6.0")
-@Experimental
-sealed abstract class LDAModel private[ml] (
+abstract class LDAModel private[ml] (
     @Since("1.6.0") override val uid: String,
     @Since("1.6.0") val vocabSize: Int,
     @Since("1.6.0") @transient private[ml] val sparkSession: SparkSession)
@@ -431,7 +429,7 @@ sealed abstract class LDAModel private[ml] (
   private[ml] def getEffectiveTopicConcentration: Double = getModel.topicConcentration
 
   /**
-   * The features for LDA should be a [[Vector]] representing the word counts in a document.
+   * The features for LDA should be a `Vector` representing the word counts in a document.
    * The vector should be of length vocabSize, with counts for each term (word).
    *
    * @group setParam
@@ -556,14 +554,12 @@ sealed abstract class LDAModel private[ml] (
 
 
 /**
- * :: Experimental ::
  *
  * Local (non-distributed) model fitted by [[LDA]].
  *
  * This model stores the inferred topics only; it does not store info about the training dataset.
  */
 @Since("1.6.0")
-@Experimental
 class LocalLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
@@ -641,7 +637,6 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
 
 
 /**
- * :: Experimental ::
  *
  * Distributed model fitted by [[LDA]].
  * This type of model is currently only produced by Expectation-Maximization (EM).
@@ -650,10 +645,9 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
  * for each training document.
  *
  * @param oldLocalModelOption  Used to implement [[oldLocalModel]] as a lazy val, but keeping
- *                             [[copy()]] cheap.
+ *                             `copy()` cheap.
  */
 @Since("1.6.0")
-@Experimental
 class DistributedLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
@@ -701,7 +695,7 @@ class DistributedLDAModel private[ml] (
    *  - Even with [[logPrior]], this is NOT the same as the data log likelihood given the
    *    hyperparameters.
    *  - This is computed from the topic distributions computed during training. If you call
-   *    [[logLikelihood()]] on the same training dataset, the topic distributions will be computed
+   *    `logLikelihood()` on the same training dataset, the topic distributions will be computed
    *    again, possibly giving different results.
    */
   @Since("1.6.0")
@@ -719,7 +713,7 @@ class DistributedLDAModel private[ml] (
   /**
    * :: DeveloperApi ::
    *
-   * If using checkpointing and [[LDA.keepLastCheckpoint]] is set to true, then there may be
+   * If using checkpointing and `LDA.keepLastCheckpoint` is set to true, then there may be
    * saved checkpoint files.  This method is provided so that users can manage those files.
    *
    * Note that removing the checkpoints can cause failures if a partition is lost and is needed
@@ -789,7 +783,6 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
 
 
 /**
- * :: Experimental ::
  *
  * Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
  *
@@ -804,16 +797,15 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
  *
  * Input data (featuresCol):
  *  LDA is given a collection of documents as input data, via the featuresCol parameter.
- *  Each document is specified as a [[Vector]] of length vocabSize, where each entry is the
+ *  Each document is specified as a `Vector` of length vocabSize, where each entry is the
  *  count for the corresponding term (word) in the document.  Feature transformers such as
  *  [[org.apache.spark.ml.feature.Tokenizer]] and [[org.apache.spark.ml.feature.CountVectorizer]]
  *  can be useful for converting text to word count vectors.
  *
- * @see [[http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation Latent Dirichlet allocation
- *       (Wikipedia)]]
+ * @see <a href="http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation">
+ * Latent Dirichlet allocation (Wikipedia)</a>
  */
 @Since("1.6.0")
-@Experimental
 class LDA @Since("1.6.0") (
     @Since("1.6.0") override val uid: String)
   extends Estimator[LDAModel] with LDAParams with DefaultParamsWritable {
@@ -826,7 +818,7 @@ class LDA @Since("1.6.0") (
     optimizeDocConcentration -> true, keepLastCheckpoint -> true)
 
   /**
-   * The features for LDA should be a [[Vector]] representing the word counts in a document.
+   * The features for LDA should be a `Vector` representing the word counts in a document.
    * The vector should be of length vocabSize, with counts for each term (word).
    *
    * @group setParam

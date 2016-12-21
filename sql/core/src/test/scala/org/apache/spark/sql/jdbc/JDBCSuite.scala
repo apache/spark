@@ -24,12 +24,13 @@ import java.util.{Calendar, GregorianCalendar, Properties}
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -199,7 +200,22 @@ class JDBCSuite extends SparkFunSuite
          |CREATE TEMPORARY TABLE nullparts
          |USING org.apache.spark.sql.jdbc
          |OPTIONS (url '$url', dbtable 'TEST.EMP', user 'testUser', password 'testPass',
-         |partitionColumn '"Dept"', lowerBound '1', upperBound '4', numPartitions '4')
+         |partitionColumn '"Dept"', lowerBound '1', upperBound '4', numPartitions '3')
+      """.stripMargin.replaceAll("\n", " "))
+
+    conn.prepareStatement(
+      """create table test."mixedCaseCols" ("Name" TEXT(32), "Id" INTEGER NOT NULL)""")
+      .executeUpdate()
+    conn.prepareStatement("""insert into test."mixedCaseCols" values ('fred', 1)""").executeUpdate()
+    conn.prepareStatement("""insert into test."mixedCaseCols" values ('mary', 2)""").executeUpdate()
+    conn.prepareStatement("""insert into test."mixedCaseCols" values (null, 3)""").executeUpdate()
+    conn.commit()
+
+    sql(
+      s"""
+         |CREATE TEMPORARY TABLE mixedCaseCols
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', dbtable 'TEST."mixedCaseCols"', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
@@ -207,6 +223,16 @@ class JDBCSuite extends SparkFunSuite
 
   after {
     conn.close()
+  }
+
+  // Check whether the tables are fetched in the expected degree of parallelism
+  def checkNumPartitions(df: DataFrame, expectedNumPartitions: Int): Unit = {
+    val jdbcRelations = df.queryExecution.analyzed.collect {
+      case LogicalRelation(r: JDBCRelation, _, _) => r
+    }
+    assert(jdbcRelations.length == 1)
+    assert(jdbcRelations.head.parts.length == expectedNumPartitions,
+      s"Expecting a JDBCRelation with $expectedNumPartitions partitions, but got:`$jdbcRelations`")
   }
 
   test("SELECT *") {
@@ -313,13 +339,23 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("SELECT * partitioned") {
-    assert(sql("SELECT * FROM parts").collect().size == 3)
+    val df = sql("SELECT * FROM parts")
+    checkNumPartitions(df, expectedNumPartitions = 3)
+    assert(df.collect().length == 3)
   }
 
   test("SELECT WHERE (simple predicates) partitioned") {
-    assert(sql("SELECT * FROM parts WHERE THEID < 1").collect().size === 0)
-    assert(sql("SELECT * FROM parts WHERE THEID != 2").collect().size === 2)
-    assert(sql("SELECT THEID FROM parts WHERE THEID = 1").collect().size === 1)
+    val df1 = sql("SELECT * FROM parts WHERE THEID < 1")
+    checkNumPartitions(df1, expectedNumPartitions = 3)
+    assert(df1.collect().length === 0)
+
+    val df2 = sql("SELECT * FROM parts WHERE THEID != 2")
+    checkNumPartitions(df2, expectedNumPartitions = 3)
+    assert(df2.collect().length === 2)
+
+    val df3 = sql("SELECT THEID FROM parts WHERE THEID = 1")
+    checkNumPartitions(df3, expectedNumPartitions = 3)
+    assert(df3.collect().length === 1)
   }
 
   test("SELECT second field partitioned") {
@@ -370,24 +406,27 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
-    assert(
-      spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties())
-      .collect().length === 3)
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties())
+    checkNumPartitions(df, expectedNumPartitions = 3)
+    assert(df.collect().length === 3)
   }
 
   test("Partitioning via list-of-where-clauses API") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
-    assert(spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
-      .collect().length === 3)
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
+    checkNumPartitions(df, expectedNumPartitions = 2)
+    assert(df.collect().length === 3)
   }
 
   test("Partitioning on column that might have null values.") {
-    assert(
-      spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "theid", 0, 4, 3, new Properties())
-        .collect().length === 4)
-    assert(
-      spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "THEID", 0, 4, 3, new Properties())
-        .collect().length === 4)
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "theid", 0, 4, 3, new Properties())
+    checkNumPartitions(df, expectedNumPartitions = 3)
+    assert(df.collect().length === 4)
+
+    val df2 = spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "THEID", 0, 4, 3, new Properties())
+    checkNumPartitions(df2, expectedNumPartitions = 3)
+    assert(df2.collect().length === 4)
+
     // partitioning on a nullable quoted column
     assert(
       spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", """"Dept"""", 0, 4, 3, new Properties())
@@ -404,6 +443,7 @@ class JDBCSuite extends SparkFunSuite
       numPartitions = 0,
       connectionProperties = new Properties()
     )
+    checkNumPartitions(res, expectedNumPartitions = 1)
     assert(res.count() === 8)
   }
 
@@ -417,6 +457,7 @@ class JDBCSuite extends SparkFunSuite
       numPartitions = 10,
       connectionProperties = new Properties()
     )
+    checkNumPartitions(res, expectedNumPartitions = 4)
     assert(res.count() === 8)
   }
 
@@ -430,6 +471,7 @@ class JDBCSuite extends SparkFunSuite
       numPartitions = 4,
       connectionProperties = new Properties()
     )
+    checkNumPartitions(res, expectedNumPartitions = 1)
     assert(res.count() === 8)
   }
 
@@ -450,7 +492,9 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("SELECT * on partitioned table with a nullable partition column") {
-    assert(sql("SELECT * FROM nullparts").collect().size == 4)
+    val df = sql("SELECT * FROM nullparts")
+    checkNumPartitions(df, expectedNumPartitions = 3)
+    assert(df.collect().length == 4)
   }
 
   test("H2 integral types") {
@@ -604,28 +648,32 @@ class JDBCSuite extends SparkFunSuite
 
   test("compile filters") {
     val compileFilter = PrivateMethod[Option[String]]('compileFilter)
-    def doCompileFilter(f: Filter): String = JDBCRDD invokePrivate compileFilter(f) getOrElse("")
-    assert(doCompileFilter(EqualTo("col0", 3)) === "col0 = 3")
-    assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === "(NOT (col1 = 'abc'))")
+    def doCompileFilter(f: Filter): String =
+      JDBCRDD invokePrivate compileFilter(f, JdbcDialects.get("jdbc:")) getOrElse("")
+    assert(doCompileFilter(EqualTo("col0", 3)) === """"col0" = 3""")
+    assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === """(NOT ("col1" = 'abc'))""")
     assert(doCompileFilter(And(EqualTo("col0", 0), EqualTo("col1", "def")))
-      === "(col0 = 0) AND (col1 = 'def')")
+      === """("col0" = 0) AND ("col1" = 'def')""")
     assert(doCompileFilter(Or(EqualTo("col0", 2), EqualTo("col1", "ghi")))
-      === "(col0 = 2) OR (col1 = 'ghi')")
-    assert(doCompileFilter(LessThan("col0", 5)) === "col0 < 5")
+      === """("col0" = 2) OR ("col1" = 'ghi')""")
+    assert(doCompileFilter(LessThan("col0", 5)) === """"col0" < 5""")
     assert(doCompileFilter(LessThan("col3",
-      Timestamp.valueOf("1995-11-21 00:00:00.0"))) === "col3 < '1995-11-21 00:00:00.0'")
-    assert(doCompileFilter(LessThan("col4", Date.valueOf("1983-08-04"))) === "col4 < '1983-08-04'")
-    assert(doCompileFilter(LessThanOrEqual("col0", 5)) === "col0 <= 5")
-    assert(doCompileFilter(GreaterThan("col0", 3)) === "col0 > 3")
-    assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === "col0 >= 3")
-    assert(doCompileFilter(In("col1", Array("jkl"))) === "col1 IN ('jkl')")
+      Timestamp.valueOf("1995-11-21 00:00:00.0"))) === """"col3" < '1995-11-21 00:00:00.0'""")
+    assert(doCompileFilter(LessThan("col4", Date.valueOf("1983-08-04")))
+      === """"col4" < '1983-08-04'""")
+    assert(doCompileFilter(LessThanOrEqual("col0", 5)) === """"col0" <= 5""")
+    assert(doCompileFilter(GreaterThan("col0", 3)) === """"col0" > 3""")
+    assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === """"col0" >= 3""")
+    assert(doCompileFilter(In("col1", Array("jkl"))) === """"col1" IN ('jkl')""")
+    assert(doCompileFilter(In("col1", Array.empty)) ===
+      """CASE WHEN "col1" IS NULL THEN NULL ELSE FALSE END""")
     assert(doCompileFilter(Not(In("col1", Array("mno", "pqr"))))
-      === "(NOT (col1 IN ('mno', 'pqr')))")
-    assert(doCompileFilter(IsNull("col1")) === "col1 IS NULL")
-    assert(doCompileFilter(IsNotNull("col1")) === "col1 IS NOT NULL")
+      === """(NOT ("col1" IN ('mno', 'pqr')))""")
+    assert(doCompileFilter(IsNull("col1")) === """"col1" IS NULL""")
+    assert(doCompileFilter(IsNotNull("col1")) === """"col1" IS NOT NULL""")
     assert(doCompileFilter(And(EqualNullSafe("col0", "abc"), EqualTo("col1", "def")))
-      === "((NOT (col0 != 'abc' OR col0 IS NULL OR 'abc' IS NULL) "
-        + "OR (col0 IS NULL AND 'abc' IS NULL))) AND (col1 = 'def')")
+      === """((NOT ("col0" != 'abc' OR "col0" IS NULL OR 'abc' IS NULL) """
+        + """OR ("col0" IS NULL AND 'abc' IS NULL))) AND ("col1" = 'def')""")
   }
 
   test("Dialect unregister") {
@@ -720,7 +768,8 @@ class JDBCSuite extends SparkFunSuite
     }
     // test the JdbcRelation toString output
     df.queryExecution.analyzed.collect {
-      case r: LogicalRelation => assert(r.relation.toString == "JDBCRelation(TEST.PEOPLE)")
+      case r: LogicalRelation =>
+        assert(r.relation.toString == "JDBCRelation(TEST.PEOPLE) [numPartitions=3]")
     }
   }
 
@@ -729,6 +778,38 @@ class JDBCSuite extends SparkFunSuite
     val explain = ExplainCommand(df.queryExecution.logical, extended = true)
     spark.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       r => assert(!List("testPass", "testUser").exists(r.toString.contains))
+    }
+  }
+
+  test("hide credentials in create and describe a persistent/temp table") {
+    val password = "testPass"
+    val tableName = "tab1"
+    Seq("TABLE", "TEMPORARY VIEW").foreach { tableType =>
+      withTable(tableName) {
+        val df = sql(
+          s"""
+             |CREATE $tableType $tableName
+             |USING org.apache.spark.sql.jdbc
+             |OPTIONS (
+             | url '$urlWithUserAndPass',
+             | dbtable 'TEST.PEOPLE',
+             | user 'testUser',
+             | password '$password')
+           """.stripMargin)
+
+        val explain = ExplainCommand(df.queryExecution.logical, extended = true)
+        spark.sessionState.executePlan(explain).executedPlan.executeCollect().foreach { r =>
+          assert(!r.toString.contains(password))
+        }
+
+        sql(s"DESC FORMATTED $tableName").collect().foreach { r =>
+          assert(!r.toString().contains(password))
+        }
+
+        sql(s"DESC EXTENDED $tableName").collect().foreach { r =>
+          assert(!r.toString().contains(password))
+        }
+      }
     }
   }
 
@@ -789,5 +870,34 @@ class JDBCSuite extends SparkFunSuite
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
     val schema = JdbcUtils.schemaString(df.schema, "jdbc:mysql://localhost:3306/temp")
     assert(schema.contains("`order` TEXT"))
+  }
+
+  test("SPARK-18141: Predicates on quoted column names in the jdbc data source") {
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id < 1").collect().size == 0)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <= 1").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id > 1").collect().size == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id >= 1").collect().size == 3)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id != 2").collect().size == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <=> 2").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE 'fr%'").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%ed'").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%re%'").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NULL").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NOT NULL").collect().size == 2)
+    assert(sql("SELECT * FROM mixedCaseCols").filter($"Name".isin()).collect().size == 0)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IN ('mary', 'fred')").collect().size == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name NOT IN ('fred')").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1 OR Name = 'mary'").collect().size == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name = 'mary' AND Id = 2").collect().size == 1)
+  }
+
+  test("SPARK-18419: Fix `asConnectionProperties` to filter case-insensitively") {
+    val parameters = Map(
+      "url" -> "jdbc:mysql://localhost:3306/temp",
+      "dbtable" -> "t1",
+      "numPartitions" -> "10")
+    assert(new JDBCOptions(parameters).asConnectionProperties.isEmpty)
+    assert(new JDBCOptions(new CaseInsensitiveMap(parameters)).asConnectionProperties.isEmpty)
   }
 }

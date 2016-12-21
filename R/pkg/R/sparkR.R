@@ -322,6 +322,9 @@ sparkRHive.init <- function(jsc = NULL) {
 #' SparkSession or initializes a new SparkSession.
 #' Additional Spark properties can be set in \code{...}, and these named parameters take priority
 #' over values in \code{master}, \code{appName}, named lists of \code{sparkConfig}.
+#' When called in an interactive session, this checks for the Spark installation, and, if not
+#' found, it will be downloaded and cached automatically. Alternatively, \code{install.spark} can
+#' be called manually.
 #'
 #' For details on how to initialize and use SparkR, refer to SparkR programming guide at
 #' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession}.
@@ -424,7 +427,7 @@ sparkR.session <- function(
 #' @method setJobGroup default
 setJobGroup.default <- function(groupId, description, interruptOnCancel) {
   sc <- getSparkContext()
-  callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
+  invisible(callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel))
 }
 
 setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
@@ -454,7 +457,7 @@ setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
 #' @method clearJobGroup default
 clearJobGroup.default <- function() {
   sc <- getSparkContext()
-  callJMethod(sc, "clearJobGroup")
+  invisible(callJMethod(sc, "clearJobGroup"))
 }
 
 clearJobGroup <- function(sc) {
@@ -481,7 +484,7 @@ clearJobGroup <- function(sc) {
 #' @method cancelJobGroup default
 cancelJobGroup.default <- function(groupId) {
   sc <- getSparkContext()
-  callJMethod(sc, "cancelJobGroup", groupId)
+  invisible(callJMethod(sc, "cancelJobGroup", groupId))
 }
 
 cancelJobGroup <- function(sc, groupId) {
@@ -565,7 +568,7 @@ sparkCheckInstall <- function(sparkHome, master, deployMode) {
       message(msg)
       NULL
     } else {
-      if (isMasterLocal(master)) {
+      if (interactive() || isMasterLocal(master)) {
         msg <- paste0("Spark not found in SPARK_HOME: ", sparkHome)
         message(msg)
         packageLocalDir <- install.spark()

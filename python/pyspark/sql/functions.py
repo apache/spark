@@ -359,7 +359,7 @@ def grouping_id(*cols):
 
        (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
 
-    .. note:: the list of columns should match with grouping columns exactly, or empty (means all
+    .. note:: The list of columns should match with grouping columns exactly, or empty (means all
         the grouping columns).
 
     >>> df.cube("name").agg(grouping_id(), sum("age")).orderBy("name").show()
@@ -547,7 +547,7 @@ def shiftRightUnsigned(col, numBits):
 def spark_partition_id():
     """A column for partition ID.
 
-    Note that this is indeterministic because it depends on data partitioning and task scheduling.
+    .. note:: This is indeterministic because it depends on data partitioning and task scheduling.
 
     >>> df.repartition(1).select(spark_partition_id().alias("pid")).collect()
     [Row(pid=0), Row(pid=0)]
@@ -1852,9 +1852,10 @@ class UserDefinedFunction(object):
 @since(1.3)
 def udf(f, returnType=StringType()):
     """Creates a :class:`Column` expression representing a user defined function (UDF).
-    Note that the user-defined functions must be deterministic. Due to optimization,
-    duplicate invocations may be eliminated or the function may even be invoked more times than
-    it is present in the query.
+
+    .. note:: The user-defined functions must be deterministic. Due to optimization,
+        duplicate invocations may be eliminated or the function may even be invoked more times than
+        it is present in the query.
 
     :param f: python function
     :param returnType: a :class:`pyspark.sql.types.DataType` object

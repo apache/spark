@@ -88,7 +88,7 @@ object Statistics {
   def corr(x: RDD[Double], y: RDD[Double]): Double = Correlations.corr(x, y)
 
   /**
-   * Java-friendly version of [[corr()]]
+   * Java-friendly version of `corr()`
    */
   @Since("1.4.1")
   def corr(x: JavaRDD[java.lang.Double], y: JavaRDD[java.lang.Double]): Double =
@@ -112,7 +112,7 @@ object Statistics {
   def corr(x: RDD[Double], y: RDD[Double], method: String): Double = Correlations.corr(x, y, method)
 
   /**
-   * Java-friendly version of [[corr()]]
+   * Java-friendly version of `corr()`
    */
   @Since("1.4.1")
   def corr(x: JavaRDD[java.lang.Double], y: JavaRDD[java.lang.Double], method: String): Double =
@@ -176,7 +176,9 @@ object Statistics {
     ChiSqTest.chiSquaredFeatures(data)
   }
 
-  /** Java-friendly version of [[chiSqTest()]] */
+  /**
+   * Java-friendly version of `chiSqTest()`
+   */
   @Since("1.5.0")
   def chiSqTest(data: JavaRDD[LabeledPoint]): Array[ChiSqTestResult] = chiSqTest(data.rdd)
 
@@ -186,7 +188,8 @@ object Statistics {
    * distribution of the sample data and the theoretical distribution we can provide a test for the
    * the null hypothesis that the sample data comes from that theoretical distribution.
    * For more information on KS Test:
-   * @see [[https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test]]
+   * @see <a href="https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test">
+   * Kolmogorov-Smirnov test (Wikipedia)</a>
    *
    * @param data an `RDD[Double]` containing the sample of data to test
    * @param cdf a `Double => Double` function to calculate the theoretical CDF at a given value
@@ -217,7 +220,9 @@ object Statistics {
     KolmogorovSmirnovTest.testOneSample(data, distName, params: _*)
   }
 
-  /** Java-friendly version of [[kolmogorovSmirnovTest()]] */
+  /**
+   * Java-friendly version of `kolmogorovSmirnovTest()`
+   */
   @Since("1.5.0")
   @varargs
   def kolmogorovSmirnovTest(
