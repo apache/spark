@@ -410,7 +410,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
     testMode("Update", OutputMode.Update)
   }
 
-  test("unsupported strings in outputMode(string") {
+  test("unsupported strings in outputMode(string)") {
     def testMode(outputMode: String): Unit = {
       val acceptedModes = Seq("append", "update", "complete")
       val df = spark.readStream

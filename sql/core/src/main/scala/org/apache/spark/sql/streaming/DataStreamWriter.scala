@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, ForeachWriter}
-import org.apache.spark.sql.catalyst.InternalOutputModes._
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink}
 
@@ -221,12 +221,15 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       if (extraOptions.get("queryName").isEmpty) {
         throw new AnalysisException("queryName must be specified for memory sink")
       }
+      val supportedModes = "Output modes supported by the memory sink are 'append' and 'complete'."
       outputMode match {
         case Append | Complete => // allowed
         case Update =>
-          throw new AnalysisException("Update ouptut mode is not supported for memory format")
+          throw new AnalysisException(
+            s"Update output mode is not supported for memory sink. $supportedModes")
         case _ =>
-          throw new AnalysisException(s"$outputMode is not supported for memory format")
+          throw new AnalysisException(
+            s"$outputMode is not supported for memory sink. $supportedModes")
       }
       val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
