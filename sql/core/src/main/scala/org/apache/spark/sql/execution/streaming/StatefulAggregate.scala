@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.InternalOutputModes._
@@ -108,6 +108,30 @@ case class StateStoreSaveExec(
     "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
     "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"))
 
+  /** Generate a predicate that matches data older than the watermark */
+  private lazy val watermarkPredicate: Option[Predicate] = {
+    val optionalWatermarkAttribute =
+      keyExpressions.find(_.metadata.contains(EventTimeWatermark.delayKey))
+
+    optionalWatermarkAttribute.map { watermarkAttribute =>
+      // If we are evicting based on a window, use the end of the window.  Otherwise just
+      // use the attribute itself.
+      val evictionExpression =
+        if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
+          LessThanOrEqual(
+            GetStructField(watermarkAttribute, 1),
+            Literal(eventTimeWatermark.get * 1000))
+        } else {
+          LessThanOrEqual(
+            watermarkAttribute,
+            Literal(eventTimeWatermark.get * 1000))
+        }
+
+      logInfo(s"Filtering state store on: $evictionExpression")
+      newPredicate(evictionExpression, keyExpressions)
+    }
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
     assert(outputMode.nonEmpty,
@@ -151,26 +175,8 @@ case class StateStoreSaveExec(
               numUpdatedStateRows += 1
             }
 
-            // Note: Append mode can be done only when watermark has been specified
-            val watermarkAttribute =
-              keyExpressions.find(_.metadata.contains(EventTimeWatermark.delayKey)).get
-            // If we are evicting based on a window, use the end of the window.  Otherwise just
-            // use the attribute itself.
-            val evictionExpression =
-              if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
-                LessThanOrEqual(
-                  GetStructField(watermarkAttribute, 1),
-                  Literal(eventTimeWatermark.get * 1000))
-              } else {
-                LessThanOrEqual(
-                  watermarkAttribute,
-                  Literal(eventTimeWatermark.get * 1000))
-              }
-
-            logInfo(s"Filtering state store on: $evictionExpression")
-            val predicate = newPredicate(evictionExpression, keyExpressions)
-            store.remove(predicate.eval)
-
+            // Assumption: Append mode can be done only when watermark has been specified
+            store.remove(watermarkPredicate.get.eval)
             store.commit()
 
             numTotalStateRows += store.numKeys()
@@ -182,32 +188,10 @@ case class StateStoreSaveExec(
           // Update and output modified rows from the StateStore.
           case Some(Update) =>
 
-            // Note: Update mode can be done with or without a specified watermark
-            val optionalWatermarkAttribute =
-              keyExpressions.find(_.metadata.contains(EventTimeWatermark.delayKey))
-
-            val optionalPredicate = optionalWatermarkAttribute.map { watermarkAttribute =>
-              // If we are evicting based on a window, use the end of the window.  Otherwise just
-              // use the attribute itself.
-              val evictionExpression =
-              if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
-                LessThanOrEqual(
-                  GetStructField(watermarkAttribute, 1),
-                  Literal(eventTimeWatermark.get * 1000))
-              } else {
-                LessThanOrEqual(
-                  watermarkAttribute,
-                  Literal(eventTimeWatermark.get * 1000))
-              }
-
-              logInfo(s"Filtering state store on: $evictionExpression")
-              newPredicate(evictionExpression, keyExpressions)
-            }
-
             new Iterator[InternalRow] {
 
               // Filter late date using watermark if specified
-              private[this] val baseIterator = optionalPredicate match {
+              private[this] val baseIterator = watermarkPredicate match {
                 case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))
                 case None => iter
               }
@@ -215,7 +199,7 @@ case class StateStoreSaveExec(
               override def hasNext: Boolean = {
                 if (!baseIterator.hasNext) {
                   // Remove old aggregates if watermark specified
-                  if (optionalPredicate.nonEmpty) store.remove(optionalPredicate.get.eval)
+                  if (watermarkPredicate.nonEmpty) store.remove(watermarkPredicate.get.eval)
                   store.commit()
                   numTotalStateRows += store.numKeys()
                   false
