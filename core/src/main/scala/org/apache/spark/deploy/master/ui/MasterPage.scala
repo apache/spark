@@ -177,7 +177,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     <tr>
       <td>
         {
-          if (worker.state == WorkerState.DEAD) {
+          if (worker.state != WorkerState.ALIVE) {
             worker.id
           } else {
             <a href={UIUtils.makeHref(parent.master.reverseProxy,
