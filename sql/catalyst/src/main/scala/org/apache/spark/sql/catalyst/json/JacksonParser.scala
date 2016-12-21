@@ -50,7 +50,7 @@ class JacksonParser(
   private type ValueConverter = JsonParser => AnyRef
 
   // `ValueConverter`s for the root schema for all fields in the schema
-  private val rootConverter: ValueConverter = makeRootConverter(schema)
+  private val rootConverter = makeRootConverter(schema)
 
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
@@ -120,11 +120,11 @@ class JacksonParser(
    * to a value according to a desired schema. This is a wrapper for the method
    * `makeConverter()` to handle a row wrapped with an array.
    */
-  private def makeRootConverter(st: StructType): ValueConverter = {
+  private def makeRootConverter(st: StructType): JsonParser => Seq[InternalRow] = {
     val elementConverter = makeConverter(st)
     val fieldConverters = st.map(_.dataType).map(makeConverter)
-    (parser: JsonParser) => parseJsonToken[AnyRef](parser, st) {
-      case START_OBJECT => convertObject(parser, st, fieldConverters)
+    (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, st) {
+      case START_OBJECT => convertObject(parser, st, fieldConverters) :: Nil
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
         //
@@ -138,7 +138,15 @@ class JacksonParser(
         // List([str_a_1,null])
         // List([str_a_2,null], [null,str_b_3])
         //
-      case START_ARRAY => convertArray(parser, elementConverter)
+      case START_ARRAY =>
+        val array = convertArray(parser, elementConverter)
+        // Here, as we support reading top level JSON arrays and take every element
+        // in such an array as a row, this case is possible.
+        if (array.numElements() == 0) {
+          Nil
+        } else {
+          array.toArray[InternalRow](schema).toSeq
+        }
     }
   }
 
@@ -416,17 +424,8 @@ class JacksonParser(
         parser.nextToken() match {
           case null => Nil
           case _ => rootConverter.apply(parser) match {
-            case row: InternalRow => row :: Nil
-            case array: ArrayData =>
-              // Here, as we support reading top level JSON arrays and take every element
-              // in such an array as a row, this case is possible.
-              if (array.numElements() == 0) {
-                Nil
-              } else {
-                array.toArray[InternalRow](schema)
-              }
-            case _ =>
-              throw new SparkSQLJsonProcessingException("Root converter failed")
+            case null => throw new SparkSQLJsonProcessingException("Root converter returned null")
+            case rows => rows
           }
         }
       }
