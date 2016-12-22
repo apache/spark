@@ -29,6 +29,7 @@ import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat, CombineFil
 
 import org.apache.spark.internal.config
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.Since
 
 /**
  * A general format for reading whole files in as streams, byte arrays,
@@ -194,5 +195,8 @@ class PortableDataStream(
   }
 
   def getPath(): String = path
+
+  @Since("2.2.0")
+  def getConfiguration: Configuration = conf
 }
 

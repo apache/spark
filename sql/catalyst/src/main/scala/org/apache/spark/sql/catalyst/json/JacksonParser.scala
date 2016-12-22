@@ -39,7 +39,6 @@ private[sql] class SparkSQLJsonProcessingException(msg: String) extends RuntimeE
  */
 class JacksonParser(
     schema: StructType,
-    columnNameOfCorruptRecord: String,
     options: JSONOptions) extends Logging {
 
   import JacksonUtils._
@@ -57,6 +56,8 @@ class JacksonParser(
   options.setJacksonOptions(factory)
 
   private val emptyRow: Seq[InternalRow] = Seq(new GenericInternalRow(schema.length))
+
+  private val columnNameOfCorruptRecord = options.columnNameOfCorruptRecord
 
   @transient
   private[this] var isWarningPrintedForMalformedRecord: Boolean = false
@@ -394,17 +395,22 @@ class JacksonParser(
   }
 
   /**
-   * Parse the string JSON input to the set of [[InternalRow]]s.
+   * Parse the JSON input to the set of [[InternalRow]]s.
+   *
+   * @param recordIdentifier an optional string that will be used to generate
+   *   the corrupt column text instead of record.toString
    */
-  def parse(input: String): Seq[InternalRow] = {
-    if (input.trim.isEmpty) {
-      Nil
-    } else {
-      try {
-        Utils.tryWithResource(factory.createParser(input)) { parser =>
-          parser.nextToken()
-          rootConverter.apply(parser) match {
-            case null => failedRecord(input)
+  def parse[T](
+      record: T,
+      createParser: (JsonFactory, T) => JsonParser,
+      recordIdentifier: Option[String] = None): Seq[InternalRow] = {
+    try {
+      Utils.tryWithResource(createParser(factory, record)) { parser =>
+        // a null first token is equivalent to testing for input.trim.isEmpty
+        // but it works on any token stream and not just strings
+        parser.nextToken() match {
+          case null => Nil
+          case _ => rootConverter.apply(parser) match {
             case row: InternalRow => row :: Nil
             case array: ArrayData =>
               // Here, as we support reading top level JSON arrays and take every element
@@ -415,15 +421,13 @@ class JacksonParser(
                 array.toArray[InternalRow](schema)
               }
             case _ =>
-              failedRecord(input)
+              throw new SparkSQLJsonProcessingException("Root converter failed")
           }
         }
-      } catch {
-        case _: JsonProcessingException =>
-          failedRecord(input)
-        case _: SparkSQLJsonProcessingException =>
-          failedRecord(input)
       }
+    } catch {
+      case _: JsonProcessingException | _: SparkSQLJsonProcessingException =>
+        failedRecord(recordIdentifier.getOrElse(record.toString))
     }
   }
 }

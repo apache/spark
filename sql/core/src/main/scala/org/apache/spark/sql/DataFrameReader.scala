@@ -26,8 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -261,14 +260,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a JSON file (<a href="http://jsonlines.org/">JSON Lines text format or
-   * newline-delimited JSON</a>) and returns the result as a `DataFrame`.
+   * Loads a JSON file and returns the results as a `DataFrame`.
+   *
+   * Both JSON (one record per file) and <a href="http://jsonlines.org/">JSON Lines</a>
+   * (newline-delimited JSON) are supported and can be selected with the `wholeFile` option.
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
    *
    * You can set the following JSON-specific options to deal with non-standard JSON files:
    * <ul>
+   * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines,
+   * per file</li>
    * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
    * <li>`prefersDecimal` (default `false`): infers all floating-point values as a decimal
    * type. If the values do not fit in decimal, then it infers them as doubles.</li>
@@ -332,20 +335,21 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
-    val parsedOptions: JSONOptions =
-      new JSONOptions(extraOptions.toMap, sparkSession.sessionState.conf.sessionLocalTimeZone)
-    val columnNameOfCorruptRecord =
-      parsedOptions.columnNameOfCorruptRecord
-        .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    val parsedOptions = new JSONOptions(extraOptions.toMap,
+      sparkSession.sessionState.conf.sessionLocalTimeZone,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    val createParser = CreateJacksonParser.string _
+
     val schema = userSpecifiedSchema.getOrElse {
       JsonInferSchema.infer(
         jsonRDD,
-        columnNameOfCorruptRecord,
-        parsedOptions)
+        parsedOptions,
+        createParser)
     }
+
     val parsed = jsonRDD.mapPartitions { iter =>
-      val parser = new JacksonParser(schema, columnNameOfCorruptRecord, parsedOptions)
-      iter.flatMap(parser.parse)
+      val parser = new JacksonParser(schema, parsedOptions)
+      iter.flatMap(parser.parse(_, createParser))
     }
 
     Dataset.ofRows(

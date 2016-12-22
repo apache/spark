@@ -141,8 +141,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   }
 
   /**
-   * Loads a JSON file stream (<a href="http://jsonlines.org/">JSON Lines text format or
-   * newline-delimited JSON</a>) and returns the result as a `DataFrame`.
+   * Loads a JSON file stream and returns the results as a `DataFrame`.
+   *
+   * Both JSON (one record per file) and <a href="http://jsonlines.org/">JSON Lines</a>
+   * (newline-delimited JSON) are supported and can be selected with the `wholeFile` option.
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
@@ -151,6 +153,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
+   * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines,
+   * per file</li>
    * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
    * <li>`prefersDecimal` (default `false`): infers all floating-point values as a decimal
    * type. If the values do not fit in decimal, then it infers them as doubles.</li>

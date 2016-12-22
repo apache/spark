@@ -159,11 +159,12 @@ class DataFrameReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             timeZone=None):
+             timeZone=None, wholeFile=None):
         """
-        Loads a JSON file (`JSON Lines text format or newline-delimited JSON
-        <http://jsonlines.org/>`_) or an RDD of Strings storing JSON objects (one object per
-        record) and returns the result as a :class`DataFrame`.
+        Loads a JSON file and returns the results as a :class:`DataFrame`.
+
+        Both JSON (one record per file) and `JSON Lines <http://jsonlines.org/>`_
+        (newline-delimited JSON) are supported and can be selected with the `wholeFile` parameter.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
@@ -171,6 +172,8 @@ class DataFrameReader(OptionUtils):
         :param path: string represents path to the JSON dataset,
                      or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema.
+        :param wholeFile: parse one record, which may span multiple lines, per file. If None is
+                          set, it uses the default value, ``false``.
         :param primitivesAsString: infers all primitive values as a string type. If None is set,
                                    it uses the default value, ``false``.
         :param prefersDecimal: infers all floating-point values as a decimal type. If the values
@@ -228,7 +231,7 @@ class DataFrameReader(OptionUtils):
             allowSingleQuotes=allowSingleQuotes, allowNumericLeadingZero=allowNumericLeadingZero,
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
-            timestampFormat=timestampFormat, timeZone=timeZone)
+            timestampFormat=timestampFormat, timeZone=timeZone, wholeFile=wholeFile)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:

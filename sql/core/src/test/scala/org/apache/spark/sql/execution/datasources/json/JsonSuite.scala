@@ -28,8 +28,8 @@ import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkException
-import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
+import org.apache.spark.sql.{functions => F, _}
+import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.json.JsonInferSchema.compatibleType
@@ -64,7 +64,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       val dummyOption = new JSONOptions(Map.empty[String, String], "GMT")
       val dummySchema = StructType(Seq.empty)
-      val parser = new JacksonParser(dummySchema, "", dummyOption)
+      val parser = new JacksonParser(dummySchema, dummyOption)
 
       Utils.tryWithResource(factory.createParser(writer.toString)) { jsonParser =>
         jsonParser.nextToken()
@@ -1367,7 +1367,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
     // This is really a test that it doesn't throw an exception
     val emptySchema = JsonInferSchema.infer(
-      empty, "", new JSONOptions(Map.empty[String, String], "GMT"))
+      empty,
+      new JSONOptions(Map.empty[String, String], "GMT"),
+      CreateJacksonParser.string)
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1392,7 +1394,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-8093 Erase empty structs") {
     val emptySchema = JsonInferSchema.infer(
-      emptyRecords, "", new JSONOptions(Map.empty[String, String], "GMT"))
+      emptyRecords,
+      new JSONOptions(Map.empty[String, String], "GMT"),
+      CreateJacksonParser.string)
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1801,5 +1805,120 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(df1.schema == schema)
     val df2 = spark.read.option("PREfersdecimaL", "true").json(records)
     assert(df2.schema == schema)
+  }
+
+  test("SPARK-18352: Parse normal multi-line JSON files (compressed)") {
+    withTempDir { dir =>
+      dir.delete()
+      val path = dir.getCanonicalPath
+      primitiveFieldAndType
+        .toDF("value")
+        .write
+        .option("compression", "GzIp")
+        .text(path)
+
+      new File(path).listFiles() match {
+        case compressedFiles =>
+          assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+      }
+
+      val jsonDF = spark.read.option("wholeFile", true).json(path)
+      val jsonDir = new File(dir, "json").getCanonicalPath
+      jsonDF.coalesce(1).write
+        .format("json")
+        .option("compression", "gZiP")
+        .save(jsonDir)
+
+      new File(jsonDir).listFiles() match {
+        case compressedFiles =>
+          assert(compressedFiles.exists(_.getName.endsWith(".json.gz")))
+      }
+
+      val jsonCopy = spark.read
+        .format("json")
+        .load(jsonDir)
+
+      assert(jsonCopy.count === jsonDF.count)
+      val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
+      val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
+      checkAnswer(jsonCopySome, jsonDFSome)
+    }
+  }
+
+  test("SPARK-18352: Parse normal multi-line JSON files (uncompressed)") {
+    withTempDir { dir =>
+      dir.delete()
+      val path = dir.getCanonicalPath
+      primitiveFieldAndType
+        .toDF("value")
+        .write
+        .text(path)
+
+      val jsonDF = spark.read.option("wholeFile", true).json(path)
+      val jsonDir = new File(dir, "json").getCanonicalPath
+      jsonDF.coalesce(1).write
+        .format("json")
+        .save(jsonDir)
+
+      val compressedFiles = new File(jsonDir).listFiles()
+      assert(compressedFiles.exists(_.getName.endsWith(".json")))
+
+      val jsonCopy = spark.read
+        .format("json")
+        .load(jsonDir)
+
+      assert(jsonCopy.count === jsonDF.count)
+      val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
+      val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
+      checkAnswer(jsonCopySome, jsonDFSome)
+    }
+  }
+
+  test("SPARK-18352: Expect one JSON document per file") {
+    // the json parser terminates as soon as it sees a matching END_OBJECT or END_ARRAY token.
+    // this might not be the optimal behavior but this test verifies that only the first value
+    // is parsed and the rest are discarded.
+
+    // alternatively the parser could continue parsing following objects, which may further reduce
+    // allocations by skipping the line reader entirely
+
+    withTempDir { dir =>
+      dir.delete()
+      val path = dir.getCanonicalPath
+      primitiveFieldAndType
+        .flatMap(Iterator.fill(3)(_) ++ Iterator("\n{invalid}"))
+        .toDF("value")
+        .coalesce(1)
+        .write
+        .text(path)
+
+      val jsonDF = spark.read.option("wholeFile", true).json(path)
+      assert(jsonDF.count() === 1)
+    }
+  }
+
+  test("SPARK-18352: Handle corrupt documents") {
+    withTempDir { dir =>
+      dir.delete()
+      val path = dir.getCanonicalPath
+      val corruptRecordCount = additionalCorruptRecords.count().toInt
+      assert(corruptRecordCount === 5)
+
+      additionalCorruptRecords
+        .toDF("value")
+        .repartition(corruptRecordCount * 4)
+        .write
+        .text(path)
+
+      val jsonDF = spark.read.option("wholeFile", true).json(path)
+      assert(jsonDF.count() === corruptRecordCount)
+      assert(jsonDF.schema === new StructType()
+        .add("_corrupt_record", StringType)
+        .add("dummy", StringType))
+      val aggs = jsonDF.agg(
+        F.sum(F.when($"dummy".isNotNull, 1)).as("valid"),
+        F.sum(F.when($"_corrupt_record".startsWith("file:///"), 1)).as("corrupt"))
+      checkAnswer(aggs, Row(1, 4))
+    }
   }
 }
