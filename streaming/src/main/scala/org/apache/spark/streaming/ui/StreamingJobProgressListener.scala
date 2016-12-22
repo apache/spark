@@ -27,17 +27,17 @@ import org.apache.spark.scheduler._
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.scheduler._
 
-private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
+class StreamingJobProgressListener(ssc: StreamingContext)
   extends SparkListener with StreamingListener {
 
-  private val waitingBatchUIData = new HashMap[Time, BatchUIData]
-  private val runningBatchUIData = new HashMap[Time, BatchUIData]
-  private val completedBatchUIData = new Queue[BatchUIData]
+  val waitingBatchUIData = new HashMap[Time, BatchUIData]
+  val runningBatchUIData = new HashMap[Time, BatchUIData]
+  val completedBatchUIData = new Queue[BatchUIData]
   private val batchUIDataLimit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 1000)
   private var totalCompletedBatches = 0L
   private var totalReceivedRecords = 0L
   private var totalProcessedRecords = 0L
-  private val receiverInfos = new HashMap[Int, ReceiverInfo]
+  val receiverInfos = new HashMap[Int, ReceiverInfo]
 
   // Because onJobStart and onBatchXXX messages are processed in different threads,
   // we may not be able to get the corresponding BatchUIData when receiving onJobStart. So here we

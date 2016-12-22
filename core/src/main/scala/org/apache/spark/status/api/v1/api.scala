@@ -76,6 +76,28 @@ class ExecutorSummary private[spark](
     val maxMemory: Long,
     val executorLogs: Map[String, String])
 
+class StreamReceiverSummary private[spark] (
+    val streamId: Int,
+    val name: String,
+    val host: String,
+    val executorId: String)
+
+class StreamBatchInfoSummary private[spark] (
+    val name: String,
+    val batchTime: Long,
+    val submissionTime: Long,
+    val processingStartTime: Long,
+    val processingEndTime: Long,
+    val schedulingDelay: Long,
+    val processingDelay: Long,
+    val totalDelay: Long,
+    val numRecords: Long,
+    val numActiveOutputOp: Int,
+    val numFailedOutputOp: Int,
+    val numCompletedOutputOp: Int,
+    val isFailed: Boolean,
+    val streamIdToInputInfo: Map[Int, (Int, Long, Map[String, Any])])
+
 class JobData private[spark](
     val jobId: Int,
     val name: String,

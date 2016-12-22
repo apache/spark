@@ -60,6 +60,8 @@ private[spark] class SparkUI private (
 
   var appId: String = _
 
+  var streamingJobProgressListener: Option[SparkListener] = None
+
   /** Initialize all components of the server. */
   def initialize() {
     val jobsTab = new JobsTab(this)
@@ -120,6 +122,12 @@ private[spark] class SparkUI private (
       ))
     ))
   }
+
+  def setStreamingListener(streamingJobProgressListener: SparkListener): Unit = {
+    this.streamingJobProgressListener = Some(streamingJobProgressListener)
+  }
+
+  def getStreamingListener: Option[SparkListener] = streamingJobProgressListener
 
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
     getApplicationInfoList.find(_.id == appId)
