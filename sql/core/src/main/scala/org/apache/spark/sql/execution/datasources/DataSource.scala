@@ -278,7 +278,7 @@ case class DataSource(
           throw new IllegalArgumentException("'path' is not specified")
         })
         if (outputMode != OutputMode.Append) {
-          throw new IllegalArgumentException(
+          throw new AnalysisException(
             s"Data source $className does not support $outputMode output mode")
         }
         new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, caseInsensitiveOptions)
