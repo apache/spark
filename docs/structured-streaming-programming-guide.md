@@ -680,22 +680,25 @@ windowedCounts = words.groupBy(
 
 ### Handling Late Data and Watermarking
 Now consider what happens if one of the events arrives late to the application.
-For example, a word that was generated at 12:04 but it was received at 12:11. 
-Since this windowing is based on the time in the data, the time 12:04 should be considered for 
-windowing. This occurs naturally in our window-based grouping – the late data is 
-automatically placed in the proper windows and the correct aggregates are updated as illustrated below.
+For example, say, a word generated at 12:04 (i.e. event time) could be received received by 
+the application at 12:11. The application should use the time 12:04 instead of 12:11
+to update the older counts for the window `12:00 - 12:10`. This occurs 
+naturally in our window-based grouping – Structured Streaming can maintain the intermediate state 
+for partial aggregates for a long period of time such that late data can update aggregates of 
+old windows correctly, as illustrated below.
 
 ![Handling Late Data](img/structured-streaming-late-data.png)
 
 However, to run this query for days, its necessary for the system to bound the amount of 
 intermediate in-memory state it accumulates. This means the system needs to know when an old 
-aggregate can be dropped from the in-memory state because there isnt going to be any more 
-incoming late data for that aggregate. To enable this, in Spark 2.1, we have introduced 
-*watermarking*, which let's the engine automatically track the current event time in the data and
-and attempt to clean up intermediate state accordingly. You can define the watermark of a query by 
+aggregate can be dropped from the in-memory state because the application is not going to receive 
+late data for that aggregate any more. To enable this, in Spark 2.1, we have introduced 
+**watermarking**, which let's the engine automatically track the current event time in the data and
+and attempt to clean up old state accordingly. You can define the watermark of a query by 
 specifying the event time column and the threshold on how late the data is expected be in terms of 
-event time. The engine will maintain state for an aggregate of time T until (max event time seen 
-by the engine - late threshold > T). In other words, late data within the threshold will be aggregated, 
+event time. For a specific window starting at time `T`, the engine will maintain state and allow late
+data to be update the state until `(max event time seen by the engine - late threshold > T)`. 
+In other words, late data within the threshold will be aggregated, 
 but data later than the threshold will be dropped. Let's understand this with an example. We can 
 easily define watermarking on the previous example using `withWatermark()` as shown below.
 
@@ -757,24 +760,25 @@ Here is an illustration.
 
 ![Watermarking in Append Mode](img/structured-streaming-watermark.png)
 
-As shown in the illustration, the engine tracks the maximum event time seen in the data (blue line),
-and accordingly sets the watermark (red line) for the next trigger as 
-`max event time - late threshold`. So, when the engine observes the data `(12:14, dog)`, 
-it sets the watermark for the next interval. 
+As shown in the illustration, the maximum event time tracked by the engine is the 
+*blue dashed line*, and the watermark set as `(max event time - '10 mins')`
+at the beginning of every trigger is the red line  For example, when the engine observes the data 
+`(12:14, dog)`, it sets the watermark for the next trigger as `12:04`.
 For the window `12:00 - 12:10`, the partial counts are maintained as internal state while the system
-is waiting for late data. After the system finds data (i.e. (12:21, owl)) such that the 
+is waiting for late data. After the system finds data (i.e. `(12:21, owl)`) such that the 
 watermark exceeds 12:10, the partial count is finalized and appended to the table. This count will
 not change any further as all "too-late" data older than 12:10 will be ignored.  
 
 Note that in Append output mode, the system has to wait for "late threshold" time 
 before it can output the aggregation of a window. This may not be ideal if data can be very late, 
 (say 1 day) and you like to have partial counts without waiting for a day. In future, we will add
-Update output mode which would allows updated aggregates to be posted. 
+Update output mode which would allows every update to aggregates to be written to sink every trigger. 
 
+**Conditions for watermarking to clean aggregation state**
 It is important to note that the following conditions must be satisfied for the watermarking to 
-clean the data in aggregation queries (as of Spark 2.1, subject to change in the future).
+clean the state in aggregation queries *(as of Spark 2.1, subject to change in the future)*.
 
-- Output mode must be Append. Complete mode requires all aggregate data to be preserved, and hence 
+- **Output mode must be Append.** Complete mode requires all aggregate data to be preserved, and hence 
 cannot use watermarking to drop intermediate state. See the [Output Modes](#output-modes) section 
 for detailed explanation of the semantics of each output mode.
 
@@ -887,11 +891,12 @@ guarantees that each row will be output only once (assuming
 fault-tolerant sink). For example, queries with only `select`, 
 `where`, `map`, `flatMap`, `filter`, `join`, etc. will support Append mode.
 
-- **Complete mode** - The whole result table will be outputted to the sink.
+- **Complete mode** - The whole Result Table will be outputted to the sink after every trigger.
  This is supported for aggregation queries.
 
-- **Update mode** - (*not available in Spark 2.1*) Only the rows in the Result Table since the 
-last trigger will be outputted to the sink. More information to be added in future releases.
+- **Update mode** - (*not available in Spark 2.1*) Only the rows in the Result Table that were 
+updated since the last trigger will be outputted to the sink. 
+More information to be added in future releases.
 
 Different types of streaming queries support different output modes. 
 Here is the compatibility matrix.
@@ -904,7 +909,7 @@ Here is the compatibility matrix.
     <th>Notes</th>        
   </tr>
   <tr>
-    <td colspan="2">Queries without aggregation</td>
+    <td colspan="2" valign="middle"><br/>Queries without aggregation</td>
     <td>Append</td>
     <td>
         Complete mode note supported as it is infeasible to keep all data in the Result Table.
@@ -918,9 +923,9 @@ Here is the compatibility matrix.
         Append mode uses watermark to drop old aggregation state. But the output of a 
         windowed aggregation is delayed the late threshold specified in `withWatermark()` as by
         the modes semantics, rows can be added to the Result Table only once after they are 
-        finalized (i.e. after watermark is crossed). See [Late Data](#handling-late-data) section
-        for more detailed explanation.
-        </br></br>
+        finalized (i.e. after watermark is crossed). See 
+        <a href="#handling-late-data">Late Data</a> section for more details.
+        <br/><br/>
         Complete mode does drop not old aggregation state since by definition this mode
         preserves all data in the Result Table.
     </td>    
@@ -929,21 +934,25 @@ Here is the compatibility matrix.
     <td>Other aggregations</td>
     <td>Complete</td>
     <td>
-        Append mode not supported as aggregates can update thus violating the semantics of 
+        Append mode is not supported as aggregates can update thus violating the semantics of 
         this mode.
-        </br></br>
+        <br/><br/>
         Complete mode does drop not old aggregation state since by definition this mode
         preserves all data in the Result Table.
     </td>  
   </tr>
   <tr>
+    <td></td>
+    <td></td>
+    <td></td>
+    <td></td>
   </tr>
 </table>
 
 #### Output Sinks
 There are a few types of built-in output sinks.
 
-- **File sink** - Stores the output to a directory. As of Spark 2.0, this only supports Parquet file format, and Append output mode. 
+- **File sink** - Stores the output to a directory. 
 
 - **Foreach sink** - Runs arbitrary computation on the records in the output. See later in the section for more details.
 
@@ -962,7 +971,7 @@ Here is a table of all the sinks, and the corresponding settings.
     <th>Notes</th>
   </tr>
   <tr>
-    <td><b>File Sink</b><br/>(only parquet in Spark 2.0)</td>
+    <td><b>File Sink</b></td>
     <td>Append</td>
     <td><pre>writeStream<br/>  .format("parquet")<br/>  .start()</pre></td>
     <td>Yes</td>
@@ -988,7 +997,14 @@ Here is a table of all the sinks, and the corresponding settings.
     <td><pre>writeStream<br/>  .format("memory")<br/>  .queryName("table")<br/>  .start()</pre></td>
     <td>No</td>
     <td>Saves the output data as a table, for interactive querying. Table name is the query name.</td>
-  </tr> 
+  </tr>
+  <tr>
+    <td></td>
+    <td></td>
+    <td></td>
+    <td></td>
+    <td></td>
+  </tr>
 </table>
 
 Finally, you have to call `start()` to actually start the execution of the query. This returns a StreamingQuery object which is a handle to the continuously running execution. You can use this object to manage the query, which we will discuss in the next subsection. For now, let’s understand all this with a few examples.
@@ -1118,7 +1134,7 @@ spark.sql("select * from aggregates").show()   # interactively query in-memory t
 </div>
 
 #### Using Foreach
-The `foreach` operation allows arbitrary operations to be computed on the output data. As of Spark 2.0, this is available only for Scala and Java. To use this, you will have to implement the interface `ForeachWriter`
+The `foreach` operation allows arbitrary operations to be computed on the output data. As of Spark 2.1, this is available only for Scala and Java. To use this, you will have to implement the interface `ForeachWriter`
 ([Scala](api/scala/index.html#org.apache.spark.sql.ForeachWriter)/[Java](api/java/org/apache/spark/sql/ForeachWriter.html) docs),
 which has methods that get called whenever there is a sequence of rows generated as output after a trigger. Note the following important points.
 
@@ -1498,7 +1514,7 @@ Not available in Python.
 </div>
 
 ## Recovering from Failures with Checkpointing 
-In case of a failure or intentional shutdown, you can recover the previous progress and state of a previous query, and continue where it left off. This is done using checkpointing and write ahead logs. You can configure a query with a checkpoint location, and the query will save all the progress information (i.e. range of offsets processed in each trigger) and the running aggregates (e.g. word counts in the [quick example](#quick-example)) to the checkpoint location. As of Spark 2.0, this checkpoint location has to be a path in an HDFS compatible file system, and can be set as an option in the DataStreamWriter when [starting a query](#starting-streaming-queries). 
+In case of a failure or intentional shutdown, you can recover the previous progress and state of a previous query, and continue where it left off. This is done using checkpointing and write ahead logs. You can configure a query with a checkpoint location, and the query will save all the progress information (i.e. range of offsets processed in each trigger) and the running aggregates (e.g. word counts in the [quick example](#quick-example)) to the checkpoint location. This checkpoint location has to be a path in an HDFS compatible file system, and can be set as an option in the DataStreamWriter when [starting a query](#starting-streaming-queries). 
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
