@@ -2613,7 +2613,7 @@ test_that("randomSplit", {
   expect_true(all(sapply(abs(counts / num - weights / sum(weights)), function(e) { e < 0.05 })))
 })
 
-test_that("Setting and getting config on SparkSession", {
+test_that("Setting and getting config on SparkSession, sparkR.conf(), sparkR.uiWebUrl()", {
   # first, set it to a random but known value
   conf <- callJMethod(sparkSession, "conf")
   property <- paste0("spark.testing.", as.character(runif(1)))
@@ -2637,6 +2637,9 @@ test_that("Setting and getting config on SparkSession", {
   expect_equal(appNameValue, "sparkSession test")
   expect_equal(testValue, value)
   expect_error(sparkR.conf("completely.dummy"), "Config 'completely.dummy' is not set")
+
+  url <- sparkR.uiWebUrl()
+  expect_equal(substr(url, 1, 7), "http://")
 })
 
 test_that("enableHiveSupport on SparkSession", {
