@@ -153,8 +153,8 @@ case class BucketSpec(
  *
  * @param provider the name of the data source provider for this table, e.g. parquet, json, etc.
  *                 Can be None if this table is a View, should be "hive" for hive serde tables.
- * @param currentDatabase the name of the database we should use to resolve a view. Should be None
- *                        if this table is not a View.
+ * @param viewDefaultDatabase the name of the database we should use to resolve a view. Should be
+ *                            None if this table is not a View.
  * @param unsupportedFeatures is a list of string descriptions of features that are used by the
  *        underlying table but not supported by Spark SQL yet.
  * @param tracksPartitionsInCatalog whether this table's partition metadata is stored in the
@@ -176,7 +176,7 @@ case class CatalogTable(
     stats: Option[CatalogStatistics] = None,
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None,
-    currentDatabase: Option[String] = None,
+    viewDefaultDatabase: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
     tracksPartitionsInCatalog: Boolean = false) {
@@ -239,7 +239,7 @@ case class CatalogTable(
       ) ++ bucketStrings ++ Seq(
         viewOriginalText.map("Original View: " + _).getOrElse(""),
         viewText.map("View: " + _).getOrElse(""),
-        currentDatabase.map("Current Database: " + _).getOrElse(""),
+        viewDefaultDatabase.map("View Default Database: " + _).getOrElse(""),
         comment.map("Comment: " + _).getOrElse(""),
         if (properties.nonEmpty) s"Properties: $tableProperties" else "",
         if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",

@@ -557,7 +557,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           provider = Some("parquet"),
           viewOriginalText = Some("SELECT * FROM jt"),
           viewText = Some("SELECT * FROM jt"),
-          currentDatabase = Some("default"))
+          viewDefaultDatabase = Some("default"))
         val view2 = CatalogTable(
           identifier = TableIdentifier("view2", Some(db)),
           tableType = CatalogTableType.VIEW,
@@ -566,7 +566,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           provider = Some("parquet"),
           viewOriginalText = Some("SELECT * FROM view1"),
           viewText = Some("SELECT * FROM view1"),
-          currentDatabase = Some(db))
+          viewDefaultDatabase = Some(db))
         activateDatabase(db) {
           hiveContext.sessionState.catalog.createTable(view1, ignoreIfExists = false)
           hiveContext.sessionState.catalog.createTable(view2, ignoreIfExists = false)

@@ -518,24 +518,27 @@ class Analyzer(
     }
 
     // If the unresolved relation is running directly on files, we just return the original
-    // UnresolvedRelation, the plan will get resolved later. Else we lookup the table from catalog
-    // and change the current database name if it is a view.
+    // UnresolvedRelation, the plan will get resolved later. Else we look up the table from catalog
+    // and change the default database name if it is a view.
+    //
+    // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
+    // have empty defaultDatabase and all the relations in viewText have database part defined.
     def resolveRelation(
         plan: LogicalPlan,
-        currentDatabase: Option[String] = None): LogicalPlan = plan match {
+        defaultDatabase: Option[String] = None): LogicalPlan = plan match {
       case u @ UnresolvedRelation(table: TableIdentifier, _) if isRunningDirectlyOnFiles(table) =>
         u
       case u: UnresolvedRelation =>
-        resolveView(lookupTableFromCatalog(u, currentDatabase))
+        resolveView(lookupTableFromCatalog(u, defaultDatabase))
     }
 
-    // Lookup the table with the given name from catalog. If `currentDatabase` is set, we lookup
-    // the table in the database `currentDatabase`, else we follow the default way.
+    // Look up the table with the given name from catalog. If `defaultDatabase` is set, we look up
+    // the table in the database `defaultDatabase`, else we follow the default way.
     private def lookupTableFromCatalog(
         u: UnresolvedRelation,
-        currentDatabase: Option[String] = None): LogicalPlan = {
+        defaultDatabase: Option[String] = None): LogicalPlan = {
       try {
-        catalog.lookupRelation(u.tableIdentifier, u.alias, currentDatabase)
+        catalog.lookupRelation(u.tableIdentifier, u.alias, defaultDatabase)
       } catch {
         case _: NoSuchTableException =>
           u.failAnalysis(s"Table or view not found: ${u.tableName}")
@@ -553,16 +556,16 @@ class Analyzer(
         (!catalog.databaseExists(table.database.get) || !catalog.tableExists(table))
     }
 
-    // Change the current database name if the plan is a view, and transformDown with the new
+    // Change the default database name if the plan is a view, and transformDown with the new
     // database name to resolve all UnresolvedRelation.
     def resolveView(plan: LogicalPlan): LogicalPlan = plan match {
       case p @ SubqueryAlias(_, view: View, _) =>
-        val currentDatabase = view.currentDatabase
+        val defaultDatabase = view.defaultDatabase
         val newChild = view transform {
           case v: View if !v.resolved =>
             resolveView(v)
           case u: UnresolvedRelation =>
-            resolveRelation(u, currentDatabase)
+            resolveRelation(u, defaultDatabase)
         }
         p.copy(child = newChild)
       case _ => plan

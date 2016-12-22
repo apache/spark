@@ -138,7 +138,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
       val child = View(
         child = sparkSession.sessionState.sqlParser.parsePlan(viewText),
-        currentDatabase = table.currentDatabase)
+        defaultDatabase = table.viewDefaultDatabase)
       SubqueryAlias(alias.getOrElse(table.identifier.table), child, Option(table.identifier))
     } else {
       val qualifiedTable =

@@ -475,7 +475,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(sessionCatalog.lookupRelation(TableIdentifier("view1", Some("db3")))
       == SubqueryAlias("view1", view, Some(TableIdentifier("view1", Some("db3")))))
     // Lookup view when currentDatabase is defined.
-    assert(sessionCatalog.lookupRelation(TableIdentifier("view1"), currentDatabase = Some("db3"))
+    assert(sessionCatalog.lookupRelation(TableIdentifier("view1"), defaultDatabase = Some("db3"))
       == SubqueryAlias("view1", view, Some(TableIdentifier("view1"))))
   }
 

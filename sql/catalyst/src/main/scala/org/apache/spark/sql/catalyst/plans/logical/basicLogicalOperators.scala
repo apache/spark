@@ -388,15 +388,17 @@ case class InsertIntoTable(
 }
 
 /**
- * A container for holding the current database of a view and a query plan.
+ * A container for holding the default database of a view and a query plan.
  * This operator will be removed at the begining of the optimize stage so we can see what is part
  * of a view in a analyzed plan.
  *
  * @param child The logical plan of this view.
- * @param currentDatabase The database name we use to resolve the logical plan.
+ * @param defaultDatabase The default database name we use to resolve the logical plan, it's
+ *                        usually the current database when the view is defined. If a view is
+ *                        created by older versions of SPARK(before 2.2), its `defaultDatabase`
+ *                        param will be None.
  */
-case class View(child: LogicalPlan, currentDatabase: Option[String]) extends LogicalPlan {
-
+case class View(child: LogicalPlan, defaultDatabase: Option[String]) extends LogicalPlan {
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = child.output
 }
