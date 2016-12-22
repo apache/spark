@@ -462,7 +462,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
   test("SPARK-18342: commit fails when rename fails") {
     import RenameReturnsFalseFileSystem._
-    val dir = scheme + "://" + Utils.createDirectory(tempDir, Random.nextString(5)).toString
+    val dir = scheme + "://" + Utils.createDirectory(tempDir, Random.nextString(5)).toURI.getPath
     val conf = new Configuration()
     conf.set(s"fs.$scheme.impl", classOf[RenameReturnsFalseFileSystem].getName)
     val provider = newStoreProvider(dir = dir, hadoopConf = conf)
