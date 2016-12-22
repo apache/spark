@@ -34,14 +34,6 @@
     <sbt.project.name>tags</sbt.project.name>
   </properties>
 
-  <dependencies>
-    <dependency>
-      <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <scope>compile</scope>
-    </dependency>
-  </dependencies>
-
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
