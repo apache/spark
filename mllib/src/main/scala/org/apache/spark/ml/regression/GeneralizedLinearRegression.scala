@@ -508,10 +508,11 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         (y * yp(y1, mu, 1.0 - variancePower) - yp(y, mu, 2.0 - variancePower))
     }
 
-    override def aic(predictions: RDD[(Double, Double, Double)],
-                     deviance: Double,
-                     numInstances: Double,
-                     weightSum: Double): Double = {
+    override def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double = {
       /*
        This depends on the density of the Tweedie distribution.
        Only implemented for Gaussian, Poisson and Gamma at this point.
@@ -540,10 +541,11 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     override val defaultLink: Link = Identity
 
-    override def aic(predictions: RDD[(Double, Double, Double)],
-                     deviance: Double,
-                     numInstances: Double,
-                     weightSum: Double): Double = {
+    override def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double = {
       val wt = predictions.map(x => math.log(x._3)).sum()
       numInstances * (math.log(deviance / numInstances * 2.0 * math.Pi) + 1.0) + 2.0 - wt
     }
@@ -621,10 +623,11 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     override val defaultLink: Link = Log
 
-    override def aic(predictions: RDD[(Double, Double, Double)],
-                     deviance: Double,
-                     numInstances: Double,
-                     weightSum: Double): Double = {
+    override def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double = {
       -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
         weight * dist.Poisson(mu).logProbabilityOf(y.toInt)
       }.sum()
@@ -641,10 +644,11 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     override val defaultLink: Link = Inverse
 
-    override def aic(predictions: RDD[(Double, Double, Double)],
-                     deviance: Double,
-                     numInstances: Double,
-                     weightSum: Double): Double = {
+    override def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double = {
       val disp = deviance / weightSum
       -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
         weight * dist.Gamma(1.0 / disp, mu * disp).logPdf(y)
