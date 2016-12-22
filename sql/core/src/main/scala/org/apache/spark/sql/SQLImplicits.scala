@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
  * @since 1.6.0
  */
 @InterfaceStability.Evolving
-abstract class SQLImplicits {
+abstract class SQLImplicits extends LowPrioritySQLImplicits {
 
   protected def _sqlContext: SQLContext
 
@@ -44,9 +44,6 @@ abstract class SQLImplicits {
       new ColumnName(sc.s(args: _*))
     }
   }
-
-  /** @since 1.6.0 */
-  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = Encoders.product[T]
 
   // Primitives
 
@@ -127,46 +124,6 @@ abstract class SQLImplicits {
   implicit def newProductSeqEncoder[A <: Product : TypeTag, T <: Seq[A] : TypeTag]: Encoder[T] =
     ExpressionEncoder()
 
-  // Seqs with product (List) disambiguation
-
-  /** @since 2.2.0 */
-  implicit def newIntSeqWithProductEncoder[T <: Seq[Int] with Product : TypeTag]: Encoder[T] =
-    newIntSeqEncoder
-
-  /** @since 2.2.0 */
-  implicit def newLongSeqWithProductEncoder[T <: Seq[Long] with Product : TypeTag]: Encoder[T] =
-    newLongSeqEncoder
-
-  /** @since 2.2.0 */
-  implicit def newDoubleSeqWithProductEncoder[T <: Seq[Double] with Product : TypeTag]: Encoder[T] =
-    newDoubleSeqEncoder
-
-  /** @since 2.2.0 */
-  implicit def newFloatSeqWithProductEncoder[T <: Seq[Float] with Product : TypeTag]: Encoder[T] =
-    newFloatSeqEncoder
-
-  /** @since 2.2.0 */
-  implicit def newByteSeqWithProductEncoder[T <: Seq[Byte] with Product : TypeTag]: Encoder[T] =
-    newByteSeqEncoder
-
-  /** @since 2.2.0 */
-  implicit def newShortSeqWithProductEncoder[T <: Seq[Short] with Product : TypeTag]: Encoder[T] =
-    newShortSeqEncoder
-
-  /** @since 2.2.0 */
-  implicit def newBooleanSeqWithProductEncoder[T <: Seq[Boolean] with Product : TypeTag]
-  : Encoder[T] =
-    newBooleanSeqEncoder
-
-  /** @since 2.2.0 */
-  implicit def newStringSeqWithProductEncoder[T <: Seq[String] with Product : TypeTag]: Encoder[T] =
-    newStringSeqEncoder
-
-  /** @since 2.2.0 */
-  implicit def newProductSeqWithProductEncoder
-  [A <: Product : TypeTag, T <: Seq[A] with Product : TypeTag]: Encoder[T] =
-    newProductSeqEncoder[A, T]
-
   // Workaround for implicit resolution problem for Seq.toDS (only supports Seq)
   implicit def newProductSeqOnlyEncoder[A <: Product : TypeTag]: Encoder[Seq[A]] =
     newProductSeqEncoder[A, Seq[A]]
@@ -223,5 +180,18 @@ abstract class SQLImplicits {
    * @since 1.3.0
    */
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
+
+}
+
+/**
+ * Lower priority implicit methods for converting Scala objects into [[Dataset]]s.
+ * Conflicting implicits are placed here to disambiguate resolution.
+ *
+ * Reasons for including specific implicits:
+ * newProductEncoder - to disambiguate for [[List]]s which are both [[Seq]] and [[Product]]
+ */
+trait LowPrioritySQLImplicits {
+  /** @since 1.6.0 */
+  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = Encoders.product[T]
 
 }
