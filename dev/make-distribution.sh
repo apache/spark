@@ -102,6 +102,13 @@ if [ -z "$JAVA_HOME" ]; then
       echo "No JAVA_HOME set, proceeding with '$JAVA_HOME' learned from rpm"
     fi
   fi
+
+  if [ -z "$JAVA_HOME" ]; then
+    if [ `command -v java` ]; then
+      # If java is in /usr/bin/java, we want /usr
+      JAVA_HOME="$(dirname $(dirname $(which java)))"
+    fi
+  fi
 fi
 
 if [ -z "$JAVA_HOME" ]; then
