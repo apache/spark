@@ -16,16 +16,16 @@
  */
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
+import org.apache.spark.sql.catalyst.{InternalRow, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{If, Literal}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectSet, Count}
+import org.apache.spark.sql.catalyst.expressions.{Expression, If, Literal}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectSet, Count, ImperativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 
 class RewriteDistinctAggregatesSuite extends PlanTest {
   val conf = SimpleCatalystConf(caseSensitiveAnalysis = false, groupByOrdinal = false)
@@ -63,7 +63,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     val input = testRelation
       .groupBy('a, 'd)(
         countDistinct('e, 'c).as('agg1),
-        CollectSet('b).toAggregateExpression().as('agg2))
+        DummpAgg('b).toAggregateExpression().as('agg2))
       .analyze
     checkRewrite(RewriteDistinctAggregates(input))
   }
@@ -91,4 +91,44 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
       .analyze
     checkRewrite(RewriteDistinctAggregates(input))
   }
+}
+
+// A dummy aggregate function for testing
+case class DummpAgg(
+    child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends TypedImperativeAggregate[Int] {
+
+  def this(child: Expression) = this(child, 0, 0)
+
+  override def children: Seq[Expression] = child :: Nil
+
+  override def dataType: DataType = IntegerType
+
+  override def nullable: Boolean = false
+
+  override val supportsPartial: Boolean = false
+
+  override def createAggregationBuffer(): Int = 0
+
+  override def update(buffer: Int, input: InternalRow): Unit = {
+  }
+
+  override def merge(buffer: Int, input: Int): Unit = {
+  }
+
+  override def eval(buffer: Int): Any = 0
+
+  override def serialize(buffer: Int): Array[Byte] = null
+
+  override def deserialize(storageFormat: Array[Byte]): Int = 0
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override val prettyName: String = "dummy_agg"
 }
