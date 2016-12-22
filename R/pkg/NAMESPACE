@@ -16,6 +16,7 @@ export("sparkR.stop")
 export("sparkR.session.stop")
 export("sparkR.conf")
 export("sparkR.version")
+export("sparkR.uiWebUrl")
 export("print.jobj")
 
 export("sparkR.newJObject")
