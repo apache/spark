@@ -142,7 +142,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       StartStream(),
       AssertOnQuery(_.isActive === true),
       AddData(inputData, 0),
-      ExpectFailure[SparkException],
+      ExpectFailure[SparkException](),
       AssertOnQuery(_.isActive === false),
       TestAwaitTermination(ExpectException[SparkException]),
       TestAwaitTermination(ExpectException[SparkException], timeoutMs = 2000),
@@ -306,7 +306,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       StartStream(ProcessingTime(100), triggerClock = clock),
       AddData(inputData, 0),
       AdvanceManualClock(100),
-      ExpectFailure[SparkException],
+      ExpectFailure[SparkException](),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message.startsWith("Terminated with exception"))

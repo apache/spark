@@ -111,7 +111,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         StartStream(ProcessingTime(100), triggerClock = clock),
         AddData(inputData, 0),
         AdvanceManualClock(100),
-        ExpectFailure[SparkException],
+        ExpectFailure[SparkException](),
         AssertOnQuery { query =>
           eventually(Timeout(streamingTimeout)) {
             assert(listener.terminationEvent !== null)

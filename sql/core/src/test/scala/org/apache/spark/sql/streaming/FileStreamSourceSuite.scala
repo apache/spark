@@ -815,21 +815,31 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   test("max files per trigger - incorrect values") {
-    withTempDir { case src =>
-      def testMaxFilePerTriggerValue(value: String): Unit = {
-        val df = spark.readStream.option("maxFilesPerTrigger", value).text(src.getCanonicalPath)
-        val e = intercept[IllegalArgumentException] {
-          testStream(df)()
+    val testTable = "maxFilesPerTrigger_test"
+    withTable(testTable) {
+      withTempDir { case src =>
+        def testMaxFilePerTriggerValue(value: String): Unit = {
+          val df = spark.readStream.option("maxFilesPerTrigger", value).text(src.getCanonicalPath)
+          val e = intercept[StreamingQueryException] {
+            // Note: `maxFilesPerTrigger` is checked in the stream thread when creating the source
+            val q = df.writeStream.format("memory").queryName(testTable).start()
+            try {
+              q.processAllAvailable()
+            } finally {
+              q.stop()
+            }
+          }
+          assert(e.getCause.isInstanceOf[IllegalArgumentException])
+          Seq("maxFilesPerTrigger", value, "positive integer").foreach { s =>
+            assert(e.getMessage.contains(s))
+          }
         }
-        Seq("maxFilesPerTrigger", value, "positive integer").foreach { s =>
-          assert(e.getMessage.contains(s))
-        }
-      }
 
-      testMaxFilePerTriggerValue("not-a-integer")
-      testMaxFilePerTriggerValue("-1")
-      testMaxFilePerTriggerValue("0")
-      testMaxFilePerTriggerValue("10.1")
+        testMaxFilePerTriggerValue("not-a-integer")
+        testMaxFilePerTriggerValue("-1")
+        testMaxFilePerTriggerValue("0")
+        testMaxFilePerTriggerValue("10.1")
+      }
     }
   }
 
@@ -1202,7 +1212,8 @@ class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
   }
 }
 
-/** Fake FileSystem to test whether the method `fs.exists` is called during
+/**
+ * Fake FileSystem to test whether the method `fs.exists` is called during
  * `DataSource.resolveRelation`.
  */
 class ExistsThrowsExceptionFileSystem extends RawLocalFileSystem {
