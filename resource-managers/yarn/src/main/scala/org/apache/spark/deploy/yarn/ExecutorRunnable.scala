@@ -206,7 +206,13 @@ private[yarn] class ExecutorRunnable(
     }.toSeq
 
     YarnSparkHadoopUtil.addOutOfMemoryErrorArgument(javaOpts)
+
+    // Add support for extra executor launch prefix.
+    val executorLaunchPrefix = (if (sys.env.contains("SPARK_EXECUTOR_LAUNCH_PREFIX"))
+      sys.env("SPARK_EXECUTOR_LAUNCH_PREFIX") else "");
+
     val commands = prefixEnv ++ Seq(
+      executorLaunchPrefix,
       YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java",
       "-server") ++
       javaOpts ++

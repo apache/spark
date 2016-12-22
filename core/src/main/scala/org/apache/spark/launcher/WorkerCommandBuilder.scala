@@ -41,6 +41,10 @@ private[spark] class WorkerCommandBuilder(sparkHome: String, memoryMb: Int, comm
     command.javaOpts.foreach(cmd.add)
     CommandBuilderUtils.addPermGenSizeOpt(cmd)
     addOptionString(cmd, getenv("SPARK_JAVA_OPTS"))
+
+    val prefix = getenv("SPARK_EXECUTOR_LAUNCH_PREFIX")
+    if (prefix != null)
+      cmd.add(0, prefix)
     cmd
   }
 
