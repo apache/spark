@@ -138,6 +138,7 @@ private[spark] abstract class WebUI(
     try {
       val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
       serverInfo = Some(startJettyServer(host, port, sslOptions, handlers, conf, name))
+      updateUIPort(boundPort)
       logInfo(s"Bound $className to $host, and started at $webUrl")
     } catch {
       case e: Exception =>
@@ -158,6 +159,8 @@ private[spark] abstract class WebUI(
       s"Attempted to stop $className before binding to a server!")
     serverInfo.get.stop()
   }
+
+  protected def updateUIPort(boundPort: Int): Unit = {}
 }
 
 

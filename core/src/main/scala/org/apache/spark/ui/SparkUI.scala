@@ -124,6 +124,15 @@ private[spark] class SparkUI private (
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
     getApplicationInfoList.find(_.id == appId)
   }
+
+  override def updateUIPort(port: Int): Unit = {
+    if (sc.isDefined) {
+      val sparkContext = sc.get
+      val sparkConf = sparkContext.conf
+      sparkConf.set(SparkUI.SPARK_UI_PORT, port.toString)
+      sparkContext.postEnvironmentUpdate()
+    }
+  }
 }
 
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
@@ -139,9 +148,10 @@ private[spark] object SparkUI {
   val DEFAULT_POOL_NAME = "default"
   val DEFAULT_RETAINED_STAGES = 1000
   val DEFAULT_RETAINED_JOBS = 1000
+  val SPARK_UI_PORT = "spark.ui.port"
 
   def getUIPort(conf: SparkConf): Int = {
-    conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
+    conf.getInt(SparkUI.SPARK_UI_PORT, SparkUI.DEFAULT_PORT)
   }
 
   def createLiveUI(
