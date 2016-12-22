@@ -10,7 +10,7 @@ title: Structured Streaming Programming Guide
 # Overview
 Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. You can express your streaming computation the same way you would express a batch computation on static data.The Spark SQL engine will take care of running it incrementally and continuously and updating the final result as streaming data continues to arrive. You can use the [Dataset/DataFrame API](sql-programming-guide.html) in Scala, Java or Python to express streaming aggregations, event-time windows, stream-to-batch joins, etc. The computation is executed on the same optimized Spark SQL engine. Finally, the system ensures end-to-end exactly-once fault-tolerance guarantees through checkpointing and Write Ahead Logs. In short, *Structured Streaming provides fast, scalable, fault-tolerant, end-to-end exactly-once stream processing without the user having to reason about streaming.*
 
-**Spark 2.0 is the ALPHA RELEASE of Structured Streaming** and the APIs are still experimental. In this guide, we are going to walk you through the programming model and the APIs. First, let's start with a simple example - a streaming word count. 
+**Structured Streaming is still ALPHA in Spark 2.1** and the APIs are still experimental. In this guide, we are going to walk you through the programming model and the APIs. First, let's start with a simple example - a streaming word count. 
 
 # Quick Example
 Let’s say you want to maintain a running word count of text data received from a data server listening on a TCP socket. Let’s see how you can express this using Structured Streaming. You can see the full code in 
@@ -687,12 +687,17 @@ automatically placed in the proper windows and the correct aggregates are update
 
 ![Handling Late Data](img/structured-streaming-late-data.png)
 
-Furthermore, since Spark 2.1, you can define a watermark on the event time, and specify the threshold 
-on how late the date can be in terms of the event time. The engine will automatically track the 
-event time and drop any state that is related to old windows that are not expected to receive older 
-than (max event time seen - late threshold). This allows the engine to bound the size of the state 
-that is needed for calculating windowed aggregates. For example, we can apply watermarking to the 
-previous example as follows.
+However, to run this query for days, its necessary for the system to bound the amount of 
+intermediate in-memory state it accumulates. This means the system needs to know when an old 
+aggregate can be dropped from the in-memory state because there isnt going to be any more 
+incoming late data for that aggregate. To enable this, in Spark 2.1, we have introduced 
+*watermarking*, which let's the engine automatically track the current event time in the data and
+and attempt to clean up intermediate state accordingly. You can define the watermark of a query by 
+specifying the event time column and the threshold on how late the data is expected be in terms of 
+event time. The engine will maintain state for an aggregate of time T until (max event time seen 
+by the engine - late threshold > T). In other words, late data within the threshold will be aggregated, 
+but data later than the threshold will be dropped. Let's understand this with an example. We can 
+easily define watermarking on the previous example using `withWatermark()` as shown below.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
@@ -883,9 +888,7 @@ fault-tolerant sink). For example, queries with only `select`,
 `where`, `map`, `flatMap`, `filter`, `join`, etc. will support Append mode.
 
 - **Complete mode** - The whole result table will be outputted to the sink.
- This is supported for only those queries where the engine can maintain
- enough intermediate state that all the rows in Result Table is 
- returned every time.
+ This is supported for aggregation queries.
 
 - **Update mode** - (*not available in Spark 2.1*) Only the rows in the Result Table since the 
 last trigger will be outputted to the sink. More information to be added in future releases.
@@ -897,36 +900,40 @@ Here is the compatibility matrix.
   <tr>
     <th>Query Type</th>
     <th></th>
-    <th>Append Mode</th>
-    <th>Complete Mode</th>        
+    <th>Supported Output Modes</th>
+    <th>Notes</th>        
   </tr>
   <tr>
     <td colspan="2">Queries without aggregation</td>
-    <td>Supported</td>
-    <td>Not supported<br/><br/><i>infeasible to keep all data in memory</i></td>
+    <td>Append</td>
+    <td>
+        Complete mode note supported as it is infeasible to keep all data in the Result Table.
+    </td>
   </tr>
   <tr>
     <td rowspan="2">Queries with aggregation</td>
     <td>Aggregation on event-time with watermark</td>
+    <td>Append, Complete</td>
     <td>
-        Supported<br/><br/>
-        <i>Rows are finalized and outputted only after watermark has 
-        crossed. Hence, output of a window is delayed by the threshold 
-        specified in `withWatermark()`</i>
-    </td>
-    <td>Not supported<br/><br/><i>Aggregates are removed with watermark, 
-    violates Complete mode semantics.</i></td>
+        Append mode uses watermark to drop old aggregation state. But the output of a 
+        windowed aggregation is delayed the late threshold specified in `withWatermark()` as by
+        the modes semantics, rows can be added to the Result Table only once after they are 
+        finalized (i.e. after watermark is crossed). See [Late Data](#handling-late-data) section
+        for more detailed explanation.
+        </br></br>
+        Complete mode does drop not old aggregation state since by definition this mode
+        preserves all data in the Result Table.
+    </td>    
   </tr>
   <tr>
     <td>Other aggregations</td>
+    <td>Complete</td>
     <td>
-        Not supported<br/><br/>
-        <i>Aggregates subject to change as new data arrives, violates 
-        Append mode semantics</i>
-    </td>
-    <td>
-        Supported<br/><br/>
-        <i>State unbounded, depends on cardinality of grouping columns.</i>
+        Append mode not supported as aggregates can update thus violating the semantics of 
+        this mode.
+        </br></br>
+        Complete mode does drop not old aggregation state since by definition this mode
+        preserves all data in the Result Table.
     </td>  
   </tr>
   <tr>
