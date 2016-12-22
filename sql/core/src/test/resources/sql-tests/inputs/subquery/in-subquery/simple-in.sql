@@ -73,13 +73,13 @@ select t1a, t1b from t1 where t1c in (select t2b from t2 where t2a in
 -- simple select for NOT IN
 -- TC 01.07
 select distinct(t1a), t1b, t1h from t1 where t1a not in (select t2a from t2);
--- TC 01.08
-select t1d, t1h, t1i from t1 where t1d not in (select t2d from t2 where t2h > t1h or t2i > t1i);
+-- TC 01.08, comment out pending on SPARK-18966
+--select t1d, t1h, t1i from t1 where t1d not in (select t2d from t2 where t2h > t1h or t2i > t1i);
 -- TC 01.09
 select distinct(t1a), t1b from t1 where t1b not in (select t2b from t2 where t1a < t2a and t2b > 8);
--- TC 01.10
-select t1a, t1b from t1 where t1c not in (select t2b from t2 where t2a not in
-                      (select t3a from t3 where t2c = t3c and t2b is NULL));
+-- TC 01.10, comment out pending on SPARK-18966
+--select t1a, t1b from t1 where t1c not in (select t2b from t2 where t2a not in
+--                      (select t3a from t3 where t2c = t3c and t2b is NULL));
 -- TC 01.11
 select t1a, t1b from t1 where t1h not in (select t2h from t2 where t2a = t1a) and t1b not in (
                       (select min(t3b) from t3 where t3d = t1d));

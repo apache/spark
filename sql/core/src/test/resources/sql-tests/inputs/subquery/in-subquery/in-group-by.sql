@@ -84,14 +84,14 @@ select count(distinct(*)) from t1 where t1b in (select min(t2b) from t2 where t1
 select t1a, t1b from t1 where t1c in (select max(t2c) from t2 where t1a = t2a group by t2a, t2c having t2c > 8);
 -- TC 01.11
 select t1a, t1b from t1 where t1c in (select t2c from t2 where t2a in
-( select min(t3a) from t3 where t3a = t2a group by t3b) group by t2c);
--- TC 01.12
-select * from t1 where t1a in
-(select min(t2a) from t2 where t2a = t2a and t2c >= 1 group by t2c having t2c in
-(select t3c from t3 group by t3c, t3b having t2b > 6 and t3b > t2b ));
--- TC 01.13
-select * from (select * from t2 where t2a in (select t1a from t1 where t1b = t2b)) t2 where t2a in
-(select t2a from t2 where t2a = t2a and t2c > 1 group by t2a having t2c > 8);
+(select min(t3a) from t3 where t3a = t2a group by t3b) group by t2c);
+-- TC 01.12, comment out pending SPARK-18863
+--select * from t1 where t1a in
+--(select min(t2a) from t2 where t2a = t2a and t2c >= 1 group by t2c having t2c in
+--(select t3c from t3 group by t3c, t3b having t2b > 6 and t3b > t2b ));
+-- TC 01.13, comment out pending SPARK-18863
+--select * from (select * from t2 where t2a in (select t1a from t1 where t1b = t2b)) t2 where t2a in
+--(select t2a from t2 where t2a = t2a and t2c > 1 group by t2a having t2c > 8);
 
 -- GROUP BY in both
 -- TC 01.14
