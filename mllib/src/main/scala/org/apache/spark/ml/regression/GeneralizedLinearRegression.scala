@@ -402,9 +402,10 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
   /**
    * A description of the error distribution to be used in the model.
    *
-   * @param name the name of the family.
    */
-  private[regression] abstract class Family(val name: String) extends Serializable {
+  private[regression] abstract class Family extends Serializable {
+    /** The name of the family. */
+    val name: String
 
     /** The default link instance of this family. */
     val defaultLink: Link
@@ -448,17 +449,112 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
      */
     def fromModel(model: GeneralizedLinearRegressionBase): Family = {
       model.getFamily match {
-        case "gaussian" => Gaussian
-        case "binomial" => Binomial
-        case "poisson" => Poisson
-        case "gamma" => Gamma
-        case "tweedie" =>
+        case Gaussian.name => Gaussian
+        case Binomial.name => Binomial
+        case Poisson.name => Poisson
+        case Gamma.name => Gamma
+        case Tweedie.name =>
           model.getVariancePower match {
             case 0.0 => Gaussian
             case 1.0 => Poisson
             case 2.0 => Gamma
-            case default => new Tweedie(default)
+            case default => new TweedieFamily(default)
           }
+      }
+    }
+  }
+
+  /**
+    * Tweedie exponential family distribution.
+    * The default link for the Tweedie family is set as the log link.
+    * Define a class that takes the variance power as argument, as opposed to
+    * a global object for the other families.
+    */
+  private[regression] class TweedieFamily(private val variancePower: Double)
+    extends Family{
+
+    val name: String = variancePower match {
+      case 0.0 => "gaussian"
+      case 1.0 => "poisson"
+      case 2.0 => "gamma"
+      case default => "tweedie"
+    }
+    /*
+      The canonical link is 1 - variancePower, which is barely used when the distribution
+      is not Gaussian, Poisson or Gamma. For any other distributions in the Tweedie family,
+      we set the default to the Log link.
+    */
+    val defaultLink: Link = variancePower match {
+      case 0.0 => Identity
+      case 1.0 => Log
+      case 2.0 => Inverse
+      case default => Log
+    }
+
+    override def initialize(y: Double, weight: Double): Double = {
+      if (variancePower >= 1.0 && variancePower < 2.0) {
+        require(y >= 0.0, s"The response variable of the specified $name distribution " +
+          s"should be non-negative, but got $y")
+      } else if (variancePower >= 2.0) {
+        require(y > 0.0, s"The response variable of the specified $name distribution " +
+          s"should be non-negative, but got $y")
+      }
+      if (y == 0) delta else y
+    }
+
+    override def variance(mu: Double): Double = {
+      variancePower match {
+        case 0.0 => 1.0
+        case 1.0 => mu
+        case 2.0 => mu * mu
+        case default => math.pow(mu, default)
+      }
+    }
+
+    private def yp(y: Double, mu: Double, p: Double): Double = {
+      if (p == 0) {
+        math.log(y / mu)
+      } else {
+        (math.pow(y, p) - math.pow(mu, p)) / p
+      }
+    }
+
+    override def deviance(y: Double, mu: Double, weight: Double): Double = {
+      // Force y >= delta for Poisson or compound Poisson
+      val y1 = if (variancePower >= 1.0 && variancePower < 2.0) math.max(y, delta) else y
+      2.0 * weight *
+        (y * yp(y1, mu, 1.0 - variancePower) - yp(y, mu, 2.0 - variancePower))
+    }
+
+    override def aic(predictions: RDD[(Double, Double, Double)],
+                     deviance: Double,
+                     numInstances: Double,
+                     weightSum: Double): Double = {
+      if (variancePower == 0.0) {
+        val wt = predictions.map(x => math.log(x._3)).sum()
+        numInstances * (math.log(deviance / numInstances * 2.0 * math.Pi) + 1.0) + 2.0 - wt
+      } else if (variancePower == 1.0) {
+        -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
+          weight * dist.Poisson(mu).logProbabilityOf(y.toInt)
+        }.sum()
+      } else if (variancePower == 2.0) {
+        val disp = deviance / weightSum
+        -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
+          weight * dist.Gamma(1.0 / disp, mu * disp).logPdf(y)
+        }.sum() + 2.0
+      } else {
+        // This depends on the density of the tweedie distribution. Not yet implemented.
+        throw new UnsupportedOperationException("No AIC available for the tweedie family")
+      }
+    }
+
+    override def project(mu: Double): Double = {
+      if (mu < epsilon) {
+        epsilon
+      } else if (mu.isInfinity) {
+        Double.MaxValue
+      } else {
+        mu
       }
     }
   }
@@ -467,26 +563,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
    * Gaussian exponential family distribution.
    * The default link for the Gaussian family is the identity link.
    */
-  private[regression] object Gaussian extends Family("gaussian") {
-
-    val defaultLink: Link = Identity
-
-    override def initialize(y: Double, weight: Double): Double = y
-
-    override def variance(mu: Double): Double = 1.0
-
-    override def deviance(y: Double, mu: Double, weight: Double): Double = {
-      weight * (y - mu) * (y - mu)
-    }
-
-    override def aic(
-        predictions: RDD[(Double, Double, Double)],
-        deviance: Double,
-        numInstances: Double,
-        weightSum: Double): Double = {
-      val wt = predictions.map(x => math.log(x._3)).sum()
-      numInstances * (math.log(deviance / numInstances * 2.0 * math.Pi) + 1.0) + 2.0 - wt
-    }
+  private[regression] object Gaussian extends TweedieFamily(0.0) {
 
     override def project(mu: Double): Double = {
       if (mu.isNegInfinity) {
@@ -503,7 +580,9 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
    * Binomial exponential family distribution.
    * The default link for the Binomial family is the logit link.
    */
-  private[regression] object Binomial extends Family("binomial") {
+  private[regression] object Binomial extends Family {
+
+    val name = "binomial"
 
     val defaultLink: Link = Logit
 
@@ -555,144 +634,18 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
    * Poisson exponential family distribution.
    * The default link for the Poisson family is the log link.
    */
-  private[regression] object Poisson extends Family("poisson") {
-
-    val defaultLink: Link = Log
-
-    override def initialize(y: Double, weight: Double): Double = {
-      require(y >= 0.0, "The response variable of Poisson family " +
-        s"should be non-negative, but got $y")
-      /*
-        Force Poisson mean > 0 to avoid numerical instability in IRLS.
-        R uses y + 0.1 for initialization. See poisson()$initialize.
-       */
-      math.max(y, delta)
-    }
-
-    override def variance(mu: Double): Double = mu
-
-    override def deviance(y: Double, mu: Double, weight: Double): Double = {
-      2.0 * weight * (y * math.log(y / mu) - (y - mu))
-    }
-
-    override def aic(
-        predictions: RDD[(Double, Double, Double)],
-        deviance: Double,
-        numInstances: Double,
-        weightSum: Double): Double = {
-      -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
-        weight * dist.Poisson(mu).logProbabilityOf(y.toInt)
-      }.sum()
-    }
-
-    override def project(mu: Double): Double = {
-      if (mu < epsilon) {
-        epsilon
-      } else if (mu.isInfinity) {
-        Double.MaxValue
-      } else {
-        mu
-      }
-    }
-  }
+  private[regression] object Poisson extends TweedieFamily(1.0)
 
   /**
    * Gamma exponential family distribution.
    * The default link for the Gamma family is the inverse link.
    */
-  private[regression] object Gamma extends Family("gamma") {
-
-    val defaultLink: Link = Inverse
-
-    override def initialize(y: Double, weight: Double): Double = {
-      require(y > 0.0, "The response variable of Gamma family " +
-        s"should be positive, but got $y")
-      y
-    }
-
-    override def variance(mu: Double): Double = mu * mu
-
-    override def deviance(y: Double, mu: Double, weight: Double): Double = {
-      -2.0 * weight * (math.log(y / mu) - (y - mu)/mu)
-    }
-
-    override def aic(
-        predictions: RDD[(Double, Double, Double)],
-        deviance: Double,
-        numInstances: Double,
-        weightSum: Double): Double = {
-      val disp = deviance / weightSum
-      -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
-        weight * dist.Gamma(1.0 / disp, mu * disp).logPdf(y)
-      }.sum() + 2.0
-    }
-
-    override def project(mu: Double): Double = {
-      if (mu < epsilon) {
-        epsilon
-      } else if (mu.isInfinity) {
-        Double.MaxValue
-      } else {
-        mu
-      }
-    }
-  }
+  private[regression] object Gamma extends TweedieFamily(2.0)
 
   /**
-    * Tweedie exponential family distribution.
-    * The default link for the Tweedie family is set as the log link.
-    * Define a class that takes the variance power as argument, as opposed to
-    * a global object for the other families.
-    */
-  private[regression] class Tweedie(private val variancePower: Double)
-    extends Family("tweedie") {
-
-    // The canonical link is 1 - variancePower, which is barely used.
-    val defaultLink: Link = Log
-
-    override def initialize(y: Double, weight: Double): Double = {
-      if (variancePower > 1.0 && variancePower < 2.0) {
-        require(y >= 0.0, "The response variable of the specified Tweedie distribution " +
-          s"should be non-negative, but got $y")
-        math.max(y, delta)
-      } else {
-        require(y > 0.0, "The response variable of the specified Tweedie distribution " +
-          s"should be non-negative, but got $y")
-        y
-      }
-    }
-
-    override def variance(mu: Double): Double = math.pow(mu, variancePower)
-
-    private def yp(y: Double, mu: Double, p: Double): Double = {
-      (math.pow(y, p) - math.pow(mu, p)) / p
-    }
-
-    // Force y >= 0.1 for deviance to work for (1 - variancePower). see tweedie()$dev.resid
-    override def deviance(y: Double, mu: Double, weight: Double): Double = {
-      2.0 * weight *
-        (y * yp(math.max(y, delta), mu, 1.0 - variancePower) - yp(y, mu, 2.0 - variancePower))
-    }
-
-    // This depends on the density of the tweedie distribution. Not yet implemented.
-    override def aic(
-        predictions: RDD[(Double, Double, Double)],
-        deviance: Double,
-        numInstances: Double,
-        weightSum: Double): Double = {
-      throw new UnsupportedOperationException("No AIC available for the tweedie family")
-    }
-
-    override def project(mu: Double): Double = {
-      if (mu < epsilon) {
-        epsilon
-      } else if (mu.isInfinity) {
-        Double.MaxValue
-      } else {
-        mu
-      }
-    }
-  }
+   * Tweedie exponential family distribution.
+   */
+  private[regression] object Tweedie extends TweedieFamily(1.5)
 
   /**
    * A description of the link function to be used in the model.

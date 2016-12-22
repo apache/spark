@@ -653,7 +653,7 @@ class GeneralizedLinearRegressionSuite
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with tweedie family, " +
           s"$link link, fitIntercept = $fitIntercept and variancePower = $variancePower.")
 
-        val familyLink = new FamilyAndLink(new Tweedie(variancePower), Link.fromName(link))
+        val familyLink = new FamilyAndLink(new TweedieFamily(variancePower), Link.fromName(link))
         model.transform(datasetTweedie).select("features", "prediction", "linkPrediction").collect()
           .foreach {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
