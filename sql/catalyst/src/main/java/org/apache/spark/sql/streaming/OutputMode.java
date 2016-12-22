@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.InternalOutputModes;
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes;
 
 /**
  * :: Experimental ::
@@ -53,5 +53,15 @@ public class OutputMode {
    */
   public static OutputMode Complete() {
     return InternalOutputModes.Complete$.MODULE$;
+  }
+
+  /**
+   * OutputMode in which only the rows that were updated in the streaming DataFrame/Dataset will
+   * be written to the sink every time there are some updates.
+   *
+   * @since 2.1.1
+   */
+  public static OutputMode Update() {
+    return InternalOutputModes.Update$.MODULE$;
   }
 }

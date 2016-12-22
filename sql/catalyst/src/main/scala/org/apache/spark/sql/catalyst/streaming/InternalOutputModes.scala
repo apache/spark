@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.catalyst.streaming
 
 import org.apache.spark.sql.streaming.OutputMode
 

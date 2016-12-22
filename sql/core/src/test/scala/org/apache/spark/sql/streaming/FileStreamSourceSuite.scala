@@ -899,7 +899,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       // This is to avoid actually running a Spark job with 10000 tasks
       val df = files.filter("1 == 0").groupBy().count()
 
-      testStream(df, InternalOutputModes.Complete)(
+      testStream(df, OutputMode.Complete)(
         AddTextFileData("0", src, tmp),
         CheckAnswer(0)
       )

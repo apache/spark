@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.execution.streaming
 
 import scala.language.implicitConversions
 
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -37,7 +36,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Append output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, InternalOutputModes.Append)
+    val sink = new MemorySink(schema, OutputMode.Append)
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -71,7 +70,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Update output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, InternalOutputModes.Update)
+    val sink = new MemorySink(schema, OutputMode.Update)
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -105,7 +104,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Complete output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, InternalOutputModes.Complete)
+    val sink = new MemorySink(schema, OutputMode.Complete)
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -138,7 +137,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
   }
 
 
-  test("registering as a table in Append output mode") {
+  test("registering as a table in Append output mode - supported") {
     val input = MemoryStream[Int]
     val query = input.toDF().writeStream
       .format("memory")
@@ -161,7 +160,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     query.stop()
   }
 
-  test("registering as a table in Complete output mode") {
+  test("registering as a table in Complete output mode - supported") {
     val input = MemoryStream[Int]
     val query = input.toDF()
       .groupBy("value")
@@ -187,9 +186,23 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     query.stop()
   }
 
+  test("registering as a table in Update output mode - not supported") {
+    val input = MemoryStream[Int]
+    val df = input.toDF()
+      .groupBy("value")
+      .count()
+    intercept[AnalysisException] {
+      df.writeStream
+        .format("memory")
+        .outputMode("update")
+        .queryName("memStream")
+        .start()
+    }
+  }
+
   test("MemoryPlan statistics") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, InternalOutputModes.Append)
+    val sink = new MemorySink(schema, OutputMode.Append)
     val plan = new MemoryPlan(sink)
 
     // Before adding data, check output
