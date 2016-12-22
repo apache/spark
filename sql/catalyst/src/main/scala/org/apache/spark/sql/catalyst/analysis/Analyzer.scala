@@ -1918,14 +1918,9 @@ class Analyzer(
       case p: Project => p
       case f: Filter => f
 
-      // todo: It's hard to write a general rule to pull out nondeterministic expressions
-      // from LogicalPlan, currently we only do it for UnaryNode which has same output
-      // schema with its child.
-      case p: UnaryNode if p.output == p.child.output && p.expressions.exists(!_.deterministic) =>
-        val nondeterministicExprs = p.expressions.filterNot(_.deterministic).flatMap { expr =>
-          val leafNondeterministic = expr.collect {
-            case n: Nondeterministic => n
-          }
+      case p: UnaryNode if p.expressions.exists(!_.deterministic) =>
+        val nondeterExprs = p.expressions.filterNot(_.deterministic).flatMap { expr =>
+          val leafNondeterministic = expr.collect { case n: Nondeterministic => n }
           leafNondeterministic.map { e =>
             val ne = e match {
               case n: NamedExpression => n
@@ -1934,11 +1929,21 @@ class Analyzer(
             new TreeNodeRef(e) -> ne
           }
         }.toMap
-        val newPlan = p.transformExpressions { case e =>
-          nondeterministicExprs.get(new TreeNodeRef(e)).map(_.toAttribute).getOrElse(e)
+
+        println("map is " + nondeterExprs)
+
+        val newChild = Project(p.child.output ++ nondeterExprs.values, p.child)
+
+        val newPlan = p.transformExpressions {
+          case e if nondeterExprs.contains(new TreeNodeRef(e)) =>
+            nondeterExprs(new TreeNodeRef(e)).toAttribute
+        }.withNewChildren(newChild :: Nil)
+
+        if (newPlan.output != p.output) {
+          Project(p.output, newPlan.withNewChildren(newChild :: Nil))
+        } else {
+          newPlan
         }
-        val newChild = Project(p.child.output ++ nondeterministicExprs.values, p.child)
-        Project(p.output, newPlan.withNewChildren(newChild :: Nil))
     }
   }
 
