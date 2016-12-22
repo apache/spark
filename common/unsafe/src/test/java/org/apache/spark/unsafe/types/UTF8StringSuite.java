@@ -592,10 +592,8 @@ public class UTF8StringSuite {
     final ByteBuffer buffer = StandardCharsets.UTF_8.encode("大千世界");
     buffer.position(0);
     
-    // ByteBuffer is BIG_ENDIAN by default
-    if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
-      buffer.order(ByteOrder.LITTLE_ENDIAN);
-    }
+    // Set buffer to native byte order
+    buffer.order(ByteOrder.nativeOrder());
 
     final int length = buffer.limit();
     assertEquals(12, length);
