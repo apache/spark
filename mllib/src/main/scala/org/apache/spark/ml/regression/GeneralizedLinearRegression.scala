@@ -69,7 +69,8 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * Used only for the Tweedie family.
    * (see <a href="https://en.wikipedia.org/wiki/Tweedie_distribution">
    * Tweedie Distribution (Wikipedia)</a>)
-   * Supported value: 0 and [1, Inf).
+   * Supported value: 0 and [1, Inf). Note that when the value of the variance power is
+   * 0, 1, or 2, the Gaussian, Poisson or Gamma family is used, respectively.
    *
    * @group param
    */
@@ -78,7 +79,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
     "The power in the variance function of the Tweedie distribution which characterizes " +
     "the relationship between the variance and mean of the distribution. " +
     "Used for the Tweedie family. Supported value: 0 and [1, Inf).",
-    (x: Double) => x == 0.0 || x >= 1.0)
+    (x: Double) => x >= 1.0 || x == 0.0)
 
   /** @group getParam */
   @Since("2.2.0")
@@ -442,18 +443,18 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     /**
      * Gets the [[Family]] object based on family and variancePower.
-     * This does not work for the tweedie family as it depends on the variance power
-     * that is set by the user.
+     * 1) retrieve object based on family name
+     * 2) if family name is tweedie, retrieve object based on variancePower
      *
      * @param model a GenerealizedLinearRegressionBase object
      */
     def fromModel(model: GeneralizedLinearRegressionBase): Family = {
       model.getFamily match {
-        case Gaussian.name => Gaussian
-        case Binomial.name => Binomial
-        case Poisson.name => Poisson
-        case Gamma.name => Gamma
-        case Tweedie.name =>
+        case "gaussian" => Gaussian
+        case "binomial" => Binomial
+        case "poisson" => Poisson
+        case "gamma" => Gamma
+        case "tweedie" =>
           model.getVariancePower match {
             case 0.0 => Gaussian
             case 1.0 => Poisson
@@ -466,9 +467,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   /**
     * Tweedie exponential family distribution.
-    * The default link for the Tweedie family is set as the log link.
-    * Define a class that takes the variance power as argument, as opposed to
-    * a global object for the other families.
+    * This includes the special cases of Gaussian, Poisson and Gamma.
     */
   private[regression] class TweedieFamily(private val variancePower: Double)
     extends Family{
@@ -480,15 +479,14 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
       case default => "tweedie"
     }
     /*
-      The canonical link is 1 - variancePower, which is barely used when the distribution
-      is not Gaussian, Poisson or Gamma. For any other distributions in the Tweedie family,
-      we set the default to the Log link.
+      The canonical link is 1 - variancePower. Except for the special cases of Gaussian,
+      Poisson and Gamma, the canonical link is rarely used. Set Log as the default link.
     */
     val defaultLink: Link = variancePower match {
       case 0.0 => Identity
       case 1.0 => Log
       case 2.0 => Inverse
-      case default => Log
+      case _ => Log
     }
 
     override def initialize(y: Double, weight: Double): Double = {
@@ -543,7 +541,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
           weight * dist.Gamma(1.0 / disp, mu * disp).logPdf(y)
         }.sum() + 2.0
       } else {
-        // This depends on the density of the tweedie distribution. Not yet implemented.
+        // This depends on the density of the Tweedie distribution. Not yet implemented.
         throw new UnsupportedOperationException("No AIC available for the tweedie family")
       }
     }
@@ -641,11 +639,6 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
    * The default link for the Gamma family is the inverse link.
    */
   private[regression] object Gamma extends TweedieFamily(2.0)
-
-  /**
-   * Tweedie exponential family distribution.
-   */
-  private[regression] object Tweedie extends TweedieFamily(1.5)
 
   /**
    * A description of the link function to be used in the model.

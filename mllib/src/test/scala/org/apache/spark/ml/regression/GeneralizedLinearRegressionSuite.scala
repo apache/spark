@@ -1282,7 +1282,7 @@ class GeneralizedLinearRegressionSuite
     }
   }
 
-  ignore("read/write") {
+  test("read/write") {
     def checkModelData(
         model: GeneralizedLinearRegressionModel,
         model2: GeneralizedLinearRegressionModel): Unit = {
