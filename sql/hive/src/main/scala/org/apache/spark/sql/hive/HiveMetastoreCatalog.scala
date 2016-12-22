@@ -105,17 +105,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val qualifiedTableName = getQualifiedTableName(tableIdent)
     val table = sparkSession.sharedState.externalCatalog.getTable(
       qualifiedTableName.database, qualifiedTableName.name)
-      .withStats(sessionState.conf.cboStatsEnabled)
 
     if (DDLUtils.isDatasourceTable(table)) {
-      val dataSourceTable = cachedDataSourceTables(qualifiedTableName) match {
-        case l: LogicalRelation if l.catalogTable.isDefined =>
-          l.copy(
-            expectedOutputAttributes = Some(l.expectedOutputAttributes.getOrElse(l.output)),
-            catalogTable = Some(l.catalogTable.get.withStats(sessionState.conf.cboStatsEnabled)))
-        case plan =>
-          plan
-      }
+      val dataSourceTable = cachedDataSourceTables(qualifiedTableName)
       val qualifiedTable = SubqueryAlias(qualifiedTableName.name, dataSourceTable, None)
       // Then, if alias is specified, wrap the table with a Subquery using the alias.
       // Otherwise, wrap the table with a Subquery using the table name.

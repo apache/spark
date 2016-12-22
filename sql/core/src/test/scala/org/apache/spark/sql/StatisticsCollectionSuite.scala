@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.StaticSQLConf
@@ -170,14 +170,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
     checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
   }
-
-  test("test cbo switch for data source table") {
-    val tableName = "cbo_switch_table"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (c1 INT) USING PARQUET")
-      checkEnablingStats(tableName, Seq("c1"))
-    }
-  }
 }
 
 
@@ -270,37 +262,45 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     }
   }
 
-  /**
-   * Check both statistics in CatalogTable and relation when cbo stats is enabled and disabled.
-   */
-  def checkEnablingStats(tableName: String, cols: Seq[String]): Unit = {
-    sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS ${cols.mkString(", ")}")
-    withSQLConf("spark.sql.cbo.statistics.enabled" -> "true") {
-      val (relation, catalogTable) = getRelationAndTable(tableName)
-      // Check the existence of catalog statistics
-      assert(catalogTable.stats.isDefined)
-      assert(catalogTable.stats.get.rowCount.isDefined)
-      assert(catalogTable.stats.get.colStats.size == cols.length)
-      // Check the existence of plan statistics except sizeInBytes, because it will always be set
-      // no matter cbo stats is enabled or not.
-      assert(relation.statistics.rowCount.isDefined)
-      assert(relation.statistics.attributeStats.size == cols.length)
-    }
-    withSQLConf("spark.sql.cbo.statistics.enabled" -> "false") {
-      // Don't have catalog stats and attribute stats because cbo stats is turned off.
-      val (relation, catalogTable) = getRelationAndTable(tableName)
-      assert(catalogTable.stats.isEmpty)
-      assert(relation.statistics.rowCount.isEmpty)
-      assert(relation.statistics.attributeStats.size == 0)
+  // This test will be run twice: with and without Hive support
+  test("conversion from CatalogStatistics to Statistics") {
+    withTable("ds_tbl", "hive_tbl") {
+      // Test data source table
+      checkStatsConversion(tableName = "ds_tbl", isDatasourceTable = true)
+      // Test hive serde table
+      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
+        checkStatsConversion(tableName = "hive_tbl", isDatasourceTable = false)
+      }
     }
   }
 
-  private def getRelationAndTable(tableName: String): (LogicalPlan, CatalogTable) = {
-    val rst = spark.table(tableName).queryExecution.analyzed.collect {
+  private def checkStatsConversion(tableName: String, isDatasourceTable: Boolean): Unit = {
+    // Create an empty table and run analyze command on it.
+    val col = "c1"
+    val createTableSql = if (isDatasourceTable) {
+      s"CREATE TABLE $tableName ($col INT) USING PARQUET"
+    } else {
+      s"CREATE TABLE $tableName ($col INT)"
+    }
+    sql(createTableSql)
+    sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS $col")
+
+    val (relation, catalogTable) = spark.table(tableName).queryExecution.analyzed.collect {
       case catalogRel: CatalogRelation => (catalogRel, catalogRel.catalogTable)
       case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
-    }
-    assert(rst.size == 1)
-    rst.head
+    }.head
+    val emptyColStat = ColumnStat(0, None, None, 0, 4, 4)
+    // Check catalog statistics
+    assert(catalogTable.stats.isDefined)
+    assert(catalogTable.stats.get.sizeInBytes == 0)
+    assert(catalogTable.stats.get.rowCount == Some(0))
+    assert(catalogTable.stats.get.colStats == Map(col -> emptyColStat))
+
+    // Check relation statistics
+    assert(relation.statistics.sizeInBytes == 0)
+    assert(relation.statistics.rowCount == Some(0))
+    val (attribute, colStat) = relation.statistics.attributeStats.head
+    assert(attribute.name == col)
+    assert(colStat == emptyColStat)
   }
 }

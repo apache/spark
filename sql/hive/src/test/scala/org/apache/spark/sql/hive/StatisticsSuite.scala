@@ -270,20 +270,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("test cbo switch for hive serde and data source tables") {
-    val textTable = "cbo_switch_textTable"
-    val parquetTable = "cbo_switch_parquetTable"
-    withTable(textTable, parquetTable) {
-      // Test cbo switch for hive serde table
-      sql(s"CREATE TABLE $textTable (c1 INT, c2 STRING)")
-      checkEnablingStats(textTable, Seq("c1", "c2"))
-
-      // Test cbo switch for data source table
-      sql(s"CREATE TABLE $parquetTable (c1 INT, c2 DOUBLE, c3 STRING) USING PARQUET")
-      checkEnablingStats(parquetTable, Seq("c1", "c2", "c3"))
-    }
-  }
-
   test("verify serialized column stats after analyzing columns") {
     import testImplicits._
 
@@ -449,8 +435,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   /** Used to test refreshing cached metadata once table stats are updated. */
-  private def getStatsBeforeAfterUpdate(
-      isAnalyzeColumns: Boolean): (CatalogStatistics, CatalogStatistics) = {
+  private def getStatsBeforeAfterUpdate(isAnalyzeColumns: Boolean)
+    : (CatalogStatistics, CatalogStatistics) = {
     val tableName = "tbl"
     var statsBeforeUpdate: CatalogStatistics = null
     var statsAfterUpdate: CatalogStatistics = null

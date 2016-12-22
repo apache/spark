@@ -200,10 +200,6 @@ case class CatalogTable(
       locationUri, inputFormat, outputFormat, serde, compressed, properties))
   }
 
-  def withStats(cboStatsEnabled: Boolean): CatalogTable = {
-    if (cboStatsEnabled) this else copy(stats = None)
-  }
-
   override def toString: String = {
     val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
