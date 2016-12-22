@@ -582,11 +582,13 @@ class StreamExecution(
 
   /**
    * Assert that the await APIs should not be called in the stream thread. Otherwise, it may cause
-   * dead-lock.
+   * dead-lock, e.g., calling any await APIs in `StreamingQueryListener.onQueryStarted` will block
+   * the stream thread forever.
    */
   private def assertAwaitThread(): Unit = {
     if (microBatchThread eq Thread.currentThread) {
-      throw new IllegalStateException("Cannot wait inside a stream thread")
+      throw new IllegalStateException(
+        "Cannot wait for a query state from the same thread that is running the query")
     }
   }
 

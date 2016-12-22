@@ -259,8 +259,8 @@ class StreamSuite extends StreamTest {
       }
       val df = Dataset[Int](sqlContext.sparkSession, StreamingExecutionRelation(source))
       // These error are fatal errors and should be ignored in `testStream` to not fail the test.
-      testStream(df, ignoreThreadDeathCause = true)(
-        ExpectFailure()(ClassTag(e.getClass))
+      testStream(df)(
+        ExpectFailure(isFatalError = true)(ClassTag(e.getClass))
       )
     }
   }
