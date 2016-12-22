@@ -376,10 +376,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
-      case logical.SortPartitions(sortExprs, child) =>
-        // This sort only sorts tuples within a partition. Its requiredDistribution will be
-        // an UnspecifiedDistribution.
-        execution.SortExec(sortExprs, global = false, child = planLater(child)) :: Nil
       case logical.Sort(sortExprs, global, child) =>
         execution.SortExec(sortExprs, global, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>

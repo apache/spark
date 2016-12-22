@@ -213,7 +213,6 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
 
   // Other unary operations
-  testUnaryOperatorInStreamingPlan("sort partitions", SortPartitions(Nil, _), expectedMsg = "sort")
   testUnaryOperatorInStreamingPlan(
     "sample", Sample(0.1, 1, true, 1L, _)(), expectedMsg = "sampling")
   testUnaryOperatorInStreamingPlan(
