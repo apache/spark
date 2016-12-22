@@ -143,7 +143,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
   import StreamingPage._
 
   private val listener = parent.listener
-  private val startTime = System.currentTimeMillis()
+
+  private def startTime: Long = listener.startTime
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
