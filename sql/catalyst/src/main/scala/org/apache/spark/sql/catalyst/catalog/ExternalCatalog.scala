@@ -114,13 +114,26 @@ abstract class ExternalCatalog {
 
   def listTables(db: String, pattern: String): Seq[String]
 
+  /**
+   * Loads data into a table.
+   *
+   * @param isSrcLocal Whether the source data is local, as defined by the "LOAD DATA LOCAL"
+   *                   HiveQL command.
+   */
   def loadTable(
       db: String,
       table: String,
       loadPath: String,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean): Unit
+      holdDDLTime: Boolean,
+      isSrcLocal: Boolean): Unit
 
+  /**
+   * Loads data into a partition.
+   *
+   * @param isSrcLocal Whether the source data is local, as defined by the "LOAD DATA LOCAL"
+   *                   HiveQL command.
+   */
   def loadPartition(
       db: String,
       table: String,
@@ -128,7 +141,8 @@ abstract class ExternalCatalog {
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean): Unit
+      inheritTableSpecs: Boolean,
+      isSrcLocal: Boolean): Unit
 
   def loadDynamicPartitions(
       db: String,

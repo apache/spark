@@ -26,7 +26,6 @@ import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SortExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -1120,7 +1119,34 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // sizeInBytes is 2404280404, before the fix, it overflows to a negative number
     assert(sizeInBytes > 0)
   }
+
+  test("SPARK-18717: code generation works for both scala.collection.Map" +
+    " and scala.collection.imutable.Map") {
+    val ds = Seq(WithImmutableMap("hi", Map(42L -> "foo"))).toDS
+    checkDataset(ds.map(t => t), WithImmutableMap("hi", Map(42L -> "foo")))
+
+    val ds2 = Seq(WithMap("hi", Map(42L -> "foo"))).toDS
+    checkDataset(ds2.map(t => t), WithMap("hi", Map(42L -> "foo")))
+  }
+
+  test("SPARK-18746: add implicit encoder for BigDecimal, date, timestamp") {
+    // For this implicit encoder, 18 is the default scale
+    assert(spark.range(1).map { x => new java.math.BigDecimal(1) }.head ==
+      new java.math.BigDecimal(1).setScale(18))
+
+    assert(spark.range(1).map { x => scala.math.BigDecimal(1, 18) }.head ==
+      scala.math.BigDecimal(1, 18))
+
+    assert(spark.range(1).map { x => new java.sql.Date(2016, 12, 12) }.head ==
+      new java.sql.Date(2016, 12, 12))
+
+    assert(spark.range(1).map { x => new java.sql.Timestamp(100000) }.head ==
+      new java.sql.Timestamp(100000))
+  }
 }
+
+case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map[Long, String])
+case class WithMap(id: String, map_test: scala.collection.Map[Long, String])
 
 case class Generic[T](id: T, value: Double)
 

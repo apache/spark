@@ -86,39 +86,31 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     plan
   }
 
-  // The tests here are failed on Windows due to the failure of initiating executors
-  // by the path length limitation. See SPARK-18718.
   test("unsafe broadcast hash join updates peak execution memory") {
-    assume(!Utils.isWindows)
     testBroadcastJoinPeak[BroadcastHashJoinExec]("unsafe broadcast hash join", "inner")
   }
 
   test("unsafe broadcast hash outer join updates peak execution memory") {
-    assume(!Utils.isWindows)
     testBroadcastJoinPeak[BroadcastHashJoinExec]("unsafe broadcast hash outer join", "left_outer")
   }
 
   test("unsafe broadcast left semi join updates peak execution memory") {
-    assume(!Utils.isWindows)
     testBroadcastJoinPeak[BroadcastHashJoinExec]("unsafe broadcast left semi join", "leftsemi")
   }
 
   test("broadcast hint isn't bothered by authBroadcastJoinThreshold set to low values") {
-    assume(!Utils.isWindows)
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       testBroadcastJoin[BroadcastHashJoinExec]("inner", true)
     }
   }
 
   test("broadcast hint isn't bothered by a disabled authBroadcastJoinThreshold") {
-    assume(!Utils.isWindows)
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       testBroadcastJoin[BroadcastHashJoinExec]("inner", true)
     }
   }
 
   test("broadcast hint isn't propagated after a join") {
-    assume(!Utils.isWindows)
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val df1 = spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
       val df2 = spark.createDataFrame(Seq((1, "1"), (2, "2"))).toDF("key", "value")
@@ -146,7 +138,6 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   test("broadcast hint is propagated correctly") {
-    assume(!Utils.isWindows)
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val df2 = spark.createDataFrame(Seq((1, "1"), (2, "2"), (3, "2"))).toDF("key", "value")
       val broadcasted = broadcast(df2)
@@ -167,7 +158,6 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   test("join key rewritten") {
-    assume(!Utils.isWindows)
     val l = Literal(1L)
     val i = Literal(2)
     val s = Literal.create(3, ShortType)

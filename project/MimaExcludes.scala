@@ -39,6 +39,9 @@ object MimaExcludes {
     // [SPARK-18663][SQL] Simplify CountMinSketch aggregate implementation
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.util.sketch.CountMinSketch.toByteArray"),
 
+    // [SPARK-18949] [SQL] Add repairTable API to Catalog
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.recoverPartitions"),
+
     // [SPARK-18537] Add a REST api to spark streaming
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.streaming.scheduler.StreamingListener.onStreamingStarted")
   )

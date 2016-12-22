@@ -50,7 +50,7 @@ from pyspark.sql import SparkSession, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type
 from pyspark.tests import ReusedPySparkTestCase, SparkSubmitTests
-from pyspark.sql.functions import UserDefinedFunction, sha2
+from pyspark.sql.functions import UserDefinedFunction, sha2, lit
 from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
 
@@ -1065,7 +1065,8 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(df.schema.simpleString(), "struct<data:string>")
 
     def test_stream_save_options(self):
-        df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+        df = self.spark.readStream.format('text').load('python/test_support/sql/streaming') \
+            .withColumn('id', lit(1))
         for q in self.spark._wrapped.streams.active:
             q.stop()
         tmpPath = tempfile.mkdtemp()
@@ -1074,7 +1075,7 @@ class SQLTests(ReusedPySparkTestCase):
         out = os.path.join(tmpPath, 'out')
         chk = os.path.join(tmpPath, 'chk')
         q = df.writeStream.option('checkpointLocation', chk).queryName('this_query') \
-            .format('parquet').outputMode('append').option('path', out).start()
+            .format('parquet').partitionBy('id').outputMode('append').option('path', out).start()
         try:
             self.assertEqual(q.name, 'this_query')
             self.assertTrue(q.isActive)
@@ -1128,9 +1129,25 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(df.isStreaming)
         out = os.path.join(tmpPath, 'out')
         chk = os.path.join(tmpPath, 'chk')
-        q = df.writeStream \
+
+        def func(x):
+            time.sleep(1)
+            return x
+
+        from pyspark.sql.functions import col, udf
+        sleep_udf = udf(func)
+
+        # Use "sleep_udf" to delay the progress update so that we can test `lastProgress` when there
+        # were no updates.
+        q = df.select(sleep_udf(col("value")).alias('value')).writeStream \
             .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
         try:
+            # "lastProgress" will return None in most cases. However, as it may be flaky when
+            # Jenkins is very slow, we don't assert it. If there is something wrong, "lastProgress"
+            # may throw error with a high chance and make this test flaky, so we should still be
+            # able to detect broken codes.
+            q.lastProgress
+
             q.processAllAvailable()
             lastProgress = q.lastProgress
             recentProgress = q.recentProgress

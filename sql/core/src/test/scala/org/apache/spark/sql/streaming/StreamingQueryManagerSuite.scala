@@ -32,6 +32,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.streaming.util.BlockingSource
 import org.apache.spark.util.Utils
 
 class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
@@ -217,7 +218,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
 
   test("SPARK-18811: Source resolution should not block main thread") {
     failAfter(streamingTimeout) {
-      StreamingQueryManagerSuite.latch = new CountDownLatch(1)
+      BlockingSource.latch = new CountDownLatch(1)
       withTempDir { tempDir =>
         // if source resolution was happening on the main thread, it would block the start call,
         // now it should only be blocking the stream execution thread
@@ -231,7 +232,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
         eventually(Timeout(streamingTimeout)) {
           assert(sq.status.message.contains("Initializing sources"))
         }
-        StreamingQueryManagerSuite.latch.countDown()
+        BlockingSource.latch.countDown()
         sq.stop()
       }
     }
@@ -243,7 +244,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
     failAfter(streamingTimeout) {
       val queries = withClue("Error starting queries") {
         datasets.zipWithIndex.map { case (ds, i) =>
-          @volatile var query: StreamExecution = null
+          var query: StreamingQuery = null
           try {
             val df = ds.toDF
             val metadataRoot =
@@ -255,7 +256,6 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
                 .option("checkpointLocation", metadataRoot)
                 .outputMode("append")
                 .start()
-                .asInstanceOf[StreamExecution]
           } catch {
             case NonFatal(e) =>
               if (query != null) query.stop()
@@ -303,7 +303,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       Thread.sleep(stopAfter.toMillis)
       if (withError) {
         logDebug(s"Terminating query ${queryToStop.name} with error")
-        queryToStop.asInstanceOf[StreamExecution].logicalPlan.collect {
+        queryToStop.asInstanceOf[StreamingQueryWrapper].streamingQuery.logicalPlan.collect {
           case StreamingExecutionRelation(source, _) =>
             source.asInstanceOf[MemoryStream[Int]].addData(0)
         }
@@ -320,8 +320,4 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
     val mapped = inputData.toDS.map(6 / _)
     (inputData, mapped)
   }
-}
-
-object StreamingQueryManagerSuite {
-  var latch: CountDownLatch = null
 }
