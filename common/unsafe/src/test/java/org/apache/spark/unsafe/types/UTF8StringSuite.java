@@ -591,8 +591,6 @@ public class UTF8StringSuite {
     // verify that writes work on objects that are not byte arrays
     final ByteBuffer buffer = StandardCharsets.UTF_8.encode("大千世界");
     buffer.position(0);
-    
-    // Set buffer to native byte order
     buffer.order(ByteOrder.nativeOrder());
 
     final int length = buffer.limit();
