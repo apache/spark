@@ -21,6 +21,9 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
 import org.apache.spark.sql.test.SharedSQLContext
 
+/**
+ * End-to-end tests for approximate percentile aggregate function.
+ */
 class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
@@ -60,6 +63,17 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
              |FROM $table
            """.stripMargin),
         Row(Seq(250D, 500D, 750D), 1000, Seq(1D, 1000D), 500500)
+      )
+    }
+  }
+
+  test("percentile_approx, multiple records with the minimum value in a partition") {
+    withTempView(table) {
+      spark.sparkContext.makeRDD(Seq(1, 1, 2, 1, 1, 3, 1, 1, 4, 1, 1, 5), 4).toDF("col")
+        .createOrReplaceTempView(table)
+      checkAnswer(
+        spark.sql(s"SELECT percentile_approx(col, array(0.5)) FROM $table"),
+        Row(Seq(1.0D))
       )
     }
   }

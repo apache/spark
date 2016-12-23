@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.net.URI
 import java.sql.Timestamp
 import java.util.{Locale, TimeZone}
 
@@ -954,7 +955,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         .mkString("/")
 
       // Loads partition data to a temporary table to verify contents
-      val path = s"${sparkSession.getWarehousePath}/dynamic_part_table/$partFolder/part-00000"
+      val warehousePathFile = new URI(sparkSession.getWarehousePath()).getPath
+      val path = s"$warehousePathFile/dynamic_part_table/$partFolder/part-00000"
 
       sql("DROP TABLE IF EXISTS dp_verify")
       sql("CREATE TABLE dp_verify(intcol INT)")

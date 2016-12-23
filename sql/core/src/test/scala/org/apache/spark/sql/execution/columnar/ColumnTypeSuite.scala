@@ -24,7 +24,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types._
 
@@ -54,7 +54,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
         expected: Int): Unit = {
 
       assertResult(expected, s"Wrong actualSize for $columnType") {
-        val row = new GenericMutableRow(1)
+        val row = new GenericInternalRow(1)
         row.update(0, CatalystTypeConverters.convertToCatalyst(value))
         val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
         columnType.actualSize(proj(row), 0)
@@ -101,14 +101,15 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
   def testColumnType[JvmType](columnType: ColumnType[JvmType]): Unit = {
 
-    val buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE).order(ByteOrder.nativeOrder())
     val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
     val converter = CatalystTypeConverters.createToScalaConverter(columnType.dataType)
     val seq = (0 until 4).map(_ => proj(makeRandomRow(columnType)).copy())
+    val totalSize = seq.map(_.getSizeInBytes).sum
+    val bufferSize = Math.max(DEFAULT_BUFFER_SIZE, totalSize)
 
     test(s"$columnType append/extract") {
-      buffer.rewind()
-      seq.foreach(columnType.append(_, 0, buffer))
+      val buffer = ByteBuffer.allocate(bufferSize).order(ByteOrder.nativeOrder())
+      seq.foreach(r => columnType.append(columnType.getField(r, 0), buffer))
 
       buffer.rewind()
       seq.foreach { row =>

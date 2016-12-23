@@ -516,10 +516,10 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     pairs.saveAsNewAPIHadoopFile[NewFakeFormat]("ignored")
 
     /*
-      Check that configurable formats get configured:
-      ConfigTestFormat throws an exception if we try to write
-      to it when setConf hasn't been called first.
-      Assertion is in ConfigTestFormat.getRecordWriter.
+     * Check that configurable formats get configured:
+     * ConfigTestFormat throws an exception if we try to write
+     * to it when setConf hasn't been called first.
+     * Assertion is in ConfigTestFormat.getRecordWriter.
      */
     pairs.saveAsNewAPIHadoopFile[ConfigTestFormat]("ignored")
   }
@@ -544,7 +544,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     val e = intercept[SparkException] {
       pairs.saveAsNewAPIHadoopFile[NewFakeFormatWithCallback]("ignored")
     }
-    assert(e.getMessage contains "failed to write")
+    assert(e.getCause.getMessage contains "failed to write")
 
     assert(FakeWriterWithCallback.calledBy === "write,callback,close")
     assert(FakeWriterWithCallback.exception != null, "exception should be captured")
@@ -725,8 +725,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
 }
 
 /*
-  These classes are fakes for testing
-    "saveNewAPIHadoopFile should call setConf if format is configurable".
+  These classes are fakes for testing saveAsHadoopFile/saveNewAPIHadoopFile.
   Unfortunately, they have to be top level classes, and not defined in
   the test method, because otherwise Scala won't generate no-args constructors
   and the test will therefore throw InstantiationException when saveAsNewAPIHadoopFile

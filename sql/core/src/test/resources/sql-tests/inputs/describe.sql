@@ -2,7 +2,11 @@ CREATE TABLE t (a STRING, b INT) PARTITIONED BY (c STRING, d STRING);
 
 ALTER TABLE t ADD PARTITION (c='Us', d=1);
 
+DESCRIBE t;
+
 DESC t;
+
+DESC TABLE t;
 
 -- Ignore these because there exist timestamp results, e.g., `Create Table`.
 -- DESC EXTENDED t;

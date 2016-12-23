@@ -24,7 +24,7 @@ import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vector, Vectors}
-import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.random._
@@ -44,6 +44,7 @@ class GeneralizedLinearRegressionSuite
   @transient var datasetGaussianInverse: DataFrame = _
   @transient var datasetBinomial: DataFrame = _
   @transient var datasetPoissonLog: DataFrame = _
+  @transient var datasetPoissonLogWithZero: DataFrame = _
   @transient var datasetPoissonIdentity: DataFrame = _
   @transient var datasetPoissonSqrt: DataFrame = _
   @transient var datasetGammaInverse: DataFrame = _
@@ -87,6 +88,15 @@ class GeneralizedLinearRegressionSuite
       intercept = 0.25, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
       family = "poisson", link = "log").toDF()
+
+    datasetPoissonLogWithZero = Seq(
+      LabeledPoint(0.0, Vectors.dense(18, 1.0)),
+      LabeledPoint(1.0, Vectors.dense(12, 0.0)),
+      LabeledPoint(0.0, Vectors.dense(15, 0.0)),
+      LabeledPoint(0.0, Vectors.dense(13, 2.0)),
+      LabeledPoint(0.0, Vectors.dense(15, 1.0)),
+      LabeledPoint(1.0, Vectors.dense(16, 1.0))
+    ).toDF()
 
     datasetPoissonIdentity = generateGeneralizedLinearRegressionInput(
       intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
@@ -139,6 +149,10 @@ class GeneralizedLinearRegressionSuite
       label + "," + features.toArray.mkString(",")
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonLog")
+    datasetPoissonLogWithZero.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonLogWithZero")
     datasetPoissonIdentity.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
     }.repartition(1).saveAsTextFile(
@@ -183,6 +197,11 @@ class GeneralizedLinearRegressionSuite
 
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(model)
+    assert(model.hasSummary)
+    val copiedModel = model.copy(ParamMap.empty)
+    assert(copiedModel.hasSummary)
+    model.setSummary(None)
+    assert(!model.hasSummary)
 
     assert(model.getFeaturesCol === "features")
     assert(model.getPredictionCol === "prediction")
@@ -453,6 +472,40 @@ class GeneralizedLinearRegressionSuite
     }
   }
 
+  test("generalized linear regression: poisson family against glm (with zero values)") {
+    /*
+       R code:
+       f1 <- data$V1 ~ data$V2 + data$V3 - 1
+       f2 <- data$V1 ~ data$V2 + data$V3
+
+       data <- read.csv("path", header=FALSE)
+       for (formula in c(f1, f2)) {
+         model <- glm(formula, family="poisson", data=data)
+         print(as.vector(coef(model)))
+       }
+       [1] -0.0457441 -0.6833928
+       [1] 1.8121235  -0.1747493  -0.5815417
+     */
+    val expected = Seq(
+      Vectors.dense(0.0, -0.0457441, -0.6833928),
+      Vectors.dense(1.8121235, -0.1747493, -0.5815417))
+
+    import GeneralizedLinearRegression._
+
+    var idx = 0
+    val link = "log"
+    val dataset = datasetPoissonLogWithZero
+    for (fitIntercept <- Seq(false, true)) {
+      val trainer = new GeneralizedLinearRegression().setFamily("poisson").setLink(link)
+        .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
+      val model = trainer.fit(dataset)
+      val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
+      assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with poisson family, " +
+        s"$link link and fitIntercept = $fitIntercept (with zero values).")
+      idx += 1
+    }
+  }
+
   test("generalized linear regression: gamma family against glm") {
     /*
        R code:
@@ -658,16 +711,17 @@ class GeneralizedLinearRegressionSuite
        R code:
 
        A <- matrix(c(0, 1, 2, 3, 5, 2, 1, 3), 4, 2)
-       b <- c(1, 0, 1, 0)
-       w <- c(1, 2, 3, 4)
+       b <- c(1, 0.5, 1, 0)
+       w <- c(1, 2.0, 0.3, 4.7)
        df <- as.data.frame(cbind(A, b))
      */
     val datasetWithWeight = Seq(
       Instance(1.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
-      Instance(0.0, 2.0, Vectors.dense(1.0, 2.0)),
-      Instance(1.0, 3.0, Vectors.dense(2.0, 1.0)),
-      Instance(0.0, 4.0, Vectors.dense(3.0, 3.0))
+      Instance(0.5, 2.0, Vectors.dense(1.0, 2.0)),
+      Instance(1.0, 0.3, Vectors.dense(2.0, 1.0)),
+      Instance(0.0, 4.7, Vectors.dense(3.0, 3.0))
     ).toDF()
+
     /*
        R code:
 
@@ -675,34 +729,34 @@ class GeneralizedLinearRegressionSuite
        summary(model)
 
        Deviance Residuals:
-           1       2       3       4
-       1.273  -1.437   2.533  -1.556
+             1        2        3        4
+        0.2404   0.1965   1.2824  -0.6916
 
        Coefficients:
           Estimate Std. Error z value Pr(>|z|)
-       V1 -0.30217    0.46242  -0.653    0.513
-       V2 -0.04452    0.37124  -0.120    0.905
+       x1  -1.6901     1.2764  -1.324    0.185
+       x2   0.7059     0.9449   0.747    0.455
 
        (Dispersion parameter for binomial family taken to be 1)
 
-           Null deviance: 13.863  on 4  degrees of freedom
-       Residual deviance: 12.524  on 2  degrees of freedom
-       AIC: 16.524
+           Null deviance: 8.3178  on 4  degrees of freedom
+       Residual deviance: 2.2193  on 2  degrees of freedom
+       AIC: 5.9915
 
        Number of Fisher Scoring iterations: 5
 
        residuals(model, type="pearson")
               1         2         3         4
-       1.117731 -1.162962  2.395838 -1.189005
+       0.171217  0.197406  2.085864 -0.495332
 
        residuals(model, type="working")
               1         2         3         4
-       2.249324 -1.676240  2.913346 -1.353433
+       1.029315  0.281881 15.502768 -1.052203
 
        residuals(model, type="response")
-               1          2          3          4
-       0.5554219 -0.4034267  0.6567520 -0.2611382
-     */
+              1          2          3          4
+       0.028480  0.069123  0.935495 -0.049613
+    */
     val trainer = new GeneralizedLinearRegression()
       .setFamily("binomial")
       .setWeightCol("weight")
@@ -710,21 +764,21 @@ class GeneralizedLinearRegressionSuite
 
     val model = trainer.fit(datasetWithWeight)
 
-    val coefficientsR = Vectors.dense(Array(-0.30217, -0.04452))
+    val coefficientsR = Vectors.dense(Array(-1.690134, 0.705929))
     val interceptR = 0.0
-    val devianceResidualsR = Array(1.273, -1.437, 2.533, -1.556)
-    val pearsonResidualsR = Array(1.117731, -1.162962, 2.395838, -1.189005)
-    val workingResidualsR = Array(2.249324, -1.676240, 2.913346, -1.353433)
-    val responseResidualsR = Array(0.5554219, -0.4034267, 0.6567520, -0.2611382)
-    val seCoefR = Array(0.46242, 0.37124)
-    val tValsR = Array(-0.653, -0.120)
-    val pValsR = Array(0.513, 0.905)
+    val devianceResidualsR = Array(0.2404, 0.1965, 1.2824, -0.6916)
+    val pearsonResidualsR = Array(0.171217, 0.197406, 2.085864, -0.495332)
+    val workingResidualsR = Array(1.029315, 0.281881, 15.502768, -1.052203)
+    val responseResidualsR = Array(0.02848, 0.069123, 0.935495, -0.049613)
+    val seCoefR = Array(1.276417, 0.944934)
+    val tValsR = Array(-1.324124, 0.747068)
+    val pValsR = Array(0.185462, 0.455023)
     val dispersionR = 1.0
-    val nullDevianceR = 13.863
-    val residualDevianceR = 12.524
+    val nullDevianceR = 8.3178
+    val residualDevianceR = 2.2193
     val residualDegreeOfFreedomNullR = 4
     val residualDegreeOfFreedomR = 2
-    val aicR = 16.524
+    val aicR = 5.991537
 
     val summary = model.summary
     val devianceResiduals = summary.residuals()
@@ -996,6 +1050,27 @@ class GeneralizedLinearRegressionSuite
     assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
     assert(summary.aic ~== aicR absTol 1E-3)
     assert(summary.solver === "irls")
+  }
+
+  test("glm handle collinear features") {
+    val collinearInstances = Seq(
+      Instance(1.0, 1.0, Vectors.dense(1.0, 2.0)),
+      Instance(2.0, 1.0, Vectors.dense(2.0, 4.0)),
+      Instance(3.0, 1.0, Vectors.dense(3.0, 6.0)),
+      Instance(4.0, 1.0, Vectors.dense(4.0, 8.0))
+    ).toDF()
+    val trainer = new GeneralizedLinearRegression()
+    val model = trainer.fit(collinearInstances)
+    // to make it clear that underlying WLS did not solve analytically
+    intercept[UnsupportedOperationException] {
+      model.summary.coefficientStandardErrors
+    }
+    intercept[UnsupportedOperationException] {
+      model.summary.pValues
+    }
+    intercept[UnsupportedOperationException] {
+      model.summary.tValues
+    }
   }
 
   test("read/write") {

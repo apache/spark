@@ -66,7 +66,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("Parse application logs") {
-    val provider = new FsHistoryProvider(createTestConf())
+    val clock = new ManualClock(12345678)
+    val provider = new FsHistoryProvider(createTestConf(), clock)
 
     // Write a new-style application log.
     val newAppComplete = newLogFile("new1", None, inProgress = false)
@@ -109,12 +110,15 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
           List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed)))
       }
 
+      // For completed files, lastUpdated would be lastModified time.
       list(0) should be (makeAppInfo("new-app-complete", newAppComplete.getName(), 1L, 5L,
         newAppComplete.lastModified(), "test", true))
       list(1) should be (makeAppInfo("new-complete-lzf", newAppCompressedComplete.getName(),
         1L, 4L, newAppCompressedComplete.lastModified(), "test", true))
+
+      // For Inprogress files, lastUpdated would be current loading time.
       list(2) should be (makeAppInfo("new-incomplete", newAppIncomplete.getName(), 1L, -1L,
-        newAppIncomplete.lastModified(), "test", false))
+        clock.getTimeMillis(), "test", false))
 
       // Make sure the UI can be rendered.
       list.foreach { case info =>
@@ -299,6 +303,48 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     assert(!log2.exists())
   }
 
+  test("log cleaner for inProgress files") {
+    val firstFileModifiedTime = TimeUnit.SECONDS.toMillis(10)
+    val secondFileModifiedTime = TimeUnit.SECONDS.toMillis(20)
+    val maxAge = TimeUnit.SECONDS.toMillis(40)
+    val clock = new ManualClock(0)
+    val provider = new FsHistoryProvider(
+      createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms"), clock)
+
+    val log1 = newLogFile("inProgressApp1", None, inProgress = true)
+    writeFile(log1, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1"))
+    )
+
+    clock.setTime(firstFileModifiedTime)
+    provider.checkForLogs()
+
+    val log2 = newLogFile("inProgressApp2", None, inProgress = true)
+    writeFile(log2, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp2", Some("inProgressApp2"), 23L, "test2", Some("attempt2"))
+    )
+
+    clock.setTime(secondFileModifiedTime)
+    provider.checkForLogs()
+
+    // This should not trigger any cleanup
+    updateAndCheck(provider)(list => list.size should be(2))
+
+    // Should trigger cleanup for first file but not second one
+    clock.setTime(firstFileModifiedTime + maxAge + 1)
+    updateAndCheck(provider)(list => list.size should be(1))
+    assert(!log1.exists())
+    assert(log2.exists())
+
+    // Should cleanup the second file as well.
+    clock.setTime(secondFileModifiedTime + maxAge + 1)
+    updateAndCheck(provider)(list => list.size should be(0))
+    assert(!log1.exists())
+    assert(!log2.exists())
+  }
+
   test("Event log copy") {
     val provider = new FsHistoryProvider(createTestConf())
     val logs = (1 to 2).map { i =>
@@ -449,8 +495,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val cstream = codec.map(_.compressedOutputStream(fstream)).getOrElse(fstream)
     val bstream = new BufferedOutputStream(cstream)
     if (isNewFormat) {
-      EventLoggingListener.initEventLog(new FileOutputStream(file))
+      val newFormatStream = new FileOutputStream(file)
+      Utils.tryWithSafeFinally {
+        EventLoggingListener.initEventLog(newFormatStream)
+      } {
+        newFormatStream.close()
+      }
     }
+
     val writer = new OutputStreamWriter(bstream, StandardCharsets.UTF_8)
     Utils.tryWithSafeFinally {
       events.foreach(e => writer.write(compact(render(JsonProtocol.sparkEventToJson(e))) + "\n"))

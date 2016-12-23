@@ -39,14 +39,14 @@ import org.apache.spark.util.random.XORShiftRandom
  * generalized to incorporate forgetfullness (i.e. decay).
  * The update rule (for each cluster) is:
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \begin{align}
  *     c_t+1 &= [(c_t * n_t * a) + (x_t * m_t)] / [n_t + m_t] \\
  *     n_t+t &= n_t * a + m_t
  *    \end{align}
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * Where c_t is the previously estimated centroid for that cluster,
  * n_t is the number of points assigned to it thus far, x_t is the centroid

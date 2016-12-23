@@ -133,7 +133,7 @@ test_that("spark.glm summary", {
   w <- c(1, 2, 3, 4)
   b <- c(1, 0, 1, 0)
   data <- as.data.frame(cbind(a1, a2, w, b))
-  df <- suppressWarnings(createDataFrame(data))
+  df <- createDataFrame(data)
 
   stats <- summary(spark.glm(df, b ~ a1 + a2, family = "binomial", weightCol = "w"))
   rStats <- summary(glm(b ~ a1 + a2, family = "binomial", data = data, weights = w))
@@ -159,6 +159,15 @@ test_that("spark.glm summary", {
   df <- suppressWarnings(createDataFrame(data))
   regStats <- summary(spark.glm(df, b ~ a1 + a2, regParam = 1.0))
   expect_equal(regStats$aic, 13.32836, tolerance = 1e-4) # 13.32836 is from summary() result
+
+  # Test spark.glm works on collinear data
+  A <- matrix(c(1, 2, 3, 4, 2, 4, 6, 8), 4, 2)
+  b <- c(1, 2, 3, 4)
+  data <- as.data.frame(cbind(A, b))
+  df <- createDataFrame(data)
+  stats <- summary(spark.glm(df, b ~ . - 1))
+  coefs <- unlist(stats$coefficients)
+  expect_true(all(abs(c(0.5, 0.25) - coefs) < 1e-4))
 })
 
 test_that("spark.glm save/load", {
@@ -341,6 +350,8 @@ test_that("spark.kmeans", {
   # Test summary works on KMeans
   summary.model <- summary(model)
   cluster <- summary.model$cluster
+  k <- summary.model$k
+  expect_equal(k, 2)
   expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
 
   # Test model save/load
@@ -361,12 +372,13 @@ test_that("spark.kmeans", {
 test_that("spark.mlp", {
   df <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
                 source = "libsvm")
-  model <- spark.mlp(df, blockSize = 128, layers = c(4, 5, 4, 3), solver = "l-bfgs", maxIter = 100,
-                     tol = 0.5, stepSize = 1, seed = 1)
+  model <- spark.mlp(df, label ~ features, blockSize = 128, layers = c(4, 5, 4, 3),
+                     solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1)
 
   # Test summary method
   summary <- summary(model)
-  expect_equal(summary$labelCount, 3)
+  expect_equal(summary$numOfInputs, 4)
+  expect_equal(summary$numOfOutputs, 3)
   expect_equal(summary$layers, c(4, 5, 4, 3))
   expect_equal(length(summary$weights), 64)
   expect_equal(head(summary$weights, 5), list(-0.878743, 0.2154151, -1.16304, -0.6583214, 1.009825),
@@ -375,7 +387,7 @@ test_that("spark.mlp", {
   # Test predict method
   mlpTestDF <- df
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
-  expect_equal(head(mlpPredictions$prediction, 6), c(0, 1, 1, 1, 1, 1))
+  expect_equal(head(mlpPredictions$prediction, 6), c("1.0", "0.0", "0.0", "0.0", "0.0", "0.0"))
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-mlp", fileext = ".tmp")
@@ -385,31 +397,68 @@ test_that("spark.mlp", {
   model2 <- read.ml(modelPath)
   summary2 <- summary(model2)
 
-  expect_equal(summary2$labelCount, 3)
+  expect_equal(summary2$numOfInputs, 4)
+  expect_equal(summary2$numOfOutputs, 3)
   expect_equal(summary2$layers, c(4, 5, 4, 3))
   expect_equal(length(summary2$weights), 64)
 
   unlink(modelPath)
 
   # Test default parameter
-  model <- spark.mlp(df, layers = c(4, 5, 4, 3))
+  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3))
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
-  expect_equal(head(mlpPredictions$prediction, 10), c(1, 1, 1, 1, 0, 1, 2, 2, 1, 0))
+  expect_equal(head(mlpPredictions$prediction, 10),
+               c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
 
   # Test illegal parameter
-  expect_error(spark.mlp(df, layers = NULL), "layers must be a integer vector with length > 1.")
-  expect_error(spark.mlp(df, layers = c()), "layers must be a integer vector with length > 1.")
-  expect_error(spark.mlp(df, layers = c(3)), "layers must be a integer vector with length > 1.")
+  expect_error(spark.mlp(df, label ~ features, layers = NULL),
+               "layers must be a integer vector with length > 1.")
+  expect_error(spark.mlp(df, label ~ features, layers = c()),
+               "layers must be a integer vector with length > 1.")
+  expect_error(spark.mlp(df, label ~ features, layers = c(3)),
+               "layers must be a integer vector with length > 1.")
 
   # Test random seed
   # default seed
-  model <- spark.mlp(df, layers = c(4, 5, 4, 3), maxIter = 10)
+  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3), maxIter = 10)
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
-  expect_equal(head(mlpPredictions$prediction, 12), c(1, 1, 1, 1, 0, 1, 2, 2, 1, 2, 0, 1))
+  expect_equal(head(mlpPredictions$prediction, 10),
+               c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
   # seed equals 10
-  model <- spark.mlp(df, layers = c(4, 5, 4, 3), maxIter = 10, seed = 10)
+  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3), maxIter = 10, seed = 10)
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
-  expect_equal(head(mlpPredictions$prediction, 12), c(1, 1, 1, 1, 2, 1, 2, 2, 1, 0, 0, 1))
+  expect_equal(head(mlpPredictions$prediction, 10),
+               c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
+
+  # test initialWeights
+  model <- spark.mlp(df, label ~ features, layers = c(4, 3), maxIter = 2, initialWeights =
+    c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 10),
+               c("1.0", "1.0", "1.0", "1.0", "2.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
+
+  model <- spark.mlp(df, label ~ features, layers = c(4, 3), maxIter = 2, initialWeights =
+    c(0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 5.0, 5.0, 5.0, 5.0, 9.0, 9.0, 9.0, 9.0, 9.0))
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 10),
+               c("1.0", "1.0", "1.0", "1.0", "2.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
+
+  model <- spark.mlp(df, label ~ features, layers = c(4, 3), maxIter = 2)
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 10),
+               c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "0.0", "2.0", "1.0", "0.0"))
+
+  # Test formula works well
+  df <- suppressWarnings(createDataFrame(iris))
+  model <- spark.mlp(df, Species ~ Sepal_Length + Sepal_Width + Petal_Length + Petal_Width,
+                     layers = c(4, 3))
+  summary <- summary(model)
+  expect_equal(summary$numOfInputs, 4)
+  expect_equal(summary$numOfOutputs, 3)
+  expect_equal(summary$layers, c(4, 3))
+  expect_equal(length(summary$weights), 15)
+  expect_equal(head(summary$weights, 5), list(-1.1957257, -5.2693685, 7.4489734, -6.3751413,
+               -10.2376130), tolerance = 1e-6)
 })
 
 test_that("spark.naiveBayes", {
@@ -481,6 +530,16 @@ test_that("spark.naiveBayes", {
     expect_error(m <- e1071::naiveBayes(Survived ~ ., data = t1), NA)
     expect_equal(as.character(predict(m, t1[1, ])), "Yes")
   }
+
+  # Test numeric response variable
+  t1$NumericSurvived <- ifelse(t1$Survived == "No", 0, 1)
+  t2 <- t1[-4]
+  df <- suppressWarnings(createDataFrame(t2))
+  m <- spark.naiveBayes(df, NumericSurvived ~ ., smoothing = 0.0)
+  s <- summary(m)
+  expect_equal(as.double(s$apriori[1, 1]), 0.5833333, tolerance = 1e-6)
+  expect_equal(sum(s$apriori), 1)
+  expect_equal(as.double(s$tables[1, "Age_Adult"]), 0.5714286, tolerance = 1e-6)
 })
 
 test_that("spark.survreg", {
@@ -550,7 +609,7 @@ test_that("spark.isotonicRegression", {
   feature <- c(0.0, 1.0, 2.0, 3.0, 4.0)
   weight <- c(1.0, 1.0, 1.0, 1.0, 1.0)
   data <- as.data.frame(cbind(label, feature, weight))
-  df <- suppressWarnings(createDataFrame(data))
+  df <- createDataFrame(data)
 
   model <- spark.isoreg(df, label ~ feature, isotonic = FALSE,
                         weightCol = "weight")
@@ -575,6 +634,144 @@ test_that("spark.isotonicRegression", {
   expect_equal(result, summary(model2))
 
   unlink(modelPath)
+})
+
+test_that("spark.logit", {
+  # R code to reproduce the result.
+  # nolint start
+  #' library(glmnet)
+  #' iris.x = as.matrix(iris[, 1:4])
+  #' iris.y = as.factor(as.character(iris[, 5]))
+  #' logit = glmnet(iris.x, iris.y, family="multinomial", alpha=0, lambda=0.5)
+  #' coef(logit)
+  #
+  # $setosa
+  # 5 x 1 sparse Matrix of class "dgCMatrix"
+  # s0
+  #               1.0981324
+  # Sepal.Length -0.2909860
+  # Sepal.Width   0.5510907
+  # Petal.Length -0.1915217
+  # Petal.Width  -0.4211946
+  #
+  # $versicolor
+  # 5 x 1 sparse Matrix of class "dgCMatrix"
+  # s0
+  #               1.520061e+00
+  # Sepal.Length  2.524501e-02
+  # Sepal.Width  -5.310313e-01
+  # Petal.Length  3.656543e-02
+  # Petal.Width  -3.144464e-05
+  #
+  # $virginica
+  # 5 x 1 sparse Matrix of class "dgCMatrix"
+  # s0
+  #              -2.61819385
+  # Sepal.Length  0.26574097
+  # Sepal.Width  -0.02005932
+  # Petal.Length  0.15495629
+  # Petal.Width   0.42122607
+  # nolint end
+
+  # Test multinomial logistic regression againt three classes
+  df <- suppressWarnings(createDataFrame(iris))
+  model <- spark.logit(df, Species ~ ., regParam = 0.5)
+  summary <- summary(model)
+  versicolorCoefsR <- c(1.52, 0.03, -0.53, 0.04, 0.00)
+  virginicaCoefsR <- c(-2.62, 0.27, -0.02, 0.16, 0.42)
+  setosaCoefsR <- c(1.10, -0.29, 0.55, -0.19, -0.42)
+  versicolorCoefs <- unlist(summary$coefficients[, "versicolor"])
+  virginicaCoefs <- unlist(summary$coefficients[, "virginica"])
+  setosaCoefs <- unlist(summary$coefficients[, "setosa"])
+  expect_true(all(abs(versicolorCoefsR - versicolorCoefs) < 0.1))
+  expect_true(all(abs(virginicaCoefsR - virginicaCoefs) < 0.1))
+  expect_true(all(abs(setosaCoefs - setosaCoefs) < 0.1))
+
+  # Test model save and load
+  modelPath <- tempfile(pattern = "spark-logit", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  coefs <- summary(model)$coefficients
+  coefs2 <- summary(model2)$coefficients
+  expect_equal(coefs, coefs2)
+  unlink(modelPath)
+
+  # R code to reproduce the result.
+  # nolint start
+  #' library(glmnet)
+  #' iris2 <- iris[iris$Species %in% c("versicolor", "virginica"), ]
+  #' iris.x = as.matrix(iris2[, 1:4])
+  #' iris.y = as.factor(as.character(iris2[, 5]))
+  #' logit = glmnet(iris.x, iris.y, family="multinomial", alpha=0, lambda=0.5)
+  #' coef(logit)
+  #
+  # $versicolor
+  # 5 x 1 sparse Matrix of class "dgCMatrix"
+  # s0
+  #               3.93844796
+  # Sepal.Length -0.13538675
+  # Sepal.Width  -0.02386443
+  # Petal.Length -0.35076451
+  # Petal.Width  -0.77971954
+  #
+  # $virginica
+  # 5 x 1 sparse Matrix of class "dgCMatrix"
+  # s0
+  #              -3.93844796
+  # Sepal.Length  0.13538675
+  # Sepal.Width   0.02386443
+  # Petal.Length  0.35076451
+  # Petal.Width   0.77971954
+  #
+  #' logit = glmnet(iris.x, iris.y, family="binomial", alpha=0, lambda=0.5)
+  #' coef(logit)
+  #
+  # 5 x 1 sparse Matrix of class "dgCMatrix"
+  # s0
+  # (Intercept)  -6.0824412
+  # Sepal.Length  0.2458260
+  # Sepal.Width   0.1642093
+  # Petal.Length  0.4759487
+  # Petal.Width   1.0383948
+  #
+  # nolint end
+
+  # Test multinomial logistic regression againt two classes
+  df <- suppressWarnings(createDataFrame(iris))
+  training <- df[df$Species %in% c("versicolor", "virginica"), ]
+  model <- spark.logit(training, Species ~ ., regParam = 0.5, family = "multinomial")
+  summary <- summary(model)
+  versicolorCoefsR <- c(3.94, -0.16, -0.02, -0.35, -0.78)
+  virginicaCoefsR <- c(-3.94, 0.16, -0.02, 0.35, 0.78)
+  versicolorCoefs <- unlist(summary$coefficients[, "versicolor"])
+  virginicaCoefs <- unlist(summary$coefficients[, "virginica"])
+  expect_true(all(abs(versicolorCoefsR - versicolorCoefs) < 0.1))
+  expect_true(all(abs(virginicaCoefsR - virginicaCoefs) < 0.1))
+
+  # Test binomial logistic regression againt two classes
+  model <- spark.logit(training, Species ~ ., regParam = 0.5)
+  summary <- summary(model)
+  coefsR <- c(-6.08, 0.25, 0.16, 0.48, 1.04)
+  coefs <- unlist(summary$coefficients[, "Estimate"])
+  expect_true(all(abs(coefsR - coefs) < 0.1))
+
+  # Test prediction with string label
+  prediction <- predict(model, training)
+  expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "character")
+  expected <- c("versicolor", "versicolor", "virginica", "versicolor", "versicolor",
+                "versicolor", "versicolor", "versicolor", "versicolor", "versicolor")
+  expect_equal(as.list(take(select(prediction, "prediction"), 10))[[1]], expected)
+
+  # Test prediction with numeric label
+  label <- c(0.0, 0.0, 0.0, 1.0, 1.0)
+  feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
+  data <- as.data.frame(cbind(label, feature))
+  df <- createDataFrame(data)
+  model <- spark.logit(df, label ~ feature)
+  prediction <- collect(select(predict(model, df), "prediction"))
+  expect_equal(prediction$prediction, c("0.0", "0.0", "1.0", "1.0", "0.0"))
 })
 
 test_that("spark.gaussianMixture", {
@@ -731,10 +928,10 @@ test_that("spark.posterior and spark.perplexity", {
 
 test_that("spark.als", {
   data <- list(list(0, 0, 4.0), list(0, 1, 2.0), list(1, 1, 3.0), list(1, 2, 4.0),
-  list(2, 1, 1.0), list(2, 2, 5.0))
+               list(2, 1, 1.0), list(2, 2, 5.0))
   df <- createDataFrame(data, c("user", "item", "score"))
   model <- spark.als(df, ratingCol = "score", userCol = "user", itemCol = "item",
-  rank = 10, maxIter = 5, seed = 0, reg = 0.1)
+                     rank = 10, maxIter = 5, seed = 0, regParam = 0.1)
   stats <- summary(model)
   expect_equal(stats$rank, 10)
   test <- createDataFrame(list(list(0, 2), list(1, 0), list(2, 0)), c("user", "item"))
@@ -789,6 +986,185 @@ test_that("spark.kstest", {
   expect_equal(stats$p.value, rStats$p.value, tolerance = 1e-4)
   expect_equal(stats$statistic, unname(rStats$statistic), tolerance = 1e-4)
   expect_match(capture.output(stats)[1], "Kolmogorov-Smirnov test summary:")
+
+  # Test print.summary.KSTest
+  printStats <- capture.output(print.summary.KSTest(stats))
+  expect_match(printStats[1], "Kolmogorov-Smirnov test summary:")
+  expect_match(printStats[5],
+               "Low presumption against null hypothesis: Sample follows theoretical distribution. ")
+})
+
+test_that("spark.randomForest", {
+  # regression
+  data <- suppressWarnings(createDataFrame(longley))
+  model <- spark.randomForest(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16,
+                              numTrees = 1)
+
+  predictions <- collect(predict(model, data))
+  expect_equal(predictions$prediction, c(60.323, 61.122, 60.171, 61.187,
+                                         63.221, 63.639, 64.989, 63.761,
+                                         66.019, 67.857, 68.169, 66.513,
+                                         68.655, 69.564, 69.331, 70.551),
+               tolerance = 1e-4)
+
+  stats <- summary(model)
+  expect_equal(stats$numTrees, 1)
+  expect_error(capture.output(stats), NA)
+  expect_true(length(capture.output(stats)) > 6)
+
+  model <- spark.randomForest(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16,
+                              numTrees = 20, seed = 123)
+  predictions <- collect(predict(model, data))
+  expect_equal(predictions$prediction, c(60.32820, 61.22315, 60.69025, 62.11070,
+                                         63.53160, 64.05470, 65.12710, 64.30450,
+                                         66.70910, 67.86125, 68.08700, 67.21865,
+                                         68.89275, 69.53180, 69.39640, 69.68250),
+
+               tolerance = 1e-4)
+  stats <- summary(model)
+  expect_equal(stats$numTrees, 20)
+
+  modelPath <- tempfile(pattern = "spark-randomForestRegression", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+  expect_equal(stats$formula, stats2$formula)
+  expect_equal(stats$numFeatures, stats2$numFeatures)
+  expect_equal(stats$features, stats2$features)
+  expect_equal(stats$featureImportances, stats2$featureImportances)
+  expect_equal(stats$numTrees, stats2$numTrees)
+  expect_equal(stats$treeWeights, stats2$treeWeights)
+
+  unlink(modelPath)
+
+  # classification
+  data <- suppressWarnings(createDataFrame(iris))
+  model <- spark.randomForest(data, Species ~ Petal_Length + Petal_Width, "classification",
+                              maxDepth = 5, maxBins = 16)
+
+  stats <- summary(model)
+  expect_equal(stats$numFeatures, 2)
+  expect_equal(stats$numTrees, 20)
+  expect_error(capture.output(stats), NA)
+  expect_true(length(capture.output(stats)) > 6)
+  # Test string prediction values
+  predictions <- collect(predict(model, data))$prediction
+  expect_equal(length(grep("setosa", predictions)), 50)
+  expect_equal(length(grep("versicolor", predictions)), 50)
+
+  modelPath <- tempfile(pattern = "spark-randomForestClassification", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+  expect_equal(stats$depth, stats2$depth)
+  expect_equal(stats$numNodes, stats2$numNodes)
+  expect_equal(stats$numClasses, stats2$numClasses)
+
+  unlink(modelPath)
+
+  # Test numeric response variable
+  labelToIndex <- function(species) {
+    switch(as.character(species),
+      setosa = 0.0,
+      versicolor = 1.0,
+      virginica = 2.0
+    )
+  }
+  iris$NumericSpecies <- lapply(iris$Species, labelToIndex)
+  data <- suppressWarnings(createDataFrame(iris[-5]))
+  model <- spark.randomForest(data, NumericSpecies ~ Petal_Length + Petal_Width, "classification",
+                              maxDepth = 5, maxBins = 16)
+  stats <- summary(model)
+  expect_equal(stats$numFeatures, 2)
+  expect_equal(stats$numTrees, 20)
+  # Test numeric prediction values
+  predictions <- collect(predict(model, data))$prediction
+  expect_equal(length(grep("1.0", predictions)), 50)
+  expect_equal(length(grep("2.0", predictions)), 50)
+
+  # spark.randomForest classification can work on libsvm data
+  data <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
+                source = "libsvm")
+  model <- spark.randomForest(data, label ~ features, "classification")
+  expect_equal(summary(model)$numFeatures, 4)
+})
+
+test_that("spark.gbt", {
+  # regression
+  data <- suppressWarnings(createDataFrame(longley))
+  model <- spark.gbt(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16, seed = 123)
+  predictions <- collect(predict(model, data))
+  expect_equal(predictions$prediction, c(60.323, 61.122, 60.171, 61.187,
+                                         63.221, 63.639, 64.989, 63.761,
+                                         66.019, 67.857, 68.169, 66.513,
+                                         68.655, 69.564, 69.331, 70.551),
+               tolerance = 1e-4)
+  stats <- summary(model)
+  expect_equal(stats$numTrees, 20)
+  expect_equal(stats$formula, "Employed ~ .")
+  expect_equal(stats$numFeatures, 6)
+  expect_equal(length(stats$treeWeights), 20)
+
+  modelPath <- tempfile(pattern = "spark-gbtRegression", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+  expect_equal(stats$formula, stats2$formula)
+  expect_equal(stats$numFeatures, stats2$numFeatures)
+  expect_equal(stats$features, stats2$features)
+  expect_equal(stats$featureImportances, stats2$featureImportances)
+  expect_equal(stats$numTrees, stats2$numTrees)
+  expect_equal(stats$treeWeights, stats2$treeWeights)
+
+  unlink(modelPath)
+
+  # classification
+  # label must be binary - GBTClassifier currently only supports binary classification.
+  iris2 <- iris[iris$Species != "virginica", ]
+  data <- suppressWarnings(createDataFrame(iris2))
+  model <- spark.gbt(data, Species ~ Petal_Length + Petal_Width, "classification")
+  stats <- summary(model)
+  expect_equal(stats$numFeatures, 2)
+  expect_equal(stats$numTrees, 20)
+  expect_error(capture.output(stats), NA)
+  expect_true(length(capture.output(stats)) > 6)
+  predictions <- collect(predict(model, data))$prediction
+  # test string prediction values
+  expect_equal(length(grep("setosa", predictions)), 50)
+  expect_equal(length(grep("versicolor", predictions)), 50)
+
+  modelPath <- tempfile(pattern = "spark-gbtClassification", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+  expect_equal(stats$depth, stats2$depth)
+  expect_equal(stats$numNodes, stats2$numNodes)
+  expect_equal(stats$numClasses, stats2$numClasses)
+
+  unlink(modelPath)
+
+  iris2$NumericSpecies <- ifelse(iris2$Species == "setosa", 0, 1)
+  df <- suppressWarnings(createDataFrame(iris2))
+  m <- spark.gbt(df, NumericSpecies ~ ., type = "classification")
+  s <- summary(m)
+  # test numeric prediction values
+  expect_equal(iris2$NumericSpecies, as.double(collect(predict(m, df))$prediction))
+  expect_equal(s$numFeatures, 5)
+  expect_equal(s$numTrees, 20)
+
+  # spark.gbt classification can work on libsvm data
+  data <- read.df(absoluteSparkPath("data/mllib/sample_binary_classification_data.txt"),
+                source = "libsvm")
+  model <- spark.gbt(data, label ~ features, "classification")
+  expect_equal(summary(model)$numFeatures, 692)
 })
 
 sparkR.session.stop()
