@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.util.UUID
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -29,6 +29,7 @@ import org.apache.spark.sql.SparkSession
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 trait StreamingQuery {
 
   /**

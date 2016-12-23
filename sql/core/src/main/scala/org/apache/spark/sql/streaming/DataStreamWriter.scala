@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, ForeachWriter}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, Memory
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private val df = ds.toDF()
