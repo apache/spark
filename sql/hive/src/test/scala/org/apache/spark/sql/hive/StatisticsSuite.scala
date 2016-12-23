@@ -78,6 +78,41 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("MetastoreRelations fallback to hdfs of scanned partitions for size estimation") {
+    withTempView("tempTbl", "largeTbl", "partTbl") {
+      spark.range(0, 1000, 1, 2).selectExpr("id as col1", "id as col2")
+        .createOrReplaceTempView("tempTbl")
+      spark.range(0, 100000, 1, 2).selectExpr("id as col1", "id as col2").
+        createOrReplaceTempView("largeTbl")
+      sql("CREATE TABLE partTbl (col1 INT, col2 STRING) " +
+        "PARTITIONED BY (part1 STRING, part2 INT) STORED AS textfile")
+      for (part1 <- Seq("a", "b", "c", "d"); part2 <- Seq(1, 2)) {
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE partTbl PARTITION (part1='$part1',part2='$part2')
+             |select col1, col2 from tempTbl
+          """.stripMargin)
+      }
+      val query = "select * from largeTbl join partTbl on (largeTbl.col1 = partTbl.col1 " +
+        "and partTbl.part1 = 'a' and partTbl.part2 = 1)"
+      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "8001") {
+
+        withSQLConf(SQLConf.ENABLE_PARTITION_PRUNER_FOR_STATS.key -> "true") {
+          val broadcastJoins =
+            sql(query).queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
+          assert(broadcastJoins.nonEmpty)
+        }
+
+        withSQLConf(SQLConf.ENABLE_PARTITION_PRUNER_FOR_STATS.key -> "false") {
+          val broadcastJoins =
+            sql(query).queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
+          assert(broadcastJoins.isEmpty)
+        }
+      }
+    }
+  }
+
   test("analyze MetastoreRelations") {
     def queryTotalSize(tableName: String): BigInt =
       spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName)).statistics.sizeInBytes

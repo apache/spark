@@ -129,6 +129,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ENABLE_PARTITION_PRUNER_FOR_STATS = SQLConfigBuilder("spark.sql.statistics.partitionPruner")
+    .doc("When true, some predicates will be pushed down into MetastoreRelation so that " +
+      "determining if partitions that are involved are small enough to use auto broadcast joins.")
+    .booleanConf
+    .createWithDefault(false)
+
   val DEFAULT_SIZE_IN_BYTES = SQLConfigBuilder("spark.sql.defaultSizeInBytes")
     .internal()
     .doc("The default table size used in query planning. By default, it is set to Long.MaxValue " +
@@ -768,6 +774,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
+
+  def partitionPrunerForStatsEnabled: Boolean = getConf(ENABLE_PARTITION_PRUNER_FOR_STATS)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 

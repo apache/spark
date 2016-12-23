@@ -34,7 +34,7 @@ class MetastoreRelationSuite extends QueryTest with SQLTestUtils with TestHiveSi
     val relation = MetastoreRelation("db", "test")(table, null)
 
     // No exception should be thrown
-    relation.makeCopy(Array("db", "test"))
+    relation.makeCopy(Array("db", "test", Seq.empty))
     // No exception should be thrown
     relation.toJSON
   }
