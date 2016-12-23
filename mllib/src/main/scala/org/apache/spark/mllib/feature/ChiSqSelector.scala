@@ -177,8 +177,11 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
  *  - `percentile` is similar but chooses a fraction of all features instead of a fixed number.
  *  - `fpr` chooses all features whose p-value is below a threshold, thus controlling the false
  *    positive rate of selection.
- *  - `fdr` chooses all features whose false discovery rate meets some threshold.
- *  - `fwe` chooses all features whose family-wise error rate meets some threshold.
+ *  - `fdr` uses the [Benjamini-Hochberg procedure]
+ *    (https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure)
+ *    to choose all features whose false discovery rate is below a threshold.
+ *  - `fwe` chooses all features whose whose p-values is below a threshold,
+ *    thus controlling the family-wise error rate of selection.
  * By default, the selection method is `numTopFeatures`, with the default number of top features
  * set to 50.
  */
@@ -220,14 +223,14 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
     this
   }
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setFdr(value: Double): this.type = {
     require(0.0 <= value && value <= 1.0, "FDR must be in [0,1]")
     fdr = value
     this
   }
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setFwe(value: Double): this.type = {
     require(0.0 <= value && value <= 1.0, "FWE must be in [0,1]")
     fwe = value
@@ -266,6 +269,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
           .filter { case (res, _) => res.pValue < fpr }
       case ChiSqSelector.FDR =>
         // This uses the Benjamini-Hochberg procedure.
+        // https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure
         val tempRes = chiSqTestResult
           .sortBy { case (res, _) => res.pValue }
         val maxIndex = tempRes
@@ -289,10 +293,10 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
 private[spark] object ChiSqSelector {
 
   /** String name for `numTopFeatures` selector type. */
-  val NumTopFeatures: String = "numTopFeatures"
+  private[spark] val NumTopFeatures: String = "numTopFeatures"
 
   /** String name for `percentile` selector type. */
-  val Percentile: String = "percentile"
+  private[spark] val Percentile: String = "percentile"
 
   /** String name for `fpr` selector type. */
   private[spark] val FPR: String = "fpr"

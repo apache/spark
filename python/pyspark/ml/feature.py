@@ -2636,8 +2636,11 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     `percentile` is similar but chooses a fraction of all features instead of a fixed number.
     `fpr` chooses all features whose p-value is below a threshold, thus controlling the false
     positive rate of selection.
-    `fdr` chooses all features whose false discovery rate meets some threshold.
-    `fwe` chooses all features whose family-wise error rate meets some threshold.
+    `fdr` uses the [Benjamini-Hochberg procedure]
+    (https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure)
+    to choose all features whose false discovery rate is below a threshold.
+    `fwe` chooses all features whose whose p-values is below a threshold,
+    thus controlling the family-wise error rate of selection.
     By default, the selection method is `numTopFeatures`, with the default number of top features
     set to 50.
 
@@ -2686,10 +2689,10 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     fpr = Param(Params._dummy(), "fpr", "The highest p-value for features to be kept.",
                 typeConverter=TypeConverters.toFloat)
 
-    fdr = Param(Params._dummy(), "fdr", "The highest uncorrected p-value for features to be kept.",
+    fdr = Param(Params._dummy(), "fdr", "The upper bound of the expected false discovery rate.",
                 typeConverter=TypeConverters.toFloat)
 
-    fwe = Param(Params._dummy(), "fwe", "The highest uncorrected p-value for features to be kept.",
+    fwe = Param(Params._dummy(), "fwe", "The upper bound of the expected family-wise error rate.",
                 typeConverter=TypeConverters.toFloat)
 
     @keyword_only
@@ -2781,7 +2784,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         """
         return self.getOrDefault(self.fpr)
 
-    @since("2.1.0")
+    @since("2.2.0")
     def setFdr(self, value):
         """
         Sets the value of :py:attr:`fdr`.
@@ -2789,14 +2792,14 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         """
         return self._set(fdr=value)
 
-    @since("2.1.0")
+    @since("2.2.0")
     def getFdr(self):
         """
         Gets the value of fdr or its default value.
         """
         return self.getOrDefault(self.fdr)
 
-    @since("2.1.0")
+    @since("2.2.0")
     def setFwe(self, value):
         """
         Sets the value of :py:attr:`fwe`.
@@ -2804,7 +2807,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         """
         return self._set(fwe=value)
 
-    @since("2.1.0")
+    @since("2.2.0")
     def getFwe(self):
         """
         Gets the value of fwe or its default value.
