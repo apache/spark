@@ -22,7 +22,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 
 /**
  * :: Experimental ::
@@ -36,6 +36,7 @@ import org.apache.spark.annotation.Experimental
  * @since 2.1.0
  */
 @Experimental
+@InterfaceStability.Evolving
 class StreamingQueryStatus protected[sql](
     val message: String,
     val isDataAvailable: Boolean,
