@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
-import org.apache.spark.sql.execution.command.{AlterTableRecoverPartitionsCommand, DDLUtils}
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, HadoopFsRelation}
+import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -150,7 +150,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * predicates on the partitioned columns. In order for partitioning to work well, the number
    * of distinct values in each column should typically be less than tens of thousands.
    *
-   * This was initially applicable for Parquet but in 1.5+ covers JSON, text, ORC and avro as well.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
    *
    * @since 1.4.0
    */
@@ -164,7 +164,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Buckets the output by the given columns. If specified, the output is laid out on the file
    * system similar to Hive's bucketing scheme.
    *
-   * This is applicable for Parquet, JSON and ORC.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
    *
    * @since 2.0
    */
@@ -178,7 +178,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Sorts the output in each bucket by the given columns.
    *
-   * This is applicable for Parquet, JSON and ORC.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
    *
    * @since 2.0
    */
@@ -214,6 +214,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     dataSource.write(mode, df)
   }
+
   /**
    * Inserts the content of the `DataFrame` to the specified table. It requires that
    * the schema of the `DataFrame` is the same as the schema of the table.

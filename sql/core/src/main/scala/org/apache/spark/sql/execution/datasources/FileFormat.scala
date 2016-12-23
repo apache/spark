@@ -148,7 +148,8 @@ trait FileFormat {
  * The base class file format that is based on text file.
  */
 abstract class TextBasedFileFormat extends FileFormat {
-  private var codecFactory: CompressionCodecFactory = null
+  private var codecFactory: CompressionCodecFactory = _
+
   override def isSplitable(
       sparkSession: SparkSession,
       options: Map[String, String],

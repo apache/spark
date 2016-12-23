@@ -84,6 +84,11 @@ case class EventTimeWatermarkExec(
     child: SparkPlan) extends SparkPlan {
 
   val eventTimeStats = new EventTimeStatsAccum()
+  val delayMs = {
+    val millisPerMonth = CalendarInterval.MICROS_PER_DAY / 1000 * 31
+    delay.milliseconds + delay.months * millisPerMonth
+  }
+
   sparkContext.register(eventTimeStats)
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -101,7 +106,7 @@ case class EventTimeWatermarkExec(
     if (a semanticEquals eventTime) {
       val updatedMetadata = new MetadataBuilder()
           .withMetadata(a.metadata)
-          .putLong(EventTimeWatermark.delayKey, delay.milliseconds)
+          .putLong(EventTimeWatermark.delayKey, delayMs)
           .build()
 
       a.withMetadata(updatedMetadata)

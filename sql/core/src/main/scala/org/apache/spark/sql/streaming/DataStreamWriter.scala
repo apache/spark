@@ -19,8 +19,9 @@ package org.apache.spark.sql.streaming
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, ForeachWriter}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink}
 
@@ -32,6 +33,7 @@ import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, Memory
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private val df = ds.toDF()
@@ -65,9 +67,11 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         OutputMode.Append
       case "complete" =>
         OutputMode.Complete
+      case "update" =>
+        OutputMode.Update
       case _ =>
         throw new IllegalArgumentException(s"Unknown output mode $outputMode. " +
-          "Accepted output modes are 'append' and 'complete'")
+          "Accepted output modes are 'append', 'complete', 'update'")
     }
     this
   }
@@ -98,7 +102,6 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     this.trigger = trigger
     this
   }
-
 
   /**
    * Specifies the name of the [[StreamingQuery]] that can be started with `start()`.
@@ -219,11 +222,20 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       if (extraOptions.get("queryName").isEmpty) {
         throw new AnalysisException("queryName must be specified for memory sink")
       }
-
+      val supportedModes = "Output modes supported by the memory sink are 'append' and 'complete'."
+      outputMode match {
+        case Append | Complete => // allowed
+        case Update =>
+          throw new AnalysisException(
+            s"Update output mode is not supported for memory sink. $supportedModes")
+        case _ =>
+          throw new AnalysisException(
+            s"$outputMode is not supported for memory sink. $supportedModes")
+      }
       val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
       val chkpointLoc = extraOptions.get("checkpointLocation")
-      val recoverFromChkpoint = chkpointLoc.isDefined && outputMode == OutputMode.Complete()
+      val recoverFromChkpoint = outputMode == OutputMode.Complete()
       val query = df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
         chkpointLoc,

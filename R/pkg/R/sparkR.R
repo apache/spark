@@ -410,6 +410,30 @@ sparkR.session <- function(
   sparkSession
 }
 
+#' Get the URL of the SparkUI instance for the current active SparkSession
+#'
+#' Get the URL of the SparkUI instance for the current active SparkSession.
+#'
+#' @return the SparkUI URL, or NA if it is disabled, or not started.
+#' @rdname sparkR.uiWebUrl
+#' @name sparkR.uiWebUrl
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' url <- sparkR.uiWebUrl()
+#' }
+#' @note sparkR.uiWebUrl since 2.2.0
+sparkR.uiWebUrl <- function() {
+  sc <- sparkR.callJMethod(getSparkContext(), "sc")
+  u <- callJMethod(sc, "uiWebUrl")
+  if (callJMethod(u, "isDefined")) {
+    callJMethod(u, "get")
+  } else {
+    NA
+  }
+}
+
 #' Assigns a group ID to all the jobs started by this thread until the group ID is set to a
 #' different value or cleared.
 #'
