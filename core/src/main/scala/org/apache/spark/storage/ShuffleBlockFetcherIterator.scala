@@ -304,6 +304,10 @@ final class ShuffleBlockFetcherIterator(
    * Throws a FetchFailedException if the next block could not be fetched.
    */
   override def next(): (BlockId, InputStream) = {
+    if (!hasNext) {
+      throw new NoSuchElementException
+    }
+
     numBlocksProcessed += 1
     val startFetchWait = System.currentTimeMillis()
     currentResult = results.take()

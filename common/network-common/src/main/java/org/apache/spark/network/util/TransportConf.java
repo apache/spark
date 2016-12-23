@@ -73,6 +73,10 @@ public class TransportConf {
     return "spark." + module + "." + suffix;
   }
 
+  public String getModuleName() {
+    return module;
+  }
+
   /** IO mode: nio or epoll */
   public String ioMode() { return conf.get(SPARK_NETWORK_IO_MODE_KEY, "NIO").toUpperCase(); }
 
