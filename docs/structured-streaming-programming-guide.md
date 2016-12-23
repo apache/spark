@@ -1499,7 +1499,7 @@ spark.streams.addListener(new StreamingQueryListener() {
         System.out.println("Query terminated: " + queryTerminated.id());
     }
     @Overrides void onQueryProgress(QueryProgressEvent queryProgress) {
-        System.out.println("Query made progress: " + queryProgress.lastProgress());
+        System.out.println("Query made progress: " + queryProgress.progress());
     }
 });
 {% endhighlight %}
