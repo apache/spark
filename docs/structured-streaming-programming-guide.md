@@ -1305,7 +1305,7 @@ Here are a few examples.
 {% highlight scala %}
 val query: StreamingQuery = ...
 
-println(query.progress)
+println(query.lastProgress)
 
 /* Will print something like the following.
 
@@ -1373,7 +1373,7 @@ println(query.status)
 {% highlight java %}
 StreamingQuery query = ...
 
-System.out.println(query.progress);
+System.out.println(query.lastProgress());
 /* Will print something like the following.
 
 {
@@ -1423,7 +1423,7 @@ System.out.println(query.progress);
 */
 
 
-System.out.println(query.status);
+System.out.println(query.status());
 /*  Will print something like the following.
 {
   "message" : "Waiting for data to arrive",
@@ -1438,7 +1438,7 @@ System.out.println(query.status);
 
 {% highlight python %}
 query = ...  # a StreamingQuery
-print(query.progress)
+print(query.lastProgress)
 
 '''
 Will print something like the following.
@@ -1474,7 +1474,7 @@ val spark: SparkSession = ...
 
 spark.streams.addListener(new StreamingQueryListener() {
     override def onQueryStarted(queryStarted: QueryStartedEvent): Unit = {
-        println("Query started: " + queryTerminated.id)
+        println("Query started: " + queryStarted.id)
     }
     override def onQueryTerminated(queryTerminated: QueryTerminatedEvent): Unit = {
         println("Query terminated: " + queryTerminated.id)
@@ -1493,13 +1493,13 @@ SparkSession spark = ...
 
 spark.streams.addListener(new StreamingQueryListener() {
     @Overrides void onQueryStarted(QueryStartedEvent queryStarted) {
-        System.out.println("Query started: " + queryTerminated.id);
+        System.out.println("Query started: " + queryStarted.id());
     }
     @Overrides void onQueryTerminated(QueryTerminatedEvent queryTerminated) {
-        System.out.println("Query terminated: " + queryTerminated.id);
+        System.out.println("Query terminated: " + queryTerminated.id());
     }
     @Overrides void onQueryProgress(QueryProgressEvent queryProgress) {
-        System.out.println("Query made progress: " + queryProgress.progress);
+        System.out.println("Query made progress: " + queryProgress.lastProgress());
     }
 });
 {% endhighlight %}
