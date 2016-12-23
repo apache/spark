@@ -83,7 +83,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
       LabeledPoint(2.0, Vectors.dense(Array(8.0, 9.0, 6.0, 5.0, 4.0, 4.0))),
       LabeledPoint(2.0, Vectors.dense(Array(8.0, 9.0, 6.0, 4.0, 0.0, 0.0)))), 2)
 
-  test("ChiSqSelector transform by KBest test (sparse & dense vector)") {
+  test("ChiSqSelector transform by numTopFeatures test (sparse & dense vector)") {
     val preFilteredData =
       Set(LabeledPoint(0.0, Vectors.dense(Array(6.0, 7.0, 7.0))),
         LabeledPoint(1.0, Vectors.dense(Array(0.0, 9.0, 0.0))),
