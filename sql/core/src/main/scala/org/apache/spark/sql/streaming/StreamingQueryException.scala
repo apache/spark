@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 
 /**
  * :: Experimental ::
@@ -30,6 +30,7 @@ import org.apache.spark.annotation.Experimental
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 class StreamingQueryException private[sql](
     private val queryDebugString: String,
     val message: String,
