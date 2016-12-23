@@ -325,7 +325,24 @@ object ScalaReflection extends ScalaReflection {
           val cls = mirror.runtimeClass(t.typeSymbol.asClass)
           import scala.collection.generic.CanBuildFrom
           import scala.reflect.ClassTag
-          import scala.util.{Try, Success}
+
+          // Some canBuildFrom methods take an implicit ClassTag parameter
+          val cbfParams = try {
+            cls.getDeclaredMethod("canBuildFrom", classOf[ClassTag[_]])
+            StaticInvoke(
+              ClassTag.getClass,
+              ObjectType(classOf[ClassTag[_]]),
+              "apply",
+              StaticInvoke(
+                cls,
+                ObjectType(classOf[Class[_]]),
+                "getClass"
+              ) :: Nil
+            ) :: Nil
+          } catch {
+            case _: NoSuchMethodException => Nil
+          }
+
           Invoke(
             wrappedArray,
             "to",
@@ -334,20 +351,7 @@ object ScalaReflection extends ScalaReflection {
               cls,
               ObjectType(classOf[CanBuildFrom[_, _, _]]),
               "canBuildFrom",
-              Try(cls.getDeclaredMethod("canBuildFrom", classOf[ClassTag[_]])) match {
-                case Success(_) =>
-                  StaticInvoke(
-                    ClassTag.getClass,
-                    ObjectType(classOf[ClassTag[_]]),
-                    "apply",
-                    StaticInvoke(
-                      cls,
-                      ObjectType(classOf[Class[_]]),
-                      "getClass"
-                    ) :: Nil
-                  ) :: Nil
-                case _ => Nil
-              }
+              cbfParams
             ) :: Nil
           )
         }
