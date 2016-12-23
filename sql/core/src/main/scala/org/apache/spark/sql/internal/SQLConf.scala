@@ -1014,8 +1014,8 @@ object StaticSQLConf {
 
   val HIVE_THRIFT_SERVER_SINGLESESSION = buildConf("spark.sql.hive.thriftServer.singleSession")
     .doc("When set to true, Hive Thrift server is running in a single session mode. " +
-      "all the JDBC/ODBC connections share the same temporary tables, function registries, " +
-      "SQL configuration and current active database.")
+      "All the JDBC/ODBC connections share the temporary views, function registries, " +
+      "SQL configuration and the current database.")
     .booleanConf
     .createWithDefault(false)
 }
