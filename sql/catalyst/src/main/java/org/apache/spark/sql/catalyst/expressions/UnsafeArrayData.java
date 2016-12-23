@@ -294,7 +294,8 @@ public final class UnsafeArrayData extends ArrayData {
     assertIndexIsValid(ordinal);
     BitSetMethods.set(baseObject, baseOffset + 8, ordinal);
 
-    /* we assume the corrresponding column was already 0 */
+    /* we assume the corrresponding column was already 0 or
+       will be set to 0 later by the caller side */
   }
 
   public void setBoolean(int ordinal, boolean value) {
