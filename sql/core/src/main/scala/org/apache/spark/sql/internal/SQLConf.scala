@@ -821,6 +821,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def warehousePath: String = new Path(getConf(StaticSQLConf.WAREHOUSE_PATH)).toString
 
+  def hiveThriftServerSingleSession: Boolean =
+    getConf(StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION)
+
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
@@ -998,6 +1001,13 @@ object StaticSQLConf {
   val DEBUG_MODE = buildConf("spark.sql.debug")
     .internal()
     .doc("Only used for internal debugging. Not all functions are supported when it is enabled.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val HIVE_THRIFT_SERVER_SINGLESESSION = buildConf("spark.sql.hive.thriftServer.singleSession")
+    .doc("When set to true, Hive Thrift server is running in a single session mode. " +
+      "all the JDBC/ODBC connections share the same temporary tables, function registries, " +
+      "SQL configuration and current active database.")
     .booleanConf
     .createWithDefault(false)
 }

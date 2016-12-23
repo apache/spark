@@ -586,7 +586,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         val dataPath = "../hive/src/test/resources/data/files/kv1.txt"
 
         Seq(
-          s"CREATE TABLE test_udtf(key INT, value STRING)",
+          "DROP TABLE test_udtf",
+          "CREATE TABLE test_udtf(key INT, value STRING)",
           s"LOAD DATA LOCAL INPATH '$dataPath' OVERWRITE INTO TABLE test_udtf"
         ).foreach(statement.execute)
 
@@ -624,7 +625,7 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
   override protected def extraConf: Seq[String] =
     "--conf spark.sql.hive.thriftServer.singleSession=true" :: Nil
 
-  test("test single session") {
+  test("share the temporary functions across JDBC connections") {
     withMultipleConnectionJdbcStatement(
       { statement =>
         val jarPath = "../hive/src/test/resources/TestUDTF.jar"
@@ -664,6 +665,54 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
         } finally {
           statement.executeQuery("DROP TEMPORARY FUNCTION udtf_count2")
         }
+      }
+    )
+  }
+
+  test ("unable to changing spark.sql.hive.thriftServer.singleSession using JDBC connections") {
+    withJdbcStatement { statement =>
+      // JDBC connections are not able to set the conf spark.sql.hive.thriftServer.singleSession
+      val e = intercept[SQLException] {
+        statement.executeQuery("SET spark.sql.hive.thriftServer.singleSession=false")
+      }.getMessage
+      assert(e.contains(
+        "Cannot modify the value of a static config: spark.sql.hive.thriftServer.singleSession"))
+    }
+  }
+
+  test("share the current database and temporary tables across JDBC connections") {
+    withMultipleConnectionJdbcStatement(
+      { statement =>
+        statement.execute("CREATE DATABASE IF NOT EXISTS db1")
+      },
+
+      { statement =>
+        val rs1 = statement.executeQuery("SELECT current_database()")
+        assert(rs1.next())
+        assert(rs1.getString(1) === "default")
+
+        statement.execute("USE db1")
+
+        val rs2 = statement.executeQuery("SELECT current_database()")
+        assert(rs2.next())
+        assert(rs2.getString(1) === "db1")
+
+        statement.execute("CREATE TEMP VIEW tempView AS SELECT 123")
+      },
+
+      { statement =>
+        // the current database is set to db1 by another JDBC connection.
+        val rs1 = statement.executeQuery("SELECT current_database()")
+        assert(rs1.next())
+        assert(rs1.getString(1) === "db1")
+
+        val rs2 = statement.executeQuery("SELECT * from tempView")
+        assert(rs2.next())
+        assert(rs2.getString(1) === "123")
+
+        statement.execute("USE default")
+        statement.execute("DROP VIEW tempView")
+        statement.execute("DROP DATABASE db1 CASCADE")
       }
     )
   }
