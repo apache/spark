@@ -1689,12 +1689,13 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   unlink(jsonPath3)
 })
 
-test_that("toJSON() returns an RDD of the correct values", {
-  df <- read.json(jsonPath)
-  testRDD <- toJSON(df)
-  expect_is(testRDD, "RDD")
-  expect_equal(getSerializedMode(testRDD), "string")
-  expect_equal(collectRDD(testRDD)[[1]], mockLines[1])
+test_that("toJSON() on DataFrame", {
+  df <- as.DataFrame(cars)
+  df_json <- toJSON(df)
+  expect_is(df_json, "SparkDataFrame")
+  expect_equal(colnames(df_json), c("value"))
+  expect_equal(head(df_json, 1),
+              data.frame(value = "{\"speed\":4.0,\"dist\":2.0}", stringsAsFactors = FALSE))
 })
 
 test_that("showDF()", {
