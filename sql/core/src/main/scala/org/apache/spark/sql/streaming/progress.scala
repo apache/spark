@@ -29,13 +29,14 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 
 /**
  * :: Experimental ::
  * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
  */
 @Experimental
+@InterfaceStability.Evolving
 class StateOperatorProgress private[sql](
     val numRowsTotal: Long,
     val numRowsUpdated: Long) extends Serializable {
@@ -80,6 +81,7 @@ class StateOperatorProgress private[sql](
  * @since 2.1.0
  */
 @Experimental
+@InterfaceStability.Evolving
 class StreamingQueryProgress private[sql](
   val id: UUID,
   val runId: UUID,
@@ -151,6 +153,7 @@ class StreamingQueryProgress private[sql](
  * @since 2.1.0
  */
 @Experimental
+@InterfaceStability.Evolving
 class SourceProgress protected[sql](
   val description: String,
   val startOffset: String,
@@ -196,6 +199,7 @@ class SourceProgress protected[sql](
  * @since 2.1.0
  */
 @Experimental
+@InterfaceStability.Evolving
 class SinkProgress protected[sql](
     val description: String) extends Serializable {
 
