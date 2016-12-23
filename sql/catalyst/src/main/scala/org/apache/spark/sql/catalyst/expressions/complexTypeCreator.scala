@@ -63,17 +63,17 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     val et = dataType.elementType
     val evals = children.map(e => e.genCode(ctx))
     val isPrimitiveArray = ctx.isPrimitiveType(et)
-    val primitiveTypeName = if (isPrimitiveArray) ctx.primitiveTypeName(et) else ""
-    val (preprocess, arrayData, arrayWriter) =
+    val (preprocess, arrayData) =
       GenArrayData.getCodeArrayData(ctx, et, children.size, isPrimitiveArray, array)
 
     val assigns = if (isPrimitiveArray) {
+      val primitiveTypeName = ctx.primitiveTypeName(et)
       evals.zipWithIndex.map { case (eval, i) =>
         eval.code + s"""
          if (${eval.isNull}) {
-           $arrayWriter.setNull$primitiveTypeName($i);
+           $arrayData.setNullAt($i);
          } else {
-           $arrayWriter.write($i, ${eval.value});
+           $arrayData.set$primitiveTypeName($i, ${eval.value});
          }
        """
       }
@@ -106,47 +106,28 @@ private [sql] object GenArrayData {
       dt: DataType,
       size: Int,
       isPrimitive : Boolean,
-      array: String): (String, String, String) = {
+      array: String): (String, String) = {
     if (!isPrimitive) {
       val arrayClass = classOf[GenericArrayData].getName
       ctx.addMutableState("Object[]", array,
         s"this.$array = new Object[${size}];")
-      ("", s"new $arrayClass($array)", null)
+      ("", s"new $arrayClass($array)")
     } else {
-      val row = ctx.freshName("row")
-      val holder = ctx.freshName("holder")
-      val rowWriter = ctx.freshName("createRowWriter")
-      val arrayWriter = ctx.freshName("createArrayWriter")
-      val unsafeRowClass = classOf[UnsafeRow].getName
+      val baseArray = ctx.freshName("baseArray")
       val unsafeArrayClass = classOf[UnsafeArrayData].getName
-      val holderClass = classOf[BufferHolder].getName
-      val rowWriterClass = classOf[UnsafeRowWriter].getName
-      val arrayWriterClass = classOf[UnsafeArrayWriter].getName
-      ctx.addMutableState(unsafeRowClass, row, "")
       ctx.addMutableState(unsafeArrayClass, array, "")
-      ctx.addMutableState(holderClass, holder, "")
-      ctx.addMutableState(rowWriterClass, rowWriter, "")
-      ctx.addMutableState(arrayWriterClass, arrayWriter, "")
       val unsafeArraySizeInBytes =
         UnsafeArrayData.calculateHeaderPortionInBytes(size) +
         ByteArrayMethods.roundNumberOfBytesToNearestWord(dt.defaultSize * size)
+      val baseOffset = Platform.BYTE_ARRAY_OFFSET
 
-      // To write data to UnsafeArrayData, we create UnsafeRow with a single array field
-      // and then prepare BufferHolder for the array.
-      // In summary, this does not use UnsafeRow and wastes some bits in an byte array
       (s"""
-        $row = new $unsafeRowClass(1);
-        $holder = new $holderClass($row, $unsafeArraySizeInBytes);
-        $rowWriter = new $rowWriterClass($holder, 1);
-        $arrayWriter = new $arrayWriterClass();
-        $rowWriter.reset();
-        $rowWriter.setOffsetAndSize(0, $unsafeArraySizeInBytes);
-        $holder.reset();
-        $arrayWriter.initialize($holder, ${size}, ${dt.defaultSize});
-        $array = $row.getArray(0);
+        byte[] $baseArray = new byte[$unsafeArraySizeInBytes];
+        $array = new $unsafeArrayClass();
+        Platform.putLong($baseArray, $baseOffset, $size);
+        $array.pointTo($baseArray, $baseOffset, $unsafeArraySizeInBytes);
        """,
-       array,
-       arrayWriter
+       array
       )
     }
   }
@@ -209,71 +190,65 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val MapType(keyDt, valueDt, _) = dataType
     val evalKeys = keys.map(e => e.genCode(ctx))
     val isPrimitiveArrayKey = ctx.isPrimitiveType(keyDt)
-    val primitiveKeyTypeName = if (isPrimitiveArrayKey) ctx.primitiveTypeName(keyDt) else ""
     val evalValues = values.map(e => e.genCode(ctx))
     val isPrimitiveArrayValue = ctx.isPrimitiveType(valueDt)
-    val primitiveValueTypeName = if (isPrimitiveArrayKey) ctx.primitiveTypeName(keyDt) else ""
-    val (preprocessKeyData, keyData, keyDataArrayWriter) =
+    val (preprocessKeyData, keyDataArray) =
       GenArrayData.getCodeArrayData(ctx, keyDt, keys.size, isPrimitiveArrayKey, keyArray)
-    val (preprocessValueData, valueData, valueDataArrayWriter) =
+    val (preprocessValueData, valueDataArray) =
       GenArrayData.getCodeArrayData(ctx, valueDt, values.size, isPrimitiveArrayValue, valueArray)
+
+    val assignKeys = if (isPrimitiveArrayKey) {
+      val primitiveKeyTypeName = ctx.primitiveTypeName(keyDt)
+      evalKeys.zipWithIndex.map { case (eval, i) =>
+        eval.code + s"""
+         if (${eval.isNull}) {
+           $keyDataArray.setNullAt($i);
+         } else {
+           $keyDataArray.set$primitiveKeyTypeName($i, ${eval.value});
+         }
+       """
+      }
+    } else {
+      evalKeys.zipWithIndex.map { case (eval, i) =>
+        eval.code + s"""
+         if (${eval.isNull}) {
+           throw new RuntimeException("Cannot use null as map key!");
+         } else {
+           $keyArray[$i] = ${eval.value};
+         }
+       """
+      }
+    }
+
+    val assignValues = if (isPrimitiveArrayValue) {
+      val primitiveValueTypeName = ctx.primitiveTypeName(valueDt)
+      evalValues.zipWithIndex.map { case (eval, i) =>
+        eval.code + s"""
+         if (${eval.isNull}) {
+           $valueDataArray.setNullAt($i);
+         } else {
+           $valueDataArray.set$primitiveValueTypeName($i, ${eval.value});
+         }
+       """
+      }
+    } else {
+      evalValues.zipWithIndex.map { case (eval, i) =>
+        eval.code + s"""
+         if (${eval.isNull}) {
+           $valueArray[$i] = null;
+         } else {
+           $valueArray[$i] = ${eval.value};
+         }
+       """
+      }
+    }
 
     ev.copy(code = s"final boolean ${ev.isNull} = false;" +
       preprocessKeyData +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        evalKeys.zipWithIndex.map { case (eval, i) =>
-          eval.code +
-            (if (isPrimitiveArrayKey) {
-               (if (!keys(i).nullable) {
-                  s"\n$keyDataArrayWriter.write($i, ${eval.value});"
-                } else {
-                  s"""
-                 if (${eval.isNull}) {
-                   $keyDataArrayWriter.setNull$primitiveKeyTypeName($i);
-                 } else {
-                   $keyDataArrayWriter.write($i, ${eval.value});
-                 }
-                """
-                })
-              } else {
-                s"""
-                if (${eval.isNull}) {
-                  throw new RuntimeException("Cannot use null as map key!");
-                } else {
-                  $keyArray[$i] = ${eval.value};
-                }
-               """
-              })
-        }) +
+      ctx.splitExpressions(ctx.INPUT_ROW, assignKeys) +
       preprocessValueData +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        evalValues.zipWithIndex.map { case (eval, i) =>
-          eval.code +
-            (if (isPrimitiveArrayValue) {
-               (if (!values(i).nullable) {
-                  s"\n$valueDataArrayWriter.write($i, ${eval.value});"
-                } else {
-                  s"""
-                 if (${eval.isNull}) {
-                   $valueDataArrayWriter.setNull$primitiveValueTypeName($i);
-                 } else {
-                   $valueDataArrayWriter.write($i, ${eval.value});
-                 }
-                """
-                })
-             } else {
-               s"""
-               if (${eval.isNull}) {
-                 $valueArray[$i] = null;
-               } else {
-                 $valueArray[$i] = ${eval.value};
-               }
-              """
-             })
-        }) +
-      s"final MapData ${ev.value} = new $mapClass($keyData, $valueData);")
+      ctx.splitExpressions(ctx.INPUT_ROW, assignValues) +
+      s"final MapData ${ev.value} = new $mapClass($keyDataArray, $valueDataArray);")
   }
 
   override def prettyName: String = "map"
