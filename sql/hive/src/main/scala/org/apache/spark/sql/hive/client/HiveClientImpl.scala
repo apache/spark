@@ -823,10 +823,12 @@ private[hive] class HiveClientImpl(
       case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
     })
     // Note: In Hive the schema and partition columns must be disjoint sets
-    val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
-      table.partitionColumnNames.contains(c.getName)
+    val schema = table.schema.map(toHiveColumn)
+    val partCols = table.partitionColumnNames.flatMap { colName =>
+      schema.find(_.getName == colName)
     }
-    if (schema.isEmpty) {
+    val schemaWithoutPartCols = schema.filterNot(partCols.contains)
+    if (schemaWithoutPartCols.isEmpty) {
       // This is a hack to preserve existing behavior. Before Spark 2.0, we do not
       // set a default serde here (this was done in Hive), and so if the user provides
       // an empty schema Hive would automatically populate the schema with a single
@@ -836,7 +838,7 @@ private[hive] class HiveClientImpl(
       hiveTable.setFields(
         Seq(new FieldSchema("col", "array<string>", "from deserializer")).asJava)
     } else {
-      hiveTable.setFields(schema.asJava)
+      hiveTable.setFields(schemaWithoutPartCols.asJava)
     }
     hiveTable.setPartCols(partCols.asJava)
     hiveTable.setOwner(conf.getUser)
