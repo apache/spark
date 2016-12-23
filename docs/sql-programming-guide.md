@@ -384,8 +384,8 @@ For example:
 
 ## Aggregations
 
-The [built-in DataFrames functions](api/scala/index.html#org.apache.spark.sql.functions$) mentioned 
-before provide such common aggregations as `count()`, `countDistinct()`, `avg()`, `max()`, `min()`, etc.
+The [built-in DataFrames functions](api/scala/index.html#org.apache.spark.sql.functions$) provide common
+aggregations such as `count()`, `countDistinct()`, `avg()`, `max()`, `min()`, etc.
 While those functions are designed for DataFrames, Spark SQL also has type-safe versions for some of them in 
 [Scala](api/scala/index.html#org.apache.spark.sql.expressions.scalalang.typed$) and 
 [Java](api/java/org/apache/spark/sql/expressions/javalang/typed.html) to work with strongly typed Datasets.

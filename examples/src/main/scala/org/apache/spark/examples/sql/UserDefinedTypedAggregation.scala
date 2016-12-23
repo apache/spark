@@ -40,7 +40,11 @@ object UserDefinedTypedAggregation {
       buffer
     }
     // Merge two intermediate values
-    def merge(b1: Average, b2: Average): Average = Average(b1.sum + b2.sum, b1.count + b2.count)
+    def merge(b1: Average, b2: Average): Average = {
+      b1.sum += b2.sum
+      b1.count += b2.count
+      b1
+    }
     // Transform the output of the reduction
     def finish(reduction: Average): Double = reduction.sum.toDouble / reduction.count
     // Specifies the Encoder for the intermediate value type

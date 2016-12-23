@@ -102,9 +102,11 @@ public class JavaUserDefinedTypedAggregation {
     }
     // Merge two intermediate values
     public Average merge(Average b1, Average b2) {
-      long newSum = b1.getSum() + b2.getSum();
-      long newCount = b1.getCount() + b2.getCount();
-      return new Average(newSum, newCount);
+      long mergedSum = b1.getSum() + b2.getSum();
+      long mergedCount = b1.getCount() + b2.getCount();
+      b1.setSum(mergedSum);
+      b1.setCount(mergedCount);
+      return b1;
     }
     // Transform the output of the reduction
     public Double finish(Average reduction) {
