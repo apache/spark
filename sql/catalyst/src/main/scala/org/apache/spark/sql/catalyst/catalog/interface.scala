@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.util.Date
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Cast, Literal}
@@ -241,6 +239,8 @@ case class CatalogTable(
 
 /**
  * This class of statistics is used in [[CatalogTable]] to interact with metastore.
+ * We define this new class instead of directly using [[Statistics]] here because there are no
+ * concepts of attributes or broadcast hint in catalog.
  */
 case class CatalogStatistics(
     sizeInBytes: BigInt,
@@ -251,22 +251,16 @@ case class CatalogStatistics(
    * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
    * on column names.
    */
-  def convert(attributes: Seq[Attribute]): Statistics = {
-    val matched = mutable.HashMap[Attribute, ColumnStat]()
-    attributes.foreach { attr =>
-      if (colStats.contains(attr.name)) {
-        matched.put(attr, colStats(attr.name))
-      }
-    }
+  def toPlanStats(planOutput: Seq[Attribute]): Statistics = {
+    val matched = planOutput.flatMap(a => colStats.get(a.name).map(a -> _))
     Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
-      attributeStats = AttributeMap(matched.toSeq))
+      attributeStats = AttributeMap(matched))
   }
 
   /** Readable string representation for the CatalogStatistics. */
   def simpleString: String = {
-    Seq(s"sizeInBytes=$sizeInBytes",
-      if (rowCount.isDefined) s"rowCount=${rowCount.get}" else ""
-    ).filter(_.nonEmpty).mkString(", ")
+    val rowCountString = if (rowCount.isDefined) s", ${rowCount.get} rows" else ""
+    s"$sizeInBytes bytes$rowCountString"
   }
 }
 
