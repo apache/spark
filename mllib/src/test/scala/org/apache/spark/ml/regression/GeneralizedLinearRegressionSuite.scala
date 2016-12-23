@@ -581,6 +581,8 @@ class GeneralizedLinearRegressionSuite
   test("generalized linear regression: tweedie family against glm") {
     /*
         R code:
+        
+        library(statmod)
         df <- as.data.frame(matrix(c(
           1.0, 1.0, 0.0, 5.0,
           0.5, 1.0, 1.0, 2.0,
@@ -1150,6 +1152,7 @@ class GeneralizedLinearRegressionSuite
     /*
       R code:
 
+      library(statmod)
       df <- as.data.frame(matrix(c(
         1.0, 1.0, 0.0, 5.0,
         0.5, 2.0, 1.0, 2.0,
