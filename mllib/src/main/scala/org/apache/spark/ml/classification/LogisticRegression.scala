@@ -233,7 +233,7 @@ class LogisticRegression @Since("1.2.0") (
 
   /**
    * Set the convergence tolerance of iterations.
-   * Smaller value will lead to higher accuracy with the cost of more iterations.
+   * Smaller value will lead to higher accuracy at the cost of more iterations.
    * Default is 1E-6.
    *
    * @group setParam

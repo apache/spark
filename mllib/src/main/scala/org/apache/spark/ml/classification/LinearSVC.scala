@@ -17,10 +17,11 @@
 
 package org.apache.spark.ml.classification
 
+import scala.collection.mutable
+
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
-import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
@@ -39,9 +40,9 @@ import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit}
 
 /** Params for linear SVM Classifier. */
-private[ml] trait LinearSVCParams extends ClassifierParams with HasRegParam with HasMaxIter
-  with HasFitIntercept with HasTol with HasStandardization with HasWeightCol with HasThreshold
-  with HasAggregationDepth {
+private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
+  with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
+  with HasThreshold with HasAggregationDepth {
 
 }
 
@@ -51,23 +52,13 @@ private[ml] trait LinearSVCParams extends ClassifierParams with HasRegParam with
  */
 @Since("2.2.0")
 @Experimental
-class LinearSVC @Since("2.2.0")(
+class LinearSVC @Since("2.2.0") (
     @Since("2.2.0") override val uid: String)
   extends Classifier[Vector, LinearSVC, LinearSVCModel]
   with LinearSVCParams with DefaultParamsWritable {
 
   @Since("2.2.0")
   def this() = this(Identifiable.randomUID("linearsvc"))
-
-  /**
-   * Set the maximum number of iterations.
-   * Default is 100.
-   *
-   * @group setParam
-   */
-  @Since("2.2.0")
-  def setMaxIter(value: Int): this.type = set(maxIter, value)
-
 
   /**
    * Set the regularization parameter.
@@ -77,16 +68,17 @@ class LinearSVC @Since("2.2.0")(
    */
   @Since("2.2.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
+  setDefault(regParam -> 0.0)
 
   /**
-   * Set the convergence tolerance of iterations.
-   * Smaller value will lead to higher accuracy with the cost of more iterations.
-   * Default is 1E-4.
+   * Set the maximum number of iterations.
+   * Default is 100.
    *
    * @group setParam
    */
   @Since("2.2.0")
-  def setTol(value: Double): this.type = set(tol, value)
+  def setMaxIter(value: Int): this.type = set(maxIter, value)
+  setDefault(maxIter -> 100)
 
   /**
    * Whether to fit an intercept term.
@@ -96,9 +88,28 @@ class LinearSVC @Since("2.2.0")(
    */
   @Since("2.2.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
+  setDefault(fitIntercept -> true)
 
+  /**
+   * Set the convergence tolerance of iterations.
+   * Smaller value will lead to higher accuracy at the cost of more iterations.
+   * Default is 1E-6.
+   *
+   * @group setParam
+   */
   @Since("2.2.0")
-  override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
+  def setTol(value: Double): this.type = set(tol, value)
+  setDefault(tol -> 1E-6)
+
+  /**
+   * whether to standardize the training features before fitting the model.
+   * Default is true.
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setStandardization(value: Boolean): this.type = set(standardization, value)
+  setDefault(standardization -> true)
 
   /**
    * Sets the value of param [[weightCol]].
@@ -110,15 +121,35 @@ class LinearSVC @Since("2.2.0")(
   @Since("2.2.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
-  setDefault(maxIter -> 100,
-    regParam -> 0.0,
-    threshold -> 0,
-    tol -> 1E-6,
-    fitIntercept -> true
-  )
+  /**
+   * Set threshold in binary classification, in range [0, 1].
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setThreshold(value: Double): this.type = set(threshold, value)
+  setDefault(threshold -> 0.0)
 
   /**
-   * Train a linear SVM Classifier Model with Hinge Loss and OWLQN optimizer
+   * Suggested depth for treeAggregate (greater than or equal to 2).
+   * If the dimensions of features or the number of partitions are large,
+   * this param could be adjusted to a larger size.
+   * Default is 2.
+   *
+   * @group expertSetParam
+   */
+  @Since("2.2.0")
+  def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
+  setDefault(aggregationDepth -> 2)
+
+  @Since("2.2.0")
+  override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
+
+  /**
+   *
+   * Linear SVM Classifier (https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM)
+   *
+   * This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
    *
    * @param dataset Training dataset
    * @return Fitted model
@@ -248,30 +279,36 @@ object LinearSVC extends DefaultParamsReadable[LinearSVC] {
  */
 @Since("2.2.0")
 @Experimental
-class LinearSVCModel private[ml](
+class LinearSVCModel private[classification] (
     @Since("2.2.0") override val uid: String,
     @Since("2.2.0") val coefficients: Vector,
     @Since("2.2.0") val intercept: Double)
   extends ClassificationModel[Vector, LinearSVCModel]
   with LinearSVCParams with MLWritable {
 
-  override val numClasses = 2
+  @Since("2.2.0")
+  override val numClasses: Int = 2
 
   @Since("2.2.0")
+  override val numFeatures: Int = coefficients.size
+
+    @Since("2.2.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
 
-  /**
-   * Predict label for the given features.
-   * This internal method is used to implement [[transform()]] and output [[predictionCol]].
-   */
+  @Since("2.2.0")
+  def setWeightCol(value: Double): this.type = set(threshold, value)
+
+  private val margin: Vector => Double = (features) => {
+    BLAS.dot(features, coefficients) + intercept
+  }
+
   override protected def predict(features: Vector): Double = {
-    val margin = BLAS.dot(features, coefficients) + intercept
-    if (margin > $(threshold)) 1.0 else 0.0
+    if (margin(features) > $(threshold)) 1.0 else 0.0
   }
 
   override protected def predictRaw(features: Vector): Vector = {
-    val margin = BLAS.dot(features, coefficients) + intercept
-    Vectors.dense(-margin, margin)
+    val m = margin(features)
+    Vectors.dense(-m, m)
   }
 
   @Since("2.2.0")
@@ -279,9 +316,6 @@ class LinearSVCModel private[ml](
     copyValues(new LinearSVCModel(uid, coefficients, intercept), extra).setParent(parent)
   }
 
-  /**
-   * Returns a [[org.apache.spark.ml.util.MLWriter]] instance for this ML instance.
-   */
   @Since("2.2.0")
   override def write: MLWriter = new LinearSVCModel.LinearSVCWriter(this)
 
@@ -307,7 +341,6 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      // Save model data: numClasses, numFeatures, intercept, coefficients
       val data = Data(instance.coefficients, instance.intercept)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
