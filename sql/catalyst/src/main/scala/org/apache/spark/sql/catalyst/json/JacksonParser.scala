@@ -122,7 +122,7 @@ class JacksonParser(
    */
   private def makeRootConverter(st: StructType): JsonParser => Seq[InternalRow] = {
     val elementConverter = makeConverter(st)
-    val fieldConverters = st.map(_.dataType).map(makeConverter)
+    val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
     (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, st) {
       case START_OBJECT => convertObject(parser, st, fieldConverters) :: Nil
         // SPARK-3308: support reading top level JSON arrays and take every element
@@ -287,7 +287,7 @@ class JacksonParser(
       }
 
     case st: StructType =>
-      val fieldConverters = st.map(_.dataType).map(makeConverter)
+      val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
       (parser: JsonParser) => parseJsonToken[InternalRow](parser, dataType) {
         case START_OBJECT => convertObject(parser, st, fieldConverters)
       }
@@ -362,7 +362,7 @@ class JacksonParser(
   private def convertObject(
       parser: JsonParser,
       schema: StructType,
-      fieldConverters: Seq[ValueConverter]): InternalRow = {
+      fieldConverters: Array[ValueConverter]): InternalRow = {
     val row = new GenericInternalRow(schema.length)
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
