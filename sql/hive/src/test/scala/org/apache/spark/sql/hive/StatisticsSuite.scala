@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
+import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
@@ -152,7 +152,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   private def checkTableStats(
-      stats: Option[Statistics],
+      stats: Option[CatalogStatistics],
       hasSizeInBytes: Boolean,
       expectedRowCounts: Option[Int]): Unit = {
     if (hasSizeInBytes || expectedRowCounts.nonEmpty) {
@@ -168,7 +168,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       tableName: String,
       isDataSourceTable: Boolean,
       hasSizeInBytes: Boolean,
-      expectedRowCounts: Option[Int]): Option[Statistics] = {
+      expectedRowCounts: Option[Int]): Option[CatalogStatistics] = {
     val df = sql(s"SELECT * FROM $tableName")
     val stats = df.queryExecution.analyzed.collect {
       case rel: MetastoreRelation =>
@@ -435,10 +435,11 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   /** Used to test refreshing cached metadata once table stats are updated. */
-  private def getStatsBeforeAfterUpdate(isAnalyzeColumns: Boolean): (Statistics, Statistics) = {
+  private def getStatsBeforeAfterUpdate(isAnalyzeColumns: Boolean)
+    : (CatalogStatistics, CatalogStatistics) = {
     val tableName = "tbl"
-    var statsBeforeUpdate: Statistics = null
-    var statsAfterUpdate: Statistics = null
+    var statsBeforeUpdate: CatalogStatistics = null
+    var statsAfterUpdate: CatalogStatistics = null
     withTable(tableName) {
       val tableIndent = TableIdentifier(tableName, Some("default"))
       val catalog = spark.sessionState.catalog.asInstanceOf[HiveSessionCatalog]

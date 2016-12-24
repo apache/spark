@@ -24,6 +24,7 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.StaticSQLConf
@@ -39,7 +40,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   import testImplicits._
 
   private def checkTableStats(tableName: String, expectedRowCount: Option[Int])
-    : Option[Statistics] = {
+    : Option[CatalogStatistics] = {
     val df = spark.table(tableName)
     val stats = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
       assert(rel.catalogTable.get.stats.flatMap(_.rowCount) === expectedRowCount)
@@ -259,5 +260,47 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
         assert(stats2.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
       }
     }
+  }
+
+  // This test will be run twice: with and without Hive support
+  test("conversion from CatalogStatistics to Statistics") {
+    withTable("ds_tbl", "hive_tbl") {
+      // Test data source table
+      checkStatsConversion(tableName = "ds_tbl", isDatasourceTable = true)
+      // Test hive serde table
+      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
+        checkStatsConversion(tableName = "hive_tbl", isDatasourceTable = false)
+      }
+    }
+  }
+
+  private def checkStatsConversion(tableName: String, isDatasourceTable: Boolean): Unit = {
+    // Create an empty table and run analyze command on it.
+    val createTableSql = if (isDatasourceTable) {
+      s"CREATE TABLE $tableName (c1 INT, c2 STRING) USING PARQUET"
+    } else {
+      s"CREATE TABLE $tableName (c1 INT, c2 STRING)"
+    }
+    sql(createTableSql)
+    // Analyze only one column.
+    sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c1")
+    val (relation, catalogTable) = spark.table(tableName).queryExecution.analyzed.collect {
+      case catalogRel: CatalogRelation => (catalogRel, catalogRel.catalogTable)
+      case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
+    }.head
+    val emptyColStat = ColumnStat(0, None, None, 0, 4, 4)
+    // Check catalog statistics
+    assert(catalogTable.stats.isDefined)
+    assert(catalogTable.stats.get.sizeInBytes == 0)
+    assert(catalogTable.stats.get.rowCount == Some(0))
+    assert(catalogTable.stats.get.colStats == Map("c1" -> emptyColStat))
+
+    // Check relation statistics
+    assert(relation.statistics.sizeInBytes == 0)
+    assert(relation.statistics.rowCount == Some(0))
+    assert(relation.statistics.attributeStats.size == 1)
+    val (attribute, colStat) = relation.statistics.attributeStats.head
+    assert(attribute.name == "c1")
+    assert(colStat == emptyColStat)
   }
 }
