@@ -121,12 +121,8 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
   implicit def newStringSeqEncoder[T <: Seq[String] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
   /** @since 1.6.1 */
-  implicit def newProductSeqEncoder[A <: Product, T <: Seq[A] : TypeTag]: Encoder[T] =
+  implicit def newProductSeqEncoder[T <: Seq[Product] : TypeTag]: Encoder[T] =
     ExpressionEncoder()
-
-  // Workaround for implicit resolution problem for Seq.toDS (only supports Seq)
-  implicit def newProductSeqOnlyEncoder[A <: Product : TypeTag]: Encoder[Seq[A]] =
-    newProductSeqEncoder[A, Seq[A]]
 
   // Arrays
 
