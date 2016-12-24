@@ -947,8 +947,8 @@ class ExecutorAllocationManagerSuite
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(stageInfo))
     assert(maxNumExecutorsNeeded(manager) === 1)
 
-    val taskInfo = createTaskInfo(1, 1, "executor-1")
-    val speculatedTaskInfo = createTaskInfo(2, 1, "executor-1")
+    val taskInfo = createTaskInfo(0, 0, "executor-1")
+    val speculatedTaskInfo = createTaskInfo(1, 0, "executor-1")
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, taskInfo))
     assert(maxNumExecutorsNeeded(manager) === 1)
 
@@ -961,7 +961,7 @@ class ExecutorAllocationManagerSuite
     sc.listenerBus.postToAll(SparkListenerStageCompleted(stageInfo))
     assert(maxNumExecutorsNeeded(manager) === 0)
 
-    sc.listenerBus.postToAll(SparkListenerTaskEnd(0, 0, null, Success, speculatedTaskInfo, null))
+    sc.listenerBus.postToAll(SparkListenerTaskEnd(0, 0, null, TaskKilled, speculatedTaskInfo, null))
     assert(maxNumExecutorsNeeded(manager) === 0)
   }
 
