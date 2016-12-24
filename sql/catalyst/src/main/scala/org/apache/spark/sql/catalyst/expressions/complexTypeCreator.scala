@@ -58,40 +58,24 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val array = ctx.freshName("array")
-
     val et = dataType.elementType
     val evals = children.map(e => e.genCode(ctx))
     val isPrimitiveArray = ctx.isPrimitiveType(et)
-    val (preprocess, arrayData) =
-      GenArrayData.getCodeArrayData(ctx, et, children.size, isPrimitiveArray, array)
-
-    val assigns = if (isPrimitiveArray) {
-      val primitiveTypeName = ctx.primitiveTypeName(et)
-      evals.zipWithIndex.map { case (eval, i) =>
-        eval.code + s"""
-         if (${eval.isNull}) {
-           $arrayData.setNullAt($i);
-         } else {
-           $arrayData.set$primitiveTypeName($i, ${eval.value});
-         }
-       """
-      }
-    } else {
-      evals.zipWithIndex.map { case (eval, i) =>
-        eval.code + s"""
-         if (${eval.isNull}) {
-           $array[$i] = null;
-         } else {
-           $array[$i] = ${eval.value};
-         }
-       """
-      }
-    }
-    ev.copy(code =
-      preprocess +
-      ctx.splitExpressions(ctx.INPUT_ROW, assigns) +
-      s"\nfinal ArrayData ${ev.value} = $arrayData;\n",
+    val (preprocess, postprocess, arrayData, array) =
+      GenArrayData.genCodeToCreateArrayData(ctx, et, children.size, isPrimitiveArray)
+    val assigns = GenArrayData.genCodeToAssignArrayElements(
+      ctx, evals, et, isPrimitiveArray, arrayData, array, true)
+    /*
+      TODO: When we generate simpler code, we have to solve the following exception
+        https://github.com/apache/spark/pull/13909/files#r93813725
+      ev.copy(
+        code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess
+        value = arrayData,
+        isNull = "false")
+    */
+    ev.copy(
+      code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess +
+        s"\nfinal ArrayData ${ev.value} = $arrayData;\n",
       isNull = "false")
   }
 
@@ -99,36 +83,101 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 }
 
 private [sql] object GenArrayData {
-  // This function returns Java code pieces based on DataType and isPrimitive
-  // for allocation of ArrayData class
-  def getCodeArrayData(
+  /**
+   * Return Java code pieces based on DataType and isPrimitive to allocate ArrayData class
+   *
+   * @param ctx a [[CodegenContext]]
+   * @param elementType data type of an underlying array
+   * @param numElements the number of array elements
+   * @param isPrimitive Are all of the elements of an underlying array primitive type
+   * @return (code pre-assignments, code post-assignments, underlying array name, arrayData name)
+   */
+  def genCodeToCreateArrayData(
       ctx: CodegenContext,
-      dt: DataType,
-      size: Int,
-      isPrimitive : Boolean,
-      array: String): (String, String) = {
+      elementType: DataType,
+      numElements: Int,
+      isPrimitive : Boolean): (String, String, String, String) = {
+    val arrayName = ctx.freshName("array")
+    val arrayDataName = ctx.freshName("arrayData")
     if (!isPrimitive) {
       val arrayClass = classOf[GenericArrayData].getName
-      ctx.addMutableState("Object[]", array,
-        s"this.$array = new Object[${size}];")
-      ("", s"new $arrayClass($array)")
+      ctx.addMutableState("Object[]", arrayName,
+        s"this.$arrayName = new Object[${numElements}];")
+      ("",
+       s"$arrayClass $arrayDataName = new $arrayClass($arrayName);",
+       arrayDataName,
+       arrayName)
     } else {
-      val baseArray = ctx.freshName("baseArray")
       val unsafeArrayClass = classOf[UnsafeArrayData].getName
-      ctx.addMutableState(unsafeArrayClass, array, "")
+      val baseObject = ctx.freshName("baseObject")
       val unsafeArraySizeInBytes =
-        UnsafeArrayData.calculateHeaderPortionInBytes(size) +
-        ByteArrayMethods.roundNumberOfBytesToNearestWord(dt.defaultSize * size)
+        UnsafeArrayData.calculateHeaderPortionInBytes(numElements) +
+        ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
       val baseOffset = Platform.BYTE_ARRAY_OFFSET
 
       (s"""
-        byte[] $baseArray = new byte[$unsafeArraySizeInBytes];
-        $array = new $unsafeArrayClass();
-        Platform.putLong($baseArray, $baseOffset, $size);
-        $array.pointTo($baseArray, $baseOffset, $unsafeArraySizeInBytes);
-       """,
-       array
-      )
+        byte[] $arrayName = new byte[$unsafeArraySizeInBytes];
+        $unsafeArrayClass $arrayDataName = new $unsafeArrayClass();
+        Platform.putLong($arrayName, $baseOffset, $numElements);
+        $arrayDataName.pointTo($arrayName, $baseOffset, $unsafeArraySizeInBytes);
+      """,
+       "",
+       arrayDataName,
+       arrayName)
+    }
+  }
+
+  /**
+   * Return Java code pieces to assign values to each element of an array
+   *
+   * @param ctx a [[CodegenContext]]
+   * @param evals a set of [[ExprCode]] for each element of an underlying array
+   * @param elementType data type of an underlying array
+   * @param isPrimitive Are all of the elements of an underlying array primitive type
+   * @param arrayDataName arrayData name
+   * @param arrayName underlying array name
+   * @param allowNull Is an assignment of null to an array element allowed
+   * @return a set of Strings for assignments to each element of an array
+   */
+  def genCodeToAssignArrayElements(
+      ctx: CodegenContext,
+      evals: Seq[ExprCode],
+      elementType: DataType,
+      isPrimitive: Boolean,
+      arrayDataName: String,
+      arrayName: String,
+      allowNull: Boolean): Seq[String] = {
+    if (isPrimitive) {
+      val primitiveValueTypeName = ctx.primitiveTypeName(elementType)
+      evals.zipWithIndex.map { case (eval, i) =>
+        val isNullAssignment = if (allowNull) {
+          s"$arrayDataName.setNullAt($i);"
+        } else {
+          "throw new RuntimeException(\"Cannot use null as map key!\");"
+        }
+        eval.code + s"""
+         if (${eval.isNull}) {
+           $isNullAssignment
+         } else {
+           $arrayDataName.set$primitiveValueTypeName($i, ${eval.value});
+         }
+       """
+      }
+    } else {
+      evals.zipWithIndex.map { case (eval, i) =>
+        val isNullAssignment = if (allowNull) {
+          s"$arrayName[$i] = null;"
+        } else {
+          "throw new RuntimeException(\"Cannot use null as map key!\");"
+        }
+        eval.code + s"""
+         if (${eval.isNull}) {
+           $isNullAssignment
+         } else {
+           $arrayName[$i] = ${eval.value};
+         }
+       """
+      }
     }
   }
 }
@@ -184,71 +233,31 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val mapClass = classOf[ArrayBasedMapData].getName
-    val keyArray = ctx.freshName("keyArray")
-    val valueArray = ctx.freshName("valueArray")
-
     val MapType(keyDt, valueDt, _) = dataType
     val evalKeys = keys.map(e => e.genCode(ctx))
-    val isPrimitiveArrayKey = ctx.isPrimitiveType(keyDt)
+    val isPrimitiveKey = ctx.isPrimitiveType(keyDt)
     val evalValues = values.map(e => e.genCode(ctx))
-    val isPrimitiveArrayValue = ctx.isPrimitiveType(valueDt)
-    val (preprocessKeyData, keyDataArray) =
-      GenArrayData.getCodeArrayData(ctx, keyDt, keys.size, isPrimitiveArrayKey, keyArray)
-    val (preprocessValueData, valueDataArray) =
-      GenArrayData.getCodeArrayData(ctx, valueDt, values.size, isPrimitiveArrayValue, valueArray)
-
-    val assignKeys = if (isPrimitiveArrayKey) {
-      val primitiveKeyTypeName = ctx.primitiveTypeName(keyDt)
-      evalKeys.zipWithIndex.map { case (eval, i) =>
-        eval.code + s"""
-         if (${eval.isNull}) {
-           $keyDataArray.setNullAt($i);
-         } else {
-           $keyDataArray.set$primitiveKeyTypeName($i, ${eval.value});
-         }
-       """
-      }
-    } else {
-      evalKeys.zipWithIndex.map { case (eval, i) =>
-        eval.code + s"""
-         if (${eval.isNull}) {
-           throw new RuntimeException("Cannot use null as map key!");
-         } else {
-           $keyArray[$i] = ${eval.value};
-         }
-       """
-      }
-    }
-
-    val assignValues = if (isPrimitiveArrayValue) {
-      val primitiveValueTypeName = ctx.primitiveTypeName(valueDt)
-      evalValues.zipWithIndex.map { case (eval, i) =>
-        eval.code + s"""
-         if (${eval.isNull}) {
-           $valueDataArray.setNullAt($i);
-         } else {
-           $valueDataArray.set$primitiveValueTypeName($i, ${eval.value});
-         }
-       """
-      }
-    } else {
-      evalValues.zipWithIndex.map { case (eval, i) =>
-        eval.code + s"""
-         if (${eval.isNull}) {
-           $valueArray[$i] = null;
-         } else {
-           $valueArray[$i] = ${eval.value};
-         }
-       """
-      }
-    }
-
-    ev.copy(code = s"final boolean ${ev.isNull} = false;" +
-      preprocessKeyData +
-      ctx.splitExpressions(ctx.INPUT_ROW, assignKeys) +
-      preprocessValueData +
-      ctx.splitExpressions(ctx.INPUT_ROW, assignValues) +
-      s"final MapData ${ev.value} = new $mapClass($keyDataArray, $valueDataArray);")
+    val isPrimitiveValue = ctx.isPrimitiveType(valueDt)
+    val (preprocessKeyData, postprocessKeyData, keyArrayData, keyArray) =
+      GenArrayData.genCodeToCreateArrayData(ctx, keyDt, keys.size, isPrimitiveKey)
+    val (preprocessValueData, postprocessValueData, valueArrayData, valueArray) =
+      GenArrayData.genCodeToCreateArrayData(ctx, valueDt, values.size, isPrimitiveValue)
+    val assignKeys = GenArrayData.genCodeToAssignArrayElements(
+      ctx, evalKeys, keyDt, isPrimitiveKey, keyArrayData, keyArray, false)
+    val assignValues = GenArrayData.genCodeToAssignArrayElements(
+      ctx, evalValues, valueDt, isPrimitiveValue, valueArrayData, valueArray, true)
+    val code =
+      s"""
+       final boolean ${ev.isNull} = false;
+       $preprocessKeyData
+       ${ctx.splitExpressions(ctx.INPUT_ROW, assignKeys)}
+       $postprocessKeyData
+       $preprocessValueData
+       ${ctx.splitExpressions(ctx.INPUT_ROW, assignValues)}
+       $postprocessValueData
+       final MapData ${ev.value} = new $mapClass($keyArrayData, $valueArrayData);
+      """
+    ev.copy(code = code)
   }
 
   override def prettyName: String = "map"
