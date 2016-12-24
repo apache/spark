@@ -31,10 +31,9 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   val LOCAL = "local"
   val APP_NAME = "PoolSuite"
   val SCHEDULER_ALLOCATION_FILE_PROPERTY = "spark.scheduler.allocation.file"
-  val SCHEDULER_POOL_PROPERTY = "spark.scheduler.pool"
 
   def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl)
-  : TaskSetManager = {
+    : TaskSetManager = {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, Nil)
     }
@@ -94,9 +93,9 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     verifyPool(rootPool, "3", 0, 1, FIFO)
 
     val properties1 = new Properties()
-    properties1.setProperty(SCHEDULER_POOL_PROPERTY, "1")
+    properties1.setProperty(schedulableBuilder.FAIR_SCHEDULER_PROPERTIES, "1")
     val properties2 = new Properties()
-    properties2.setProperty(SCHEDULER_POOL_PROPERTY, "2")
+    properties2.setProperty(schedulableBuilder.FAIR_SCHEDULER_PROPERTIES, "2")
 
     val taskSetManager10 = createTaskSetManager(0, 1, taskScheduler)
     val taskSetManager11 = createTaskSetManager(1, 1, taskScheduler)
@@ -178,7 +177,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     scheduleTaskAndVerifyId(3, rootPool, 2)
   }
 
-  test("FairSchedulableBuilder sets default values for blank or invalid datas") {
+  test("SPARK-17663: FairSchedulableBuilder sets default values for blank or invalid datas") {
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler-with-invalid-data.xml")
       .getFile()
     val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE_PROPERTY, xmlPath)
@@ -199,6 +198,9 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     verifyPool(rootPool, "pool_with_empty_min_share", 0, 3, FAIR)
     verifyPool(rootPool, "pool_with_empty_weight", 2, 1, FAIR)
     verifyPool(rootPool, "pool_with_empty_scheduling_mode", 2, 2, FIFO)
+    verifyPool(rootPool, "pool_with_min_share_surrounded_whitespace", 3, 2, FAIR)
+    verifyPool(rootPool, "pool_with_weight_surrounded_whitespace", 1, 2, FAIR)
+    verifyPool(rootPool, "pool_with_scheduling_mode_surrounded_whitespace", 3, 2, FAIR)
   }
 
   private def verifyPool(rootPool: Pool, poolName: String, expectedInitMinShare: Int,
