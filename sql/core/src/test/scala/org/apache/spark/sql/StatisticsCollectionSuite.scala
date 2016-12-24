@@ -276,15 +276,14 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
   private def checkStatsConversion(tableName: String, isDatasourceTable: Boolean): Unit = {
     // Create an empty table and run analyze command on it.
-    val col = "c1"
     val createTableSql = if (isDatasourceTable) {
-      s"CREATE TABLE $tableName ($col INT) USING PARQUET"
+      s"CREATE TABLE $tableName (c1 INT, c2 STRING) USING PARQUET"
     } else {
-      s"CREATE TABLE $tableName ($col INT)"
+      s"CREATE TABLE $tableName (c1 INT, c2 STRING)"
     }
     sql(createTableSql)
-    sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS $col")
-
+    // Analyze only one column.
+    sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c1")
     val (relation, catalogTable) = spark.table(tableName).queryExecution.analyzed.collect {
       case catalogRel: CatalogRelation => (catalogRel, catalogRel.catalogTable)
       case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
@@ -294,13 +293,14 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     assert(catalogTable.stats.isDefined)
     assert(catalogTable.stats.get.sizeInBytes == 0)
     assert(catalogTable.stats.get.rowCount == Some(0))
-    assert(catalogTable.stats.get.colStats == Map(col -> emptyColStat))
+    assert(catalogTable.stats.get.colStats == Map("c1" -> emptyColStat))
 
     // Check relation statistics
     assert(relation.statistics.sizeInBytes == 0)
     assert(relation.statistics.rowCount == Some(0))
+    assert(relation.statistics.attributeStats.size == 1)
     val (attribute, colStat) = relation.statistics.attributeStats.head
-    assert(attribute.name == col)
+    assert(attribute.name == "c1")
     assert(colStat == emptyColStat)
   }
 }
