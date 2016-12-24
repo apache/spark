@@ -126,6 +126,7 @@ private [sql] object GenArrayData {
         UnsafeArrayData.calculateHeaderPortionInBytes(numElements) +
         ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
       val baseOffset = Platform.BYTE_ARRAY_OFFSET
+      ctx.addMutableState(unsafeArrayClass, arrayDataName, "");
 
       val primitiveValueTypeName = ctx.primitiveTypeName(elementType)
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
@@ -145,7 +146,7 @@ private [sql] object GenArrayData {
 
       (s"""
         byte[] $arrayName = new byte[$unsafeArraySizeInBytes];
-        final $unsafeArrayClass $arrayDataName = new $unsafeArrayClass();
+        $arrayDataName = new $unsafeArrayClass();
         Platform.putLong($arrayName, $baseOffset, $numElements);
         $arrayDataName.pointTo($arrayName, $baseOffset, $unsafeArraySizeInBytes);
       """,
