@@ -19,10 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -60,22 +59,11 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val et = dataType.elementType
     val evals = children.map(e => e.genCode(ctx))
-    val isPrimitiveArray = ctx.isPrimitiveType(et)
-    val (preprocess, postprocess, arrayData, array) =
-      GenArrayData.genCodeToCreateArrayData(ctx, et, children.size, isPrimitiveArray)
-    val assigns = GenArrayData.genCodeToAssignArrayElements(
-      ctx, evals, et, isPrimitiveArray, arrayData, array, true)
-    /*
-      TODO: When we generate simpler code, we have to solve the following exception
-        https://github.com/apache/spark/pull/13909/files#r93813725
-      ev.copy(
-        code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess,
-        value = arrayData,
-        isNull = "false")
-    */
+    val (preprocess, assigns, postprocess, arrayData, array) =
+      GenArrayData.genCodeToCreateArrayData(ctx, et, evals, true)
     ev.copy(
-      code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess +
-        s"\nfinal ArrayData ${ev.value} = $arrayData;\n",
+      code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess,
+      value = arrayData,
       isNull = "false")
   }
 
@@ -88,83 +76,26 @@ private [sql] object GenArrayData {
    *
    * @param ctx a [[CodegenContext]]
    * @param elementType data type of an underlying array
-   * @param numElements the number of array elements
-   * @param isPrimitive Are all of the elements of an underlying array primitive type
-   * @return (code pre-assignments, code post-assignments, arrayData name, underlying array name)
+   * @param elementsCode a set of [[ExprCode]] for each element of an underlying array
+   * @return (code pre-assignments, assignments to each array elements, code post-assignments,
+   *           arrayData name, underlying array name)
    */
   def genCodeToCreateArrayData(
       ctx: CodegenContext,
       elementType: DataType,
-      numElements: Int,
-      isPrimitive : Boolean): (String, String, String, String) = {
+      elementsCode: Seq[ExprCode],
+      allowNull: Boolean): (String, Seq[String], String, String, String) = {
     val arrayName = ctx.freshName("array")
     val arrayDataName = ctx.freshName("arrayData")
-    if (!isPrimitive) {
-      val arrayClass = classOf[GenericArrayData].getName
+    val numElements = elementsCode.length
+
+    if (!ctx.isPrimitiveType(elementType)) {
+      val arrayClass = classOf[ArrayData].getName
+      val genericArrayClass = classOf[GenericArrayData].getName
       ctx.addMutableState("Object[]", arrayName,
         s"this.$arrayName = new Object[${numElements}];")
-      ("",
-       s"$arrayClass $arrayDataName = new $arrayClass($arrayName);",
-       arrayDataName,
-       arrayName)
-    } else {
-      val unsafeArrayClass = classOf[UnsafeArrayData].getName
-      val baseObject = ctx.freshName("baseObject")
-      val unsafeArraySizeInBytes =
-        UnsafeArrayData.calculateHeaderPortionInBytes(numElements) +
-        ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
-      val baseOffset = Platform.BYTE_ARRAY_OFFSET
 
-      (s"""
-        byte[] $arrayName = new byte[$unsafeArraySizeInBytes];
-        $unsafeArrayClass $arrayDataName = new $unsafeArrayClass();
-        Platform.putLong($arrayName, $baseOffset, $numElements);
-        $arrayDataName.pointTo($arrayName, $baseOffset, $unsafeArraySizeInBytes);
-      """,
-       "",
-       arrayDataName,
-       arrayName)
-    }
-  }
-
-  /**
-   * Return Java code pieces to assign values to each element of an array
-   *
-   * @param ctx a [[CodegenContext]]
-   * @param evals a set of [[ExprCode]] for each element of an underlying array
-   * @param elementType data type of an underlying array
-   * @param isPrimitive Are all of the elements of an underlying array primitive type
-   * @param arrayDataName arrayData name
-   * @param arrayName underlying array name
-   * @param allowNull Is an assignment of null to an array element allowed
-   * @return a set of Strings for assignments to each element of an array
-   */
-  def genCodeToAssignArrayElements(
-      ctx: CodegenContext,
-      evals: Seq[ExprCode],
-      elementType: DataType,
-      isPrimitive: Boolean,
-      arrayDataName: String,
-      arrayName: String,
-      allowNull: Boolean): Seq[String] = {
-    if (isPrimitive) {
-      val primitiveValueTypeName = ctx.primitiveTypeName(elementType)
-      evals.zipWithIndex.map { case (eval, i) =>
-        val isNullAssignment = if (allowNull) {
-          s"$arrayDataName.setNullAt($i);"
-        } else {
-          "throw new RuntimeException(\"Cannot use null as map key!\");"
-        }
-        eval.code + s"""
-         if (${eval.isNull}) {
-           $isNullAssignment
-         } else {
-           $arrayDataName.set$primitiveValueTypeName($i, ${eval.value});
-         }
-       """
-      }
-    } else {
-      evals.zipWithIndex.map { case (eval, i) =>
+      val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
         val isNullAssignment = if (allowNull) {
           s"$arrayName[$i] = null;"
         } else {
@@ -178,6 +109,50 @@ private [sql] object GenArrayData {
          }
        """
       }
+
+      /*
+        TODO: When we declare arrayDataName as GenericArrayData,
+               we have to solve the following exception
+          https://github.com/apache/spark/pull/13909/files#r93813725
+      */
+      ("",
+       assignments,
+       s"final $arrayClass $arrayDataName = new $genericArrayClass($arrayName);",
+       arrayDataName,
+       arrayName)
+    } else {
+      val unsafeArrayClass = classOf[UnsafeArrayData].getName
+      val unsafeArraySizeInBytes =
+        UnsafeArrayData.calculateHeaderPortionInBytes(numElements) +
+        ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
+      val baseOffset = Platform.BYTE_ARRAY_OFFSET
+
+      val primitiveValueTypeName = ctx.primitiveTypeName(elementType)
+      val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
+        val isNullAssignment = if (allowNull) {
+          s"$arrayDataName.setNullAt($i);"
+        } else {
+          "throw new RuntimeException(\"Cannot use null as map key!\");"
+        }
+        eval.code + s"""
+         if (${eval.isNull}) {
+           $isNullAssignment
+         } else {
+           $arrayDataName.set$primitiveValueTypeName($i, ${eval.value});
+         }
+       """
+      }
+
+      (s"""
+        byte[] $arrayName = new byte[$unsafeArraySizeInBytes];
+        final $unsafeArrayClass $arrayDataName = new $unsafeArrayClass();
+        Platform.putLong($arrayName, $baseOffset, $numElements);
+        $arrayDataName.pointTo($arrayName, $baseOffset, $unsafeArraySizeInBytes);
+      """,
+       assignments,
+       "",
+       arrayDataName,
+       arrayName)
     }
   }
 }
@@ -235,17 +210,11 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val mapClass = classOf[ArrayBasedMapData].getName
     val MapType(keyDt, valueDt, _) = dataType
     val evalKeys = keys.map(e => e.genCode(ctx))
-    val isPrimitiveKey = ctx.isPrimitiveType(keyDt)
     val evalValues = values.map(e => e.genCode(ctx))
-    val isPrimitiveValue = ctx.isPrimitiveType(valueDt)
-    val (preprocessKeyData, postprocessKeyData, keyArrayData, keyArray) =
-      GenArrayData.genCodeToCreateArrayData(ctx, keyDt, keys.size, isPrimitiveKey)
-    val (preprocessValueData, postprocessValueData, valueArrayData, valueArray) =
-      GenArrayData.genCodeToCreateArrayData(ctx, valueDt, values.size, isPrimitiveValue)
-    val assignKeys = GenArrayData.genCodeToAssignArrayElements(
-      ctx, evalKeys, keyDt, isPrimitiveKey, keyArrayData, keyArray, false)
-    val assignValues = GenArrayData.genCodeToAssignArrayElements(
-      ctx, evalValues, valueDt, isPrimitiveValue, valueArrayData, valueArray, true)
+    val (preprocessKeyData, assignKeys, postprocessKeyData, keyArrayData, keyArray) =
+      GenArrayData.genCodeToCreateArrayData(ctx, keyDt, evalKeys, false)
+    val (preprocessValueData, assignValues, postprocessValueData, valueArrayData, valueArray) =
+      GenArrayData.genCodeToCreateArrayData(ctx, valueDt, evalValues, true)
     val code =
       s"""
        final boolean ${ev.isNull} = false;
