@@ -586,7 +586,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         val dataPath = "../hive/src/test/resources/data/files/kv1.txt"
 
         Seq(
-          "DROP TABLE test_udtf",
+          "DROP TABLE IF EXISTS test_udtf",
           "CREATE TABLE test_udtf(key INT, value STRING)",
           s"LOAD DATA LOCAL INPATH '$dataPath' OVERWRITE INTO TABLE test_udtf"
         ).foreach(statement.execute)
