@@ -69,42 +69,39 @@ class CSVTypeCastSuite extends SparkFunSuite {
     val types = Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
       BooleanType, DecimalType.DoubleDecimal, TimestampType, DateType, StringType)
 
+    // Nullable field with nullValue option.
     types.foreach { t =>
-      val converterOne =
+      // Tests that a custom nullValue.
+      val converter =
         CSVTypeCast.makeConverter("_1", t, nullable = true, CSVOptions("nullValue", "-"))
-      assertNull(converterOne.apply("-"))
-      assertNull(converterOne.apply(null))
+      assertNull(converter.apply("-"))
+      assertNull(converter.apply(null))
 
-      // casting a null to not nullable field should throw an exception.
-      val converterTwo =
+      // Tests that the default nullValue is empty string.
+      assertNull(CSVTypeCast.makeConverter("_1", t, nullable = true).apply(""))
+    }
+
+    // Not nullable field with nullValue option.
+    types.foreach { t =>
+      // Casts a null to not nullable field should throw an exception.
+      val converter =
         CSVTypeCast.makeConverter("_1", t, nullable = false, CSVOptions("nullValue", "-"))
-
       var message = intercept[RuntimeException] {
-        converterTwo.apply("-")
+        converter.apply("-")
       }.getMessage
       assert(message.contains("null value found but field _1 is not nullable."))
-
       message = intercept[RuntimeException] {
-        converterTwo.apply(null)
+        converter.apply(null)
       }.getMessage
       assert(message.contains("null value found but field _1 is not nullable."))
     }
-  }
 
-  test("String type should also respect `nullValue`") {
-    assertNull(CSVTypeCast.makeConverter("_1", StringType, nullable = true).apply(""))
-
+    // If nullValue is different with empty string, then, empty string should not be casted into
+    // null.
     Seq(true, false).foreach { b =>
       val converter =
         CSVTypeCast.makeConverter("_1", StringType, nullable = b, CSVOptions("nullValue", "null"))
       assert(converter.apply("") == UTF8String.fromString(""))
-    }
-
-    Seq(CSVOptions("nullValue", "null"), CSVOptions()).foreach { options =>
-      val converter =
-        CSVTypeCast.makeConverter("_1", StringType, nullable = true, options)
-      assertNull(converter.apply(options.nullValue))
-      assertNull(converter.apply(null))
     }
   }
 
