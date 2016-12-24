@@ -96,7 +96,7 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
-      <type>test-jar</type>
+      <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
