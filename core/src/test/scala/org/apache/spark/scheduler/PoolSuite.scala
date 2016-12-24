@@ -202,7 +202,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     verifyPool(rootPool, "pool_with_surrounded_whitespace", 3, 2, FAIR)
   }
 
-  test("FIFO Scheduler just uses root pool") {
+  test("SPARK-18066: FIFO Scheduler just uses root pool") {
     sc = new SparkContext("local", "PoolSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
 
@@ -222,11 +222,12 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
 
     assert(rootPool.getSchedulableByName(TEST_POOL) == null)
     assert(rootPool.schedulableQueue.size == 2)
-    assert(rootPool.getSchedulableByName(taskSetManager0.name) eq taskSetManager0)
-    assert(rootPool.getSchedulableByName(taskSetManager1.name) eq taskSetManager1)
+    assert(rootPool.getSchedulableByName(taskSetManager0.name) === taskSetManager0)
+    assert(rootPool.getSchedulableByName(taskSetManager1.name) === taskSetManager1)
   }
 
-  test("FAIR Scheduler uses default pool when spark.scheduler.pool property is not set") {
+  test("SPARK-18066: FAIR Scheduler uses default pool when spark.scheduler.pool property is not " +
+    "set") {
     sc = new SparkContext("local", "PoolSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
 
@@ -242,7 +243,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val defaultPool = rootPool.getSchedulableByName(schedulableBuilder.DEFAULT_POOL_NAME)
     assert(defaultPool != null)
     assert(defaultPool.schedulableQueue.size == 1)
-    assert(defaultPool.getSchedulableByName(taskSetManager0.name) eq taskSetManager0)
+    assert(defaultPool.getSchedulableByName(taskSetManager0.name) === taskSetManager0)
 
     // FAIR Scheduler uses default pool when spark.scheduler.pool property is not set
     val taskSetManager1 = createTaskSetManager(stageId = 1, numTasks = 1, taskScheduler)
@@ -250,7 +251,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     schedulableBuilder.addTaskSetManager(taskSetManager1, new Properties())
 
     assert(defaultPool.schedulableQueue.size == 2)
-    assert(defaultPool.getSchedulableByName(taskSetManager1.name) eq taskSetManager1)
+    assert(defaultPool.getSchedulableByName(taskSetManager1.name) === taskSetManager1)
 
     // FAIR Scheduler uses default pool when spark.scheduler.pool property is set as default pool
     val taskSetManager2 = createTaskSetManager(stageId = 2, numTasks = 1, taskScheduler)
@@ -262,10 +263,11 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     schedulableBuilder.addTaskSetManager(taskSetManager2, properties)
 
     assert(defaultPool.schedulableQueue.size == 3)
-    assert(defaultPool.getSchedulableByName(taskSetManager2.name) eq taskSetManager2)
+    assert(defaultPool.getSchedulableByName(taskSetManager2.name) === taskSetManager2)
   }
 
-  test("FAIR Scheduler creates a new pool when spark.scheduler.pool property points non-existent") {
+  test("SPARK-18066: FAIR Scheduler creates a new pool when spark.scheduler.pool property points " +
+    "non-existent") {
     sc = new SparkContext("local", "PoolSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
 
@@ -290,7 +292,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     assert(testPool.schedulingMode == schedulableBuilder.DEFAULT_SCHEDULING_MODE)
     assert(testPool.minShare == schedulableBuilder.DEFAULT_MINIMUM_SHARE)
     assert(testPool.weight == schedulableBuilder.DEFAULT_WEIGHT)
-    assert(testPool.getSchedulableByName(taskSetManager.name) eq taskSetManager)
+    assert(testPool.getSchedulableByName(taskSetManager.name) === taskSetManager)
   }
 
   private def verifyPool(rootPool: Pool, poolName: String, expectedInitMinShare: Int,
