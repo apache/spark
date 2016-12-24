@@ -156,7 +156,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Seconds") {
     assert(Second(Literal.create(null, DateType), "GMT").resolved === false)
-    assert(Second(Cast(Literal(d), TimestampType), null).resolved === false)
+    assert(Second(Cast(Literal(d), TimestampType), null).resolved === true)
     checkEvaluation(Second(Cast(Literal(d), TimestampType, "GMT"), "GMT"), 0)
     checkEvaluation(Second(Cast(Literal(sdf.format(d)), TimestampType, "GMT"), "GMT"), 15)
     checkEvaluation(Second(Literal(ts), "GMT"), 15)
@@ -215,7 +215,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Hour") {
     assert(Hour(Literal.create(null, DateType), "GMT").resolved === false)
-    assert(Hour(Literal(ts), null).resolved === false)
+    assert(Hour(Literal(ts), null).resolved === true)
     checkEvaluation(Hour(Cast(Literal(d), TimestampType, "GMT"), "GMT"), 0)
     checkEvaluation(Hour(Cast(Literal(sdf.format(d)), TimestampType, "GMT"), "GMT"), 13)
     checkEvaluation(Hour(Literal(ts), "GMT"), 13)
@@ -240,7 +240,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Minute") {
     assert(Minute(Literal.create(null, DateType), "GMT").resolved === false)
-    assert(Minute(Literal(ts), null).resolved === false)
+    assert(Minute(Literal(ts), null).resolved === true)
     checkEvaluation(Minute(Cast(Literal(d), TimestampType, "GMT"), "GMT"), 0)
     checkEvaluation(
       Minute(Cast(Literal(sdf.format(d)), TimestampType, "GMT"), "GMT"), 10)

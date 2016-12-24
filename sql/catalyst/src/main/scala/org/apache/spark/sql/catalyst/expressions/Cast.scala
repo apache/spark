@@ -170,9 +170,6 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: String = null
   override def timeZoneResolved: Boolean =
     (!(childrenResolved && Cast.needTimeZone(child.dataType, dataType))) || super.timeZoneResolved
 
-  override lazy val resolved: Boolean =
-    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
-
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = timeZoneId)
 

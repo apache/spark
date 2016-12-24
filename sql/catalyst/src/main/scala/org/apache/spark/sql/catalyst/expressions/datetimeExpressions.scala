@@ -67,9 +67,6 @@ case class CurrentDate(timeZoneId: String = null)
 
   override def dataType: DataType = DateType
 
-  override lazy val resolved: Boolean =
-    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
-
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = timeZoneId)
 
@@ -116,9 +113,6 @@ case class CurrentBatchTimestamp(timestampMs: Long, dataType: DataType, timeZone
   override def nullable: Boolean = false
 
   override def timeZoneResolved: Boolean = dataType != DateType || super.timeZoneResolved
-
-  override lazy val resolved: Boolean =
-    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = timeZoneId)
@@ -221,9 +215,6 @@ case class Hour(child: Expression, timeZoneId: String = null)
 
   override def dataType: DataType = IntegerType
 
-  override lazy val resolved: Boolean =
-    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
-
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = timeZoneId)
 
@@ -254,9 +245,6 @@ case class Minute(child: Expression, timeZoneId: String = null)
 
   override def dataType: DataType = IntegerType
 
-  override lazy val resolved: Boolean =
-    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
-
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = timeZoneId)
 
@@ -286,9 +274,6 @@ case class Second(child: Expression, timeZoneId: String = null)
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
 
   override def dataType: DataType = IntegerType
-
-  override lazy val resolved: Boolean =
-    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = timeZoneId)
@@ -480,9 +465,6 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Stri
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
 
-  override lazy val resolved: Boolean =
-    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
-
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = timeZoneId)
 
@@ -594,9 +576,6 @@ abstract class UnixTime
 
   override def timeZoneResolved: Boolean =
     (!(childrenResolved && needTimeZone)) || super.timeZoneResolved
-
-  override lazy val resolved: Boolean =
-    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: SimpleDateFormat =
@@ -732,9 +711,6 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: String 
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType, StringType)
-
-  override lazy val resolved: Boolean =
-    childrenResolved && checkInputDataTypes().isSuccess && timeZoneResolved
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = timeZoneId)

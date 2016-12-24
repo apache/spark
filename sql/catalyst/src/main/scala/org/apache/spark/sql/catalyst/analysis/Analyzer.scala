@@ -104,7 +104,6 @@ class Analyzer(
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables ::
-      ResolveTimeZone ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
@@ -113,6 +112,8 @@ class Analyzer(
       HandleNullInputsForUDF),
     Batch("FixNullability", Once,
       FixNullability),
+    Batch("ResolveTimeZone", Once,
+      ResolveTimeZone),
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
