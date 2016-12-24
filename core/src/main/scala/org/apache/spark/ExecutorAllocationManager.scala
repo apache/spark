@@ -675,7 +675,9 @@ private[spark] class ExecutorAllocationManager(
       val taskIndex = taskEnd.taskInfo.index
       val stageId = taskEnd.stageId
       allocationManager.synchronized {
-        numRunningTasks -= 1
+        if (stageIdToNumTasks.contains(stageId)) {
+          numRunningTasks -= 1
+        }
         // If the executor is no longer running any scheduled tasks, mark it as idle
         if (executorIdToTaskIds.contains(executorId)) {
           executorIdToTaskIds(executorId) -= taskId
