@@ -247,3 +247,7 @@ a.expandbutton {
   margin: 0;
   padding: 4px 0;
 }
+
+.table-cell-width-limited td {
+  max-width: 600px;
+}
