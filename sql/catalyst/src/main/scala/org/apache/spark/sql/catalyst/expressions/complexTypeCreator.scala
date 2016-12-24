@@ -69,7 +69,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
       TODO: When we generate simpler code, we have to solve the following exception
         https://github.com/apache/spark/pull/13909/files#r93813725
       ev.copy(
-        code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess
+        code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess,
         value = arrayData,
         isNull = "false")
     */
@@ -90,7 +90,7 @@ private [sql] object GenArrayData {
    * @param elementType data type of an underlying array
    * @param numElements the number of array elements
    * @param isPrimitive Are all of the elements of an underlying array primitive type
-   * @return (code pre-assignments, code post-assignments, underlying array name, arrayData name)
+   * @return (code pre-assignments, code post-assignments, arrayData name, underlying array name)
    */
   def genCodeToCreateArrayData(
       ctx: CodegenContext,
