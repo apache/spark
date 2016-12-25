@@ -22,10 +22,15 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 
+import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import sun.misc.Cleaner;
 import sun.misc.Unsafe;
 
 public final class Platform {
+  private static final Logger logger = LoggerFactory.getLogger(Platform.class);
 
   private static final Unsafe _UNSAFE;
 
@@ -44,6 +49,9 @@ public final class Platform {
   public static final int DOUBLE_ARRAY_OFFSET;
 
   private static final boolean unaligned;
+
+  private static final MemoryBlock _doubleBuffer;
+
   static {
     boolean _unaligned;
     // use reflection to access unaligned field
@@ -119,7 +127,12 @@ public final class Platform {
   }
 
   public static double getDouble(Object object, long offset) {
-    return _UNSAFE.getDouble(object, offset);
+    if ( null == _doubleBuffer) {
+      return _UNSAFE.getDouble(object, offset);
+    } else {
+      copyMemory(object, offset, _doubleBuffer.getBaseObject(), _doubleBuffer.getBaseOffset(), 8);
+      return _UNSAFE.getDouble(_doubleBuffer.getBaseObject(), _doubleBuffer.getBaseOffset());
+    }
   }
 
   public static void putDouble(Object object, long offset, double value) {
@@ -244,6 +257,34 @@ public final class Platform {
       LONG_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(long[].class);
       FLOAT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(float[].class);
       DOUBLE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(double[].class);
+
+      // determine whether double access should be aligned.
+      String arch = System.getProperty("os.arch", "");
+      if (arch.matches("^(arm|arm32)")) {
+        logger.info(
+            "Host platform '{}' requires aligned double access. "+
+            "Creating an aligned buffer for unsafe double reads.",
+            arch);
+
+        // allocate a 2x memory block to ensure buffer used is 8-byte aligned. Java
+        // objects are always aligned, so we just need to ensure the offset is aligned
+        // to an 8-byte boundary
+        byte[] heapObj = new byte[16];
+        long offset = BYTE_ARRAY_OFFSET;
+        long bufferSize = 16;
+        for (long i = 0; i < 8; ++i ) {
+          if ((offset+i)%8 == 0) {
+            logger.debug("Found aligned buffer offset at {} + {}", offset, i);
+            offset += i;
+            bufferSize -= i;
+            break;
+          }
+        }
+        _doubleBuffer = new MemoryBlock(heapObj, offset, bufferSize);
+      } else {
+        // set the buffer address to null to indicate no buffer allocated
+        _doubleBuffer = null;
+      }
     } else {
       BOOLEAN_ARRAY_OFFSET = 0;
       BYTE_ARRAY_OFFSET = 0;
@@ -252,6 +293,7 @@ public final class Platform {
       LONG_ARRAY_OFFSET = 0;
       FLOAT_ARRAY_OFFSET = 0;
       DOUBLE_ARRAY_OFFSET = 0;
+      _doubleBuffer = null;
     }
   }
 }
