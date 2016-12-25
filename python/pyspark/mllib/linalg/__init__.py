@@ -795,13 +795,21 @@ class SparseVector(Vector):
         return False
 
     def __getattr__(self, item):
+        """
+        If the user has SciPy installed and calls a function not expliticly defined for SparseVectors,
+        then the SciPy version of the function will be used (if available in your version of SciPy).
+        """
+
+        # Build a wrapper so that if inputs are sent to the SciPy function,
+        # they are passed through instead of ignored.
         def wrapper(*args, **kwargs):
             if _have_scipy:
-                csr = scipy.sparse.csr_matrix((np.append(self.values, 0),
-                                               np.append(self.indices, self.size-1),
-                                               [0, len(self.values)]))
-                func = getattr(csr, item)
+                csr_of_sparseVec = scipy.sparse.csr_matrix((self.values,self.indices,[0, len(self.values)]),
+                                                            shape=(1,self.size))
+                func = getattr(csr_of_sparseVec, item)
                 result = func(*args, **kwargs)
+                
+                # If the result is a vector, return it as a SparseVector
                 if isinstance(result, scipy.sparse.csr.csr_matrix):
                     return SparseVector(result.shape[1],result.indices,result.data)
                 return result
