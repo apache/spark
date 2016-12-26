@@ -408,8 +408,15 @@ private[hive] class HiveClientImpl(
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
         storage = CatalogStorageFormat(
           locationUri = shim.getDataLocation(h),
-          inputFormat = Option(h.getInputFormatClass).map(_.getName),
-          outputFormat = Option(h.getOutputFormatClass).map(_.getName),
+          // To avoid ClassNotFound exception, we try our best to not get the format class, but get
+          // the class name directly. However, for non-native tables, there is no interface to get
+          // the format class name, so we may still throw ClassNotFound in this case.
+          inputFormat = Option(h.getTTable.getSd.getInputFormat).orElse {
+            Option(h.getStorageHandler).map(_.getInputFormatClass.getName)
+          },
+          outputFormat = Option(h.getTTable.getSd.getOutputFormat).orElse {
+            Option(h.getStorageHandler).map(_.getOutputFormatClass.getName)
+          },
           serde = Option(h.getSerializationLib),
           compressed = h.getTTable.getSd.isCompressed,
           properties = Option(h.getTTable.getSd.getSerdeInfo.getParameters)
