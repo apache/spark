@@ -79,7 +79,7 @@ private [sql] object GenArrayData {
    * @param elementsCode a set of [[ExprCode]] for each element of an underlying array
    * @param allowNull if to assign null value to an array element is allowed
    * @return (code pre-assignments, assignments to each array elements, code post-assignments,
-   *           arrayData name, underlying array name)
+   *           arrayData name)
    */
   def genCodeToCreateArrayData(
       ctx: CodegenContext,
