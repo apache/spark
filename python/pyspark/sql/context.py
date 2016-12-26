@@ -74,10 +74,7 @@ class SQLContext(object):
         self._jvm = self._sc._jvm
 
         if sparkSession is None:
-            if sparkContext is SparkContext._active_spark_context:
-                sparkSession = SparkSession.builder.getOrCreate()
-            else:
-                sparkSession = SparkSession(sparkContext)
+            sparkSession = SparkSession.builder.getOrCreate()
 
         if jsqlContext is None:
             jsqlContext = sparkSession._jwrapped
