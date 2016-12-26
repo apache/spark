@@ -557,8 +557,8 @@ class SessionCatalog(
    * Note that, the global temp view database is also valid here, this will return the global temp
    * view matching the given name.
    *
-   * If the relation is a view, we add a [[View]] operator over the relation, and wrap the logical
-   * plan in a [[SubqueryAlias]] which will track the name of the view.
+   * If the relation is a view, we generate a [[View]] operator from the view description, and
+   * wrap the logical plan in a [[SubqueryAlias]] which will track the name of the view.
    *
    * @param name The name of the table/view that we lookup.
    * @param alias The alias name of the table/view that we lookup.
@@ -581,10 +581,9 @@ class SessionCatalog(
         val metadata = externalCatalog.getTable(db, table)
         if (metadata.tableType == CatalogTableType.VIEW) {
           // The relation is a view, so we wrap the relation by:
-          // 1. Add a [[View]] operator over the relation to keep track of the database name;
+          // 1. Add a [[View]] operator over the relation to keep track of the view desc;
           // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
-          val child = View(SimpleCatalogRelation(metadata), metadata.viewDefaultDatabase)
-          SubqueryAlias(relationAlias, child, Some(name))
+          SubqueryAlias(relationAlias, View(metadata), Some(name))
         } else {
           SubqueryAlias(relationAlias, SimpleCatalogRelation(metadata), None)
         }

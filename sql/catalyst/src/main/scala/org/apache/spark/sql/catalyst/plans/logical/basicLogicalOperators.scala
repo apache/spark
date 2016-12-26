@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{CatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTypes}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -387,20 +388,34 @@ case class InsertIntoTable(
   override lazy val resolved: Boolean = childrenResolved && table.resolved
 }
 
+/** Factory for constructing new `View` nodes. */
+object View {
+  def apply(desc: CatalogTable): View = View(desc, desc.schema.toAttributes, None)
+}
+
 /**
- * A container for holding the default database of a view and a query plan.
- * This operator will be removed at the begining of the optimize stage so we can see what is part
- * of a view in a analyzed plan.
+ * A container for holding the view description(CatalogTable), and the output of the view. The
+ * child will be defined if the view is defined in a Hive metastore or the view is resolved,
+ * else it should be None.
+ * This operator will be removed at the end of analysis stage.
  *
- * @param child The logical plan of this view.
- * @param defaultDatabase The default database name we use to resolve the logical plan, it's
- *                        usually the current database when the view is defined. If a view is
- *                        created by older versions of SPARK(before 2.2), its `defaultDatabase`
- *                        param will be None.
+ * @param desc A view description(CatalogTable) that provides necessary information to resolve the
+ *             view.
+ * @param output The output of a view operator, this is generated during planning the view, so that
+ *               we are able to decouple the output from the underlying structure.
+ * @param child The logical plan of a view operator, it should be non-empty if the view is defined
+ *              in a Hive metastore or the view is resolved, else it should be None.
  */
-case class View(child: LogicalPlan, defaultDatabase: Option[String]) extends LogicalPlan {
-  override def children: Seq[LogicalPlan] = child :: Nil
-  override def output: Seq[Attribute] = child.output
+case class View(
+    desc: CatalogTable,
+    output: Seq[Attribute],
+    child: Option[LogicalPlan] = None) extends LogicalPlan with MultiInstanceRelation {
+
+  override lazy val resolved: Boolean = child.exists(_.resolved)
+
+  override def children: Seq[LogicalPlan] = child.toSeq
+
+  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 }
 
 /**

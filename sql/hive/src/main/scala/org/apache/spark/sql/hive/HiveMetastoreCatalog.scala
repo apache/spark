@@ -134,11 +134,12 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     } else if (table.tableType == CatalogTableType.VIEW) {
       val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
       // The relation is a view, so we wrap the relation by:
-      // 1. Add a [[View]] operator over the relation to keep track of the database name;
+      // 1. Add a [[View]] operator over the relation to keep track of the view desc;
       // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
       val child = View(
-        child = sparkSession.sessionState.sqlParser.parsePlan(viewText),
-        defaultDatabase = table.viewDefaultDatabase)
+        desc = table,
+        output = table.schema.toAttributes,
+        child = Some(sparkSession.sessionState.sqlParser.parsePlan(viewText)))
       SubqueryAlias(alias.getOrElse(table.identifier.table), child, Option(table.identifier))
     } else {
       val qualifiedTable =

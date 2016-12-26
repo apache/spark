@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -557,18 +557,47 @@ class Analyzer(
     }
 
     // Change the default database name if the plan is a view, and transformDown with the new
-    // database name to resolve all UnresolvedRelation.
+    // database name to resolve all UnresolvedRelations and Views.
+    // If the view is defined in a DataSource other than Hive, and the view's child is empty,
+    // set the view's child to a SimpleCatalogRelation, else throw an AnalysisException.
     def resolveView(plan: LogicalPlan): LogicalPlan = plan match {
-      case p @ SubqueryAlias(_, view: View, _) =>
-        val defaultDatabase = view.defaultDatabase
-        val newChild = view transform {
+      case view: View =>
+        val desc = view.desc
+        val defaultDatabase = desc.viewDefaultDatabase
+        val unresolvedChild = view.child.getOrElse {
+          if (isDatasourceTable(desc)) {
+            SimpleCatalogRelation(lookupDatabaseName(desc), desc)
+          } else {
+            throw new AnalysisException(s"The child of view '${desc.identifier}' is not defined.")
+          }
+        }
+        // Resolve all the UnresolvedRelations and Views in the child.
+        val newChild = unresolvedChild transform {
           case v: View if !v.resolved =>
             resolveView(v)
           case u: UnresolvedRelation =>
             resolveRelation(u, defaultDatabase)
         }
+        view.copy(child = Some(newChild))
+      case p @ SubqueryAlias(_, view: View, _) =>
+        val newChild = resolveView(view)
         p.copy(child = newChild)
       case _ => plan
+    }
+
+    // If the database part is defined in the table identifer of the view description, return that
+    // database name, else first attempt to return the view default database name of the view
+    // desc, if that does not exist, return the current database of the catalog.
+    private def lookupDatabaseName(desc: CatalogTable): String = {
+      val identifier = desc.identifier
+      val viewDefaultDatabase = desc.viewDefaultDatabase
+      val dbName = identifier.database.getOrElse(
+        viewDefaultDatabase.getOrElse(catalog.getCurrentDatabase))
+      if (conf.caseSensitiveAnalysis) dbName else dbName.toLowerCase
+    }
+
+    private def isDatasourceTable(table: CatalogTable): Boolean = {
+      table.provider.isDefined && table.provider.get != "hive"
     }
   }
 
@@ -691,6 +720,17 @@ class Analyzer(
           Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
         }
 
+      // A special case for View, replace the output attributes with the attributes that have the
+      // same names from the child. If the corresponding attribute is not found, throw an
+      // AnalysisException.
+      // TODO: Also check the dataTypes and nullabilites of the output.
+      case v @ View(_, output, child) if child.isDefined =>
+        val resolver = conf.resolver
+        val newOutput = output.map { attr =>
+          findAttributeByName(attr.name, child.get.output, resolver)
+        }
+        v.copy(output = newOutput)
+
       // Skips plan which contains deserializer expressions, as they should be resolved by another
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
@@ -718,6 +758,22 @@ class Analyzer(
 
     def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
       AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
+    }
+
+    /**
+     * Find the attribute that has the expected attribute name from an attribute list, the names
+     * are compared using conf.resolver.
+     * If the expected attribute is not found, throw an AnalysisException.
+     */
+    private def findAttributeByName(
+        name: String,
+        attrs: Seq[Attribute],
+        resolver: Resolver): Attribute = {
+      attrs.collectFirst {
+        case attr if resolver(attr.name, name) => attr
+      }.getOrElse(throw new AnalysisException(
+        s"Attribute with name '$name' is not found in " +
+          s"'${attrs.map(_.name).mkString("(", ",", ")")}'"))
     }
 
     /**
@@ -2257,13 +2313,12 @@ object EliminateSubqueryAliases extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes [[View]] operators from the plan. The operator is only used to provide the database
- * name we should use in resolving a view, and it's respected till the end of analysis stage
- * just because we want to see which part of a analyzed logical plan is generated from a view.
+ * Removes [[View]] operators from the plan. The operator is respected till the end of analysis
+ * stage because we want to see which part of a analyzed logical plan is generated from a view.
  */
 object EliminateView extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case View(child, _) => child
+    case View(_, output, child) if child.isDefined => Project(output, child.get)
   }
 }
 

@@ -21,8 +21,8 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range, SubqueryAlias, View}
 
 
 /**
@@ -471,12 +471,27 @@ class SessionCatalogSuite extends SparkFunSuite {
     val metadata1 = externalCatalog.getTable("db3", "view1")
     sessionCatalog.setCurrentDatabase("default")
     // Lookup view when currentDatabase is not defined.
-    val view = View(SimpleCatalogRelation("db3", metadata1), None)
-    assert(sessionCatalog.lookupRelation(TableIdentifier("view1", Some("db3")))
-      == SubqueryAlias("view1", view, Some(TableIdentifier("view1", Some("db3")))))
+    val view = normalizeView(View(metadata1))
+    assert(
+      normalizeView(sessionCatalog.lookupRelation(TableIdentifier("view1", Some("db3"))))
+        == SubqueryAlias("view1", view, Some(TableIdentifier("view1", Some("db3")))))
     // Lookup view when currentDatabase is defined.
-    assert(sessionCatalog.lookupRelation(TableIdentifier("view1"), defaultDatabase = Some("db3"))
-      == SubqueryAlias("view1", view, Some(TableIdentifier("view1"))))
+    assert(
+      normalizeView(sessionCatalog
+        .lookupRelation(TableIdentifier("view1"), defaultDatabase = Some("db3")))
+        == SubqueryAlias("view1", view, Some(TableIdentifier("view1"))))
+  }
+
+  /**
+   * Normalize the exprIds of the View.output, so we could check whether two different View
+   * operators are identical.
+   */
+  private def normalizeView(plan: LogicalPlan): LogicalPlan = plan transform {
+    case view: View =>
+      val newOutput = view.output.map { attr =>
+        AttributeReference(attr.name, attr.dataType, attr.nullable)(exprId = ExprId(0))
+      }
+      view.copy(output = newOutput)
   }
 
   test("table exists") {
