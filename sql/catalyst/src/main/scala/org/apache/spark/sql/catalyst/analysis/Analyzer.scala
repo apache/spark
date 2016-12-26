@@ -1118,7 +1118,7 @@ class Analyzer(
         case p: Sort =>
           failOnOuterReference(p)
           p
-        case p: RedistributeData =>
+        case p: RepartitionByExpression =>
           failOnOuterReference(p)
           p
 
