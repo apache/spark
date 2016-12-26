@@ -311,6 +311,29 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
+  test("SPARK-18989: DESC TABLE should not fail with format class not found") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+
+    val argsForCreateTable = Seq(
+      "--class", SPARK_18989_CREATE_TABLE.getClass.getName.stripSuffix("$"),
+      "--name", "SPARK-18947",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--jars", TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath,
+      unusedJar.toString)
+    runSparkSubmit(argsForCreateTable)
+
+    val argsForShowTables = Seq(
+      "--class", SPARK_18989_DESC_TABLE.getClass.getName.stripSuffix("$"),
+      "--name", "SPARK-18947",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      unusedJar.toString)
+    runSparkSubmit(argsForShowTables)
+  }
+
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   // This is copied from org.apache.spark.deploy.SparkSubmitSuite
   private def runSparkSubmit(args: Seq[String]): Unit = {
@@ -850,6 +873,29 @@ object SPARK_18360 {
     } finally {
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = true, purge = false)
       hiveClient.runSqlHive(s"SET hive.metastore.warehouse.dir=$defaultDbLocation")
+    }
+  }
+}
+
+object SPARK_18989_CREATE_TABLE {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
+    spark.sql(
+      """
+        |CREATE TABLE IF NOT EXISTS base64_tbl(val string) STORED AS
+        |INPUTFORMAT 'org.apache.hadoop.hive.contrib.fileformat.base64.Base64TextInputFormat'
+        |OUTPUTFORMAT 'org.apache.hadoop.hive.contrib.fileformat.base64.Base64TextOutputFormat'
+      """.stripMargin)
+  }
+}
+
+object SPARK_18989_DESC_TABLE {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
+    try {
+      spark.sql("DESC base64_tbl")
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS base64_tbl")
     }
   }
 }
