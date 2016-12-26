@@ -24,6 +24,7 @@ import java.util
 import java.util.{Date, Random}
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
@@ -55,6 +56,7 @@ case class InsertIntoHiveTable(
   def output: Seq[Attribute] = Seq.empty
 
   val hadoopConf = sessionState.newHadoopConf()
+  var createdTempDir: Option[Path] = None
   val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
   val scratchDir = hadoopConf.get("hive.exec.scratchdir", "/tmp/hive")
 
@@ -83,13 +85,13 @@ case class InsertIntoHiveTable(
       if (!FileUtils.mkdir(fs, dir, true, hadoopConf)) {
         throw new IllegalStateException("Cannot create staging directory  '" + dir.toString + "'")
       }
+      createdTempDir = Some(dir)
       fs.deleteOnExit(dir)
     }
     catch {
       case e: IOException =>
         throw new RuntimeException(
           "Cannot create staging directory '" + dir.toString + "': " + e.getMessage, e)
-
     }
     return dir
   }
@@ -136,11 +138,11 @@ case class InsertIntoHiveTable(
       if (!FileUtils.mkdir(fs, dirPath, true, hadoopConf)) {
         throw new IllegalStateException("Cannot create staging directory: " + dirPath.toString)
       }
+      createdTempDir = Some(dirPath)
       fs.deleteOnExit(dirPath)
     } catch {
       case e: IOException =>
         throw new RuntimeException("Cannot create staging directory: " + dirPath.toString, e)
-
     }
     dirPath
   }
@@ -339,6 +341,15 @@ case class InsertIntoHiveTable(
         qualifiedTableName,
         overwrite,
         holdDDLTime)
+    }
+
+    // Attempt to delete the staging directory and the inclusive files. If failed, the files are
+    // expected to be dropped at the normal termination of VM since deleteOnExit is used.
+    try {
+      createdTempDir.foreach { path => path.getFileSystem(hadoopConf).delete(path, true) }
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
     }
 
     // Invalidate the cache.
