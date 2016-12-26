@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -59,7 +59,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val et = dataType.elementType
     val evals = children.map(e => e.genCode(ctx))
-    val (preprocess, assigns, postprocess, arrayData, _) =
+    val (preprocess, assigns, postprocess, arrayData) =
       GenArrayData.genCodeToCreateArrayData(ctx, et, evals, true)
     ev.copy(
       code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess,
@@ -85,13 +85,12 @@ private [sql] object GenArrayData {
       ctx: CodegenContext,
       elementType: DataType,
       elementsCode: Seq[ExprCode],
-      allowNull: Boolean): (String, Seq[String], String, String, String) = {
+      allowNull: Boolean): (String, Seq[String], String, String) = {
     val arrayName = ctx.freshName("array")
     val arrayDataName = ctx.freshName("arrayData")
     val numElements = elementsCode.length
 
     if (!ctx.isPrimitiveType(elementType)) {
-      val arrayClass = classOf[ArrayData].getName
       val genericArrayClass = classOf[GenericArrayData].getName
       ctx.addMutableState("Object[]", arrayName,
         s"this.$arrayName = new Object[${numElements}];")
@@ -118,16 +117,14 @@ private [sql] object GenArrayData {
       */
       ("",
        assignments,
-       s"final $arrayClass $arrayDataName = new $genericArrayClass($arrayName);",
-       arrayDataName,
-       arrayName)
+       s"final ArrayClass $arrayDataName = new $genericArrayClass($arrayName);",
+       arrayDataName)
     } else {
-      val unsafeArrayClass = classOf[UnsafeArrayData].getName
       val unsafeArraySizeInBytes =
         UnsafeArrayData.calculateHeaderPortionInBytes(numElements) +
         ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
       val baseOffset = Platform.BYTE_ARRAY_OFFSET
-      ctx.addMutableState(unsafeArrayClass, arrayDataName, "");
+      ctx.addMutableState("UnsafeArrayData", arrayDataName, "");
 
       val primitiveValueTypeName = ctx.primitiveTypeName(elementType)
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
@@ -147,14 +144,13 @@ private [sql] object GenArrayData {
 
       (s"""
         byte[] $arrayName = new byte[$unsafeArraySizeInBytes];
-        $arrayDataName = new $unsafeArrayClass();
+        $arrayDataName = new UnsafeArrayData();
         Platform.putLong($arrayName, $baseOffset, $numElements);
         $arrayDataName.pointTo($arrayName, $baseOffset, $unsafeArraySizeInBytes);
       """,
        assignments,
        "",
-       arrayDataName,
-       arrayName)
+       arrayDataName)
     }
   }
 }
@@ -213,9 +209,9 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val MapType(keyDt, valueDt, _) = dataType
     val evalKeys = keys.map(e => e.genCode(ctx))
     val evalValues = values.map(e => e.genCode(ctx))
-    val (preprocessKeyData, assignKeys, postprocessKeyData, keyArrayData, keyArray) =
+    val (preprocessKeyData, assignKeys, postprocessKeyData, keyArrayData) =
       GenArrayData.genCodeToCreateArrayData(ctx, keyDt, evalKeys, false)
-    val (preprocessValueData, assignValues, postprocessValueData, valueArrayData, valueArray) =
+    val (preprocessValueData, assignValues, postprocessValueData, valueArrayData) =
       GenArrayData.genCodeToCreateArrayData(ctx, valueDt, evalValues, true)
     val code =
       s"""
