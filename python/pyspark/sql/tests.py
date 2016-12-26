@@ -1890,6 +1890,7 @@ class HiveSparkSubmitTests(SparkSubmitTests):
         self.assertIn("default", out.decode('utf-8'))
         self.assertTrue(os.path.exists(metastore_path))
 
+
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
     @classmethod
