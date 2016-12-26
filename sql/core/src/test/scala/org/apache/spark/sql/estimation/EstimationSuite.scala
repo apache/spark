@@ -26,14 +26,14 @@ import org.apache.spark.sql.types.IntegerType
 
 class EstimationSuite extends SharedSQLContext {
   test("statistics for a plan based on the cbo switch") {
-    val defaultStats =
+    val expectedDefaultStats =
       Statistics(
         sizeInBytes = 40,
         rowCount = Some(10),
         attributeStats = AttributeMap(Seq(
           AttributeReference("c1", IntegerType)() -> ColumnStat(10, Some(1), Some(10), 0, 4, 4))),
         isBroadcastable = false)
-    val cboStats =
+    val expectedCboStats =
       Statistics(
         sizeInBytes = 4,
         rowCount = Some(1),
@@ -41,14 +41,14 @@ class EstimationSuite extends SharedSQLContext {
           AttributeReference("c1", IntegerType)() -> ColumnStat(1, Some(5), Some(5), 0, 4, 4))),
         isBroadcastable = false)
 
-    val plan = DummyLogicalPlan(expectedDefaultStats = defaultStats, expectedCboStats = cboStats)
+    val plan = DummyLogicalPlan(defaultStats = expectedDefaultStats, cboStats = expectedCboStats)
     withSQLConf("spark.sql.cbo.enabled" -> "true") {
       // Use the statistics estimated by cbo
-      assert(plan.planStats(spark.sessionState.conf) == cboStats)
+      assert(plan.planStats(spark.sessionState.conf) == expectedCboStats)
     }
     withSQLConf("spark.sql.cbo.enabled" -> "false") {
       // Use the default statistics
-      assert(plan.planStats(spark.sessionState.conf) == defaultStats)
+      assert(plan.planStats(spark.sessionState.conf) == expectedDefaultStats)
     }
   }
 }
@@ -58,10 +58,10 @@ class EstimationSuite extends SharedSQLContext {
  * default statistics and cbo estimated statistics.
  */
 private case class DummyLogicalPlan(
-    expectedDefaultStats: Statistics,
-    expectedCboStats: Statistics) extends LogicalPlan {
-  override lazy val statistics = expectedDefaultStats
-  override def cboStatistics(conf: CatalystConf): Statistics = expectedCboStats
+    defaultStats: Statistics,
+    cboStats: Statistics) extends LogicalPlan {
+  override lazy val statistics = defaultStats
+  override def cboStatistics(conf: CatalystConf): Statistics = cboStats
   override def output: Seq[Attribute] = Nil
   override def children: Seq[LogicalPlan] = Nil
 }
