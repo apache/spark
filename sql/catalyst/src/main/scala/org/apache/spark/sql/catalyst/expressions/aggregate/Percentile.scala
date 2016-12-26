@@ -123,19 +123,25 @@ case class Percentile(
     new OpenHashMap[Number, Long]()
   }
 
-  override def update(buffer: OpenHashMap[Number, Long], input: InternalRow): Unit = {
+  override def update(
+      buffer: OpenHashMap[Number, Long],
+      input: InternalRow): OpenHashMap[Number, Long] = {
     val key = child.eval(input).asInstanceOf[Number]
 
     // Null values are ignored in counts map.
     if (key != null) {
       buffer.changeValue(key, 1L, _ + 1L)
     }
+    buffer
   }
 
-  override def merge(buffer: OpenHashMap[Number, Long], other: OpenHashMap[Number, Long]): Unit = {
+  override def merge(
+      buffer: OpenHashMap[Number, Long],
+      other: OpenHashMap[Number, Long]): OpenHashMap[Number, Long] = {
     other.foreach { case (key, count) =>
       buffer.changeValue(key, count, _ + count)
     }
+    buffer
   }
 
   override def eval(buffer: OpenHashMap[Number, Long]): Any = {
