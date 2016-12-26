@@ -26,7 +26,7 @@ import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFut
 
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
-import scala.util.{Failure, Random, Success}
+import scala.util.Random
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -216,7 +216,7 @@ private[deploy] class Worker(
           try {
             logInfo("Connecting to master " + masterAddress + "...")
             val masterEndpoint = rpcEnv.setupEndpointRef(masterAddress, Master.ENDPOINT_NAME)
-            registerWithMaster(masterEndpoint)
+            sendRegisterMessageToMaster(masterEndpoint)
           } catch {
             case ie: InterruptedException => // Cancelled
             case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
@@ -272,7 +272,7 @@ private[deploy] class Worker(
                 try {
                   logInfo("Connecting to master " + masterAddress + "...")
                   val masterEndpoint = rpcEnv.setupEndpointRef(masterAddress, Master.ENDPOINT_NAME)
-                  registerWithMaster(masterEndpoint)
+                  sendRegisterMessageToMaster(masterEndpoint)
                 } catch {
                   case ie: InterruptedException => // Cancelled
                   case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
@@ -341,19 +341,8 @@ private[deploy] class Worker(
     }
   }
 
-  private def registerWithMaster(masterEndpoint: RpcEndpointRef): Unit = {
-    masterEndpoint.ask[RegisterWorkerResponse](RegisterWorker(
-      workerId, host, port, self, cores, memory, workerWebUiUrl))
-      .onComplete {
-        // This is a very fast action so we can use "ThreadUtils.sameThread"
-        case Success(msg) =>
-          Utils.tryLogNonFatalError {
-            handleRegisterResponse(msg)
-          }
-        case Failure(e) =>
-          logError(s"Cannot register with master: ${masterEndpoint.address}", e)
-          System.exit(1)
-      }(ThreadUtils.sameThread)
+  private def sendRegisterMessageToMaster(masterEndpoint: RpcEndpointRef): Unit = {
+    masterEndpoint.send(RegisterWorker(workerId, host, port, self, cores, memory, workerWebUiUrl))
   }
 
   private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
@@ -394,6 +383,9 @@ private[deploy] class Worker(
   }
 
   override def receive: PartialFunction[Any, Unit] = synchronized {
+    case msg: RegisterWorkerResponse =>
+      handleRegisterResponse(msg)
+
     case SendHeartbeat =>
       if (connected) { sendToMaster(Heartbeat(workerId, self)) }
 
