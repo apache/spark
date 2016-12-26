@@ -117,7 +117,7 @@ private [sql] object GenArrayData {
       */
       ("",
        assignments,
-       s"final ArrayClass $arrayDataName = new $genericArrayClass($arrayName);",
+       s"final ArrayData $arrayDataName = new $genericArrayClass($arrayName);",
        arrayDataName)
     } else {
       val unsafeArraySizeInBytes =
