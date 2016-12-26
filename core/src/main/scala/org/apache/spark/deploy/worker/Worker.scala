@@ -574,6 +574,9 @@ private[deploy] class Worker(
           dirList.foreach { dir =>
             Utils.deleteRecursively(new File(dir))
           }
+        }(cleanupThreadExecutor).onFailure {
+          case e: Throwable =>
+            logError("App dir cleanup failed: " + e.getMessage, e)
         }(cleanupThreadExecutor)
       }
       shuffleService.applicationRemoved(id)
