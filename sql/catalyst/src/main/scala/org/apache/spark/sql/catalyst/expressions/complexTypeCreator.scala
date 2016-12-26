@@ -59,7 +59,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val et = dataType.elementType
     val evals = children.map(e => e.genCode(ctx))
-    val (preprocess, assigns, postprocess, arrayData, array) =
+    val (preprocess, assigns, postprocess, arrayData, _) =
       GenArrayData.genCodeToCreateArrayData(ctx, et, evals, true)
     ev.copy(
       code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess,
@@ -75,8 +75,9 @@ private [sql] object GenArrayData {
    * Return Java code pieces based on DataType and isPrimitive to allocate ArrayData class
    *
    * @param ctx a [[CodegenContext]]
-   * @param elementType data type of an underlying array
+   * @param elementType data type of underlying array elements
    * @param elementsCode a set of [[ExprCode]] for each element of an underlying array
+   * @param allowNull if to assign null value to an array element is allowed
    * @return (code pre-assignments, assignments to each array elements, code post-assignments,
    *           arrayData name, underlying array name)
    */
