@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 private[sql] case class SubqueryExecHelper(executedPlan: SparkPlan) {
@@ -31,7 +32,17 @@ private[sql] case class SubqueryExecHelper(executedPlan: SparkPlan) {
 
   def computeOrGetResult(): RDD[InternalRow] = this.synchronized {
     if (_computedOutput == null) {
-      _computedOutput = executedPlan.execute()
+      _computedOutput = executedPlan.execute().mapPartitionsInternal { iter =>
+        iter.map { row =>
+          // A hack to create new UnsafeRow so each row can be serialized individually.
+          val copyRow = new UnsafeRow(row.numFields)
+          copyRow.pointTo(row.asInstanceOf[UnsafeRow])
+          copyRow.asInstanceOf[InternalRow]
+        }
+      // Use serialized cache because under this mode the rows are written to serialized format
+      // when iterating. If we use deseralized mode, the rows will be quoted and cached in batch.
+      // Because the rows are shared a common byte array, the bytes will be overritten.
+      }.persist(StorageLevel.MEMORY_ONLY_SER)
     }
     _computedOutput
   }

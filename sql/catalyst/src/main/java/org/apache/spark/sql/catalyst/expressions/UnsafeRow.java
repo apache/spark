@@ -173,6 +173,17 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   /**
+   * Update this UnsafeRow to point to different UnsafeRow.
+   *
+   * @param other the UnsafeRow to point to
+   */
+  public void pointTo(UnsafeRow other) {
+    this.baseObject = other.baseObject;
+    this.baseOffset = other.baseOffset;
+    this.sizeInBytes = other.sizeInBytes;
+  }
+
+  /**
    * Update this UnsafeRow to point to the underlying byte array.
    *
    * @param buf byte array to point to
