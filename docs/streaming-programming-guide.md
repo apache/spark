@@ -1246,6 +1246,21 @@ dstream.foreachRDD { rdd =>
 }
 {% endhighlight %}
 </div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
+  @Override public void call(JavaRDD<String> rdd) throws Exception {
+    final Connection connection =  new Connection(connectionString); // executed at the driver
+    rdd.foreach(new VoidFunction<String>() {
+      @Override public void call(String record) throws Exception {
+        connection.send(record); // executed at the worker
+      }
+    });
+    connection.close();
+  }
+});
+{% endhighlight %}
+</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 def sendRecord(rdd):
@@ -1279,6 +1294,21 @@ dstream.foreachRDD { rdd =>
 }
 {% endhighlight %}
 </div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
+  @Override public void call(JavaRDD<String> rdd) throws Exception {
+    rdd.foreach(new VoidFunction<String>() {
+      @Override public void call(String record) throws Exception {
+        Connection connection = new Connection(connectionString);
+        connection.send(record);
+        connection.close();
+      }
+    });
+  }
+});
+{% endhighlight %}
+</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 def sendRecord(record):
@@ -1307,6 +1337,23 @@ dstream.foreachRDD { rdd =>
     connection.close()
   }
 }
+{% endhighlight %}
+</div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
+  @Override public void call(JavaRDD<String> rdd) throws Exception {
+    rdd.foreachPartition(new VoidFunction<Iterator<String>>() {
+      @Override public void call(Iterator<String> partitionOfRecords) throws Exception {
+        Connection connection = new Connection(connectionString);
+        while (partitionOfRecords.hasNext()) {
+          connection.send(partitionOfRecords.next());
+        }
+        connection.close();
+      }
+    });
+  }
+});
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
@@ -1342,6 +1389,23 @@ dstream.foreachRDD { rdd =>
 {% endhighlight %}
 </div>
 
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
+  @Override public void call(JavaRDD<String> rdd) throws Exception {
+    rdd.foreachPartition(new VoidFunction<Iterator<String>>() {
+      @Override public void call(Iterator<String> partitionOfRecords) throws Exception {
+        Connection connection = ConnectionPool.getConnection(connectionString);
+        while (partitionOfRecords.hasNext()) {
+          connection.send(partitionOfRecords.next());
+        }
+        ConnectionPool.releaseConnection(connection);
+      }
+    });
+  }
+});
+{% endhighlight %}
+</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 def sendPartition(iter):
