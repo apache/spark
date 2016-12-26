@@ -22,7 +22,7 @@ import warnings
 if sys.version >= '3':
     basestring = unicode = str
 
-from pyspark import since, SparkContext
+from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
