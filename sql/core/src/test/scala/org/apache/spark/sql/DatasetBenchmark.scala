@@ -205,10 +205,10 @@ object DatasetBenchmark {
 
     aggregate:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    RDD sum                                       1950 / 1995         51.3          19.5       1.0X
-    DataFrame sum                                  587 /  611        170.2           5.9       3.3X
-    Dataset sum using Aggregator                  3014 / 3222         33.2          30.1       0.6X
-    Dataset complex Aggregator                  32650 / 34505          3.1         326.5       0.1X
+    RDD sum                                       2297 / 2440         43.5          23.0       1.0X
+    DataFrame sum                                  630 /  637        158.7           6.3       3.6X
+    Dataset sum using Aggregator                  3129 / 3247         32.0          31.3       0.7X
+    Dataset complex Aggregator                  12109 / 12142          8.3         121.1       0.2X
     */
     benchmark3.run()
   }
