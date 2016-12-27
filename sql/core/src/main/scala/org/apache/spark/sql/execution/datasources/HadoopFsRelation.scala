@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -51,16 +49,8 @@ case class HadoopFsRelation(
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
   val schema: StructType = {
-    val getColName: (StructField => String) =
-      if (sparkSession.sessionState.conf.caseSensitiveAnalysis) _.name else _.name.toLowerCase
-    val overlappedPartCols = mutable.Map.empty[String, StructField]
-    partitionSchema.foreach { partitionField =>
-      if (dataSchema.exists(getColName(_) == getColName(partitionField))) {
-        overlappedPartCols += getColName(partitionField) -> partitionField
-      }
-    }
-    StructType(dataSchema.map(f => overlappedPartCols.getOrElse(getColName(f), f)) ++
-      partitionSchema.filterNot(f => overlappedPartCols.contains(getColName(f))))
+    DataSource.outputSchema(
+      dataSchema, partitionSchema, sparkSession.sessionState.conf.caseSensitiveAnalysis)
   }
 
   def partitionSchemaOption: Option[StructType] =
