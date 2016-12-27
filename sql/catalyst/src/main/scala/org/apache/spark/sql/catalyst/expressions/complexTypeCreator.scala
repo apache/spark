@@ -60,7 +60,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     val et = dataType.elementType
     val evals = children.map(e => e.genCode(ctx))
     val (preprocess, assigns, postprocess, arrayData) =
-      GenArrayData.genCodeToCreateArrayData(ctx, et, evals, true)
+      GenArrayData.genCodeToCreateArrayData(ctx, et, evals, false)
     ev.copy(
       code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess,
       value = arrayData,
@@ -77,7 +77,7 @@ private [sql] object GenArrayData {
    * @param ctx a [[CodegenContext]]
    * @param elementType data type of underlying array elements
    * @param elementsCode a set of [[ExprCode]] for each element of an underlying array
-   * @param allowNull if to assign null value to an array element is allowed
+   * @param isMapKey if throw an exception when to assign a null value to an array element
    * @return (code pre-assignments, assignments to each array elements, code post-assignments,
    *           arrayData name)
    */
@@ -85,7 +85,7 @@ private [sql] object GenArrayData {
       ctx: CodegenContext,
       elementType: DataType,
       elementsCode: Seq[ExprCode],
-      allowNull: Boolean): (String, Seq[String], String, String) = {
+      isMapKey: Boolean): (String, Seq[String], String, String) = {
     val arrayName = ctx.freshName("array")
     val arrayDataName = ctx.freshName("arrayData")
     val numElements = elementsCode.length
@@ -96,7 +96,7 @@ private [sql] object GenArrayData {
         s"this.$arrayName = new Object[${numElements}];")
 
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
-        val isNullAssignment = if (allowNull) {
+        val isNullAssignment = if (!isMapKey) {
           s"$arrayName[$i] = null;"
         } else {
           "throw new RuntimeException(\"Cannot use null!\");"
@@ -123,7 +123,7 @@ private [sql] object GenArrayData {
 
       val primitiveValueTypeName = ctx.primitiveTypeName(elementType)
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
-        val isNullAssignment = if (allowNull) {
+        val isNullAssignment = if (!isMapKey) {
           s"$arrayDataName.setNullAt($i);"
         } else {
           "throw new RuntimeException(\"Cannot use null!\");"
@@ -205,9 +205,9 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val evalKeys = keys.map(e => e.genCode(ctx))
     val evalValues = values.map(e => e.genCode(ctx))
     val (preprocessKeyData, assignKeys, postprocessKeyData, keyArrayData) =
-      GenArrayData.genCodeToCreateArrayData(ctx, keyDt, evalKeys, false)
+      GenArrayData.genCodeToCreateArrayData(ctx, keyDt, evalKeys, true)
     val (preprocessValueData, assignValues, postprocessValueData, valueArrayData) =
-      GenArrayData.genCodeToCreateArrayData(ctx, valueDt, evalValues, true)
+      GenArrayData.genCodeToCreateArrayData(ctx, valueDt, evalValues, false)
     val code =
       s"""
        final boolean ${ev.isNull} = false;
