@@ -110,11 +110,6 @@ private [sql] object GenArrayData {
        """
       }
 
-      /*
-        TODO: When we declare arrayDataName as GenericArrayData,
-               we have to solve the following exception
-          https://github.com/apache/spark/pull/13909/files#r93813725
-      */
       ("",
        assignments,
        s"final ArrayData $arrayDataName = new $genericArrayClass($arrayName);",
