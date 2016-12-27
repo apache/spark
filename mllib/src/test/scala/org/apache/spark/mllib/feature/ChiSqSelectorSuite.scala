@@ -113,7 +113,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val filteredData = labeledDiscreteData.map { lp =>
       LabeledPoint(lp.label, model.transform(lp.features))
     }.collect().toSet
-    assert(filteredData == preFilteredData)
+    assert(filteredData === preFilteredData)
   }
 
   test("ChiSqSelector transform by FPR test (sparse & dense vector)") {
