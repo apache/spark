@@ -312,15 +312,39 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td>Details for the storage status of a given RDD.</td>
   </tr>
   <tr>
-    <td><code>/applications/[base-app-id]/logs</code></td>
-    <td>Download the event logs for all attempts of the given application as files within
+    <td><code>/applications/[app-id]/logs</code></td>
+    <td>Download the event logs of the given application as files within
     a zip file.
     </td>
   </tr>
   <tr>
-    <td><code>/applications/[base-app-id]/[attempt-id]/logs</code></td>
-    <td>Download the event logs for a specific application attempt as a zip file.</td>
+    <td><code>/applications/[app-id]/streaming/statistics</code></td>
+    <td>Statistics information of stream</td>
   </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/receivers</code></td>
+    <td>A list of all receiver streams</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/receivers/[stream-id]</code></td>
+    <td>Details of the given receiver stream</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches</code></td>
+    <td>A list of all retained batches</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches/[batch-id]</code></td>
+    <td>Details of the given batch</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations</code></td>
+    <td>A list of all output operations of the given batch</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations/[outputOp-id]</code></td>
+    <td>Details of the given operation and given batch</td>
+  </tr>       
 </table>
 
 The number of jobs and stages which can retrieved is constrained by the same retention
