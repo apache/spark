@@ -1,5 +1,0 @@
-v1
-{"path":"file:///Users/cloud/dev/spark/target/tmp/spark-d378fbab-7334-49b7-a4b9-eb2801c9402d/part=0/id=0/part-00000-85a954d2-17ce-40f2-ad9e-448c4b6a1cbf.c000.snappy.parquet","timestamp":1482846791000,"batchId":0}
-{"path":"file:///Users/cloud/dev/spark/target/tmp/spark-d378fbab-7334-49b7-a4b9-eb2801c9402d/part=1/id=1/part-00000-85a954d2-17ce-40f2-ad9e-448c4b6a1cbf.c000.snappy.parquet","timestamp":1482846791000,"batchId":0}
-{"path":"file:///Users/cloud/dev/spark/target/tmp/spark-d378fbab-7334-49b7-a4b9-eb2801c9402d/part=2/id=2/part-00000-85a954d2-17ce-40f2-ad9e-448c4b6a1cbf.c000.snappy.parquet","timestamp":1482846791000,"batchId":0}
-{"path":"file:///Users/cloud/dev/spark/target/tmp/spark-d378fbab-7334-49b7-a4b9-eb2801c9402d/part=3/id=3/part-00000-85a954d2-17ce-40f2-ad9e-448c4b6a1cbf.c000.snappy.parquet","timestamp":1482846791000,"batchId":0}

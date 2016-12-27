@@ -310,6 +310,29 @@ class CodegenContext {
       // The UTF8String may came from UnsafeRow, otherwise clone is cheap (re-use the bytes)
       case StringType => s"$row.update($ordinal, $value.clone())"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
+      case s: StructType if UnsafeRow.isMutable(s) =>
+        val nestedRow = freshName("nestedRow")
+        val updateFields = s.zipWithIndex.map { case (field, index) =>
+          val ev = ExprCode(
+            code = "",
+            isNull = s"value.isNullAt($index)",
+            value = getValue("value", field.dataType, index.toString))
+          updateColumn(nestedRow, field.dataType, index, ev, field.nullable)
+        }
+        val setColumnFunc = freshName("setColumnFunc")
+        val funcCode = s"""
+          public void $setColumnFunc(InternalRow row, InternalRow value) {
+            if (row instanceof UnsafeRow) {
+              ((UnsafeRow) row).setNotNullAt($ordinal);
+              final InternalRow $nestedRow = row.getStruct($ordinal, ${s.length});
+              ${updateFields.mkString("\n")}
+            } else {
+              row.update($ordinal, value);
+            }
+          }
+        """
+        addNewFunction(setColumnFunc, funcCode)
+        s"$setColumnFunc($row, $value)"
       case _ => s"$row.update($ordinal, $value)"
     }
   }
@@ -327,24 +350,28 @@ class CodegenContext {
       nullable: Boolean,
       isVectorized: Boolean = false): String = {
     if (nullable) {
-      // Can't call setNullAt on DecimalType, because we need to keep the offset
-      if (!isVectorized && dataType.isInstanceOf[DecimalType]) {
+      // Can't call setNullAt for mutable but non-primitive data type, e.g. DecimalType, StructType
+      // with fix-length fields, because we need to keep the offset and length.
+      val isMutableVarLenField = UnsafeRow.isMutable(dataType) && !UnsafeRow.isFixedLength(dataType)
+      val setNull = if (!isVectorized && isMutableVarLenField) {
         s"""
-           if (!${ev.isNull}) {
-             ${setColumn(row, dataType, ordinal, ev.value)};
-           } else {
-             ${setColumn(row, dataType, ordinal, "null")};
-           }
-         """
+          if ($row instanceof UnsafeRow) {
+            ((UnsafeRow) $row).setNullData($ordinal);
+          } else {
+            $row.setNullAt($ordinal);
+          }
+        """
       } else {
-        s"""
-           if (!${ev.isNull}) {
-             ${setColumn(row, dataType, ordinal, ev.value)};
-           } else {
-             $row.setNullAt($ordinal);
-           }
-         """
+        s"$row.setNullAt($ordinal);"
       }
+
+      s"""
+         if (!${ev.isNull}) {
+           ${setColumn(row, dataType, ordinal, ev.value)};
+         } else {
+           $setNull
+         }
+       """
     } else {
       s"""${setColumn(row, dataType, ordinal, ev.value)};"""
     }
@@ -553,11 +580,36 @@ class CodegenContext {
           }
         """
       addNewFunction(compareFunc, funcCode)
-      s"this.$compareFunc($c1, $c2)"
+      s"$compareFunc($c1, $c2)"
     case schema: StructType =>
-      INPUT_ROW = "i"
-      val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")
+      val compareFields = schema.zipWithIndex.map {
+        case (field, index) =>
+          val fieldA = freshName("fieldA")
+          val isNullA = freshName("isNullA")
+          val fieldB = freshName("fieldB")
+          val isNullB = freshName("isNullB")
+          val dt = field.dataType
+          s"""
+            final boolean $isNullA = a.isNullAt($index);
+            final boolean $isNullB = b.isNullAt($index);
+            if ($isNullA && $isNullB) {
+              // Nothing
+            } else if ($isNullA) {
+              return -1;
+            } else if ($isNullB) {
+              return 1;
+            } else {
+              ${javaType(dt)} $fieldA = ${getValue("a", dt, index.toString)};
+              ${javaType(dt)} $fieldB = ${getValue("b", dt, index.toString)};
+              int comp = ${genComp(dt, fieldA, fieldB)};
+              if (comp != 0) {
+                return comp;
+              }
+            }
+          """
+      }
+
       val funcCode: String =
         s"""
           public int $compareFunc(InternalRow a, InternalRow b) {
@@ -566,13 +618,12 @@ class CodegenContext {
             if (a instanceof UnsafeRow && b instanceof UnsafeRow && a.equals(b)) {
               return 0;
             }
-            InternalRow i = null;
-            $comparisons
+            ${compareFields.mkString("\n")}
             return 0;
           }
         """
       addNewFunction(compareFunc, funcCode)
-      s"this.$compareFunc($c1, $c2)"
+      s"$compareFunc($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>

@@ -98,9 +98,15 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         val tmpCursor = ctx.freshName("tmpCursor")
 
         val setNull = dt match {
-          case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
-            // Can't call setNullAt() for DecimalType with precision larger than 18.
-            s"$rowWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
+          case dt if UnsafeRow.isMutable(dt) && !UnsafeRow.isFixedLength(dt) =>
+            def varLenDataSize(s: DataType): Int = s match {
+              case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS => 16
+              case s: StructType =>
+                UnsafeRow.calculateBitSetWidthInBytes(s.length) + 8 * s.length +
+                  s.map(f => varLenDataSize(f.dataType)).sum
+              case _ => 0
+            }
+            s"$rowWriter.writeNull($index, ${varLenDataSize(dt)});"
           case _ => s"$rowWriter.setNullAt($index);"
         }
 

@@ -105,7 +105,16 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   public static boolean isMutable(DataType dt) {
-    return mutableFieldTypes.contains(dt) || dt instanceof DecimalType;
+    if (dt instanceof StructType) {
+      for (StructField field : ((StructType) dt).fields()) {
+        if (!UnsafeRow.isMutable(field.dataType())) {
+          return false;
+        }
+      }
+      return true;
+    } else {
+      return mutableFieldTypes.contains(dt) || dt instanceof DecimalType;
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -199,6 +208,25 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     // Since this row does does not currently support updates to variable-length values, we don't
     // have to worry about zeroing out that data.
     Platform.putLong(baseObject, getFieldOffset(i), 0);
+  }
+
+  public void setNullData(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return;
+    }
+
+    final long offsetAndSize = getLong(ordinal);
+    final int offset = (int) (offsetAndSize >> 32);
+    final int size = (int) offsetAndSize;
+
+    assert size % 8 == 0;
+
+    // zero-out the bytes
+    for (int i=0; i < size; i+=8) {
+      Platform.putLong(baseObject, baseOffset + offset + i, 0L);
+    }
+    // set null bits
+    BitSetMethods.set(baseObject, baseOffset, ordinal);
   }
 
   @Override

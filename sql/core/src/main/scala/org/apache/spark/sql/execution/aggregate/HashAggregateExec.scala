@@ -592,7 +592,7 @@ case class HashAggregateExec(
 
     ctx.addNewFunction(doAgg,
       s"""
-        ${generateGenerateCode}
+        $generateGenerateCode
         private void $doAgg() throws java.io.IOException {
           $hashMapTerm = $thisPlan.createHashMap();
           ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
@@ -675,7 +675,7 @@ case class HashAggregateExec(
      }
 
      // output the result
-     ${outputFromGeneratedMap}
+     $outputFromGeneratedMap
 
      while ($iterTerm.next()) {
        $numOutput.add(1);
