@@ -277,20 +277,20 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
-            ctx.addMinorReferenceObj(v)
+            ctx.addReferenceMinorObj(v)
           } else {
             s"${value}f"
           }
         case DoubleType =>
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
-            ctx.addMinorReferenceObj(v)
+            ctx.addReferenceMinorObj(v)
           } else {
             s"${value}D"
           }
         case ByteType | ShortType => s"(${ctx.javaType(dataType)})$value"
         case TimestampType | LongType => s"${value}L"
-        case other => ctx.addMinorReferenceObj(value, ctx.javaType(dataType))
+        case other => ctx.addReferenceMinorObj(value, ctx.javaType(dataType))
       }
       ev.copy("")
     }
