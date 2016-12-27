@@ -472,10 +472,11 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     extends Family("tweedie") {
 
     /*
-      The canonical link is 1 - variancePower, which becomes Identify for Gaussian,
+      The canonical link is 1 - variancePower, which becomes Identity for Gaussian,
       Log for Poisson, and Inverse for Gamma. Except for these special cases,
-      the canonical link is not meaningful and rarely used. For example, the canonical
-      link is 1/Sqrt when variancePower = 1.5. We set Log as the default link.
+      the canonical link is rarely used. For example, the canonical link is 1/Sqrt
+      when variancePower = 1.5. We set Log as the default link, which may be overridden
+      in subclasses.
     */
     override val defaultLink: Link = Log
 
