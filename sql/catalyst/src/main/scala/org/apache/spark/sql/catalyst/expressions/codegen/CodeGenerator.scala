@@ -185,6 +185,20 @@ class CodegenContext {
   }
 
   /**
+   * Code statements to initialize states that depend on the partition index.
+   * An integer `partitionIndex` will be made available within the scope.
+   */
+  val partitionInitializationStatements: mutable.ArrayBuffer[String] = mutable.ArrayBuffer.empty
+
+  def addPartitionInitializationStatement(statement: String): Unit = {
+    partitionInitializationStatements += statement
+  }
+
+  def initPartition(): String = {
+    partitionInitializationStatements.mkString("\n")
+  }
+
+  /**
    * Holding all the functions those will be added into generated class.
    */
   val addedFunctions: mutable.Map[String, String] =
@@ -467,8 +481,13 @@ class CodegenContext {
     case FloatType => s"(java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2"
     case DoubleType => s"(java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
+    case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
+    case array: ArrayType => genComp(array, c1, c2) + " == 0"
+    case struct: StructType => genComp(struct, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
-    case other => s"$c1.equals($c2)"
+    case _ =>
+      throw new IllegalArgumentException(
+        "cannot generate equality code for un-comparable type: " + dataType.simpleString)
   }
 
   /**
@@ -498,6 +517,11 @@ class CodegenContext {
       val funcCode: String =
         s"""
           public int $compareFunc(ArrayData a, ArrayData b) {
+            // when comparing unsafe arrays, try equals first as it compares the binary directly
+            // which is very fast.
+            if (a instanceof UnsafeArrayData && b instanceof UnsafeArrayData && a.equals(b)) {
+              return 0;
+            }
             int lengthA = a.numElements();
             int lengthB = b.numElements();
             int $minLength = (lengthA > lengthB) ? lengthB : lengthA;
@@ -537,6 +561,11 @@ class CodegenContext {
       val funcCode: String =
         s"""
           public int $compareFunc(InternalRow a, InternalRow b) {
+            // when comparing unsafe rows, try equals first as it compares the binary directly
+            // which is very fast.
+            if (a instanceof UnsafeRow && b instanceof UnsafeRow && a.equals(b)) {
+              return 0;
+            }
             InternalRow i = null;
             $comparisons
             return 0;
@@ -547,7 +576,8 @@ class CodegenContext {
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
-      throw new IllegalArgumentException("cannot generate compare code for un-comparable type")
+      throw new IllegalArgumentException(
+        "cannot generate compare code for un-comparable type: " + dataType.simpleString)
   }
 
   /**

@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 
 
 /**
- * The data type representing `Int` values. Please use the singleton [[DataTypes.IntegerType]].
+ * The data type representing `Int` values. Please use the singleton `DataTypes.IntegerType`.
  *
  * @since 1.3.0
  */

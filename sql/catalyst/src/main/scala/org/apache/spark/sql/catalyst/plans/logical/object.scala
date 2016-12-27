@@ -230,6 +230,19 @@ object AppendColumns {
       encoderFor[U].namedExpressions,
       child)
   }
+
+  def apply[T : Encoder, U : Encoder](
+      func: T => U,
+      inputAttributes: Seq[Attribute],
+      child: LogicalPlan): AppendColumns = {
+    new AppendColumns(
+      func.asInstanceOf[Any => Any],
+      implicitly[Encoder[T]].clsTag.runtimeClass,
+      implicitly[Encoder[T]].schema,
+      UnresolvedDeserializer(encoderFor[T].deserializer, inputAttributes),
+      encoderFor[U].namedExpressions,
+      child)
+  }
 }
 
 /**

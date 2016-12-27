@@ -638,13 +638,13 @@ private[python] class PythonMLLibAPI extends Serializable {
       selectorType: String,
       numTopFeatures: Int,
       percentile: Double,
-      alpha: Double,
+      fpr: Double,
       data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
     new ChiSqSelector()
       .setSelectorType(selectorType)
       .setNumTopFeatures(numTopFeatures)
       .setPercentile(percentile)
-      .setAlpha(alpha)
+      .setFpr(fpr)
       .fit(data.rdd)
   }
 

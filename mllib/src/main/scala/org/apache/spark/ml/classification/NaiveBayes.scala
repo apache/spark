@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.DoubleType
 /**
  * Params for Naive Bayes Classifiers.
  */
-private[ml] trait NaiveBayesParams extends PredictorParams with HasWeightCol {
+private[classification] trait NaiveBayesParams extends PredictorParams with HasWeightCol {
 
   /**
    * The smoothing parameter.
@@ -60,23 +60,27 @@ private[ml] trait NaiveBayesParams extends PredictorParams with HasWeightCol {
   final def getModelType: String = $(modelType)
 }
 
+// scalastyle:off line.size.limit
 /**
  * Naive Bayes Classifiers.
  * It supports Multinomial NB
- * ([[http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html]])
+ * (see <a href="http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html">
+ * here</a>)
  * which can handle finitely supported discrete data. For example, by converting documents into
  * TF-IDF vectors, it can be used for document classification. By making every vector a
  * binary (0/1) data, it can also be used as Bernoulli NB
- * ([[http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html]]).
+ * (see <a href="http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html">
+ * here</a>).
  * The input feature values must be nonnegative.
  */
+// scalastyle:on line.size.limit
 @Since("1.5.0")
 class NaiveBayes @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, NaiveBayes, NaiveBayesModel]
   with NaiveBayesParams with DefaultParamsWritable {
 
-  import NaiveBayes.{Bernoulli, Multinomial}
+  import NaiveBayes._
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("nb"))
@@ -110,21 +114,20 @@ class NaiveBayes @Since("1.5.0") (
   @Since("2.1.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
+  override protected def train(dataset: Dataset[_]): NaiveBayesModel = {
+    trainWithLabelCheck(dataset, positiveLabel = true)
+  }
+
   /**
    * ml assumes input labels in range [0, numClasses). But this implementation
    * is also called by mllib NaiveBayes which allows other kinds of input labels
-   * such as {-1, +1}. Here we use this parameter to switch between different processing logic.
-   * It should be removed when we remove mllib NaiveBayes.
+   * such as {-1, +1}. `positiveLabel` is used to determine whether the label
+   * should be checked and it should be removed when we remove mllib NaiveBayes.
    */
-  private[spark] var isML: Boolean = true
-
-  private[spark] def setIsML(isML: Boolean): this.type = {
-    this.isML = isML
-    this
-  }
-
-  override protected def train(dataset: Dataset[_]): NaiveBayesModel = {
-    if (isML) {
+  private[spark] def trainWithLabelCheck(
+      dataset: Dataset[_],
+      positiveLabel: Boolean): NaiveBayesModel = {
+    if (positiveLabel) {
       val numClasses = getNumClasses(dataset)
       if (isDefined(thresholds)) {
         require($(thresholds).length == numClasses, this.getClass.getSimpleName +
@@ -133,28 +136,9 @@ class NaiveBayes @Since("1.5.0") (
       }
     }
 
-    val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
-      val values = v match {
-        case sv: SparseVector => sv.values
-        case dv: DenseVector => dv.values
-      }
-
-      require(values.forall(_ >= 0.0),
-        s"Naive Bayes requires nonnegative feature values but found $v.")
-    }
-
-    val requireZeroOneBernoulliValues: Vector => Unit = (v: Vector) => {
-      val values = v match {
-        case sv: SparseVector => sv.values
-        case dv: DenseVector => dv.values
-      }
-
-      require(values.forall(v => v == 0.0 || v == 1.0),
-        s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
-    }
-
+    val modelTypeValue = $(modelType)
     val requireValues: Vector => Unit = {
-      $(modelType) match {
+      modelTypeValue match {
         case Multinomial =>
           requireNonnegativeValues
         case Bernoulli =>
@@ -171,7 +155,7 @@ class NaiveBayes @Since("1.5.0") (
     // Aggregates term frequencies per label.
     // TODO: Calling aggregateByKey and collect creates two stages, we can implement something
     // TODO: similar to reduceByKeyLocally to save one stage.
-    val aggregated = dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd
+    val aggregated = dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd
       .map { row => (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2)))
       }.aggregateByKey[(Double, DenseVector)]((0.0, Vectors.zeros(numFeatures).toDense))(
       seqOp = {
@@ -226,13 +210,33 @@ class NaiveBayes @Since("1.5.0") (
 @Since("1.6.0")
 object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
   /** String name for multinomial model type. */
-  private[spark] val Multinomial: String = "multinomial"
+  private[classification] val Multinomial: String = "multinomial"
 
   /** String name for Bernoulli model type. */
-  private[spark] val Bernoulli: String = "bernoulli"
+  private[classification] val Bernoulli: String = "bernoulli"
 
   /* Set of modelTypes that NaiveBayes supports */
-  private[spark] val supportedModelTypes = Set(Multinomial, Bernoulli)
+  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
+
+  private[NaiveBayes] def requireNonnegativeValues(v: Vector): Unit = {
+    val values = v match {
+      case sv: SparseVector => sv.values
+      case dv: DenseVector => dv.values
+    }
+
+    require(values.forall(_ >= 0.0),
+      s"Naive Bayes requires nonnegative feature values but found $v.")
+  }
+
+  private[NaiveBayes] def requireZeroOneBernoulliValues(v: Vector): Unit = {
+    val values = v match {
+      case sv: SparseVector => sv.values
+      case dv: DenseVector => dv.values
+    }
+
+    require(values.forall(v => v == 0.0 || v == 1.0),
+      s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
+  }
 
   @Since("1.6.0")
   override def load(path: String): NaiveBayes = super.load(path)

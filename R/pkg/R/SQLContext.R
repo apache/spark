@@ -324,7 +324,8 @@ setMethod("toDF", signature(x = "RDD"),
 
 #' Create a SparkDataFrame from a JSON file.
 #'
-#' Loads a JSON file (one object per line), returning the result as a SparkDataFrame
+#' Loads a JSON file (\href{http://jsonlines.org/}{JSON Lines text format or newline-delimited JSON}
+#' ), returning the result as a SparkDataFrame
 #' It goes through the entire dataset once to determine the schema.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
@@ -349,7 +350,7 @@ read.json.default <- function(path, ...) {
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
-  sdf <- callJMethod(read, "json", paths)
+  sdf <- handledCallJMethod(read, "json", paths)
   dataFrame(sdf)
 }
 
@@ -421,7 +422,7 @@ read.orc <- function(path, ...) {
   path <- suppressWarnings(normalizePath(path))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
-  sdf <- callJMethod(read, "orc", path)
+  sdf <- handledCallJMethod(read, "orc", path)
   dataFrame(sdf)
 }
 
@@ -443,7 +444,7 @@ read.parquet.default <- function(path, ...) {
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
-  sdf <- callJMethod(read, "parquet", paths)
+  sdf <- handledCallJMethod(read, "parquet", paths)
   dataFrame(sdf)
 }
 
@@ -495,7 +496,7 @@ read.text.default <- function(path, ...) {
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
-  sdf <- callJMethod(read, "text", paths)
+  sdf <- handledCallJMethod(read, "text", paths)
   dataFrame(sdf)
 }
 
@@ -633,7 +634,7 @@ tableNames <- function(x, ...) {
 cacheTable.default <- function(tableName) {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
-  callJMethod(catalog, "cacheTable", tableName)
+  invisible(callJMethod(catalog, "cacheTable", tableName))
 }
 
 cacheTable <- function(x, ...) {
@@ -662,7 +663,7 @@ cacheTable <- function(x, ...) {
 uncacheTable.default <- function(tableName) {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
-  callJMethod(catalog, "uncacheTable", tableName)
+  invisible(callJMethod(catalog, "uncacheTable", tableName))
 }
 
 uncacheTable <- function(x, ...) {
@@ -685,7 +686,7 @@ uncacheTable <- function(x, ...) {
 clearCache.default <- function() {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
-  callJMethod(catalog, "clearCache")
+  invisible(callJMethod(catalog, "clearCache"))
 }
 
 clearCache <- function() {
@@ -729,6 +730,7 @@ dropTempTable <- function(x, ...) {
 #' If the view has been cached before, then it will also be uncached.
 #'
 #' @param viewName the name of the view to be dropped.
+#' @return TRUE if the view is dropped successfully, FALSE otherwise.
 #' @rdname dropTempView
 #' @name dropTempView
 #' @export
@@ -913,12 +915,13 @@ read.jdbc <- function(url, tableName,
     } else {
       numPartitions <- numToInt(numPartitions)
     }
-    sdf <- callJMethod(read, "jdbc", url, tableName, as.character(partitionColumn),
-                       numToInt(lowerBound), numToInt(upperBound), numPartitions, jprops)
+    sdf <- handledCallJMethod(read, "jdbc", url, tableName, as.character(partitionColumn),
+                              numToInt(lowerBound), numToInt(upperBound), numPartitions, jprops)
   } else if (length(predicates) > 0) {
-    sdf <- callJMethod(read, "jdbc", url, tableName, as.list(as.character(predicates)), jprops)
+    sdf <- handledCallJMethod(read, "jdbc", url, tableName, as.list(as.character(predicates)),
+                              jprops)
   } else {
-    sdf <- callJMethod(read, "jdbc", url, tableName, jprops)
+    sdf <- handledCallJMethod(read, "jdbc", url, tableName, jprops)
   }
   dataFrame(sdf)
 }

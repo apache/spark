@@ -23,9 +23,8 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.command.{DescribeFunctionCommand, DescribeTableCommand,
-  ShowFunctionsCommand}
-import org.apache.spark.sql.execution.datasources.{CreateTable, CreateTempViewUsing}
+import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
@@ -219,5 +218,36 @@ class SparkSqlParserSuite extends PlanTest {
         TableIdentifier("t"), Map.empty, isExtended = false, isFormatted = true))
 
     intercept("explain describe tables x", "Unsupported SQL statement")
+  }
+
+  test("analyze table statistics") {
+    assertEqual("analyze table t compute statistics",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
+    assertEqual("analyze table t compute statistics noscan",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+    assertEqual("analyze table t partition (a) compute statistics nOscAn",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+
+    // Partitions specified - we currently parse them but don't do anything with it
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+    assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
+    assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS noscan",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+
+    intercept("analyze table t compute statistics xxxx",
+      "Expected `NOSCAN` instead of `xxxx`")
+    intercept("analyze table t partition (a) compute statistics xxxx",
+      "Expected `NOSCAN` instead of `xxxx`")
+  }
+
+  test("analyze table column statistics") {
+    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS", "")
+
+    assertEqual("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS key, value",
+      AnalyzeColumnCommand(TableIdentifier("t"), Seq("key", "value")))
   }
 }

@@ -74,7 +74,7 @@ object Row {
  * It is invalid to use the native primitive interface to retrieve a value that is null, instead a
  * user must check `isNullAt` before attempting to retrieve a value that might be null.
  *
- * To create a new Row, use [[RowFactory.create()]] in Java or [[Row.apply()]] in Scala.
+ * To create a new Row, use `RowFactory.create()` in Java or `Row.apply()` in Scala.
  *
  * A [[Row]] object can be constructed by providing field values. Example:
  * {{{
@@ -343,7 +343,7 @@ trait Row extends Serializable {
   }
 
   /**
-   * Returns a Map(name -> value) for the requested fieldNames
+   * Returns a Map consisting of names and values for the requested fieldNames
    * For primitive types if value is null it returns 'zero value' specific for primitive
    * ie. 0 for Int - use isNullAt to ensure that value is not null
    *

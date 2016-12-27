@@ -23,7 +23,7 @@ import org.apache.spark.sql.execution.aggregate._
 
 /**
  * :: Experimental ::
- * Type-safe functions available for [[Dataset]] operations in Scala.
+ * Type-safe functions available for `Dataset` operations in Scala.
  *
  * Java users should use [[org.apache.spark.sql.expressions.javalang.typed]].
  *

@@ -104,7 +104,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     ReuseSubquery(sparkSession.sessionState.conf))
 
   protected def stringOrError[A](f: => A): String =
-    try f.toString catch { case e: Throwable => e.toString }
+    try f.toString catch { case e: AnalysisException => e.toString }
 
 
   /**

@@ -58,14 +58,15 @@ private[spark] class SparkUI private (
 
   val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
 
-
-  val stagesTab = new StagesTab(this)
-
   var appId: String = _
+
+  private var streamingJobProgressListener: Option[SparkListener] = None
 
   /** Initialize all components of the server. */
   def initialize() {
-    attachTab(new JobsTab(this))
+    val jobsTab = new JobsTab(this)
+    attachTab(jobsTab)
+    val stagesTab = new StagesTab(this)
     attachTab(stagesTab)
     attachTab(new StorageTab(this))
     attachTab(new EnvironmentTab(this))
@@ -73,7 +74,9 @@ private[spark] class SparkUI private (
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
     attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
     attachHandler(ApiRootResource.getServletHandler(this))
-    // This should be POST only, but, the YARN AM proxy won't proxy POSTs
+    // These should be POST only, but, the YARN AM proxy won't proxy POSTs
+    attachHandler(createRedirectHandler(
+      "/jobs/job/kill", "/jobs/", jobsTab.handleKillRequest, httpMethods = Set("GET", "POST")))
     attachHandler(createRedirectHandler(
       "/stages/stage/kill", "/stages/", stagesTab.handleKillRequest,
       httpMethods = Set("GET", "POST")))
@@ -81,7 +84,7 @@ private[spark] class SparkUI private (
   initialize()
 
   def getSparkUser: String = {
-    environmentListener.systemProperties.toMap.get("user.name").getOrElse("<unknown>")
+    environmentListener.systemProperties.toMap.getOrElse("user.name", "<unknown>")
   }
 
   def getAppName: String = appName
@@ -93,15 +96,8 @@ private[spark] class SparkUI private (
   /** Stop the server behind this web interface. Only valid after bind(). */
   override def stop() {
     super.stop()
-    logInfo("Stopped Spark web UI at %s".format(appUIAddress))
+    logInfo(s"Stopped Spark web UI at $webUrl")
   }
-
-  /**
-   * Return the application UI host:port. This does not include the scheme (http://).
-   */
-  private[spark] def appUIHostPort = publicHostName + ":" + boundPort
-
-  private[spark] def appUIAddress = s"http://$appUIHostPort"
 
   def getSparkUI(appId: String): Option[SparkUI] = {
     if (appId == this.appId) Some(this) else None
@@ -130,12 +126,18 @@ private[spark] class SparkUI private (
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
     getApplicationInfoList.find(_.id == appId)
   }
+
+  def getStreamingJobProgressListener: Option[SparkListener] = streamingJobProgressListener
+
+  def setStreamingJobProgressListener(sparkListener: SparkListener): Unit = {
+    streamingJobProgressListener = Option(sparkListener)
+  }
 }
 
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
   extends WebUITab(parent, prefix) {
 
-  def appName: String = parent.getAppName
+  def appName: String = parent.appName
 
 }
 

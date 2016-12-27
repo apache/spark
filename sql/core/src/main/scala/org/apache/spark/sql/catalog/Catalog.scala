@@ -301,6 +301,13 @@ abstract class Catalog {
   def dropGlobalTempView(viewName: String): Boolean
 
   /**
+   * Recover all the partitions in the directory of a table and update the catalog.
+   *
+   * @since 2.1.1
+   */
+  def recoverPartitions(tableName: String): Unit
+
+  /**
    * Returns true if the table is currently cached in-memory.
    *
    * @since 2.0.0
@@ -343,7 +350,8 @@ abstract class Catalog {
 
   /**
    * Invalidate and refresh all the cached data (and the associated metadata) for any dataframe that
-   * contains the given data source path.
+   * contains the given data source path. Path matching is by prefix, i.e. "/" would invalidate
+   * everything that is cached.
    *
    * @since 2.0.0
    */

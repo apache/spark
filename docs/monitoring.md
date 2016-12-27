@@ -41,13 +41,11 @@ directory must be supplied in the `spark.history.fs.logDirectory` configuration 
 and should contain sub-directories that each represents an application's event logs.
 
 The spark jobs themselves must be configured to log events, and to log them to the same shared,
-writeable directory. For example, if the server was configured with a log directory of
+writable directory. For example, if the server was configured with a log directory of
 `hdfs://namenode/shared/spark-logs`, then the client-side options would be:
 
-```
-spark.eventLog.enabled true
-spark.eventLog.dir hdfs://namenode/shared/spark-logs
-```
+    spark.eventLog.enabled true
+    spark.eventLog.dir hdfs://namenode/shared/spark-logs
 
 The history server can be configured as follows:
 
