@@ -71,7 +71,7 @@ private[spark] case class SSLOptions(
       keyPassword.foreach(sslContextFactory.setKeyManagerPassword)
       keyStoreType.foreach(sslContextFactory.setKeyStoreType)
       if (needClientAuth) {
-        trustStore.foreach(file => sslContextFactory.setTrustStore(file.getAbsolutePath))
+        trustStore.foreach(file => sslContextFactory.setTrustStorePath(file.getAbsolutePath))
         trustStorePassword.foreach(sslContextFactory.setTrustStorePassword)
         trustStoreType.foreach(sslContextFactory.setTrustStoreType)
       }
@@ -150,8 +150,8 @@ private[spark] object SSLOptions extends Logging {
    * $ - `[ns].enabledAlgorithms` - a comma separated list of ciphers
    *
    * For a list of protocols and ciphers supported by particular Java versions, you may go to
-   * [[https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https Oracle
-   * blog page]].
+   * <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">
+   * Oracle blog page</a>.
    *
    * You can optionally specify the default configuration. If you do, for each setting which is
    * missing in SparkConf, the corresponding setting is used from the default configuration.

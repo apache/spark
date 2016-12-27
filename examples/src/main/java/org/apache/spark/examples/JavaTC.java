@@ -25,10 +25,10 @@ import java.util.Set;
 
 import scala.Tuple2;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.sql.SparkSession;
 
 /**
  * Transitive closure on a graph, implemented in Java.
@@ -64,10 +64,15 @@ public final class JavaTC {
   }
 
   public static void main(String[] args) {
-    SparkConf sparkConf = new SparkConf().setAppName("JavaHdfsLR");
-    JavaSparkContext sc = new JavaSparkContext(sparkConf);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaTC")
+      .getOrCreate();
+
+    JavaSparkContext jsc = new JavaSparkContext(spark.sparkContext());
+
     Integer slices = (args.length > 0) ? Integer.parseInt(args[0]): 2;
-    JavaPairRDD<Integer, Integer> tc = sc.parallelizePairs(generateGraph(), slices).cache();
+    JavaPairRDD<Integer, Integer> tc = jsc.parallelizePairs(generateGraph(), slices).cache();
 
     // Linear transitive closure: each round grows paths by one edge,
     // by joining the graph's edges with the already-discovered paths.
@@ -94,6 +99,6 @@ public final class JavaTC {
     } while (nextCount != oldCount);
 
     System.out.println("TC has " + tc.count() + " edges.");
-    sc.stop();
+    spark.stop();
   }
 }

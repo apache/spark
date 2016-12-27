@@ -489,7 +489,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
   /**
    * Setup an [[RpcEndpoint]] to collect all network events.
    *
-   * @return the [[RpcEndpointRef]] and an `ConcurrentLinkedQueue` that contains network events.
+   * @return the [[RpcEndpointRef]] and a `ConcurrentLinkedQueue` that contains network events.
    */
   private def setupNetworkEndpoint(
       _env: RpcEnv,

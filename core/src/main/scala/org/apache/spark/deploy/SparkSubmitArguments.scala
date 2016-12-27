@@ -412,10 +412,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         repositories = value
 
       case CONF =>
-        value.split("=", 2).toSeq match {
-          case Seq(k, v) => sparkProperties(k) = v
-          case _ => SparkSubmit.printErrorAndExit(s"Spark config without '=': $value")
-        }
+        val (confName, confValue) = SparkSubmit.parseSparkConfProperty(value)
+        sparkProperties(confName) = confValue
 
       case PROXY_USER =>
         proxyUser = value
@@ -550,6 +548,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              (Default: 1).
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
         |  --num-executors NUM         Number of executors to launch (Default: 2).
+        |                              If dynamic allocation is enabled, the initial number of
+        |                              executors will be at least NUM.
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
         |                              working directory of each executor.
         |  --principal PRINCIPAL       Principal to be used to login to KDC, while running on

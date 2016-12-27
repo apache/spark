@@ -57,6 +57,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
         <th>Task Time</th>
         <th>Total Tasks</th>
         <th>Failed Tasks</th>
+        <th>Killed Tasks</th>
         <th>Succeeded Tasks</th>
         {if (hasInput) {
           <th>
@@ -113,11 +114,23 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
       case Some(stageData: StageUIData) =>
         stageData.executorSummary.toSeq.sortBy(_._1).map { case (k, v) =>
           <tr>
-            <td>{k}</td>
+            <td>
+              <div style="float: left">{k}</div>
+              <div style="float: right">
+              {
+                val logs = parent.executorsListener.executorToTaskSummary.get(k)
+                  .map(_.executorLogs).getOrElse(Map.empty)
+                logs.map {
+                  case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
+                }
+              }
+              </div>
+            </td>
             <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
             <td sorttable_customkey={v.taskTime.toString}>{UIUtils.formatDuration(v.taskTime)}</td>
-            <td>{v.failedTasks + v.succeededTasks}</td>
+            <td>{v.failedTasks + v.succeededTasks + v.killedTasks}</td>
             <td>{v.failedTasks}</td>
+            <td>{v.killedTasks}</td>
             <td>{v.succeededTasks}</td>
             {if (stageData.hasInput) {
               <td sorttable_customkey={v.inputBytes.toString}>

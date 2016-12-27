@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, Literal}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.analysis.OutputMode
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.streaming.OutputMode
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
@@ -30,13 +32,17 @@ import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, 
 class IncrementalExecution(
     sparkSession: SparkSession,
     logicalPlan: LogicalPlan,
-    outputMode: OutputMode,
-    checkpointLocation: String,
-    currentBatchId: Long)
-  extends QueryExecution(sparkSession, logicalPlan) {
+    val outputMode: OutputMode,
+    val checkpointLocation: String,
+    val currentBatchId: Long,
+    val currentEventTimeWatermark: Long)
+  extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // TODO: make this always part of planning.
-  val stateStrategy = sparkSession.sessionState.planner.StatefulAggregationStrategy :: Nil
+  val stateStrategy =
+    sparkSession.sessionState.planner.StatefulAggregationStrategy +:
+    sparkSession.sessionState.planner.StreamingRelationStrategy +:
+    sparkSession.sessionState.experimentalMethods.extraStrategies
 
   // Modified planner with stateful operations.
   override def planner: SparkPlanner =
@@ -46,6 +52,19 @@ class IncrementalExecution(
       stateStrategy)
 
   /**
+   * See [SPARK-18339]
+   * Walk the optimized logical plan and replace CurrentBatchTimestamp
+   * with the desired literal
+   */
+  override lazy val optimizedPlan: LogicalPlan = {
+    sparkSession.sessionState.optimizer.execute(withCachedData) transformAllExpressions {
+      case ts @ CurrentBatchTimestamp(timestamp, _) =>
+        logInfo(s"Current batch timestamp = $timestamp")
+        ts.toLiteral
+    }
+  }
+
+  /**
    * Records the current id for a given stateful operator in the query plan as the `state`
    * preparation walks the query plan.
    */
@@ -53,16 +72,19 @@ class IncrementalExecution(
 
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
+
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
-      case StateStoreSaveExec(keys, None,
+      case StateStoreSaveExec(keys, None, None, None,
              UnaryExecNode(agg,
                StateStoreRestoreExec(keys2, None, child))) =>
-        val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId - 1)
+        val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId)
         operatorId += 1
 
         StateStoreSaveExec(
           keys,
           Some(stateId),
+          Some(outputMode),
+          Some(currentEventTimeWatermark),
           agg.withNewChildren(
             StateStoreRestoreExec(
               keys,

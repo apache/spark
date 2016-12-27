@@ -37,20 +37,20 @@ import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.storage.StorageLevel
 
 /**
  * Model representing the result of matrix factorization.
- *
- * Note: If you create the model directly using constructor, please be aware that fast prediction
- * requires cached user/product features and their associated partitioners.
  *
  * @param rank Rank for the features in this model.
  * @param userFeatures RDD of tuples where each tuple represents the userId and
  *                     the features computed for this user.
  * @param productFeatures RDD of tuples where each tuple represents the productId
  *                        and the features computed for this product.
+ *
+ * @note If you create the model directly using constructor, please be aware that fast prediction
+ * requires cached user/product features and their associated partitioners.
  */
 @Since("0.8.0")
 class MatrixFactorizationModel @Since("0.8.0") (
@@ -146,7 +146,7 @@ class MatrixFactorizationModel @Since("0.8.0") (
   }
 
   /**
-   * Java-friendly version of [[MatrixFactorizationModel.predict]].
+   * Java-friendly version of `MatrixFactorizationModel.predict`.
    */
   @Since("1.2.0")
   def predict(usersProducts: JavaPairRDD[JavaInteger, JavaInteger]): JavaRDD[Rating] = {
@@ -195,7 +195,7 @@ class MatrixFactorizationModel @Since("0.8.0") (
    *  - human-readable (JSON) model metadata to path/metadata/
    *  - Parquet formatted data to path/data/
    *
-   * The model may be loaded using [[Loader.load]].
+   * The model may be loaded using `Loader.load`.
    *
    * @param sc  Spark context used to save model data.
    * @param path  Path specifying the directory in which to save this model.
@@ -320,7 +320,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
   /**
    * Load a model from the given path.
    *
-   * The model should have been saved by [[Saveable.save]].
+   * The model should have been saved by `Saveable.save`.
    *
    * @param sc  Spark context used for loading model files.
    * @param path  Path specifying the directory to which the model was saved.
@@ -354,8 +354,8 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
      */
     def save(model: MatrixFactorizationModel, path: String): Unit = {
       val sc = model.userFeatures.sparkContext
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      import spark.implicits._
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("rank" -> model.rank)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
@@ -365,16 +365,16 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
 
     def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
       implicit val formats = DefaultFormats
-      val sqlContext = SQLContext.getOrCreate(sc)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val (className, formatVersion, metadata) = loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
       val rank = (metadata \ "rank").extract[Int]
-      val userFeatures = sqlContext.read.parquet(userPath(path)).rdd.map {
+      val userFeatures = spark.read.parquet(userPath(path)).rdd.map {
         case Row(id: Int, features: Seq[_]) =>
           (id, features.asInstanceOf[Seq[Double]].toArray)
       }
-      val productFeatures = sqlContext.read.parquet(productPath(path)).rdd.map {
+      val productFeatures = spark.read.parquet(productPath(path)).rdd.map {
         case Row(id: Int, features: Seq[_]) =>
           (id, features.asInstanceOf[Seq[Double]].toArray)
       }

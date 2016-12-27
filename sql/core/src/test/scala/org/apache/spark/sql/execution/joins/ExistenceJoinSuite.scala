@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, StructT
 
 class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
 
-  private lazy val left = sqlContext.createDataFrame(
+  private lazy val left = spark.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(1, 2.0),
       Row(1, 2.0),
@@ -42,7 +42,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
       Row(6, null)
     )), new StructType().add("a", IntegerType).add("b", DoubleType))
 
-  private lazy val right = sqlContext.createDataFrame(
+  private lazy val right = spark.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(2, 3.0),
       Row(2, 3.0),
@@ -53,7 +53,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
       Row(6, null)
     )), new StructType().add("c", IntegerType).add("d", DoubleType))
 
-  private lazy val rightUniqueKey = sqlContext.createDataFrame(
+  private lazy val rightUniqueKey = spark.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(2, 3.0),
       Row(3, 2.0),

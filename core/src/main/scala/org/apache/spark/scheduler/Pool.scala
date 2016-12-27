@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
- * An Schedulable entity that represents collection of Pools or TaskSetManagers
+ * A Schedulable entity that represents collection of Pools or TaskSetManagers
  */
 private[spark] class Pool(
     val poolName: String,
@@ -88,10 +88,10 @@ private[spark] class Pool(
     schedulableQueue.asScala.foreach(_.executorLost(executorId, host, reason))
   }
 
-  override def checkSpeculatableTasks(): Boolean = {
+  override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
     var shouldRevive = false
     for (schedulable <- schedulableQueue.asScala) {
-      shouldRevive |= schedulable.checkSpeculatableTasks()
+      shouldRevive |= schedulable.checkSpeculatableTasks(minTimeToSpeculation)
     }
     shouldRevive
   }

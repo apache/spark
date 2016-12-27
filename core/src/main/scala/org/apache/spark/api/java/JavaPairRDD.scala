@@ -54,7 +54,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   // Common RDD functions
 
-  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
+  /**
+   * Persist this RDD with the default storage level (`MEMORY_ONLY`).
+   */
   def cache(): JavaPairRDD[K, V] = new JavaPairRDD[K, V](rdd.cache())
 
   /**
@@ -206,7 +208,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
    * elements, even if the input RDDs did.
    *
-   * Note that this method performs a shuffle internally.
+   * @note This method performs a shuffle internally.
    */
   def intersection(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.intersection(other.rdd))
@@ -223,9 +225,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns a JavaPairRDD[(K, V)] into a result of type JavaPairRDD[(K, C)], for a
-   * "combined type" C. Note that V and C can be different -- for example, one might group an
-   * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three
-   * functions:
+   * "combined type" C.
+   *
+   * Users provide three functions:
    *
    *  - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
    *  - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
@@ -234,6 +236,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * In addition, users can control the partitioning of the output RDD, the serializer that is use
    * for the shuffle, and whether to perform map-side aggregation (if a mapper can produce multiple
    * items with the same key).
+   *
+   * @note V and C can be different -- for example, one might group an RDD of type (Int, Int) into
+   * an RDD of type (Int, List[Int]).
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
       mergeValue: JFunction2[C, V, C],
@@ -255,9 +260,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns a JavaPairRDD[(K, V)] into a result of type JavaPairRDD[(K, C)], for a
-   * "combined type" C. Note that V and C can be different -- for example, one might group an
-   * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three
-   * functions:
+   * "combined type" C.
+   *
+   * Users provide three functions:
    *
    *  - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
    *  - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
@@ -265,6 +270,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    *
    * In addition, users can control the partitioning of the output RDD. This method automatically
    * uses map-side aggregation in shuffling the RDD.
+   *
+   * @note V and C can be different -- for example, one might group an RDD of type (Int, Int) into
+   * an RDD of type (Int, List[Int]).
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
       mergeValue: JFunction2[C, V, C],
@@ -398,8 +406,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Group the values for each key in the RDD into a single sequence. Allows controlling the
    * partitioning of the resulting key-value pair RDD by passing a Partitioner.
    *
-   * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
-   * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
+   * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * each key, using `JavaPairRDD.reduceByKey` or `JavaPairRDD.combineByKey`
    * will provide much better performance.
    */
   def groupByKey(partitioner: Partitioner): JavaPairRDD[K, JIterable[V]] =
@@ -409,8 +417,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with into `numPartitions` partitions.
    *
-   * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
-   * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
+   * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * each key, using `JavaPairRDD.reduceByKey` or `JavaPairRDD.combineByKey`
    * will provide much better performance.
    */
   def groupByKey(numPartitions: Int): JavaPairRDD[K, JIterable[V]] =
@@ -448,13 +456,17 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
     fromRDD(rdd.subtractByKey(other))
   }
 
-  /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
+  /**
+   * Return an RDD with the pairs from `this` whose keys are not in `other`.
+   */
   def subtractByKey[W](other: JavaPairRDD[K, W], numPartitions: Int): JavaPairRDD[K, V] = {
     implicit val ctag: ClassTag[W] = fakeClassTag
     fromRDD(rdd.subtractByKey(other, numPartitions))
   }
 
-  /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
+  /**
+   * Return an RDD with the pairs from `this` whose keys are not in `other`.
+   */
   def subtractByKey[W](other: JavaPairRDD[K, W], p: Partitioner): JavaPairRDD[K, V] = {
     implicit val ctag: ClassTag[W] = fakeClassTag
     fromRDD(rdd.subtractByKey(other, p))
@@ -539,8 +551,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with the existing partitioner/parallelism level.
    *
-   * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
-   * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
+   * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * each key, using `JavaPairRDD.reduceByKey` or `JavaPairRDD.combineByKey`
    * will provide much better performance.
    */
   def groupByKey(): JavaPairRDD[K, JIterable[V]] =

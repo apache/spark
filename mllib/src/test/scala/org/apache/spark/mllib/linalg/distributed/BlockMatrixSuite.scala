@@ -135,6 +135,11 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(rowMat.numCols() === n)
     assert(rowMat.toBreeze() === gridBasedMat.toBreeze())
 
+    // SPARK-15922: BlockMatrix to IndexedRowMatrix throws an error"
+    val bmat = rowMat.toBlockMatrix
+    val imat = bmat.toIndexedRowMatrix
+    imat.rows.collect
+
     val rows = 1
     val cols = 10
 
@@ -152,7 +157,7 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val C = B.toIndexedRowMatrix.rows.collect
 
-    (C(0).vector.toBreeze, C(1).vector.toBreeze) match {
+    (C(0).vector.asBreeze, C(1).vector.asBreeze) match {
       case (denseVector: BDV[Double], sparseVector: BSV[Double]) =>
         assert(denseVector.length === sparseVector.length)
 

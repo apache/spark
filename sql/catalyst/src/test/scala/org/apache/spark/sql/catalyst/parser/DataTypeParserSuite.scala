@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
-class CatalystQlDataTypeParserSuite extends SparkFunSuite {
+class DataTypeParserSuite extends SparkFunSuite {
 
   def parse(sql: String): DataType = CatalystSqlParser.parseDataType(sql)
 
@@ -116,6 +116,7 @@ class CatalystQlDataTypeParserSuite extends SparkFunSuite {
   unsupported("it is not a data type")
   unsupported("struct<x+y: int, 1.1:timestamp>")
   unsupported("struct<x: int")
+  unsupported("struct<x int, y string>")
 
   // DataType parser accepts certain reserved keywords.
   checkDataType(
@@ -125,12 +126,11 @@ class CatalystQlDataTypeParserSuite extends SparkFunSuite {
         StructField("DATE", BooleanType, true) :: Nil)
   )
 
-  // Define struct columns without ':'
-  checkDataType(
-    "struct<x int, y string>",
-    (new StructType).add("x", IntegerType).add("y", StringType))
+  // Use SQL keywords.
+  checkDataType("struct<end: long, select: int, from: string>",
+    (new StructType).add("end", LongType).add("select", IntegerType).add("from", StringType))
 
-  checkDataType(
-    "struct<`x``y` int>",
-    (new StructType).add("x`y", IntegerType))
+  // DataType parser accepts comments.
+  checkDataType("Struct<x: INT, y: STRING COMMENT 'test'>",
+    (new StructType).add("x", IntegerType).add("y", StringType, true, "test"))
 }

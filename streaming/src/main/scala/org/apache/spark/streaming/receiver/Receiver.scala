@@ -32,7 +32,7 @@ import org.apache.spark.storage.StorageLevel
  * should define the setup steps necessary to start receiving data,
  * and `onStop()` should define the cleanup steps necessary to stop receiving data.
  * Exceptions while receiving can be handled either by restarting the receiver with `restart(...)`
- * or stopped completely by `stop(...)` or
+ * or stopped completely by `stop(...)`.
  *
  * A custom receiver in Scala would look like this.
  *
@@ -45,7 +45,7 @@ import org.apache.spark.storage.StorageLevel
  *          // Call store(...) in those threads to store received data into Spark's memory.
  *
  *          // Call stop(...), restart(...) or reportError(...) on any thread based on how
- *          // different errors needs to be handled.
+ *          // different errors need to be handled.
  *
  *          // See corresponding method documentation for more details
  *      }
@@ -71,7 +71,7 @@ import org.apache.spark.storage.StorageLevel
  *          // Call store(...) in those threads to store received data into Spark's memory.
  *
  *          // Call stop(...), restart(...) or reportError(...) on any thread based on how
- *          // different errors needs to be handled.
+ *          // different errors need to be handled.
  *
  *          // See corresponding method documentation for more details
  *     }

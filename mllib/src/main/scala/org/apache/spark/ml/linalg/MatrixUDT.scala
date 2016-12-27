@@ -18,14 +18,14 @@
 package org.apache.spark.ml.linalg
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
 
 /**
  * User-defined type for [[Matrix]] in [[mllib-local]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.Dataset]].
  */
-private[ml] class MatrixUDT extends UserDefinedType[Matrix] {
+private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
 
   override def sqlType: StructType = {
     // type: 0 = sparse, 1 = dense
@@ -46,7 +46,7 @@ private[ml] class MatrixUDT extends UserDefinedType[Matrix] {
   }
 
   override def serialize(obj: Matrix): InternalRow = {
-    val row = new GenericMutableRow(7)
+    val row = new GenericInternalRow(7)
     obj match {
       case sm: SparseMatrix =>
         row.setByte(0, 0)

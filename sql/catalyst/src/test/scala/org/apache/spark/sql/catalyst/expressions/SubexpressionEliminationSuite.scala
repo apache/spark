@@ -17,12 +17,17 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 class SubexpressionEliminationSuite extends SparkFunSuite {
   test("Semantic equals and hash") {
-    val id = ExprId(1)
     val a: AttributeReference = AttributeReference("name", IntegerType)()
+    val id = {
+      // Make sure we use a "ExprId" different from "a.exprId"
+      val _id = ExprId(1)
+      if (a.exprId == _id) ExprId(2) else _id
+    }
     val b1 = a.withName("name2").withExprId(id)
     val b2 = a.withExprId(id)
     val b3 = a.withQualifier(Some("qualifierName"))
@@ -158,13 +163,18 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
   test("Children of CodegenFallback") {
     val one = Literal(1)
     val two = Add(one, one)
-    val explode = Explode(two)
-    val add = Add(two, explode)
+    val fallback = CodegenFallbackExpression(two)
+    val add = Add(two, fallback)
 
-    var equivalence = new EquivalentExpressions
+    val equivalence = new EquivalentExpressions
     equivalence.addExprTree(add, true)
-    // the `two` inside `explode` should not be added
+    // the `two` inside `fallback` should not be added
     assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 0)
     assert(equivalence.getAllEquivalentExprs.count(_.size == 1) == 3)  // add, two, explode
   }
+}
+
+case class CodegenFallbackExpression(child: Expression)
+  extends UnaryExpression with CodegenFallback {
+  override def dataType: DataType = child.dataType
 }

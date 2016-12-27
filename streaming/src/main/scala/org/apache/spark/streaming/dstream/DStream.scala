@@ -27,7 +27,8 @@ import scala.util.matching.Regex
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.{BlockRDD, PairRDDFunctions, RDD, RDDOperationScope}
+import org.apache.spark.internal.io.SparkHadoopWriterUtils
+import org.apache.spark.rdd.{BlockRDD, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext.rddToFileName
@@ -52,7 +53,7 @@ import org.apache.spark.util.{CallSite, Utils}
  * `join`. These operations are automatically available on any DStream of pairs
  * (e.g., DStream[(Int, Int)] through implicit conversions.
  *
- * DStreams internally is characterized by a few basic properties:
+ * A DStream internally is characterized by a few basic properties:
  *  - A list of other DStreams that the DStream depends on
  *  - A time interval at which the DStream generates an RDD
  *  - A function that is used to generate an RDD after each time interval
@@ -68,13 +69,13 @@ abstract class DStream[T: ClassTag] (
   // Methods that should be implemented by subclasses of DStream
   // =======================================================================
 
-  /** Time interval after which the DStream generates a RDD */
+  /** Time interval after which the DStream generates an RDD */
   def slideDuration: Duration
 
   /** List of parent DStreams on which this DStream depends on */
   def dependencies: List[DStream[_]]
 
-  /** Method that generates a RDD for the given time */
+  /** Method that generates an RDD for the given time */
   def compute(validTime: Time): Option[RDD[T]]
 
   // =======================================================================
@@ -157,7 +158,7 @@ abstract class DStream[T: ClassTag] (
   def persist(level: StorageLevel): DStream[T] = {
     if (this.isInitialized) {
       throw new UnsupportedOperationException(
-        "Cannot change storage level of an DStream after streaming context has started")
+        "Cannot change storage level of a DStream after streaming context has started")
     }
     this.storageLevel = level
     this
@@ -176,7 +177,7 @@ abstract class DStream[T: ClassTag] (
   def checkpoint(interval: Duration): DStream[T] = {
     if (isInitialized) {
       throw new UnsupportedOperationException(
-        "Cannot change checkpoint interval of an DStream after streaming context has started")
+        "Cannot change checkpoint interval of a DStream after streaming context has started")
     }
     persist()
     checkpointDuration = interval
@@ -337,7 +338,7 @@ abstract class DStream[T: ClassTag] (
           // scheduler, since we may need to write output to an existing directory during checkpoint
           // recovery; see SPARK-4835 for more details. We need to have this call here because
           // compute() might cause Spark jobs to be launched.
-          PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
+          SparkHadoopWriterUtils.disableOutputSpecValidation.withValue(true) {
             compute(time)
           }
         }

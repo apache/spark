@@ -1,0 +1,105 @@
+<!--
+Licensed to the Apache Software Foundation (ASF) under one or more
+contributor license agreements.  See the NOTICE file distributed with
+this work for additional information regarding copyright ownership.
+The ASF licenses this file to You under the Apache License, Version 2.0
+(the "License"); you may not use this file except in compliance with
+the License.  You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+<script id="executors-summary-template" type="text/html">
+  <h4 style="clear: left; display: inline-block;">Summary</h4>
+  <div class="container-fluid">
+    <div class="container-fluid">
+      <table id="summary-execs-table" class="table table-striped compact">
+        <thead>
+        <th></th>
+        <th>RDD Blocks</th>
+        <th><span data-toggle="tooltip"
+                  title="Memory used / total available memory for storage of data like RDD partitions cached in memory. ">Storage Memory</span>
+        </th>
+        <th>Disk Used</th>
+        <th>Cores</th>
+        <th>Active Tasks</th>
+        <th>Failed Tasks</th>
+        <th>Complete Tasks</th>
+        <th>Total Tasks</th>
+        <th><span data-toggle="tooltip"
+                  title="Shaded red when garbage collection (GC) time is over 10% of task time">
+          Task Time (GC Time)</span></th>
+        <th><span data-toggle="tooltip"
+                  title="Bytes and records read from Hadoop or from Spark storage.">Input</span></th>
+        <th><span data-toggle="tooltip"
+                  title="Total shuffle bytes and records read (includes both data read locally and data read from remote executors).">
+          Shuffle Read</span></th>
+        <th>
+          <span data-toggle="tooltip" data-placement="left"
+                title="Bytes and records written to disk in order to be read by a shuffle in a future stage.">
+            Shuffle Write</span>
+        </th>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <h4 style="clear: left; display: inline-block;">Executors</h4>
+  <div class="container-fluid">
+    <div class="container-fluid">
+      <table id="active-executors-table" class="table table-striped compact">
+        <thead>
+        <tr>
+          <th>
+            <span data-toggle="tooltip" data-placement="right" title="ID of the executor">Executor ID</span></th>
+          <th>
+            <span data-toggle="tooltip" data-placement="top" title="Address">Address</span></th>
+          <th><span data-toggle="tooltip" data-placement="top" title="Status">Status</span></th>
+          <th>
+            <span data-toggle="tooltip" data-placement="top" title="RDD Blocks">RDD Blocks</span></th>
+          <th>
+            <span data-toggle="tooltip" data-placement="top"
+                  title="Memory used / total available memory for storage of data like RDD partitions cached in memory.">
+              Storage Memory</span></th>
+          <th><span data-toggle="tooltip" data-placement="top" title="Disk Used">Disk Used</span></th>
+          <th><span data-toggle="tooltip" data-placement="top" title="Cores">Cores</span></th>
+          <th><span data-toggle="tooltip" data-placement="top" title="Active Tasks">Active Tasks</span></th>
+          <th><span data-toggle="tooltip" data-placement="top" title="Failed Tasks">Failed Tasks</span></th>
+          <th><span data-toggle="tooltip" data-placement="top" title="Complete Tasks">Complete Tasks</span></th>
+          <th><span data-toggle="tooltip" data-placement="top" title="Total Tasks">Total Tasks</span></th>
+          <th>
+            <scan data-toggle="tooltip" data-placement="top"
+                  title="Shaded red when garbage collection (GC) time is over 10% of task time">
+              Task Time (GC Time)
+            </scan>
+          </th>
+          <th><span data-toggle="tooltip" data-placement="top"
+                    title="Bytes and records read from Hadoop or from Spark storage.">Input</span></th>
+          <th>
+            <span data-toggle="tooltip" data-placement="top"
+                  title="Total shuffle bytes and records read (includes both data read locally and data read from remote executors).">
+              Shuffle Read</span></th>
+          <th>
+            <!-- Place the shuffle write tooltip on the left (rather than the default position
+            of on top) because the shuffle write column is the last column on the right side and
+            the tooltip is wider than the column, so it doesn't fit on top. -->
+            <span data-toggle="tooltip" data-placement="left"
+                  title="Bytes and records written to disk in order to be read by a shuffle in a future stage.">
+              Shuffle Write</span></th>
+          <th><span data-toggle="tooltip" data-placement="left" title="Logs">Logs</span></th>
+          <th><span data-toggle="tooltip" data-placement="left" title="Thread Dump">Thread Dump</span></th>
+        </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</script>

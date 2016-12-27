@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.NoSuchElementException
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -62,6 +60,13 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
+    case Some((key @ SetCommand.VariableName(name), Some(value))) =>
+      val runFunc = (sparkSession: SparkSession) => {
+        sparkSession.conf.set(name, value)
+        Seq(Row(key, value))
+      }
+      (keyValueOutput, runFunc)
+
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
@@ -88,7 +93,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       val schema = StructType(
         StructField("key", StringType, nullable = false) ::
-          StructField("default", StringType, nullable = false) ::
+          StructField("value", StringType, nullable = false) ::
           StructField("meaning", StringType, nullable = false) :: Nil)
       (schema.toAttributes, runFunc)
 
@@ -117,4 +122,22 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
 
   override def run(sparkSession: SparkSession): Seq[Row] = runFunc(sparkSession)
 
+}
+
+object SetCommand {
+  val VariableName = """hivevar:([^=]+)""".r
+}
+
+/**
+ * This command is for resetting SQLConf to the default values. Command that runs
+ * {{{
+ *   reset;
+ * }}}
+ */
+case object ResetCommand extends RunnableCommand with Logging {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sessionState.conf.clear()
+    Seq.empty[Row]
+  }
 }

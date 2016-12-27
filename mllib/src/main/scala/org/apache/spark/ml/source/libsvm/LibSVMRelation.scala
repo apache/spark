@@ -21,18 +21,16 @@ import java.io.IOException
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{NullWritable, Text}
-import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.annotation.Since
-import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.TaskContext
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, JoinedRow}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
@@ -45,79 +43,39 @@ private[libsvm] class LibSVMOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter {
 
-  private[this] val buffer = new Text()
-
-  private val recordWriter: RecordWriter[NullWritable, Text] = {
-    new TextOutputFormat[NullWritable, Text]() {
-      override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
-        val taskAttemptId = context.getTaskAttemptID
-        val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
-      }
-    }.getRecordWriter(context)
-  }
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
 
   override def write(row: Row): Unit = {
     val label = row.get(0)
     val vector = row.get(1).asInstanceOf[Vector]
-    val sb = new StringBuilder(label.toString)
+    writer.write(label.toString)
     vector.foreachActive { case (i, v) =>
-      sb += ' '
-      sb ++= s"${i + 1}:$v"
+      writer.write(s" ${i + 1}:$v")
     }
-    buffer.set(sb.mkString)
-    recordWriter.write(NullWritable.get(), buffer)
+
+    writer.write('\n')
   }
 
   override def close(): Unit = {
-    recordWriter.close(context)
+    writer.close()
   }
 }
 
-/**
- * `libsvm` package implements Spark SQL data source API for loading LIBSVM data as [[DataFrame]].
- * The loaded [[DataFrame]] has two columns: `label` containing labels stored as doubles and
- * `features` containing feature vectors stored as [[Vector]]s.
- *
- * To use LIBSVM data source, you need to set "libsvm" as the format in [[DataFrameReader]] and
- * optionally specify options, for example:
- * {{{
- *   // Scala
- *   val df = spark.read.format("libsvm")
- *     .option("numFeatures", "780")
- *     .load("data/mllib/sample_libsvm_data.txt")
- *
- *   // Java
- *   DataFrame df = spark.read().format("libsvm")
- *     .option("numFeatures, "780")
- *     .load("data/mllib/sample_libsvm_data.txt");
- * }}}
- *
- * LIBSVM data source supports the following options:
- *  - "numFeatures": number of features.
- *    If unspecified or nonpositive, the number of features will be determined automatically at the
- *    cost of one additional pass.
- *    This is also useful when the dataset is already split into multiple files and you want to load
- *    them separately, because some features may not present in certain files, which leads to
- *    inconsistent feature dimensions.
- *  - "vectorType": feature vector type, "sparse" (default) or "dense".
- *
- *  @see [[https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/ LIBSVM datasets]]
- */
-@Since("1.6.0")
-class DefaultSource extends FileFormat with DataSourceRegister {
+/** @see [[LibSVMDataSource]] for public documentation. */
+// If this is moved or renamed, please update DataSource's backwardCompatibilityMap.
+private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
-  @Since("1.6.0")
   override def shortName(): String = "libsvm"
 
   override def toString: String = "LibSVM"
 
   private def verifySchema(dataSchema: StructType): Unit = {
-    if (dataSchema.size != 2 ||
-      (!dataSchema(0).dataType.sameType(DataTypes.DoubleType)
-        || !dataSchema(1).dataType.sameType(new VectorUDT()))) {
+    if (
+      dataSchema.size != 2 ||
+        !dataSchema(0).dataType.sameType(DataTypes.DoubleType) ||
+        !dataSchema(1).dataType.sameType(new VectorUDT()) ||
+        !(dataSchema(1).metadata.getLong("numFeatures").toInt > 0)
+    ) {
       throw new IOException(s"Illegal schema for libsvm data, schema=$dataSchema")
     }
   }
@@ -126,17 +84,8 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    Some(
-      StructType(
-        StructField("label", DoubleType, nullable = false) ::
-        StructField("features", new VectorUDT(), nullable = false) :: Nil))
-  }
-
-  override def prepareRead(
-      sparkSession: SparkSession,
-      options: Map[String, String],
-      files: Seq[FileStatus]): Map[String, String] = {
-    def computeNumFeatures(): Int = {
+    val numFeatures: Int = options.get("numFeatures").map(_.toInt).filter(_ > 0).getOrElse {
+      // Infers number of features if the user doesn't specify (a valid) one.
       val dataFiles = files.filterNot(_.getPath.getName startsWith "_")
       val path = if (dataFiles.length == 1) {
         dataFiles.head.getPath.toUri.toString
@@ -151,11 +100,14 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       MLUtils.computeNumFeatures(parsed)
     }
 
-    val numFeatures = options.get("numFeatures").filter(_.toInt > 0).getOrElse {
-      computeNumFeatures()
-    }
+    val featuresMetadata = new MetadataBuilder()
+      .putLong("numFeatures", numFeatures)
+      .build()
 
-    new CaseInsensitiveMap(options + ("numFeatures" -> numFeatures.toString))
+    Some(
+      StructType(
+        StructField("label", DoubleType, nullable = false) ::
+        StructField("features", new VectorUDT(), nullable = false, featuresMetadata) :: Nil))
   }
 
   override def prepareWrite(
@@ -166,11 +118,13 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     new OutputWriterFactory {
       override def newInstance(
           path: String,
-          bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        if (bucketId.isDefined) { sys.error("LibSVM doesn't support bucketing") }
         new LibSVMOutputWriter(path, dataSchema, context)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        ".libsvm" + CodecStreams.getCompressionExtension(context)
       }
     }
   }
@@ -184,7 +138,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     verifySchema(dataSchema)
-    val numFeatures = options("numFeatures").toInt
+    val numFeatures = dataSchema("features").metadata.getLong("numFeatures").toInt
     assert(numFeatures > 0)
 
     val sparse = options.getOrElse("vectorType", "sparse") == "sparse"
@@ -193,8 +147,10 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
-      val points =
-        new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      val linesReader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
+
+      val points = linesReader
           .map(_.toString.trim)
           .filterNot(line => line.isEmpty || line.startsWith("#"))
           .map { line =>

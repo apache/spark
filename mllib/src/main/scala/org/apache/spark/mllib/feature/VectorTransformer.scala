@@ -53,7 +53,7 @@ trait VectorTransformer extends Serializable {
   }
 
   /**
-   * Applies transformation on an JavaRDD[Vector].
+   * Applies transformation on a JavaRDD[Vector].
    *
    * @param data JavaRDD[Vector] to be transformed.
    * @return transformed JavaRDD[Vector].

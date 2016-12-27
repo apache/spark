@@ -24,7 +24,7 @@ import org.apache.spark.mllib.linalg.{Matrix, SparseMatrix, Vectors}
 import org.apache.spark.rdd.RDD
 
 /**
- * Represents an entry in an distributed matrix.
+ * Represents an entry in a distributed matrix.
  * @param i row index
  * @param j column index
  * @param value value of the entry
@@ -101,14 +101,16 @@ class CoordinateMatrix @Since("1.0.0") (
     toIndexedRowMatrix().toRowMatrix()
   }
 
-  /** Converts to BlockMatrix. Creates blocks of [[SparseMatrix]] with size 1024 x 1024. */
+  /**
+   * Converts to BlockMatrix. Creates blocks of `SparseMatrix` with size 1024 x 1024.
+   */
   @Since("1.3.0")
   def toBlockMatrix(): BlockMatrix = {
     toBlockMatrix(1024, 1024)
   }
 
   /**
-   * Converts to BlockMatrix. Creates blocks of [[SparseMatrix]].
+   * Converts to BlockMatrix. Creates blocks of `SparseMatrix`.
    * @param rowsPerBlock The number of rows of each block. The blocks at the bottom edge may have
    *                     a smaller value. Must be an integer value greater than 0.
    * @param colsPerBlock The number of columns of each block. The blocks at the right edge may have

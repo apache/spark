@@ -29,7 +29,7 @@ object UDTSerializationBenchmark {
     val iters = 1e2.toInt
     val numRows = 1e3.toInt
 
-    val encoder = ExpressionEncoder[Vector].defaultBinding
+    val encoder = ExpressionEncoder[Vector].resolveAndBind()
 
     val vectors = (1 to numRows).map { i =>
       Vectors.dense(Array.fill(1e5.toInt)(1.0 * i))
@@ -57,13 +57,12 @@ object UDTSerializationBenchmark {
     }
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11.4
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-
-    VectorUDT de/serialization:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    serialize                                 380 /  392          0.0      379730.0       1.0X
-    deserialize                               138 /  142          0.0      137816.6       2.8X
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    VectorUDT de/serialization:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    serialize                                      265 /  318          0.0      265138.5       1.0X
+    deserialize                                    155 /  197          0.0      154611.4       1.7X
     */
     benchmark.run()
   }
