@@ -174,9 +174,19 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema4)
 
     df.write.jdbc(url, "TEST.APPENDTEST", new Properties())
-    df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
-    assert(3 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).count())
-    assert(2 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).collect()(0).length)
+
+    withSQLConf("spark.sql.caseSensitive" -> "true") {
+      val m = intercept[SparkException] {
+        df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
+      }.getMessage
+      assert(m.contains("Column \"NAME\" not found"))
+    }
+
+    withSQLConf("spark.sql.caseSensitive" -> "false") {
+      df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
+      assert(3 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).count())
+      assert(2 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).collect()(0).length)
+    }
   }
 
   test("Truncate") {

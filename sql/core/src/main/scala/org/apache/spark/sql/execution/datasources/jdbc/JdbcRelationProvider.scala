@@ -60,23 +60,27 @@ class JdbcRelationProvider extends CreatableRelationProvider
 
     val conn = JdbcUtils.createConnectionFactory(jdbcOptions)()
     try {
-      val tableExists = JdbcUtils.tableExists(conn, url, table)
+      val tableSchema = JdbcUtils.getSchema(conn, url, table)
+      val tableExists = tableSchema.isDefined
+      val caseSensitive = sqlContext.conf.caseSensitiveAnalysis
       if (tableExists) {
         mode match {
           case SaveMode.Overwrite =>
-            if (isTruncate && isCascadingTruncateTable(url) == Some(false)) {
+            val savingSchema = if (isTruncate && isCascadingTruncateTable(url) == Some(false)) {
               // In this case, we should truncate table and then load.
               truncateTable(conn, table)
-              saveTable(df, url, table, jdbcOptions)
+              JdbcUtils.getSavingSchema(df.schema, tableSchema.get, caseSensitive)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, table)
               createTable(df.schema, url, table, createTableOptions, conn)
-              saveTable(df, url, table, jdbcOptions)
+              df.schema
             }
+            saveTable(df, url, table, savingSchema, jdbcOptions)
 
           case SaveMode.Append =>
-            saveTable(df, url, table, jdbcOptions)
+            val savingSchema = JdbcUtils.getSavingSchema(df.schema, tableSchema.get, caseSensitive)
+            saveTable(df, url, table, savingSchema, jdbcOptions)
 
           case SaveMode.ErrorIfExists =>
             throw new AnalysisException(
@@ -89,7 +93,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
         }
       } else {
         createTable(df.schema, url, table, createTableOptions, conn)
-        saveTable(df, url, table, jdbcOptions)
+        saveTable(df, url, table, df.schema, jdbcOptions)
       }
     } finally {
       conn.close()

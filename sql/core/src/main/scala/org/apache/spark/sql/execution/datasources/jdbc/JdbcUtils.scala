@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 
 import scala.collection.JavaConverters._
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.spark.TaskContext
@@ -110,28 +110,10 @@ object JdbcUtils extends Logging {
   /**
    * Returns a PreparedStatement that inserts a row into table via conn.
    */
-  def insertStatement(conn: Connection, table: String, rddSchema: StructType, dialect: JdbcDialect)
+  def insertStatement(conn: Connection, table: String, schema: StructType, dialect: JdbcDialect)
       : PreparedStatement = {
-    // Use database column names instead of RDD schema column names
-    val tableSchemaQuery = conn.prepareStatement(dialect.getSchemaQuery(table))
-    var columns: String = ""
-    try {
-      val tableSchema = getSchema(tableSchemaQuery.executeQuery(), dialect)
-      val nameMap = tableSchema.fields.map(f => f.name -> f.name).toMap
-      val lowercaseNameMap = tableSchema.fields.map(f => f.name.toLowerCase -> f.name).toMap
-      columns = rddSchema.fields.map { x =>
-        if (nameMap.isDefinedAt(x.name)) {
-          dialect.quoteIdentifier(x.name)
-        } else if (lowercaseNameMap.isDefinedAt(x.name.toLowerCase)) {
-          dialect.quoteIdentifier(lowercaseNameMap(x.name.toLowerCase))
-        } else {
-          throw new SQLException(s"""Column "${x.name}" not found""")
-        }
-      }.mkString(",")
-    } finally {
-      tableSchemaQuery.close()
-    }
-    val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
+    val columns = schema.fields.map(x => dialect.quoteIdentifier(x.name)).mkString(",")
+    val placeholders = schema.fields.map(_ => "?").mkString(",")
     val sql = s"INSERT INTO $table ($columns) VALUES ($placeholders)"
     conn.prepareStatement(sql)
   }
@@ -226,6 +208,52 @@ object JdbcUtils extends Logging {
 
     if (answer == null) throw new SQLException("Unsupported type " + sqlType)
     answer
+  }
+
+  /**
+   * Returns the schema if the table already exists in the JDBC database.
+   */
+  def getSchema(conn: Connection, url: String, table: String): Option[StructType] = {
+    val dialect = JdbcDialects.get(url)
+
+    Try {
+      val statement = conn.prepareStatement(dialect.getSchemaQuery(table))
+      try {
+        getSchema(statement.executeQuery(), dialect)
+      } finally {
+        statement.close()
+      }
+    } match {
+      case Success(v) =>
+        Some(v)
+      case Failure(e) =>
+        None
+    }
+  }
+
+  /**
+   * Returns the saving schema using rddSchema's sequence and tableSchema's name.
+   */
+  def getSavingSchema(
+      rddSchema: StructType,
+      tableSchema: StructType,
+      caseSensitive: Boolean): StructType = {
+    val nameMap = tableSchema.fields.map(f => f.name -> f).toMap
+    val lowercaseNameMap = tableSchema.fields.map(f => f.name.toLowerCase -> f).toMap
+
+    var schema = new StructType()
+    rddSchema.fields.foreach { f =>
+      if (nameMap.isDefinedAt(f.name)) {
+        // identical names
+        schema = schema.add(nameMap(f.name))
+      } else if (!caseSensitive && lowercaseNameMap.isDefinedAt(f.name.toLowerCase)) {
+        // case-insensitive identical names
+        schema = schema.add(lowercaseNameMap(f.name.toLowerCase))
+      } else {
+        throw new org.apache.spark.SparkException(s"""Column "${f.name}" not found""")
+      }
+    }
+    schema
   }
 
   /**
@@ -548,7 +576,7 @@ object JdbcUtils extends Logging {
       getConnection: () => Connection,
       table: String,
       iterator: Iterator[Row],
-      rddSchema: StructType,
+      schema: StructType,
       nullTypes: Array[Int],
       batchSize: Int,
       dialect: JdbcDialect,
@@ -586,10 +614,10 @@ object JdbcUtils extends Logging {
         conn.setAutoCommit(false) // Everything in the same db transaction.
         conn.setTransactionIsolation(finalIsolationLevel)
       }
-      val stmt = insertStatement(conn, table, rddSchema, dialect)
-      val setters: Array[JDBCValueSetter] = rddSchema.fields.map(_.dataType)
+      val stmt = insertStatement(conn, table, schema, dialect)
+      val setters: Array[JDBCValueSetter] = schema.fields.map(_.dataType)
         .map(makeSetter(conn, dialect, _)).toArray
-      val numFields = rddSchema.fields.length
+      val numFields = schema.fields.length
 
       try {
         var rowCount = 0
@@ -675,13 +703,13 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       url: String,
       table: String,
+      schema: StructType,
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
       getJdbcType(field.dataType, dialect).jdbcNullType
     }
 
-    val rddSchema = df.schema
     val getConnection: () => Connection = createConnectionFactory(options)
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
@@ -693,7 +721,7 @@ object JdbcUtils extends Logging {
       case _ => df
     }
     repartitionedDF.foreachPartition(iterator => savePartition(
-      getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect, isolationLevel)
+      getConnection, table, iterator, schema, nullTypes, batchSize, dialect, isolationLevel)
     )
   }
 
