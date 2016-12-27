@@ -863,6 +863,7 @@ abstract class CatalogTestUtils {
    *   - func1
    * db3
    *   - view1
+   *   - view2
    */
   def newBasicCatalog(): ExternalCatalog = {
     val catalog = newEmptyCatalog()
@@ -873,7 +874,8 @@ abstract class CatalogTestUtils {
     catalog.createDatabase(newDb("db3"), ignoreIfExists = false)
     catalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = false)
     catalog.createTable(newTable("tbl2", "db2"), ignoreIfExists = false)
-    catalog.createTable(newView("view1", Some("db3")), ignoreIfExists = false)
+    catalog.createTable(newView("view1", Some("db3"), Some("hive")), ignoreIfExists = false)
+    catalog.createTable(newView("view2", Some("db3")), ignoreIfExists = false)
     catalog.createPartitions("db2", "tbl2", Seq(part1, part2), ignoreIfExists = false)
     catalog.createFunction("db2", newFunc("func1", Some("db2")))
     catalog
@@ -904,7 +906,10 @@ abstract class CatalogTestUtils {
       bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))
   }
 
-  def newView(name: String, database: Option[String] = None): CatalogTable = {
+  def newView(
+      name: String,
+      database: Option[String] = None,
+      provider: Option[String] = None): CatalogTable = {
     CatalogTable(
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.VIEW,
@@ -914,7 +919,7 @@ abstract class CatalogTestUtils {
         .add("col2", "string")
         .add("a", "int")
         .add("b", "string"),
-      provider = Some("hive"),
+      provider = provider,
       viewOriginalText = Some("SELECT * FROM tbl1"),
       viewText = Some("SELECT `gen_attr_0` AS `col1`, `gen_attr_1` AS `col2`, `gen_attr_2` AS " +
         "`a`, `gen_attr_3` AS `b` FROM (SELECT `gen_attr_0`, `gen_attr_1`, `gen_attr_2`, " +

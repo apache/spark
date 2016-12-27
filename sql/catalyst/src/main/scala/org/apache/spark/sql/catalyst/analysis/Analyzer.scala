@@ -520,6 +520,25 @@ class Analyzer(
     // If the unresolved relation is running directly on files, we just return the original
     // UnresolvedRelation, the plan will get resolved later. Else we look up the table from catalog
     // and change the default database name if it is a view.
+    // We usually look up a table from the default database if the table identifier has an empty
+    // database part, for a view the default database should be the currentDb when the view was
+    // created. When the case comes to resolving a nested view, the view may have different default
+    // database with that the referenced view has, so we need to use the variable `defaultDatabase`
+    // to track the current default database.
+    // When the relation we resolve is a view, we fetch the view.desc(which is a CatalogTable), and
+    // then set the value of `CatalogTable.viewDefaultDatabase` to the variable `defaultDatabase`,
+    // we look up the relations that the view references using the default database.
+    // For example:
+    // |- view1 (defaultDatabase = db1)
+    //   |- operator
+    //     |- table2 (defaultDatabase = db1)
+    //     |- view2 (defaultDatabase = db2)
+    //        |- view3 (defaultDatabase = db3)
+    //   |- view4 (defaultDatabase = db4)
+    // In this case, the view `view1` is a nested view, it directly references `table2`、`view2`
+    // and `view4`, the view `view2` references `view3`. On resolving the table, we look up the
+    // relations `table2`、`view2`、`view4` using the default database `db1`, and look up the
+    // relation `view3` using the default database `db2`.
     //
     // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
     // have empty defaultDatabase and all the relations in viewText have database part defined.
@@ -532,8 +551,11 @@ class Analyzer(
         resolveView(lookupTableFromCatalog(u, defaultDatabase))
     }
 
-    // Look up the table with the given name from catalog. If `defaultDatabase` is set, we look up
-    // the table in the database `defaultDatabase`, else we follow the default way.
+    // Look up the table with the given name from catalog. The database we look up the table from
+    // is decided follow the steps:
+    // 1. If the database part is defined in the table identifier, use that database name;
+    // 2. Else If the defaultDatabase is defined, use the default database name;
+    // 3. Else use the currentDb of the SessionCatalog.
     private def lookupTableFromCatalog(
         u: UnresolvedRelation,
         defaultDatabase: Option[String] = None): LogicalPlan = {
@@ -558,21 +580,37 @@ class Analyzer(
 
     // Change the default database name if the plan is a view, and transformDown with the new
     // database name to resolve all UnresolvedRelations and Views.
-    // If the view is defined in a DataSource other than Hive, and the view's child is empty,
-    // set the view's child to a SimpleCatalogRelation, else throw an AnalysisException.
     def resolveView(plan: LogicalPlan): LogicalPlan = plan match {
       case view: View =>
         val desc = view.desc
         val defaultDatabase = desc.viewDefaultDatabase
+        // If a view is a datasource table(the table provider is defined and is not hive), the
+        // logical plan returned by catalog.lookupRelation() should be:
+        // `SubqueryAlias(_, View(desc: CatalogTable, desc.output, None), _)`, on resolution of the
+        // View operator, we should set the view's child to a SimpleCatalogRelation(that should be
+        // handled by DataSourceStrategy later).
         val unresolvedChild = view.child.getOrElse {
           if (isDatasourceTable(desc)) {
-            SimpleCatalogRelation(lookupDatabaseName(desc), desc)
+            // If the database part is defined in the table identifer of the view description,
+            // return that database name, else first attempt to return the view default database
+            // name of the view desc, if that does not exist, return the current database of the
+            // catalog.
+            val identifier = desc.identifier
+            val viewDefaultDatabase = desc.viewDefaultDatabase
+            val rawDatabaseName = identifier.database.getOrElse(
+              viewDefaultDatabase.getOrElse(catalog.getCurrentDatabase))
+            val databaseName = if (conf.caseSensitiveAnalysis) rawDatabaseName
+              else rawDatabaseName.toLowerCase
+            SimpleCatalogRelation(databaseName, desc)
           } else {
-            throw new AnalysisException(s"The child of view '${desc.identifier}' is not defined.")
+            // If the view is not a datasource table, and the child is not defined, we should throw
+            // an AnalysisException to require Hive support(to generate the view's child).
+            throw new AnalysisException(
+              "Hive support is required to resolve the view '${desc.identifier}'.")
           }
         }
         // Resolve all the UnresolvedRelations and Views in the child.
-        val newChild = unresolvedChild transform {
+        val newChild = unresolvedChild transformDown {
           case v: View if !v.resolved =>
             resolveView(v)
           case u: UnresolvedRelation =>
@@ -583,17 +621,6 @@ class Analyzer(
         val newChild = resolveView(view)
         p.copy(child = newChild)
       case _ => plan
-    }
-
-    // If the database part is defined in the table identifer of the view description, return that
-    // database name, else first attempt to return the view default database name of the view
-    // desc, if that does not exist, return the current database of the catalog.
-    private def lookupDatabaseName(desc: CatalogTable): String = {
-      val identifier = desc.identifier
-      val viewDefaultDatabase = desc.viewDefaultDatabase
-      val dbName = identifier.database.getOrElse(
-        viewDefaultDatabase.getOrElse(catalog.getCurrentDatabase))
-      if (conf.caseSensitiveAnalysis) dbName else dbName.toLowerCase
     }
 
     private def isDatasourceTable(table: CatalogTable): Boolean = {
@@ -723,6 +750,10 @@ class Analyzer(
       // A special case for View, replace the output attributes with the attributes that have the
       // same names from the child. If the corresponding attribute is not found, throw an
       // AnalysisException.
+      // On the resolution of the view, the output attributes are generated from the view schema,
+      // and the view query is resolved later. After the view query has been resolved, we should
+      // map the output of the logical plan to the output of the view, here we simply replace the
+      // output attributes of the view with the attributes that have the same names from the child.
       // TODO: Also check the dataTypes and nullabilites of the output.
       case v @ View(_, output, child) if child.isDefined =>
         val resolver = conf.resolver

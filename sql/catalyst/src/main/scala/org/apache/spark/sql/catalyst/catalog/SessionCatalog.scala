@@ -560,10 +560,14 @@ class SessionCatalog(
    * If the relation is a view, we generate a [[View]] operator from the view description, and
    * wrap the logical plan in a [[SubqueryAlias]] which will track the name of the view.
    *
-   * @param name The name of the table/view that we lookup.
-   * @param alias The alias name of the table/view that we lookup.
-   * @param defaultDatabase The database name we should use to lookup the table/view, if the
-   *                        database part of [[TableIdentifier]] is not defined.
+   * @param name The name of the table/view that we look up.
+   * @param alias The alias name of the table/view that we look up.
+   * @param defaultDatabase The default database name we should use to look up the table/view, if
+   *                        the database part of [[TableIdentifier]] is not defined.
+   *                        The precedence of the database name should be:
+   *                        1. the database part of the table identifier;
+   *                        2. the default database;
+   *                        3. the current database from the session catalog.
    */
   def lookupRelation(
       name: TableIdentifier,
