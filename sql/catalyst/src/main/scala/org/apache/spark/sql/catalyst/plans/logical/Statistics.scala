@@ -41,13 +41,13 @@ import org.apache.spark.sql.types._
  * @param sizeInBytes Physical size in bytes. For leaf operators this defaults to 1, otherwise it
  *                    defaults to the product of children's `sizeInBytes`.
  * @param rowCount Estimated number of rows.
- * @param colStats Column-level statistics.
+ * @param attributeStats Statistics for Attributes.
  * @param isBroadcastable If true, output is small enough to be used in a broadcast join.
  */
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
-    colStats: Map[String, ColumnStat] = Map.empty,
+    attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil),
     isBroadcastable: Boolean = false) {
 
   override def toString: String = "Statistics(" + simpleString + ")"

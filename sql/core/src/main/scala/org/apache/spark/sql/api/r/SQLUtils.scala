@@ -276,11 +276,12 @@ private[sql] object SQLUtils extends Logging {
   }
 
   def getTableNames(sparkSession: SparkSession, databaseName: String): Array[String] = {
-    databaseName match {
-      case n: String if n != null && n.trim.nonEmpty =>
-        sparkSession.catalog.listTables(n).collect().map(_.name)
+    val db = databaseName match {
+      case _ if databaseName != null && databaseName.trim.nonEmpty =>
+        databaseName
       case _ =>
-        sparkSession.catalog.listTables().collect().map(_.name)
+        sparkSession.catalog.currentDatabase
     }
+    sparkSession.sessionState.catalog.listTables(db).map(_.table).toArray
   }
 }
