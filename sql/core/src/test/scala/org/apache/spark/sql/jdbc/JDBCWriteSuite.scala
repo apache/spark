@@ -27,6 +27,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -175,14 +176,14 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     df.write.jdbc(url, "TEST.APPENDTEST", new Properties())
 
-    withSQLConf("spark.sql.caseSensitive" -> "true") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       val m = intercept[SparkException] {
         df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
       }.getMessage
       assert(m.contains("Column \"NAME\" not found"))
     }
 
-    withSQLConf("spark.sql.caseSensitive" -> "false") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
       assert(3 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).count())
       assert(2 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).collect()(0).length)
