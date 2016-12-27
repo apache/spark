@@ -511,12 +511,6 @@ class Analyzer(
    */
   object ResolveRelations extends Rule[LogicalPlan] {
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
-      case u: UnresolvedRelation => resolveRelation(u)
-    }
-
     // If the unresolved relation is running directly on files, we just return the original
     // UnresolvedRelation, the plan will get resolved later. Else we look up the table from catalog
     // and change the default database name if it is a view.
@@ -549,6 +543,12 @@ class Analyzer(
         u
       case u: UnresolvedRelation =>
         resolveView(lookupTableFromCatalog(u, defaultDatabase))
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
+        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
+      case u: UnresolvedRelation => resolveRelation(u)
     }
 
     // Look up the table with the given name from catalog. The database we look up the table from
