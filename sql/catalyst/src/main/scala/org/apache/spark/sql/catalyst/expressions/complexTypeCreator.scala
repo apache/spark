@@ -77,7 +77,7 @@ private [sql] object GenArrayData {
    * @param ctx a [[CodegenContext]]
    * @param elementType data type of underlying array elements
    * @param elementsCode a set of [[ExprCode]] for each element of an underlying array
-   * @param isMapKey if throw an exception when to assign a null value to an array element
+   * @param isMapKey if true, throw an exception when the element is null
    * @return (code pre-assignments, assignments to each array elements, code post-assignments,
    *           arrayData name)
    */
