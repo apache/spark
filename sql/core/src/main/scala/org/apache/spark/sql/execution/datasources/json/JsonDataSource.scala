@@ -69,13 +69,12 @@ abstract class JsonDataSource[T] extends Serializable {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): Option[StructType] = {
-    val jsonSchema = JsonInferSchema.infer(
-      createBaseRdd(sparkSession, inputPaths),
-      parsedOptions,
-      createParser)
-    checkConstraints(jsonSchema)
-
-    if (jsonSchema.fields.nonEmpty) {
+    if (inputPaths.nonEmpty) {
+      val jsonSchema = JsonInferSchema.infer(
+        createBaseRdd(sparkSession, inputPaths),
+        parsedOptions,
+        createParser)
+      checkConstraints(jsonSchema)
       Some(jsonSchema)
     } else {
       None
