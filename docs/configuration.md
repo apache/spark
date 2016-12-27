@@ -840,8 +840,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>64m</td>
   <td>
     Maximum allowable size of Kryo serialization buffer. This must be larger than any
-    object you attempt to serialize. Increase this if you get a "buffer limit exceeded" exception
-    inside Kryo.
+    object you attempt to serialize and must be less than 2048m.
+    Increase this if you get a "buffer limit exceeded" exception inside Kryo.
   </td>
 </tr>
 <tr>
