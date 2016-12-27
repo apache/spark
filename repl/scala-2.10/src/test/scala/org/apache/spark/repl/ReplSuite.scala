@@ -44,7 +44,7 @@ class ReplSuite extends SparkFunSuite {
         }
       }
     }
-    val classpath = paths.mkString(File.pathSeparator)
+    val classpath = paths.map(new File(_).getAbsolutePath).mkString(File.pathSeparator)
 
     val oldExecutorClasspath = System.getProperty(CONF_EXECUTOR_CLASSPATH)
     System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
