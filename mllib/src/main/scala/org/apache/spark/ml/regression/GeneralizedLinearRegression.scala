@@ -353,9 +353,6 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   private[regression] val epsilon: Double = 1E-16
 
-  /** Constant used in initialization and deviance to avoid numerical issues. */
-  private[regression] val delta: Double = 0.1
-
   /**
    * Wrapper of family and link combination used in the model.
    */
@@ -445,7 +442,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
      * 1) retrieve object based on family name
      * 2) if family name is tweedie, retrieve object based on variancePower
      *
-     * @param params a GenerealizedLinearRegressionBase object
+     * @param params the parameter map containing family name and variance power
      */
     def fromParams(params: GeneralizedLinearRegressionBase): Family = {
       params.getFamily match {
@@ -488,7 +485,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         require(y > 0.0, s"The response variable of $name($variancePower) family " +
           s"should be non-negative, but got $y")
       }
-      if (y == 0) delta else y
+      if (y == 0) Tweedie.delta else y
     }
 
     override def variance(mu: Double): Double = math.pow(mu, variancePower)
@@ -504,7 +501,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     override def deviance(y: Double, mu: Double, weight: Double): Double = {
       // Force y >= delta for Poisson or compound Poisson
       val y1 = if (variancePower >= 1.0 && variancePower < 2.0) {
-        math.max(y, delta)
+        math.max(y, Tweedie.delta)
       } else {
         y
       }
@@ -533,6 +530,12 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         mu
       }
     }
+  }
+
+  private[regression] object Tweedie{
+
+    /** Constant used in initialization and deviance to avoid numerical issues. */
+    private[regression] val delta: Double = 0.1
   }
 
   /**
@@ -642,7 +645,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         Force Poisson mean > 0 to avoid numerical instability in IRLS.
         R uses y + delta for initialization. See poisson()$initialize.
        */
-      math.max(y, delta)
+      math.max(y, Tweedie.delta)
     }
 
     override def variance(mu: Double): Double = mu
