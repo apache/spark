@@ -374,19 +374,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
       case _ =>
-        val existingTable = if (tableExists) {
-          Some(df.sparkSession.sessionState.catalog.getTableMetadata(tableIdent))
-        } else {
-          None
-        }
-        val storage = if (tableExists) {
-          existingTable.get.storage
-        } else {
-          DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
-        }
-        val tableType = if (tableExists) {
-          existingTable.get.tableType
-        } else if (storage.locationUri.isDefined) {
+        val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
+        val tableType = if (storage.locationUri.isDefined) {
           CatalogTableType.EXTERNAL
         } else {
           CatalogTableType.MANAGED
@@ -441,7 +430,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertNotPartitioned("jdbc")
     assertNotBucketed("jdbc")
     // connectionProperties should override settings in extraOptions.
-    this.extraOptions = this.extraOptions ++ connectionProperties.asScala
+    this.extraOptions ++= connectionProperties.asScala
     // explicit url and dbtable should override all
     this.extraOptions += ("url" -> url, "dbtable" -> table)
     format("jdbc").save()
@@ -588,7 +577,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
 
-  private var extraOptions = new scala.collection.mutable.HashMap[String, String]
+  private val extraOptions = new scala.collection.mutable.HashMap[String, String]
 
   private var partitioningColumns: Option[Seq[String]] = None
 
