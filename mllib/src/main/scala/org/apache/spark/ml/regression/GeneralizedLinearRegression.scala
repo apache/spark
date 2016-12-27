@@ -535,7 +535,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
   private[regression] object Tweedie{
 
     /** Constant used in initialization and deviance to avoid numerical issues. */
-    private[regression] val delta: Double = 0.1
+    val delta: Double = 0.1
   }
 
   /**
