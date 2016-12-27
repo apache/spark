@@ -25,14 +25,13 @@ import breeze.stats.distributions.{Multinomial => BrzMultinomial}
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.classification.NaiveBayes.{Bernoulli, Multinomial}
 import org.apache.spark.ml.classification.NaiveBayesSuite._
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions.lit
 
 class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -174,13 +173,14 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     )
     testParams.foreach { case (family, dataset) =>
       // NaiveBayes is sensitive to constant scaling of the weights unless smoothing is set to 0
-      val estimator = new NaiveBayes().setSmoothing(0.0).setModelType(family)
+      val estimatorNoSmoothing = new NaiveBayes().setSmoothing(0.0).setModelType(family)
+      val estimatorWithSmoothing = new NaiveBayes().setModelType(family)
       MLTestingUtils.testArbitrarilyScaledWeights[NaiveBayesModel, NaiveBayes](
-        dataset.as[LabeledPoint], estimator, modelEquals)
+        dataset.as[LabeledPoint], estimatorNoSmoothing, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[NaiveBayesModel, NaiveBayes](
-        dataset.withColumn("weight", lit(1.0)).as[Instance], estimator, numClasses, modelEquals)
+        dataset.as[LabeledPoint], estimatorWithSmoothing, numClasses, modelEquals)
       MLTestingUtils.testOversamplingVsWeighting[NaiveBayesModel, NaiveBayes](
-        dataset.toDF(), estimator, modelEquals, seed)
+        dataset.as[LabeledPoint], estimatorWithSmoothing, modelEquals, seed)
     }
   }
 

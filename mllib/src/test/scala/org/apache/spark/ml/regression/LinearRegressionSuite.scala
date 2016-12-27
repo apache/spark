@@ -28,7 +28,6 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.functions.lit
 
 class LinearRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -37,7 +36,7 @@ class LinearRegressionSuite
 
   private val seed: Int = 42
   @transient var datasetWithDenseFeature: DataFrame = _
-  @transient var weightedDatasetWithDenseFeature: DataFrame = _
+  @transient var datasetWithStrongNoise: DataFrame = _
   @transient var datasetWithDenseFeatureWithoutIntercept: DataFrame = _
   @transient var datasetWithSparseFeature: DataFrame = _
   @transient var datasetWithWeight: DataFrame = _
@@ -50,7 +49,7 @@ class LinearRegressionSuite
       intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2).map(_.asML).toDF()
 
-    weightedDatasetWithDenseFeature = sc.parallelize(LinearDataGenerator.generateLinearInput(
+    datasetWithStrongNoise = sc.parallelize(LinearDataGenerator.generateLinearInput(
       intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
       xVariance = Array(0.7, 1.2), nPoints = 100, seed, eps = 5.0), 2).map(_.asML).toDF()
 
@@ -816,7 +815,6 @@ class LinearRegressionSuite
     val sqlContext = spark.sqlContext
     import sqlContext.implicits._
     val numClasses = 0
-    val dataset = weightedDatasetWithDenseFeature.withColumn("weight", lit(1.0))
     def modelEquals(m1: LinearRegressionModel, m2: LinearRegressionModel): Unit = {
       assert(m1.coefficients ~== m2.coefficients relTol 0.01)
       assert(m1.intercept ~== m2.intercept relTol 0.01)
@@ -837,11 +835,11 @@ class LinearRegressionSuite
         .setRegParam(regParam)
         .setElasticNetParam(elasticNetParam)
       MLTestingUtils.testArbitrarilyScaledWeights[LinearRegressionModel, LinearRegression](
-        dataset.as[LabeledPoint], estimator, modelEquals)
+        datasetWithStrongNoise.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LinearRegressionModel, LinearRegression](
-        dataset.as[Instance], estimator, numClasses, modelEquals)
+        datasetWithStrongNoise.as[LabeledPoint], estimator, numClasses, modelEquals)
       MLTestingUtils.testOversamplingVsWeighting[LinearRegressionModel, LinearRegression](
-        dataset, estimator, modelEquals, seed)
+        datasetWithStrongNoise.as[LabeledPoint], estimator, modelEquals, seed)
     }
   }
 

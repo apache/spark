@@ -1812,7 +1812,8 @@ class LogisticRegressionSuite
 
   test("logistic regression with sample weights") {
     def modelEquals(m1: LogisticRegressionModel, m2: LogisticRegressionModel): Unit = {
-      assert(m1.coefficientMatrix ~== m2.coefficientMatrix absTol 0.01)
+      assert(m1.coefficientMatrix ~== m2.coefficientMatrix absTol 0.05)
+      assert(m1.interceptVector ~== m2.interceptVector absTol 0.05)
     }
     val testParams = Seq(
       ("binomial", smallBinaryDataset, 2),
@@ -1823,9 +1824,9 @@ class LogisticRegressionSuite
       MLTestingUtils.testArbitrarilyScaledWeights[LogisticRegressionModel, LogisticRegression](
         dataset.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LogisticRegressionModel, LogisticRegression](
-        dataset.withColumn("weight", lit(1.0)).as[Instance], estimator, numClasses, modelEquals)
+        dataset.as[LabeledPoint], estimator, numClasses, modelEquals)
       MLTestingUtils.testOversamplingVsWeighting[LogisticRegressionModel, LogisticRegression](
-        dataset.toDF(), estimator, modelEquals, seed)
+        dataset.as[LabeledPoint], estimator, modelEquals, seed)
     }
   }
 

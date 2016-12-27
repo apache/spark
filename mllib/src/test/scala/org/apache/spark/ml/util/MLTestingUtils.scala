@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml._
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
-import org.apache.spark.ml.linalg.{BLAS, DenseMatrix, DenseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol, HasWeightCol}
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
@@ -183,29 +183,25 @@ object MLTestingUtils extends SparkFunSuite {
   }
 
   /**
-   * Given a dataframe, generate two output dataframes: one having the original rows oversampled
+   * Given a DataFrame, generate two output DataFrames: one having the original rows oversampled
    * an integer number of times, and one having the original rows but with a column of weights
-   * proportional to the number of oversampled instances in the oversampled dataframe.
+   * proportional to the number of oversampled instances in the oversampled DataFrames.
    */
   def genEquivalentOversampledAndWeightedInstances(
-      data: DataFrame,
-      labelCol: String,
-      featuresCol: String,
-      seed: Long): (DataFrame, DataFrame) = {
+      data: Dataset[LabeledPoint],
+      seed: Long): (Dataset[Instance], Dataset[Instance]) = {
     import data.sparkSession.implicits._
     val rng = new scala.util.Random(seed)
     val sample: () => Int = () => rng.nextInt(10) + 1
     val sampleUDF = udf(sample)
-    val rawData = data.select(labelCol, featuresCol).withColumn("samples", sampleUDF())
-    val overSampledData = rawData.rdd.flatMap {
-      case Row(label: Double, features: Vector, n: Int) =>
-        Iterator.fill(n)(Instance(label, 1.0, features))
-    }.toDF()
+    val rawData = data.select("label", "features").withColumn("samples", sampleUDF())
+    val overSampledData = rawData.rdd.flatMap { case Row(label: Double, features: Vector, n: Int) =>
+      Iterator.fill(n)(Instance(label, 1.0, features))
+    }.toDS()
     rng.setSeed(seed)
-    val weightedData = rawData.rdd.map {
-      case Row(label: Double, features: Vector, n: Int) =>
-        Instance(label, n.toDouble, features)
-    }.toDF()
+    val weightedData = rawData.rdd.map { case Row(label: Double, features: Vector, n: Int) =>
+      Instance(label, n.toDouble, features)
+    }.toDS()
     (overSampledData, weightedData)
   }
 
@@ -214,12 +210,12 @@ object MLTestingUtils extends SparkFunSuite {
    * to assigning a sample weight proportional to the number of samples for each point.
    */
   def testOversamplingVsWeighting[M <: Model[M], E <: Estimator[M]](
-      df: DataFrame,
-      estimator: E with HasWeightCol with HasLabelCol with HasFeaturesCol,
+      df: Dataset[LabeledPoint],
+      estimator: E with HasWeightCol,
       modelEquals: (M, M) => Unit,
       seed: Long): Unit = {
     val (overSampledData, weightedData) = genEquivalentOversampledAndWeightedInstances(
-      df, estimator.getLabelCol, estimator.getFeaturesCol, seed)
+      df, seed)
     val weightedModel = estimator.set(estimator.weightCol, "weight").fit(weightedData)
     val overSampledModel = estimator.set(estimator.weightCol, "").fit(overSampledData)
     modelEquals(weightedModel, overSampledModel)
@@ -231,14 +227,15 @@ object MLTestingUtils extends SparkFunSuite {
    * model despite the outliers.
    */
   def testOutliersWithSmallWeights[M <: Model[M], E <: Estimator[M]](
-      ds: Dataset[Instance],
-      estimator: E with HasWeightCol with HasLabelCol with HasFeaturesCol,
+      ds: Dataset[LabeledPoint],
+      estimator: E with HasWeightCol,
       numClasses: Int,
       modelEquals: (M, M) => Unit): Unit = {
     import ds.sqlContext.implicits._
-    val outlierDS = ds.flatMap { case Instance(l, w, f) =>
-      val outlierLabel = if (numClasses == 0) -l else numClasses - l - 1
-      List.fill(3)(Instance(outlierLabel, 0.0001, f)) ++ List(Instance(l, w, f))
+    val outlierDS = ds.withColumn("weight", lit(1.0)).as[Instance].flatMap {
+      case Instance(l, w, f) =>
+        val outlierLabel = if (numClasses == 0) -l else numClasses - l - 1
+        List.fill(3)(Instance(outlierLabel, 0.0001, f)) ++ List(Instance(l, w, f))
     }
     val trueModel = estimator.set(estimator.weightCol, "").fit(ds)
     val outlierModel = estimator.set(estimator.weightCol, "weight").fit(outlierDS)
@@ -251,12 +248,9 @@ object MLTestingUtils extends SparkFunSuite {
    */
   def testArbitrarilyScaledWeights[M <: Model[M], E <: Estimator[M]](
       data: Dataset[LabeledPoint],
-      estimator: E with HasWeightCol with HasLabelCol with HasFeaturesCol,
+      estimator: E with HasWeightCol,
       modelEquals: (M, M) => Unit): Unit = {
-    estimator
-      .set(estimator.labelCol, "label")
-      .set(estimator.featuresCol, "features")
-      .set(estimator.weightCol, "weight")
+    estimator.set(estimator.weightCol, "weight")
     val models = Seq(0.001, 1.0, 1000.0).map { w =>
       val df = data.withColumn("weight", lit(w))
       estimator.fit(df)
