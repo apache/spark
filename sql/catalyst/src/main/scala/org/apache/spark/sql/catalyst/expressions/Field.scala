@@ -5,9 +5,10 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types.{AtomicType, DataType, IntegerType}
+
 /**
   * A function that returns the index of str in (str1, str2, ...) list or 0 if not found.
-  * It takes at least 2 parameters, and all parameters' types should be subtypes of AtomicTppe
+  * It takes at least 2 parameters, and all parameters' types should be subtypes of AtomicType
   */
 @ExpressionDescription(
   usage = "_FUNC_(str, str1, str2, ...) - Returns the index of str in the str1,str2,... list or 0 if not found.",
