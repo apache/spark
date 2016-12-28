@@ -309,7 +309,7 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     var m = 1
     var doneLearning = false
-    var pre_predError=predError
+    var previousPredError = predError
     while (m < numIterations && !doneLearning) {
       // Update data with pseudo-residuals
       val data = predError.zip(input).map { case ((pred, _), point) =>
@@ -330,10 +330,10 @@ private[spark] object GradientBoostedTrees extends Logging {
       //       However, the behavior should be reasonable, though not optimal.
       baseLearnerWeights(m) = learningRate
 
-      if (pre_predError.getStorageLevel != StorageLevel.NONE ){
-        pre_predError.unpersist()
+      if (previousPredError.getStorageLevel != StorageLevel.NONE) {
+        previousPredError.unpersist()
       }
-      pre_predError=predError
+      previousPredError = predError
 
       predError = updatePredictionError(
         input, predError, baseLearnerWeights(m), baseLearners(m), loss)
@@ -369,11 +369,11 @@ private[spark] object GradientBoostedTrees extends Logging {
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
 
-    if (predError.getStorageLevel != StorageLevel.NONE){
+    if (predError.getStorageLevel != StorageLevel.NONE) {
       predError.unpersist()
     }
-    if (pre_predError.getStorageLevel != StorageLevel.NONE) {
-      pre_predError.unpersist()
+    if (previousPredError.getStorageLevel != StorageLevel.NONE) {
+      previousPredError.unpersist()
     }
     
     predErrorCheckpointer.deleteAllCheckpoints()
