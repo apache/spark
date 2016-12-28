@@ -2499,4 +2499,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("should not be able to resolve a persistent view without Hive support") {
+    withTable("t1") {
+      withView("v1") {
+        sql("CREATE TABLE `t1` USING parquet AS SELECT * FROM VALUES(1, 1) AS t1(a, b)")
+        sql("CREATE VIEW `v1` AS SELECT * FROM t1")
+        val e = intercept[AnalysisException] {
+          sql("SELECT * FROM v1")
+        }.getMessage
+        assert(e.contains("Hive support is required to select over the following views"))
+      }
+    }
+  }
 }

@@ -554,7 +554,6 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           tableType = CatalogTableType.VIEW,
           storage = CatalogStorageFormat.empty,
           schema = new StructType().add("id", "int").add("id1", "int"),
-          provider = Some("parquet"),
           viewOriginalText = Some("SELECT * FROM jt"),
           viewText = Some("SELECT * FROM jt"),
           viewDefaultDatabase = Some("default"))
@@ -563,7 +562,6 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           tableType = CatalogTableType.VIEW,
           storage = CatalogStorageFormat.empty,
           schema = new StructType().add("id", "int").add("id1", "int"),
-          provider = Some("parquet"),
           viewOriginalText = Some("SELECT * FROM view1"),
           viewText = Some("SELECT * FROM view1"),
           viewDefaultDatabase = Some(db))

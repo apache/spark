@@ -395,16 +395,15 @@ object View {
 
 /**
  * A container for holding the view description(CatalogTable), and the output of the view. The
- * child will be defined if the view is defined in a Hive metastore or the view is resolved,
- * else it should be None.
+ * child will be defined if the view is resolved with Hive support, else it should be None.
  * This operator will be removed at the end of analysis stage.
  *
  * @param desc A view description(CatalogTable) that provides necessary information to resolve the
  *             view.
  * @param output The output of a view operator, this is generated during planning the view, so that
  *               we are able to decouple the output from the underlying structure.
- * @param child The logical plan of a view operator, it should be non-empty if the view is defined
- *              in a Hive metastore or the view is resolved, else it should be None.
+ * @param child The logical plan of a view operator, it should be non-empty if the view is resolved
+ *              with Hive support, else it should be None.
  */
 case class View(
     desc: CatalogTable,
@@ -416,6 +415,10 @@ case class View(
   override def children: Seq[LogicalPlan] = child.toSeq
 
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+
+  override def simpleString: String = {
+    s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
+  }
 }
 
 /**
