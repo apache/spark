@@ -178,7 +178,7 @@ private[spark] object SparkUI {
       Utils.getContextOrSparkClassLoader).asScala
     listenerFactories.foreach { listenerFactory =>
       val listeners = listenerFactory.createListeners(conf, sparkUI)
-      listeners.foreach(listenerBus.addListener)
+      listeners.foreach(l => listenerBus.addListener(l))
     }
     sparkUI
   }

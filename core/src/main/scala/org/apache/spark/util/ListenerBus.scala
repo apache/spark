@@ -30,11 +30,12 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.LiveListenerBus
 
-
-private class ListenerEventExecutor(listenerName: String, queueCapacity: Int) extends Logging {
+private class ListenerEventExecutor[L <: AnyRef] (listenerName: String, queueCapacity: Int)
+  extends Logging {
   private val threadFactory = new ThreadFactoryBuilder().setDaemon(true)
     .setNameFormat(listenerName + "-event-executor")
     .build()
+  val listeners = new CopyOnWriteArrayList[L]()
   /** Holds the events to be processed by this listener. */
   private val eventQueue = new LinkedBlockingQueue[Runnable](queueCapacity)
   /**
@@ -55,9 +56,17 @@ private class ListenerEventExecutor(listenerName: String, queueCapacity: Int) ex
    * guarantee that we do not process any event before starting the event executor.
    */
   private val isStarted = new AtomicBoolean(false)
-  private val lock = new ReentrantLock();
+  private val lock = new ReentrantLock()
   /** Condition variable which is signaled once the event executor is started */
   private val startCondition: Condition = lock.newCondition
+
+  def addListener(listener: L): Unit = {
+    listeners.add(listener)
+  }
+
+  def removeListener(listener: L): Unit = {
+    listeners.remove(listener)
+  }
 
   def start(): Unit = {
     isStarted.set(true)
@@ -133,7 +142,8 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
   // Cap the capacity of the event queue so we get an explicit error (rather than
   // an OOM exception) if it's perpetually being added to more quickly than it's being drained.
   protected def eventQueueSize = 10000
-  private val listenerAndEventExecutors = new CopyOnWriteArrayList[(L, ListenerEventExecutor)]()
+  private val eventGroupToEventExecutors =
+    new ConcurrentHashMap[String, ListenerEventExecutor[L]] ()
 
   // Indicate if `start()` is called
   private val started = new AtomicBoolean(false)
@@ -143,11 +153,19 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
   /**
    * Add a listener to listen events. This method is thread-safe and can be called in any thread.
    */
-  final def addListener(listener: L): Unit = {
-    val eventProcessor = new ListenerEventExecutor(listener.getClass.getName, eventQueueSize)
-    listenerAndEventExecutors.add((listener, eventProcessor))
+  final def addListener(
+    listener: L, eventListenerGroup: String = ListenerEventExecutor.DefaultEventListenerGroup):
+  Unit = synchronized {
+    var listenerEventExecutor = eventGroupToEventExecutors.get(eventListenerGroup)
+    if (listenerEventExecutor == null) {
+      listenerEventExecutor =
+        new ListenerEventExecutor[L](listener.getClass.getName, eventQueueSize)
+      eventGroupToEventExecutors.put(eventListenerGroup, listenerEventExecutor)
+
+    }
+    listenerEventExecutor.addListener(listener)
     if (started.get()) {
-      eventProcessor.start
+      listenerEventExecutor.start
     }
   }
 
@@ -156,14 +174,8 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * in any thread.
    */
   final def removeListener(listener: L): Unit = {
-    val iter = listenerAndEventExecutors.iterator()
-    var index = 0
-    while (iter.hasNext) {
-      if (iter.next()._1 == listener) {
-        listenerAndEventExecutors.remove(index)
-        return
-      }
-      index = index + 1
+    for (eventExecutor <- eventGroupToEventExecutors.values().asScala) {
+      eventExecutor.removeListener(listener)
     }
   }
 
@@ -172,10 +184,8 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
     * any of the existing listener
     */
   def isListenerBusEmpty: Boolean = {
-    val iter = listenerAndEventExecutors.iterator()
-    while (iter.hasNext) {
-      val listenerEvenProcessor = iter.next._2
-      if (!listenerEvenProcessor.isEmpty) {
+    for (eventExecutor <- eventGroupToEventExecutors.values().asScala) {
+      if (!eventExecutor.isEmpty) {
         return false
       }
     }
@@ -188,19 +198,19 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * the {@link ListenerEventExecutor}.
    */
   final def postToAll(event: E): Unit = {
-    // JavaConverters can create a JIterableWrapper if we use asScala.
-    // However, this method will be called frequently. To avoid the wrapper cost, here we use
-    // Java Iterator directly.
-    val iter = listenerAndEventExecutors.iterator()
-    while (iter.hasNext) {
-      val item = iter.next()
-      val listener = item._1
-      val listenerEventProcessor = item._2
+    for (listenerEventProcessor <- eventGroupToEventExecutors.values().asScala) {
+      // JavaConverters can create a JIterableWrapper if we use asScala.
+      // However, this method will be called frequently. To avoid the wrapper cost, here we use
+      // Java Iterator directly.
+      val iter = listenerEventProcessor.listeners.iterator()
+      while (iter.hasNext) {
+        val listener = iter.next()
         listenerEventProcessor.submit(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
             doPostEvent(listener, event)
           }
         })
+      }
     }
   }
 
@@ -210,15 +220,19 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * events.
    */
   final def postToAllSync(event: E): Unit = {
-    val iter = listenerAndEventExecutors.iterator()
-    while (iter.hasNext) {
-      val item = iter.next()
-      val listener = item._1
-      try {
-        doPostEvent(listener, event)
-      } catch {
-        case NonFatal(e) =>
-          logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
+    for (listenerEventProcessor <- eventGroupToEventExecutors.values().asScala) {
+      // JavaConverters can create a JIterableWrapper if we use asScala.
+      // However, this method will be called frequently. To avoid the wrapper cost, here we use
+      // Java Iterator directly.
+      val iter = listenerEventProcessor.listeners.iterator()
+      while (iter.hasNext) {
+        val listener = iter.next()
+        try {
+          doPostEvent(listener, event)
+        } catch {
+          case NonFatal(e) =>
+            logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
+        }
       }
     }
   }
@@ -231,11 +245,11 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
 
   private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
     val c = implicitly[ClassTag[T]].runtimeClass
-    listenerAndEventExecutors.asScala.filter(_._1.getClass == c).map(_._1.asInstanceOf[T])
+    listeners().toSeq.filter(_.getClass == c).map(_.asInstanceOf[T])
   }
 
   private[spark] def listeners(): Seq[L] = {
-    listenerAndEventExecutors.asScala.map(_._1)
+    eventGroupToEventExecutors.values.asScala.map(l => l.listeners.asScala).flatten.toSeq
   }
 
   /**
@@ -250,9 +264,8 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
     if (!started.compareAndSet(false, true)) {
       throw new IllegalStateException(s" already started!")
     }
-    val iter = listenerAndEventExecutors.iterator()
-    while (iter.hasNext) {
-      iter.next()._2.start()
+    for (eventExecutor <- eventGroupToEventExecutors.values().asScala) {
+      eventExecutor.start()
     }
   }
 
@@ -268,10 +281,19 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
     } else {
       // Keep quiet
     }
-    val iter = listenerAndEventExecutors.iterator()
+    val iter = eventGroupToEventExecutors.values().iterator()
     while (iter.hasNext) {
-      iter.next()._2.stop()
+      iter.next().stop()
     }
   }
+}
+
+private[spark] object ListenerEventExecutor {
+  val DefaultEventListenerGroup = "default-event-listener"
+  val DefaultUserEventListenerGroup = "default-user-event-listener"
+  val ExecutorAllocationManagerGroup = "executor-allocation-manager-listener"
+  val HeartBeatReceiverGroup = "heart-beat-receiver-listener"
+  val EventLoggingGroup = "event-logging-listener"
+  // Allows for Context to check whether stop() call is made within listener thread
 }
 

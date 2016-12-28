@@ -532,7 +532,7 @@ class SparkContext(config: SparkConf) extends Logging {
           new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
             _conf, _hadoopConfiguration)
         logger.start()
-        listenerBus.addListener(logger)
+        listenerBus.addListener(logger, ListenerEventExecutor.EventLoggingGroup)
         Some(logger)
       } else {
         None
@@ -2329,7 +2329,7 @@ class SparkContext(config: SparkConf) extends Logging {
                 " parameter from breaking Spark's ability to find a valid constructor.")
           }
         }
-        listenerBus.addListener(listener)
+        listenerBus.addListener(listener, ListenerEventExecutor.DefaultUserEventListenerGroup)
         logInfo(s"Registered listener $className")
       }
     } catch {
