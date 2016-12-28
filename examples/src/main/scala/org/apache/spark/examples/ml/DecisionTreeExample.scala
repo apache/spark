@@ -124,10 +124,9 @@ object DecisionTreeExample {
       }
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    }.getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
@@ -197,7 +196,7 @@ object DecisionTreeExample {
     (training, test)
   }
 
-  def run(params: Params) {
+  def run(params: Params): Unit = {
     val spark = SparkSession
       .builder
       .appName(s"DecisionTreeExample with $params")
@@ -321,7 +320,7 @@ object DecisionTreeExample {
       case None => throw new RuntimeException(
         "Unknown failure when indexing labels for classification.")
     }
-    val accuracy = new MulticlassMetrics(predictions.zip(labels)).precision
+    val accuracy = new MulticlassMetrics(predictions.zip(labels)).accuracy
     println(s"  Accuracy ($numClasses classes): $accuracy")
   }
 

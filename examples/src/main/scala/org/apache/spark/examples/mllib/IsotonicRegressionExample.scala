@@ -21,6 +21,7 @@ package org.apache.spark.examples.mllib
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.regression.{IsotonicRegression, IsotonicRegressionModel}
+import org.apache.spark.mllib.util.MLUtils
 // $example off$
 
 object IsotonicRegressionExample {
@@ -30,12 +31,12 @@ object IsotonicRegressionExample {
     val conf = new SparkConf().setAppName("IsotonicRegressionExample")
     val sc = new SparkContext(conf)
     // $example on$
-    val data = sc.textFile("data/mllib/sample_isotonic_regression_data.txt")
+    val data = MLUtils.loadLibSVMFile(sc,
+      "data/mllib/sample_isotonic_regression_libsvm_data.txt").cache()
 
     // Create label, feature, weight tuples from input data with weight set to default value 1.0.
-    val parsedData = data.map { line =>
-      val parts = line.split(',').map(_.toDouble)
-      (parts(0), parts(1), 1.0)
+    val parsedData = data.map { labeledPoint =>
+      (labeledPoint.label, labeledPoint.features(0), 1.0)
     }
 
     // Split data into training (60%) and test (40%) sets.

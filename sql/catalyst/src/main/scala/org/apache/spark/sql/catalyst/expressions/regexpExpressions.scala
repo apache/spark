@@ -68,7 +68,7 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
  * Simple RegEx pattern matching function
  */
 @ExpressionDescription(
-  usage = "str _FUNC_ pattern - Returns true if str matches pattern and false otherwise.")
+  usage = "str _FUNC_ pattern - Returns true if `str` matches `pattern`, or false otherwise.")
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
 
@@ -108,10 +108,11 @@ case class Like(left: Expression, right: Expression)
         """)
       }
     } else {
+      val rightStr = ctx.freshName("rightStr")
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
-          String rightStr = ${eval2}.toString();
-          ${patternClass} $pattern = ${patternClass}.compile($escapeFunc(rightStr));
+          String $rightStr = ${eval2}.toString();
+          ${patternClass} $pattern = ${patternClass}.compile($escapeFunc($rightStr));
           ${ev.value} = $pattern.matcher(${eval1}.toString()).matches();
         """
       })
@@ -120,7 +121,7 @@ case class Like(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "str _FUNC_ regexp - Returns true if str matches regexp and false otherwise.")
+  usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp`, or false otherwise.")
 case class RLike(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
 
@@ -157,10 +158,11 @@ case class RLike(left: Expression, right: Expression)
         """)
       }
     } else {
+      val rightStr = ctx.freshName("rightStr")
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
-          String rightStr = ${eval2}.toString();
-          ${patternClass} $pattern = ${patternClass}.compile(rightStr);
+          String $rightStr = ${eval2}.toString();
+          ${patternClass} $pattern = ${patternClass}.compile($rightStr);
           ${ev.value} = $pattern.matcher(${eval1}.toString()).find(0);
         """
       })
@@ -173,8 +175,12 @@ case class RLike(left: Expression, right: Expression)
  * Splits str around pat (pattern is a regular expression).
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str, regex) - Splits str around occurrences that match regex",
-  extended = "> SELECT _FUNC_('oneAtwoBthreeC', '[ABC]');\n ['one', 'two', 'three']")
+  usage = "_FUNC_(str, regex) - Splits `str` around occurrences that match `regex`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]');
+       ["one","two","three",""]
+  """)
 case class StringSplit(str: Expression, pattern: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -204,9 +210,15 @@ case class StringSplit(str: Expression, pattern: Expression)
  *
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str, regexp, rep) - replace all substrings of str that match regexp with rep.",
-  extended = "> SELECT _FUNC_('100-200', '(\\d+)', 'num');\n 'num-num'")
+  usage = "_FUNC_(str, regexp, rep) - Replaces all substrings of `str` that match `regexp` with `rep`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('100-200', '(\d+)', 'num');
+       num-num
+  """)
+// scalastyle:on line.size.limit
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -218,7 +230,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   @transient private var lastReplacement: String = _
   @transient private var lastReplacementInUTF8: UTF8String = _
   // result buffer write by Matcher
-  @transient private val result: StringBuffer = new StringBuffer
+  @transient private lazy val result: StringBuffer = new StringBuffer
 
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     if (!p.equals(lastRegex)) {
@@ -259,6 +271,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     val classNamePattern = classOf[Pattern].getCanonicalName
     val classNameStringBuffer = classOf[java.lang.StringBuffer].getCanonicalName
 
+    val matcher = ctx.freshName("matcher")
+
     ctx.addMutableState("UTF8String", termLastRegex, s"${termLastRegex} = null;")
     ctx.addMutableState(classNamePattern, termPattern, s"${termPattern} = null;")
     ctx.addMutableState("String", termLastReplacement, s"${termLastReplacement} = null;")
@@ -266,6 +280,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       termLastReplacementInUTF8, s"${termLastReplacementInUTF8} = null;")
     ctx.addMutableState(classNameStringBuffer,
       termResult, s"${termResult} = new $classNameStringBuffer();")
+
+    val setEvNotNull = if (nullable) {
+      s"${ev.isNull} = false;"
+    } else {
+      ""
+    }
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, rep) => {
     s"""
@@ -280,14 +300,14 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
         ${termLastReplacement} = ${termLastReplacementInUTF8}.toString();
       }
       ${termResult}.delete(0, ${termResult}.length());
-      java.util.regex.Matcher m = ${termPattern}.matcher($subject.toString());
+      java.util.regex.Matcher ${matcher} = ${termPattern}.matcher($subject.toString());
 
-      while (m.find()) {
-        m.appendReplacement(${termResult}, ${termLastReplacement});
+      while (${matcher}.find()) {
+        ${matcher}.appendReplacement(${termResult}, ${termLastReplacement});
       }
-      m.appendTail(${termResult});
+      ${matcher}.appendTail(${termResult});
       ${ev.value} = UTF8String.fromString(${termResult}.toString());
-      ${ev.isNull} = false;
+      $setEvNotNull
     """
     })
   }
@@ -299,8 +319,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str, regexp[, idx]) - extracts a group that matches regexp.",
-  extended = "> SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);\n '100'")
+  usage = "_FUNC_(str, regexp[, idx]) - Extracts a group that matches `regexp`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('100-200', '(\d+)-(\d+)', 1);
+       100
+  """)
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
@@ -319,7 +343,12 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     val m = pattern.matcher(s.toString)
     if (m.find) {
       val mr: MatchResult = m.toMatchResult
-      UTF8String.fromString(mr.group(r.asInstanceOf[Int]))
+      val group = mr.group(r.asInstanceOf[Int])
+      if (group == null) { // Pattern matched, but not optional group
+        UTF8String.EMPTY_UTF8
+      } else {
+        UTF8String.fromString(group)
+      }
     } else {
       UTF8String.EMPTY_UTF8
     }
@@ -334,9 +363,17 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     val termLastRegex = ctx.freshName("lastRegex")
     val termPattern = ctx.freshName("pattern")
     val classNamePattern = classOf[Pattern].getCanonicalName
+    val matcher = ctx.freshName("matcher")
+    val matchResult = ctx.freshName("matchResult")
 
     ctx.addMutableState("UTF8String", termLastRegex, s"${termLastRegex} = null;")
     ctx.addMutableState(classNamePattern, termPattern, s"${termPattern} = null;")
+
+    val setEvNotNull = if (nullable) {
+      s"${ev.isNull} = false;"
+    } else {
+      ""
+    }
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
@@ -345,15 +382,19 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
         ${termLastRegex} = $regexp.clone();
         ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
       }
-      java.util.regex.Matcher m =
+      java.util.regex.Matcher ${matcher} =
         ${termPattern}.matcher($subject.toString());
-      if (m.find()) {
-        java.util.regex.MatchResult mr = m.toMatchResult();
-        ${ev.value} = UTF8String.fromString(mr.group($idx));
-        ${ev.isNull} = false;
+      if (${matcher}.find()) {
+        java.util.regex.MatchResult ${matchResult} = ${matcher}.toMatchResult();
+        if (${matchResult}.group($idx) == null) {
+          ${ev.value} = UTF8String.EMPTY_UTF8;
+        } else {
+          ${ev.value} = UTF8String.fromString(${matchResult}.group($idx));
+        }
+        $setEvNotNull
       } else {
         ${ev.value} = UTF8String.EMPTY_UTF8;
-        ${ev.isNull} = false;
+        $setEvNotNull
       }"""
     })
   }

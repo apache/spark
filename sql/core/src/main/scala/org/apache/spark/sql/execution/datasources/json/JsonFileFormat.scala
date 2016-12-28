@@ -17,29 +17,26 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.CharArrayWriter
-
-import com.fasterxml.jackson.core.JsonFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
+import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
-import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.JoinedRow
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-class JsonFileFormat extends FileFormat with DataSourceRegister {
+class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "json"
 
@@ -54,13 +51,8 @@ class JsonFileFormat extends FileFormat with DataSourceRegister {
       val columnNameOfCorruptRecord =
         parsedOptions.columnNameOfCorruptRecord
           .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-      val jsonFiles = files.filterNot { status =>
-        val name = status.getPath.getName
-        name.startsWith("_") || name.startsWith(".")
-      }.toArray
-
       val jsonSchema = InferSchema.infer(
-        createBaseRdd(sparkSession, jsonFiles),
+        createBaseRdd(sparkSession, files),
         columnNameOfCorruptRecord,
         parsedOptions)
       checkConstraints(jsonSchema)
@@ -83,10 +75,13 @@ class JsonFileFormat extends FileFormat with DataSourceRegister {
     new OutputWriterFactory {
       override def newInstance(
           path: String,
-          bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new JsonOutputWriter(path, bucketId, dataSchema, context)
+        new JsonOutputWriter(path, parsedOptions, dataSchema, context)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        ".json" + CodecStreams.getCompressionExtension(context)
       }
     }
   }
@@ -107,13 +102,11 @@ class JsonFileFormat extends FileFormat with DataSourceRegister {
       .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
     (file: PartitionedFile) => {
-      val lines = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map(_.toString)
-
-      JacksonParser.parseJson(
-        lines,
-        requiredSchema,
-        columnNameOfCorruptRecord,
-        parsedOptions)
+      val linesReader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
+      val lines = linesReader.map(_.toString)
+      val parser = new JacksonParser(requiredSchema, columnNameOfCorruptRecord, parsedOptions)
+      lines.flatMap(parser.parse)
     }
   }
 
@@ -156,43 +149,25 @@ class JsonFileFormat extends FileFormat with DataSourceRegister {
 
 private[json] class JsonOutputWriter(
     path: String,
-    bucketId: Option[Int],
+    options: JSONOptions,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter with Logging {
 
-  private[this] val writer = new CharArrayWriter()
-  // create the Generator without separator inserted between 2 records
-  private[this] val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
-  private[this] val result = new Text()
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
 
-  private val recordWriter: RecordWriter[NullWritable, Text] = {
-    new TextOutputFormat[NullWritable, Text]() {
-      override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
-        val taskAttemptId = context.getTaskAttemptID
-        val split = taskAttemptId.getTaskID.getId
-        val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString.json$extension")
-      }
-    }.getRecordWriter(context)
-  }
+  // create the Generator without separator inserted between 2 records
+  private[this] val gen = new JacksonGenerator(dataSchema, writer, options)
 
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
-    JacksonGenerator(dataSchema, gen)(row)
-    gen.flush()
-
-    result.set(writer.toString)
-    writer.reset()
-
-    recordWriter.write(NullWritable.get(), result)
+    gen.write(row)
+    gen.writeLineEnding()
   }
 
   override def close(): Unit = {
     gen.close()
-    recordWriter.close(context)
+    writer.close()
   }
 }

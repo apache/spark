@@ -211,9 +211,6 @@ private[storage] class BlockInfoManager extends Logging {
    * If another task has already locked this block for either reading or writing, then this call
    * will block until the other locks are released or will return immediately if `blocking = false`.
    *
-   * If this is called by a task which already holds the block's exclusive write lock, then this
-   * method will throw an exception.
-   *
    * @param blockId the block to lock.
    * @param blocking if true (default), this call will block until the lock is acquired. If false,
    *                 this call will return immediately if the lock acquisition fails.

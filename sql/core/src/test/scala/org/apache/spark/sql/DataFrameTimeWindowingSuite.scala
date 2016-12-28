@@ -29,16 +29,6 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
 
   import testImplicits._
 
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
-  }
-
-  override def afterEach(): Unit = {
-    super.beforeEach()
-    TimeZone.setDefault(null)
-  }
-
   test("tumbling window groupBy statement") {
     val df = Seq(
       ("2016-03-27 19:39:34", 1, "a"),

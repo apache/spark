@@ -257,7 +257,7 @@ class BlockMatrix @Since("1.3.0") (
       val colStart = blockColIndex.toLong * colsPerBlock
       val entryValues = new ArrayBuffer[MatrixEntry]()
       mat.foreachActive { (i, j, v) =>
-        if (v != 0.0) entryValues.append(new MatrixEntry(rowStart + i, colStart + j, v))
+        if (v != 0.0) entryValues += new MatrixEntry(rowStart + i, colStart + j, v)
       }
       entryValues
     }
@@ -275,7 +275,7 @@ class BlockMatrix @Since("1.3.0") (
     val rows = blocks.flatMap { case ((blockRowIdx, blockColIdx), mat) =>
       mat.rowIter.zipWithIndex.map {
         case (vector, rowIdx) =>
-          blockRowIdx * rowsPerBlock + rowIdx -> (blockColIdx, vector.toBreeze)
+          blockRowIdx * rowsPerBlock + rowIdx -> (blockColIdx, vector.asBreeze)
       }
     }.groupByKey().map { case (rowIdx, vectors) =>
       val numberNonZeroPerRow = vectors.map(_._2.activeSize).sum.toDouble / cols.toDouble
@@ -288,14 +288,16 @@ class BlockMatrix @Since("1.3.0") (
 
       vectors.foreach { case (blockColIdx: Int, vec: BV[Double]) =>
         val offset = colsPerBlock * blockColIdx
-        wholeVector(offset until offset + colsPerBlock) := vec
+        wholeVector(offset until Math.min(cols, offset + colsPerBlock)) := vec
       }
       new IndexedRow(rowIdx, Vectors.fromBreeze(wholeVector))
     }
     new IndexedRowMatrix(rows)
   }
 
-  /** Collect the distributed matrix on the driver as a `DenseMatrix`. */
+  /**
+   * Collect the distributed matrix on the driver as a `DenseMatrix`.
+   */
   @Since("1.3.0")
   def toLocalMatrix(): Matrix = {
     require(numRows() < Int.MaxValue, "The number of rows of this matrix should be less than " +
@@ -367,12 +369,12 @@ class BlockMatrix @Since("1.3.0") (
           }
           if (a.isEmpty) {
             val zeroBlock = BM.zeros[Double](b.head.numRows, b.head.numCols)
-            val result = binMap(zeroBlock, b.head.toBreeze)
+            val result = binMap(zeroBlock, b.head.asBreeze)
             new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
           } else if (b.isEmpty) {
             new MatrixBlock((blockRowIndex, blockColIndex), a.head)
           } else {
-            val result = binMap(a.head.toBreeze, b.head.toBreeze)
+            val result = binMap(a.head.asBreeze, b.head.asBreeze)
             new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
           }
       }
@@ -385,10 +387,10 @@ class BlockMatrix @Since("1.3.0") (
   /**
    * Adds the given block matrix `other` to `this` block matrix: `this + other`.
    * The matrices must have the same size and matching `rowsPerBlock` and `colsPerBlock`
-   * values. If one of the blocks that are being added are instances of [[SparseMatrix]],
-   * the resulting sub matrix will also be a [[SparseMatrix]], even if it is being added
-   * to a [[DenseMatrix]]. If two dense matrices are added, the output will also be a
-   * [[DenseMatrix]].
+   * values. If one of the blocks that are being added are instances of `SparseMatrix`,
+   * the resulting sub matrix will also be a `SparseMatrix`, even if it is being added
+   * to a `DenseMatrix`. If two dense matrices are added, the output will also be a
+   * `DenseMatrix`.
    */
   @Since("1.3.0")
   def add(other: BlockMatrix): BlockMatrix =
@@ -397,10 +399,10 @@ class BlockMatrix @Since("1.3.0") (
   /**
    * Subtracts the given block matrix `other` from `this` block matrix: `this - other`.
    * The matrices must have the same size and matching `rowsPerBlock` and `colsPerBlock`
-   * values. If one of the blocks that are being subtracted are instances of [[SparseMatrix]],
-   * the resulting sub matrix will also be a [[SparseMatrix]], even if it is being subtracted
-   * from a [[DenseMatrix]]. If two dense matrices are subtracted, the output will also be a
-   * [[DenseMatrix]].
+   * values. If one of the blocks that are being subtracted are instances of `SparseMatrix`,
+   * the resulting sub matrix will also be a `SparseMatrix`, even if it is being subtracted
+   * from a `DenseMatrix`. If two dense matrices are subtracted, the output will also be a
+   * `DenseMatrix`.
    */
   @Since("2.0.0")
   def subtract(other: BlockMatrix): BlockMatrix =
@@ -426,27 +428,32 @@ class BlockMatrix @Since("1.3.0") (
       partitioner: GridPartitioner): (BlockDestinations, BlockDestinations) = {
     val leftMatrix = blockInfo.keys.collect() // blockInfo should already be cached
     val rightMatrix = other.blocks.keys.collect()
+
+    val rightCounterpartsHelper = rightMatrix.groupBy(_._1).mapValues(_.map(_._2))
     val leftDestinations = leftMatrix.map { case (rowIndex, colIndex) =>
-      val rightCounterparts = rightMatrix.filter(_._1 == colIndex)
-      val partitions = rightCounterparts.map(b => partitioner.getPartition((rowIndex, b._2)))
+      val rightCounterparts = rightCounterpartsHelper.getOrElse(colIndex, Array.empty[Int])
+      val partitions = rightCounterparts.map(b => partitioner.getPartition((rowIndex, b)))
       ((rowIndex, colIndex), partitions.toSet)
     }.toMap
+
+    val leftCounterpartsHelper = leftMatrix.groupBy(_._2).mapValues(_.map(_._1))
     val rightDestinations = rightMatrix.map { case (rowIndex, colIndex) =>
-      val leftCounterparts = leftMatrix.filter(_._2 == rowIndex)
-      val partitions = leftCounterparts.map(b => partitioner.getPartition((b._1, colIndex)))
+      val leftCounterparts = leftCounterpartsHelper.getOrElse(rowIndex, Array.empty[Int])
+      val partitions = leftCounterparts.map(b => partitioner.getPartition((b, colIndex)))
       ((rowIndex, colIndex), partitions.toSet)
     }.toMap
+
     (leftDestinations, rightDestinations)
   }
 
   /**
    * Left multiplies this [[BlockMatrix]] to `other`, another [[BlockMatrix]]. The `colsPerBlock`
    * of this matrix must equal the `rowsPerBlock` of `other`. If `other` contains
-   * [[SparseMatrix]], they will have to be converted to a [[DenseMatrix]]. The output
-   * [[BlockMatrix]] will only consist of blocks of [[DenseMatrix]]. This may cause
+   * `SparseMatrix`, they will have to be converted to a `DenseMatrix`. The output
+   * [[BlockMatrix]] will only consist of blocks of `DenseMatrix`. This may cause
    * some performance issues until support for multiplying two sparse matrices is added.
    *
-   * Note: The behavior of multiply has changed in 1.6.0. `multiply` used to throw an error when
+   * @note The behavior of multiply has changed in 1.6.0. `multiply` used to throw an error when
    * there were blocks with duplicate indices. Now, the blocks with duplicate indices will be added
    * with each other.
    */
@@ -479,7 +486,7 @@ class BlockMatrix @Since("1.3.0") (
               case _ =>
                 throw new SparkException(s"Unrecognized matrix type ${rightBlock.getClass}.")
             }
-            ((leftRowIndex, rightColIndex), C.toBreeze)
+            ((leftRowIndex, rightColIndex), C.asBreeze)
           }
         }
       }.reduceByKey(resultPartitioner, (a, b) => a + b).mapValues(Matrices.fromBreeze)

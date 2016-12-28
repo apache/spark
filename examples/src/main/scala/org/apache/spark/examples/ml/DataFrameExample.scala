@@ -20,7 +20,6 @@ package org.apache.spark.examples.ml
 
 import java.io.File
 
-import com.google.common.io.Files
 import scopt.OptionParser
 
 import org.apache.spark.examples.mllib.AbstractParams
@@ -28,6 +27,7 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.util.Utils
 
 /**
  * An example of how to use [[org.apache.spark.sql.DataFrame]] for ML. Run with
@@ -54,14 +54,13 @@ object DataFrameExample {
       }
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    }.getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params) {
+  def run(params: Params): Unit = {
     val spark = SparkSession
       .builder
       .appName(s"DataFrameExample with $params")
@@ -86,8 +85,7 @@ object DataFrameExample {
     println(s"Selected features column with average values:\n ${featureSummary.mean.toString}")
 
     // Save the records in a parquet file.
-    val tmpDir = Files.createTempDir()
-    tmpDir.deleteOnExit()
+    val tmpDir = Utils.createTempDir()
     val outputDir = new File(tmpDir, "dataframe").toString
     println(s"Saving to $outputDir as Parquet file.")
     df.write.parquet(outputDir)

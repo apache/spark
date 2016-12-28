@@ -20,15 +20,14 @@ package org.apache.spark.sql.execution.command
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, FunctionResource}
-import org.apache.spark.sql.catalyst.catalog.FunctionResourceType
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsing}
+import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 
 // TODO: merge this with DDLSuite (SPARK-14441)
@@ -237,6 +236,21 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed4, expected4)
   }
 
+  test("create table - table file format") {
+    val allSources = Seq("parquet", "parquetfile", "orc", "orcfile", "avro", "avrofile",
+      "sequencefile", "rcfile", "textfile")
+
+    allSources.foreach { s =>
+      val query = s"CREATE TABLE my_tab STORED AS $s"
+      val ct = parseAs[CreateTable](query)
+      val hiveSerde = HiveSerDe.sourceToSerDe(s)
+      assert(hiveSerde.isDefined)
+      assert(ct.tableDesc.storage.serde == hiveSerde.get.serde)
+      assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
+      assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
+    }
+  }
+
   test("create table - row format and table file format") {
     val createTableStart = "CREATE TABLE my_tab ROW FORMAT"
     val fileFormat = s"STORED AS INPUTFORMAT 'inputfmt' OUTPUTFORMAT 'outputfmt'"
@@ -244,14 +258,14 @@ class DDLCommandSuite extends PlanTest {
     val query2 = s"$createTableStart DELIMITED FIELDS TERMINATED BY ' ' $fileFormat"
 
     // No conflicting serdes here, OK
-    val parsed1 = parseAs[CreateTableCommand](query1)
-    assert(parsed1.table.storage.serde == Some("anything"))
-    assert(parsed1.table.storage.inputFormat == Some("inputfmt"))
-    assert(parsed1.table.storage.outputFormat == Some("outputfmt"))
-    val parsed2 = parseAs[CreateTableCommand](query2)
-    assert(parsed2.table.storage.serde.isEmpty)
-    assert(parsed2.table.storage.inputFormat == Some("inputfmt"))
-    assert(parsed2.table.storage.outputFormat == Some("outputfmt"))
+    val parsed1 = parseAs[CreateTable](query1)
+    assert(parsed1.tableDesc.storage.serde == Some("anything"))
+    assert(parsed1.tableDesc.storage.inputFormat == Some("inputfmt"))
+    assert(parsed1.tableDesc.storage.outputFormat == Some("outputfmt"))
+    val parsed2 = parseAs[CreateTable](query2)
+    assert(parsed2.tableDesc.storage.serde.isEmpty)
+    assert(parsed2.tableDesc.storage.inputFormat == Some("inputfmt"))
+    assert(parsed2.tableDesc.storage.outputFormat == Some("outputfmt"))
   }
 
   test("create table - row format serde and generic file format") {
@@ -261,12 +275,12 @@ class DDLCommandSuite extends PlanTest {
     allSources.foreach { s =>
       val query = s"CREATE TABLE my_tab ROW FORMAT SERDE 'anything' STORED AS $s"
       if (supportedSources.contains(s)) {
-        val ct = parseAs[CreateTableCommand](query)
-        val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+        val ct = parseAs[CreateTable](query)
+        val hiveSerde = HiveSerDe.sourceToSerDe(s)
         assert(hiveSerde.isDefined)
-        assert(ct.table.storage.serde == Some("anything"))
-        assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
-        assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
+        assert(ct.tableDesc.storage.serde == Some("anything"))
+        assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
+        assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
       } else {
         assertUnsupported(query, Seq("row format serde", "incompatible", s))
       }
@@ -280,12 +294,12 @@ class DDLCommandSuite extends PlanTest {
     allSources.foreach { s =>
       val query = s"CREATE TABLE my_tab ROW FORMAT DELIMITED FIELDS TERMINATED BY ' ' STORED AS $s"
       if (supportedSources.contains(s)) {
-        val ct = parseAs[CreateTableCommand](query)
-        val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+        val ct = parseAs[CreateTable](query)
+        val hiveSerde = HiveSerDe.sourceToSerDe(s)
         assert(hiveSerde.isDefined)
-        assert(ct.table.storage.serde == hiveSerde.get.serde)
-        assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
-        assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
+        assert(ct.tableDesc.storage.serde == hiveSerde.get.serde)
+        assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
+        assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
       } else {
         assertUnsupported(query, Seq("row format delimited", "only compatible with 'textfile'", s))
       }
@@ -297,9 +311,9 @@ class DDLCommandSuite extends PlanTest {
       sql = "CREATE EXTERNAL TABLE my_tab",
       containsThesePhrases = Seq("create external table", "location"))
     val query = "CREATE EXTERNAL TABLE my_tab LOCATION '/something/anything'"
-    val ct = parseAs[CreateTableCommand](query)
-    assert(ct.table.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.table.storage.locationUri == Some("/something/anything"))
+    val ct = parseAs[CreateTable](query)
+    assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
+    assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
   }
 
   test("create table - property values must be set") {
@@ -314,30 +328,29 @@ class DDLCommandSuite extends PlanTest {
 
   test("create table - location implies external") {
     val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
-    val ct = parseAs[CreateTableCommand](query)
-    assert(ct.table.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.table.storage.locationUri == Some("/something/anything"))
+    val ct = parseAs[CreateTable](query)
+    assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
+    assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
   }
 
   test("create table using - with partitioned by") {
-    val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (a)"
-    val expected = CreateTableUsing(
-      TableIdentifier("my_tab"),
-      Some(new StructType().add("a", IntegerType).add("b", StringType)),
-      "parquet",
-      false,
-      Map.empty,
-      null,
-      None,
-      false,
-      true)
+    val query = "CREATE TABLE my_tab(a INT comment 'test', b STRING) " +
+      "USING parquet PARTITIONED BY (a)"
+
+    val expectedTableDesc = CatalogTable(
+      identifier = TableIdentifier("my_tab"),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType()
+        .add("a", IntegerType, nullable = true, "test")
+        .add("b", StringType),
+      provider = Some("parquet"),
+      partitionColumnNames = Seq("a")
+    )
 
     parser.parsePlan(query) match {
-      case ct: CreateTableUsing =>
-        // We can't compare array in `CreateTableUsing` directly, so here we compare
-        // `partitionColumns` ahead, and make `partitionColumns` null before plan comparison.
-        assert(Seq("a") == ct.partitionColumns.toSeq)
-        comparePlans(ct.copy(partitionColumns = null), expected)
+      case CreateTable(tableDesc, _, None) =>
+        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
       case other =>
         fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
           s"got ${other.getClass.getName}: $query")
@@ -347,23 +360,19 @@ class DDLCommandSuite extends PlanTest {
   test("create table using - with bucket") {
     val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
       "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
-    val expected = CreateTableUsing(
-      TableIdentifier("my_tab"),
-      Some(new StructType().add("a", IntegerType).add("b", StringType)),
-      "parquet",
-      false,
-      Map.empty,
-      null,
-      Some(BucketSpec(5, Seq("a"), Seq("b"))),
-      false,
-      true)
+
+    val expectedTableDesc = CatalogTable(
+      identifier = TableIdentifier("my_tab"),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType().add("a", IntegerType).add("b", StringType),
+      provider = Some("parquet"),
+      bucketSpec = Some(BucketSpec(5, Seq("a"), Seq("b")))
+    )
 
     parser.parsePlan(query) match {
-      case ct: CreateTableUsing =>
-        // `Array.empty == Array.empty` returns false, here we set `partitionColumns` to null before
-        // plan comparison.
-        assert(ct.partitionColumns.isEmpty)
-        comparePlans(ct.copy(partitionColumns = null), expected)
+      case CreateTable(tableDesc, _, None) =>
+        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
       case other =>
         fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
           s"got ${other.getClass.getName}: $query")
@@ -378,15 +387,22 @@ class DDLCommandSuite extends PlanTest {
     val parsed_table = parser.parsePlan(sql_table)
     val parsed_view = parser.parsePlan(sql_view)
     val expected_table = AlterTableRenameCommand(
-      TableIdentifier("table_name", None),
-      TableIdentifier("new_table_name", None),
+      TableIdentifier("table_name"),
+      TableIdentifier("new_table_name"),
       isView = false)
     val expected_view = AlterTableRenameCommand(
-      TableIdentifier("table_name", None),
-      TableIdentifier("new_table_name", None),
+      TableIdentifier("table_name"),
+      TableIdentifier("new_table_name"),
       isView = true)
     comparePlans(parsed_table, expected_table)
     comparePlans(parsed_view, expected_view)
+  }
+
+  test("alter table: rename table with database") {
+    val query = "ALTER TABLE db1.tbl RENAME TO db1.tbl2"
+    val plan = parseAs[AlterTableRenameCommand](query)
+    assert(plan.oldName == TableIdentifier("tbl", Some("db1")))
+    assert(plan.newName == TableIdentifier("tbl2", Some("db1")))
   }
 
   // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
@@ -531,6 +547,14 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
+  test("alter table: recover partitions") {
+    val sql = "ALTER TABLE table_name RECOVER PARTITIONS"
+    val parsed = parser.parsePlan(sql)
+    val expected = AlterTableRecoverPartitionsCommand(
+      TableIdentifier("table_name", None))
+    comparePlans(parsed, expected)
+  }
+
   test("alter view: add partition (not supported)") {
     assertUnsupported(
       """
@@ -580,8 +604,7 @@ class DDLCommandSuite extends PlanTest {
 
     val parsed1_table = parser.parsePlan(sql1_table)
     val parsed2_table = parser.parsePlan(sql2_table)
-    assertUnsupported(sql1_table + " PURGE")
-    assertUnsupported(sql2_table + " PURGE")
+    val parsed1_purge = parser.parsePlan(sql1_table + " PURGE")
     assertUnsupported(sql1_view)
     assertUnsupported(sql2_view)
 
@@ -591,11 +614,15 @@ class DDLCommandSuite extends PlanTest {
       Seq(
         Map("dt" -> "2008-08-08", "country" -> "us"),
         Map("dt" -> "2009-09-09", "country" -> "uk")),
-      ifExists = true)
+      ifExists = true,
+      purge = false,
+      retainData = false)
     val expected2_table = expected1_table.copy(ifExists = false)
+    val expected1_purge = expected1_table.copy(purge = true)
 
     comparePlans(parsed1_table, expected1_table)
     comparePlans(parsed2_table, expected2_table)
+    comparePlans(parsed1_purge, expected1_purge)
   }
 
   test("alter table: archive partition (not supported)") {
@@ -633,6 +660,34 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
+  test("alter table: change column name/type/comment") {
+    val sql1 = "ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT"
+    val sql2 = "ALTER TABLE table_name CHANGE COLUMN col_name col_name INT COMMENT 'new_comment'"
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+    val tableIdent = TableIdentifier("table_name", None)
+    val expected1 = AlterTableChangeColumnCommand(
+      tableIdent,
+      "col_old_name",
+      StructField("col_new_name", IntegerType))
+    val expected2 = AlterTableChangeColumnCommand(
+      tableIdent,
+      "col_name",
+      StructField("col_name", IntegerType).withComment("new_comment"))
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("alter table: change column position (not supported)") {
+    assertUnsupported("ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT FIRST")
+    assertUnsupported(
+      "ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT AFTER other_col")
+  }
+
+  test("alter table: change column in partition spec") {
+    assertUnsupported("ALTER TABLE table_name PARTITION (a='1', a='2') CHANGE COLUMN a new_a INT")
+  }
+
   test("alter table: touch (not supported)") {
     assertUnsupported("ALTER TABLE table_name TOUCH")
     assertUnsupported("ALTER TABLE table_name TOUCH PARTITION (dt='2008-08-08', country='us')")
@@ -666,19 +721,6 @@ class DDLCommandSuite extends PlanTest {
     assertUnsupported("ALTER TABLE table_name NOT STORED AS DIRECTORIES")
     assertUnsupported("ALTER TABLE table_name SET SKEWED LOCATION (col_name1=\"location1\"")
     assertUnsupported("ALTER TABLE table_name SKEWED BY (key) ON (1,5,6) STORED AS DIRECTORIES")
-  }
-
-  test("alter table: change column name/type/position/comment (not allowed)") {
-    assertUnsupported("ALTER TABLE table_name CHANGE col_old_name col_new_name INT")
-    assertUnsupported(
-      """
-       |ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT
-       |COMMENT 'col_comment' FIRST CASCADE
-      """.stripMargin)
-    assertUnsupported("""
-       |ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT
-       |COMMENT 'col_comment' AFTER column_name RESTRICT
-      """.stripMargin)
   }
 
   test("alter table: add/replace columns (not allowed)") {
@@ -740,25 +782,30 @@ class DDLCommandSuite extends PlanTest {
     val tableName1 = "db.tab"
     val tableName2 = "tab"
 
-    val parsed1 = parser.parsePlan(s"DROP TABLE $tableName1")
-    val parsed2 = parser.parsePlan(s"DROP TABLE IF EXISTS $tableName1")
-    val parsed3 = parser.parsePlan(s"DROP TABLE $tableName2")
-    val parsed4 = parser.parsePlan(s"DROP TABLE IF EXISTS $tableName2")
-    assertUnsupported(s"DROP TABLE IF EXISTS $tableName2 PURGE")
+    val parsed = Seq(
+        s"DROP TABLE $tableName1",
+        s"DROP TABLE IF EXISTS $tableName1",
+        s"DROP TABLE $tableName2",
+        s"DROP TABLE IF EXISTS $tableName2",
+        s"DROP TABLE $tableName2 PURGE",
+        s"DROP TABLE IF EXISTS $tableName2 PURGE"
+      ).map(parser.parsePlan)
 
-    val expected1 =
-      DropTableCommand(TableIdentifier("tab", Option("db")), ifExists = false, isView = false)
-    val expected2 =
-      DropTableCommand(TableIdentifier("tab", Option("db")), ifExists = true, isView = false)
-    val expected3 =
-      DropTableCommand(TableIdentifier("tab", None), ifExists = false, isView = false)
-    val expected4 =
-      DropTableCommand(TableIdentifier("tab", None), ifExists = true, isView = false)
+    val expected = Seq(
+      DropTableCommand(TableIdentifier("tab", Option("db")), ifExists = false, isView = false,
+        purge = false),
+      DropTableCommand(TableIdentifier("tab", Option("db")), ifExists = true, isView = false,
+        purge = false),
+      DropTableCommand(TableIdentifier("tab", None), ifExists = false, isView = false,
+        purge = false),
+      DropTableCommand(TableIdentifier("tab", None), ifExists = true, isView = false,
+        purge = false),
+      DropTableCommand(TableIdentifier("tab", None), ifExists = false, isView = false,
+        purge = true),
+      DropTableCommand(TableIdentifier("tab", None), ifExists = true, isView = false,
+        purge = true))
 
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
+    parsed.zip(expected).foreach { case (p, e) => comparePlans(p, e) }
   }
 
   test("drop view") {
@@ -771,13 +818,17 @@ class DDLCommandSuite extends PlanTest {
     val parsed4 = parser.parsePlan(s"DROP VIEW IF EXISTS $viewName2")
 
     val expected1 =
-      DropTableCommand(TableIdentifier("view", Option("db")), ifExists = false, isView = true)
+      DropTableCommand(TableIdentifier("view", Option("db")), ifExists = false, isView = true,
+        purge = false)
     val expected2 =
-      DropTableCommand(TableIdentifier("view", Option("db")), ifExists = true, isView = true)
+      DropTableCommand(TableIdentifier("view", Option("db")), ifExists = true, isView = true,
+        purge = false)
     val expected3 =
-      DropTableCommand(TableIdentifier("view", None), ifExists = false, isView = true)
+      DropTableCommand(TableIdentifier("view", None), ifExists = false, isView = true,
+        purge = false)
     val expected4 =
-      DropTableCommand(TableIdentifier("view", None), ifExists = true, isView = true)
+      DropTableCommand(TableIdentifier("view", None), ifExists = true, isView = true,
+        purge = false)
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
@@ -789,21 +840,23 @@ class DDLCommandSuite extends PlanTest {
     val sql1 = "SHOW COLUMNS FROM t1"
     val sql2 = "SHOW COLUMNS IN db1.t1"
     val sql3 = "SHOW COLUMNS FROM t1 IN db1"
-    val sql4 = "SHOW COLUMNS FROM db1.t1 IN db1"
-    val sql5 = "SHOW COLUMNS FROM db1.t1 IN db2"
+    val sql4 = "SHOW COLUMNS FROM db1.t1 IN db2"
 
     val parsed1 = parser.parsePlan(sql1)
-    val expected1 = ShowColumnsCommand(TableIdentifier("t1", None))
+    val expected1 = ShowColumnsCommand(None, TableIdentifier("t1", None))
     val parsed2 = parser.parsePlan(sql2)
-    val expected2 = ShowColumnsCommand(TableIdentifier("t1", Some("db1")))
+    val expected2 = ShowColumnsCommand(None, TableIdentifier("t1", Some("db1")))
     val parsed3 = parser.parsePlan(sql3)
-    val parsed4 = parser.parsePlan(sql3)
+    val expected3 = ShowColumnsCommand(Some("db1"), TableIdentifier("t1", None))
+    val parsed4 = parser.parsePlan(sql4)
+    val expected4 = ShowColumnsCommand(Some("db2"), TableIdentifier("t1", Some("db1")))
+
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected2)
-    comparePlans(parsed4, expected2)
-    assertUnsupported(sql5)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
   }
+
 
   test("show partitions") {
     val sql1 = "SHOW PARTITIONS t1"
@@ -823,5 +876,64 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected3)
+  }
+
+  test("support for other types in DBPROPERTIES") {
+    val sql =
+      """
+        |CREATE DATABASE database_name
+        |LOCATION '/home/user/db'
+        |WITH DBPROPERTIES ('a'=1, 'b'=0.1, 'c'=TRUE)
+      """.stripMargin
+    val parsed = parser.parsePlan(sql)
+    val expected = CreateDatabaseCommand(
+      "database_name",
+      ifNotExists = false,
+      Some("/home/user/db"),
+      None,
+      Map("a" -> "1", "b" -> "0.1", "c" -> "true"))
+
+    comparePlans(parsed, expected)
+  }
+
+  test("support for other types in TBLPROPERTIES") {
+    val sql =
+      """
+        |ALTER TABLE table_name
+        |SET TBLPROPERTIES ('a' = 1, 'b' = 0.1, 'c' = TRUE)
+      """.stripMargin
+    val parsed = parser.parsePlan(sql)
+    val expected = AlterTableSetPropertiesCommand(
+      TableIdentifier("table_name"),
+      Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
+      isView = false)
+
+    comparePlans(parsed, expected)
+  }
+
+  test("support for other types in OPTIONS") {
+    val sql =
+      """
+        |CREATE TABLE table_name USING json
+        |OPTIONS (a 1, b 0.1, c TRUE)
+      """.stripMargin
+
+    val expectedTableDesc = CatalogTable(
+      identifier = TableIdentifier("table_name"),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty.copy(
+        properties = Map("a" -> "1", "b" -> "0.1", "c" -> "true")
+      ),
+      schema = new StructType,
+      provider = Some("json")
+    )
+
+    parser.parsePlan(sql) match {
+      case CreateTable(tableDesc, _, None) =>
+        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $sql")
+    }
   }
 }

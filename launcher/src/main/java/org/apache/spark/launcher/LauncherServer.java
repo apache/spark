@@ -337,6 +337,10 @@ class LauncherServer implements Closeable {
       }
       super.close();
       if (handle != null) {
+        if (!handle.getState().isFinal()) {
+          LOG.log(Level.WARNING, "Lost connection to spark application.");
+          handle.setState(SparkAppHandle.State.LOST);
+        }
         handle.disconnect();
       }
     }

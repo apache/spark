@@ -23,7 +23,7 @@ import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
- * An memory consumer of TaskMemoryManager, which support spilling.
+ * A memory consumer of {@link TaskMemoryManager} that supports spilling.
  *
  * Note: this only supports allocation / spilling of Tungsten memory.
  */
@@ -45,7 +45,7 @@ public abstract class MemoryConsumer {
   }
 
   /**
-   * Returns the memory mode, ON_HEAP or OFF_HEAP.
+   * Returns the memory mode, {@link MemoryMode#ON_HEAP} or {@link MemoryMode#OFF_HEAP}.
    */
   public MemoryMode getMode() {
     return mode;

@@ -47,7 +47,8 @@ private[spark] abstract class AbstractJavaRDDLike[T, This <: JavaRDDLike[T, This
 
 /**
  * Defines operations common to several Java RDD implementations.
- * Note that this trait is not intended to be implemented by user code.
+ *
+ * @note This trait is not intended to be implemented by user code.
  */
 trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def wrapRDD(rdd: RDD[T]): This
@@ -282,6 +283,17 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
            separateWorkingDir: Boolean,
            bufferSize: Int): JavaRDD[String] = {
     rdd.pipe(command.asScala, env.asScala, null, null, separateWorkingDir, bufferSize)
+  }
+
+  /**
+   * Return an RDD created by piping elements to a forked external process.
+   */
+  def pipe(command: JList[String],
+           env: JMap[String, String],
+           separateWorkingDir: Boolean,
+           bufferSize: Int,
+           encoding: String): JavaRDD[String] = {
+    rdd.pipe(command.asScala, env.asScala, null, null, separateWorkingDir, bufferSize, encoding)
   }
 
   /**

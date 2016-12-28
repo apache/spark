@@ -72,7 +72,9 @@ public class JavaPrefixSpanSuite extends SharedSparkSession {
 
     try {
       model.save(spark.sparkContext(), outputPath);
-      PrefixSpanModel newModel = PrefixSpanModel.load(spark.sparkContext(), outputPath);
+      @SuppressWarnings("unchecked")
+      PrefixSpanModel<Integer> newModel =
+          (PrefixSpanModel<Integer>) PrefixSpanModel.load(spark.sparkContext(), outputPath);
       JavaRDD<FreqSequence<Integer>> freqSeqs = newModel.freqSequences().toJavaRDD();
       List<FreqSequence<Integer>> localFreqSeqs = freqSeqs.collect();
       Assert.assertEquals(5, localFreqSeqs.size());

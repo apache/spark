@@ -33,6 +33,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.recommendation.ALS._
+import org.apache.spark.ml.recommendation.ALS.Rating
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -510,18 +511,18 @@ class ALSSuite
       (1, 1L, 1d, 0, 0L, 0d, 5.0)
     ).toDF("user", "user_big", "user_small", "item", "item_big", "item_small", "rating")
     withClue("fit should fail when ids exceed integer range. ") {
-      assert(intercept[IllegalArgumentException] {
+      assert(intercept[SparkException] {
         als.fit(df.select(df("user_big").as("user"), df("item"), df("rating")))
-      }.getMessage.contains("was out of Integer range"))
-      assert(intercept[IllegalArgumentException] {
+      }.getCause.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
         als.fit(df.select(df("user_small").as("user"), df("item"), df("rating")))
-      }.getMessage.contains("was out of Integer range"))
-      assert(intercept[IllegalArgumentException] {
+      }.getCause.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
         als.fit(df.select(df("item_big").as("item"), df("user"), df("rating")))
-      }.getMessage.contains("was out of Integer range"))
-      assert(intercept[IllegalArgumentException] {
+      }.getCause.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
         als.fit(df.select(df("item_small").as("item"), df("user"), df("rating")))
-      }.getMessage.contains("was out of Integer range"))
+      }.getCause.getMessage.contains("was out of Integer range"))
     }
     withClue("transform should fail when ids exceed integer range. ") {
       val model = als.fit(df)
@@ -537,6 +538,13 @@ class ALSSuite
       assert(intercept[SparkException] {
         model.transform(df.select(df("item_small").as("item"), df("user"))).first
       }.getMessage.contains("was out of Integer range"))
+    }
+  }
+
+  test("SPARK-18268: ALS with empty RDD should fail with better message") {
+    val ratings = sc.parallelize(Array.empty[Rating[Int]])
+    intercept[IllegalArgumentException] {
+      ALS.train(ratings)
     }
   }
 }
@@ -591,6 +599,7 @@ class ALSCleanerSuite extends SparkFunSuite {
         val spark = SparkSession.builder
           .master("local[2]")
           .appName("ALSCleanerSuite")
+          .sparkContext(sc)
           .getOrCreate()
         import spark.implicits._
         val als = new ALS()
@@ -606,7 +615,7 @@ class ALSCleanerSuite extends SparkFunSuite {
         val pattern = "shuffle_(\\d+)_.+\\.data".r
         val rddIds = resultingFiles.flatMap { f =>
           pattern.findAllIn(f.getName()).matchData.map { _.group(1) } }
-        assert(rddIds.toSet.size === 4)
+        assert(rddIds.size === 4)
       } finally {
         sc.stop()
       }

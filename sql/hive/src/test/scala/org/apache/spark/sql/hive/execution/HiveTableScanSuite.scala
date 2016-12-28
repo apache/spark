@@ -18,13 +18,15 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.MetastoreRelation
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
-class HiveTableScanSuite extends HiveComparisonTest {
+class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestHiveSingleton {
 
   createQueryTest("partition_based_table_scan_with_different_serde",
     """
@@ -88,5 +90,92 @@ class HiveTableScanSuite extends HiveComparisonTest {
 
     assert(sql("select CaseSensitiveColName from spark_4959_2").head() === Row("hi"))
     assert(sql("select casesensitivecolname from spark_4959_2").head() === Row("hi"))
+  }
+
+  private def checkNumScannedPartitions(stmt: String, expectedNumParts: Int): Unit = {
+    val plan = sql(stmt).queryExecution.sparkPlan
+    val numPartitions = plan.collectFirst {
+      case p: HiveTableScanExec =>
+        p.relation.getHiveQlPartitions(p.partitionPruningPred).length
+    }.getOrElse(0)
+    assert(numPartitions == expectedNumParts)
+  }
+
+  test("Verify SQLConf HIVE_METASTORE_PARTITION_PRUNING") {
+    val view = "src"
+    withTempView(view) {
+      spark.range(1, 5).createOrReplaceTempView(view)
+      val table = "table_with_partition"
+      withTable(table) {
+        sql(
+          s"""
+             |CREATE TABLE $table(id string)
+             |PARTITIONED BY (p1 string,p2 string,p3 string,p4 string,p5 string)
+           """.stripMargin)
+        sql(
+          s"""
+             |FROM $view v
+             |INSERT INTO TABLE $table
+             |PARTITION (p1='a',p2='b',p3='c',p4='d',p5='e')
+             |SELECT v.id
+             |INSERT INTO TABLE $table
+             |PARTITION (p1='a',p2='c',p3='c',p4='d',p5='e')
+             |SELECT v.id
+           """.stripMargin)
+
+        Seq("true", "false").foreach { hivePruning =>
+          withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> hivePruning) {
+            // If the pruning predicate is used, getHiveQlPartitions should only return the
+            // qualified partition; Otherwise, it return all the partitions.
+            val expectedNumPartitions = if (hivePruning == "true") 1 else 2
+            checkNumScannedPartitions(
+              stmt = s"SELECT id, p2 FROM $table WHERE p2 <= 'b'", expectedNumPartitions)
+          }
+        }
+
+        Seq("true", "false").foreach { hivePruning =>
+          withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> hivePruning) {
+            // If the pruning predicate does not exist, getHiveQlPartitions should always
+            // return all the partitions.
+            checkNumScannedPartitions(
+              stmt = s"SELECT id, p2 FROM $table WHERE id <= 3", expectedNumParts = 2)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-16926: number of table and partition columns match for new partitioned table") {
+    val view = "src"
+    withTempView(view) {
+      spark.range(1, 5).createOrReplaceTempView(view)
+      val table = "table_with_partition"
+      withTable(table) {
+        sql(
+          s"""
+             |CREATE TABLE $table(id string)
+             |PARTITIONED BY (p1 string,p2 string,p3 string,p4 string,p5 string)
+           """.stripMargin)
+        sql(
+          s"""
+             |FROM $view v
+             |INSERT INTO TABLE $table
+             |PARTITION (p1='a',p2='b',p3='c',p4='d',p5='e')
+             |SELECT v.id
+             |INSERT INTO TABLE $table
+             |PARTITION (p1='a',p2='c',p3='c',p4='d',p5='e')
+             |SELECT v.id
+           """.stripMargin)
+        val plan = sql(
+          s"""
+             |SELECT * FROM $table
+           """.stripMargin).queryExecution.sparkPlan
+        val relation = plan.collectFirst {
+          case p: HiveTableScanExec => p.relation
+        }.get
+        val tableCols = relation.hiveQlTable.getCols
+        relation.getHiveQlPartitions().foreach(p => assert(p.getCols.size == tableCols.size))
+      }
+    }
   }
 }

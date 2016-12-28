@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.math._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateOrdering, LazilyGeneratedOrdering}
 import org.apache.spark.sql.types._
 
 class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -44,9 +45,14 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
           case Ascending => signum(expected)
           case Descending => -1 * signum(expected)
         }
+
+        val kryo = new KryoSerializer(new SparkConf).newInstance()
         val intOrdering = new InterpretedOrdering(sortOrder :: Nil)
-        val genOrdering = GenerateOrdering.generate(sortOrder :: Nil)
-        Seq(intOrdering, genOrdering).foreach { ordering =>
+        val genOrdering = new LazilyGeneratedOrdering(sortOrder :: Nil)
+        val kryoIntOrdering = kryo.deserialize[InterpretedOrdering](kryo.serialize(intOrdering))
+        val kryoGenOrdering = kryo.deserialize[LazilyGeneratedOrdering](kryo.serialize(genOrdering))
+
+        Seq(intOrdering, genOrdering, kryoIntOrdering, kryoGenOrdering).foreach { ordering =>
           assert(ordering.compare(rowA, rowA) === 0)
           assert(ordering.compare(rowB, rowB) === 0)
           assert(signum(ordering.compare(rowA, rowB)) === expectedCompareResult)

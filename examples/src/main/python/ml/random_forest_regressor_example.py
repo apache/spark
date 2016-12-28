@@ -31,7 +31,7 @@ from pyspark.sql import SparkSession
 if __name__ == "__main__":
     spark = SparkSession\
         .builder\
-        .appName("random_forest_regressor_example")\
+        .appName("RandomForestRegressorExample")\
         .getOrCreate()
 
     # $example on$

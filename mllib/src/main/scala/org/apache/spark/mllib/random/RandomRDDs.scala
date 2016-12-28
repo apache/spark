@@ -249,8 +249,8 @@ object RandomRDDs {
    *  shape and scale.
    *
    * @param sc SparkContext used to create the RDD.
-   * @param shape shape parameter (> 0) for the gamma distribution
-   * @param scale scale parameter (> 0) for the gamma distribution
+   * @param shape shape parameter (greater than 0) for the gamma distribution
+   * @param scale scale parameter (greater than 0) for the gamma distribution
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
@@ -418,6 +418,7 @@ object RandomRDDs {
   }
 
   /**
+   * :: DeveloperApi ::
    * [[RandomRDDs#randomJavaRDD]] with the default seed.
    */
   @DeveloperApi
@@ -431,15 +432,16 @@ object RandomRDDs {
   }
 
   /**
+   * :: DeveloperApi ::
    * [[RandomRDDs#randomJavaRDD]] with the default seed & numPartitions
    */
   @DeveloperApi
   @Since("1.6.0")
   def randomJavaRDD[T](
-    jsc: JavaSparkContext,
-    generator: RandomDataGenerator[T],
-    size: Long): JavaRDD[T] = {
-    randomJavaRDD(jsc, generator, size, 0);
+      jsc: JavaSparkContext,
+      generator: RandomDataGenerator[T],
+      size: Long): JavaRDD[T] = {
+    randomJavaRDD(jsc, generator, size, 0)
   }
 
   // TODO Generate RDD[Vector] from multivariate distributions.
@@ -764,8 +766,8 @@ object RandomRDDs {
    * gamma distribution with the input shape and scale.
    *
    * @param sc SparkContext used to create the RDD.
-   * @param shape shape parameter (> 0) for the gamma distribution.
-   * @param scale scale parameter (> 0) for the gamma distribution.
+   * @param shape shape parameter (greater than 0) for the gamma distribution.
+   * @param scale scale parameter (greater than 0) for the gamma distribution.
    * @param numRows Number of Vectors in the RDD.
    * @param numCols Number of elements in each Vector.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`)
@@ -854,6 +856,7 @@ object RandomRDDs {
   }
 
   /**
+   * :: DeveloperApi ::
    * Java-friendly version of [[RandomRDDs#randomVectorRDD]].
    */
   @DeveloperApi
@@ -869,6 +872,7 @@ object RandomRDDs {
   }
 
   /**
+   * :: DeveloperApi ::
    * [[RandomRDDs#randomJavaVectorRDD]] with the default seed.
    */
   @DeveloperApi
@@ -883,6 +887,7 @@ object RandomRDDs {
   }
 
   /**
+   * :: DeveloperApi ::
    * [[RandomRDDs#randomJavaVectorRDD]] with the default number of partitions and the default seed.
    */
   @DeveloperApi

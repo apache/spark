@@ -56,7 +56,7 @@ public class JavaDefaultReadWriteSuite extends SharedSparkSession {
     } catch (IOException e) {
       // expected
     }
-    instance.write().context(spark.sqlContext()).overwrite().save(outputPath);
+    instance.write().session(spark).overwrite().save(outputPath);
     MyParams newInstance = MyParams.load(outputPath);
     Assert.assertEquals("UID should match.", instance.uid(), newInstance.uid());
     Assert.assertEquals("Params should be preserved.",
