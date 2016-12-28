@@ -22,6 +22,7 @@ import java.util.UUID
 
 import scala.language.implicitConversions
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfterAll
@@ -29,11 +30,12 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.FilterExec
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{UninterruptibleThread, Utils}
 
 /**
  * Helper trait that should be extended by all SQL test suites.
@@ -66,7 +68,7 @@ private[sql] trait SQLTestUtils
    * but the implicits import is needed in the constructor.
    */
   protected object testImplicits extends SQLImplicits {
-    protected override def _sqlContext: SQLContext = self.spark.wrapped
+    protected override def _sqlContext: SQLContext = self.spark.sqlContext
   }
 
   /**
@@ -149,11 +151,11 @@ private[sql] trait SQLTestUtils
   /**
    * Drops temporary table `tableName` after calling `f`.
    */
-  protected def withTempTable(tableNames: String*)(f: => Unit): Unit = {
+  protected def withTempView(tableNames: String*)(f: => Unit): Unit = {
     try f finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
       // temp tables that never got created.
-      try tableNames.foreach(spark.catalog.dropTempTable) catch {
+      try tableNames.foreach(spark.catalog.dropTempView) catch {
         case _: NoSuchTableException =>
       }
     }
@@ -196,7 +198,12 @@ private[sql] trait SQLTestUtils
       fail("Failed to create temporary database", cause)
     }
 
-    try f(dbName) finally spark.sql(s"DROP DATABASE $dbName CASCADE")
+    try f(dbName) finally {
+      if (spark.catalog.currentDatabase == dbName) {
+        spark.sql(s"USE ${DEFAULT_DATABASE}")
+      }
+      spark.sql(s"DROP DATABASE $dbName CASCADE")
+    }
   }
 
   /**
@@ -217,11 +224,7 @@ private[sql] trait SQLTestUtils
       case FilterExec(_, child) => child
     }
 
-    val childRDD = withoutFilters
-      .execute()
-      .map(row => Row.fromSeq(row.copy().toSeq(schema)))
-
-    spark.createDataFrame(childRDD, schema)
+    spark.internalCreateDataFrame(withoutFilters.execute(), schema)
   }
 
   /**
@@ -243,6 +246,46 @@ private[sql] trait SQLTestUtils
       quietly {
         f
       }
+    }
+  }
+
+  /** Run a test on a separate [[UninterruptibleThread]]. */
+  protected def testWithUninterruptibleThread(name: String, quietly: Boolean = false)
+    (body: => Unit): Unit = {
+    val timeoutMillis = 10000
+    @transient var ex: Throwable = null
+
+    def runOnThread(): Unit = {
+      val thread = new UninterruptibleThread(s"Testing thread for test $name") {
+        override def run(): Unit = {
+          try {
+            body
+          } catch {
+            case NonFatal(e) =>
+              ex = e
+          }
+        }
+      }
+      thread.setDaemon(true)
+      thread.start()
+      thread.join(timeoutMillis)
+      if (thread.isAlive) {
+        thread.interrupt()
+        // If this interrupt does not work, then this thread is most likely running something that
+        // is not interruptible. There is not much point to wait for the thread to termniate, and
+        // we rather let the JVM terminate the thread on exit.
+        fail(
+          s"Test '$name' running on o.a.s.util.UninterruptibleThread timed out after" +
+            s" $timeoutMillis ms")
+      } else if (ex != null) {
+        throw ex
+      }
+    }
+
+    if (quietly) {
+      testQuietly(name) { runOnThread() }
+    } else {
+      test(name) { runOnThread() }
     }
   }
 }

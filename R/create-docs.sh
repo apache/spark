@@ -17,17 +17,26 @@
 # limitations under the License.
 #
 
-# Script to create API docs for SparkR
-# This requires `devtools` and `knitr` to be installed on the machine.
+# Script to create API docs and vignettes for SparkR
+# This requires `devtools`, `knitr` and `rmarkdown` to be installed on the machine.
 
-# After running this script the html docs can be found in 
+# After running this script the html docs can be found in
 # $SPARK_HOME/R/pkg/html
+# The vignettes can be found in
+# $SPARK_HOME/R/pkg/vignettes/sparkr_vignettes.html
 
 set -o pipefail
 set -e
 
 # Figure out where the script is
 export FWDIR="$(cd "`dirname "$0"`"; pwd)"
+export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+
+# Required for setting SPARK_SCALA_VERSION
+. "${SPARK_HOME}"/bin/load-spark-env.sh
+
+echo "Using Scala $SPARK_SCALA_VERSION"
+
 pushd $FWDIR
 
 # Install the package (this will also generate the Rd files)

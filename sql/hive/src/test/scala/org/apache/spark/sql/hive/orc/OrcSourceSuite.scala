@@ -22,14 +22,16 @@ import java.io.File
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
 
 abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterAll {
-  import hiveContext._
+  import spark._
 
   var orcTableDir: File = null
   var orcTableAsDir: File = null
@@ -37,21 +39,17 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    orcTableAsDir = File.createTempFile("orctests", "sparksql")
-    orcTableAsDir.delete()
-    orcTableAsDir.mkdir()
+    orcTableAsDir = Utils.createTempDir("orctests", "sparksql")
 
     // Hack: to prepare orc data files using hive external tables
-    orcTableDir = File.createTempFile("orctests", "sparksql")
-    orcTableDir.delete()
-    orcTableDir.mkdir()
+    orcTableDir = Utils.createTempDir("orctests", "sparksql")
     import org.apache.spark.sql.hive.test.TestHive.implicits._
 
     sparkContext
       .makeRDD(1 to 10)
       .map(i => OrcData(i, s"part-$i"))
       .toDF()
-      .registerTempTable(s"orc_temp_table")
+      .createOrReplaceTempView(s"orc_temp_table")
 
     sql(
       s"""CREATE EXTERNAL TABLE normal_orc(
@@ -66,15 +64,6 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
       s"""INSERT INTO TABLE normal_orc
          |SELECT intField, stringField FROM orc_temp_table
        """.stripMargin)
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      orcTableDir.delete()
-      orcTableAsDir.delete()
-    } finally {
-      super.afterAll()
-    }
   }
 
   test("create temporary orc table") {
@@ -158,22 +147,37 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
 
     sql("DROP TABLE IF EXISTS orcNullValues")
   }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    assert(new OrcOptions(Map("Orc.Compress" -> "NONE")).compressionCodec == "NONE")
+  }
+
+  test("SPARK-18220: read Hive orc table with varchar column") {
+    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+    try {
+      hiveClient.runSqlHive("CREATE TABLE orc_varchar(a VARCHAR(10)) STORED AS orc")
+      hiveClient.runSqlHive("INSERT INTO TABLE orc_varchar SELECT 'a' FROM (SELECT 1) t")
+      checkAnswer(spark.table("orc_varchar"), Row("a"))
+    } finally {
+      hiveClient.runSqlHive("DROP TABLE IF EXISTS orc_varchar")
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    hiveContext.sql(
-      s"""CREATE TEMPORARY TABLE normal_orc_source
+    spark.sql(
+      s"""CREATE TEMPORARY VIEW normal_orc_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
          |)
        """.stripMargin)
 
-    hiveContext.sql(
-      s"""CREATE TEMPORARY TABLE normal_orc_as_source
+    spark.sql(
+      s"""CREATE TEMPORARY VIEW normal_orc_as_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'

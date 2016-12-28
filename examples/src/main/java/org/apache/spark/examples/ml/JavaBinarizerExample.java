@@ -47,21 +47,22 @@ public class JavaBinarizerExample {
       RowFactory.create(2, 0.2)
     );
     StructType schema = new StructType(new StructField[]{
-      new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
+      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
       new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
     });
     Dataset<Row> continuousDataFrame = spark.createDataFrame(data, schema);
+
     Binarizer binarizer = new Binarizer()
       .setInputCol("feature")
       .setOutputCol("binarized_feature")
       .setThreshold(0.5);
+
     Dataset<Row> binarizedDataFrame = binarizer.transform(continuousDataFrame);
-    Dataset<Row> binarizedFeatures = binarizedDataFrame.select("binarized_feature");
-    for (Row r : binarizedFeatures.collectAsList()) {
-      Double binarized_value = r.getDouble(0);
-      System.out.println(binarized_value);
-    }
+
+    System.out.println("Binarizer output with Threshold = " + binarizer.getThreshold());
+    binarizedDataFrame.show();
     // $example off$
+
     spark.stop();
   }
 }

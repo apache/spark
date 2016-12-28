@@ -48,14 +48,21 @@ public class JavaNaiveBayesExample {
 
     // create the trainer and set its parameters
     NaiveBayes nb = new NaiveBayes();
+
     // train the model
     NaiveBayesModel model = nb.fit(train);
-    // compute precision on the test set
-    Dataset<Row> result = model.transform(test);
-    Dataset<Row> predictionAndLabels = result.select("prediction", "label");
+
+    // Select example rows to display.
+    Dataset<Row> predictions = model.transform(test);
+    predictions.show();
+
+    // compute accuracy on the test set
     MulticlassClassificationEvaluator evaluator = new MulticlassClassificationEvaluator()
-      .setMetricName("precision");
-    System.out.println("Precision = " + evaluator.evaluate(predictionAndLabels));
+      .setLabelCol("label")
+      .setPredictionCol("prediction")
+      .setMetricName("accuracy");
+    double accuracy = evaluator.evaluate(predictions);
+    System.out.println("Test set accuracy = " + accuracy);
     // $example off$
 
     spark.stop();

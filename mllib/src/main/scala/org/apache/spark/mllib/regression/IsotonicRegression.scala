@@ -34,7 +34,8 @@ import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.RangePartitioner
 
 /**
  * Regression model for isotonic regression.
@@ -185,21 +186,21 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
         boundaries: Array[Double],
         predictions: Array[Double],
         isotonic: Boolean): Unit = {
-      val sqlContext = SQLContext.getOrCreate(sc)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
           ("isotonic" -> isotonic)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
-      sqlContext.createDataFrame(
+      spark.createDataFrame(
         boundaries.toSeq.zip(predictions).map { case (b, p) => Data(b, p) }
       ).write.parquet(dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): (Array[Double], Array[Double]) = {
-      val sqlContext = SQLContext.getOrCreate(sc)
-      val dataRDD = sqlContext.read.parquet(dataPath(path))
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      val dataRDD = spark.read.parquet(dataPath(path))
 
       checkSchema[Data](dataRDD.schema)
       val dataArray = dataRDD.select("boundary", "prediction").collect()
@@ -221,7 +222,7 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
         val (boundaries, predictions) = SaveLoadV1_0.load(sc, path)
         new IsotonicRegressionModel(boundaries, predictions, isotonic)
       case _ => throw new Exception(
-        s"IsotonicRegressionModel.load did not recognize model with (className, format version):" +
+        s"IsotonicRegressionModel.load did not recognize model with (className, format version): " +
         s"($loadedClassName, $version).  Supported:\n" +
         s"  ($classNameV1_0, 1.0)"
       )
@@ -237,23 +238,22 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
  * Sequential PAV implementation based on:
  * Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
  *   "Nearly-isotonic regression." Technometrics 53.1 (2011): 54-61.
- *   Available from [[http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf]]
+ *   Available from <a href="http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf">here</a>
  *
  * Sequential PAV parallelization based on:
  * Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset.
  *   "An approach to parallelizing isotonic regression."
  *   Applied Mathematics and Parallel Computing. Physica-Verlag HD, 1996. 141-147.
- *   Available from [[http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf]]
+ *   Available from <a href="http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf">here</a>
  *
- * @see [[http://en.wikipedia.org/wiki/Isotonic_regression Isotonic regression (Wikipedia)]]
+ * @see <a href="http://en.wikipedia.org/wiki/Isotonic_regression">Isotonic regression
+ * (Wikipedia)</a>
  */
 @Since("1.3.0")
 class IsotonicRegression private (private var isotonic: Boolean) extends Serializable {
 
   /**
    * Constructs IsotonicRegression instance with default parameter isotonic = true.
-   *
-   * @return New instance of IsotonicRegression.
    */
   @Since("1.3.0")
   def this() = this(true)
@@ -408,9 +408,11 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    */
   private def parallelPoolAdjacentViolators(
       input: RDD[(Double, Double, Double)]): Array[(Double, Double, Double)] = {
-    val parallelStepResult = input
-      .sortBy(x => (x._2, x._1))
-      .glom()
+    val keyedInput = input.keyBy(_._2)
+    val parallelStepResult = keyedInput
+      .partitionBy(new RangePartitioner(keyedInput.getNumPartitions, keyedInput))
+      .values
+      .mapPartitions(p => Iterator(p.toArray.sortBy(x => (x._2, x._1))))
       .flatMap(poolAdjacentViolators)
       .collect()
       .sortBy(x => (x._2, x._1)) // Sort again because collect() doesn't promise ordering.

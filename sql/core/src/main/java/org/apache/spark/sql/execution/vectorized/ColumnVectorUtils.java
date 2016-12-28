@@ -23,8 +23,6 @@ import java.sql.Date;
 import java.util.Iterator;
 import java.util.List;
 
-import org.apache.commons.lang.NotImplementedException;
-
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -88,8 +86,9 @@ public class ColumnVectorUtils {
         col.getChildColumn(0).putInts(0, capacity, c.months);
         col.getChildColumn(1).putLongs(0, capacity, c.microseconds);
       } else if (t instanceof DateType) {
-        Date date = (Date)row.get(fieldIdx, t);
-        col.putInts(0, capacity, DateTimeUtils.fromJavaDate(date));
+        col.putInts(0, capacity, row.getInt(fieldIdx));
+      } else if (t instanceof TimestampType) {
+        col.putLongs(0, capacity, row.getLong(fieldIdx));
       }
     }
   }
@@ -112,7 +111,7 @@ public class ColumnVectorUtils {
       }
       return result;
     } else {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
   }
 
@@ -161,7 +160,7 @@ public class ColumnVectorUtils {
       } else if (t instanceof DateType) {
         dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
       } else {
-        throw new NotImplementedException("Type " + t);
+        throw new UnsupportedOperationException("Type " + t);
       }
     }
   }

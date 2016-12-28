@@ -20,7 +20,7 @@ package org.apache.spark.examples.ml
 
 // $example on$
 import org.apache.spark.ml.feature.VectorAssembler
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
 // $example off$
 import org.apache.spark.sql.SparkSession
 
@@ -41,7 +41,8 @@ object VectorAssemblerExample {
       .setOutputCol("features")
 
     val output = assembler.transform(dataset)
-    println(output.select("features", "clicked").first())
+    println("Assembled columns 'hour', 'mobile', 'userFeatures' to vector column 'features'")
+    output.select("features", "clicked").show(false)
     // $example off$
 
     spark.stop()

@@ -21,8 +21,7 @@ package org.apache.spark.examples.mllib
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.classification.{NaiveBayes, NaiveBayesModel}
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.util.MLUtils
 // $example off$
 
 object NaiveBayesExample {
@@ -31,16 +30,11 @@ object NaiveBayesExample {
     val conf = new SparkConf().setAppName("NaiveBayesExample")
     val sc = new SparkContext(conf)
     // $example on$
-    val data = sc.textFile("data/mllib/sample_naive_bayes_data.txt")
-    val parsedData = data.map { line =>
-      val parts = line.split(',')
-      LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))
-    }
+    // Load and parse the data file.
+    val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 
     // Split data into training (60%) and test (40%).
-    val splits = parsedData.randomSplit(Array(0.6, 0.4), seed = 11L)
-    val training = splits(0)
-    val test = splits(1)
+    val Array(training, test) = data.randomSplit(Array(0.6, 0.4))
 
     val model = NaiveBayes.train(training, lambda = 1.0, modelType = "multinomial")
 

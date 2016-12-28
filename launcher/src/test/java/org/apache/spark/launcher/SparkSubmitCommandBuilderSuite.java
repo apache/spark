@@ -59,6 +59,26 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
+  public void testCliHelpAndNoArg() throws Exception {
+    List<String> helpArgs = Arrays.asList(parser.HELP);
+    Map<String, String> env = new HashMap<>();
+    List<String> cmd = buildCommand(helpArgs, env);
+    assertTrue("--help should be contained in the final cmd.", cmd.contains(parser.HELP));
+
+    List<String> sparkEmptyArgs = Collections.emptyList();
+    cmd = buildCommand(sparkEmptyArgs, env);
+    assertTrue(
+      "org.apache.spark.deploy.SparkSubmit should be contained in the final cmd of empty input.",
+      cmd.contains("org.apache.spark.deploy.SparkSubmit"));
+  }
+
+  @Test
+  public void testCliKillAndStatus() throws Exception {
+    testCLIOpts(parser.STATUS);
+    testCLIOpts(parser.KILL_SUBMISSION);
+  }
+
+  @Test
   public void testCliParser() throws Exception {
     List<String> sparkSubmitArgs = Arrays.asList(
       parser.MASTER,
@@ -150,6 +170,24 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertEquals("bar", findArgValue(cmd, "--deploy-mode"));
     assertEquals("script.py", cmd.get(cmd.size() - 2));
     assertEquals("arg1", cmd.get(cmd.size() - 1));
+  }
+
+  @Test
+  public void testSparkRShell() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(
+      SparkSubmitCommandBuilder.SPARKR_SHELL,
+      "--master=foo",
+      "--deploy-mode=bar",
+      "--conf", "spark.r.shell.command=/usr/bin/R");
+
+    Map<String, String> env = new HashMap<>();
+    List<String> cmd = buildCommand(sparkSubmitArgs, env);
+    assertEquals("/usr/bin/R", cmd.get(cmd.size() - 1));
+    assertEquals(
+      String.format(
+        "\"%s\" \"foo\" \"%s\" \"bar\" \"--conf\" \"spark.r.shell.command=/usr/bin/R\" \"%s\"",
+        parser.MASTER, parser.DEPLOY_MODE, SparkSubmitCommandBuilder.SPARKR_SHELL_RESOURCE),
+      env.get("SPARKR_SUBMIT_ARGS"));
   }
 
   @Test
@@ -310,6 +348,14 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   private List<String> buildCommand(List<String> args, Map<String, String> env) throws Exception {
     return newCommandBuilder(args).buildCommand(env);
+  }
+
+  private void testCLIOpts(String opt) throws Exception {
+    List<String> helpArgs = Arrays.asList(opt, "driver-20160531171222-0000");
+    Map<String, String> env = new HashMap<>();
+    List<String> cmd = buildCommand(helpArgs, env);
+    assertTrue(opt + " should be contained in the final cmd.",
+      cmd.contains(opt));
   }
 
 }

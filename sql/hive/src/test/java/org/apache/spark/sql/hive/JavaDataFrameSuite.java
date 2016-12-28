@@ -57,7 +57,7 @@ public class JavaDataFrameSuite {
       jsonObjects.add("{\"key\":" + i + ", \"value\":\"str" + i + "\"}");
     }
     df = hc.read().json(sc.parallelize(jsonObjects));
-    df.registerTempTable("window_table");
+    df.createOrReplaceTempView("window_table");
   }
 
   @After

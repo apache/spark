@@ -27,7 +27,7 @@ __all__ = ["GroupedData"]
 def dfapi(f):
     def _api(self):
         name = f.__name__
-        jdf = getattr(self._jdf, name)()
+        jdf = getattr(self._jgd, name)()
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -35,9 +35,9 @@ def dfapi(f):
 
 
 def df_varargs_api(f):
-    def _api(self, *args):
+    def _api(self, *cols):
         name = f.__name__
-        jdf = getattr(self._jdf, name)(_to_seq(self.sql_ctx._sc, args))
+        jdf = getattr(self._jgd, name)(_to_seq(self.sql_ctx._sc, cols))
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -54,8 +54,8 @@ class GroupedData(object):
     .. versionadded:: 1.3
     """
 
-    def __init__(self, jdf, sql_ctx):
-        self._jdf = jdf
+    def __init__(self, jgd, sql_ctx):
+        self._jgd = jgd
         self.sql_ctx = sql_ctx
 
     @ignore_unicode_prefix
@@ -83,11 +83,11 @@ class GroupedData(object):
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            jdf = self._jdf.agg(exprs[0])
+            jdf = self._jgd.agg(exprs[0])
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            jdf = self._jdf.agg(exprs[0]._jc,
+            jdf = self._jgd.agg(exprs[0]._jc,
                                 _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.sql_ctx)
 
@@ -178,30 +178,34 @@ class GroupedData(object):
         :param pivot_col: Name of the column to pivot.
         :param values: List of values that will be translated to columns in the output DataFrame.
 
-        // Compute the sum of earnings for each year by course with each course as a separate column
+        # Compute the sum of earnings for each year by course with each course as a separate column
+
         >>> df4.groupBy("year").pivot("course", ["dotNET", "Java"]).sum("earnings").collect()
         [Row(year=2012, dotNET=15000, Java=20000), Row(year=2013, dotNET=48000, Java=30000)]
 
-        // Or without specifying column values (less efficient)
+        # Or without specifying column values (less efficient)
+
         >>> df4.groupBy("year").pivot("course").sum("earnings").collect()
         [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
         """
         if values is None:
-            jgd = self._jdf.pivot(pivot_col)
+            jgd = self._jgd.pivot(pivot_col)
         else:
-            jgd = self._jdf.pivot(pivot_col, values)
+            jgd = self._jgd.pivot(pivot_col, values)
         return GroupedData(jgd, self.sql_ctx)
 
 
 def _test():
     import doctest
-    from pyspark.context import SparkContext
-    from pyspark.sql import Row, SQLContext
+    from pyspark.sql import Row, SparkSession
     import pyspark.sql.group
     globs = pyspark.sql.group.__dict__.copy()
-    sc = SparkContext('local[4]', 'PythonTest')
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("sql.group tests")\
+        .getOrCreate()
+    sc = spark.sparkContext
     globs['sc'] = sc
-    globs['sqlContext'] = SQLContext(sc)
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
@@ -216,7 +220,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.group, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
         exit(-1)
 

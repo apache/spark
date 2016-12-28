@@ -19,9 +19,11 @@ installed. Also install the following libraries:
     $ sudo gem install jekyll jekyll-redirect-from pygments.rb
     $ sudo pip install Pygments
     # Following is needed only for generating API docs
-    $ sudo pip install sphinx
-    $ Rscript -e 'install.packages(c("knitr", "devtools"), repos="http://cran.stat.ucla.edu/")'
+    $ sudo pip install sphinx pypandoc
+    $ sudo Rscript -e 'install.packages(c("knitr", "devtools", "roxygen2", "testthat", "rmarkdown"), repos="http://cran.stat.ucla.edu/")'
 ```
+(Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0)
+
 ## Generating the Documentation HTML
 
 We include the Spark documentation as part of the source (as opposed to using a hosted wiki, such as
@@ -67,4 +69,5 @@ may take some time as it generates all of the scaladoc.  The jekyll plugin also 
 PySpark docs using [Sphinx](http://sphinx-doc.org/).
 
 NOTE: To skip the step of building and copying over the Scala, Python, R API docs, run `SKIP_API=1
-jekyll`.
+jekyll`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, and `SKIP_RDOC=1` can be used to skip a single
+step of the corresponding language.

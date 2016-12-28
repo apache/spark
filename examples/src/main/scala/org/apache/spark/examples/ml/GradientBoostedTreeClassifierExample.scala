@@ -83,7 +83,7 @@ object GradientBoostedTreeClassifierExample {
     val evaluator = new MulticlassClassificationEvaluator()
       .setLabelCol("indexedLabel")
       .setPredictionCol("prediction")
-      .setMetricName("precision")
+      .setMetricName("accuracy")
     val accuracy = evaluator.evaluate(predictions)
     println("Test Error = " + (1.0 - accuracy))
 

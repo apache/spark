@@ -20,36 +20,16 @@ package org.apache.spark.mllib.random;
 import java.io.Serializable;
 import java.util.Arrays;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.sql.SparkSession;
 import static org.apache.spark.mllib.random.RandomRDDs.*;
 
-public class JavaRandomRDDsSuite {
-  private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
-
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaRandomRDDsSuite")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
-  }
+public class JavaRandomRDDsSuite extends SharedSparkSession {
 
   @Test
   public void testUniformRDD() {

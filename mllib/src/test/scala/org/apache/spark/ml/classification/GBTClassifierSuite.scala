@@ -18,13 +18,14 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -38,6 +39,7 @@ import org.apache.spark.util.Utils
 class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   with DefaultReadWriteTest {
 
+  import testImplicits._
   import GBTClassifierSuite.compareAPIs
 
   // Combinations for estimators, learning rates and subsamplingRate
@@ -51,10 +53,13 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   override def beforeAll() {
     super.beforeAll()
     data = sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100), 2)
+      .map(_.asML)
     trainData =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 120), 2)
+        .map(_.asML)
     validationData =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80), 2)
+        .map(_.asML)
   }
 
   test("params") {
@@ -63,6 +68,14 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
       Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0, null), 1)),
       Array(1.0), 1)
     ParamsSuite.checkParams(model)
+  }
+
+  test("GBT parameter stepSize should be in interval (0, 1]") {
+    withClue("GBT parameter stepSize should be in interval (0, 1]") {
+      intercept[IllegalArgumentException] {
+        new GBTClassifier().setStepSize(10)
+      }
+    }
   }
 
   test("Binary classification with continuous features: Log Loss") {
@@ -106,7 +119,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   test("should support all NumericType labels and not support other types") {
     val gbt = new GBTClassifier().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[GBTClassificationModel, GBTClassifier](
-      gbt, isClassification = true, spark) { (expected, actual) =>
+      gbt, spark) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)
       }
   }
@@ -130,15 +143,14 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   */
 
   test("Fitting without numClasses in metadata") {
-    val df: DataFrame = spark.createDataFrame(TreeTests.featureImportanceData(sc))
+    val df: DataFrame = TreeTests.featureImportanceData(sc).toDF()
     val gbt = new GBTClassifier().setMaxDepth(1).setMaxIter(1)
     gbt.fit(df)
   }
 
   test("extractLabeledPoints with bad data") {
     def getTestData(labels: Seq[Double]): DataFrame = {
-      val data = labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }
-      spark.createDataFrame(data)
+      labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }.toDF()
     }
 
     val gbt = new GBTClassifier().setMaxDepth(1).setMaxIter(1)
@@ -229,7 +241,7 @@ private object GBTClassifierSuite extends SparkFunSuite {
     val oldBoostingStrategy =
       gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
     val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt)
-    val oldModel = oldGBT.run(data)
+    val oldModel = oldGBT.run(data.map(OldLabeledPoint.fromML))
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 2)
     val newModel = gbt.fit(newData)
     // Use parent from newTree since this is not checked anyways.

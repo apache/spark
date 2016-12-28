@@ -47,8 +47,15 @@ if [ "$SPARK_MASTER_PORT" = "" ]; then
   SPARK_MASTER_PORT=7077
 fi
 
-if [ "$SPARK_MASTER_IP" = "" ]; then
-  SPARK_MASTER_IP=`hostname`
+if [ "$SPARK_MASTER_HOST" = "" ]; then
+  case `uname` in
+      (SunOS)
+	  SPARK_MASTER_HOST="`/usr/sbin/check-hostname | awk '{print $NF}'`"
+	  ;;
+      (*)
+	  SPARK_MASTER_HOST="`hostname -f`"
+	  ;;
+  esac
 fi
 
 if [ "$SPARK_MASTER_WEBUI_PORT" = "" ]; then
@@ -56,5 +63,5 @@ if [ "$SPARK_MASTER_WEBUI_PORT" = "" ]; then
 fi
 
 "${SPARK_HOME}/sbin"/spark-daemon.sh start $CLASS 1 \
-  --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT \
+  --host $SPARK_MASTER_HOST --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT \
   $ORIGINAL_ARGS

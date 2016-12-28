@@ -150,6 +150,10 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       assert(math.abs(d1 - 2 * q1 * n) < error_double)
       assert(math.abs(d2 - 2 * q2 * n) < error_double)
     }
+    // test approxQuantile on NaN values
+    val dfNaN = Seq(Double.NaN, 1.0, Double.NaN, Double.NaN).toDF("input")
+    val resNaN = dfNaN.stat.approxQuantile("input", Array(q1, q2), epsilons.head)
+    assert(resNaN.count(_.isNaN) === 0)
   }
 
   test("crosstab") {
@@ -233,6 +237,17 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     val items = results.collect().head.getSeq[String](0)
     assert(items.contains("3"))
     assert(items.length === 1)
+  }
+
+  test("SPARK-15709: Prevent `UnsupportedOperationException: empty.min` in `freqItems`") {
+    val ds = spark.createDataset(Seq(1, 2, 2, 3, 3, 3))
+
+    intercept[IllegalArgumentException] {
+      ds.stat.freqItems(Seq("value"), 0)
+    }
+    intercept[IllegalArgumentException] {
+      ds.stat.freqItems(Seq("value"), 2)
+    }
   }
 
   test("sampleBy") {

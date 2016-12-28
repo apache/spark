@@ -208,16 +208,14 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("cannot call lockForWriting while already holding a write lock") {
+  test("cannot grab a writer lock while already holding a write lock") {
     withTaskId(0) {
       assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
       blockInfoManager.unlock("block")
     }
     withTaskId(1) {
       assert(blockInfoManager.lockForWriting("block").isDefined)
-      intercept[IllegalStateException] {
-        blockInfoManager.lockForWriting("block")
-      }
+      assert(blockInfoManager.lockForWriting("block", false).isEmpty)
       blockInfoManager.assertBlockIsLockedForWriting("block")
     }
   }
