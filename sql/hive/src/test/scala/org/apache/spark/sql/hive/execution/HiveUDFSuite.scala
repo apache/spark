@@ -460,7 +460,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
       // External parquet pointing to LOCATION
 
-      val parquetLocation = tempDir.toURI.toString + "/external_parquet"
+      val parquetLocation = s"${tempDir.toURI}/external_parquet"
       sql("SELECT 1, 2").write.parquet(parquetLocation)
 
       sql(
