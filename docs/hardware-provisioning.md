@@ -22,7 +22,7 @@ Hadoop and Spark on a common cluster manager like [Mesos](running-on-mesos.html)
 
 * If this is not possible, run Spark on different nodes in the same local-area network as HDFS.
 
-* For low-latency data stores like HBase, it may be preferrable to run computing jobs on different
+* For low-latency data stores like HBase, it may be preferable to run computing jobs on different
 nodes than the storage system to avoid interference.
 
 # Local Disks

@@ -19,61 +19,49 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.types._
 
-
-/**
- * Used to represent the operation of create table using a data source.
- *
- * @param allowExisting If it is true, we will do nothing when the table already exists.
- *                      If it is false, an exception will be thrown
- */
-case class CreateTableUsing(
-    tableIdent: TableIdentifier,
-    userSpecifiedSchema: Option[StructType],
-    provider: String,
-    temporary: Boolean,
-    options: Map[String, String],
-    partitionColumns: Array[String],
-    bucketSpec: Option[BucketSpec],
-    allowExisting: Boolean,
-    managedIfNoPath: Boolean) extends LogicalPlan with logical.Command {
-
-  override def output: Seq[Attribute] = Seq.empty
-  override def children: Seq[LogicalPlan] = Seq.empty
-}
-
-/**
- * A node used to support CTAS statements and saveAsTable for the data source API.
- * This node is a [[logical.UnaryNode]] instead of a [[logical.Command]] because we want the
- * analyzer can analyze the logical plan that will be used to populate the table.
- * So, [[PreWriteCheck]] can detect cases that are not allowed.
- */
-case class CreateTableUsingAsSelect(
-    tableIdent: TableIdentifier,
-    provider: String,
-    temporary: Boolean,
-    partitionColumns: Array[String],
-    bucketSpec: Option[BucketSpec],
+case class CreateTable(
+    tableDesc: CatalogTable,
     mode: SaveMode,
-    options: Map[String, String],
-    child: LogicalPlan) extends logical.UnaryNode {
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
+    query: Option[LogicalPlan]) extends Command {
+  assert(tableDesc.provider.isDefined, "The table to be created must have a provider.")
+
+  if (query.isEmpty) {
+    assert(
+      mode == SaveMode.ErrorIfExists || mode == SaveMode.Ignore,
+      "create table without data insertion can only use ErrorIfExists or Ignore as SaveMode.")
+  }
+
+  override def innerChildren: Seq[QueryPlan[_]] = query.toSeq
 }
 
-case class CreateTempTableUsing(
+/**
+ * Create or replace a local/global temporary view with given data source.
+ */
+case class CreateTempViewUsing(
     tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
+    replace: Boolean,
+    global: Boolean,
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
   if (tableIdent.database.isDefined) {
     throw new AnalysisException(
-      s"Temporary table '$tableIdent' should not have specified a database")
+      s"Temporary view '$tableIdent' should not have specified a database")
+  }
+
+  override def argString: String = {
+    s"[tableIdent:$tableIdent " +
+      userSpecifiedSchema.map(_ + " ").getOrElse("") +
+      s"replace:$replace " +
+      s"provider:$provider " +
+      CatalogUtils.maskCredentials(options)
   }
 
   def run(sparkSession: SparkSession): Seq[Row] = {
@@ -82,41 +70,16 @@ case class CreateTempTableUsing(
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       options = options)
-    sparkSession.sessionState.catalog.createTempView(
-      tableIdent.table,
-      Dataset.ofRows(sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
-      overrideIfExists = true)
 
-    Seq.empty[Row]
-  }
-}
+    val catalog = sparkSession.sessionState.catalog
+    val viewDefinition = Dataset.ofRows(
+      sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan
 
-case class CreateTempTableUsingAsSelect(
-    tableIdent: TableIdentifier,
-    provider: String,
-    partitionColumns: Array[String],
-    mode: SaveMode,
-    options: Map[String, String],
-    query: LogicalPlan) extends RunnableCommand {
-
-  if (tableIdent.database.isDefined) {
-    throw new AnalysisException(
-      s"Temporary table '$tableIdent' should not have specified a database")
-  }
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    val df = Dataset.ofRows(sparkSession, query)
-    val dataSource = DataSource(
-      sparkSession,
-      className = provider,
-      partitionColumns = partitionColumns,
-      bucketSpec = None,
-      options = options)
-    val result = dataSource.write(mode, df)
-    sparkSession.sessionState.catalog.createTempView(
-      tableIdent.table,
-      Dataset.ofRows(sparkSession, LogicalRelation(result)).logicalPlan,
-      overrideIfExists = true)
+    if (global) {
+      catalog.createGlobalTempView(tableIdent.table, viewDefinition, replace)
+    } else {
+      catalog.createTempView(tableIdent.table, viewDefinition, replace)
+    }
 
     Seq.empty[Row]
   }
@@ -126,42 +89,18 @@ case class RefreshTable(tableIdent: TableIdentifier)
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // Refresh the given table's metadata first.
-    sparkSession.sessionState.catalog.refreshTable(tableIdent)
-
-    // If this table is cached as a InMemoryColumnarRelation, drop the original
-    // cached version and make the new version cached lazily.
-    val logicalPlan = sparkSession.sessionState.catalog.lookupRelation(tableIdent)
-    // Use lookupCachedData directly since RefreshTable also takes databaseName.
-    val isCached = sparkSession.cacheManager.lookupCachedData(logicalPlan).nonEmpty
-    if (isCached) {
-      // Create a data frame to represent the table.
-      // TODO: Use uncacheTable once it supports database name.
-      val df = Dataset.ofRows(sparkSession, logicalPlan)
-      // Uncache the logicalPlan.
-      sparkSession.cacheManager.tryUncacheQuery(df, blocking = true)
-      // Cache it again.
-      sparkSession.cacheManager.cacheQuery(df, Some(tableIdent.table))
-    }
-
+    // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
+    // drop the original cached version and make the new version cached lazily.
+    sparkSession.catalog.refreshTable(tableIdent.quotedString)
     Seq.empty[Row]
   }
 }
 
-/**
- * Builds a map in which keys are case insensitive
- */
-class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
-  with Serializable {
+case class RefreshResource(path: String)
+  extends RunnableCommand {
 
-  val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))
-
-  override def get(k: String): Option[String] = baseMap.get(k.toLowerCase)
-
-  override def + [B1 >: String](kv: (String, B1)): Map[String, B1] =
-    baseMap + kv.copy(_1 = kv._1.toLowerCase)
-
-  override def iterator: Iterator[(String, String)] = baseMap.iterator
-
-  override def -(key: String): Map[String, String] = baseMap - key.toLowerCase
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.catalog.refreshByPath(path)
+    Seq.empty[Row]
+  }
 }

@@ -51,8 +51,8 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
   test("Converting Hive to Parquet Table via saveAsParquetFile") {
     withTempPath { dir =>
       sql("SELECT * FROM src").write.parquet(dir.getCanonicalPath)
-      hiveContext.read.parquet(dir.getCanonicalPath).registerTempTable("p")
-      withTempTable("p") {
+      spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("p")
+      withTempView("p") {
         checkAnswer(
           sql("SELECT * FROM src ORDER BY key"),
           sql("SELECT * from p ORDER BY key").collect().toSeq)
@@ -65,8 +65,8 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
     withParquetTable((1 to 10).map(i => (i, s"val_$i")), "t", false) {
       withTempPath { file =>
         sql("SELECT * FROM t LIMIT 1").write.parquet(file.getCanonicalPath)
-        hiveContext.read.parquet(file.getCanonicalPath).registerTempTable("p")
-        withTempTable("p") {
+        spark.read.parquet(file.getCanonicalPath).createOrReplaceTempView("p")
+        withTempView("p") {
           // let's do three overwrites for good measure
           sql("INSERT OVERWRITE TABLE p SELECT * FROM t")
           sql("INSERT OVERWRITE TABLE p SELECT * FROM t")

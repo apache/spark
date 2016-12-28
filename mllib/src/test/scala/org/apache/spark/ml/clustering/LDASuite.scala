@@ -20,10 +20,10 @@ package org.apache.spark.ml.clustering
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql._
 
 
@@ -61,6 +61,8 @@ object LDASuite {
 
 
 class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
 
   val k: Int = 5
   val vocabSize: Int = 30
@@ -140,8 +142,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       new LDA().setTopicConcentration(-1.1)
     }
 
-    val dummyDF = spark.createDataFrame(Seq(
-      (1, Vectors.dense(1.0, 2.0)))).toDF("id", "features")
+    val dummyDF = Seq((1, Vectors.dense(1.0, 2.0))).toDF("id", "features")
+
     // validate parameters
     lda.transformSchema(dummyDF.schema)
     lda.setDocConcentration(1.1)

@@ -34,7 +34,9 @@ case class ReflectData(
     decimalField: java.math.BigDecimal,
     date: Date,
     timestampField: Timestamp,
-    seqInt: Seq[Int])
+    seqInt: Seq[Int],
+    javaBigInt: java.math.BigInteger,
+    scalaBigInt: scala.math.BigInt)
 
 case class NullReflectData(
     intField: java.lang.Integer,
@@ -77,18 +79,20 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSQLContext {
 
   test("query case class RDD") {
     val data = ReflectData("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,
-      new java.math.BigDecimal(1), Date.valueOf("1970-01-01"), new Timestamp(12345), Seq(1, 2, 3))
-    Seq(data).toDF().registerTempTable("reflectData")
+      new java.math.BigDecimal(1), Date.valueOf("1970-01-01"), new Timestamp(12345), Seq(1, 2, 3),
+      new java.math.BigInteger("1"), scala.math.BigInt(1))
+    Seq(data).toDF().createOrReplaceTempView("reflectData")
 
     assert(sql("SELECT * FROM reflectData").collect().head ===
       Row("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,
         new java.math.BigDecimal(1), Date.valueOf("1970-01-01"),
-        new Timestamp(12345), Seq(1, 2, 3)))
+        new Timestamp(12345), Seq(1, 2, 3), new java.math.BigDecimal(1),
+        new java.math.BigDecimal(1)))
   }
 
   test("query case class RDD with nulls") {
     val data = NullReflectData(null, null, null, null, null, null, null)
-    Seq(data).toDF().registerTempTable("reflectNullData")
+    Seq(data).toDF().createOrReplaceTempView("reflectNullData")
 
     assert(sql("SELECT * FROM reflectNullData").collect().head ===
       Row.fromSeq(Seq.fill(7)(null)))
@@ -96,7 +100,7 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSQLContext {
 
   test("query case class RDD with Nones") {
     val data = OptionalReflectData(None, None, None, None, None, None, None)
-    Seq(data).toDF().registerTempTable("reflectOptionalData")
+    Seq(data).toDF().createOrReplaceTempView("reflectOptionalData")
 
     assert(sql("SELECT * FROM reflectOptionalData").collect().head ===
       Row.fromSeq(Seq.fill(7)(null)))
@@ -104,7 +108,7 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSQLContext {
 
   // Equality is broken for Arrays, so we test that separately.
   test("query binary data") {
-    Seq(ReflectBinary(Array[Byte](1))).toDF().registerTempTable("reflectBinary")
+    Seq(ReflectBinary(Array[Byte](1))).toDF().createOrReplaceTempView("reflectBinary")
 
     val result = sql("SELECT data FROM reflectBinary")
       .collect().head(0).asInstanceOf[Array[Byte]]
@@ -124,7 +128,7 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSQLContext {
         Map(10 -> Some(100L), 20 -> Some(200L), 30 -> None),
         Nested(None, "abc")))
 
-    Seq(data).toDF().registerTempTable("reflectComplexData")
+    Seq(data).toDF().createOrReplaceTempView("reflectComplexData")
     assert(sql("SELECT * FROM reflectComplexData").collect().head ===
       Row(
         Seq(1, 2, 3),

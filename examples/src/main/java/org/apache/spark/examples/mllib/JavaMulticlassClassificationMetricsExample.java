@@ -68,9 +68,7 @@ public class JavaMulticlassClassificationMetricsExample {
     System.out.println("Confusion matrix: \n" + confusion);
 
     // Overall statistics
-    System.out.println("Precision = " + metrics.precision());
-    System.out.println("Recall = " + metrics.recall());
-    System.out.println("F1 Score = " + metrics.fMeasure());
+    System.out.println("Accuracy = " + metrics.accuracy());
 
     // Stats by labels
     for (int i = 0; i < metrics.labels().length; i++) {

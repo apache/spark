@@ -63,7 +63,7 @@ configuring Flume agents.
 
 	By default, the Python API will decode Flume event body as UTF8 encoded strings. You can specify your custom decoding function to decode the body byte arrays in Flume events to any arbitrary data type. 
 	See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.flume.FlumeUtils)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/flume_wordcount.py).
+	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/flume_wordcount.py).
 	</div>
 	</div>
 
@@ -115,11 +115,11 @@ Configuring Flume on the chosen machine requires the following two steps.
 		artifactId = scala-library
 		version = {{site.SCALA_VERSION}}
 
-	(iii) *Commons Lang 3 JAR*: Download the Commons Lang 3 JAR. It can be found with the following artifact detail (or, [direct link](http://search.maven.org/remotecontent?filepath=org/apache/commons/commons-lang3/3.3.2/commons-lang3-3.3.2.jar)).
+	(iii) *Commons Lang 3 JAR*: Download the Commons Lang 3 JAR. It can be found with the following artifact detail (or, [direct link](http://search.maven.org/remotecontent?filepath=org/apache/commons/commons-lang3/3.5/commons-lang3-3.5.jar)).
 
 		groupId = org.apache.commons
 		artifactId = commons-lang3
-		version = 3.3.2
+		version = 3.5
 
 2. **Configuration file**: On that machine, configure Flume agent to send data to an Avro sink by having the following in the configuration file.
 

@@ -44,7 +44,7 @@ import org.apache.spark.sql.DataFrame
  *   import org.apache.spark.ml.Pipeline
  *
  *   // a DataFrame with three columns: id (integer), text (string), and rating (double).
- *   val df = sqlContext.createDataFrame(Seq(
+ *   val df = spark.createDataFrame(Seq(
  *     (0, "Hi I heard about Spark", 3.0),
  *     (1, "I wish Java could use case classes", 4.0),
  *     (2, "Logistic regression models are neat", 4.0)
@@ -84,6 +84,7 @@ import org.apache.spark.sql.DataFrame
  * input dataset, while MLlib's feature transformers operate lazily on individual columns,
  * which is more efficient and flexible to handle large and complex datasets.
  *
- * @see [[http://scikit-learn.org/stable/modules/preprocessing.html scikit-learn.preprocessing]]
+ * @see <a href="http://scikit-learn.org/stable/modules/preprocessing.html">
+ * scikit-learn.preprocessing</a>
  */
 package object feature

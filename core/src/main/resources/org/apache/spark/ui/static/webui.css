@@ -155,7 +155,7 @@ pre {
   display: none;
 }
 
-span.expand-additional-metrics, span.expand-dag-viz {
+span.expand-additional-metrics, span.expand-dag-viz, span.collapse-table {
   cursor: pointer;
 }
 
@@ -163,7 +163,7 @@ span.additional-metric-title {
   cursor: pointer;
 }
 
-.additional-metrics.collapsed {
+.additional-metrics.collapsed, .collapsible-table.collapsed {
   display: none;
 }
 
@@ -246,4 +246,8 @@ a.expandbutton {
   text-align: center;
   margin: 0;
   padding: 4px 0;
+}
+
+.table-cell-width-limited td {
+  max-width: 600px;
 }

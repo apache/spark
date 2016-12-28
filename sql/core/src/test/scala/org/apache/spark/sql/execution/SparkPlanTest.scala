@@ -91,7 +91,7 @@ private[sql] abstract class SparkPlanTest extends SparkFunSuite {
       expectedAnswer: Seq[Row],
       sortAnswers: Boolean = true): Unit = {
     SparkPlanTest
-      .checkAnswer(input, planFunction, expectedAnswer, sortAnswers, spark.wrapped) match {
+      .checkAnswer(input, planFunction, expectedAnswer, sortAnswers, spark.sqlContext) match {
         case Some(errorMessage) => fail(errorMessage)
         case None =>
     }
@@ -115,7 +115,7 @@ private[sql] abstract class SparkPlanTest extends SparkFunSuite {
       expectedPlanFunction: SparkPlan => SparkPlan,
       sortAnswers: Boolean = true): Unit = {
     SparkPlanTest.checkAnswer(
-        input, planFunction, expectedPlanFunction, sortAnswers, spark.wrapped) match {
+        input, planFunction, expectedPlanFunction, sortAnswers, spark.sqlContext) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
@@ -231,7 +231,12 @@ object SparkPlanTest {
     }
   }
 
-  private def executePlan(outputPlan: SparkPlan, spark: SQLContext): Seq[Row] = {
+  /**
+   * Runs the plan
+   * @param outputPlan SparkPlan to be executed
+   * @param spark SqlContext used for execution of the plan
+   */
+  def executePlan(outputPlan: SparkPlan, spark: SQLContext): Seq[Row] = {
     val execution = new QueryExecution(spark.sparkSession, null) {
       override lazy val sparkPlan: SparkPlan = outputPlan transform {
         case plan: SparkPlan =>

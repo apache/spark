@@ -170,7 +170,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
    */
   def storeBlock(blockId: StreamBlockId, block: ReceivedBlock): ReceivedBlockStoreResult = {
 
-    var numRecords = None: Option[Long]
+    var numRecords = Option.empty[Long]
     // Serialize the block so that it can be inserted into both
     val serializedBlock = block match {
       case ArrayBufferBlock(arrayBuffer) =>

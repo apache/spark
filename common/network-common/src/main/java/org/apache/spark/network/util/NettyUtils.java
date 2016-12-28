@@ -20,7 +20,6 @@ package org.apache.spark.network.util;
 import java.lang.reflect.Field;
 import java.util.concurrent.ThreadFactory;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
@@ -31,6 +30,7 @@ import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.util.concurrent.DefaultThreadFactory;
 import io.netty.util.internal.PlatformDependent;
 
 /**
@@ -39,10 +39,7 @@ import io.netty.util.internal.PlatformDependent;
 public class NettyUtils {
   /** Creates a new ThreadFactory which prefixes each thread with the given name. */
   public static ThreadFactory createThreadFactory(String threadPoolPrefix) {
-    return new ThreadFactoryBuilder()
-      .setDaemon(true)
-      .setNameFormat(threadPoolPrefix + "-%d")
-      .build();
+    return new DefaultThreadFactory(threadPoolPrefix, true);
   }
 
   /** Creates a Netty EventLoopGroup based on the IOMode. */

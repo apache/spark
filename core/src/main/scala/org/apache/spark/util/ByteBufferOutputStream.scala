@@ -29,7 +29,32 @@ private[spark] class ByteBufferOutputStream(capacity: Int) extends ByteArrayOutp
 
   def getCount(): Int = count
 
+  private[this] var closed: Boolean = false
+
+  override def write(b: Int): Unit = {
+    require(!closed, "cannot write to a closed ByteBufferOutputStream")
+    super.write(b)
+  }
+
+  override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+    require(!closed, "cannot write to a closed ByteBufferOutputStream")
+    super.write(b, off, len)
+  }
+
+  override def reset(): Unit = {
+    require(!closed, "cannot reset a closed ByteBufferOutputStream")
+    super.reset()
+  }
+
+  override def close(): Unit = {
+    if (!closed) {
+      super.close()
+      closed = true
+    }
+  }
+
   def toByteBuffer: ByteBuffer = {
-    return ByteBuffer.wrap(buf, 0, count)
+    require(closed, "can only call toByteBuffer() after ByteBufferOutputStream has been closed")
+    ByteBuffer.wrap(buf, 0, count)
   }
 }

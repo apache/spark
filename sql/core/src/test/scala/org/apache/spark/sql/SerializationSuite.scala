@@ -25,6 +25,6 @@ class SerializationSuite extends SparkFunSuite with SharedSQLContext {
 
   test("[SPARK-5235] SQLContext should be serializable") {
     val spark = SparkSession.builder.getOrCreate()
-    new JavaSerializer(new SparkConf()).newInstance().serialize(spark.wrapped)
+    new JavaSerializer(new SparkConf()).newInstance().serialize(spark.sqlContext)
   }
 }

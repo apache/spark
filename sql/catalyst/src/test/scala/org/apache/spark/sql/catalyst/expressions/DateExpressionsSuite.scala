@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.util.Calendar
+import java.util.{Calendar, Locale}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -30,8 +30,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   import IntegralLiteralTestUtils._
 
-  val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-  val sdfDate = new SimpleDateFormat("yyyy-MM-dd")
+  val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+  val sdfDate = new SimpleDateFormat("yyyy-MM-dd", Locale.US)
   val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
   val ts = new Timestamp(sdf.parse("2013-11-08 13:10:15").getTime)
 
@@ -49,7 +49,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("DayOfYear") {
-    val sdfDay = new SimpleDateFormat("D")
+    val sdfDay = new SimpleDateFormat("D", Locale.US)
     (0 to 3).foreach { m =>
       (0 to 5).foreach { i =>
         val c = Calendar.getInstance()
@@ -143,7 +143,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Seconds") {
-    checkEvaluation(Second(Literal.create(null, DateType)), null)
+    assert(Second(Literal.create(null, DateType)).resolved === false)
     checkEvaluation(Second(Cast(Literal(d), TimestampType)), 0)
     checkEvaluation(Second(Cast(Literal(sdf.format(d)), TimestampType)), 15)
     checkEvaluation(Second(Literal(ts)), 15)
@@ -176,7 +176,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Hour") {
-    checkEvaluation(Hour(Literal.create(null, DateType)), null)
+    assert(Hour(Literal.create(null, DateType)).resolved === false)
     checkEvaluation(Hour(Cast(Literal(d), TimestampType)), 0)
     checkEvaluation(Hour(Cast(Literal(sdf.format(d)), TimestampType)), 13)
     checkEvaluation(Hour(Literal(ts)), 13)
@@ -195,7 +195,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Minute") {
-    checkEvaluation(Minute(Literal.create(null, DateType)), null)
+    assert(Minute(Literal.create(null, DateType)).resolved === false)
     checkEvaluation(Minute(Cast(Literal(d), TimestampType)), 0)
     checkEvaluation(Minute(Cast(Literal(sdf.format(d)), TimestampType)), 10)
     checkEvaluation(Minute(Literal(ts)), 10)
@@ -411,9 +411,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("from_unixtime") {
-    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
     val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
-    val sdf2 = new SimpleDateFormat(fmt2)
+    val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
     checkEvaluation(
       FromUnixTime(Literal(0L), Literal("yyyy-MM-dd HH:mm:ss")), sdf1.format(new Timestamp(0)))
     checkEvaluation(FromUnixTime(
@@ -430,11 +430,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("unix_timestamp") {
-    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
     val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
-    val sdf2 = new SimpleDateFormat(fmt2)
+    val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
     val fmt3 = "yy-MM-dd"
-    val sdf3 = new SimpleDateFormat(fmt3)
+    val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
     val date1 = Date.valueOf("2015-07-24")
     checkEvaluation(
       UnixTimestamp(Literal(sdf1.format(new Timestamp(0))), Literal("yyyy-MM-dd HH:mm:ss")), 0L)
@@ -466,11 +466,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("to_unix_timestamp") {
-    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
     val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
-    val sdf2 = new SimpleDateFormat(fmt2)
+    val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
     val fmt3 = "yy-MM-dd"
-    val sdf3 = new SimpleDateFormat(fmt3)
+    val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
     val date1 = Date.valueOf("2015-07-24")
     checkEvaluation(
       ToUnixTimestamp(Literal(sdf1.format(new Timestamp(0))), Literal("yyyy-MM-dd HH:mm:ss")), 0L)
