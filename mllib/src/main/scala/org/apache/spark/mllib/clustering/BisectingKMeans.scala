@@ -377,12 +377,12 @@ private object BisectingKMeans extends Serializable {
         internalIndex -= 1
         val leftIndex = leftChildIndex(rawIndex)
         val rightIndex = rightChildIndex(rawIndex)
-        val height = math.sqrt(Seq(leftIndex, rightIndex).map { childIndex =>
+        val indexes = Seq(leftIndex, rightIndex).filter(clusters.contains(_))
+        val height = math.sqrt(indexes.map { childIndex =>
           KMeans.fastSquaredDistance(center, clusters(childIndex).center)
         }.max)
-        val left = buildSubTree(leftIndex)
-        val right = buildSubTree(rightIndex)
-        new ClusteringTreeNode(index, size, center, cost, height, Array(left, right))
+        val children = indexes.map(buildSubTree(_)).toArray
+        new ClusteringTreeNode(index, size, center, cost, height, children)
       } else {
         val index = leafIndex
         leafIndex += 1

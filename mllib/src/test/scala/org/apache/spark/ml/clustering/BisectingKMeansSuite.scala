@@ -66,6 +66,9 @@ class BisectingKMeansSuite
     // Verify fit does not fail on very sparse data
     val model = bkm.fit(sparseDataset)
     assert(model.hasSummary)
+    val result = model.transform(sparseDataset)
+    val numClusters = result.select("prediction").distinct().collect().length
+    assert(numClusters <= k && numClusters >= 1)
   }
 
   test("setter/getter") {
