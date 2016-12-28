@@ -139,7 +139,8 @@ case class CreateDataSourceTableAsSelectCommand(
     val tableName = tableIdentWithDB.unquotedString
 
     val result = if (sessionState.catalog.tableExists(tableIdentWithDB)) {
-      assert(mode != SaveMode.Overwrite, "analyzer will drop the table to overwrite it.")
+      assert(mode != SaveMode.Overwrite,
+        s"Expect the table $tableName has been dropped when the save mode is Overwrite")
 
       if (mode == SaveMode.ErrorIfExists) {
         throw new AnalysisException(s"Table $tableName already exists. You need to drop it first.")
@@ -187,7 +188,7 @@ case class CreateDataSourceTableAsSelectCommand(
       tableLocation: Option[String],
       data: LogicalPlan,
       mode: SaveMode): BaseRelation = {
-    // Create the relation based on the data of df.
+    // Create the relation based on the input logical plan: `data`.
     val pathOption = tableLocation.map("path" -> _)
     val dataSource = DataSource(
       session,

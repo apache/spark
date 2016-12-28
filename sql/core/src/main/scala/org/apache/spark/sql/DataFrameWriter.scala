@@ -385,11 +385,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         }
         EliminateSubqueryAliases(catalog.lookupRelation(tableIdentWithDB)) match {
           // Only do the check if the table is a data source table (the relation is a BaseRelation).
-          case LogicalRelation(dest: BaseRelation, _, _) =>
-            if (srcRelations.contains(dest)) {
-              throw new AnalysisException(
-                s"Cannot overwrite table $tableName that is also being read from")
-            }
+          case LogicalRelation(dest: BaseRelation, _, _) if srcRelations.contains(dest) =>
+            throw new AnalysisException(
+              s"Cannot overwrite table $tableName that is also being read from")
           case _ => // OK
         }
 
