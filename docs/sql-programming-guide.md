@@ -536,7 +536,7 @@ Starting from Spark 2.1, persistent datasource tables have per-partition metadat
 - Since full information of all partitions can be retrieved from metastore, excessive partition discovery is no longer needed. This greatly saves query planning time for partitioned tables with a large number of partitions.
 - Hive DDLs such as `ALTER TABLE PARTITION ... SET LOCATION` are now available for tables created with the Datasource API.
 
-Note that partition information is not gathered by default when creating an external tables. You may want to invoke `MSCK REPAIR TABLE` to trigger partition discovery and persist per-partition information into metastore before querying a created external table.
+Note that partition information is not gathered by default when creating an external datasource tables (those with a `path` option). You may want to invoke `MSCK REPAIR TABLE` to trigger partition discovery and persist per-partition information into metastore before querying a created external table.
 
 ## Parquet Files
 
