@@ -99,7 +99,7 @@ private [sql] object GenArrayData {
         val isNullAssignment = if (!isMapKey) {
           s"$arrayName[$i] = null;"
         } else {
-          "throw new RuntimeException(\"Cannot use null!\");"
+          "throw new RuntimeException(\"Cannot use null as map key!\");"
         }
         eval.code + s"""
          if (${eval.isNull}) {
@@ -126,7 +126,7 @@ private [sql] object GenArrayData {
         val isNullAssignment = if (!isMapKey) {
           s"$arrayDataName.setNullAt($i);"
         } else {
-          "throw new RuntimeException(\"Cannot use null!\");"
+          "throw new RuntimeException(\"Cannot use null as map key!\");"
         }
         eval.code + s"""
          if (${eval.isNull}) {
