@@ -359,8 +359,16 @@ class LogisticRegressionSuite
         assert(pred == predFromProb)
     }
 
-    // force it to use probability2prediction
+    // force it to use raw2prediction
     model.setProbabilityCol("")
+    val resultsUsingRaw2Predict =
+      model.transform(smallMultinomialDataset).select("prediction").as[Double].collect()
+    resultsUsingRaw2Predict.zip(results.select("prediction").as[Double].collect()).foreach {
+      case (pred1, pred2) => assert(pred1 === pred2)
+    }
+
+    // force it to use probability2prediction
+    model.setRawPredictionCol("")
     val resultsUsingProb2Predict =
       model.transform(smallMultinomialDataset).select("prediction").as[Double].collect()
     resultsUsingProb2Predict.zip(results.select("prediction").as[Double].collect()).foreach {
@@ -405,8 +413,16 @@ class LogisticRegressionSuite
         assert(pred == predFromProb)
     }
 
-    // force it to use probability2prediction
+    // force it to use raw2prediction
     model.setProbabilityCol("")
+    val resultsUsingRaw2Predict =
+      model.transform(smallBinaryDataset).select("prediction").as[Double].collect()
+    resultsUsingRaw2Predict.zip(results.select("prediction").as[Double].collect()).foreach {
+      case (pred1, pred2) => assert(pred1 === pred2)
+    }
+
+    // force it to use probability2prediction
+    model.setRawPredictionCol("")
     val resultsUsingProb2Predict =
       model.transform(smallBinaryDataset).select("prediction").as[Double].collect()
     resultsUsingProb2Predict.zip(results.select("prediction").as[Double].collect()).foreach {
