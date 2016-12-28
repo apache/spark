@@ -62,26 +62,23 @@ class JdbcRelationProvider extends CreatableRelationProvider
     try {
       val tableSchema = JdbcUtils.getSchema(conn, url, table)
       val tableExists = tableSchema.isDefined
-      val caseSensitive = sqlContext.conf.caseSensitiveAnalysis
+      val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
       if (tableExists) {
         mode match {
           case SaveMode.Overwrite =>
-            val normalizedSchema = if (isTruncate && isCascadingTruncateTable(url) == Some(false)) {
+            if (isTruncate && isCascadingTruncateTable(url) == Some(false)) {
               // In this case, we should truncate table and then load.
               truncateTable(conn, table)
-              JdbcUtils.normalizeSchema(df.schema, tableSchema.get, caseSensitive)
+              saveTable(df, url, table, tableSchema.get, isCaseSensitive, jdbcOptions)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, table)
               createTable(df.schema, url, table, createTableOptions, conn)
-              df.schema
+              saveTable(df, url, table, df.schema, isCaseSensitive, jdbcOptions)
             }
-            saveTable(df, url, table, normalizedSchema, jdbcOptions)
 
           case SaveMode.Append =>
-            val normalizedSchema =
-              JdbcUtils.normalizeSchema(df.schema, tableSchema.get, caseSensitive)
-            saveTable(df, url, table, normalizedSchema, jdbcOptions)
+            saveTable(df, url, table, tableSchema.get, isCaseSensitive, jdbcOptions)
 
           case SaveMode.ErrorIfExists =>
             throw new AnalysisException(
@@ -94,7 +91,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
         }
       } else {
         createTable(df.schema, url, table, createTableOptions, conn)
-        saveTable(df, url, table, df.schema, jdbcOptions)
+        saveTable(df, url, table, df.schema, isCaseSensitive, jdbcOptions)
       }
     } finally {
       conn.close()

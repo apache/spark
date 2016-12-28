@@ -706,7 +706,8 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       url: String,
       table: String,
-      schema: StructType,
+      tableSchema: StructType,
+      isCaseSensitive: Boolean,
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
@@ -716,6 +717,7 @@ object JdbcUtils extends Logging {
     val getConnection: () => Connection = createConnectionFactory(options)
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
+    val schema = normalizeSchema(df.schema, tableSchema, isCaseSensitive)
     val repartitionedDF = options.numPartitions match {
       case Some(n) if n <= 0 => throw new IllegalArgumentException(
         s"Invalid value `$n` for parameter `${JDBCOptions.JDBC_NUM_PARTITIONS}` in table writing " +
