@@ -40,8 +40,8 @@ private[sql] case class SubqueryExecHelper(executedPlan: SparkPlan) {
           copyRow.asInstanceOf[InternalRow]
         }
       // Use serialized cache because under this mode the rows are written to serialized format
-      // when iterating. If we use deseralized mode, the rows will be quoted and cached in batch.
-      // Because the rows are shared a common byte array, the bytes will be overritten.
+      // when iterating. If we use deseralized mode, the rows will be queued and cached in batch.
+      // Because the rows are shared a common byte array, the bytes will be overritten in this mode.
       }.persist(StorageLevel.MEMORY_ONLY_SER)
     }
     _computedOutput

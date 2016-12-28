@@ -52,7 +52,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     // However, because we also use the analyzer to canonicalized queries (for view definition),
     // we do not eliminate subqueries or compute current time in the analyzer.
     Batch("Finish Analysis", Once,
-      EliminateOneTimeSubqueryAliases,
+      EliminateNonDuplicatedSubqueryAliases,
       ReplaceExpressions,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
@@ -1345,46 +1345,38 @@ case class OptimizeCommonSubqueries(optimizer: Optimizer)
 }
 
 /**
- * Removes the [[SubqueryAlias]] operators which are used only once from the plan.
+ * Removes the [[SubqueryAlias]] operators which are not duplicated in the query plan.
  */
-object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
+object EliminateNonDuplicatedSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     val subqueries = ArrayBuffer[LogicalPlan]()
     val duplicateSubqueries = ArrayBuffer[LogicalPlan]()
 
-    val noRecursiveSubqueryPlan = plan.transformDown {
-      // Eliminate the recursive subqueries which have the same output.
+    // Eliminates the recursive subqueries which have the same output.
+    val cleanedPlan = plan.transformDown {
       case s @ SubqueryAlias(_, child, _, _)
           if child.find(p => p.isInstanceOf[SubqueryAlias] && p.sameResult(s)).isDefined =>
         child
     }
 
-    noRecursiveSubqueryPlan.foreach {
-      // Collects the subqueries that are used more than once in the query.
-      // Skip the SubqueryAlias on table scan.
+    // Collects duplicated subqueries but ignores the SubqueryAlias of table scan.
+    cleanedPlan.foreach {
       case SubqueryAlias(_, child, _, _) if !child.isInstanceOf[MultiInstanceRelation] =>
         if (subqueries.indexWhere(s => s.sameResult(child)) >= 0) {
-          // If the plan with same results can be found.
           duplicateSubqueries += child
         } else {
-          // If it can't be found, add it into the list.
           subqueries += child
         }
       case _ =>
     }
 
-    // Set the `commonSubquery` of remainning SubqueryAlias as `true`.
-    noRecursiveSubqueryPlan.transformDown {
-      // Eliminates the subqueries that are used only once in the query.
+    // Eliminates non-duplicated subqueries.
+    cleanedPlan.transformDown {
       case SubqueryAlias(alias, child, v, _) =>
         if (duplicateSubqueries.indexWhere(s => s.sameResult(child)) < 0) {
           child
         } else {
-          // Strip all wrapped subqueries.
-          val newChild = child.transformDown {
-            case s: SubqueryAlias => s.child
-          }
-          SubqueryAlias(alias, newChild, v, commonSubquery = true)
+          SubqueryAlias(alias, child, v, commonSubquery = true)
         }
     }
   }
