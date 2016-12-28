@@ -542,7 +542,28 @@ class Analyzer(
       case u @ UnresolvedRelation(table: TableIdentifier, _) if isRunningDirectlyOnFiles(table) =>
         u
       case u: UnresolvedRelation =>
-        resolveView(lookupTableFromCatalog(u, defaultDatabase))
+        val relation = lookupTableFromCatalog(u, defaultDatabase)
+        resolveRelation(relation, defaultDatabase)
+      // Hive support is required to resolve a persistent view, the logical plan returned by
+      // catalog.lookupRelation() should be:
+      // `SubqueryAlias(_, View(desc: CatalogTable, desc.output, child: LogicalPlan), _)`,
+      // where the child should be a logical plan parsed from `desc.viewText`.
+      // If the child of a view is empty, we will throw an AnalysisException later in
+      // `checkAnalysis`.
+      case view: View if view.child.isDefined =>
+        val defaultDatabase = view.desc.viewDefaultDatabase
+        // Resolve all the UnresolvedRelations and Views in the child.
+        val newChild = view.child.get transformDown {
+          case v: View if !v.resolved =>
+            resolveRelation(v, defaultDatabase)
+          case u: UnresolvedRelation =>
+            resolveRelation(u, defaultDatabase)
+        }
+        view.copy(child = Some(newChild))
+      case p @ SubqueryAlias(_, view: View, _) =>
+        val newChild = resolveRelation(view, defaultDatabase)
+        p.copy(child = newChild)
+      case _ => plan
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -576,31 +597,6 @@ class Analyzer(
     private def isRunningDirectlyOnFiles(table: TableIdentifier): Boolean = {
       table.database.isDefined && conf.runSQLonFile && !catalog.isTemporaryTable(table) &&
         (!catalog.databaseExists(table.database.get) || !catalog.tableExists(table))
-    }
-
-    // Change the default database name if the plan is a view, and transformDown with the new
-    // database name to resolve all UnresolvedRelations and Views.
-    def resolveView(plan: LogicalPlan): LogicalPlan = plan match {
-      // Hive support is required to resolve a persistent view, the logical plan returned by
-      // catalog.lookupRelation() should be:
-      // `SubqueryAlias(_, View(desc: CatalogTable, desc.output, child: LogicalPlan), _)`, where
-      // the child should be a logical plan parsed from `desc.viewText`.
-      // If the child of a view is empty, we will throw an AnalysisException later in
-      // `checkAnalysis`.
-      case view: View if view.child.isDefined =>
-        val defaultDatabase = view.desc.viewDefaultDatabase
-        // Resolve all the UnresolvedRelations and Views in the child.
-        val newChild = view.child.get transformDown {
-          case v: View if !v.resolved =>
-            resolveView(v)
-          case u: UnresolvedRelation =>
-            resolveRelation(u, defaultDatabase)
-        }
-        view.copy(child = Some(newChild))
-      case p @ SubqueryAlias(_, view: View, _) =>
-        val newChild = resolveView(view)
-        p.copy(child = newChild)
-      case _ => plan
     }
   }
 
