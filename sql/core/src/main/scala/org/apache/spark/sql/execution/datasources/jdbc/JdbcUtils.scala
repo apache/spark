@@ -20,13 +20,13 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 
 import scala.collection.JavaConverters._
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
@@ -216,25 +216,28 @@ object JdbcUtils extends Logging {
   def getSchema(conn: Connection, url: String, table: String): Option[StructType] = {
     val dialect = JdbcDialects.get(url)
 
-    Try {
+    try {
       val statement = conn.prepareStatement(dialect.getSchemaQuery(table))
       try {
-        getSchema(statement.executeQuery(), dialect)
+        Some(getSchema(statement.executeQuery(), dialect))
+      } catch {
+        case _: SQLException => None
       } finally {
         statement.close()
       }
-    } match {
-      case Success(v) =>
-        Some(v)
-      case Failure(e) =>
-        None
+    } catch {
+      case _: SQLException => None
     }
   }
 
   /**
-   * Returns the saving schema using rddSchema's sequence and tableSchema's name.
+   * Returns a schema using rddSchema's column sequence and tableSchema's column names.
+   *
+   * When appending data into some case-sensitive DBMSs like PostgreSQL/Oracle, we need to respect
+   * the existing case-sensitive column names instead of RDD column names for user convenience.
+   * See SPARK-18123 for more details.
    */
-  def getSavingSchema(
+  def normalizeSchema(
       rddSchema: StructType,
       tableSchema: StructType,
       caseSensitive: Boolean): StructType = {
@@ -247,10 +250,10 @@ object JdbcUtils extends Logging {
         // identical names
         schema = schema.add(nameMap(f.name))
       } else if (!caseSensitive && lowercaseNameMap.isDefinedAt(f.name.toLowerCase)) {
-        // case-insensitive identical names
+        // identical names in a case-insensitive way
         schema = schema.add(lowercaseNameMap(f.name.toLowerCase))
       } else {
-        throw new org.apache.spark.SparkException(s"""Column "${f.name}" not found""")
+        throw new AnalysisException(s"""Column "${f.name}" not found""")
       }
     }
     schema

@@ -66,21 +66,22 @@ class JdbcRelationProvider extends CreatableRelationProvider
       if (tableExists) {
         mode match {
           case SaveMode.Overwrite =>
-            val savingSchema = if (isTruncate && isCascadingTruncateTable(url) == Some(false)) {
+            val normalizedSchema = if (isTruncate && isCascadingTruncateTable(url) == Some(false)) {
               // In this case, we should truncate table and then load.
               truncateTable(conn, table)
-              JdbcUtils.getSavingSchema(df.schema, tableSchema.get, caseSensitive)
+              JdbcUtils.normalizeSchema(df.schema, tableSchema.get, caseSensitive)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, table)
               createTable(df.schema, url, table, createTableOptions, conn)
               df.schema
             }
-            saveTable(df, url, table, savingSchema, jdbcOptions)
+            saveTable(df, url, table, normalizedSchema, jdbcOptions)
 
           case SaveMode.Append =>
-            val savingSchema = JdbcUtils.getSavingSchema(df.schema, tableSchema.get, caseSensitive)
-            saveTable(df, url, table, savingSchema, jdbcOptions)
+            val normalizedSchema =
+              JdbcUtils.normalizeSchema(df.schema, tableSchema.get, caseSensitive)
+            saveTable(df, url, table, normalizedSchema, jdbcOptions)
 
           case SaveMode.ErrorIfExists =>
             throw new AnalysisException(

@@ -25,7 +25,7 @@ import scala.collection.JavaConverters.propertiesAsScalaMapConverter
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -177,7 +177,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     df.write.jdbc(url, "TEST.APPENDTEST", new Properties())
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val m = intercept[SparkException] {
+      val m = intercept[AnalysisException] {
         df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
       }.getMessage
       assert(m.contains("Column \"NAME\" not found"))
@@ -202,7 +202,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
     assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
 
-    val m = intercept[SparkException] {
+    val m = intercept[AnalysisException] {
       df3.write.mode(SaveMode.Overwrite).option("truncate", true)
         .jdbc(url1, "TEST.TRUNCATETEST", properties)
     }.getMessage
