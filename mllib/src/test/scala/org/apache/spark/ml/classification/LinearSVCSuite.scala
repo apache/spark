@@ -103,28 +103,20 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(model.intercept === 0.0)
   }
 
-  test("Linear SVC with weighted data") {
-    val numClasses = 2
-    val numPoints = 40
-    val outlierData = MLTestingUtils.genClassificationInstancesWithWeightedOutliers(spark,
-      numClasses, numPoints)
-    val testData = Array.tabulate[LabeledPoint](numClasses) { i =>
-      LabeledPoint(i.toDouble, Vectors.dense(i.toDouble))
-    }.toSeq.toDF()
-    val lsvc = new LinearSVC().setWeightCol("weight")
-    val model = lsvc.fit(outlierData)
-    val results = model.transform(testData).select("label", "prediction").collect()
-
-    // check that the predictions are the one to one mapping
-    results.foreach { case Row(label: Double, pred: Double) =>
-      assert(label === pred)
+  test("linearSVC with sample weights") {
+    def modelEquals(m1: LinearSVCModel, m2: LinearSVCModel): Unit = {
+      assert(m1.coefficients ~== m2.coefficients absTol 0.05)
+      assert(m1.intercept ~== m2.intercept absTol 0.05)
     }
-    val (overSampledData, weightedData) =
-      MLTestingUtils.genEquivalentOversampledAndWeightedInstances(outlierData, "label", "features",
-        42L)
-    val weightedModel = lsvc.fit(weightedData)
-    val overSampledModel = lsvc.setWeightCol("").fit(overSampledData)
-    assert(weightedModel.coefficients ~== overSampledModel.coefficients relTol 0.01)
+
+    val estimator = new LinearSVC().setRegParam(0.1)
+    val dataset = smallBinaryDataset
+    MLTestingUtils.testArbitrarilyScaledWeights[LinearSVCModel, LinearSVC](
+      dataset.as[LabeledPoint], estimator, modelEquals)
+    MLTestingUtils.testOutliersWithSmallWeights[LinearSVCModel, LinearSVC](
+      dataset.as[LabeledPoint], estimator, 2, modelEquals)
+    MLTestingUtils.testOversamplingVsWeighting[LinearSVCModel, LinearSVC](
+      dataset.as[LabeledPoint], estimator, modelEquals, 42L)
   }
 
   test("read/write: SVM") {
