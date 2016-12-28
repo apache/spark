@@ -23,11 +23,12 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -364,7 +365,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       throw new AnalysisException("Cannot create hive serde table with saveAsTable API")
     }
 
-    val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
+    val catalog = df.sparkSession.sessionState.catalog
+    val tableExists = catalog.tableExists(tableIdent)
+    val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
+    val tableIdentWithDB = tableIdent.copy(database = Some(db))
+    val tableName = tableIdentWithDB.unquotedString
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
@@ -373,26 +378,48 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case (true, SaveMode.ErrorIfExists) =>
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
-      case _ =>
-        val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
-        val tableType = if (storage.locationUri.isDefined) {
-          CatalogTableType.EXTERNAL
-        } else {
-          CatalogTableType.MANAGED
+      case (true, SaveMode.Overwrite) =>
+        // Get all input data source relations of the query.
+        val srcRelations = df.logicalPlan.collect {
+          case LogicalRelation(src: BaseRelation, _, _) => src
+        }
+        EliminateSubqueryAliases(catalog.lookupRelation(tableIdentWithDB)) match {
+          // Only do the check if the table is a data source table (the relation is a BaseRelation).
+          case LogicalRelation(dest: BaseRelation, _, _) =>
+            if (srcRelations.contains(dest)) {
+              throw new AnalysisException(
+                s"Cannot overwrite table $tableName that is also being read from")
+            }
+          case _ => // OK
         }
 
-        val tableDesc = CatalogTable(
-          identifier = tableIdent,
-          tableType = tableType,
-          storage = storage,
-          schema = new StructType,
-          provider = Some(source),
-          partitionColumnNames = partitioningColumns.getOrElse(Nil),
-          bucketSpec = getBucketSpec
-        )
-        df.sparkSession.sessionState.executePlan(
-          CreateTable(tableDesc, mode, Some(df.logicalPlan))).toRdd
+        // Drop the existing table
+        catalog.dropTable(tableIdentWithDB, ignoreIfNotExists = true, purge = false)
+        createTable(tableIdent)
+
+      case _ => createTable(tableIdent)
     }
+  }
+
+  private def createTable(tableIdent: TableIdentifier): Unit = {
+    val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
+    val tableType = if (storage.locationUri.isDefined) {
+      CatalogTableType.EXTERNAL
+    } else {
+      CatalogTableType.MANAGED
+    }
+
+    val tableDesc = CatalogTable(
+      identifier = tableIdent,
+      tableType = tableType,
+      storage = storage,
+      schema = new StructType,
+      provider = Some(source),
+      partitionColumnNames = partitioningColumns.getOrElse(Nil),
+      bucketSpec = getBucketSpec
+    )
+    df.sparkSession.sessionState.executePlan(
+      CreateTable(tableDesc, mode, Some(df.logicalPlan))).toRdd
   }
 
   /**

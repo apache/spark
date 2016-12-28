@@ -188,39 +188,6 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
         tableDesc = existingTable.copy(schema = new StructType()),
         query = Some(newQuery))
 
-    // When we overwrite data to an existing table, check if we are not overwriting a table that is
-    // also being read from, and drop the existing table.
-    case c @ CreateTable(tableDesc, SaveMode.Overwrite, Some(query))
-        if sparkSession.sessionState.catalog.tableExists(tableDesc.identifier) =>
-      // Analyze the query in CTAS and then we can do the normalization and checking.
-      val qe = sparkSession.sessionState.executePlan(query)
-      qe.assertAnalyzed()
-      val analyzedQuery = qe.analyzed
-
-      val catalog = sparkSession.sessionState.catalog
-      val db = tableDesc.identifier.database.getOrElse(catalog.getCurrentDatabase)
-      val tableIdentWithDB = tableDesc.identifier.copy(database = Some(db))
-      val tableName = tableIdentWithDB.unquotedString
-
-      EliminateSubqueryAliases(catalog.lookupRelation(tableIdentWithDB)) match {
-        // Only do the check if the table is a data source table
-        // (the relation is a BaseRelation).
-        case LogicalRelation(dest: BaseRelation, _, _) =>
-          // Get all input data source relations of the query.
-          val srcRelations = analyzedQuery.collect {
-            case LogicalRelation(src: BaseRelation, _, _) => src
-          }
-          if (srcRelations.contains(dest)) {
-            throw new AnalysisException(
-              s"Cannot overwrite table $tableName that is also being read from")
-          }
-        case _ => // OK
-      }
-
-      // Drop the existing table
-      catalog.dropTable(tableIdentWithDB, ignoreIfNotExists = true, purge = false)
-      c.copy(query = Some(analyzedQuery))
-
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
     // config, and do various checks:
     //   * column names in table definition can't be duplicated.
