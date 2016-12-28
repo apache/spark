@@ -228,9 +228,10 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
 
     df.write.jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
-    intercept[org.apache.spark.SparkException] {
+    val m = intercept[AnalysisException] {
       df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
-    }
+    }.getMessage
+    assert(m.contains("Column \"seq\" not found"))
   }
 
   test("INSERT to JDBC Datasource") {
