@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * When planning take() or collect() operations, this special node that is inserted at the top of
@@ -93,13 +91,13 @@ case class Generate(
 
   override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)
 
-  def output: Seq[Attribute] = {
-    val qualified = qualifier.map(q =>
-      // prepend the new qualifier to the existed one
-      generatorOutput.map(a => a.withQualifier(Some(q)))
-    ).getOrElse(generatorOutput)
+  def qualifiedGeneratorOutput: Seq[Attribute] = qualifier.map { q =>
+    // prepend the new qualifier to the existed one
+    generatorOutput.map(a => a.withQualifier(Some(q)))
+  }.getOrElse(generatorOutput)
 
-    if (join) child.output ++ qualified else qualified
+  def output: Seq[Attribute] = {
+    if (join) child.output ++ qualifiedGeneratorOutput else qualifiedGeneratorOutput
   }
 }
 
@@ -134,7 +132,7 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
     childrenResolved &&
       left.output.length == right.output.length &&
       left.output.zip(right.output).forall { case (l, r) =>
-        l.dataType.asNullable == r.dataType.asNullable
+        l.dataType.sameType(r.dataType)
       } && duplicateResolved
 }
 
@@ -211,8 +209,8 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
         child.output.length == children.head.output.length &&
         // compare the data types with the first child
         child.output.zip(children.head.output).forall {
-          case (l, r) => l.dataType.asNullable == r.dataType.asNullable }
-      )
+          case (l, r) => l.dataType.sameType(r.dataType)
+        })
     children.length > 1 && childrenResolved && allChildrenCompatible
   }
 
@@ -347,20 +345,6 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
 }
 
 /**
- * Options for writing new data into a table.
- *
- * @param enabled whether to overwrite existing data in the table.
- * @param specificPartition only data in the specified partition will be overwritten.
- */
-case class OverwriteOptions(
-    enabled: Boolean,
-    specificPartition: Option[CatalogTypes.TablePartitionSpec] = None) {
-  if (specificPartition.isDefined) {
-    assert(enabled, "Overwrite must be enabled when specifying a partition to overwrite.")
-  }
-}
-
-/**
  * Insert some data into a table.
  *
  * @param table the logical plan representing the table. In the future this should be a
@@ -380,14 +364,14 @@ case class InsertIntoTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],
     child: LogicalPlan,
-    overwrite: OverwriteOptions,
+    overwrite: Boolean,
     ifNotExists: Boolean)
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty
 
-  assert(overwrite.enabled || !ifNotExists)
+  assert(overwrite || !ifNotExists)
   assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
 
   override lazy val resolved: Boolean = childrenResolved && table.resolved
@@ -403,6 +387,13 @@ case class InsertIntoTable(
  */
 case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  override def simpleString: String = {
+    val cteAliases = Utils.truncatedString(cteRelations.map(_._1), "[", ", ", "]")
+    s"CTE $cteAliases"
+  }
+
+  override def innerChildren: Seq[LogicalPlan] = cteRelations.map(_._2)
 }
 
 case class WithWindowDefinition(
@@ -523,51 +514,56 @@ case class Window(
 
 object Expand {
   /**
-   * Extract attribute set according to the grouping id.
+   * Build bit mask from attributes of selected grouping set. A bit in the bitmask is corresponding
+   * to an attribute in group by attributes sequence, the selected attribute has corresponding bit
+   * set to 0 and otherwise set to 1. For example, if we have GroupBy attributes (a, b, c, d), the
+   * bitmask 5(whose binary form is 0101) represents grouping set (a, c).
    *
-   * @param bitmask bitmask to represent the selected of the attribute sequence
-   * @param attrs the attributes in sequence
-   * @return the attributes of non selected specified via bitmask (with the bit set to 1)
+   * @param groupingSetAttrs The attributes of selected grouping set
+   * @param attrMap Mapping group by attributes to its index in attributes sequence
+   * @return The bitmask which represents the selected attributes out of group by attributes.
    */
-  private def buildNonSelectAttrSet(
-      bitmask: Int,
-      attrs: Seq[Attribute]): AttributeSet = {
-    val nonSelect = new ArrayBuffer[Attribute]()
-
-    var bit = attrs.length - 1
-    while (bit >= 0) {
-      if (((bitmask >> bit) & 1) == 1) nonSelect += attrs(attrs.length - bit - 1)
-      bit -= 1
-    }
-
-    AttributeSet(nonSelect)
+  private def buildBitmask(
+    groupingSetAttrs: Seq[Attribute],
+    attrMap: Map[Attribute, Int]): Int = {
+    val numAttributes = attrMap.size
+    val mask = (1 << numAttributes) - 1
+    // Calculate the attrbute masks of selected grouping set. For example, if we have GroupBy
+    // attributes (a, b, c, d), grouping set (a, c) will produce the following sequence:
+    // (15, 7, 13), whose binary form is (1111, 0111, 1101)
+    val masks = (mask +: groupingSetAttrs.map(attrMap).map(index =>
+      // 0 means that the column at the given index is a grouping column, 1 means it is not,
+      // so we unset the bit in bitmap.
+      ~(1 << (numAttributes - 1 - index))
+    ))
+    // Reduce masks to generate an bitmask for the selected grouping set.
+    masks.reduce(_ & _)
   }
 
   /**
    * Apply the all of the GroupExpressions to every input row, hence we will get
    * multiple output rows for an input row.
    *
-   * @param bitmasks The bitmask set represents the grouping sets
+   * @param groupingSetsAttrs The attributes of grouping sets
    * @param groupByAliases The aliased original group by expressions
    * @param groupByAttrs The attributes of aliased group by expressions
    * @param gid Attribute of the grouping id
    * @param child Child operator
    */
   def apply(
-    bitmasks: Seq[Int],
+    groupingSetsAttrs: Seq[Seq[Attribute]],
     groupByAliases: Seq[Alias],
     groupByAttrs: Seq[Attribute],
     gid: Attribute,
     child: LogicalPlan): Expand = {
+    val attrMap = groupByAttrs.zipWithIndex.toMap
+
     // Create an array of Projections for the child projection, and replace the projections'
     // expressions which equal GroupBy expressions with Literal(null), if those expressions
-    // are not set for this grouping set (according to the bit mask).
-    val projections = bitmasks.map { bitmask =>
-      // get the non selected grouping attributes according to the bit mask
-      val nonSelectedGroupAttrSet = buildNonSelectAttrSet(bitmask, groupByAttrs)
-
+    // are not set for this grouping set.
+    val projections = groupingSetsAttrs.map { groupingSetAttrs =>
       child.output ++ groupByAttrs.map { attr =>
-        if (nonSelectedGroupAttrSet.contains(attr)) {
+        if (!groupingSetAttrs.contains(attr)) {
           // if the input attribute in the Invalid Grouping Expression set of for this group
           // replace it with constant null
           Literal.create(null, attr.dataType)
@@ -575,7 +571,7 @@ object Expand {
           attr
         }
       // groupingId is the last output, here we use the bit mask as the concrete value for it.
-      } :+ Literal.create(bitmask, IntegerType)
+      } :+ Literal.create(buildBitmask(groupingSetAttrs, attrMap), IntegerType)
     }
 
     // the `groupByAttrs` has different meaning in `Expand.output`, it could be the original
@@ -616,16 +612,15 @@ case class Expand(
  *
  * We will transform GROUPING SETS into logical plan Aggregate(.., Expand) in Analyzer
  *
- * @param bitmasks     A list of bitmasks, each of the bitmask indicates the selected
- *                     GroupBy expressions
- * @param groupByExprs The Group By expressions candidates, take effective only if the
- *                     associated bit in the bitmask set to 1.
+ * @param selectedGroupByExprs A sequence of selected GroupBy expressions, all exprs should
+ *                     exists in groupByExprs.
+ * @param groupByExprs The Group By expressions candidates.
  * @param child        Child operator
  * @param aggregations The Aggregation expressions, those non selected group by expressions
  *                     will be considered as constant null if it appears in the expressions
  */
 case class GroupingSets(
-    bitmasks: Seq[Int],
+    selectedGroupByExprs: Seq[Seq[Expression]],
     groupByExprs: Seq[Expression],
     child: LogicalPlan,
     aggregations: Seq[NamedExpression]) extends UnaryNode {
@@ -766,6 +761,28 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
   extends UnaryNode {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
+  override def output: Seq[Attribute] = child.output
+}
+
+/**
+ * This method repartitions data using [[Expression]]s into `numPartitions`, and receives
+ * information about the number of partitions during execution. Used when a specific ordering or
+ * distribution is expected by the consumer of the query result. Use [[Repartition]] for RDD-like
+ * `coalesce` and `repartition`.
+ * If `numPartitions` is not specified, the number of partitions will be the number set by
+ * `spark.sql.shuffle.partitions`.
+ */
+case class RepartitionByExpression(
+    partitionExpressions: Seq[Expression],
+    child: LogicalPlan,
+    numPartitions: Option[Int] = None) extends UnaryNode {
+
+  numPartitions match {
+    case Some(n) => require(n > 0, s"Number of partitions ($n) must be positive.")
+    case None => // Ok
+  }
+
+  override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
 }
 

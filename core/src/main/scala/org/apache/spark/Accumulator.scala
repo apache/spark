@@ -26,7 +26,7 @@ package org.apache.spark
  *
  * An accumulator is created from an initial value `v` by calling
  * [[SparkContext#accumulator SparkContext.accumulator]].
- * Tasks running on the cluster can then add to it using the [[Accumulable#+= +=]] operator.
+ * Tasks running on the cluster can then add to it using the `+=` operator.
  * However, they cannot read its value. Only the driver program can read the accumulator's value,
  * using its [[#value]] method.
  *

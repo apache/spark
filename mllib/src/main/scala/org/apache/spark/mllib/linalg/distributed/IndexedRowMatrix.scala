@@ -90,14 +90,16 @@ class IndexedRowMatrix @Since("1.0.0") (
     new RowMatrix(rows.map(_.vector), 0L, nCols)
   }
 
-  /** Converts to BlockMatrix. Creates blocks of [[SparseMatrix]] with size 1024 x 1024. */
+  /**
+   * Converts to BlockMatrix. Creates blocks of `SparseMatrix` with size 1024 x 1024.
+   */
   @Since("1.3.0")
   def toBlockMatrix(): BlockMatrix = {
     toBlockMatrix(1024, 1024)
   }
 
   /**
-   * Converts to BlockMatrix. Creates blocks of [[SparseMatrix]].
+   * Converts to BlockMatrix. Creates blocks of `SparseMatrix`.
    * @param rowsPerBlock The number of rows of each block. The blocks at the bottom edge may have
    *                     a smaller value. Must be an integer value greater than 0.
    * @param colsPerBlock The number of columns of each block. The blocks at the right edge may have
@@ -188,8 +190,9 @@ class IndexedRowMatrix @Since("1.0.0") (
   }
 
   /**
-   * Computes the Gramian matrix `A^T A`. Note that this cannot be
-   * computed on matrices with more than 65535 columns.
+   * Computes the Gramian matrix `A^T A`.
+   *
+   * @note This cannot be computed on matrices with more than 65535 columns.
    */
   @Since("1.0.0")
   def computeGramianMatrix(): Matrix = {

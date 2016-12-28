@@ -446,7 +446,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     // Using only a subset of all partition columns
-    intercept[Throwable] {
+    intercept[AnalysisException] {
       partitionedTestDF2.write
         .format(dataSourceName)
         .mode(SaveMode.Append)
@@ -875,6 +875,23 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
         checkLocality()
       }
+    }
+  }
+
+  test("SPARK-16975: Partitioned table with the column having '_' should be read correctly") {
+    withTempDir { dir =>
+      val childDir = new File(dir, dataSourceName).getCanonicalPath
+      val dataDf = spark.range(10).toDF()
+      val df = dataDf.withColumn("_col", $"id")
+      df.write.format(dataSourceName).partitionBy("_col").save(childDir)
+      val reader = spark.read.format(dataSourceName)
+
+      // This is needed for SimpleTextHadoopFsRelationSuite as SimpleTextSource needs schema.
+      if (dataSourceName == classOf[SimpleTextSource].getCanonicalName) {
+        reader.option("dataSchema", dataDf.schema.json)
+      }
+      val readBack = reader.load(childDir)
+      checkAnswer(df, readBack)
     }
   }
 }

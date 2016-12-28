@@ -27,12 +27,13 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
 
 
 /**
- * Internal implementation of the user-facing [[Catalog]].
+ * Internal implementation of the user-facing `Catalog`.
  */
 class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
@@ -175,8 +176,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Get the database with the specified name. This throws an [[AnalysisException]] when no
-   * [[Database]] can be found.
+   * Get the database with the specified name. This throws an `AnalysisException` when no
+   * `Database` can be found.
    */
   override def getDatabase(dbName: String): Database = {
     makeDatabase(dbName)
@@ -184,7 +185,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Get the table or view with the specified name. This table can be a temporary view or a
-   * table/view in the current database. This throws an [[AnalysisException]] when no [[Table]]
+   * table/view in the current database. This throws an `AnalysisException` when no `Table`
    * can be found.
    */
   override def getTable(tableName: String): Table = {
@@ -193,7 +194,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Get the table or view with the specified name in the specified database. This throws an
-   * [[AnalysisException]] when no [[Table]] can be found.
+   * `AnalysisException` when no `Table` can be found.
    */
   override def getTable(dbName: String, tableName: String): Table = {
     makeTable(TableIdentifier(tableName, Option(dbName)))
@@ -201,7 +202,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Get the function with the specified name. This function can be a temporary function or a
-   * function in the current database. This throws an [[AnalysisException]] when no [[Function]]
+   * function in the current database. This throws an `AnalysisException` when no `Function`
    * can be found.
    */
   override def getFunction(functionName: String): Function = {
@@ -209,7 +210,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Get the function with the specified name. This returns [[None]] when no [[Function]] can be
+   * Get the function with the specified name. This returns `None` when no `Function` can be
    * found.
    */
   override def getFunction(dbName: String, functionName: String): Function = {
@@ -391,6 +392,19 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       sparkSession.sharedState.cacheManager.uncacheQuery(Dataset.ofRows(sparkSession, viewDef))
       sessionCatalog.dropGlobalTempView(viewName)
     }
+  }
+
+  /**
+   * Recover all the partitions in the directory of a table and update the catalog.
+   *
+   * @param tableName the name of the table to be repaired.
+   * @group ddl_ops
+   * @since 2.1.1
+   */
+  override def recoverPartitions(tableName: String): Unit = {
+    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    sparkSession.sessionState.executePlan(
+      AlterTableRecoverPartitionsCommand(tableIdent)).toRdd
   }
 
   /**

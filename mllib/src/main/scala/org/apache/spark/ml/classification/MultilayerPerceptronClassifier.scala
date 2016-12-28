@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
 import org.apache.spark.ml.feature.LabeledPoint
@@ -135,7 +135,6 @@ private object LabelConverter {
 }
 
 /**
- * :: Experimental ::
  * Classifier trainer based on the Multilayer Perceptron.
  * Each layer has sigmoid activation function, output layer has softmax.
  * Number of inputs has to be equal to the size of feature vectors.
@@ -143,7 +142,6 @@ private object LabelConverter {
  *
  */
 @Since("1.5.0")
-@Experimental
 class MultilayerPerceptronClassifier @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends Predictor[Vector, MultilayerPerceptronClassifier, MultilayerPerceptronClassificationModel]
@@ -282,17 +280,14 @@ object MultilayerPerceptronClassifier
 }
 
 /**
- * :: Experimental ::
  * Classification model based on the Multilayer Perceptron.
  * Each layer has sigmoid activation function, output layer has softmax.
  *
  * @param uid uid
  * @param layers array of layer sizes including input and output layers
  * @param weights the weights of layers
- * @return prediction model
  */
 @Since("1.5.0")
-@Experimental
 class MultilayerPerceptronClassificationModel private[ml] (
     @Since("1.5.0") override val uid: String,
     @Since("1.5.0") val layers: Array[Int],

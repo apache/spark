@@ -492,24 +492,6 @@ private[hive] class TestHiveQueryExecution(
   }
 }
 
-
-private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
-
-  private val removedFunctions =
-    collection.mutable.ArrayBuffer.empty[(String, (ExpressionInfo, FunctionBuilder))]
-
-  def unregisterFunction(name: String): Unit = synchronized {
-    functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
-  }
-
-  def restore(): Unit = synchronized {
-    removedFunctions.foreach {
-      case (name, (info, builder)) => registerFunction(name, info, builder)
-    }
-  }
-}
-
-
 private[hive] class TestHiveSessionState(
     sparkSession: TestHiveSparkSession)
   extends HiveSessionState(sparkSession) { self =>
@@ -523,16 +505,6 @@ private[hive] class TestHiveSessionState(
         TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }
       }
     }
-  }
-
-  override lazy val functionRegistry: TestHiveFunctionRegistry = {
-    // We use TestHiveFunctionRegistry at here to track functions that have been explicitly
-    // unregistered (through TestHiveFunctionRegistry.unregisterFunction method).
-    val fr = new TestHiveFunctionRegistry
-    org.apache.spark.sql.catalyst.analysis.FunctionRegistry.expressions.foreach {
-      case (name, (info, builder)) => fr.registerFunction(name, info, builder)
-    }
-    fr
   }
 
   override def executePlan(plan: LogicalPlan): TestHiveQueryExecution = {

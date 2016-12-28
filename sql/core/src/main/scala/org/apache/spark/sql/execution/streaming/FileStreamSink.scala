@@ -77,10 +77,10 @@ class FileStreamSink(
 
       FileFormatWriter.write(
         sparkSession = sparkSession,
-        plan = data.logicalPlan,
+        queryExecution = data.queryExecution,
         fileFormat = fileFormat,
         committer = committer,
-        outputPath = path,
+        outputSpec = FileFormatWriter.OutputSpec(path, Map.empty),
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = None,
