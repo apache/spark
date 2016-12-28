@@ -465,6 +465,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       sc.removeSparkListener(sparkListener1)
       assert(!sc.listenerBus.listeners.contains(sparkListener1))
       assert(sc.listenerBus.listeners.contains(sparkListener2))
+    } finally {
+      sc.stop()
     }
   }
 }
