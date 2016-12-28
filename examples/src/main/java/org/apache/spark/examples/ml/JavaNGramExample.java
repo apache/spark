@@ -42,29 +42,25 @@ public class JavaNGramExample {
 
     // $example on$
     List<Row> data = Arrays.asList(
-      RowFactory.create(0.0, Arrays.asList("Hi", "I", "heard", "about", "Spark")),
-      RowFactory.create(1.0, Arrays.asList("I", "wish", "Java", "could", "use", "case", "classes")),
-      RowFactory.create(2.0, Arrays.asList("Logistic", "regression", "models", "are", "neat"))
+      RowFactory.create(0, Arrays.asList("Hi", "I", "heard", "about", "Spark")),
+      RowFactory.create(1, Arrays.asList("I", "wish", "Java", "could", "use", "case", "classes")),
+      RowFactory.create(2, Arrays.asList("Logistic", "regression", "models", "are", "neat"))
     );
 
     StructType schema = new StructType(new StructField[]{
-      new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
+      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
       new StructField(
         "words", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
     });
 
     Dataset<Row> wordDataFrame = spark.createDataFrame(data, schema);
 
-    NGram ngramTransformer = new NGram().setInputCol("words").setOutputCol("ngrams");
+    NGram ngramTransformer = new NGram().setN(2).setInputCol("words").setOutputCol("ngrams");
 
     Dataset<Row> ngramDataFrame = ngramTransformer.transform(wordDataFrame);
-
-    for (Row r : ngramDataFrame.select("ngrams", "label").takeAsList(3)) {
-      java.util.List<String> ngrams = r.getList(0);
-      for (String ngram : ngrams) System.out.print(ngram + " --- ");
-      System.out.println();
-    }
+    ngramDataFrame.select("ngrams").show(false);
     // $example off$
+
     spark.stop();
   }
 }

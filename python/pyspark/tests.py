@@ -69,6 +69,7 @@ from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, 
 from pyspark.shuffle import Aggregator, ExternalMerger, ExternalSorter
 from pyspark import shuffle
 from pyspark.profiler import BasicProfiler
+from pyspark.taskcontext import TaskContext
 
 _have_scipy = False
 _have_numpy = False
@@ -390,6 +391,23 @@ class CheckpointTests(ReusedPySparkTestCase):
         self.assertEqual([1, 2, 3, 4], recovered.collect())
 
 
+class LocalCheckpointTests(ReusedPySparkTestCase):
+
+    def test_basic_localcheckpointing(self):
+        parCollection = self.sc.parallelize([1, 2, 3, 4])
+        flatMappedRDD = parCollection.flatMap(lambda x: range(1, x + 1))
+
+        self.assertFalse(flatMappedRDD.isCheckpointed())
+        self.assertFalse(flatMappedRDD.isLocallyCheckpointed())
+
+        flatMappedRDD.localCheckpoint()
+        result = flatMappedRDD.collect()
+        time.sleep(1)  # 1 second
+        self.assertTrue(flatMappedRDD.isCheckpointed())
+        self.assertTrue(flatMappedRDD.isLocallyCheckpointed())
+        self.assertEqual(flatMappedRDD.collect(), result)
+
+
 class AddFileTests(PySparkTestCase):
 
     def test_add_py_file(self):
@@ -409,12 +427,22 @@ class AddFileTests(PySparkTestCase):
         self.assertEqual("Hello World!", res)
 
     def test_add_file_locally(self):
-        path = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        path = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
         self.sc.addFile(path)
         download_path = SparkFiles.get("hello.txt")
         self.assertNotEqual(path, download_path)
         with open(download_path) as test_file:
             self.assertEqual("Hello World!\n", test_file.readline())
+
+    def test_add_file_recursively_locally(self):
+        path = os.path.join(SPARK_HOME, "python/test_support/hello")
+        self.sc.addFile(path, True)
+        download_path = SparkFiles.get("hello")
+        self.assertNotEqual(path, download_path)
+        with open(download_path + "/hello.txt") as test_file:
+            self.assertEqual("Hello World!\n", test_file.readline())
+        with open(download_path + "/sub_hello/sub_hello.txt") as test_file:
+            self.assertEqual("Sub Hello World!\n", test_file.readline())
 
     def test_add_py_file_locally(self):
         # To ensure that we're actually testing addPyFile's effects, check that
@@ -451,6 +479,70 @@ class AddFileTests(PySparkTestCase):
         self.assertEqual(["My Server"], self.sc.parallelize(range(1)).map(func).collect())
 
 
+class TaskContextTests(PySparkTestCase):
+
+    def setUp(self):
+        self._old_sys_path = list(sys.path)
+        class_name = self.__class__.__name__
+        # Allow retries even though they are normally disabled in local mode
+        self.sc = SparkContext('local[4, 2]', class_name)
+
+    def test_stage_id(self):
+        """Test the stage ids are available and incrementing as expected."""
+        rdd = self.sc.parallelize(range(10))
+        stage1 = rdd.map(lambda x: TaskContext.get().stageId()).take(1)[0]
+        stage2 = rdd.map(lambda x: TaskContext.get().stageId()).take(1)[0]
+        # Test using the constructor directly rather than the get()
+        stage3 = rdd.map(lambda x: TaskContext().stageId()).take(1)[0]
+        self.assertEqual(stage1 + 1, stage2)
+        self.assertEqual(stage1 + 2, stage3)
+        self.assertEqual(stage2 + 1, stage3)
+
+    def test_partition_id(self):
+        """Test the partition id."""
+        rdd1 = self.sc.parallelize(range(10), 1)
+        rdd2 = self.sc.parallelize(range(10), 2)
+        pids1 = rdd1.map(lambda x: TaskContext.get().partitionId()).collect()
+        pids2 = rdd2.map(lambda x: TaskContext.get().partitionId()).collect()
+        self.assertEqual(0, pids1[0])
+        self.assertEqual(0, pids1[9])
+        self.assertEqual(0, pids2[0])
+        self.assertEqual(1, pids2[9])
+
+    def test_attempt_number(self):
+        """Verify the attempt numbers are correctly reported."""
+        rdd = self.sc.parallelize(range(10))
+        # Verify a simple job with no failures
+        attempt_numbers = rdd.map(lambda x: TaskContext.get().attemptNumber()).collect()
+        map(lambda attempt: self.assertEqual(0, attempt), attempt_numbers)
+
+        def fail_on_first(x):
+            """Fail on the first attempt so we get a positive attempt number"""
+            tc = TaskContext.get()
+            attempt_number = tc.attemptNumber()
+            partition_id = tc.partitionId()
+            attempt_id = tc.taskAttemptId()
+            if attempt_number == 0 and partition_id == 0:
+                raise Exception("Failing on first attempt")
+            else:
+                return [x, partition_id, attempt_number, attempt_id]
+        result = rdd.map(fail_on_first).collect()
+        # We should re-submit the first partition to it but other partitions should be attempt 0
+        self.assertEqual([0, 0, 1], result[0][0:3])
+        self.assertEqual([9, 3, 0], result[9][0:3])
+        first_partition = filter(lambda x: x[1] == 0, result)
+        map(lambda x: self.assertEqual(1, x[2]), first_partition)
+        other_partitions = filter(lambda x: x[1] != 0, result)
+        map(lambda x: self.assertEqual(0, x[2]), other_partitions)
+        # The task attempt id should be different
+        self.assertTrue(result[0][3] != result[9][3])
+
+    def test_tc_on_driver(self):
+        """Verify that getting the TaskContext on the driver returns None."""
+        tc = TaskContext.get()
+        self.assertTrue(tc is None)
+
+
 class RDDTests(ReusedPySparkTestCase):
 
     def test_range(self):
@@ -474,6 +566,18 @@ class RDDTests(ReusedPySparkTestCase):
     def test_sum(self):
         self.assertEqual(0, self.sc.emptyRDD().sum())
         self.assertEqual(6, self.sc.parallelize([1, 2, 3]).sum())
+
+    def test_to_localiterator(self):
+        from time import sleep
+        rdd = self.sc.parallelize([1, 2, 3])
+        it = rdd.toLocalIterator()
+        sleep(5)
+        self.assertEqual([1, 2, 3], sorted(it))
+
+        rdd2 = rdd.repartition(1000)
+        it2 = rdd2.toLocalIterator()
+        sleep(5)
+        self.assertEqual([1, 2, 3], sorted(it2))
 
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
@@ -514,12 +618,30 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_cartesian_on_textfile(self):
         # Regression test for
-        path = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        path = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
         a = self.sc.textFile(path)
         result = a.cartesian(a).collect()
         (x, y) = result[0]
         self.assertEqual(u"Hello World!", x.strip())
         self.assertEqual(u"Hello World!", y.strip())
+
+    def test_cartesian_chaining(self):
+        # Tests for SPARK-16589
+        rdd = self.sc.parallelize(range(10), 2)
+        self.assertSetEqual(
+            set(rdd.cartesian(rdd).cartesian(rdd).collect()),
+            set([((x, y), z) for x in range(10) for y in range(10) for z in range(10)])
+        )
+
+        self.assertSetEqual(
+            set(rdd.cartesian(rdd.cartesian(rdd)).collect()),
+            set([(x, (y, z)) for x in range(10) for y in range(10) for z in range(10)])
+        )
+
+        self.assertSetEqual(
+            set(rdd.cartesian(rdd.zip(rdd)).collect()),
+            set([(x, (y, y)) for x in range(10) for y in range(10)])
+        )
 
     def test_deleting_input_files(self):
         # Regression test for SPARK-1025
@@ -751,7 +873,7 @@ class RDDTests(ReusedPySparkTestCase):
         b = b._reserialize(MarshalSerializer())
         self.assertEqual(a.zip(b).collect(), [(0, 100), (1, 101), (2, 102), (3, 103), (4, 104)])
         # regression test for SPARK-4841
-        path = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        path = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
         t = self.sc.textFile(path)
         cnt = t.count()
         self.assertEqual(cnt, t.zip(t).count())
@@ -903,6 +1025,16 @@ class RDDTests(ReusedPySparkTestCase):
         partitions = repartitioned.glom().collect()
         self.assertEqual(partitions[0], [(0, 5), (0, 8), (2, 6)])
         self.assertEqual(partitions[1], [(1, 3), (3, 8), (3, 8)])
+
+    def test_repartition_no_skewed(self):
+        num_partitions = 20
+        a = self.sc.parallelize(range(int(1000)), 2)
+        l = a.repartition(num_partitions).glom().map(len).collect()
+        zeros = len([x for x in l if x == 0])
+        self.assertTrue(zeros == 0)
+        l = a.coalesce(num_partitions, True).glom().map(len).collect()
+        zeros = len([x for x in l if x == 0])
+        self.assertTrue(zeros == 0)
 
     def test_distinct(self):
         rdd = self.sc.parallelize((1, 2, 3)*10, 10)
@@ -1214,7 +1346,7 @@ class InputFormatTests(ReusedPySparkTestCase):
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.assertEqual(ints, ei)
 
-        hellopath = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        hellopath = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
         oldconf = {"mapred.input.dir": hellopath}
         hello = self.sc.hadoopRDD("org.apache.hadoop.mapred.TextInputFormat",
                                   "org.apache.hadoop.io.LongWritable",
@@ -1233,7 +1365,7 @@ class InputFormatTests(ReusedPySparkTestCase):
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.assertEqual(ints, ei)
 
-        hellopath = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        hellopath = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
         newconf = {"mapred.input.dir": hellopath}
         hello = self.sc.newAPIHadoopRDD("org.apache.hadoop.mapreduce.lib.input.TextInputFormat",
                                         "org.apache.hadoop.io.LongWritable",

@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
+import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -139,5 +140,17 @@ private[r] object RRDD {
    */
   def createRDDFromArray(jsc: JavaSparkContext, arr: Array[Array[Byte]]): JavaRDD[Array[Byte]] = {
     JavaRDD.fromRDD(jsc.sc.parallelize(arr, arr.length))
+  }
+
+  /**
+   * Create an RRDD given a temporary file name. This is used to create RRDD when parallelize is
+   * called on large R objects.
+   *
+   * @param fileName name of temporary file on driver machine
+   * @param parallelism number of slices defaults to 4
+   */
+  def createRDDFromFile(jsc: JavaSparkContext, fileName: String, parallelism: Int):
+  JavaRDD[Array[Byte]] = {
+    PythonRDD.readRDDFromFile(jsc, fileName, parallelism)
   }
 }

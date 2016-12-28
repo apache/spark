@@ -39,7 +39,8 @@ if __name__ == "__main__":
         outputCol="features")
 
     output = assembler.transform(dataset)
-    print(output.select("features", "clicked").first())
+    print("Assembled columns 'hour', 'mobile', 'userFeatures' to vector column 'features'")
+    output.select("features", "clicked").show(truncate=False)
     # $example off$
 
     spark.stop()

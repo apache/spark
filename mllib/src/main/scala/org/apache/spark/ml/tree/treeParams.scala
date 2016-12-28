@@ -73,11 +73,13 @@ private[ml] trait DecisionTreeParams extends PredictorParams
 
   /**
    * Minimum information gain for a split to be considered at a tree node.
+   * Should be >= 0.0.
    * (default = 0.0)
    * @group param
    */
   final val minInfoGain: DoubleParam = new DoubleParam(this, "minInfoGain",
-    "Minimum information gain for a split to be considered at a tree node.")
+    "Minimum information gain for a split to be considered at a tree node.",
+    ParamValidators.gtEq(0.0))
 
   /**
    * Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be
@@ -105,54 +107,78 @@ private[ml] trait DecisionTreeParams extends PredictorParams
   setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1, minInfoGain -> 0.0,
     maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
 
-  /** @group setParam */
+  /**
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @group setParam
+   */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setMaxDepth(value: Int): this.type = set(maxDepth, value)
 
   /** @group getParam */
   final def getMaxDepth: Int = $(maxDepth)
 
-  /** @group setParam */
+  /**
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @group setParam
+   */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setMaxBins(value: Int): this.type = set(maxBins, value)
 
   /** @group getParam */
   final def getMaxBins: Int = $(maxBins)
 
-  /** @group setParam */
+  /**
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @group setParam
+   */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
   /** @group getParam */
   final def getMinInstancesPerNode: Int = $(minInstancesPerNode)
 
-  /** @group setParam */
+  /**
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @group setParam
+   */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
   /** @group getParam */
   final def getMinInfoGain: Double = $(minInfoGain)
 
-  /** @group setParam */
+  /**
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @group setParam
+   */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  /** @group expertSetParam */
+  /**
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @group expertSetParam
+   */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
 
   /** @group expertGetParam */
   final def getMaxMemoryInMB: Int = $(maxMemoryInMB)
 
-  /** @group expertSetParam */
+  /**
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @group expertSetParam
+   */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
 
   /** @group expertGetParam */
   final def getCacheNodeIds: Boolean = $(cacheNodeIds)
 
   /**
-   * Specifies how often to checkpoint the cached node IDs.
-   * E.g. 10 means that the cache will get checkpointed every 10 iterations.
-   * This is only used if cacheNodeIds is true and if the checkpoint directory is set in
-   * [[org.apache.spark.SparkContext]].
-   * Must be >= 1.
-   * (default = 10)
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
    * @group setParam
    */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
@@ -196,7 +222,11 @@ private[ml] trait TreeClassifierParams extends Params {
 
   setDefault(impurity -> "gini")
 
-  /** @group setParam */
+  /**
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @group setParam
+   */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
@@ -241,7 +271,11 @@ private[ml] trait TreeRegressorParams extends Params {
 
   setDefault(impurity -> "variance")
 
-  /** @group setParam */
+  /**
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @group setParam
+   */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
@@ -298,7 +332,11 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
 
   setDefault(subsamplingRate -> 1.0)
 
-  /** @group setParam */
+  /**
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @group setParam
+   */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
 
   /** @group getParam */
@@ -317,8 +355,36 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
   }
 }
 
-/** Used for [[RandomForestParams]] */
-private[ml] trait HasFeatureSubsetStrategy extends Params {
+/**
+ * Parameters for Random Forest algorithms.
+ */
+private[ml] trait RandomForestParams extends TreeEnsembleParams {
+
+  /**
+   * Number of trees to train (>= 1).
+   * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
+   * TODO: Change to always do bootstrapping (simpler).  SPARK-7130
+   * (default = 20)
+   *
+   * Note: The reason that we cannot add this to both GBT and RF (i.e. in TreeEnsembleParams)
+   * is the param `maxIter` controls how many trees a GBT has. The semantics in the algorithms
+   * are a bit different.
+   * @group param
+   */
+  final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)",
+    ParamValidators.gtEq(1))
+
+  setDefault(numTrees -> 20)
+
+  /**
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @group setParam
+   */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  def setNumTrees(value: Int): this.type = set(numTrees, value)
+
+  /** @group getParam */
+  final def getNumTrees: Int = $(numTrees)
 
   /**
    * The number of features to consider for splits at each tree node.
@@ -340,9 +406,9 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
    *  - sqrt: recommended by Breiman manual for random forests
    *  - The defaults of sqrt (classification) and onethird (regression) match the R randomForest
    *    package.
-   * @see [[http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf  Breiman (2001)]]
-   * @see [[http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf  Breiman manual for
-   *     random forests]]
+   * @see <a href="http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf">Breiman (2001)</a>
+   * @see <a href="http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf">
+   * Breiman manual for random forests</a>
    *
    * @group param
    */
@@ -357,44 +423,16 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
 
   setDefault(featureSubsetStrategy -> "auto")
 
-  /** @group setParam */
+  /**
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @group setParam
+   */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setFeatureSubsetStrategy(value: String): this.type = set(featureSubsetStrategy, value)
 
   /** @group getParam */
   final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase
 }
-
-/**
- * Used for [[RandomForestParams]].
- * This is separated out from [[RandomForestParams]] because of an issue with the
- * `numTrees` method conflicting with this Param in the Estimator.
- */
-private[ml] trait HasNumTrees extends Params {
-
-  /**
-   * Number of trees to train (>= 1).
-   * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
-   * TODO: Change to always do bootstrapping (simpler).  SPARK-7130
-   * (default = 20)
-   * @group param
-   */
-  final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)",
-    ParamValidators.gtEq(1))
-
-  setDefault(numTrees -> 20)
-
-  /** @group setParam */
-  def setNumTrees(value: Int): this.type = set(numTrees, value)
-
-  /** @group getParam */
-  final def getNumTrees: Int = $(numTrees)
-}
-
-/**
- * Parameters for Random Forest algorithms.
- */
-private[ml] trait RandomForestParams extends TreeEnsembleParams
-  with HasFeatureSubsetStrategy with HasNumTrees
 
 private[spark] object RandomForestParams {
   // These options should be lowercase.
@@ -405,21 +443,15 @@ private[spark] object RandomForestParams {
 private[ml] trait RandomForestClassifierParams
   extends RandomForestParams with TreeClassifierParams
 
-private[ml] trait RandomForestClassificationModelParams extends TreeEnsembleParams
-  with HasFeatureSubsetStrategy with TreeClassifierParams
-
 private[ml] trait RandomForestRegressorParams
   extends RandomForestParams with TreeRegressorParams
-
-private[ml] trait RandomForestRegressionModelParams extends TreeEnsembleParams
-  with HasFeatureSubsetStrategy with TreeRegressorParams
 
 /**
  * Parameters for Gradient-Boosted Tree algorithms.
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize {
+private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
 
   /* TODO: Add this doc when we add this param.  SPARK-7132
    * Threshold for stopping early when runWithValidation is used.
@@ -432,24 +464,34 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
   // final val validationTol: DoubleParam = new DoubleParam(this, "validationTol", "")
   // validationTol -> 1e-5
 
-  setDefault(maxIter -> 20, stepSize -> 0.1)
-
-  /** @group setParam */
+  /**
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @group setParam
+   */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /**
-   * Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each
-   * estimator.
+   * Param for Step size (a.k.a. learning rate) in interval (0, 1] for shrinking
+   * the contribution of each estimator.
    * (default = 0.1)
+   * @group param
+   */
+  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size " +
+    "(a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator.",
+    ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
+
+  /** @group getParam */
+  final def getStepSize: Double = $(stepSize)
+
+  /**
+   * @deprecated This method is deprecated and will be removed in 2.2.0.
    * @group setParam
    */
+  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
-  override def validateParams(): Unit = {
-    require(ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true)(
-      getStepSize), "GBT parameter stepSize should be in interval (0, 1], " +
-      s"but it given invalid value $getStepSize.")
-  }
+  setDefault(maxIter -> 20, stepSize -> 0.1)
 
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(

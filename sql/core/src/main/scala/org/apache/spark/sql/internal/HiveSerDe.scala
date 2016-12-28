@@ -28,10 +28,9 @@ object HiveSerDe {
    *
    * @param source Currently the source abbreviation can be one of the following:
    *               SequenceFile, RCFile, ORC, PARQUET, and case insensitive.
-   * @param conf SQLConf
    * @return HiveSerDe associated with the specified source
    */
-  def sourceToSerDe(source: String, conf: SQLConf): Option[HiveSerDe] = {
+  def sourceToSerDe(source: String): Option[HiveSerDe] = {
     val serdeMap = Map(
       "sequencefile" ->
         HiveSerDe(
@@ -42,8 +41,7 @@ object HiveSerDe {
         HiveSerDe(
           inputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"),
           outputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"),
-          serde = Option(conf.getConfString("hive.default.rcfile.serde",
-            "org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))),
+          serde = Option("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe")),
 
       "orc" ->
         HiveSerDe(

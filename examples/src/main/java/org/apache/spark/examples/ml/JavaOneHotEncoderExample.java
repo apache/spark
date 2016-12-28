@@ -68,9 +68,11 @@ public class JavaOneHotEncoderExample {
     OneHotEncoder encoder = new OneHotEncoder()
       .setInputCol("categoryIndex")
       .setOutputCol("categoryVec");
+
     Dataset<Row> encoded = encoder.transform(indexed);
-    encoded.select("id", "categoryVec").show();
+    encoded.show();
     // $example off$
+
     spark.stop();
   }
 }

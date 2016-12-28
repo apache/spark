@@ -253,7 +253,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       rpcEnv.stop(masterTracker.trackerEndpoint)
       rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
 
-      // Frame size should be ~1.1MB, and MapOutputTrackerMasterActor should throw exception.
+      // Frame size should be ~1.1MB, and MapOutputTrackerMasterEndpoint should throw exception.
       // Note that the size is hand-selected here because map output statuses are compressed before
       // being sent.
       masterTracker.registerShuffle(20, 100)

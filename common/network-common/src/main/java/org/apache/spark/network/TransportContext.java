@@ -56,7 +56,7 @@ import org.apache.spark.network.util.TransportFrameDecoder;
  * processes to send messages back to the client on an existing channel.
  */
 public class TransportContext {
-  private final Logger logger = LoggerFactory.getLogger(TransportContext.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportContext.class);
 
   private final TransportConf conf;
   private final RpcHandler rpcHandler;

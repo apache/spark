@@ -54,7 +54,7 @@ public final class JavaSparkPi {
       public Integer call(Integer integer) {
         double x = Math.random() * 2 - 1;
         double y = Math.random() * 2 - 1;
-        return (x * x + y * y < 1) ? 1 : 0;
+        return (x * x + y * y <= 1) ? 1 : 0;
       }
     }).reduce(new Function2<Integer, Integer, Integer>() {
       @Override
