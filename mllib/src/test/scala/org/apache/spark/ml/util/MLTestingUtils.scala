@@ -18,15 +18,15 @@
 package org.apache.spark.ml.util
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute.NominalAttribute
+import org.apache.spark.ml._
 import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol, HasWeightCol}
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -182,46 +182,79 @@ object MLTestingUtils extends SparkFunSuite {
       .toMap
   }
 
-  def genClassificationInstancesWithWeightedOutliers(
-      spark: SparkSession,
-      numClasses: Int,
-      numInstances: Int): DataFrame = {
-    val data = Array.tabulate[Instance](numInstances) { i =>
-      val feature = i % numClasses
-      if (i < numInstances / 3) {
-        // give large weights to minority of data with 1 to 1 mapping feature to label
-        Instance(feature, 1.0, Vectors.dense(feature))
-      } else {
-        // give small weights to majority of data points with reverse mapping
-        Instance(numClasses - feature - 1, 0.01, Vectors.dense(feature))
-      }
-    }
-    val labelMeta =
-      NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses).toMetadata()
-    spark.createDataFrame(data).select(col("label").as("label", labelMeta), col("weight"),
-      col("features"))
-  }
-
+  /**
+   * Given a DataFrame, generate two output DataFrames: one having the original rows oversampled
+   * an integer number of times, and one having the original rows but with a column of weights
+   * proportional to the number of oversampled instances in the oversampled DataFrames.
+   */
   def genEquivalentOversampledAndWeightedInstances(
-      data: DataFrame,
-      labelCol: String,
-      featuresCol: String,
-      seed: Long): (DataFrame, DataFrame) = {
+      data: Dataset[LabeledPoint],
+      seed: Long): (Dataset[Instance], Dataset[Instance]) = {
     import data.sparkSession.implicits._
-    val rng = scala.util.Random
-    rng.setSeed(seed)
+    val rng = new scala.util.Random(seed)
     val sample: () => Int = () => rng.nextInt(10) + 1
     val sampleUDF = udf(sample)
-    val rawData = data.select(labelCol, featuresCol).withColumn("samples", sampleUDF())
-    val overSampledData = rawData.rdd.flatMap {
-      case Row(label: Double, features: Vector, n: Int) =>
-        Iterator.fill(n)(Instance(label, 1.0, features))
-    }.toDF()
+    val rawData = data.select("label", "features").withColumn("samples", sampleUDF())
+    val overSampledData = rawData.rdd.flatMap { case Row(label: Double, features: Vector, n: Int) =>
+      Iterator.fill(n)(Instance(label, 1.0, features))
+    }.toDS()
     rng.setSeed(seed)
-    val weightedData = rawData.rdd.map {
-      case Row(label: Double, features: Vector, n: Int) =>
-        Instance(label, n.toDouble, features)
-    }.toDF()
+    val weightedData = rawData.rdd.map { case Row(label: Double, features: Vector, n: Int) =>
+      Instance(label, n.toDouble, features)
+    }.toDS()
     (overSampledData, weightedData)
+  }
+
+  /**
+   * Helper function for testing sample weights. Tests that oversampling each point is equivalent
+   * to assigning a sample weight proportional to the number of samples for each point.
+   */
+  def testOversamplingVsWeighting[M <: Model[M], E <: Estimator[M]](
+      data: Dataset[LabeledPoint],
+      estimator: E with HasWeightCol,
+      modelEquals: (M, M) => Unit,
+      seed: Long): Unit = {
+    val (overSampledData, weightedData) = genEquivalentOversampledAndWeightedInstances(
+      data, seed)
+    val weightedModel = estimator.set(estimator.weightCol, "weight").fit(weightedData)
+    val overSampledModel = estimator.set(estimator.weightCol, "").fit(overSampledData)
+    modelEquals(weightedModel, overSampledModel)
+  }
+
+  /**
+   * Helper function for testing sample weights. Tests that injecting a large number of outliers
+   * with very small sample weights does not affect fitting. The predictor should learn the true
+   * model despite the outliers.
+   */
+  def testOutliersWithSmallWeights[M <: Model[M], E <: Estimator[M]](
+      data: Dataset[LabeledPoint],
+      estimator: E with HasWeightCol,
+      numClasses: Int,
+      modelEquals: (M, M) => Unit): Unit = {
+    import data.sqlContext.implicits._
+    val outlierDS = data.withColumn("weight", lit(1.0)).as[Instance].flatMap {
+      case Instance(l, w, f) =>
+        val outlierLabel = if (numClasses == 0) -l else numClasses - l - 1
+        List.fill(3)(Instance(outlierLabel, 0.0001, f)) ++ List(Instance(l, w, f))
+    }
+    val trueModel = estimator.set(estimator.weightCol, "").fit(data)
+    val outlierModel = estimator.set(estimator.weightCol, "weight").fit(outlierDS)
+    modelEquals(trueModel, outlierModel)
+  }
+
+  /**
+   * Helper function for testing sample weights. Tests that giving constant weights to each data
+   * point yields the same model, regardless of the magnitude of the weight.
+   */
+  def testArbitrarilyScaledWeights[M <: Model[M], E <: Estimator[M]](
+      data: Dataset[LabeledPoint],
+      estimator: E with HasWeightCol,
+      modelEquals: (M, M) => Unit): Unit = {
+    estimator.set(estimator.weightCol, "weight")
+    val models = Seq(0.001, 1.0, 1000.0).map { w =>
+      val df = data.withColumn("weight", lit(w))
+      estimator.fit(df)
+    }
+    models.sliding(2).foreach { case Seq(m1, m2) => modelEquals(m1, m2)}
   }
 }
