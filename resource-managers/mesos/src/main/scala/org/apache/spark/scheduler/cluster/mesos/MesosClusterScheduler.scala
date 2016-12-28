@@ -740,7 +740,8 @@ private[spark] class MesosClusterScheduler(
       val desc = queuedDrivers.remove(index)
       queuedDriversState.expunge(id)
       finishedDrivers += new MesosClusterSubmissionState(desc, TaskID.newBuilder().
-        setValue("").build(), SlaveID.newBuilder().setValue("").build(), None, null, None)
+        setValue("").build(), SlaveID.newBuilder().setValue("").build(), None, null, None,
+        getDriverFrameworkID(desc))
       true
     } else {
       false
@@ -753,7 +754,8 @@ private[spark] class MesosClusterScheduler(
       val desc = pendingRetryDrivers.remove(index)
       pendingRetryDriversState.expunge(id)
       finishedDrivers += new MesosClusterSubmissionState(desc, TaskID.newBuilder().
-        setValue("").build(), SlaveID.newBuilder().setValue("").build(), None, null, None)
+        setValue("").build(), SlaveID.newBuilder().setValue("").build(), None, null, None,
+        getDriverFrameworkID(desc))
       true
     } else {
       false
