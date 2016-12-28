@@ -22,7 +22,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 
-import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,7 +49,7 @@ public final class Platform {
 
   private static final boolean unaligned;
 
-  private static final MemoryBlock _doubleBuffer;
+  private static final DoubleAccessFunctor _doubleAccessFunc;
 
   static {
     boolean _unaligned;
@@ -127,16 +126,11 @@ public final class Platform {
   }
 
   public static double getDouble(Object object, long offset) {
-    if ( null == _doubleBuffer) {
-      return _UNSAFE.getDouble(object, offset);
-    } else {
-      copyMemory(object, offset, _doubleBuffer.getBaseObject(), _doubleBuffer.getBaseOffset(), 8);
-      return _UNSAFE.getDouble(_doubleBuffer.getBaseObject(), _doubleBuffer.getBaseOffset());
-    }
+    return _doubleAccessFunc.getDouble(_UNSAFE, object, offset);
   }
 
   public static void putDouble(Object object, long offset, double value) {
-    _UNSAFE.putDouble(object, offset, value);
+    _doubleAccessFunc.putDouble(_UNSAFE, object, offset, value);
   }
 
   public static Object getObjectVolatile(Object object, long offset) {
@@ -263,27 +257,12 @@ public final class Platform {
       if (arch.matches("^(arm|arm32)")) {
         logger.info(
             "Host platform '{}' requires aligned double access. "+
-            "Creating an aligned buffer for unsafe double reads.",
+            "Using aligned double access method.",
             arch);
-
-        // allocate a 2x memory block to ensure buffer used is 8-byte aligned. Java
-        // objects are always aligned, so we just need to ensure the offset is aligned
-        // to an 8-byte boundary
-        byte[] heapObj = new byte[16];
-        long offset = BYTE_ARRAY_OFFSET;
-        long bufferSize = 16;
-        for (long i = 0; i < 8; ++i ) {
-          if ((offset+i)%8 == 0) {
-            logger.debug("Found aligned buffer offset at {} + {}", offset, i);
-            offset += i;
-            bufferSize -= i;
-            break;
-          }
-        }
-        _doubleBuffer = new MemoryBlock(heapObj, offset, bufferSize);
+        _doubleAccessFunc = new DoubleAccessBuffered();
       } else {
         // set the buffer address to null to indicate no buffer allocated
-        _doubleBuffer = null;
+        _doubleAccessFunc = new DoubleAccessDirect();;
       }
     } else {
       BOOLEAN_ARRAY_OFFSET = 0;
@@ -293,7 +272,7 @@ public final class Platform {
       LONG_ARRAY_OFFSET = 0;
       FLOAT_ARRAY_OFFSET = 0;
       DOUBLE_ARRAY_OFFSET = 0;
-      _doubleBuffer = null;
+      _doubleAccessFunc = null;
     }
   }
 }
