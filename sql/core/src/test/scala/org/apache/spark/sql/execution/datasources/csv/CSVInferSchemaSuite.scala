@@ -117,8 +117,13 @@ class CSVInferSchemaSuite extends SparkFunSuite {
 
   test("SPARK-18877: `inferField` on DecimalType should find a common type with `typeSoFar`") {
     val options = new CSVOptions(Map.empty[String, String])
+
     // 9.03E+12 is Decimal(3, -10) and 1.19E+11 is Decimal(3, -9).
     assert(CSVInferSchema.inferField(DecimalType(3, -10), "1.19E+11", options) ==
       DecimalType(4, -9))
+
+    // BigDecimal("12345678901234567890.01234567890123456789") is precision 40 and scale 20.
+    val value = "12345678901234567890.01234567890123456789"
+    assert(CSVInferSchema.inferField(DecimalType(3, -10), value, options) == DoubleType)
   }
 }
