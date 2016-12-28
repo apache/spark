@@ -19,14 +19,12 @@ package org.apache.spark.unsafe;
 
 import sun.misc.Unsafe;
 
-public class DoubleAccessBuffered implements DoubleAccessFunctor {
+final class DoubleAccessBuffered extends DoubleAccessFunctor {
 
-  @Override
   public double getDouble(Unsafe unsafe, Object object, long offset) {
     return Double.longBitsToDouble(unsafe.getLong(object, offset));
   }
 
-  @Override
   public void putDouble(Unsafe unsafe, Object object, long offset, double value) {
     unsafe.putLong(object, offset, Double.doubleToRawLongBits(value));
   }

@@ -89,8 +89,8 @@ public class PlatformUtilSuite {
     // write a double to an unaligned location
     long unalignedOffset = testBuffer.getBaseOffset() + 3;
     // double check unalignment just to be sure:
-    if (unalignedOffset%8 == 0) {
-      ++unalignedOffset;
+    if (unalignedOffset % 8 == 0) {
+      unalignedOffset++;
     }
 
     Platform.putDouble(testBuffer.getBaseObject(), unalignedOffset, 3.14159);
@@ -113,13 +113,18 @@ public class PlatformUtilSuite {
       Field unsafeField = Unsafe.class.getDeclaredField("theUnsafe");
       unsafeField.setAccessible(true);
       unsafe = (sun.misc.Unsafe) unsafeField.get(null);
+    } catch (Throwable cause) {
+      unsafe = null;
+    }
 
+    // can't run test because Unsafe is unavailable.
+    if (unsafe != null){
       MemoryBlock testBuffer = MemoryBlock.fromLongArray(new long[20]);
 
       // ensure offset is aligned so test can run on any host platform.
       long alignedOffset = testBuffer.getBaseOffset();
-      if (alignedOffset%8 != 0) {
-        alignedOffset += 8 - alignedOffset%8;
+      if (alignedOffset % 8 != 0) {
+        alignedOffset += 8 - alignedOffset % 8;
       }
 
       DoubleAccessFunctor buffered = new DoubleAccessBuffered();
@@ -132,15 +137,13 @@ public class PlatformUtilSuite {
       Assert.assertEquals(
           buffered2directValue,
           direct.getDouble(unsafe, testBuffer.getBaseObject(), alignedOffset),
-          0.000001);
+          0.0000001);
 
       direct.putDouble(unsafe, testBuffer.getBaseObject(), alignedOffset, direct2bufferedValue);
       Assert.assertEquals(
           direct2bufferedValue,
           buffered.getDouble(unsafe, testBuffer.getBaseObject(), alignedOffset),
-          0.000001);
-    } catch (Throwable cause) {
-      // can't run test because Unsafe is unavailable.
+          0.0000001);
     }
   }
 }

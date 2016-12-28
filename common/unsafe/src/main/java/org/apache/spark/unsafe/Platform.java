@@ -49,7 +49,7 @@ public final class Platform {
 
   private static final boolean unaligned;
 
-  private static final DoubleAccessFunctor _doubleAccessFunc;
+  private static final DoubleAccessFunctor doubleAccessFunc;
 
   static {
     boolean _unaligned;
@@ -126,11 +126,11 @@ public final class Platform {
   }
 
   public static double getDouble(Object object, long offset) {
-    return _doubleAccessFunc.getDouble(_UNSAFE, object, offset);
+    return doubleAccessFunc.getDouble(_UNSAFE, object, offset);
   }
 
   public static void putDouble(Object object, long offset, double value) {
-    _doubleAccessFunc.putDouble(_UNSAFE, object, offset, value);
+    doubleAccessFunc.putDouble(_UNSAFE, object, offset, value);
   }
 
   public static Object getObjectVolatile(Object object, long offset) {
@@ -259,10 +259,9 @@ public final class Platform {
             "Host platform '{}' requires aligned double access. "+
             "Using aligned double access method.",
             arch);
-        _doubleAccessFunc = new DoubleAccessBuffered();
+        doubleAccessFunc = new DoubleAccessBuffered();
       } else {
-        // set the buffer address to null to indicate no buffer allocated
-        _doubleAccessFunc = new DoubleAccessDirect();;
+        doubleAccessFunc = new DoubleAccessDirect();
       }
     } else {
       BOOLEAN_ARRAY_OFFSET = 0;
@@ -272,7 +271,7 @@ public final class Platform {
       LONG_ARRAY_OFFSET = 0;
       FLOAT_ARRAY_OFFSET = 0;
       DOUBLE_ARRAY_OFFSET = 0;
-      _doubleAccessFunc = null;
+      doubleAccessFunc = null;
     }
   }
 }

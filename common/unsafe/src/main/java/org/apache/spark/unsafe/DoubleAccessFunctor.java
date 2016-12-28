@@ -19,7 +19,7 @@ package org.apache.spark.unsafe;
 
 import sun.misc.Unsafe;
 
-interface DoubleAccessFunctor {
-  double getDouble(Unsafe unsafe, Object object, long offset);
-  void putDouble(Unsafe unsafe, Object object, long offset, double value);
+abstract class DoubleAccessFunctor {
+  abstract double getDouble(Unsafe unsafe, Object object, long offset);
+  abstract void putDouble(Unsafe unsafe, Object object, long offset, double value);
 }
