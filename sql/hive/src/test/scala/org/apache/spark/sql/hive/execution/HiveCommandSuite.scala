@@ -258,7 +258,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
       // LOAD DATA INTO partitioned table must specify partition
       withInputFile { f =>
-        val path = {f.toURI}
+        val path = f.toURI
         intercept[AnalysisException] {
           sql(s"""$loadQuery INPATH "$path" INTO TABLE part_table""")
         }
