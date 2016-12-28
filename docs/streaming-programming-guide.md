@@ -1249,14 +1249,15 @@ dstream.foreachRDD { rdd =>
 <div data-lang="java" markdown="1">
 {% highlight java %}
 dstream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
-  @Override public void call(JavaRDD<String> rdd) throws Exception {
-    final Connection connection =  new Connection(connectionString); // executed at the driver
+  @Override
+  public void call(JavaRDD<String> rdd) {
+    final Connection connection = createNewConnection(); // executed at the driver
     rdd.foreach(new VoidFunction<String>() {
-      @Override public void call(String record) throws Exception {
+      @Override
+      public void call(String record) {
         connection.send(record); // executed at the worker
       }
     });
-    connection.close();
   }
 });
 {% endhighlight %}
@@ -1297,10 +1298,12 @@ dstream.foreachRDD { rdd =>
 <div data-lang="java" markdown="1">
 {% highlight java %}
 dstream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
-  @Override public void call(JavaRDD<String> rdd) throws Exception {
+  @Override
+  public void call(JavaRDD<String> rdd) {
     rdd.foreach(new VoidFunction<String>() {
-      @Override public void call(String record) throws Exception {
-        Connection connection = new Connection(connectionString);
+      @Override
+      public void call(String record) {
+        Connection connection = createNewConnection();
         connection.send(record);
         connection.close();
       }
@@ -1342,10 +1345,12 @@ dstream.foreachRDD { rdd =>
 <div data-lang="java" markdown="1">
 {% highlight java %}
 dstream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
-  @Override public void call(JavaRDD<String> rdd) throws Exception {
+  @Override
+  public void call(JavaRDD<String> rdd) {
     rdd.foreachPartition(new VoidFunction<Iterator<String>>() {
-      @Override public void call(Iterator<String> partitionOfRecords) throws Exception {
-        Connection connection = new Connection(connectionString);
+      @Override
+      public void call(Iterator<String> partitionOfRecords) {
+        Connection connection = createNewConnection();
         while (partitionOfRecords.hasNext()) {
           connection.send(partitionOfRecords.next());
         }
@@ -1392,14 +1397,17 @@ dstream.foreachRDD { rdd =>
 <div data-lang="java" markdown="1">
 {% highlight java %}
 dstream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
-  @Override public void call(JavaRDD<String> rdd) throws Exception {
+  @Override
+  public void call(JavaRDD<String> rdd) {
     rdd.foreachPartition(new VoidFunction<Iterator<String>>() {
-      @Override public void call(Iterator<String> partitionOfRecords) throws Exception {
-        Connection connection = ConnectionPool.getConnection(connectionString);
+      @Override
+      public void call(Iterator<String> partitionOfRecords) {
+        // ConnectionPool is a static, lazily initialized pool of connections
+        Connection connection = ConnectionPool.getConnection();
         while (partitionOfRecords.hasNext()) {
           connection.send(partitionOfRecords.next());
         }
-        ConnectionPool.releaseConnection(connection);
+        ConnectionPool.returnConnection(connection); // return to the pool for future reuse
       }
     });
   }
