@@ -29,9 +29,12 @@ class BisectingKMeansSuite
   final val k = 5
   @transient var dataset: Dataset[_] = _
 
+  @transient var sparseDataset: Dataset[_] = _
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
+    sparseDataset = KMeansSuite.generateSparseData(spark, 100, 1000, k, 42)
   }
 
   test("default parameters") {
@@ -49,6 +52,20 @@ class BisectingKMeansSuite
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
+  }
+
+  test("SPARK-16473: Verify Bisecting K-Means does not fail in edge case where" +
+    "one cluster is empty after split") {
+    val bkm = new BisectingKMeans().setK(k).setMinDivisibleClusterSize(4).setMaxIter(4)
+
+    assert(bkm.getK === k)
+    assert(bkm.getFeaturesCol === "features")
+    assert(bkm.getPredictionCol === "prediction")
+    assert(bkm.getMaxIter === 4)
+    assert(bkm.getMinDivisibleClusterSize === 4)
+    // Verify fit does not fail on very sparse data
+    val model = bkm.fit(sparseDataset)
+    assert(model.hasSummary)
   }
 
   test("setter/getter") {
