@@ -26,16 +26,18 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
 
 class TrainValidationSplitSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
+
   test("train validation with logistic regression") {
-    val dataset = spark.createDataFrame(
-      sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2))
+    val dataset = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2).toDF()
 
     val lr = new LogisticRegression
     val lrParamMaps = new ParamGridBuilder()
@@ -58,9 +60,10 @@ class TrainValidationSplitSuite
   }
 
   test("train validation with linear regression") {
-    val dataset = spark.createDataFrame(
-        sc.parallelize(LinearDataGenerator.generateLinearInput(
-            6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2).map(_.asML))
+    val dataset = sc.parallelize(
+      LinearDataGenerator.generateLinearInput(
+        6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2)
+      .map(_.asML).toDF()
 
     val trainer = new LinearRegression().setSolver("l-bfgs")
     val lrParamMaps = new ParamGridBuilder()
@@ -75,6 +78,10 @@ class TrainValidationSplitSuite
       .setTrainRatio(0.5)
       .setSeed(42L)
     val cvModel = cv.fit(dataset)
+
+    // copied model must have the same paren.
+    MLTestingUtils.checkCopy(cvModel)
+
     val parent = cvModel.bestModel.parent.asInstanceOf[LinearRegression]
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)

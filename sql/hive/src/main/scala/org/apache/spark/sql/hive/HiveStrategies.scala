@@ -46,7 +46,8 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(
           table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
-        InsertIntoHiveTable(table, partition, planLater(child), overwrite, ifNotExists) :: Nil
+        InsertIntoHiveTable(
+          table, partition, planLater(child), overwrite, ifNotExists) :: Nil
 
       case CreateTable(tableDesc, mode, Some(query)) if tableDesc.provider.get == "hive" =>
         val newTableDesc = if (tableDesc.storage.serde.isEmpty) {
@@ -61,7 +62,7 @@ private[hive] trait HiveStrategies {
         // `ErrorIfExists` mode, and `DataFrameWriter.saveAsTable` doesn't support hive serde
         // tables yet.
         if (mode == SaveMode.Append || mode == SaveMode.Overwrite) {
-          throw new AnalysisException("" +
+          throw new AnalysisException(
             "CTAS for hive serde tables does not support append or overwrite semantics.")
         }
 

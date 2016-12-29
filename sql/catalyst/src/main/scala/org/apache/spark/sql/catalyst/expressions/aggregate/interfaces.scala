@@ -155,7 +155,7 @@ case class AggregateExpression(
  * Code which accepts [[AggregateFunction]] instances should be prepared to handle both types of
  * aggregate functions.
  */
-sealed abstract class AggregateFunction extends Expression with ImplicitCastInputTypes {
+abstract class AggregateFunction extends Expression {
 
   /** An aggregate function is not foldable. */
   final override def foldable: Boolean = false
@@ -307,14 +307,14 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    *
    * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
    */
-  def initialize(mutableAggBuffer: MutableRow): Unit
+  def initialize(mutableAggBuffer: InternalRow): Unit
 
   /**
    * Updates its aggregation buffer, located in `mutableAggBuffer`, based on the given `inputRow`.
    *
    * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
    */
-  def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit
+  def update(mutableAggBuffer: InternalRow, inputRow: InternalRow): Unit
 
   /**
    * Combines new intermediate results from the `inputAggBuffer` with the existing intermediate
@@ -323,7 +323,7 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    * Use `fieldNumber + mutableAggBufferOffset` to access fields of `mutableAggBuffer`.
    * Use `fieldNumber + inputAggBufferOffset` to access fields of `inputAggBuffer`.
    */
-  def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit
+  def merge(mutableAggBuffer: InternalRow, inputAggBuffer: InternalRow): Unit
 }
 
 /**
@@ -471,23 +471,29 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   def createAggregationBuffer(): T
 
   /**
-   * In-place updates the aggregation buffer object with an input row. buffer = buffer + input.
+   * Updates the aggregation buffer object with an input row and returns a new buffer object. For
+   * performance, the function may do in-place update and return it instead of constructing new
+   * buffer object.
+   *
    * This is typically called when doing Partial or Complete mode aggregation.
    *
    * @param buffer The aggregation buffer object.
    * @param input an input row
    */
-  def update(buffer: T, input: InternalRow): Unit
+  def update(buffer: T, input: InternalRow): T
 
   /**
-   * Merges an input aggregation object into aggregation buffer object. buffer = buffer + input.
+   * Merges an input aggregation object into aggregation buffer object and returns a new buffer
+   * object. For performance, the function may do in-place merge and return it instead of
+   * constructing new buffer object.
+   *
    * This is typically called when doing PartialMerge or Final mode aggregation.
    *
    * @param buffer the aggregation buffer object used to store the aggregation result.
    * @param input an input aggregation object. Input aggregation object can be produced by
    *              de-serializing the partial aggregate's output from Mapper side.
    */
-  def merge(buffer: T, input: T): Unit
+  def merge(buffer: T, input: T): T
 
   /**
    * Generates the final aggregation result value for current key group with the aggregation buffer
@@ -504,20 +510,19 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   /** De-serializes the serialized format Array[Byte], and produces aggregation buffer object T */
   def deserialize(storageFormat: Array[Byte]): T
 
-  final override def initialize(buffer: MutableRow): Unit = {
-    val bufferObject = createAggregationBuffer()
-    buffer.update(mutableAggBufferOffset, bufferObject)
+  final override def initialize(buffer: InternalRow): Unit = {
+    buffer(mutableAggBufferOffset) = createAggregationBuffer()
   }
 
-  final override def update(buffer: MutableRow, input: InternalRow): Unit = {
-    update(getBufferObject(buffer), input)
+  final override def update(buffer: InternalRow, input: InternalRow): Unit = {
+    buffer(mutableAggBufferOffset) = update(getBufferObject(buffer), input)
   }
 
-  final override def merge(buffer: MutableRow, inputBuffer: InternalRow): Unit = {
+  final override def merge(buffer: InternalRow, inputBuffer: InternalRow): Unit = {
     val bufferObject = getBufferObject(buffer)
     // The inputBuffer stores serialized aggregation buffer object produced by partial aggregate
     val inputObject = deserialize(inputBuffer.getBinary(inputAggBufferOffset))
-    merge(bufferObject, inputObject)
+    buffer(mutableAggBufferOffset) = merge(bufferObject, inputObject)
   }
 
   final override def eval(buffer: InternalRow): Any = {
@@ -547,7 +552,7 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
    * This is only called when doing Partial or PartialMerge mode aggregation, before the framework
    * shuffle out aggregate buffers.
    */
-  final def serializeAggregateBufferInPlace(buffer: MutableRow): Unit = {
+  final def serializeAggregateBufferInPlace(buffer: InternalRow): Unit = {
     buffer(mutableAggBufferOffset) = serialize(getBufferObject(buffer))
   }
 }

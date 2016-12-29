@@ -53,7 +53,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * The messages should have been processed by the pipeline setup by {@link TransportServer}.
  */
 public class TransportRequestHandler extends MessageHandler<RequestMessage> {
-  private final Logger logger = LoggerFactory.getLogger(TransportRequestHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportRequestHandler.class);
 
   /** The Netty channel that this handler is associated with. */
   private final Channel channel;
@@ -116,7 +116,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   private void processFetchRequest(final ChunkFetchRequest req) {
     if (logger.isTraceEnabled()) {
-      logger.trace("Received req from {} to fetch block {}", getRemoteAddress(channel), req.streamChunkId);
+      logger.trace("Received req from {} to fetch block {}", getRemoteAddress(channel),
+        req.streamChunkId);
     }
 
     ManagedBuffer buf;
@@ -125,8 +126,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       streamManager.registerChannel(channel, req.streamChunkId.streamId);
       buf = streamManager.getChunk(req.streamChunkId.streamId, req.streamChunkId.chunkIndex);
     } catch (Exception e) {
-      logger.error(String.format(
-        "Error opening block %s for request from %s", req.streamChunkId, getRemoteAddress(channel)), e);
+      logger.error(String.format("Error opening block %s for request from %s",
+        req.streamChunkId, getRemoteAddress(channel)), e);
       respond(new ChunkFetchFailure(req.streamChunkId, Throwables.getStackTraceAsString(e)));
       return;
     }

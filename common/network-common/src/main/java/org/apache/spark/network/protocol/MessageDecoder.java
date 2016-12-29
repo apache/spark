@@ -33,7 +33,8 @@ import org.slf4j.LoggerFactory;
 @ChannelHandler.Sharable
 public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
 
-  private final Logger logger = LoggerFactory.getLogger(MessageDecoder.class);
+  private static final Logger logger = LoggerFactory.getLogger(MessageDecoder.class);
+
   @Override
   public void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
     Message.Type msgType = Message.Type.decode(in);

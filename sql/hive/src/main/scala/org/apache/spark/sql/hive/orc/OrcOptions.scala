@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.hive.orc
 
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+
 /**
  * Options for the ORC data source.
  */
-private[orc] class OrcOptions(@transient private val parameters: Map[String, String])
+private[orc] class OrcOptions(@transient private val parameters: CaseInsensitiveMap)
   extends Serializable {
 
   import OrcOptions._
+
+  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
 
   /**
    * Compression codec to use. By default snappy compression.

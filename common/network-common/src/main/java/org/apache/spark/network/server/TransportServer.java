@@ -44,7 +44,7 @@ import org.apache.spark.network.util.TransportConf;
  * Server for the efficient, low-level streaming service.
  */
 public class TransportServer implements Closeable {
-  private final Logger logger = LoggerFactory.getLogger(TransportServer.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportServer.class);
 
   private final TransportContext context;
   private final TransportConf conf;
@@ -89,7 +89,7 @@ public class TransportServer implements Closeable {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     EventLoopGroup bossGroup =
-      NettyUtils.createEventLoop(ioMode, conf.serverThreads(), "shuffle-server");
+      NettyUtils.createEventLoop(ioMode, conf.serverThreads(), conf.getModuleName() + "-server");
     EventLoopGroup workerGroup = bossGroup;
 
     PooledByteBufAllocator allocator = NettyUtils.createPooledByteBufAllocator(

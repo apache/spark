@@ -1,0 +1,1 @@
+./build/mvn -DskipTests package

@@ -28,6 +28,7 @@ object JoinType {
     case "rightouter" | "right" => RightOuter
     case "leftsemi" => LeftSemi
     case "leftanti" => LeftAnti
+    case "cross" => Cross
     case _ =>
       val supported = Seq(
         "inner",
@@ -35,7 +36,8 @@ object JoinType {
         "leftouter", "left",
         "rightouter", "right",
         "leftsemi",
-        "leftanti")
+        "leftanti",
+        "cross")
 
       throw new IllegalArgumentException(s"Unsupported join type '$typ'. " +
         "Supported join types include: " + supported.mkString("'", "', '", "'") + ".")
@@ -46,8 +48,22 @@ sealed abstract class JoinType {
   def sql: String
 }
 
-case object Inner extends JoinType {
+/**
+ * The explicitCartesian flag indicates if the inner join was constructed with a CROSS join
+ * indicating a cartesian product has been explicitly requested.
+ */
+sealed abstract class InnerLike extends JoinType {
+  def explicitCartesian: Boolean
+}
+
+case object Inner extends InnerLike {
+  override def explicitCartesian: Boolean = false
   override def sql: String = "INNER"
+}
+
+case object Cross extends InnerLike {
+  override def explicitCartesian: Boolean = true
+  override def sql: String = "CROSS"
 }
 
 case object LeftOuter extends JoinType {
@@ -84,7 +100,7 @@ case class NaturalJoin(tpe: JoinType) extends JoinType {
   override def sql: String = "NATURAL " + tpe.sql
 }
 
-case class UsingJoin(tpe: JoinType, usingColumns: Seq[UnresolvedAttribute]) extends JoinType {
+case class UsingJoin(tpe: JoinType, usingColumns: Seq[String]) extends JoinType {
   require(Seq(Inner, LeftOuter, LeftSemi, RightOuter, FullOuter, LeftAnti).contains(tpe),
     "Unsupported using join type " + tpe)
   override def sql: String = "USING " + tpe.sql

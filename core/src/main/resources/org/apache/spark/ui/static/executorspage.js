@@ -425,10 +425,6 @@ $(document).ready(function () {
                     ],
                     "columnDefs": [
                         {
-                            "targets": [ 15 ],
-                            "visible": logsExist(response)
-                        },
-                        {
                             "targets": [ 16 ],
                             "visible": getThreadDumpEnabled()
                         },
@@ -440,7 +436,8 @@ $(document).ready(function () {
                     "order": [[0, "asc"]]
                 };
     
-                $(selector).DataTable(conf);
+                var dt = $(selector).DataTable(conf);
+                dt.column(15).visible(logsExist(response));
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
     
                 var sumSelector = "#summary-execs-table";

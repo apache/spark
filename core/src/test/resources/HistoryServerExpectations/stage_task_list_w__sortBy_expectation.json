@@ -10,7 +10,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 29,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 351,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 7,
     "resultSerializationTime" : 1,
@@ -50,7 +52,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 31,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 350,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 7,
     "resultSerializationTime" : 0,
@@ -90,7 +94,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 30,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 350,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 7,
     "resultSerializationTime" : 1,
@@ -130,7 +136,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 32,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 349,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 7,
     "resultSerializationTime" : 1,
@@ -170,7 +178,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 31,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 349,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 7,
     "resultSerializationTime" : 2,
@@ -210,7 +220,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 31,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 349,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 7,
     "resultSerializationTime" : 1,
@@ -250,7 +262,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 31,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 349,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 7,
     "resultSerializationTime" : 0,
@@ -290,7 +304,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 32,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 348,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 7,
     "resultSerializationTime" : 2,
@@ -330,7 +346,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 5,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 93,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 5,
     "resultSerializationTime" : 0,
@@ -370,7 +388,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 10,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 92,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 5,
     "resultSerializationTime" : 0,
@@ -410,7 +430,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 11,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 91,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 5,
     "resultSerializationTime" : 1,
@@ -450,7 +472,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 5,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 88,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 5,
     "resultSerializationTime" : 0,
@@ -490,7 +514,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 9,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 84,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -530,7 +556,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 10,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 84,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 5,
     "resultSerializationTime" : 0,
@@ -570,7 +598,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 5,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 84,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 5,
     "resultSerializationTime" : 0,
@@ -610,7 +640,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 6,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 83,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -650,7 +682,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 3,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 83,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 5,
     "resultSerializationTime" : 0,
@@ -690,7 +724,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 3,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 80,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -730,7 +766,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 9,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 77,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -770,7 +808,9 @@
   "accumulatorUpdates" : [ ],
   "taskMetrics" : {
     "executorDeserializeTime" : 9,
+    "executorDeserializeCpuTime" : 0,
     "executorRunTime" : 76,
+    "executorCpuTime" : 0,
     "resultSize" : 2010,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,

@@ -47,7 +47,7 @@ Table or view not found: s2; line 1 pos 26
 
 
 -- !query 5
-WITH t1 AS (SELECT * FROM t2), t2 AS (SELECT 2 FROM t1) SELECT * FROM t1, t2
+WITH t1 AS (SELECT * FROM t2), t2 AS (SELECT 2 FROM t1) SELECT * FROM t1 cross join t2
 -- !query 5 schema
 struct<id:int,2:int>
 -- !query 5 output
