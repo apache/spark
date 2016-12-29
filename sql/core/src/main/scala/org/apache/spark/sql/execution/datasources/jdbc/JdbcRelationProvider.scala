@@ -60,7 +60,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
 
     val conn = JdbcUtils.createConnectionFactory(jdbcOptions)()
     try {
-      val tableSchema = JdbcUtils.getSchema(conn, url, table)
+      val tableSchema = JdbcUtils.getSchemaOption(conn, url, table)
       val tableExists = tableSchema.isDefined
       val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
       if (tableExists) {

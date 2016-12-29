@@ -108,14 +108,37 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * Returns a PreparedStatement that inserts a row into table via conn.
+   * Returns an Insert SQL statement for inserting a row into the target table via JDBC conn.
    */
-  def insertStatement(conn: Connection, table: String, schema: StructType, dialect: JdbcDialect)
-      : PreparedStatement = {
-    val columns = schema.fields.map(x => dialect.quoteIdentifier(x.name)).mkString(",")
-    val placeholders = schema.fields.map(_ => "?").mkString(",")
-    val sql = s"INSERT INTO $table ($columns) VALUES ($placeholders)"
-    conn.prepareStatement(sql)
+  def getInsertStatement(
+      table: String,
+      rddSchema: StructType,
+      tableSchema: StructType,
+      isCaseSensitive: Boolean,
+      dialect: JdbcDialect): String = {
+    // The generated insert statement needs to follow rddSchema's column sequence and tableSchema's
+    // column names. When appending data into some case-sensitive DBMSs like PostgreSQL/Oracle,
+    // we need to respect the existing case-sensitive column names instead of RDD column names for
+    // user convenience. See SPARK-18123 for more details.
+    var insertSchema = new StructType()
+    val nameMap = tableSchema.fields.map(f => f.name -> f).toMap
+    val lowercaseNameMap = tableSchema.fields.map(f => f.name.toLowerCase -> f).toMap
+
+    rddSchema.fields.foreach { f =>
+      if (nameMap.isDefinedAt(f.name)) {
+        // identical names
+        insertSchema = insertSchema.add(nameMap(f.name))
+      } else if (!isCaseSensitive && lowercaseNameMap.isDefinedAt(f.name.toLowerCase)) {
+        // identical names in a case-insensitive way
+        insertSchema = insertSchema.add(lowercaseNameMap(f.name.toLowerCase))
+      } else {
+        throw new AnalysisException(s"""Column "${f.name}" not found""")
+      }
+    }
+
+    val columns = insertSchema.fields.map(x => dialect.quoteIdentifier(x.name)).mkString(",")
+    val placeholders = insertSchema.fields.map(_ => "?").mkString(",")
+    s"INSERT INTO $table ($columns) VALUES ($placeholders)"
   }
 
   /**
@@ -213,7 +236,7 @@ object JdbcUtils extends Logging {
   /**
    * Returns the schema if the table already exists in the JDBC database.
    */
-  def getSchema(conn: Connection, url: String, table: String): Option[StructType] = {
+  def getSchemaOption(conn: Connection, url: String, table: String): Option[StructType] = {
     val dialect = JdbcDialects.get(url)
 
     try {
@@ -228,35 +251,6 @@ object JdbcUtils extends Logging {
     } catch {
       case _: SQLException => None
     }
-  }
-
-  /**
-   * Returns a schema using rddSchema's column sequence and tableSchema's column names.
-   *
-   * When appending data into some case-sensitive DBMSs like PostgreSQL/Oracle, we need to respect
-   * the existing case-sensitive column names instead of RDD column names for user convenience.
-   * See SPARK-18123 for more details.
-   */
-  def normalizeSchema(
-      rddSchema: StructType,
-      tableSchema: StructType,
-      caseSensitive: Boolean): StructType = {
-    val nameMap = tableSchema.fields.map(f => f.name -> f).toMap
-    val lowercaseNameMap = tableSchema.fields.map(f => f.name.toLowerCase -> f).toMap
-
-    var schema = new StructType()
-    rddSchema.fields.foreach { f =>
-      if (nameMap.isDefinedAt(f.name)) {
-        // identical names
-        schema = schema.add(nameMap(f.name))
-      } else if (!caseSensitive && lowercaseNameMap.isDefinedAt(f.name.toLowerCase)) {
-        // identical names in a case-insensitive way
-        schema = schema.add(lowercaseNameMap(f.name.toLowerCase))
-      } else {
-        throw new AnalysisException(s"""Column "${f.name}" not found""")
-      }
-    }
-    schema
   }
 
   /**
@@ -579,8 +573,8 @@ object JdbcUtils extends Logging {
       getConnection: () => Connection,
       table: String,
       iterator: Iterator[Row],
-      schema: StructType,
-      nullTypes: Array[Int],
+      rddSchema: StructType,
+      insertStmt: String,
       batchSize: Int,
       dialect: JdbcDialect,
       isolationLevel: Int): Iterator[Byte] = {
@@ -617,9 +611,10 @@ object JdbcUtils extends Logging {
         conn.setAutoCommit(false) // Everything in the same db transaction.
         conn.setTransactionIsolation(finalIsolationLevel)
       }
-      val stmt = insertStatement(conn, table, schema, dialect)
-      val setters = schema.fields.map(f => makeSetter(conn, dialect, f.dataType))
-      val numFields = schema.fields.length
+      val stmt = conn.prepareStatement(insertStmt)
+      val setters = rddSchema.fields.map(f => makeSetter(conn, dialect, f.dataType))
+      val nullTypes = rddSchema.fields.map(f => getJdbcType(f.dataType, dialect).jdbcNullType)
+      val numFields = rddSchema.fields.length
 
       try {
         var rowCount = 0
@@ -709,14 +704,11 @@ object JdbcUtils extends Logging {
       isCaseSensitive: Boolean,
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(url)
-    val nullTypes: Array[Int] = df.schema.fields.map { field =>
-      getJdbcType(field.dataType, dialect).jdbcNullType
-    }
-
+    val rddSchema = df.schema
     val getConnection: () => Connection = createConnectionFactory(options)
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
-    val schema = normalizeSchema(df.schema, tableSchema, isCaseSensitive)
+    val insertStmt = getInsertStatement(table, rddSchema, tableSchema, isCaseSensitive, dialect)
     val repartitionedDF = options.numPartitions match {
       case Some(n) if n <= 0 => throw new IllegalArgumentException(
         s"Invalid value `$n` for parameter `${JDBCOptions.JDBC_NUM_PARTITIONS}` in table writing " +
@@ -725,7 +717,7 @@ object JdbcUtils extends Logging {
       case _ => df
     }
     repartitionedDF.foreachPartition(iterator => savePartition(
-      getConnection, table, iterator, schema, nullTypes, batchSize, dialect, isolationLevel)
+      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel)
     )
   }
 
