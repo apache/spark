@@ -22,7 +22,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.spark.api.java.function.MapFunction;
-import org.apache.spark.sql.AnalysisException;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
@@ -54,7 +53,7 @@ public class JavaSparkHiveExample {
   }
   // $example off:spark_hive$
 
-  public static void main(String[] args) throws AnalysisException {
+  public static void main(String[] args) {
     // $example on:spark_hive$
     // warehouseLocation points to the default location for managed databases and tables
     String warehouseLocation = "spark-warehouse";

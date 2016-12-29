@@ -2586,12 +2586,9 @@ class Dataset[T] private[sql](
    * Creates a local temporary view using the given name. The lifetime of this
    * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
    *
-   * @throws AnalysisException if the view name is invalid
-   *
    * @group basic
    * @since 2.0.0
    */
-  @throws[AnalysisException]
   def createOrReplaceTempView(viewName: String): Unit = withPlan {
     createTempViewCommand(viewName, replace = true, global = false)
   }

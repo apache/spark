@@ -28,7 +28,6 @@ import java.util.Properties;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.MapFunction;
-import org.apache.spark.sql.AnalysisException;
 import org.apache.spark.sql.Encoders;
 // $example on:schema_merging$
 // $example on:json_dataset$
@@ -93,7 +92,7 @@ public class JavaSQLDataSourceExample {
   }
   // $example off:schema_merging$
 
-  public static void main(String[] args) throws AnalysisException {
+  public static void main(String[] args) {
     SparkSession spark = SparkSession
       .builder()
       .appName("Java Spark SQL data sources example")
@@ -125,7 +124,7 @@ public class JavaSQLDataSourceExample {
     // $example off:direct_sql$
   }
 
-  private static void runBasicParquetExample(SparkSession spark) throws AnalysisException {
+  private static void runBasicParquetExample(SparkSession spark) {
     // $example on:basic_parquet_example$
     Dataset<Row> peopleDF = spark.read().json("examples/src/main/resources/people.json");
 
@@ -195,7 +194,7 @@ public class JavaSQLDataSourceExample {
     // $example off:schema_merging$
   }
 
-  private static void runJsonDatasetExample(SparkSession spark) throws AnalysisException {
+  private static void runJsonDatasetExample(SparkSession spark) {
     // $example on:json_dataset$
     // A JSON dataset is pointed to by path.
     // The path can be either a single text file or a directory storing text files
