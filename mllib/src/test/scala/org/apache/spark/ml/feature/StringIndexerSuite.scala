@@ -220,12 +220,8 @@ class StringIndexerSuite
   }
 
   test("SPARK 18698: construct IndexToString with custom uid") {
-    val uid = Identifiable.randomUID("customuid")
+    val uid = "customUID"
     val t = new IndexToString(uid)
-      .setInputCol("myInputCol")
-      .setOutputCol("myOutputCol")
-      .setLabels(Array("label"))
-    testDefaultReadWrite(t)
     assert(t.uid == uid)
   }
 
