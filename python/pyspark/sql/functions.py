@@ -401,6 +401,22 @@ def countDistinct(col, *cols):
     return Column(jc)
 
 
+@since(2.2)
+def field(*cols):
+    """
+    Returns the index of str in (str1, str2, ...) list or 0 if not found.
+    It takes at least 2 parameters.
+
+    >>> df = spark.createDataFrame([(1, 2, 1)], ['a', 'b', 'c'])
+    >>> df.select(field(df.a, df.b, df.c).alias("field")).collect()
+    [Row(field=2)]
+    """
+    if len(cols) < 2:
+        raise ValueError("field should take at least two columns")
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.field(_to_seq(sc, cols, _to_java_column)))
+
+
 @since(1.3)
 def first(col, ignorenulls=False):
     """Aggregate function: returns the first value in a group.
