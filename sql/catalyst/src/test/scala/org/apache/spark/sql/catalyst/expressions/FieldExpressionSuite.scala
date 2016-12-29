@@ -18,5 +18,4 @@ class FieldExpressionSuite extends SparkFunSuite with ExpressionEvalHelper{
     checkEvaluation(Field(Seq(Literal(999), Literal(1.224), Literal("999"), Literal(true), Literal(new Date(2016, 1, 1)), Literal(999))), 5)
     checkEvaluation(Field(Seq(Literal("Cannot find me"), Literal("abc"), Literal("bcd"), Literal("花花世界"))), 0)
   }
-
 }

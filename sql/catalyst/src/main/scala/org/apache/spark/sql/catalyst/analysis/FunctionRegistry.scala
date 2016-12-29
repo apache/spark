@@ -194,6 +194,7 @@ object FunctionRegistry {
     expression[Coalesce]("coalesce"),
     expression[Explode]("explode"),
     expressionGeneratorOuter[Explode]("explode_outer"),
+    expression[Field]("field"),
     expression[Greatest]("greatest"),
     expression[If]("if"),
     expression[Inline]("inline"),
