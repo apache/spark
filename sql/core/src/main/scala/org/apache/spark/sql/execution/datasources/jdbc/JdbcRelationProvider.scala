@@ -57,13 +57,13 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val table = jdbcOptions.table
     val createTableOptions = jdbcOptions.createTableOptions
     val isTruncate = jdbcOptions.isTruncate
+    val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
 
     val conn = JdbcUtils.createConnectionFactory(jdbcOptions)()
     try {
-      val tableSchema = JdbcUtils.getSchemaOption(conn, url, table)
-      val tableExists = tableSchema.isDefined
-      val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
+      val tableExists = JdbcUtils.tableExists(conn, url, table)
       if (tableExists) {
+        val tableSchema = JdbcUtils.getSchemaOption(conn, url, table)
         mode match {
           case SaveMode.Overwrite =>
             if (isTruncate && isCascadingTruncateTable(url) == Some(false)) {

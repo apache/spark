@@ -703,6 +703,7 @@ object JdbcUtils extends Logging {
     val getConnection: () => Connection = createConnectionFactory(options)
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
+
     val insertStmt = getInsertStatement(table, rddSchema, tableSchema, isCaseSensitive, dialect)
     val repartitionedDF = options.numPartitions match {
       case Some(n) if n <= 0 => throw new IllegalArgumentException(
