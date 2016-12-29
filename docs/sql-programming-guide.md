@@ -515,7 +515,7 @@ new data.
 ### Saving to Persistent Tables
 
 `DataFrames` can also be saved as persistent tables into Hive metastore using the `saveAsTable`
-command. Notice that existing Hive deployment is not necessary to use this feature. Spark will create a
+command. Notice that an existing Hive deployment is not necessary to use this feature. Spark will create a
 default local Hive metastore (using Derby) for you. Unlike the `createOrReplaceTempView` command,
 `saveAsTable` will materialize the contents of the DataFrame and create a pointer to the data in the
 Hive metastore. Persistent tables will still exist even after your Spark program has restarted, as
@@ -533,10 +533,10 @@ is dropped only its metadata is removed.
 
 Starting from Spark 2.1, persistent datasource tables have per-partition metadata stored in the Hive metastore. This brings several benefits:
 
-- Since full information of all partitions can be retrieved from metastore, excessive partition discovery is no longer needed. This greatly saves query planning time for partitioned tables with a large number of partitions.
+- Since the metastore can return only necessary partitions for a query, discovering all the partitions on the first query to the table is no longer needed.
 - Hive DDLs such as `ALTER TABLE PARTITION ... SET LOCATION` are now available for tables created with the Datasource API.
 
-Note that partition information is not gathered by default when creating an external datasource tables (those with a `path` option). You may want to invoke `MSCK REPAIR TABLE` to trigger partition discovery and persist per-partition information into metastore before querying a created external table.
+Note that partition information is not gathered by default when creating external datasource tables (those with a `path` option). To sync the partition information in the metastore, you can invoke `MSCK REPAIR TABLE`.
 
 ## Parquet Files
 
