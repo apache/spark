@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.estimation.AggregateEstimation
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ProjectEstimation
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -495,13 +496,13 @@ case class Aggregate(
     child.constraints.union(getAliasedConstraints(nonAgg))
   }
 
-  override lazy val statistics: Statistics = {
+  override lazy val statistics: Statistics = AggregateEstimation.estimate(this).getOrElse(
     if (groupingExpressions.isEmpty) {
       super.statistics.copy(sizeInBytes = 1)
     } else {
       super.statistics
     }
-  }
+  )
 }
 
 case class Window(
