@@ -1915,10 +1915,16 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       assert(jsonDF.schema === new StructType()
         .add("_corrupt_record", StringType)
         .add("dummy", StringType))
-      val aggs = jsonDF.agg(
-        F.sum(F.when($"dummy".isNotNull, 1)).as("valid"),
-        F.sum(F.when($"_corrupt_record".startsWith("file:///"), 1)).as("corrupt"))
-      checkAnswer(aggs, Row(1, 4))
+      val counts = jsonDF
+        .join(
+          additionalCorruptRecords.toDF("value"),
+          F.regexp_replace($"_corrupt_record", "(^\\s+|\\s+$)", "") === F.trim($"value"),
+          "outer")
+        .agg(
+          F.count($"dummy").as("valid"),
+          F.count($"_corrupt_record").as("corrupt"),
+          F.count("*").as("count"))
+      checkAnswer(counts, Row(1, 4, 6))
     }
   }
 }

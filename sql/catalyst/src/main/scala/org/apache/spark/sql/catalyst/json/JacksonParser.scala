@@ -57,61 +57,92 @@ class JacksonParser(
 
   private val emptyRow: Seq[InternalRow] = Seq(new GenericInternalRow(schema.length))
 
-  private val columnNameOfCorruptRecord = options.columnNameOfCorruptRecord
+  private val corruptFieldIndex = schema.getFieldIndex(options.columnNameOfCorruptRecord)
 
   @transient
-  private[this] var isWarningPrintedForMalformedRecord: Boolean = false
+  private var printWarningForMalformedRecord: (() => UTF8String) => Unit = { record =>
+    def sampleRecord: String = {
+      if (options.wholeFile) {
+        ""
+      } else {
+        s"Sample record: ${record()}\n"
+      }
+    }
+
+    def footer: String = {
+      s"""Code example to print all malformed records (scala):
+         |===================================================
+         |// The corrupted record exists in column ${options.columnNameOfCorruptRecord}.
+         |val parsedJson = spark.read.json("/path/to/json/file/test.json")
+         |
+       """.stripMargin
+    }
+
+    if (options.permissive) {
+      logWarning(
+        s"""Found at least one malformed record. The JSON reader will replace
+           |all malformed records with placeholder null in current $PERMISSIVE_MODE parser mode.
+           |To find out which corrupted records have been replaced with null, please use the
+           |default inferred schema instead of providing a custom schema.
+           |
+           |${sampleRecord ++ footer}
+           |
+         """.stripMargin)
+    } else if (options.dropMalformed) {
+      logWarning(
+        s"""Found at least one malformed record. The JSON reader will drop
+           |all malformed records in current $DROP_MALFORMED_MODE parser mode. To find out which
+           |corrupted records have been dropped, please switch the parser mode to $PERMISSIVE_MODE
+           |mode and use the default inferred schema.
+           |
+           |${sampleRecord ++ footer}
+           |
+         """.stripMargin)
+    }
+
+    printWarningForMalformedRecord = _ => ()
+  }
+
+  @transient
+  private var printWarningIfWholeFile: () => Unit = { () =>
+    if (options.wholeFile && corruptFieldIndex.isDefined) {
+      logWarning(
+        s"""Enabling wholeFile mode and defining columnNameOfCorruptRecord may result
+           |in very large allocations or OutOfMemoryExceptions being raised.
+           |
+         """.stripMargin)
+    }
+
+    printWarningIfWholeFile = () => ()
+  }
 
   /**
    * This function deals with the cases it fails to parse. This function will be called
    * when exceptions are caught during converting. This functions also deals with `mode` option.
    */
-  private def failedRecord(record: String): Seq[InternalRow] = {
-    // create a row even if no corrupt record column is present
-    if (options.failFast) {
-      throw new SparkSQLJsonProcessingException(s"Malformed line in FAILFAST mode: $record")
-    }
-    if (options.dropMalformed) {
-      if (!isWarningPrintedForMalformedRecord) {
-        logWarning(
-          s"""Found at least one malformed records (sample: $record). The JSON reader will drop
-             |all malformed records in current $DROP_MALFORMED_MODE parser mode. To find out which
-             |corrupted records have been dropped, please switch the parser mode to $PERMISSIVE_MODE
-             |mode and use the default inferred schema.
-             |
-             |Code example to print all malformed records (scala):
-             |===================================================
-             |// The corrupted record exists in column ${columnNameOfCorruptRecord}
-             |val parsedJson = spark.read.json("/path/to/json/file/test.json")
-             |
-           """.stripMargin)
-        isWarningPrintedForMalformedRecord = true
-      }
-      Nil
-    } else if (schema.getFieldIndex(columnNameOfCorruptRecord).isEmpty) {
-      if (!isWarningPrintedForMalformedRecord) {
-        logWarning(
-          s"""Found at least one malformed records (sample: $record). The JSON reader will replace
-             |all malformed records with placeholder null in current $PERMISSIVE_MODE parser mode.
-             |To find out which corrupted records have been replaced with null, please use the
-             |default inferred schema instead of providing a custom schema.
-             |
-             |Code example to print all malformed records (scala):
-             |===================================================
-             |// The corrupted record exists in column ${columnNameOfCorruptRecord}.
-             |val parsedJson = spark.read.json("/path/to/json/file/test.json")
-             |
-           """.stripMargin)
-        isWarningPrintedForMalformedRecord = true
-      }
-      emptyRow
-    } else {
-      val row = new GenericInternalRow(schema.length)
-      for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecord)) {
+  private def failedRecord(record: () => UTF8String): Seq[InternalRow] = {
+    corruptFieldIndex match {
+      case _ if options.failFast =>
+        if (options.wholeFile) {
+          throw new SparkSQLJsonProcessingException("Malformed line in FAILFAST mode")
+        } else {
+          throw new SparkSQLJsonProcessingException(s"Malformed line in FAILFAST mode: ${record()}")
+        }
+
+      case _ if options.dropMalformed =>
+        printWarningForMalformedRecord(record)
+        Nil
+
+      case None =>
+        printWarningForMalformedRecord(record)
+        emptyRow
+
+      case Some(corruptIndex) =>
+        printWarningIfWholeFile()
+        val row = new GenericInternalRow(schema.length)
         require(schema(corruptIndex).dataType == StringType)
-        row.update(corruptIndex, UTF8String.fromString(record))
-      }
-      Seq(row)
+        row.update(corruptIndex, record())
+        Seq(row)
     }
   }
 
@@ -410,13 +441,13 @@ class JacksonParser(
   /**
    * Parse the JSON input to the set of [[InternalRow]]s.
    *
-   * @param recordIdentifier an optional string that will be used to generate
-   *   the corrupt column text instead of record.toString
+   * @param recordLiteral an optional function that will be used to generate
+   *   the corrupt record text instead of record.toString
    */
   def parse[T](
       record: T,
       createParser: (JsonFactory, T) => JsonParser,
-      recordIdentifier: Option[String] = None): Seq[InternalRow] = {
+      recordLiteral: PartialFunction[T, UTF8String] = PartialFunction.empty): Seq[InternalRow] = {
     try {
       Utils.tryWithResource(createParser(factory, record)) { parser =>
         // a null first token is equivalent to testing for input.trim.isEmpty
@@ -431,7 +462,9 @@ class JacksonParser(
       }
     } catch {
       case _: JsonProcessingException | _: SparkSQLJsonProcessingException =>
-        failedRecord(recordIdentifier.getOrElse(record.toString))
+        failedRecord(() => recordLiteral.applyOrElse[T, UTF8String](
+          record,
+          record => UTF8String.fromString(record.toString)))
     }
   }
 }

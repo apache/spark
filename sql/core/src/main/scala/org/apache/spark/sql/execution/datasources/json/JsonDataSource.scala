@@ -22,6 +22,7 @@ import java.io.InputStream
 import scala.reflect.ClassTag
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
+import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -36,6 +37,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.datasources.{CodecStreams, HadoopFileLinesReader, PartitionedFile}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * Common functions for parsing JSON files
@@ -195,9 +198,16 @@ object WholeFileJsonDataSource extends JsonDataSource[PortableDataStream] {
       conf: Configuration,
       file: PartitionedFile,
       parser: JacksonParser): Iterator[InternalRow] = {
+    val partitionedFileString: PartialFunction[Any, UTF8String] = {
+      case _ =>
+        Utils.tryWithResource(createInputStream(conf, file.filePath)) { inputStream =>
+          UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
+        }
+    }
+
     parser.parse(
       createInputStream(conf, file.filePath),
       CreateJacksonParser.inputStream,
-      Some(file.filePath)).toIterator
+      partitionedFileString).toIterator
   }
 }
