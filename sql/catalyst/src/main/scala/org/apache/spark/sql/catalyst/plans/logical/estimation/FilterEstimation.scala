@@ -217,6 +217,24 @@ object FilterEstimation extends Logging {
       logDebug("[CBO] No statistics for " + attrRef)
       return 1.0
     }
+
+    /** Make sure that the Date/Timestamp literal is a valid one */
+    attrRef.dataType match {
+      case DateType =>
+        val dateLiteral = DateTimeUtils.stringToDate(literal.value.asInstanceOf[UTF8String])
+        if (dateLiteral.isEmpty) {
+          logDebug("[CBO] Date literal is wrong, No statistics for " + attrRef)
+          return 1.0
+        }
+      case TimestampType =>
+        val tsLiteral = DateTimeUtils.stringToTimestamp(literal.value.asInstanceOf[UTF8String])
+        if (tsLiteral.isEmpty) {
+          logDebug("[CBO] Timestamp literal is wrong, No statistics for " + attrRef)
+          return 1.0
+        }
+      case _ =>
+    }
+
     op match {
       case EqualTo(l, r) => evaluateEqualTo(op, planStat, attrRef, literal, update)
       case _ =>
@@ -231,6 +249,24 @@ object FilterEstimation extends Logging {
             logDebug("[CBO] No statistics for String/Binary type " + attrRef)
             return 1.0
         }
+    }
+  }
+
+  def numericLiteralToBigDecimal(
+      literal: Literal,
+      dataType: DataType)
+    : BigDecimal = {
+    dataType match {
+      case _: IntegralType =>
+        BigDecimal(literal.value.asInstanceOf[Long])
+      case _: FractionalType =>
+        BigDecimal(literal.value.asInstanceOf[Double])
+      case DateType =>
+        val dateLiteral = DateTimeUtils.stringToDate(literal.value.asInstanceOf[UTF8String])
+        BigDecimal(dateLiteral.asInstanceOf[BigInt])
+      case TimestampType =>
+        val tsLiteral = DateTimeUtils.stringToTimestamp(literal.value.asInstanceOf[UTF8String])
+        BigDecimal(tsLiteral.asInstanceOf[BigInt])
     }
   }
 
@@ -255,34 +291,8 @@ object FilterEstimation extends Logging {
       case _: NumericType | DateType | TimestampType =>
         val statsRange =
           Range(aColStat.min, aColStat.max, attrRef.dataType).asInstanceOf[NumericRange]
-
-        attrRef.dataType match {
-          case _: IntegralType =>
-            (BigDecimal(literal.value.asInstanceOf[Long]) >= statsRange.min) &&
-              (BigDecimal(literal.value.asInstanceOf[Long]) <= statsRange.max)
-
-          case _: FractionalType =>
-            (BigDecimal(literal.value.asInstanceOf[Double]) >= statsRange.min) &&
-              (BigDecimal(literal.value.asInstanceOf[Double]) <= statsRange.max)
-
-          case DateType =>
-            val dateLiteral = DateTimeUtils.stringToDate(literal.value.asInstanceOf[UTF8String])
-            if (dateLiteral.isEmpty) {
-              logDebug("[CBO] Date literal is wrong, No statistics for " + attrRef)
-              return 1.0
-            }
-            val dateBigDecimal = BigDecimal(dateLiteral.asInstanceOf[BigInt])
-            (dateBigDecimal >= statsRange.min) && (dateBigDecimal <= statsRange.max)
-
-          case TimestampType =>
-            val tsLiteral = DateTimeUtils.stringToTimestamp(literal.value.asInstanceOf[UTF8String])
-            if (tsLiteral.isEmpty) {
-              logDebug("[CBO] Timestamp literal is wrong, No statistics for " + attrRef)
-              return 1.0
-            }
-            val tsBigDecimal = BigDecimal(tsLiteral.asInstanceOf[BigInt])
-            (tsBigDecimal >= statsRange.min) && (tsBigDecimal <= statsRange.max)
-        }
+        val lit = numericLiteralToBigDecimal(literal, attrRef.dataType)
+        (lit >= statsRange.min) && (lit <= statsRange.max)
 
       case _ => true  /** for String/Binary type */
     }
@@ -323,8 +333,51 @@ object FilterEstimation extends Logging {
       logDebug("[CBO] No statistics for " + attrRef)
       return 1.0
     }
-    // TODO: will fill in this method later.
-    1.0
+
+    val aColStat = planStat.colStats(attrRef.name)
+    val ndv = aColStat.distinctCount
+    val aType = attrRef.dataType
+
+    // use [min, max] to filter the original hSet
+    val validQuerySet = aType match {
+      case _: NumericType | DateType | TimestampType =>
+        val statsRange =
+          Range(aColStat.min, aColStat.max, aType).asInstanceOf[NumericRange]
+        hSet.map(e => numericLiteralToBigDecimal(e.asInstanceOf[Literal], aType)).
+          filter(e => e >= statsRange.min && e <= statsRange.max)
+
+      /** We assume the whole set since there is no min/max information for String/Binary type */
+      case StringType | BinaryType => hSet
+    }
+    if (validQuerySet.isEmpty) {
+      return 0.0
+    }
+
+    val newNdv = validQuerySet.size
+    val(newMax, newMin) = aType match {
+      case _: NumericType | DateType | TimestampType =>
+        val tmpSet: Set[Double] = validQuerySet.map(e => e.toString.toDouble)
+        (Some(tmpSet.max), Some(tmpSet.min))
+      case _ =>
+        (None, None)
+    }
+
+    if (update) {
+      val newStats = attrRef.dataType match {
+        case _: NumericType | DateType | TimestampType =>
+          aColStat.copy(distinctCount = newNdv, min = newMin,
+            max = newMax, nullCount = 0)
+        case StringType | BinaryType =>
+          aColStat.copy(distinctCount = newNdv, nullCount = 0)
+      }
+      mutableColStats += (attrRef.name -> newStats)
+    }
+
+    /**
+     * return the filter selectivity.  Without advanced statistics such as histograms,
+     * we have to assume uniform distribution.
+     */
+    math.min(1.0, validQuerySet.size / ndv.toDouble)
   }
 
   def evaluateBinaryForNumeric(
@@ -334,8 +387,73 @@ object FilterEstimation extends Logging {
       literal: Literal,
       update: Boolean)
     : Double = {
-    // TODO: will fill in this method later.
-    1.0
+
+    var percent = 1.0
+    val aColStat = planStat.colStats(attrRef.name)
+    val ndv = aColStat.distinctCount
+    val statsRange =
+      Range(aColStat.min, aColStat.max, attrRef.dataType).asInstanceOf[NumericRange]
+
+    val literalValueBD = numericLiteralToBigDecimal(literal, attrRef.dataType)
+
+    /** determine the overlapping degree between predicate range and column's range */
+    val (noOverlap: Boolean, completeOverlap: Boolean) = op match {
+      case LessThan(l, r) =>
+        (literalValueBD <= statsRange.min, literalValueBD > statsRange.max)
+      case LessThanOrEqual(l, r) =>
+        (literalValueBD < statsRange.min, literalValueBD >= statsRange.max)
+      case GreaterThan(l, r) =>
+        (literalValueBD >= statsRange.max, literalValueBD < statsRange.min)
+      case GreaterThanOrEqual(l, r) =>
+        (literalValueBD > statsRange.max, literalValueBD <= statsRange.min)
+    }
+
+    if (noOverlap) {
+      percent = 0.0
+    } else if (completeOverlap) {
+      percent = 1.0
+    } else {
+      /** this is partial overlap case */
+      var newMax = aColStat.max
+      var newMin = aColStat.min
+      var newNdv = ndv
+      val literalToDouble = literalValueBD.toDouble
+      val maxToDouble = BigDecimal(statsRange.max).toDouble
+      val minToDouble = BigDecimal(statsRange.min).toDouble
+
+      /**
+       * Without advanced statistics like histogram, we assume uniform data distribution.
+       * We just prorate the adjusted range over the initial range to compute filter selectivity.
+       */
+      percent = op match {
+        case LessThan(l, r) =>
+          (literalToDouble - minToDouble) / (maxToDouble - minToDouble)
+        case LessThanOrEqual(l, r) =>
+          if (literalValueBD == BigDecimal(statsRange.min)) 1.0 / ndv.toDouble
+          else (literalToDouble - minToDouble) / (maxToDouble - minToDouble)
+        case GreaterThan(l, r) =>
+          (maxToDouble - literalToDouble) / (maxToDouble - minToDouble)
+        case GreaterThanOrEqual(l, r) =>
+          if (literalValueBD == BigDecimal(statsRange.max)) 1.0 / ndv.toDouble
+          else (maxToDouble - literalToDouble) / (maxToDouble - minToDouble)
+      }
+
+      if (update) {
+        op match {
+          case GreaterThan(l, r) => newMin = Some(literal.value)
+          case GreaterThanOrEqual(l, r) => newMin = Some(literal.value)
+          case LessThan(l, r) => newMax = Some(literal.value)
+          case LessThanOrEqual(l, r) => newMax = Some(literal.value)
+        }
+        newNdv = math.max(math.round(ndv.toDouble * percent), 1)
+        val newStats = aColStat.copy(distinctCount = newNdv, min = newMin,
+          max = newMax, nullCount = 0)
+
+        mutableColStats += (attrRef.name -> newStats)
+      }
+    }
+
+    percent
   }
 
 }

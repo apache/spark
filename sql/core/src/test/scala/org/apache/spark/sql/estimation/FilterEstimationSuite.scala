@@ -25,7 +25,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 class FilterEstimationSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  private val data1 = Seq[Long](1, 2, 3, 4)
+  private val data1 = Seq[Long](1, 2, 3, 4, 5)
   private val colStatAfterFilter = ColumnStat(1, Some(2L), Some(2L), 0, 8, 8)
   private val expectedFilterStats = Statistics(
     sizeInBytes = 1 * 8,
