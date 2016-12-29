@@ -294,11 +294,23 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     appResource = PYSPARK_SHELL_RESOURCE;
     constructEnvVarArgs(env, "PYSPARK_SUBMIT_ARGS");
 
-    // The executable is the PYSPARK_DRIVER_PYTHON env variable set by the pyspark script,
-    // followed by PYSPARK_DRIVER_PYTHON_OPTS.
+    // Will pick up the binary executable in the following order
+    // 1. conf spark.pyspark.driver.python
+    // 2. conf spark.pyspark.python
+    // 3. environment variable PYSPARK_DRIVER_PYTHON
+    // 4. environment variable PYSPARK_PYTHON
+    // 5. python
     List<String> pyargs = new ArrayList<>();
-    pyargs.add(firstNonEmpty(System.getenv("PYSPARK_DRIVER_PYTHON"), "python"));
+    pyargs.add(firstNonEmpty(conf.get(SparkLauncher.PYSPARK_DRIVER_PYTHON),
+      conf.get(SparkLauncher.PYSPARK_PYTHON),
+      System.getenv("PYSPARK_DRIVER_PYTHON"),
+      System.getenv("PYSPARK_PYTHON"),
+      "python"));
     String pyOpts = System.getenv("PYSPARK_DRIVER_PYTHON_OPTS");
+    if (conf.containsKey(SparkLauncher.PYSPARK_PYTHON)) {
+      // pass conf spark.pyspark.python to python by environment variable.
+      env.put("PYSPARK_PYTHON", conf.get(SparkLauncher.PYSPARK_PYTHON));
+    }
     if (!isEmpty(pyOpts)) {
       pyargs.addAll(parseOptionString(pyOpts));
     }
@@ -324,7 +336,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
             join(File.separator, sparkHome, "R", "lib", "SparkR", "profile", "shell.R"));
 
     List<String> args = new ArrayList<>();
-    args.add(firstNonEmpty(System.getenv("SPARKR_DRIVER_R"), "R"));
+    args.add(firstNonEmpty(conf.get(SparkLauncher.SPARKR_R_SHELL),
+      System.getenv("SPARKR_DRIVER_R"), "R"));
     return args;
   }
 

@@ -85,7 +85,7 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
         val eta = math.log(mu / (1.0 - mu))
         Instance(eta, instance.weight, instance.features)
       }
-      val initial = new WeightedLeastSquares(fitIntercept, regParam = 0.0,
+      val initial = new WeightedLeastSquares(fitIntercept, regParam = 0.0, elasticNetParam = 0.0,
         standardizeFeatures = false, standardizeLabel = false).fit(newInstances)
       val irls = new IterativelyReweightedLeastSquares(initial, BinomialReweightFunc,
         fitIntercept, regParam = 0.0, maxIter = 25, tol = 1e-8).fit(instances1)
@@ -122,7 +122,7 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
         val eta = math.log(mu)
         Instance(eta, instance.weight, instance.features)
       }
-      val initial = new WeightedLeastSquares(fitIntercept, regParam = 0.0,
+      val initial = new WeightedLeastSquares(fitIntercept, regParam = 0.0, elasticNetParam = 0.0,
         standardizeFeatures = false, standardizeLabel = false).fit(newInstances)
       val irls = new IterativelyReweightedLeastSquares(initial, PoissonReweightFunc,
         fitIntercept, regParam = 0.0, maxIter = 25, tol = 1e-8).fit(instances2)
@@ -155,7 +155,7 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
 
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
-      val initial = new WeightedLeastSquares(fitIntercept, regParam = 0.0,
+      val initial = new WeightedLeastSquares(fitIntercept, regParam = 0.0, elasticNetParam = 0.0,
         standardizeFeatures = false, standardizeLabel = false).fit(instances2)
       val irls = new IterativelyReweightedLeastSquares(initial, L1RegressionReweightFunc,
         fitIntercept, regParam = 0.0, maxIter = 200, tol = 1e-7).fit(instances2)

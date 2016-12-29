@@ -61,7 +61,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     pw.close()
 
     // Path to tmpFile
-    tmpFilePath = "file://" + tmpFile.getAbsolutePath
+    tmpFilePath = tmpFile.toURI.toString
   }
 
   after {
@@ -181,7 +181,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     sc.textFile(tmpFilePath, 4)
       .map(key => (key, 1))
       .reduceByKey(_ + _)
-      .saveAsTextFile("file://" + tmpFile.getAbsolutePath)
+      .saveAsTextFile(tmpFile.toURI.toString)
 
     sc.listenerBus.waitUntilEmpty(500)
     assert(inputRead == numRecords)
@@ -197,7 +197,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     val numPartitions = 2
     val cartVector = 0 to 9
     val cartFile = new File(tmpDir, getClass.getSimpleName + "_cart.txt")
-    val cartFilePath = "file://" + cartFile.getAbsolutePath
+    val cartFilePath = cartFile.toURI.toString
 
     // write files to disk so we can read them later.
     sc.parallelize(cartVector).saveAsTextFile(cartFilePath)

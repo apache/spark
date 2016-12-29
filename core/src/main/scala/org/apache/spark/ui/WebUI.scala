@@ -28,6 +28,7 @@ import org.json4s.JsonAST.{JNothing, JValue}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
 
@@ -50,13 +51,13 @@ private[spark] abstract class WebUI(
   protected val handlers = ArrayBuffer[ServletContextHandler]()
   protected val pageToHandlers = new HashMap[WebUIPage, ArrayBuffer[ServletContextHandler]]
   protected var serverInfo: Option[ServerInfo] = None
-  protected val localHostName = Utils.localHostNameForURI()
-  protected val publicHostName = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHostName)
+  protected val publicHostName = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(
+    conf.get(DRIVER_HOST_ADDRESS))
   private val className = Utils.getFormattedClassName(this)
 
   def getBasePath: String = basePath
-  def getTabs: Seq[WebUITab] = tabs.toSeq
-  def getHandlers: Seq[ServletContextHandler] = handlers.toSeq
+  def getTabs: Seq[WebUITab] = tabs
+  def getHandlers: Seq[ServletContextHandler] = handlers
   def getSecurityManager: SecurityManager = securityManager
 
   /** Attach a tab to this UI, along with all of its attached pages. */
@@ -83,8 +84,8 @@ private[spark] abstract class WebUI(
       (request: HttpServletRequest) => page.renderJson(request), securityManager, conf, basePath)
     attachHandler(renderHandler)
     attachHandler(renderJsonHandler)
-    pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
-      .append(renderHandler)
+    val handlers = pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
+    handlers += renderHandler
   }
 
   /** Attach a handler to this UI. */
@@ -132,7 +133,7 @@ private[spark] abstract class WebUI(
   def initialize(): Unit
 
   /** Bind to the HTTP server behind this web interface. */
-  def bind() {
+  def bind(): Unit = {
     assert(!serverInfo.isDefined, s"Attempted to bind $className more than once!")
     try {
       val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
@@ -152,7 +153,7 @@ private[spark] abstract class WebUI(
   def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
 
   /** Stop the server behind this web interface. Only valid after bind(). */
-  def stop() {
+  def stop(): Unit = {
     assert(serverInfo.isDefined,
       s"Attempted to stop $className before binding to a server!")
     serverInfo.get.stop()

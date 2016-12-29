@@ -109,6 +109,16 @@ class CloudPickler(Pickler):
             if 'recursion' in e.args[0]:
                 msg = """Could not pickle object as excessively deep recursion required."""
                 raise pickle.PicklingError(msg)
+        except pickle.PickleError:
+            raise
+        except Exception as e:
+            if "'i' format requires" in e.message:
+                msg = "Object too large to serialize: " + e.message
+            else:
+                msg = "Could not serialize object: " + e.__class__.__name__ + ": " + e.message
+            print_exec(sys.stderr)
+            raise pickle.PicklingError(msg)
+            
 
     def save_memoryview(self, obj):
         """Fallback to save_string"""

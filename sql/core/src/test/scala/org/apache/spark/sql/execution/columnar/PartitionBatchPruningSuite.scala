@@ -85,6 +85,8 @@ class PartitionBatchPruningSuite
   // Comparisons
   checkBatchPruning("SELECT key FROM pruningData WHERE key = 1", 1, 1)(Seq(1))
   checkBatchPruning("SELECT key FROM pruningData WHERE 1 = key", 1, 1)(Seq(1))
+  checkBatchPruning("SELECT key FROM pruningData WHERE key <=> 1", 1, 1)(Seq(1))
+  checkBatchPruning("SELECT key FROM pruningData WHERE 1 <=> key", 1, 1)(Seq(1))
   checkBatchPruning("SELECT key FROM pruningData WHERE key < 12", 1, 2)(1 to 11)
   checkBatchPruning("SELECT key FROM pruningData WHERE key <= 11", 1, 2)(1 to 11)
   checkBatchPruning("SELECT key FROM pruningData WHERE key > 88", 1, 2)(89 to 100)
