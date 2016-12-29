@@ -276,7 +276,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]</code></td>
-    <td>Details for the given stage attempt</td>
+    <td>Details for the given stage attempt.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskSummary</code></td>
@@ -319,31 +319,31 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   </tr>
   <tr>
     <td><code>/applications/[app-id]/streaming/statistics</code></td>
-    <td>Statistics information of stream</td>
+    <td>Statistics information of stream.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/streaming/receivers</code></td>
-    <td>A list of all receiver streams</td>
+    <td>A list of all receiver streams.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/streaming/receivers/[stream-id]</code></td>
-    <td>Details of the given receiver stream</td>
+    <td>Details of the given receiver stream.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/streaming/batches</code></td>
-    <td>A list of all retained batches</td>
+    <td>A list of all retained batches.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/streaming/batches/[batch-id]</code></td>
-    <td>Details of the given batch</td>
+    <td>Details of the given batch.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations</code></td>
-    <td>A list of all output operations of the given batch</td>
+    <td>A list of all output operations of the given batch.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations/[outputOp-id]</code></td>
-    <td>Details of the given operation and given batch</td>
+    <td>Details of the given operation and given batch.</td>
   </tr>       
 </table>
 
