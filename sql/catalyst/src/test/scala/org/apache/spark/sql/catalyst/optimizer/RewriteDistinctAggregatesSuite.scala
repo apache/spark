@@ -112,11 +112,9 @@ case class DummpAgg(
 
   override def createAggregationBuffer(): Int = 0
 
-  override def update(buffer: Int, input: InternalRow): Unit = {
-  }
+  override def update(buffer: Int, input: InternalRow): Int = 0
 
-  override def merge(buffer: Int, input: Int): Unit = {
-  }
+  override def merge(buffer: Int, input: Int): Int = 0
 
   override def eval(buffer: Int): Any = 0
 
