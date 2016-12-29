@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.json.JacksonGenerator
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
@@ -2569,7 +2570,7 @@ class Dataset[T] private[sql](
    * created it, i.e. it will be automatically dropped when the session terminates. It's not
    * tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
    *
-   * @throws AnalysisException if the view name already exists
+   * @throws AnalysisException if the view name is invalid or already exists
    *
    * @group basic
    * @since 2.0.0
@@ -2585,9 +2586,12 @@ class Dataset[T] private[sql](
    * Creates a local temporary view using the given name. The lifetime of this
    * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
    *
+   * @throws AnalysisException if the view name is invalid
+   *
    * @group basic
    * @since 2.0.0
    */
+  @throws[AnalysisException]
   def createOrReplaceTempView(viewName: String): Unit = withPlan {
     createTempViewCommand(viewName, replace = true, global = false)
   }
@@ -2601,7 +2605,7 @@ class Dataset[T] private[sql](
    * preserved database `_global_temp`, and we must use the qualified name to refer a global temp
    * view, e.g. `SELECT * FROM _global_temp.view1`.
    *
-   * @throws AnalysisException if the view name already exists
+   * @throws AnalysisException if the view name is invalid or already exists
    *
    * @group basic
    * @since 2.1.0
@@ -2616,8 +2620,14 @@ class Dataset[T] private[sql](
       replace: Boolean,
       global: Boolean): CreateViewCommand = {
     val viewType = if (global) GlobalTempView else LocalTempView
+
+    val tableIdentifier = try {
+      sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName)
+    } catch {
+      case _: ParseException => throw new AnalysisException(s"Invalid view name: $viewName")
+    }
     CreateViewCommand(
-      name = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
+      name = tableIdentifier,
       userSpecifiedColumns = Nil,
       comment = None,
       properties = Map.empty,

@@ -249,7 +249,7 @@ public class JavaSparkSQLExample {
     // $example off:create_ds$
   }
 
-  private static void runInferSchemaExample(SparkSession spark) {
+  private static void runInferSchemaExample(SparkSession spark) throws AnalysisException {
     // $example on:schema_inferring$
     // Create an RDD of Person objects from a text file
     JavaRDD<Person> peopleRDD = spark.read()
@@ -305,7 +305,7 @@ public class JavaSparkSQLExample {
     // $example off:schema_inferring$
   }
 
-  private static void runProgrammaticSchemaExample(SparkSession spark) {
+  private static void runProgrammaticSchemaExample(SparkSession spark) throws AnalysisException {
     // $example on:programmatic_schema$
     // Create an RDD
     JavaRDD<String> peopleRDD = spark.sparkContext()

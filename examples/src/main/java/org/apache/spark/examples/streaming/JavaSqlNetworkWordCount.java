@@ -26,6 +26,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.VoidFunction2;
+import org.apache.spark.sql.AnalysisException;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
@@ -95,13 +96,16 @@ public final class JavaSqlNetworkWordCount {
         Dataset<Row> wordsDataFrame = spark.createDataFrame(rowRDD, JavaRecord.class);
 
         // Creates a temporary view using the DataFrame
-        wordsDataFrame.createOrReplaceTempView("words");
-
-        // Do word count on table using SQL and print it
-        Dataset<Row> wordCountsDataFrame =
-            spark.sql("select word, count(*) as total from words group by word");
-        System.out.println("========= " + time + "=========");
-        wordCountsDataFrame.show();
+        try {
+          wordsDataFrame.createOrReplaceTempView("words");
+          // Do word count on table using SQL and print it
+          Dataset<Row> wordCountsDataFrame =
+                  spark.sql("select word, count(*) as total from words group by word");
+          System.out.println("========= " + time + "=========");
+          wordCountsDataFrame.show();
+        } catch (AnalysisException ae) {
+          System.out.println(ae.getMessage());
+        }
       }
     });
 
