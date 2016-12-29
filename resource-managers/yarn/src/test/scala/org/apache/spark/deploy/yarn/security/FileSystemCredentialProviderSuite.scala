@@ -23,30 +23,30 @@ import org.scalatest.{Matchers, PrivateMethodTester}
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 
-class HDFSCredentialProviderSuite
+class FileSystemCredentialProviderSuite
     extends SparkFunSuite
     with PrivateMethodTester
     with Matchers {
   private val _getTokenRenewer = PrivateMethod[String]('getTokenRenewer)
 
   private def getTokenRenewer(
-      hdfsCredentialProvider: HDFSCredentialProvider, conf: Configuration): String = {
-    hdfsCredentialProvider invokePrivate _getTokenRenewer(conf)
+      fsCredentialProvider: FileSystemCredentialProvider, conf: Configuration): String = {
+    fsCredentialProvider invokePrivate _getTokenRenewer(conf)
   }
 
-  private var hdfsCredentialProvider: HDFSCredentialProvider = null
+  private var fsCredentialProvider: FileSystemCredentialProvider = null
 
   override def beforeAll() {
     super.beforeAll()
 
-    if (hdfsCredentialProvider == null) {
-      hdfsCredentialProvider = new HDFSCredentialProvider()
+    if (fsCredentialProvider == null) {
+      fsCredentialProvider = new FileSystemCredentialProvider()
     }
   }
 
   override def afterAll() {
-    if (hdfsCredentialProvider != null) {
-      hdfsCredentialProvider = null
+    if (fsCredentialProvider != null) {
+      fsCredentialProvider = null
     }
 
     super.afterAll()
@@ -56,7 +56,7 @@ class HDFSCredentialProviderSuite
     val hadoopConf = new Configuration()
     hadoopConf.set("yarn.resourcemanager.address", "myrm:8033")
     hadoopConf.set("yarn.resourcemanager.principal", "yarn/myrm:8032@SPARKTEST.COM")
-    val renewer = getTokenRenewer(hdfsCredentialProvider, hadoopConf)
+    val renewer = getTokenRenewer(fsCredentialProvider, hadoopConf)
     renewer should be ("yarn/myrm:8032@SPARKTEST.COM")
   }
 
@@ -64,7 +64,7 @@ class HDFSCredentialProviderSuite
     val hadoopConf = new Configuration()
     val caught =
       intercept[SparkException] {
-        getTokenRenewer(hdfsCredentialProvider, hadoopConf)
+        getTokenRenewer(fsCredentialProvider, hadoopConf)
       }
     assert(caught.getMessage === "Can't get Master Kerberos principal for use as renewer")
   }
