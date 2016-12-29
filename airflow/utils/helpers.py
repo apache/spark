@@ -208,9 +208,9 @@ def kill_descendant_processes(logger, pids_to_kill=None):
 
     temp_processes = descendant_processes[:]
     for descendant in temp_processes:
-        logger.warn("Terminating descendant process {} PID: {}"
-                    .format(descendant.cmdline(), descendant.pid))
         try:
+            logger.warn("Terminating descendant process {} PID: {}"
+                        .format(descendant.cmdline(), descendant.pid))
             descendant.terminate()
         except psutil.NoSuchProcess:
             descendant_processes.remove(descendant)
