@@ -147,7 +147,9 @@ print "\n========================== Translating contributor list ===============
 lines = contributors_file.readlines()
 contributions = []
 for i, line in enumerate(lines):
-    temp_author = line.strip(" * ").split(" -- ")[0]
+    # It is possible that a line in the contributor file only has the github name, e.g. yhuai.
+    # So, we need a strip() to remove the newline.
+    temp_author = line.strip(" * ").split(" -- ")[0].strip()
     print "Processing author %s (%d/%d)" % (temp_author, i + 1, len(lines))
     if not temp_author:
         error_msg = "    ERROR: Expected the following format \" * <author> -- <contributions>\"\n"
