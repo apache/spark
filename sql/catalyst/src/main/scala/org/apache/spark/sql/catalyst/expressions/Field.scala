@@ -8,7 +8,7 @@ import org.apache.spark.sql.types.{AtomicType, DataType, IntegerType}
 
 /**
   * A function that returns the index of str in (str1, str2, ...) list or 0 if not found.
-  * It takes at least 2 parameters, and all parameters' types should be subtypes of AtomicType
+  * It takes at least 2 parameters, and all parameters' types should be subtypes of AtomicType.
   */
 @ExpressionDescription(
   usage = "_FUNC_(str, str1, str2, ...) - Returns the index of str in the str1,str2,... list or 0 if not found.",
@@ -41,7 +41,7 @@ case class Field(children: Seq[Expression]) extends Expression {
     val target = children.head.eval(input)
     val targetDataType = children.head.dataType
     def findEqual(target: Any, params: Seq[Expression], index: Int): Int = {
-      params match {
+      params.toList match {
         case Nil => 0
         case head::tail if targetDataType == head.dataType && ordering.equiv(target, head.eval(input)) => index
         case _ => findEqual(target, params.tail, index + 1)
