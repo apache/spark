@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogUtils, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -86,6 +86,108 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
       }
       c
 
+    // When we append data to an existing table, check if the given provider, partition columns,
+    // bucket spec, etc. match the existing table, and adjust the columns order of the given query
+    // if necessary.
+    case c @ CreateTable(tableDesc, SaveMode.Append, Some(query))
+        if sparkSession.sessionState.catalog.tableExists(tableDesc.identifier) =>
+      // This is guaranteed by the parser and `DataFrameWriter`
+      assert(tableDesc.schema.isEmpty && tableDesc.provider.isDefined)
+
+      // Analyze the query in CTAS and then we can do the normalization and checking.
+      val qe = sparkSession.sessionState.executePlan(query)
+      qe.assertAnalyzed()
+      val analyzedQuery = qe.analyzed
+
+      val catalog = sparkSession.sessionState.catalog
+      val db = tableDesc.identifier.database.getOrElse(catalog.getCurrentDatabase)
+      val tableIdentWithDB = tableDesc.identifier.copy(database = Some(db))
+      val tableName = tableIdentWithDB.unquotedString
+      val existingTable = catalog.getTableMetadata(tableIdentWithDB)
+
+      if (existingTable.tableType == CatalogTableType.VIEW) {
+        throw new AnalysisException("Saving data into a view is not allowed.")
+      }
+
+      if (existingTable.provider.get == DDLUtils.HIVE_PROVIDER) {
+        throw new AnalysisException(s"Saving data in the Hive serde table $tableName is " +
+          "not supported yet. Please use the insertInto() API as an alternative.")
+      }
+
+      // Check if the specified data source match the data source of the existing table.
+      val existingProvider = DataSource.lookupDataSource(existingTable.provider.get)
+      val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get)
+      // TODO: Check that options from the resolved relation match the relation that we are
+      // inserting into (i.e. using the same compression).
+      if (existingProvider != specifiedProvider) {
+        throw new AnalysisException(s"The format of the existing table $tableName is " +
+          s"`${existingProvider.getSimpleName}`. It doesn't match the specified format " +
+          s"`${specifiedProvider.getSimpleName}`.")
+      }
+
+      if (analyzedQuery.schema.length != existingTable.schema.length) {
+        throw new AnalysisException(
+          s"The column number of the existing table $tableName" +
+            s"(${existingTable.schema.catalogString}) doesn't match the data schema" +
+            s"(${query.schema.catalogString})")
+      }
+
+      val resolver = sparkSession.sessionState.conf.resolver
+      val tableCols = existingTable.schema.map(_.name)
+
+      // As we are inserting into an existing table, we should respect the existing schema and
+      // adjust the column order of the given dataframe according to it, or throw exception
+      // if the column names do not match.
+      val adjustedColumns = tableCols.map { col =>
+        analyzedQuery.resolve(Seq(col), resolver).getOrElse {
+          val inputColumns = analyzedQuery.schema.map(_.name).mkString(", ")
+          throw new AnalysisException(
+            s"cannot resolve '$col' given input columns: [$inputColumns]")
+        }
+      }
+
+      // Check if the specified partition columns match the existing table.
+      val specifiedPartCols = CatalogUtils.normalizePartCols(
+        tableName, tableCols, tableDesc.partitionColumnNames, resolver)
+      if (specifiedPartCols != existingTable.partitionColumnNames) {
+        val existingPartCols = existingTable.partitionColumnNames.mkString(", ")
+        throw new AnalysisException(
+          s"""
+             |Specified partitioning does not match that of the existing table $tableName.
+             |Specified partition columns: [${specifiedPartCols.mkString(", ")}]
+             |Existing partition columns: [$existingPartCols]
+          """.stripMargin)
+      }
+
+      // Check if the specified bucketing match the existing table.
+      val specifiedBucketSpec = tableDesc.bucketSpec.map { bucketSpec =>
+        CatalogUtils.normalizeBucketSpec(tableName, tableCols, bucketSpec, resolver)
+      }
+      if (specifiedBucketSpec != existingTable.bucketSpec) {
+        val specifiedBucketString =
+          specifiedBucketSpec.map(_.toString).getOrElse("not bucketed")
+        val existingBucketString =
+          existingTable.bucketSpec.map(_.toString).getOrElse("not bucketed")
+        throw new AnalysisException(
+          s"""
+             |Specified bucketing does not match that of the existing table $tableName.
+             |Specified bucketing: $specifiedBucketString
+             |Existing bucketing: $existingBucketString
+          """.stripMargin)
+      }
+
+      val newQuery = if (adjustedColumns != analyzedQuery.output) {
+        Project(adjustedColumns, analyzedQuery)
+      } else {
+        analyzedQuery
+      }
+
+      c.copy(
+        // trust everything from the existing table, except schema as we assume it's empty in a lot
+        // of places, when we do CTAS.
+        tableDesc = existingTable.copy(schema = new StructType()),
+        query = Some(newQuery))
+
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
     // config, and do various checks:
     //   * column names in table definition can't be duplicated.
@@ -94,7 +196,7 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
     //   * can't use all table columns as partition columns.
     //   * partition columns' type must be AtomicType.
     //   * sort columns' type must be orderable.
-    case c @ CreateTable(tableDesc, mode, query) =>
+    case c @ CreateTable(tableDesc, _, query) =>
       val analyzedQuery = query.map { q =>
         // Analyze the query in CTAS and then we can do the normalization and checking.
         val qe = sparkSession.sessionState.executePlan(q)
@@ -106,6 +208,7 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
       } else {
         tableDesc.schema
       }
+
       val columnNames = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
         schema.map(_.name)
       } else {
@@ -113,22 +216,24 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
       }
       checkDuplication(columnNames, "table definition of " + tableDesc.identifier)
 
-      val partitionColsChecked = checkPartitionColumns(schema, tableDesc)
-      val bucketColsChecked = checkBucketColumns(schema, partitionColsChecked)
-      c.copy(tableDesc = bucketColsChecked, query = analyzedQuery)
+      val normalizedTable = tableDesc.copy(
+        partitionColumnNames = normalizePartitionColumns(schema, tableDesc),
+        bucketSpec = normalizeBucketSpec(schema, tableDesc))
+
+      c.copy(tableDesc = normalizedTable, query = analyzedQuery)
   }
 
-  private def checkPartitionColumns(schema: StructType, tableDesc: CatalogTable): CatalogTable = {
+  private def normalizePartitionColumns(schema: StructType, table: CatalogTable): Seq[String] = {
     val normalizedPartitionCols = CatalogUtils.normalizePartCols(
-      tableName = tableDesc.identifier.unquotedString,
+      tableName = table.identifier.unquotedString,
       tableCols = schema.map(_.name),
-      partCols = tableDesc.partitionColumnNames,
+      partCols = table.partitionColumnNames,
       resolver = sparkSession.sessionState.conf.resolver)
 
     checkDuplication(normalizedPartitionCols, "partition")
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
-      if (tableDesc.provider.get == DDLUtils.HIVE_PROVIDER) {
+      if (table.provider.get == DDLUtils.HIVE_PROVIDER) {
         // When we hit this branch, it means users didn't specify schema for the table to be
         // created, as we always include partition columns in table schema for hive serde tables.
         // The real schema will be inferred at hive metastore by hive serde, plus the given
@@ -144,28 +249,28 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
       case other => failAnalysis(s"Cannot use ${other.simpleString} for partition column")
     }
 
-    tableDesc.copy(partitionColumnNames = normalizedPartitionCols)
+    normalizedPartitionCols
   }
 
-  private def checkBucketColumns(schema: StructType, tableDesc: CatalogTable): CatalogTable = {
-    tableDesc.bucketSpec match {
+  private def normalizeBucketSpec(schema: StructType, table: CatalogTable): Option[BucketSpec] = {
+    table.bucketSpec match {
       case Some(bucketSpec) =>
-        val normalizedBucketing = CatalogUtils.normalizeBucketSpec(
-          tableName = tableDesc.identifier.unquotedString,
+        val normalizedBucketSpec = CatalogUtils.normalizeBucketSpec(
+          tableName = table.identifier.unquotedString,
           tableCols = schema.map(_.name),
           bucketSpec = bucketSpec,
           resolver = sparkSession.sessionState.conf.resolver)
-        checkDuplication(normalizedBucketing.bucketColumnNames, "bucket")
-        checkDuplication(normalizedBucketing.sortColumnNames, "sort")
+        checkDuplication(normalizedBucketSpec.bucketColumnNames, "bucket")
+        checkDuplication(normalizedBucketSpec.sortColumnNames, "sort")
 
-        normalizedBucketing.sortColumnNames.map(schema(_)).map(_.dataType).foreach {
+        normalizedBucketSpec.sortColumnNames.map(schema(_)).map(_.dataType).foreach {
           case dt if RowOrdering.isOrderable(dt) => // OK
           case other => failAnalysis(s"Cannot use ${other.simpleString} for sorting column")
         }
 
-        tableDesc.copy(bucketSpec = Some(normalizedBucketing))
+        Some(normalizedBucketSpec)
 
-      case None => tableDesc
+      case None => None
     }
   }
 
@@ -294,27 +399,6 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case c @ CreateTable(tableDesc, mode, query) if c.resolved =>
-        if (query.isDefined &&
-          mode == SaveMode.Overwrite &&
-          catalog.tableExists(tableDesc.identifier)) {
-          // Need to remove SubQuery operator.
-          EliminateSubqueryAliases(catalog.lookupRelation(tableDesc.identifier)) match {
-            // Only do the check if the table is a data source table
-            // (the relation is a BaseRelation).
-            case LogicalRelation(dest: BaseRelation, _, _) =>
-              // Get all input data source relations of the query.
-              val srcRelations = query.get.collect {
-                case LogicalRelation(src: BaseRelation, _, _) => src
-              }
-              if (srcRelations.contains(dest)) {
-                failAnalysis(
-                  s"Cannot overwrite table ${tableDesc.identifier} that is also being read from")
-              }
-            case _ => // OK
-          }
-        }
-
       case logical.InsertIntoTable(
           l @ LogicalRelation(t: InsertableRelation, _, _), partition, query, _, _) =>
         // Right now, we do not support insert into a data source table with partition specs.
