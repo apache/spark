@@ -60,7 +60,7 @@ object MimaExcludes {
       // [SPARK-16967] Move Mesos to Module
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkMasterRegex.MESOS_REGEX"),
       // [SPARK-16520] [WEBUI] Link executors to corresponding worker pages
-      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.ExecutorInfo.this")
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.ExecutorInfo.this"),
       // [SPARK-16240] ML persistence backward compatibility for LDA
       ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.clustering.LDA$"),
       // [SPARK-17717] Add Find and Exists method to Catalog.
