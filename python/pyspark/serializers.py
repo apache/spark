@@ -382,18 +382,30 @@ def _hijack_namedtuple():
         return
 
     global _old_namedtuple  # or it will put in closure
+    global _old_namedtuple_kwdefaults  # or it will put in closure too
 
     def _copy_func(f):
         return types.FunctionType(f.__code__, f.__globals__, f.__name__,
                                   f.__defaults__, f.__closure__)
 
+    def _kwdefaults(f):
+        kargs = getattr(f, "__kwdefaults__", None)
+        if kargs is None:
+            return {}
+        else:
+            return kargs
+
     _old_namedtuple = _copy_func(collections.namedtuple)
+    _old_namedtuple_kwdefaults = _kwdefaults(collections.namedtuple)
 
     def namedtuple(*args, **kwargs):
+        for k, v in _old_namedtuple_kwdefaults.items():
+            kwargs[k] = kwargs.get(k, v)
         cls = _old_namedtuple(*args, **kwargs)
         return _hack_namedtuple(cls)
 
     # replace namedtuple with new one
+    collections.namedtuple.__globals__["_old_namedtuple_kwdefaults"] = _old_namedtuple_kwdefaults
     collections.namedtuple.__globals__["_old_namedtuple"] = _old_namedtuple
     collections.namedtuple.__globals__["_hack_namedtuple"] = _hack_namedtuple
     collections.namedtuple.__code__ = namedtuple.__code__
