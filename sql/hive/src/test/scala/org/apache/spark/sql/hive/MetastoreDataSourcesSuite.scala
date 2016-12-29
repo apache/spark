@@ -1239,7 +1239,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       var e = intercept[AnalysisException] {
         table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
       }.getMessage
-      assert(e.contains(s"Cannot overwrite table `$tableName` that is also being read from"))
+      assert(e.contains(s"Cannot overwrite table default.$tableName that is also being read from"))
 
       e = intercept[AnalysisException] {
         table(tableName).write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
