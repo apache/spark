@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, NoSuchFileException, Paths}
 
+import scala.io.Source
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.Column
@@ -45,13 +46,21 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   // Used for generating new query answer files by saving
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
-  private val goldenSQLPath = "src/test/resources/sqlgen/"
+  private val goldenSQLPath = {
+    // If regenerateGoldenFiles is true, we must be running this in SBT and we use hard-coded
+    // relative path. Otherwise, we use classloader's getResource to find the location.
+    if (regenerateGoldenFiles) {
+      java.nio.file.Paths.get("src", "test", "resources", "sqlgen").toFile.getCanonicalPath
+    } else {
+      getTestResourcePath("sqlgen")
+    }
+  }
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    sql("DROP TABLE IF EXISTS parquet_t0")
-    sql("DROP TABLE IF EXISTS parquet_t1")
-    sql("DROP TABLE IF EXISTS parquet_t2")
+    (0 to 3).foreach { i =>
+      sql(s"DROP TABLE IF EXISTS parquet_t$i")
+    }
     sql("DROP TABLE IF EXISTS t0")
 
     spark.range(10).write.saveAsTable("parquet_t0")
@@ -87,10 +96,9 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   override protected def afterAll(): Unit = {
     try {
-      sql("DROP TABLE IF EXISTS parquet_t0")
-      sql("DROP TABLE IF EXISTS parquet_t1")
-      sql("DROP TABLE IF EXISTS parquet_t2")
-      sql("DROP TABLE IF EXISTS parquet_t3")
+      (0 to 3).foreach { i =>
+        sql(s"DROP TABLE IF EXISTS parquet_t$i")
+      }
       sql("DROP TABLE IF EXISTS t0")
     } finally {
       super.afterAll()
@@ -110,12 +118,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         Files.write(path, answerText.getBytes(StandardCharsets.UTF_8))
       } else {
         val goldenFileName = s"sqlgen/$answerFile.sql"
-        val resourceFile = getClass.getClassLoader.getResource(goldenFileName)
-        if (resourceFile == null) {
+        val resourceStream = getClass.getClassLoader.getResourceAsStream(goldenFileName)
+        if (resourceStream == null) {
           throw new NoSuchFileException(goldenFileName)
         }
-        val path = resourceFile.getPath
-        val answerText = new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8)
+        val answerText = try {
+          Source.fromInputStream(resourceStream).mkString
+        } finally {
+          resourceStream.close
+        }
         val sqls = answerText.split(separator)
         assert(sqls.length == 2, "Golden sql files should have a separator.")
         val expectedSQL = sqls(1).trim()
@@ -234,6 +245,16 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   // when converting resolved plans back to SQL query strings as expression IDs are stripped.
   test("aggregate function in order by clause with multiple order keys") {
     checkSQL("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY key, MAX(key)", "agg3")
+  }
+
+  test("order by asc nulls last") {
+    checkSQL("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY key nulls last, MAX(key)",
+      "sort_asc_nulls_last")
+  }
+
+  test("order by desc nulls first") {
+    checkSQL("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY key desc nulls first," +
+      "MAX(key)", "sort_desc_nulls_first")
   }
 
   test("type widening in union") {
@@ -642,7 +663,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkColumnNames(
       """SELECT x.a, y.a, x.b, y.b
         |FROM (SELECT 1 AS a, 2 AS b) x
-        |INNER JOIN (SELECT 1 AS a, 2 AS b) y
+        |CROSS JOIN (SELECT 1 AS a, 2 AS b) y
         |ON x.a = y.a
       """.stripMargin,
       "a", "a", "b", "b"
@@ -698,6 +719,20 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
          |FROM parquet_t1
       """.stripMargin,
       "window_basic_3")
+
+    checkSQL(
+      """
+        |SELECT key, value, ROUND(AVG(key) OVER (), 2)
+        |FROM parquet_t1 ORDER BY key nulls last
+      """.stripMargin,
+      "window_basic_asc_nulls_last")
+
+    checkSQL(
+      """
+        |SELECT key, value, ROUND(AVG(key) OVER (), 2)
+        |FROM parquet_t1 ORDER BY key desc nulls first
+      """.stripMargin,
+      "window_basic_desc_nulls_first")
   }
 
   test("multiple window functions in one expression") {
@@ -810,7 +845,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSQL(
       """
         |SELECT COUNT(a.value), b.KEY, a.KEY
-        |FROM parquet_t1 a, parquet_t1 b
+        |FROM parquet_t1 a CROSS JOIN parquet_t1 b
         |GROUP BY a.KEY, b.KEY
         |HAVING MAX(a.KEY) > 0
       """.stripMargin,
@@ -1121,5 +1156,31 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |select * from values ("one", 1), ("two", 2), ("three", null) as data(a, b) where b > 1
       """.stripMargin,
       "inline_tables")
+  }
+
+  test("SPARK-17750 - interval arithmetic") {
+    withTable("dates") {
+      sql("create table dates (ts timestamp)")
+      checkSQL(
+        """
+          |select ts + interval 1 day, ts + interval 2 days,
+          |       ts - interval 1 day, ts - interval 2 days,
+          |       ts + interval '1' day, ts + interval '2' days,
+          |       ts - interval '1' day, ts - interval '2' days
+          |from dates
+        """.stripMargin,
+        "interval_arithmetic"
+      )
+    }
+  }
+
+  test("SPARK-17982 - limit") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(id INT, name STRING)")
+      checkSQL(
+        "SELECT * FROM (SELECT id FROM tbl LIMIT 2)",
+        "limit"
+      )
+    }
   }
 }

@@ -66,7 +66,7 @@ private[spark] class SparkConfigProvider(conf: JMap[String, String]) extends Con
     findEntry(key) match {
       case e: ConfigEntryWithDefault[_] => Option(e.defaultValueString)
       case e: ConfigEntryWithDefaultString[_] => Option(e.defaultValueString)
-      case e: FallbackConfigEntry[_] => defaultValueString(e.fallback.key)
+      case e: FallbackConfigEntry[_] => get(e.fallback.key)
       case _ => None
     }
   }

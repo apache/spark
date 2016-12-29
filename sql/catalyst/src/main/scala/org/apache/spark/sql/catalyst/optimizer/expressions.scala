@@ -57,20 +57,37 @@ object ConstantFolding extends Rule[LogicalPlan] {
  * Reorder associative integral-type operators and fold all constants into one.
  */
 object ReorderAssociativeOperator extends Rule[LogicalPlan] {
-  private def flattenAdd(e: Expression): Seq[Expression] = e match {
-    case Add(l, r) => flattenAdd(l) ++ flattenAdd(r)
+  private def flattenAdd(
+    expression: Expression,
+    groupSet: ExpressionSet): Seq[Expression] = expression match {
+    case expr @ Add(l, r) if !groupSet.contains(expr) =>
+      flattenAdd(l, groupSet) ++ flattenAdd(r, groupSet)
     case other => other :: Nil
   }
 
-  private def flattenMultiply(e: Expression): Seq[Expression] = e match {
-    case Multiply(l, r) => flattenMultiply(l) ++ flattenMultiply(r)
+  private def flattenMultiply(
+    expression: Expression,
+    groupSet: ExpressionSet): Seq[Expression] = expression match {
+    case expr @ Multiply(l, r) if !groupSet.contains(expr) =>
+      flattenMultiply(l, groupSet) ++ flattenMultiply(r, groupSet)
     case other => other :: Nil
+  }
+
+  private def collectGroupingExpressions(plan: LogicalPlan): ExpressionSet = plan match {
+    case Aggregate(groupingExpressions, aggregateExpressions, child) =>
+      ExpressionSet.apply(groupingExpressions)
+    case _ => ExpressionSet(Seq())
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsDown {
+    case q: LogicalPlan =>
+      // We have to respect aggregate expressions which exists in grouping expressions when plan
+      // is an Aggregate operator, otherwise the optimized expression could not be derived from
+      // grouping expressions.
+      val groupingExpressionSet = collectGroupingExpressions(q)
+      q transformExpressionsDown {
       case a: Add if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
-        val (foldables, others) = flattenAdd(a).partition(_.foldable)
+        val (foldables, others) = flattenAdd(a, groupingExpressionSet).partition(_.foldable)
         if (foldables.size > 1) {
           val foldableExpr = foldables.reduce((x, y) => Add(x, y))
           val c = Literal.create(foldableExpr.eval(EmptyRow), a.dataType)
@@ -79,7 +96,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
           a
         }
       case m: Multiply if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
-        val (foldables, others) = flattenMultiply(m).partition(_.foldable)
+        val (foldables, others) = flattenMultiply(m, groupingExpressionSet).partition(_.foldable)
         if (foldables.size > 1) {
           val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
           val c = Literal.create(foldableExpr.eval(EmptyRow), m.dataType)
@@ -411,45 +428,72 @@ object FoldablePropagation extends Rule[LogicalPlan] {
       }
       case _ => Nil
     })
+    val replaceFoldable: PartialFunction[Expression, Expression] = {
+      case a: AttributeReference if foldableMap.contains(a) => foldableMap(a)
+    }
 
     if (foldableMap.isEmpty) {
       plan
     } else {
       var stop = false
       CleanupAliases(plan.transformUp {
-        case u: Union =>
-          stop = true
-          u
-        case c: Command =>
-          stop = true
-          c
-        // For outer join, although its output attributes are derived from its children, they are
-        // actually different attributes: the output of outer join is not always picked from its
-        // children, but can also be null.
+        // A leaf node should not stop the folding process (note that we are traversing up the
+        // tree, starting at the leaf nodes); so we are allowing it.
+        case l: LeafNode =>
+          l
+
+        // We can only propagate foldables for a subset of unary nodes.
+        case u: UnaryNode if !stop && canPropagateFoldables(u) =>
+          u.transformExpressions(replaceFoldable)
+
+        // Allow inner joins. We do not allow outer join, although its output attributes are
+        // derived from its children, they are actually different attributes: the output of outer
+        // join is not always picked from its children, but can also be null.
         // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
         // of outer join.
-        case j @ Join(_, _, LeftOuter | RightOuter | FullOuter, _) =>
-          stop = true
-          j
+        case j @ Join(_, _, Inner, _) =>
+          j.transformExpressions(replaceFoldable)
 
-        // These 3 operators take attributes as constructor parameters, and these attributes
-        // can't be replaced by alias.
-        case m: MapGroups =>
+        // We can fold the projections an expand holds. However expand changes the output columns
+        // and often reuses the underlying attributes; so we cannot assume that a column is still
+        // foldable after the expand has been applied.
+        // TODO(hvanhovell): Expand should use new attributes as the output attributes.
+        case expand: Expand if !stop =>
+          val newExpand = expand.copy(projections = expand.projections.map { projection =>
+            projection.map(_.transform(replaceFoldable))
+          })
           stop = true
-          m
-        case f: FlatMapGroupsInR =>
-          stop = true
-          f
-        case c: CoGroup =>
-          stop = true
-          c
+          newExpand
 
-        case p: LogicalPlan if !stop => p.transformExpressions {
-          case a: AttributeReference if foldableMap.contains(a) =>
-            foldableMap(a)
-        }
+        case other =>
+          stop = true
+          other
       })
     }
+  }
+
+  /**
+   * Whitelist of all [[UnaryNode]]s for which allow foldable propagation.
+   */
+  private def canPropagateFoldables(u: UnaryNode): Boolean = u match {
+    case _: Project => true
+    case _: Filter => true
+    case _: SubqueryAlias => true
+    case _: Aggregate => true
+    case _: Window => true
+    case _: Sample => true
+    case _: GlobalLimit => true
+    case _: LocalLimit => true
+    case _: Generate => true
+    case _: Distinct => true
+    case _: AppendColumns => true
+    case _: AppendColumnsWithObject => true
+    case _: BroadcastHint => true
+    case _: RepartitionByExpression => true
+    case _: Repartition => true
+    case _: Sort => true
+    case _: TypedFilter => true
+    case _ => false
   }
 }
 
@@ -475,6 +519,12 @@ case class OptimizeCodegen(conf: CatalystConf) extends Rule[LogicalPlan] {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Cast(e, dataType) if e.dataType == dataType => e
+    case c @ Cast(e, dataType) => (e.dataType, dataType) match {
+      case (ArrayType(from, false), ArrayType(to, true)) if from == to => e
+      case (MapType(fromKey, fromValue, false), MapType(toKey, toValue, true))
+        if fromKey == toKey && fromValue == toValue => e
+      case _ => c
+      }
   }
 }
 

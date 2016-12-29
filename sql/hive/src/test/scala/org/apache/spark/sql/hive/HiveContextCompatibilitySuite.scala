@@ -87,11 +87,11 @@ class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEac
     assert(
       hc.sql("SELECT * FROM moo_table order by name").collect().toSeq ==
       df.collect().toSeq.sortBy(_.getString(0)))
-    val tables = hc.sql("SHOW TABLES IN mee_db").collect().map(_.getString(0))
+    val tables = hc.sql("SHOW TABLES IN mee_db").select("tableName").collect().map(_.getString(0))
     assert(tables.toSet == Set("moo_table", "mee_table"))
     hc.sql("DROP TABLE moo_table")
     hc.sql("DROP TABLE mee_table")
-    val tables2 = hc.sql("SHOW TABLES IN mee_db").collect().map(_.getString(0))
+    val tables2 = hc.sql("SHOW TABLES IN mee_db").select("tableName").collect().map(_.getString(0))
     assert(tables2.isEmpty)
     hc.sql("USE default")
     hc.sql("DROP DATABASE mee_db CASCADE")

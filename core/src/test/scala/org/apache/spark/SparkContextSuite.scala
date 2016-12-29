@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.File
+import java.net.MalformedURLException
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
@@ -30,6 +31,7 @@ import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
 
+import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.util.Utils
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
@@ -168,6 +170,27 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       sc.addJar(jarPath.toString)
       assert(sc.listJars().filter(_.contains("TestUDTF.jar")).size == 1)
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("SPARK-17650: malformed url's throw exceptions before bricking Executors") {
+    try {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      Seq("http", "https", "ftp").foreach { scheme =>
+        val badURL = s"$scheme://user:pwd/path"
+        val e1 = intercept[MalformedURLException] {
+          sc.addFile(badURL)
+        }
+        assert(e1.getMessage.contains(badURL))
+        val e2 = intercept[MalformedURLException] {
+          sc.addJar(badURL)
+        }
+        assert(e2.getMessage.contains(badURL))
+        assert(sc.addedFiles.isEmpty)
+        assert(sc.addedJars.isEmpty)
+      }
     } finally {
       sc.stop()
     }
@@ -427,6 +450,21 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       sc.setLogLevel(originalLevel.toString)
       assert(org.apache.log4j.Logger.getRootLogger().getLevel === originalLevel)
       sc.stop()
+    }
+  }
+
+  test("register and deregister Spark listener from SparkContext") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    try {
+      val sparkListener1 = new SparkListener { }
+      val sparkListener2 = new SparkListener { }
+      sc.addSparkListener(sparkListener1)
+      sc.addSparkListener(sparkListener2)
+      assert(sc.listenerBus.listeners.contains(sparkListener1))
+      assert(sc.listenerBus.listeners.contains(sparkListener2))
+      sc.removeSparkListener(sparkListener1)
+      assert(!sc.listenerBus.listeners.contains(sparkListener1))
+      assert(sc.listenerBus.listeners.contains(sparkListener2))
     }
   }
 }

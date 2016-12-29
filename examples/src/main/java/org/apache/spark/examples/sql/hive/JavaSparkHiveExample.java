@@ -56,7 +56,7 @@ public class JavaSparkHiveExample {
   public static void main(String[] args) {
     // $example on:spark_hive$
     // warehouseLocation points to the default location for managed databases and tables
-    String warehouseLocation = "file:" + System.getProperty("user.dir") + "spark-warehouse";
+    String warehouseLocation = "spark-warehouse";
     SparkSession spark = SparkSession
       .builder()
       .appName("Java Spark Hive Example")

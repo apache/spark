@@ -444,7 +444,8 @@ setMethod("cosh",
 
 #' Returns the number of items in a group
 #'
-#' Returns the number of items in a group. This is a column aggregate function.
+#' This can be used as a column aggregate function with \code{Column} as input,
+#' and returns the number of items in a group.
 #'
 #' @rdname count
 #' @name count
@@ -1484,7 +1485,7 @@ setMethod("soundex",
 
 #' Return the partition ID as a column
 #'
-#' Return the partition ID of the Spark task as a SparkDataFrame column.
+#' Return the partition ID as a SparkDataFrame column.
 #' Note that this is nondeterministic because it depends on data partitioning and
 #' task scheduling.
 #'
@@ -2295,7 +2296,7 @@ setMethod("n", signature(x = "Column"),
 #' A pattern could be for instance \preformatted{dd.MM.yyyy} and could return a string like '18.03.1993'. All
 #' pattern letters of \code{java.text.SimpleDateFormat} can be used.
 #'
-#' NOTE: Use when ever possible specialized functions like \code{year}. These benefit from a
+#' Note: Use when ever possible specialized functions like \code{year}. These benefit from a
 #' specialized implementation.
 #'
 #' @param y Column to compute on.
@@ -2316,7 +2317,8 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 
 #' from_utc_timestamp
 #'
-#' Assumes given timestamp is UTC and converts to given timezone.
+#' Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
+#' that corresponds to the same time of day in the given timezone.
 #'
 #' @param y Column to compute on.
 #' @param x time zone to use.
@@ -2339,7 +2341,7 @@ setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
 #' Locate the position of the first occurrence of substr column in the given string.
 #' Returns null if either of the arguments are null.
 #'
-#' NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+#' Note: The position is not zero based, but 1 based index. Returns 0 if substr
 #' could not be found in str.
 #'
 #' @param y column to check
@@ -2390,7 +2392,8 @@ setMethod("next_day", signature(y = "Column", x = "character"),
 
 #' to_utc_timestamp
 #'
-#' Assumes given timestamp is in given timezone and converts to UTC.
+#' Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
+#' another timestamp that corresponds to the same time of day in UTC.
 #'
 #' @param y Column to compute on
 #' @param x timezone to use
@@ -2538,7 +2541,7 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
 
 #' shiftRight
 #'
-#' Shift the given value numBits right. If the given value is a long value, it will return
+#' (Signed) shift the given value numBits right. If the given value is a long value, it will return
 #' a long value else it will return an integer value.
 #'
 #' @param y column to compute on.
@@ -2712,11 +2715,15 @@ setMethod("from_unixtime", signature(x = "Column"),
 #' @param x a time Column. Must be of TimestampType.
 #' @param windowDuration a string specifying the width of the window, e.g. '1 second',
 #'                       '1 day 12 hours', '2 minutes'. Valid interval strings are 'week',
-#'                       'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
+#'                       'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'. Note that
+#'                       the duration is a fixed length of time, and does not vary over time
+#'                       according to a calendar. For example, '1 day' always means 86,400,000
+#'                       milliseconds, not a calendar day.
 #' @param slideDuration a string specifying the sliding interval of the window. Same format as
 #'                      \code{windowDuration}. A new window will be generated every
 #'                      \code{slideDuration}. Must be less than or equal to
-#'                      the \code{windowDuration}.
+#'                      the \code{windowDuration}. This duration is likewise absolute, and does not
+#'                      vary according to a calendar.
 #' @param startTime the offset with respect to 1970-01-01 00:00:00 UTC with which to start
 #'                  window intervals. For example, in order to have hourly tumbling windows
 #'                  that start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
@@ -2772,7 +2779,8 @@ setMethod("window", signature(x = "Column"),
 #' locate
 #'
 #' Locate the position of the first occurrence of substr.
-#' NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+#'
+#' Note: The position is not zero based, but 1 based index. Returns 0 if substr
 #' could not be found in str.
 #'
 #' @param substr a character string to be matched.
@@ -2818,7 +2826,8 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 
 #' rand
 #'
-#' Generate a random column with i.i.d. samples from U[0.0, 1.0].
+#' Generate a random column with independent and identically distributed (i.i.d.) samples
+#' from U[0.0, 1.0].
 #'
 #' @param seed a random seed. Can be missing.
 #' @family normal_funcs
@@ -2847,7 +2856,8 @@ setMethod("rand", signature(seed = "numeric"),
 
 #' randn
 #'
-#' Generate a column with i.i.d. samples from the standard normal distribution.
+#' Generate a column with independent and identically distributed (i.i.d.) samples from
+#' the standard normal distribution.
 #'
 #' @param seed a random seed. Can be missing.
 #' @family normal_funcs
@@ -2876,7 +2886,8 @@ setMethod("randn", signature(seed = "numeric"),
 
 #' regexp_extract
 #'
-#' Extract a specific(idx) group identified by a java regex, from the specified string column.
+#' Extract a specific \code{idx} group identified by a Java regex, from the specified string column.
+#' If the regex did not match, or the specified group did not match, an empty string is returned.
 #'
 #' @param x a string Column.
 #' @param pattern a regular expression.
@@ -3436,8 +3447,8 @@ setMethod("size",
 
 #' sort_array
 #'
-#' Sorts the input array for the given column in ascending order,
-#' according to the natural ordering of the array elements.
+#' Sorts the input array in ascending or descending order according
+#' to the natural ordering of the array elements.
 #'
 #' @param x A Column to sort
 #' @param asc A logical flag indicating the sorting order.

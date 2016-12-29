@@ -24,13 +24,11 @@ variant of the [k-means++](http://en.wikipedia.org/wiki/K-means%2B%2B) method
 called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 The implementation in `spark.mllib` has the following parameters:
 
-* *k* is the number of desired clusters.
+* *k* is the number of desired clusters. Note that it is possible for fewer than k clusters to be returned, for example, if there are fewer than k distinct points to cluster.
 * *maxIterations* is the maximum number of iterations to run.
 * *initializationMode* specifies either random initialization or
 initialization via k-means\|\|.
-* *runs* is the number of times to run the k-means algorithm (k-means is not
-guaranteed to find a globally optimal solution, and when run multiple times on
-a given dataset, the algorithm returns the best clustering result).
+* *runs* This param has no effect since Spark 2.0.0.
 * *initializationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged.
 * *initialModel* is an optional set of cluster centers used for initialization. If this parameter is supplied, only one run is performed.

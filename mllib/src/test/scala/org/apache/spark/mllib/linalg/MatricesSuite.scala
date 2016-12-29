@@ -289,7 +289,7 @@ class MatricesSuite extends SparkFunSuite {
     val spHorz2 = Matrices.horzcat(Array(spMat1, deMat2))
     val spHorz3 = Matrices.horzcat(Array(deMat1, spMat2))
     val deHorz1 = Matrices.horzcat(Array(deMat1, deMat2))
-    val deHorz2 = Matrices.horzcat(Array[Matrix]())
+    val deHorz2 = Matrices.horzcat(Array.empty[Matrix])
 
     assert(deHorz1.numRows === 3)
     assert(spHorz2.numRows === 3)
@@ -343,7 +343,7 @@ class MatricesSuite extends SparkFunSuite {
     val deVert1 = Matrices.vertcat(Array(deMat1, deMat3))
     val spVert2 = Matrices.vertcat(Array(spMat1, deMat3))
     val spVert3 = Matrices.vertcat(Array(deMat1, spMat3))
-    val deVert2 = Matrices.vertcat(Array[Matrix]())
+    val deVert2 = Matrices.vertcat(Array.empty[Matrix])
 
     assert(deVert1.numRows === 5)
     assert(spVert2.numRows === 5)

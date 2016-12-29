@@ -37,6 +37,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
   with DefaultReadWriteTest {
 
   import GBTRegressorSuite.compareAPIs
+  import testImplicits._
 
   // Combinations for estimators, learning rates and subsamplingRate
   private val testCombinations =
@@ -76,14 +77,14 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("GBTRegressor behaves reasonably on toy data") {
-    val df = spark.createDataFrame(Seq(
+    val df = Seq(
       LabeledPoint(10, Vectors.dense(1, 2, 3, 4)),
       LabeledPoint(-5, Vectors.dense(6, 3, 2, 1)),
       LabeledPoint(11, Vectors.dense(2, 2, 3, 4)),
       LabeledPoint(-6, Vectors.dense(6, 4, 2, 1)),
       LabeledPoint(9, Vectors.dense(1, 2, 6, 4)),
       LabeledPoint(-4, Vectors.dense(6, 3, 2, 2))
-    ))
+    ).toDF()
     val gbt = new GBTRegressor()
       .setMaxDepth(2)
       .setMaxIter(2)
@@ -103,7 +104,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
     val path = tempDir.toURI.toString
     sc.setCheckpointDir(path)
 
-    val df = spark.createDataFrame(data)
+    val df = data.toDF()
     val gbt = new GBTRegressor()
       .setMaxDepth(2)
       .setMaxIter(5)
