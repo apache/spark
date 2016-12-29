@@ -319,13 +319,15 @@ class CodegenContext {
             value = getValue("value", field.dataType, index.toString))
           updateColumn(nestedRow, field.dataType, index, ev, field.nullable)
         }
+        val updateFieldsCode = splitExpressions(
+          updateFields, "updateFields", Seq("InternalRow" -> nestedRow, "InternalRow" -> "value"))
         val setColumnFunc = freshName("setColumnFunc")
         val funcCode = s"""
           public void $setColumnFunc(InternalRow row, InternalRow value) {
             if (row instanceof UnsafeRow) {
               ((UnsafeRow) row).setNotNullAt($ordinal);
               final InternalRow $nestedRow = row.getStruct($ordinal, ${s.length});
-              ${updateFields.mkString("\n")}
+              $updateFieldsCode
             } else {
               row.update($ordinal, value);
             }
