@@ -241,7 +241,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
     val row = ctx.freshName("row")
     s"""
-       | while ($input.hasNext()) {
+       | while ($input.hasNext() && !stopEarly()) {
        |   InternalRow $row = (InternalRow) $input.next();
        |   ${consume(ctx, null, row).trim}
        |   if (shouldStop()) return;

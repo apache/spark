@@ -55,10 +55,9 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     require(files.nonEmpty, "Cannot infer schema from an empty set of files")
-    val csvOptions = new CSVOptions(options)
 
-    // TODO: Move filtering.
-    val paths = files.filterNot(_.getPath.getName startsWith "_").map(_.getPath.toString)
+    val csvOptions = new CSVOptions(options)
+    val paths = files.map(_.getPath.toString)
     val lines: Dataset[String] = readText(sparkSession, csvOptions, paths)
     val firstLine: String = findFirstLine(csvOptions, lines)
     val firstRow = new CsvReader(csvOptions).parseLine(firstLine)

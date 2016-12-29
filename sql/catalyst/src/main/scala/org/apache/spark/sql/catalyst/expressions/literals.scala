@@ -220,7 +220,7 @@ object DecimalLiteral {
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
-case class Literal (value: Any, dataType: DataType) extends LeafExpression with CodegenFallback {
+case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
@@ -271,45 +271,28 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression with 
       ev.isNull = "true"
       ev.copy(s"final ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};")
     } else {
-      dataType match {
-        case BooleanType =>
-          ev.isNull = "false"
-          ev.value = value.toString
-          ev.copy("")
+      ev.isNull = "false"
+      ev.value = dataType match {
+        case BooleanType | IntegerType | DateType => value.toString
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
-            super[CodegenFallback].doGenCode(ctx, ev)
+            ctx.addReferenceMinorObj(v)
           } else {
-            ev.isNull = "false"
-            ev.value = s"${value}f"
-            ev.copy("")
+            s"${value}f"
           }
         case DoubleType =>
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
-            super[CodegenFallback].doGenCode(ctx, ev)
+            ctx.addReferenceMinorObj(v)
           } else {
-            ev.isNull = "false"
-            ev.value = s"${value}D"
-            ev.copy("")
+            s"${value}D"
           }
-        case ByteType | ShortType =>
-          ev.isNull = "false"
-          ev.value = s"(${ctx.javaType(dataType)})$value"
-          ev.copy("")
-        case IntegerType | DateType =>
-          ev.isNull = "false"
-          ev.value = value.toString
-          ev.copy("")
-        case TimestampType | LongType =>
-          ev.isNull = "false"
-          ev.value = s"${value}L"
-          ev.copy("")
-        // eval() version may be faster for non-primitive types
-        case other =>
-          super[CodegenFallback].doGenCode(ctx, ev)
+        case ByteType | ShortType => s"(${ctx.javaType(dataType)})$value"
+        case TimestampType | LongType => s"${value}L"
+        case other => ctx.addReferenceMinorObj(value, ctx.javaType(dataType))
       }
+      ev.copy("")
     }
   }
 
