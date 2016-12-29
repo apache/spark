@@ -116,28 +116,23 @@ object JdbcUtils extends Logging {
       tableSchema: StructType,
       isCaseSensitive: Boolean,
       dialect: JdbcDialect): String = {
+    val columnNameEquality = if (isCaseSensitive) {
+      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+    } else {
+      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
+    }
     // The generated insert statement needs to follow rddSchema's column sequence and tableSchema's
     // column names. When appending data into some case-sensitive DBMSs like PostgreSQL/Oracle,
     // we need to respect the existing case-sensitive column names instead of RDD column names for
-    // user convenience. See SPARK-18123 for more details.
-    var insertSchema = new StructType()
-    val nameMap = tableSchema.fields.map(f => f.name -> f).toMap
-    val lowercaseNameMap = tableSchema.fields.map(f => f.name.toLowerCase -> f).toMap
-
-    rddSchema.fields.foreach { f =>
-      if (nameMap.isDefinedAt(f.name)) {
-        // identical names
-        insertSchema = insertSchema.add(nameMap(f.name))
-      } else if (!isCaseSensitive && lowercaseNameMap.isDefinedAt(f.name.toLowerCase)) {
-        // identical names in a case-insensitive way
-        insertSchema = insertSchema.add(lowercaseNameMap(f.name.toLowerCase))
-      } else {
-        throw new AnalysisException(s"""Column "${f.name}" not found""")
+    // user convenience.
+    val tableColumnNames = tableSchema.fieldNames
+    val columns = rddSchema.fields.map { col =>
+      val normalizedName = tableColumnNames.find(f => columnNameEquality(f, col.name)).getOrElse {
+        throw new AnalysisException(s"""Column "${col.name}" not found in schema $tableSchema""")
       }
-    }
-
-    val columns = insertSchema.fields.map(x => dialect.quoteIdentifier(x.name)).mkString(",")
-    val placeholders = insertSchema.fields.map(_ => "?").mkString(",")
+      dialect.quoteIdentifier(normalizedName)
+    }.mkString(",")
+    val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
     s"INSERT INTO $table ($columns) VALUES ($placeholders)"
   }
 
