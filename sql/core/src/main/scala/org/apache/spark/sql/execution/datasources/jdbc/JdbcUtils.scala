@@ -618,8 +618,7 @@ object JdbcUtils extends Logging {
         conn.setTransactionIsolation(finalIsolationLevel)
       }
       val stmt = insertStatement(conn, table, schema, dialect)
-      val setters: Array[JDBCValueSetter] = schema.fields.map(_.dataType)
-        .map(makeSetter(conn, dialect, _)).toArray
+      val setters = schema.fields.map(f => makeSetter(conn, dialect, f.dataType))
       val numFields = schema.fields.length
 
       try {
