@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.StringType
 
 object EstimationUtils {
 
-  /** Check if all plans has rowCount in statistics. */
+  /** Check if each plan has rowCount in its statistics. */
   def rowCountsExist(plans: LogicalPlan*): Boolean =
     plans.forall(_.statistics.rowCount.isDefined)
 
