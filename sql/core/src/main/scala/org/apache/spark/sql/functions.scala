@@ -1666,7 +1666,7 @@ object functions {
     * It takes at least 2 parameters, and all parameters' types should be subtypes of AtomicType.
     *
     * @group normal_funcs
-    * @since 2.0.0
+    * @since 2.2.0
     */
   @scala.annotation.varargs
   def field(exprs: Column*): Column = withExpr {
