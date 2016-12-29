@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
@@ -217,6 +217,12 @@ class StringIndexerSuite
       .setOutputCol("myOutputCol")
       .setLabels(Array("a", "b", "c"))
     testDefaultReadWrite(t)
+  }
+
+  test("SPARK 18698: construct IndexToString with custom uid") {
+    val uid = "customUID"
+    val t = new IndexToString(uid)
+    assert(t.uid == uid)
   }
 
   test("StringIndexer metadata") {
