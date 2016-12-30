@@ -522,10 +522,11 @@ Hive metastore. Persistent tables will still exist even after your Spark program
 long as you maintain your connection to the same metastore. A DataFrame for a persistent table can
 be created by calling the `table` method on a `SparkSession` with the name of the table.
 
-You can specify the table path via the `path` option, e.g. `df.write.option("path", "/some/path").saveAsTable("t")`.
-When the table is dropped, the specified table path will not be removed and the table data is still there.
-If you do not specify a table path, Spark SQL will generate a default table path to store the table data.
-When the table is dropped, the default table path will be removed too.
+For file-based data source, e.g. text, parquet, json, etc. you can specify a custom table path via the
+`path` option, e.g. `df.write.option("path", "/some/path").saveAsTable("t")`. When the table is dropped,
+the custom table path will not be removed and the table data is still there. If no custom table path is
+specifed, Spark will write data to a default table path under the warehouse directory. When the table is
+dropped, the default table path will be removed too.
 
 ## Parquet Files
 
@@ -949,7 +950,8 @@ When you create a Hive table, you need to define how this table should read/writ
 i.e. the "input format" and "output format". You also need to define how this table should deserialize the data
 to rows, or serialize rows to data, i.e. the "serde". The following options can be used to specify the storage
 format("serde", "input format", "output format"), e.g. `CREATE TABLE src(id int) USING hive OPTIONS(format 'parquet')`.
-By default, we will read the table files as plain text.
+By default, we will read the table files as plain text. Note that, Hive storage handler is not supported yet when
+creating table, you can create a table using storage handler at Hive side, and use Spark SQL to read it.
 
 <table class="table">
   <tr><th>Property Name</th><th>Meaning</th></tr>

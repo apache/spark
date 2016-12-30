@@ -449,6 +449,19 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         // The relation in l is not an InsertableRelation.
         failAnalysis(s"$l does not allow insertion.")
 
+      case CreateTable(table, _, query) if DDLUtils.isHiveTable(table) =>
+        if (table.bucketSpec.isDefined) {
+          throw new AnalysisException("Creating bucketed Hive serde table is not supported yet.")
+        }
+        if (table.partitionColumnNames.nonEmpty && query.isDefined) {
+          val errorMessage = "A Create Table As Select (CTAS) statement is not allowed to " +
+            "create a partitioned table using Hive's file formats. " +
+            "Please use the syntax of \"CREATE TABLE tableName USING dataSource " +
+            "OPTIONS (...) PARTITIONED BY ...\" to create a partitioned table through a " +
+            "CTAS statement."
+          throw new AnalysisException(errorMessage)
+        }
+
       case _ => // OK
     }
   }

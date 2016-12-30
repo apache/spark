@@ -354,7 +354,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    *    [SORTED BY (col_name [ASC|DESC], ...)]
    *    INTO num_buckets BUCKETS
    *   ]
-   *   [TBLPROPERTIES (property_name=property_value, ...)]
+   *   [LOCATION path]
    *   [COMMENT table_comment]
    *   [AS select_statement];
    * }}}
