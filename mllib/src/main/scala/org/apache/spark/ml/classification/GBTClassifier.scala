@@ -200,6 +200,8 @@ object GBTClassifier extends DefaultParamsReadable[GBTClassifier] {
  *
  * @param _trees  Decision trees in the ensemble.
  * @param _treeWeights  Weights for the decision trees in the ensemble.
+ * @param numFeatures  The number of features.
+ * @param numClasses  The number of classes.
  *
  * @note Multiclass labels are not currently supported.
  */
@@ -223,11 +225,23 @@ class GBTClassificationModel private[ml](
    *
    * @param _trees  Decision trees in the ensemble.
    * @param _treeWeights  Weights for the decision trees in the ensemble.
+   * @param numFeatures  The number of features.
+   */
+  @Since("1.6.0")
+  def this(uid: String, _trees: Array[DecisionTreeRegressionModel],
+           _treeWeights: Array[Double], numFeatures: Int) =
+    this(uid, _trees, _treeWeights, numFeatures, 2)
+
+  /**
+   * Construct a GBTClassificationModel
+   *
+   * @param _trees  Decision trees in the ensemble.
+   * @param _treeWeights  Weights for the decision trees in the ensemble.
    */
   @Since("1.6.0")
   def this(uid: String, _trees: Array[DecisionTreeRegressionModel],
            _treeWeights: Array[Double]) =
-    this(uid, _trees, _treeWeights, -1, 2)
+  this(uid, _trees, _treeWeights, -1, 2)
 
   @Since("1.4.0")
   override def trees: Array[DecisionTreeRegressionModel] = _trees
