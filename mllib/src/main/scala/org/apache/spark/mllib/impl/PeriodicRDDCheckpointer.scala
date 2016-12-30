@@ -85,7 +85,7 @@ private[spark] class PeriodicRDDCheckpointer[T](
 
   override protected def persist(data: RDD[T]): Unit = {
     if (data.getStorageLevel == StorageLevel.NONE) {
-      data.persist()
+      data.persist(StorageLevel.MEMORY_AND_DISK)
     }
   }
 
