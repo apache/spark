@@ -63,22 +63,23 @@ class JdbcRelationProvider extends CreatableRelationProvider
     try {
       val tableExists = JdbcUtils.tableExists(conn, url, table)
       if (tableExists) {
-        val tableSchema = JdbcUtils.getSchemaOption(conn, url, table)
         mode match {
           case SaveMode.Overwrite =>
             if (isTruncate && isCascadingTruncateTable(url) == Some(false)) {
               // In this case, we should truncate table and then load.
               truncateTable(conn, table)
-              saveTable(df, url, table, tableSchema.get, isCaseSensitive, jdbcOptions)
+              val tableSchema = JdbcUtils.getSchemaOption(conn, url, table)
+              saveTable(df, url, table, tableSchema, isCaseSensitive, jdbcOptions)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, table)
               createTable(df.schema, url, table, createTableOptions, conn)
-              saveTable(df, url, table, df.schema, isCaseSensitive, jdbcOptions)
+              saveTable(df, url, table, Some(df.schema), isCaseSensitive, jdbcOptions)
             }
 
           case SaveMode.Append =>
-            saveTable(df, url, table, tableSchema.get, isCaseSensitive, jdbcOptions)
+            val tableSchema = JdbcUtils.getSchemaOption(conn, url, table)
+            saveTable(df, url, table, tableSchema, isCaseSensitive, jdbcOptions)
 
           case SaveMode.ErrorIfExists =>
             throw new AnalysisException(
@@ -91,7 +92,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
         }
       } else {
         createTable(df.schema, url, table, createTableOptions, conn)
-        saveTable(df, url, table, df.schema, isCaseSensitive, jdbcOptions)
+        saveTable(df, url, table, Some(df.schema), isCaseSensitive, jdbcOptions)
       }
     } finally {
       conn.close()
