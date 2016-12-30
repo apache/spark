@@ -608,7 +608,9 @@ class Analyzer(
         u: UnresolvedRelation,
         defaultDatabase: Option[String] = None): LogicalPlan = {
       try {
-        catalog.lookupRelation(u.tableIdentifier, u.alias, defaultDatabase)
+        val tableIdentWithDb = u.tableIdentifier.copy(
+          database = u.tableIdentifier.database.orElse(defaultDatabase))
+        catalog.lookupRelation(tableIdentWithDb, u.alias)
       } catch {
         case _: NoSuchTableException =>
           u.failAnalysis(s"Table or view not found: ${u.tableName}")

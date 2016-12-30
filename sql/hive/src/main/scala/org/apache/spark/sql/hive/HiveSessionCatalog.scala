@@ -55,13 +55,10 @@ private[sql] class HiveSessionCatalog(
     conf,
     hadoopConf) {
 
-  override def lookupRelation(
-      name: TableIdentifier,
-      alias: Option[String] = None,
-      defaultDatabase: Option[String] = None): LogicalPlan = {
+  override def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
     synchronized {
       val table = formatTableName(name.table)
-      val db = formatDatabaseName(name.database.getOrElse(defaultDatabase.getOrElse(currentDb)))
+      val db = formatDatabaseName(name.database.getOrElse(currentDb))
       if (db == globalTempViewManager.database) {
         val relationAlias = alias.getOrElse(table)
         globalTempViewManager.get(table).map { viewDef =>

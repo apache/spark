@@ -551,8 +551,7 @@ class SessionCatalog(
    *
    * If a database is specified in `name`, this will return the table/view from that database.
    * If no database is specified, this will first attempt to return a temporary table/view with
-   * the same name, then, if that does not exist, and defaultDatabase is defined, return the
-   * table/view from the defaultDatabase, else return the table/view from the catalog.currentDb.
+   * the same name, then, if that does not exist, return the table/view from the current database.
    *
    * Note that, the global temp view database is also valid here, this will return the global temp
    * view matching the given name.
@@ -562,19 +561,10 @@ class SessionCatalog(
    *
    * @param name The name of the table/view that we look up.
    * @param alias The alias name of the table/view that we look up.
-   * @param defaultDatabase The default database name we should use to look up the table/view, if
-   *                        the database part of [[TableIdentifier]] is not defined.
-   *                        The precedence of the database name should be:
-   *                        1. the database part of the table identifier;
-   *                        2. the default database;
-   *                        3. the current database from the session catalog.
    */
-  def lookupRelation(
-      name: TableIdentifier,
-      alias: Option[String] = None,
-      defaultDatabase: Option[String] = None): LogicalPlan = {
+  def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
     synchronized {
-      val db = formatDatabaseName(name.database.getOrElse(defaultDatabase.getOrElse(currentDb)))
+      val db = formatDatabaseName(name.database.getOrElse(currentDb))
       val table = formatTableName(name.table)
       val relationAlias = alias.getOrElse(table)
       if (db == globalTempViewManager.database) {
