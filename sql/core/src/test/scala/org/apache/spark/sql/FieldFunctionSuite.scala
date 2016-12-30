@@ -19,8 +19,8 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SharedSQLContext
 
 class FieldFunctionSuite extends QueryTest with SharedSQLContext {
   import testImplicits._

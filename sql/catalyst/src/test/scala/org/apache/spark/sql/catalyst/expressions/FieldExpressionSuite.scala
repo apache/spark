@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
-import java.sql.Timestamp
 import java.sql.Date
+import java.sql.Timestamp
+
+import org.apache.spark.SparkFunSuite
+
 
 class FieldExpressionSuite extends SparkFunSuite with ExpressionEvalHelper{
 
