@@ -573,4 +573,19 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
+  test("correctly resolve a view with CTE") {
+    withView("cte_view") {
+      val cte_view = CatalogTable(
+        identifier = TableIdentifier("cte_view"),
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType().add("n", "int"),
+        viewOriginalText = Some("WITH w AS (SELECT 1 AS n) SELECT n FROM w"),
+        viewText = Some("WITH w AS (SELECT 1 AS n) SELECT n FROM w"),
+        viewDefaultDatabase = Some("default"))
+      hiveContext.sessionState.catalog.createTable(cte_view, ignoreIfExists = false)
+      checkAnswer(sql("SELECT * FROM cte_view"), Row(1))
+    }
+  }
 }

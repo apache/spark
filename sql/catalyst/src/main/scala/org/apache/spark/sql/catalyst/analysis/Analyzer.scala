@@ -50,6 +50,36 @@ object SimpleAnalyzer extends Analyzer(
     new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 /**
+ * Provides a location for Analyzer to ask about the context of current resolution, this enables
+ * us to decouple the concerns of analysis environment from the catalog.
+ *
+ * @param defaultDatabase The default database used in the view resolution, this has a higher
+ *                        priority than the `currentDb` in the catalog.
+ * @param nestedViewLevel The nested level in the view resolution, this enables us to limit the
+ *                        depth of nested views.
+ */
+case class AnalysisContext(
+    defaultDatabase: Option[String] = None,
+    nestedViewLevel: Int = 0)
+
+object AnalysisContext {
+  private val value = new ThreadLocal[AnalysisContext]() {
+    override def initialValue: AnalysisContext = AnalysisContext()
+  }
+
+  def get: AnalysisContext = value.get()
+  def set(context: AnalysisContext): Unit = value.set(context)
+
+  def withAnalysisContext[A](context: AnalysisContext)(f: => A): A = {
+    val originContext = value.get()
+    set(context)
+    val ret = try f finally { set(originContext) }
+    set(originContext)
+    ret
+  }
+}
+
+/**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
  * [[UnresolvedRelation]]s into fully typed objects using information in a
  * [[SessionCatalog]] and a [[FunctionRegistry]].
@@ -542,6 +572,7 @@ class Analyzer(
       case u @ UnresolvedRelation(table: TableIdentifier, _) if isRunningDirectlyOnFiles(table) =>
         u
       case u: UnresolvedRelation =>
+        val defaultDatabase = AnalysisContext.get.defaultDatabase
         val relation = lookupTableFromCatalog(u, defaultDatabase)
         resolveRelation(relation, defaultDatabase)
       // Hive support is required to resolve a persistent view, the logical plan returned by
@@ -551,13 +582,10 @@ class Analyzer(
       // If the child of a view is empty, we will throw an AnalysisException later in
       // `checkAnalysis`.
       case view: View if view.child.isDefined =>
-        val defaultDatabase = view.desc.viewDefaultDatabase
+        val context = AnalysisContext(defaultDatabase = view.desc.viewDefaultDatabase)
         // Resolve all the UnresolvedRelations and Views in the child.
-        val newChild = view.child.get transformDown {
-          case v: View if !v.resolved =>
-            resolveRelation(v, defaultDatabase)
-          case u: UnresolvedRelation =>
-            resolveRelation(u, defaultDatabase)
+        val newChild = AnalysisContext.withAnalysisContext(context) {
+          execute(view.child.get)
         }
         view.copy(child = Some(newChild))
       case p @ SubqueryAlias(_, view: View, _) =>
