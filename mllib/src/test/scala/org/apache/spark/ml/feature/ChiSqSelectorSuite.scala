@@ -35,22 +35,63 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
 
     // Toy dataset, including the top feature for a chi-squared test.
     // These data are chosen such that each feature's test has a distinct p-value.
-    /*  To verify the results with R, run:
-      library(stats)
-      x1 <- c(8.0, 0.0, 0.0, 7.0, 8.0)
-      x2 <- c(7.0, 9.0, 9.0, 9.0, 7.0)
-      x3 <- c(0.0, 6.0, 8.0, 5.0, 3.0)
-      y <- c(0.0, 1.0, 1.0, 2.0, 2.0)
-      chisq.test(x1,y)
-      chisq.test(x2,y)
-      chisq.test(x3,y)
+    /*
+     *  Contingency tables
+     *  feature0 = {6.0, 0.0, 8.0}
+     *  class  0 1 2
+     *    6.0||1|0|0|
+     *    0.0||0|3|0|
+     *    8.0||0|0|2|
+     *  degree of freedom = 4, statistic = 12, pValue = 0.017
+     *
+     *  feature1 = {7.0, 9.0}
+     *  class  0 1 2
+     *    7.0||1|0|0|
+     *    9.0||0|3|2|
+     *  degree of freedom = 2, statistic = 6, pValue = 0.049
+     *
+     *  feature2 = {0.0, 6.0, 3.0, 8.0}
+     *  class  0 1 2
+     *    0.0||1|0|0|
+     *    6.0||0|1|2|
+     *    3.0||0|1|0|
+     *    8.0||0|1|0|
+     *  degree of freedom = 6, statistic = 8.66, pValue = 0.193
+     *
+     *  feature3 = {7.0, 0.0, 5.0, 4.0}
+     *  class  0 1 2
+     *    7.0||1|0|0|
+     *    0.0||0|2|0|
+     *    5.0||0|1|1|
+     *    4.0||0|0|1|
+     *  degree of freedom = 6, statistic = 9.5, pValue = 0.147
+     *
+     *  feature4 = {6.0, 5.0, 4.0, 0.0}
+     *  class  0 1 2
+     *    6.0||1|1|0|
+     *    5.0||0|2|0|
+     *    4.0||0|0|1|
+     *    0.0||0|0|1|
+     *  degree of freedom = 6, statistic = 8.0, pValue = 0.238
+     *
+     *  feature5 = {0.0, 9.0, 5.0, 4.0}
+     *  class  0 1 2
+     *    0.0||1|0|1|
+     *    9.0||0|1|0|
+     *    5.0||0|1|0|
+     *    4.0||0|1|1|
+     *  degree of freedom = 6, statistic = 5, pValue = 0.54
+     *
+     *  Use chi-squared calculator from Internet
      */
+
     dataset = spark.createDataFrame(Seq(
-      (0.0, Vectors.sparse(3, Array((0, 8.0), (1, 7.0))), Vectors.dense(8.0)),
-      (1.0, Vectors.sparse(3, Array((1, 9.0), (2, 6.0))), Vectors.dense(0.0)),
-      (1.0, Vectors.dense(Array(0.0, 9.0, 8.0)), Vectors.dense(0.0)),
-      (2.0, Vectors.dense(Array(7.0, 9.0, 5.0)), Vectors.dense(7.0)),
-      (2.0, Vectors.dense(Array(8.0, 7.0, 3.0)), Vectors.dense(8.0))
+      (0.0, Vectors.sparse(6, Array((0, 6.0), (1, 7.0), (3, 7.0), (4, 6.0))), Vectors.dense(6.0)),
+      (1.0, Vectors.sparse(6, Array((1, 9.0), (2, 6.0), (4, 5.0), (5, 9.0))), Vectors.dense(0.0)),
+      (1.0, Vectors.sparse(6, Array((1, 9.0), (2, 3.0), (4, 5.0), (5, 5.0))), Vectors.dense(0.0)),
+      (1.0, Vectors.dense(Array(0.0, 9.0, 8.0, 5.0, 6.0, 4.0)), Vectors.dense(0.0)),
+      (2.0, Vectors.dense(Array(8.0, 9.0, 6.0, 5.0, 4.0, 4.0)), Vectors.dense(8.0)),
+      (2.0, Vectors.dense(Array(8.0, 9.0, 6.0, 4.0, 0.0, 0.0)), Vectors.dense(8.0))
     )).toDF("label", "features", "topFeature")
   }
 
@@ -69,19 +110,25 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
 
   test("Test Chi-Square selector: percentile") {
     val selector = new ChiSqSelector()
-      .setOutputCol("filtered").setSelectorType("percentile").setPercentile(0.34)
+      .setOutputCol("filtered").setSelectorType("percentile").setPercentile(0.17)
     ChiSqSelectorSuite.testSelector(selector, dataset)
   }
 
   test("Test Chi-Square selector: fpr") {
     val selector = new ChiSqSelector()
-      .setOutputCol("filtered").setSelectorType("fpr").setFpr(0.2)
+      .setOutputCol("filtered").setSelectorType("fpr").setFpr(0.02)
+    ChiSqSelectorSuite.testSelector(selector, dataset)
+  }
+
+  test("Test Chi-Square selector: fdr") {
+    val selector = new ChiSqSelector()
+      .setOutputCol("filtered").setSelectorType("fdr").setFdr(0.12)
     ChiSqSelectorSuite.testSelector(selector, dataset)
   }
 
   test("Test Chi-Square selector: fwe") {
     val selector = new ChiSqSelector()
-      .setOutputCol("filtered").setSelectorType("fwe").setFwe(0.6)
+      .setOutputCol("filtered").setSelectorType("fwe").setFwe(0.12)
     ChiSqSelectorSuite.testSelector(selector, dataset)
   }
 

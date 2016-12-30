@@ -2631,7 +2631,6 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
 
     Chi-Squared feature selection, which selects categorical features to use for predicting a
     categorical label.
-    Creates a ChiSquared feature selector.
     The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`,
     `fdr`, `fwe`.
 
