@@ -390,6 +390,11 @@ case class InsertIntoHiveTable(
         logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
     }
 
+    //remove temporary directories
+    val fs = outputPath.getFileSystem(jobConf)
+    if ( outputPath.getParent.isRoot == false ) 
+      fs.delete(outputPath.getParent,true)
+
     // Invalidate the cache.
     sqlContext.sharedState.cacheManager.invalidateCache(table)
     sqlContext.sessionState.catalog.refreshTable(table.catalogTable.identifier)
