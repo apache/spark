@@ -59,15 +59,6 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     comparePlans(input, rewrite)
   }
 
-  test("single distinct group with non-partial aggregates") {
-    val input = testRelation
-      .groupBy('a, 'd)(
-        countDistinct('e, 'c).as('agg1),
-        DummpAgg('b).toAggregateExpression().as('agg2))
-      .analyze
-    checkRewrite(RewriteDistinctAggregates(input))
-  }
-
   test("multiple distinct groups") {
     val input = testRelation
       .groupBy('a)(countDistinct('b, 'c), countDistinct('d))
@@ -91,42 +82,4 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
       .analyze
     checkRewrite(RewriteDistinctAggregates(input))
   }
-}
-
-// A dummy aggregate function for testing
-case class DummpAgg(
-    child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[Int] {
-
-  def this(child: Expression) = this(child, 0, 0)
-
-  override def children: Seq[Expression] = child :: Nil
-
-  override def dataType: DataType = IntegerType
-
-  override def nullable: Boolean = false
-
-  override val supportsPartial: Boolean = false
-
-  override def createAggregationBuffer(): Int = 0
-
-  override def update(buffer: Int, input: InternalRow): Int = 0
-
-  override def merge(buffer: Int, input: Int): Int = 0
-
-  override def eval(buffer: Int): Any = 0
-
-  override def serialize(buffer: Int): Array[Byte] = null
-
-  override def deserialize(storageFormat: Array[Byte]): Int = 0
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override val prettyName: String = "dummy_agg"
 }

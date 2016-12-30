@@ -48,16 +48,8 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
   // actual order of input rows.
   override def deterministic: Boolean = false
 
-  private def generateOutput(results: Iterable[Any]): Any = {
-    if (results.isEmpty) {
-      null
-    } else {
-      new GenericArrayData(results.toArray)
-    }
-  }
-
   override def update(buffer: T, input: InternalRow): T = {
-    val value = child.eval(input).asInstanceOf[Any]
+    val value = child.eval(input)
 
     // Do not allow null values. We follow the semantics of Hive's collect_list/collect_set here.
     // See: org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMkCollectionEvaluator
@@ -72,20 +64,23 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
   }
 
   override def eval(buffer: T): Any = {
-    generateOutput(buffer)
+    new GenericArrayData(buffer.toArray)
   }
 
-  protected def _serialize(obj: Iterable[Any]): Array[Byte] = {
+  private lazy val projection = UnsafeProjection.create(
+    Array[DataType](ArrayType(elementType = child.dataType, containsNull = false)))
+  private lazy val row = new UnsafeRow(1)
+
+  override def serialize(obj: T): Array[Byte] = {
     val array = new GenericArrayData(obj.toArray)
-    val projection = UnsafeProjection.create(
-      Array[DataType](ArrayType(elementType = child.dataType, containsNull = false)))
     projection.apply(InternalRow.apply(array)).getBytes()
   }
 
-  protected def _deserialize(bytes: Array[Byte], buffer: T): Unit = {
-    val row = new UnsafeRow(1)
+  override def deserialize(bytes: Array[Byte]): T = {
+    val buffer = createAggregationBuffer()
     row.pointTo(bytes, bytes.length)
     row.getArray(0).foreach(child.dataType, (_, x: Any) => buffer += x)
+    buffer
   }
 }
 
@@ -110,13 +105,6 @@ case class CollectList(
   override def createAggregationBuffer(): ArrayBuffer[Any] = new ArrayBuffer[Any]()
 
   override def prettyName: String = "collect_list"
-
-  override def serialize(obj: ArrayBuffer[Any]): Array[Byte] = _serialize(obj)
-  override def deserialize(bytes: Array[Byte]): ArrayBuffer[Any] = {
-    val buffer = new ArrayBuffer[Any]()
-    _deserialize(bytes, buffer)
-    buffer
-  }
 }
 
 /**
@@ -148,11 +136,4 @@ case class CollectSet(
   override def prettyName: String = "collect_set"
 
   override def createAggregationBuffer(): HashSet[Any] = new HashSet[Any]()
-
-  override def serialize(obj: HashSet[Any]): Array[Byte] = _serialize(obj)
-  override def deserialize(bytes: Array[Byte]): HashSet[Any] = {
-    val buffer = new HashSet[Any]()
-    _deserialize(bytes, buffer)
-    buffer
-  }
 }
