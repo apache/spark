@@ -27,14 +27,14 @@ import org.apache.spark.sql.DataFrame
  * Evaluator for binary classification.
  *
  * @param scoreAndLabels an RDD of (score, label) pairs.
- * @param numBins if greater than 0, then the curves (ROC curve, PR curve) computed internally
- *                will be down-sampled to this many "bins". If 0, no down-sampling will occur.
- *                This is useful because the curve contains a point for each distinct score
- *                in the input, and this could be as large as the input itself -- millions of
- *                points or more, when thousands may be entirely sufficient to summarize
- *                the curve. After down-sampling, the curves will instead be made of approximately
- *                `numBins` points instead. Points are made from bins of equal numbers of
- *                consecutive points. The size of each bin is
+ * @param numBins if greater than 0, then the curves (ROC curve, PR curve, calibration curve)
+ *                computed internally will be down-sampled to this many "bins". If 0, no
+ *                down-sampling will occur. This is useful because the curve contains a point for
+ *                each distinct score in the input, and this could be as large as the input itself
+ *                -- millions of points or more, when thousands may be entirely sufficient to
+ *                summarize the curve. After down-sampling, the curves will instead be made of
+ *                approximately `numBins` points instead. Points are made from bins of equal
+ *                numbers of consecutive points. The size of each bin is
  *                `floor(scoreAndLabels.count() / numBins)`, which means the resulting number
  *                of bins may not exactly equal numBins. The last bin in each partition may
  *                be smaller as a result, meaning there may be an extra sample at
@@ -222,6 +222,78 @@ class BinaryClassificationMetrics @Since("1.3.0") (
       y: BinaryClassificationMetricComputer): RDD[(Double, Double)] = {
     confusions.map { case (_, c) =>
       (x(c), y(c))
+    }
+  }
+
+  /**
+   * Returns the calibration or reliability curve,
+   * which is an RDD of (average score in bin, fraction of positive examples in bin).
+   * @see http://en.wikipedia.org/wiki/Calibration_%28statistics%29#In_classification
+   *
+   * References:
+   *
+   * Mahdi Pakdaman Naeini, Gregory F. Cooper, Milos Hauskrecht.
+   * Binary Classifier Calibration: Non-parametric approach.
+   * http://arxiv.org/abs/1401.3390
+   *
+   * Alexandru Niculescu-Mizil, Rich Caruana.
+   * Predicting Good Probabilities With Supervised Learning.
+   * Appearing in Proceedings of the 22nd International Conference on Machine Learning,
+   * Bonn, Germany, 2005.
+   * http://www.cs.cornell.edu/~alexn/papers/calibration.icml05.crc.rev3.pdf
+   *
+   * Properties and benefits of calibrated classifiers.
+   * Ira Cohen, Moises Goldszmidt.
+   * http://www.hpl.hp.com/techreports/2004/HPL-2004-22R1.pdf
+   */
+  def calibration(): RDD[((Double, Double), (Double, Long))] = {
+    assessedCalibration
+  }
+  
+  private lazy val assessedCalibration: RDD[((Double, Double), (Double, Long))] = {
+    val distinctScoresAndLabelCounts = scoreAndLabels.combineByKey(
+      createCombiner = (label: Double) => new BinaryLabelCounter(0L, 0L) += label,
+      mergeValue = (c: BinaryLabelCounter, label: Double) => c += label,
+      mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
+    ).sortByKey(ascending = true)
+  
+    val binnedDistinctScoresAndLabelCounts =
+      if (numBins == 0) {
+        distinctScoresAndLabelCounts.map { pair => ((pair._1, pair._1), pair._2) }
+      } else {
+        val distinctScoresCount = distinctScoresAndLabelCounts.count()
+  
+        var groupCount =
+          if (distinctScoresCount % numBins == 0) {
+            distinctScoresCount / numBins
+          } else {
+            // prevent the last bin from being very small compared to the others
+            distinctScoresCount / numBins + 1
+          }
+        
+        if (groupCount < 2) {
+          logInfo(s"Too few distinct scores ($distinctScoresCount) for $numBins bins to be useful")
+          distinctScoresAndLabelCounts.map { pair => ((pair._1, pair._1), pair._2) }
+        } else {
+          if (groupCount >= Int.MaxValue) {
+            val n = distinctScoresCount
+            logWarning(
+              s"Too many distinct scores ($n) for $numBins bins; capping at ${Int.MaxValue}")
+            groupCount = Int.MaxValue
+          }
+          distinctScoresAndLabelCounts.mapPartitions(_.grouped(groupCount.toInt).map { pairs =>
+            val firstScore = pairs.head._1
+            val lastScore = pairs.last._1
+            val agg = new BinaryLabelCounter()
+            pairs.foreach(pair => agg += pair._2)
+            ((firstScore, lastScore), agg)
+          })
+        }
+      }
+  
+    binnedDistinctScoresAndLabelCounts.map { pair =>
+      val n = pair._2.numPositives + pair._2.numNegatives
+      (pair._1, (pair._2.numPositives / n.toDouble, n))
     }
   }
 }
