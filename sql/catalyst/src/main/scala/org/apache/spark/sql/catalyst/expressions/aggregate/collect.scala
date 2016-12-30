@@ -76,46 +76,16 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
   }
 
   protected def _serialize(obj: Iterable[Any]): Array[Byte] = {
-    val buffer = new Array[Byte](4 << 10)  // 4K
-    val bos = new ByteArrayOutputStream()
-    val out = new DataOutputStream(bos)
-    try {
-      val projection = UnsafeProjection.create(Array[DataType](child.dataType))
-      obj.foreach { value =>
-        val row = InternalRow.apply(value)
-        val unsafeRow = projection.apply(row)
-        out.writeInt(unsafeRow.getSizeInBytes)
-        unsafeRow.writeToStream(out, buffer)
-      }
-      out.writeInt(-1)
-      out.flush()
-
-      bos.toByteArray
-    } finally {
-      out.close()
-      bos.close()
-    }
+    val array = new GenericArrayData(obj.toArray)
+    val projection = UnsafeProjection.create(
+      Array[DataType](ArrayType(elementType = child.dataType, containsNull = false)))
+    projection.apply(InternalRow.apply(array)).getBytes()
   }
 
   protected def _deserialize(bytes: Array[Byte], buffer: T): Unit = {
-    val bis = new ByteArrayInputStream(bytes)
-    val ins = new DataInputStream(bis)
-    try {
-      // Read unsafeRow size and content in bytes.
-      var sizeOfNextRow = ins.readInt()
-      while (sizeOfNextRow >= 0) {
-        val bs = new Array[Byte](sizeOfNextRow)
-        ins.readFully(bs)
-        val row = new UnsafeRow(2)
-        row.pointTo(bs, sizeOfNextRow)
-
-        buffer += row.get(0, child.dataType)
-        sizeOfNextRow = ins.readInt()
-      }
-    } finally {
-      ins.close()
-      bis.close()
-    }
+    val row = new UnsafeRow(1)
+    row.pointTo(bytes, bytes.length)
+    row.getArray(0).foreach(child.dataType, (_, x: Any) => buffer += x)
   }
 }
 
