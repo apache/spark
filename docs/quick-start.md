@@ -235,7 +235,7 @@ import org.apache.spark.SparkConf
 object SimpleApp {
   def main(args: Array[String]) {
     val logFile = "YOUR_SPARK_HOME/README.md" // Should be some file on your system
-    val conf = new SparkConf().setAppName("Simple Application")
+    val conf = new SparkConf().setAppName("Simple Application").setMaster("local[2]")
     val sc = new SparkContext(conf)
     val logData = sc.textFile(logFile, 2).cache()
     val numAs = logData.filter(line => line.contains("a")).count()
