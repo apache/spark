@@ -283,8 +283,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     } else {
       // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
       val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
-      val optimizer = new IterativelyReweightedLeastSquares(initialModel, familyAndLink.reweightFunc,
-        $(fitIntercept), $(regParam), $(maxIter), $(tol))
+      val optimizer = new IterativelyReweightedLeastSquares(initialModel,
+        familyAndLink.reweightFunc, $(fitIntercept), $(regParam), $(maxIter), $(tol))
       val irlsModel = optimizer.fit(instances)
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
