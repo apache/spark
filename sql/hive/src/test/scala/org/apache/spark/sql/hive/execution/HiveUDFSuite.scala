@@ -428,7 +428,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           \"separatorChar\" = \",\",
           \"quoteChar\"     = \"\\\"\",
           \"escapeChar\"    = \"\\\\\")
-        LOCATION '$tempDir'
+        LOCATION '${tempDir.toURI}'
       """)
 
       val answer1 =
@@ -444,7 +444,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql(
         s"""CREATE EXTERNAL TABLE external_t5 (c1 int, c2 int)
         ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-        LOCATION '$tempDir'
+        LOCATION '${tempDir.toURI}'
       """)
 
       val answer2 =
@@ -460,7 +460,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
       // External parquet pointing to LOCATION
 
-      val parquetLocation = tempDir + "/external_parquet"
+      val parquetLocation = s"${tempDir.toURI}/external_parquet"
       sql("SELECT 1, 2").write.parquet(parquetLocation)
 
       sql(
