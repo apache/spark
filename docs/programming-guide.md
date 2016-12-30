@@ -1035,6 +1035,12 @@ for details.
   sort records by their keys. This is more efficient than calling <code>repartition</code> and then sorting within
   each partition because it can push the sorting down into the shuffle machinery. </td>
 </tr>
+<tr>
+  <td> <b>repartitionAndSortWithinPartitions</b>(<i>partitioner</i>) </td>
+  <td> Repartition the RDD according to the given partitioner and, within each resulting partition,
+  sort records by their keys. This is more efficient than calling <code>repartition</code> and then sorting within 
+  each partition because it can push the sorting down into the shuffle machinery. </td>
+</tr>
 </table>
 
 ### Actions
