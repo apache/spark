@@ -581,11 +581,11 @@ class Analyzer(
       // where the child should be a logical plan parsed from `desc.viewText`.
       // If the child of a view is empty, we will throw an AnalysisException later in
       // `checkAnalysis`.
-      case view: View if view.child.isDefined =>
-        val context = AnalysisContext(defaultDatabase = view.desc.viewDefaultDatabase)
+      case view @ View(desc, _, Some(child)) =>
+        val context = AnalysisContext(defaultDatabase = desc.viewDefaultDatabase)
         // Resolve all the UnresolvedRelations and Views in the child.
         val newChild = AnalysisContext.withAnalysisContext(context) {
-          execute(view.child.get)
+          execute(child)
         }
         view.copy(child = Some(newChild))
       case p @ SubqueryAlias(_, view: View, _) =>
@@ -755,10 +755,13 @@ class Analyzer(
       // map the output of the logical plan to the output of the view, here we simply replace the
       // output attributes of the view with the attributes that have the same names from the child.
       // TODO: Also check the dataTypes and nullabilites of the output.
-      case v @ View(_, output, child) if child.isDefined =>
+      //
+      // Note: If the child of a view is empty, we will throw an AnalysisException later in
+      // `checkAnalysis`.
+      case v @ View(_, output, Some(child)) =>
         val resolver = conf.resolver
         val newOutput = output.map { attr =>
-          findAttributeByName(attr.name, child.get.output, resolver)
+          findAttributeByName(attr.name, child.output, resolver)
         }
         v.copy(output = newOutput)
 
@@ -2349,7 +2352,9 @@ object EliminateSubqueryAliases extends Rule[LogicalPlan] {
  */
 object EliminateView extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case View(_, output, child) if child.isDefined => Project(output, child.get)
+    // If the child of a view is empty, we will throw an AnalysisException later in
+    // `checkAnalysis`.
+    case View(_, output, Some(child)) => Project(output, child)
   }
 }
 

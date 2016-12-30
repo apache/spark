@@ -465,13 +465,13 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(plan == SubqueryAlias("range", tmpView, Option(TableIdentifier("vw1"))))
   }
 
-  test("lookup view relation") {
+  test("look up view relation") {
     val externalCatalog = newBasicCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)
-    val metadata1 = externalCatalog.getTable("db3", "view1")
+    val metadata = externalCatalog.getTable("db3", "view1")
     sessionCatalog.setCurrentDatabase("default")
     // Lookup view when currentDatabase is not defined.
-    val view = normalizeView(View(metadata1))
+    val view = normalizeView(View(metadata))
     assert(
       normalizeView(sessionCatalog.lookupRelation(TableIdentifier("view1", Some("db3"))))
         == SubqueryAlias("view1", view, Some(TableIdentifier("view1", Some("db3")))))
