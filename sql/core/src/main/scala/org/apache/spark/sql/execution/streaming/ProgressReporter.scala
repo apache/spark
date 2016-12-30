@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
@@ -100,9 +100,9 @@ trait ProgressReporter extends Logging {
     progressBuffer.toArray
   }
 
-  /** Returns the most recent query progress update. */
+  /** Returns the most recent query progress update or null if there were no progress updates. */
   def lastProgress: StreamingQueryProgress = progressBuffer.synchronized {
-    progressBuffer.last
+    progressBuffer.lastOption.orNull
   }
 
   /** Begins recording statistics about query progress for a given trigger. */
@@ -159,8 +159,8 @@ trait ProgressReporter extends Logging {
       name = name,
       timestamp = formatTimestamp(currentTriggerStartTimestamp),
       batchId = currentBatchId,
-      durationMs = currentDurationsMs.toMap.mapValues(long2Long).asJava,
-      eventTime = executionStats.eventTimeStats.asJava,
+      durationMs = new java.util.HashMap(currentDurationsMs.toMap.mapValues(long2Long).asJava),
+      eventTime = new java.util.HashMap(executionStats.eventTimeStats.asJava),
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
       sink = sinkProgress)
@@ -182,7 +182,10 @@ trait ProgressReporter extends Logging {
 
   /** Extracts statistics from the most recent query execution. */
   private def extractExecutionStats(hasNewData: Boolean): ExecutionStats = {
-    val watermarkTimestamp = Map("watermark" -> formatTimestamp(offsetSeqMetadata.batchWatermarkMs))
+    val hasEventTime = logicalPlan.collect { case e: EventTimeWatermark => e }.nonEmpty
+    val watermarkTimestamp =
+      if (hasEventTime) Map("watermark" -> formatTimestamp(offsetSeqMetadata.batchWatermarkMs))
+      else Map.empty[String, String]
 
     if (!hasNewData) {
       return ExecutionStats(Map.empty, Seq.empty, watermarkTimestamp)

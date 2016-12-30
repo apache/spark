@@ -41,7 +41,7 @@ object GridPageRank {
       }
     }
     // compute the pagerank
-    var pr = Array.fill(nRows * nCols)(resetProb)
+    var pr = Array.fill(nRows * nCols)(1.0)
     for (iter <- 0 until nIter) {
       val oldPr = pr
       pr = new Array[Double](nRows * nCols)
@@ -70,10 +70,10 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       val resetProb = 0.15
       val errorTol = 1.0e-5
 
-      val staticRanks1 = starGraph.staticPageRank(numIter = 1, resetProb).vertices
-      val staticRanks2 = starGraph.staticPageRank(numIter = 2, resetProb).vertices.cache()
+      val staticRanks1 = starGraph.staticPageRank(numIter = 2, resetProb).vertices
+      val staticRanks2 = starGraph.staticPageRank(numIter = 3, resetProb).vertices.cache()
 
-      // Static PageRank should only take 2 iterations to converge
+      // Static PageRank should only take 3 iterations to converge
       val notMatching = staticRanks1.innerZipJoin(staticRanks2) { (vid, pr1, pr2) =>
         if (pr1 != pr2) 1 else 0
       }.map { case (vid, test) => test }.sum()
@@ -201,6 +201,32 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
           case (vertexId, vector) => vector(0)
         }.vertices.cache()
       assert(compareRanks(staticRanks, parallelStaticRanks) < errorTol)
+    }
+  }
+
+  test("Loop with source PageRank") {
+    withSpark { sc =>
+      val edges = sc.parallelize((1L, 2L) :: (2L, 3L) :: (3L, 4L) :: (4L, 2L) :: Nil)
+      val g = Graph.fromEdgeTuples(edges, 1)
+      val resetProb = 0.15
+      val tol = 0.0001
+      val numIter = 50
+      val errorTol = 1.0e-5
+
+      val staticRanks = g.staticPageRank(numIter, resetProb).vertices
+      val dynamicRanks = g.pageRank(tol, resetProb).vertices
+      assert(compareRanks(staticRanks, dynamicRanks) < errorTol)
+
+      // Computed in igraph 1.0 w/ R bindings:
+      // > page_rank(graph_from_literal( A -+ B -+ C -+ D -+ B))
+      // Alternatively in NetworkX 1.11:
+      // > nx.pagerank(nx.DiGraph([(1,2),(2,3),(3,4),(4,2)]))
+      // We multiply by the number of vertices to account for difference in normalization
+      val igraphPR = Seq(0.0375000, 0.3326045, 0.3202138, 0.3096817).map(_ * 4)
+      val ranks = VertexRDD(sc.parallelize(1L to 4L zip igraphPR))
+      assert(compareRanks(staticRanks, ranks) < errorTol)
+      assert(compareRanks(dynamicRanks, ranks) < errorTol)
+
     }
   }
 }

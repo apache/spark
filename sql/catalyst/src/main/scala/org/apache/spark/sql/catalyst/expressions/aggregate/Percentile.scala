@@ -77,15 +77,9 @@ case class Percentile(
   private lazy val returnPercentileArray = percentageExpression.dataType.isInstanceOf[ArrayType]
 
   @transient
-  private lazy val percentages =
-    (percentageExpression.dataType, percentageExpression.eval()) match {
-      case (_, num: Double) => Seq(num)
-      case (ArrayType(baseType: NumericType, _), arrayData: ArrayData) =>
-        val numericArray = arrayData.toObjectArray(baseType)
-        numericArray.map { x =>
-          baseType.numeric.toDouble(x.asInstanceOf[baseType.InternalType])}.toSeq
-      case other =>
-        throw new AnalysisException(s"Invalid data type ${other._1} for parameter percentages")
+  private lazy val percentages = percentageExpression.eval() match {
+      case num: Double => Seq(num)
+      case arrayData: ArrayData => arrayData.toDoubleArray().toSeq
   }
 
   override def children: Seq[Expression] = child :: percentageExpression :: Nil
@@ -99,7 +93,7 @@ case class Percentile(
   }
 
   override def inputTypes: Seq[AbstractDataType] = percentageExpression.dataType match {
-    case _: ArrayType => Seq(NumericType, ArrayType)
+    case _: ArrayType => Seq(NumericType, ArrayType(DoubleType))
     case _ => Seq(NumericType, DoubleType)
   }
 
@@ -129,19 +123,25 @@ case class Percentile(
     new OpenHashMap[Number, Long]()
   }
 
-  override def update(buffer: OpenHashMap[Number, Long], input: InternalRow): Unit = {
+  override def update(
+      buffer: OpenHashMap[Number, Long],
+      input: InternalRow): OpenHashMap[Number, Long] = {
     val key = child.eval(input).asInstanceOf[Number]
 
     // Null values are ignored in counts map.
     if (key != null) {
       buffer.changeValue(key, 1L, _ + 1L)
     }
+    buffer
   }
 
-  override def merge(buffer: OpenHashMap[Number, Long], other: OpenHashMap[Number, Long]): Unit = {
+  override def merge(
+      buffer: OpenHashMap[Number, Long],
+      other: OpenHashMap[Number, Long]): OpenHashMap[Number, Long] = {
     other.foreach { case (key, count) =>
       buffer.changeValue(key, count, _ + count)
     }
+    buffer
   }
 
   override def eval(buffer: OpenHashMap[Number, Long]): Any = {

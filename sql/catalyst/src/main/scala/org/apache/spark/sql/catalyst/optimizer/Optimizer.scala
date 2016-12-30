@@ -796,7 +796,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     case _: Distinct => true
     case _: Generate => true
     case _: Pivot => true
-    case _: RedistributeData => true
+    case _: RepartitionByExpression => true
     case _: Repartition => true
     case _: ScriptTransformation => true
     case _: Sort => true

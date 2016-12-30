@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import scala.collection.JavaConverters._
+import java.util.concurrent.CountDownLatch
 
 import org.apache.commons.lang3.RandomStringUtils
 import org.scalactic.TolerantNumerics
@@ -26,12 +26,13 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.util.BlockingSource
 import org.apache.spark.util.ManualClock
 
 
@@ -141,7 +142,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       StartStream(),
       AssertOnQuery(_.isActive === true),
       AddData(inputData, 0),
-      ExpectFailure[SparkException],
+      ExpectFailure[SparkException](),
       AssertOnQuery(_.isActive === false),
       TestAwaitTermination(ExpectException[SparkException]),
       TestAwaitTermination(ExpectException[SparkException], timeoutMs = 2000),
@@ -305,11 +306,29 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       StartStream(ProcessingTime(100), triggerClock = clock),
       AddData(inputData, 0),
       AdvanceManualClock(100),
-      ExpectFailure[SparkException],
+      ExpectFailure[SparkException](),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message.startsWith("Terminated with exception"))
     )
+  }
+
+  test("lastProgress should be null when recentProgress is empty") {
+    BlockingSource.latch = new CountDownLatch(1)
+    withTempDir { tempDir =>
+      val sq = spark.readStream
+        .format("org.apache.spark.sql.streaming.util.BlockingSource")
+        .load()
+        .writeStream
+        .format("org.apache.spark.sql.streaming.util.BlockingSource")
+        .option("checkpointLocation", tempDir.toString)
+        .start()
+      // Creating source is blocked so recentProgress is empty and lastProgress should be null
+      assert(sq.lastProgress === null)
+      // Release the latch and stop the query
+      BlockingSource.latch.countDown()
+      sq.stop()
+    }
   }
 
   test("codahale metrics") {
@@ -417,6 +436,48 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
           true
         }
       )
+    }
+  }
+
+  test("StreamingQuery should be Serializable but cannot be used in executors") {
+    def startQuery(ds: Dataset[Int], queryName: String): StreamingQuery = {
+      ds.writeStream
+        .queryName(queryName)
+        .format("memory")
+        .start()
+    }
+
+    val input = MemoryStream[Int]
+    val q1 = startQuery(input.toDS, "stream_serializable_test_1")
+    val q2 = startQuery(input.toDS.map { i =>
+      // Emulate that `StreamingQuery` get captured with normal usage unintentionally.
+      // It should not fail the query.
+      q1
+      i
+    }, "stream_serializable_test_2")
+    val q3 = startQuery(input.toDS.map { i =>
+      // Emulate that `StreamingQuery` is used in executors. We should fail the query with a clear
+      // error message.
+      q1.explain()
+      i
+    }, "stream_serializable_test_3")
+    try {
+      input.addData(1)
+
+      // q2 should not fail since it doesn't use `q1` in the closure
+      q2.processAllAvailable()
+
+      // The user calls `StreamingQuery` in the closure and it should fail
+      val e = intercept[StreamingQueryException] {
+        q3.processAllAvailable()
+      }
+      assert(e.getCause.isInstanceOf[SparkException])
+      assert(e.getCause.getCause.isInstanceOf[IllegalStateException])
+      assert(e.getMessage.contains("StreamingQuery cannot be used in executors"))
+    } finally {
+      q1.stop()
+      q2.stop()
+      q3.stop()
     }
   }
 

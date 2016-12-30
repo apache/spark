@@ -840,8 +840,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>64m</td>
   <td>
     Maximum allowable size of Kryo serialization buffer. This must be larger than any
-    object you attempt to serialize. Increase this if you get a "buffer limit exceeded" exception
-    inside Kryo.
+    object you attempt to serialize and must be less than 2048m.
+    Increase this if you get a "buffer limit exceeded" exception inside Kryo.
   </td>
 </tr>
 <tr>
@@ -1316,6 +1316,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.blacklist.timeout</code></td>
+  <td>1h</td>
+  <td>
+    (Experimental) How long a node or executor is blacklisted for the entire application, before it
+    is unconditionally removed from the blacklist to attempt running new tasks.
+  </td>
+</tr>
+<tr>
   <td><code>spark.blacklist.task.maxTaskAttemptsPerExecutor</code></td>
   <td>1</td>
   <td>
@@ -1332,7 +1340,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.stage.maxFailedTasksPerExecutor</code>
+  <td><code>spark.blacklist.stage.maxFailedTasksPerExecutor</code></td>
   <td>2</td>
   <td>
     (Experimental) How many different tasks must fail on one executor, within one stage, before the
@@ -1345,6 +1353,28 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     (Experimental) How many different executors are marked as blacklisted for a given stage, before
     the entire node is marked as failed for the stage.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blacklist.application.maxFailedTasksPerExecutor</code></td>
+  <td>2</td>
+  <td>
+    (Experimental) How many different tasks must fail on one executor, in successful task sets,
+    before the executor is blacklisted for the entire application.  Blacklisted executors will
+    be automatically added back to the pool of available resources after the timeout specified by
+    <code>spark.blacklist.timeout</code>.  Note that with dynamic allocation, though, the executors
+    may get marked as idle and be reclaimed by the cluster manager.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blacklist.application.maxFailedExecutorsPerNode</code></td>
+  <td>2</td>
+  <td>
+    (Experimental) How many different executors must be blacklisted for the entire application,
+    before the node is blacklisted for the entire application.  Blacklisted nodes will
+    be automatically added back to the pool of available resources after the timeout specified by
+    <code>spark.blacklist.timeout</code>.  Note that with dynamic allocation, though, the executors
+    on the node may get marked as idle and be reclaimed by the cluster manager.
   </td>
 </tr>
 <tr>
@@ -1391,6 +1421,48 @@ Apart from these, the following properties are also available, and may be useful
     The total number of failures spread across different tasks will not cause the job
     to fail; a particular task has to fail this number of attempts.
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.task.reaper.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enables monitoring of killed / interrupted tasks. When set to true, any task which is killed
+    will be monitored by the executor until that task actually finishes executing. See the other
+    <code>spark.task.reaper.*</code> configurations for details on how to control the exact behavior
+    of this monitoring</code>. When set to false (the default), task killing will use an older code
+    path which lacks such monitoring.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.task.reaper.pollingInterval</code></td>
+  <td>10s</td>
+  <td>
+    When <code>spark.task.reaper.enabled = true</code>, this setting controls the frequency at which
+    executors will poll the status of killed tasks. If a killed task is still running when polled
+    then a warning will be logged and, by default, a thread-dump of the task will be logged
+    (this thread dump can be disabled via the <code>spark.task.reaper.threadDump</code> setting,
+    which is documented below).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.task.reaper.threadDump</code></td>
+  <td>true</td>
+  <td>
+    When <code>spark.task.reaper.enabled = true</code>, this setting controls whether task thread
+    dumps are logged during periodic polling of killed tasks. Set this to false to disable
+    collection of thread dumps.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.task.reaper.killTimeout</code></td>
+  <td>-1</td>
+  <td>
+    When <code>spark.task.reaper.enabled = true</code>, this setting specifies a timeout after
+    which the executor JVM will kill itself if a killed task has not stopped running. The default
+    value, -1, disables this mechanism and prevents the executor from self-destructing. The purpose
+    of this setting is to act as a safety-net to prevent runaway uncancellable tasks from rendering
+    an executor unusable.
   </td>
 </tr>
 </table>
