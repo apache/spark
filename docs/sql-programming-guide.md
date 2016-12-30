@@ -515,7 +515,7 @@ new data.
 ### Saving to Persistent Tables
 
 `DataFrames` can also be saved as persistent tables into Hive metastore using the `saveAsTable`
-command. Notice existing Hive deployment is not necessary to use this feature. Spark will create a
+command. Notice that an existing Hive deployment is not necessary to use this feature. Spark will create a
 default local Hive metastore (using Derby) for you. Unlike the `createOrReplaceTempView` command,
 `saveAsTable` will materialize the contents of the DataFrame and create a pointer to the data in the
 Hive metastore. Persistent tables will still exist even after your Spark program has restarted, as
@@ -525,6 +525,18 @@ be created by calling the `table` method on a `SparkSession` with the name of th
 By default `saveAsTable` will create a "managed table", meaning that the location of the data will
 be controlled by the metastore. Managed tables will also have their data deleted automatically
 when a table is dropped.
+
+Currently, `saveAsTable` does not expose an API supporting the creation of an "external table" from a `DataFrame`.
+However, this functionality can be achieved by providing a `path` option to the `DataFrameWriter` with `path` as the key
+and location of the external table as its value (a string) when saving the table with `saveAsTable`. When an External table
+is dropped only its metadata is removed.
+
+Starting from Spark 2.1, persistent datasource tables have per-partition metadata stored in the Hive metastore. This brings several benefits:
+
+- Since the metastore can return only necessary partitions for a query, discovering all the partitions on the first query to the table is no longer needed.
+- Hive DDLs such as `ALTER TABLE PARTITION ... SET LOCATION` are now available for tables created with the Datasource API.
+
+Note that partition information is not gathered by default when creating external datasource tables (those with a `path` option). To sync the partition information in the metastore, you can invoke `MSCK REPAIR TABLE`.
 
 ## Parquet Files
 
