@@ -74,7 +74,6 @@ object AnalysisContext {
     val originContext = value.get()
     set(context)
     val ret = try f finally { set(originContext) }
-    set(originContext)
     ret
   }
 }
