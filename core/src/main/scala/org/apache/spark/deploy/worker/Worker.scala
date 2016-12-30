@@ -445,12 +445,24 @@ private[deploy] class Worker(
           // Create local dirs for the executor. These are passed to the executor via the
           // SPARK_EXECUTOR_DIRS environment variable, and deleted by the Worker when the
           // application finishes.
-          val appLocalDirs = appDirectories.getOrElse(appId,
-            Utils.getOrCreateLocalRootDirs(conf).map { dir =>
-              val appDir = Utils.createDirectory(dir, namePrefix = "executor")
-              Utils.chmod700(appDir)
-              appDir.getAbsolutePath()
-            }.toSeq)
+          val appLocalDirs = appDirectories.getOrElse(appId, {
+            val dirs = Utils.getOrCreateLocalRootDirs(conf).flatMap { dir =>
+              try {
+                val appDir = Utils.createDirectory(dir, namePrefix = "executor")
+                Utils.chmod700(appDir)
+                Some(appDir.getAbsolutePath())
+              } catch {
+                case e: IOException =>
+                  logError(s"${e.getMessage}. Ignoring this directory.")
+                  None
+              }
+            }.toSeq
+            if (dirs.length <= 0) {
+              throw new IOException("None subfolder can be created in " +
+                s"${Utils.getOrCreateLocalRootDirs(conf).mkString(",")}.")
+            }
+            dirs
+          })
           appDirectories(appId) = appLocalDirs
           val manager = new ExecutorRunner(
             appId,
