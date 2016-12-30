@@ -1082,7 +1082,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat' AS (a,b,c) FROM script_trans").count())
   }
 
-  test("test script transform for stderr") {
+  ignore("test script transform for stderr") {
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").createOrReplaceTempView("script_trans")
     assert(0 ===
