@@ -47,6 +47,10 @@ public class ByteArrayMethods {
    */
   public static boolean arrayEquals(
       Object leftBase, long leftOffset, Object rightBase, long rightOffset, final long length) {
+    if (leftBase == rightBase && leftOffset == rightOffset) {
+      return true;
+    }
+
     int i = 0;
 
     // check if stars align and we can get both offsets to be aligned

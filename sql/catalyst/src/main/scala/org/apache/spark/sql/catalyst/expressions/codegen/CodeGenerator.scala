@@ -325,9 +325,16 @@ class CodegenContext {
         val funcCode = s"""
           public void $setColumnFunc(InternalRow row, InternalRow value) {
             if (row instanceof UnsafeRow) {
-              ((UnsafeRow) row).setNotNullAt($ordinal);
-              final InternalRow $nestedRow = row.getStruct($ordinal, ${s.length});
-              $updateFieldsCode
+              UnsafeRow unsafeRow = (UnsafeRow) row;
+              unsafeRow.setNotNullAt($ordinal);
+              final UnsafeRow $nestedRow = unsafeRow.getStruct($ordinal, ${s.length});
+              if (!$nestedRow.equals(value)) {
+                if (value instanceof UnsafeRow) {
+                  unsafeRow.setFixedLengthStruct($ordinal, (UnsafeRow) value);
+                } else {
+                  $updateFieldsCode
+                }
+              }
             } else {
               row.update($ordinal, value);
             }

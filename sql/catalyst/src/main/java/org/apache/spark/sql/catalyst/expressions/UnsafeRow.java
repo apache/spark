@@ -331,6 +331,15 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     }
   }
 
+  public void setFixedLengthStruct(int ordinal, UnsafeRow row) {
+    assertIndexIsValid(ordinal);
+    final long offsetAndSize = getLong(ordinal);
+    final int offset = (int) (offsetAndSize >> 32);
+    final int size = (int) offsetAndSize;
+    assert size == row.sizeInBytes;
+    Platform.copyMemory(row.baseObject, row.baseOffset, baseObject, baseOffset + offset, size);
+  }
+
   @Override
   public Object get(int ordinal, DataType dataType) {
     if (isNullAt(ordinal) || dataType instanceof NullType) {

@@ -100,7 +100,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         val setNull = dt match {
           case dt if UnsafeRow.isMutable(dt) && !UnsafeRow.isFixedLength(dt) =>
             def varLenDataSize(s: DataType): Int = s match {
-              case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS => 16
+              case _: DecimalType => 16
               case s: StructType =>
                 UnsafeRow.calculateBitSetWidthInBytes(s.length) + 8 * s.length +
                   s.map(f => varLenDataSize(f.dataType)).sum
