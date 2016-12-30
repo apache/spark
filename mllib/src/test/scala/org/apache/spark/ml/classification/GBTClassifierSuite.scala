@@ -66,7 +66,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     ParamsSuite.checkParams(new GBTClassifier)
     val model = new GBTClassificationModel("gbtc",
       Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0, null), 1)),
-      Array(1.0), 1)
+      Array(1.0), 1, 2)
     ParamsSuite.checkParams(model)
   }
 
@@ -246,7 +246,8 @@ private object GBTClassifierSuite extends SparkFunSuite {
     val newModel = gbt.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = GBTClassificationModel.fromOld(
-      oldModel, newModel.parent.asInstanceOf[GBTClassifier], categoricalFeatures, numFeatures)
+      oldModel, newModel.parent.asInstanceOf[GBTClassifier], categoricalFeatures,
+      numFeatures, numClasses = 2)
     TreeTests.checkEqual(oldModelAsNew, newModel)
     assert(newModel.numFeatures === numFeatures)
     assert(oldModelAsNew.numFeatures === numFeatures)
