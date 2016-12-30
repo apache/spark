@@ -372,6 +372,14 @@ class ParamsSuite extends SparkFunSuite {
     val objOut = new ObjectOutputStream(new ByteArrayOutputStream())
     objOut.writeObject(filteredParamMap)
   }
+
+  test("Params.copyValues") {
+    val t = new TestParams()
+    val t2 = t.copy(ParamMap.empty)
+    assert(!t2.isSet(t2.maxIter))
+    val t3 = t.copy(ParamMap(t.maxIter -> 20))
+    assert(t3.isSet(t3.maxIter))
+  }
 }
 
 object ParamsSuite extends SparkFunSuite {
