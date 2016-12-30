@@ -1003,8 +1003,20 @@ abstract class RDD[T: ClassTag](
   /**
    * Reduces the elements of this RDD using the specified commutative and
    * associative binary operator.
+   * This function throws Exception if RDD is empty.
    */
-  def reduce(f: (T, T) => T): T = withScope {
+  def reduce(f: (T, T) => T): T = {
+    reduceOption(f).getOrElse(throw new UnsupportedOperationException("empty collection"))
+  }
+
+  /**
+   * :: Experimental ::
+   * Reduces the elements of this RDD using the specified commutative and
+   * associative binary operator.
+   * This function return None if RDD is empty.
+   */
+  @Experimental
+  def reduceOption(f: (T, T) => T): Option[T] = withScope {
     val cleanF = sc.clean(f)
     val reducePartition: Iterator[T] => Option[T] = iter => {
       if (iter.hasNext) {
@@ -1023,8 +1035,7 @@ abstract class RDD[T: ClassTag](
       }
     }
     sc.runJob(this, reducePartition, mergeResult)
-    // Get the final result out of our Option, or throw an exception if the RDD was empty
-    jobResult.getOrElse(throw new UnsupportedOperationException("empty collection"))
+    jobResult
   }
 
   /**

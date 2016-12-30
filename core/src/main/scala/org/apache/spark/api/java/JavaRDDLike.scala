@@ -385,6 +385,17 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def reduce(f: JFunction2[T, T, T]): T = rdd.reduce(f)
 
   /**
+   * :: Experimental ::
+   * Reduces the elements of this RDD using the specified commutative and associative binary
+   * operator.
+   * This function allow empty rdd, and return Optional type.
+   */
+  @Experimental
+  def reduceOption(f: JFunction2[T, T, T]): Optional[T] = {
+    JavaUtils.optionToOptional(rdd.reduceOption(f))
+  }
+
+  /**
    * Reduces the elements of this RDD in a multi-level tree pattern.
    *
    * @param depth suggested depth of the tree

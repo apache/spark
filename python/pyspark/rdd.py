@@ -812,6 +812,7 @@ class RDD(object):
         """
         Reduces the elements of this RDD using the specified commutative and
         associative binary operator. Currently reduces partitions locally.
+        This function raises Exception if RDD is empty.
 
         >>> from operator import add
         >>> sc.parallelize([1, 2, 3, 4, 5]).reduce(add)
@@ -822,6 +823,25 @@ class RDD(object):
         Traceback (most recent call last):
             ...
         ValueError: Can not reduce() empty RDD
+        """
+        ret = self.reduceOption(f)
+        if ret:
+            return ret
+        else:
+            raise ValueError("Can not reduce() empty RDD")
+
+    def reduceOption(self, f):
+        """
+        Reduces the elements of this RDD using the specified commutative and
+        associative binary operator. Currently reduces partitions locally.
+
+        >>> from operator import add
+        >>> sc.parallelize([1, 2, 3, 4, 5]).reduceOption(add)
+        15
+        >>> sc.parallelize((2 for _ in range(10))).map(lambda x: 1).cache().reduceOption(add)
+        10
+        >>> sc.parallelize([]).reduceOption(add) is None
+        True
         """
         def func(iterator):
             iterator = iter(iterator)
@@ -834,7 +854,8 @@ class RDD(object):
         vals = self.mapPartitions(func).collect()
         if vals:
             return reduce(f, vals)
-        raise ValueError("Can not reduce() empty RDD")
+        else:
+            return None
 
     def treeReduce(self, f, depth=2):
         """

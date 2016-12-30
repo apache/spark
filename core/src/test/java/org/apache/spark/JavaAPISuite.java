@@ -837,6 +837,22 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void reduceOptionExist() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1,2,3));
+    Optional<Integer> sum = rdd.reduceOption(new AddInts());
+    Optional<Integer> expected = Optional.of(6);
+    Assert.assertEquals(expected, sum);
+  }
+
+  @Test
+  public void reduceOptionAbsent() {
+    JavaRDD<Integer> rdd = sc.emptyRDD();
+    Optional<Integer> sum = rdd.reduceOption(new AddInts());
+    Optional<Integer> expected = Optional.absent();
+    Assert.assertEquals(expected, sum);
+  }
+
+  @Test
   public void fold() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4));
     int sum = rdd.fold(0, new AddInts());
