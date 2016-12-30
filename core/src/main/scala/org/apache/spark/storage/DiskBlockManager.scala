@@ -205,6 +205,9 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
       }
       try {
         val fs = dirPath.getFileSystem(SparkHadoopUtil.get.conf)
+        if (!fs.exists(dirPath)) {
+          return
+        }
         val files = fs.listStatus(dirPath, fileFilter).map(_.getPath)
         for (file <- files) {
           if (fs.exists(file)) {

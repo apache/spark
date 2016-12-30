@@ -107,7 +107,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](
   def getNumBlocks: Int = numBlocks
 
   /** Total number of blocks this broadcast variable contains. */
-  private val numBlocks: Int = if (!isExecutorSide) writeBlocks(obj) else nBlocks.getOrElse(-1)
+  private val numBlocks: Int = nBlocks.getOrElse(writeBlocks(obj))
 
   /** Whether to generate checksum for blocks or not. */
   private var checksumEnabled: Boolean = false
@@ -154,7 +154,9 @@ private[spark] class TorrentBroadcast[T: ClassTag](
         checksums(i) = calcChecksum(block)
       }
       val pieceId = BroadcastBlockId(id, "piece" + i)
-      blockManager.persistBroadcastPiece(pieceId, block)
+      if (isExecutorSide) {
+        blockManager.persistBroadcastPiece(pieceId, block)
+      }
       val bytes = new ChunkedByteBuffer(block.duplicate())
       if (!blockManager.putBytes(pieceId, bytes, MEMORY_AND_DISK_SER, tellMaster = true)) {
         throw new SparkException(s"Failed to store $pieceId of $broadcastId in local BlockManager")

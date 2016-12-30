@@ -42,7 +42,7 @@ private[spark] class TorrentBroadcastFactory extends BroadcastFactory {
   }
 
   override def uploadBroadcast[T: ClassTag](value_ : T, id: Long): Int = {
-    new TorrentBroadcast[T](value_, id).getNumBlocks
+    new TorrentBroadcast[T](value_, id, true).getNumBlocks
   }
 
   override def stop() { }
