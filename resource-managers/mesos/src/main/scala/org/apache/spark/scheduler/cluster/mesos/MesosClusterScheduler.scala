@@ -23,7 +23,6 @@ import java.util.{Collections, Date, List => JList}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.util.control.Breaks._
 
 import org.apache.mesos.{Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
@@ -560,20 +559,8 @@ private[spark] class MesosClusterScheduler(
       } else {
         val offer = offerOption.get
         val queuedTasks = tasks.getOrElseUpdate(offer.offerId, new ArrayBuffer[TaskInfo])
-        breakable {
-          val task = try {
-            createTaskInfo(submission, offer)
-          } catch {
-            case e: SparkException =>
-              afterLaunchCallback(submission.submissionId)
-              finishedDrivers += new MesosClusterSubmissionState(submission, TaskID.newBuilder().
-                setValue(submission.submissionId).build(), SlaveID.newBuilder().setValue("").
-                build(), None, null, None, getDriverFrameworkID(submission))
-              logError(s"Failed to launch the driver with id: ${submission.submissionId}, " +
-                s"cpu: $driverCpu, mem: $driverMem, reason: ${e.getMessage}")
-              // continue with the remaining drivers
-              break
-          }
+        try {
+          val task = createTaskInfo(submission, offer)
           queuedTasks += task
           logTrace(s"Using offer ${offer.offerId.getValue} to launch driver " +
             submission.submissionId)
@@ -582,6 +569,14 @@ private[spark] class MesosClusterScheduler(
           launchedDrivers(submission.submissionId) = newState
           launchedDriversState.persist(submission.submissionId, newState)
           afterLaunchCallback(submission.submissionId)
+        } catch {
+          case e: SparkException =>
+            afterLaunchCallback(submission.submissionId)
+            finishedDrivers += new MesosClusterSubmissionState(submission, TaskID.newBuilder().
+              setValue(submission.submissionId).build(), SlaveID.newBuilder().setValue("").
+              build(), None, null, None, getDriverFrameworkID(submission))
+            logError(s"Failed to launch the driver with id: ${submission.submissionId}, " +
+              s"cpu: $driverCpu, mem: $driverMem, reason: ${e.getMessage}")
         }
       }
     }
