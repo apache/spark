@@ -80,7 +80,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
               |CREATE TABLE t1
               |USING parquet
               |OPTIONS (
-              |  path '$path'
+              |  path '${dir.toURI}'
               |)
             """.stripMargin)
           assert(getTableNames(Option(db)).contains("t1"))
@@ -105,7 +105,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
               |CREATE TABLE $db.t1
               |USING parquet
               |OPTIONS (
-              |  path '$path'
+              |  path '${dir.toURI}'
               |)
             """.stripMargin)
         assert(getTableNames(Option(db)).contains("t1"))
@@ -212,7 +212,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
             s"""CREATE EXTERNAL TABLE t (id BIGINT)
                |PARTITIONED BY (p INT)
                |STORED AS PARQUET
-               |LOCATION '$path'
+               |LOCATION '${dir.toURI}'
              """.stripMargin)
 
           checkAnswer(spark.table("t"), spark.emptyDataFrame)
@@ -244,7 +244,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
           s"""CREATE EXTERNAL TABLE $db.t (id BIGINT)
                |PARTITIONED BY (p INT)
                |STORED AS PARQUET
-               |LOCATION '$path'
+               |LOCATION '${dir.toURI}'
              """.stripMargin)
 
         checkAnswer(spark.table(s"$db.t"), spark.emptyDataFrame)
@@ -280,8 +280,6 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     }
 
     withTempDir { dir =>
-      val path = dir.getCanonicalPath
-
       {
         val message = intercept[AnalysisException] {
           sql(
@@ -289,7 +287,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
             |CREATE TABLE `d:b`.`t:a` (a int)
             |USING parquet
             |OPTIONS (
-            |  path '$path'
+            |  path '${dir.toURI}'
             |)
             """.stripMargin)
         }.getMessage
@@ -304,7 +302,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
               |CREATE TABLE `d:b`.`table` (a int)
               |USING parquet
               |OPTIONS (
-              |  path '$path'
+              |  path '${dir.toURI}'
               |)
               """.stripMargin)
         }.getMessage

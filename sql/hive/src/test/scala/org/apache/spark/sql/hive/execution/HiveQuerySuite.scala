@@ -858,8 +858,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("ADD JAR command 2") {
     // this is a test case from mapjoin_addjar.q
-    val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
-    val testData = TestHive.getHiveFile("data/files/sample.json").getCanonicalPath
+    val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").toURI
+    val testData = TestHive.getHiveFile("data/files/sample.json").toURI
     sql(s"ADD JAR $testJar")
     sql(
       """CREATE TABLE t1(a string, b string)
@@ -877,8 +877,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("CREATE TEMPORARY FUNCTION") {
-    val funcJar = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
-    val jarURL = s"file://$funcJar"
+    val funcJar = TestHive.getHiveFile("TestUDTF.jar")
+    val jarURL = funcJar.toURI.toURL
     sql(s"ADD JAR $jarURL")
     sql(
       """CREATE TEMPORARY FUNCTION udtf_count2 AS
@@ -889,7 +889,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("ADD FILE command") {
-    val testFile = TestHive.getHiveFile("data/files/v1.txt").getCanonicalFile
+    val testFile = TestHive.getHiveFile("data/files/v1.txt").toURI
     sql(s"ADD FILE $testFile")
 
     val checkAddFileRDD = sparkContext.parallelize(1 to 2, 1).mapPartitions { _ =>

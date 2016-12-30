@@ -847,7 +847,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       "fs.file.impl.disable.cache" -> "true"
     )
     withTempPath { dir =>
-      val path = "file://" + dir.getCanonicalPath
+      val path = dir.toURI.toString
       val df1 = spark.range(4)
       df1.coalesce(1).write.mode("overwrite").options(options).format(dataSourceName).save(path)
       df1.coalesce(1).write.mode("append").options(options).format(dataSourceName).save(path)

@@ -542,7 +542,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       val q = spark.read.parquet(dir.getCanonicalPath).select(
         input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()"))
       val firstRow = q.head()
-      assert(firstRow.getString(0).contains(dir.getCanonicalPath))
+      assert(firstRow.getString(0).contains(dir.toURI.getPath))
       assert(firstRow.getLong(1) == 0)
       assert(firstRow.getLong(2) > 0)
 
@@ -566,7 +566,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       val q = df.select(
         input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()"))
       val firstRow = q.head()
-      assert(firstRow.getString(0).contains(dir.getCanonicalPath))
+      assert(firstRow.getString(0).contains(dir.toURI.getPath))
       assert(firstRow.getLong(1) == 0)
       assert(firstRow.getLong(2) > 0)
 
@@ -595,7 +595,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       val q = df.select(
         input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()"))
       val firstRow = q.head()
-      assert(firstRow.getString(0).contains(dir.getCanonicalPath))
+      assert(firstRow.getString(0).contains(dir.toURI.getPath))
       assert(firstRow.getLong(1) == 0)
       assert(firstRow.getLong(2) > 0)
 
