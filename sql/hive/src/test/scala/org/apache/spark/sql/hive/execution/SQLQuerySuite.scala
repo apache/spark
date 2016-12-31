@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.{File, PrintWriter}
+import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 

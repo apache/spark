@@ -168,7 +168,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
     tableType = CatalogTableType.EXTERNAL,
     storage = CatalogStorageFormat.empty.copy(
       locationUri = Some(new Path(defaultTableURI("tbl7") + "-__PLACEHOLDER__").toUri),
-      properties = Map("path" -> tempDirUri)),
+      properties = Map("path" -> new Path(tempDirUri).toString)),
     schema = new StructType(),
     properties = Map(
       "spark.sql.sources.provider" -> "json",
@@ -180,7 +180,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
     tableType = CatalogTableType.EXTERNAL,
     storage = CatalogStorageFormat.empty.copy(
       locationUri = Some(tempDirUri),
-      properties = Map("path" -> tempDirUri)),
+      properties = Map("path" -> new Path(tempDirUri).toString)),
     schema = simpleSchema,
     properties = Map(
       "spark.sql.sources.provider" -> "parquet",
@@ -192,7 +192,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
     tableType = CatalogTableType.EXTERNAL,
     storage = CatalogStorageFormat.empty.copy(
       locationUri = Some(new Path(defaultTableURI("tbl9") + "-__PLACEHOLDER__").toUri),
-      properties = Map("path" -> tempDirUri)),
+      properties = Map("path" -> new Path(tempDirUri).toString)),
     schema = new StructType(),
     properties = Map("spark.sql.sources.provider" -> "json"))
 
@@ -215,7 +215,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
 
       if (tbl.tableType == CatalogTableType.EXTERNAL) {
         // trim the URI prefix
-        val tableLocation = new URI(readBack.storage.locationUri.get).getPath
+        val tableLocation = readBack.storage.locationUri.get.getPath
         val expectedLocation = tempDir.toURI.getPath.stripSuffix("/")
         assert(tableLocation == expectedLocation)
       }
@@ -231,7 +231,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
         val readBack = getTableMetadata(tbl.identifier.table)
 
         // trim the URI prefix
-        val actualTableLocation = new URI(readBack.storage.locationUri.get).getPath
+        val actualTableLocation = readBack.storage.locationUri.get.getPath
         val expected = dir.toURI.getPath.stripSuffix("/")
         assert(actualTableLocation == expected)
       }

@@ -886,7 +886,7 @@ private[hive] class HiveClientImpl(
     CatalogTablePartition(
       spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
       storage = CatalogStorageFormat(
-        locationUri = Option(new URI(apiPartition.getSd.getLocation)),
+        locationUri = Option(new Path(apiPartition.getSd.getLocation).toUri),
         inputFormat = Option(apiPartition.getSd.getInputFormat),
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),

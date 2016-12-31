@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.net.URI
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
@@ -155,7 +157,7 @@ case class CreateDataSourceTableAsSelectCommand(
       saveDataIntoTable(sparkSession, table, table.storage.locationUri, query, mode)
     } else {
       val tableLocation = if (table.tableType == CatalogTableType.MANAGED) {
-        Some(sessionState.catalog.defaultTablePath(table.identifier))
+        Some(new Path(sessionState.catalog.defaultTablePath(table.identifier)).toUri)
       } else {
         table.storage.locationUri
       }
@@ -187,11 +189,11 @@ case class CreateDataSourceTableAsSelectCommand(
   private def saveDataIntoTable(
       session: SparkSession,
       table: CatalogTable,
-      tableLocation: Option[String],
+      tableLocation: Option[URI],
       data: LogicalPlan,
       mode: SaveMode): BaseRelation = {
     // Create the relation based on the input logical plan: `data`.
-    val pathOption = tableLocation.map("path" -> _)
+    val pathOption = tableLocation.map("path" -> new Path(_).toString)
     val dataSource = DataSource(
       session,
       className = table.provider.get,
