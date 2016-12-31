@@ -632,7 +632,7 @@ class SessionCatalog(
   /**
    * Refresh the cache entry for a metastore table, if any.
    */
-  def refreshTable(name: TableIdentifier): Unit = {
+  def refreshTable(name: TableIdentifier): Unit = synchronized {
     // Go through temporary tables and invalidate them.
     // If the database is defined, this is definitely not a temp table.
     // If the database is not defined, there is a good chance this is a temp table.
