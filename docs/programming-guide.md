@@ -770,7 +770,7 @@ Consider the naive RDD element sum below, which may behave differently depending
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
 var counter = 0
-var rdd = sc.parallelize(data)
+val rdd = sc.parallelize(data)
 
 // Wrong: Don't do this!!
 rdd.foreach(x => counter += x)
