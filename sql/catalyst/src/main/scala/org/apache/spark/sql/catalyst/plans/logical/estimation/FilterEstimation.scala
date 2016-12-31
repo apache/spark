@@ -44,7 +44,7 @@ object FilterEstimation extends Logging {
     mutableColStats = mutable.HashMap(stats.colStats.toSeq: _*)
 
     /** estimate selectivity for this filter */
-    val percent: Double = calculateConditions(plan, plan.condition)
+    val percent: Double = calculateConditions(plan, stats, plan.condition)
 
     /** copy mutableColStats contents to an immutable map */
     val newColStats = mutableColStats.toMap
@@ -61,6 +61,7 @@ object FilterEstimation extends Logging {
 
   def calculateConditions(
       plan: Filter,
+      planStat: Statistics,
       condition: Expression,
       update: Boolean = true)
     : Double = {
@@ -71,26 +72,30 @@ object FilterEstimation extends Logging {
      */
     condition match {
       case And(cond1, cond2) =>
-        calculateConditions(plan, cond1, update) * calculateConditions(plan, cond2, update)
+        val newStats1 = planStat.copy(colStats = mutableColStats.toMap)
+        val p1 = calculateConditions(plan, newStats1, cond1, update)
+        val newStats2 = planStat.copy(colStats = mutableColStats.toMap)
+        val p2 = calculateConditions(plan, newStats2, cond2, update)
+        p1 * p2
 
       case Or(cond1, cond2) =>
-        val p1 = calculateConditions(plan, cond1, update = false)
-        val p2 = calculateConditions(plan, cond2, update = false)
+        val p1 = calculateConditions(plan, planStat, cond1, update = false)
+        val p2 = calculateConditions(plan, planStat, cond2, update = false)
         math.min(1.0, p1 + p2 - (p1 * p2))
 
-      case Not(cond) => calculateSingleCondition(plan, cond, isNot = true, update = false)
-      case _ => calculateSingleCondition(plan, condition, isNot = false, update)
+      case Not(cond) => calculateSingleCondition(plan, planStat, cond, isNot = true, update = false)
+      case _ => calculateSingleCondition(plan, planStat, condition, isNot = false, update)
     }
   }
 
   def calculateSingleCondition(
       plan: Filter,
+      planStat: Statistics,
       condition: Expression,
       isNot: Boolean,
       update: Boolean)
     : Double = {
     var notSupported: Boolean = false
-    val planStat = plan.child.statistics
     val percent: Double = condition match {
       /**
        * Currently we only support binary predicates where one side is a column,
@@ -252,21 +257,36 @@ object FilterEstimation extends Logging {
     }
   }
 
+  /**
+   * This method converts a numeric or Literal value of numeric type to a BigDecimal value.
+   * If isNumeric is true, then it is a numeric value.  Otherwise, it is a Literal value.
+   */
   def numericLiteralToBigDecimal(
-      literal: Literal,
-      dataType: DataType)
+       literal: Any,
+       dataType: DataType,
+       isNumeric: Boolean = false)
     : BigDecimal = {
     dataType match {
       case _: IntegralType =>
-        BigDecimal(literal.value.asInstanceOf[Long])
+        if (isNumeric) BigDecimal(literal.asInstanceOf[Long])
+        else BigDecimal(literal.asInstanceOf[Literal].value.asInstanceOf[Long])
       case _: FractionalType =>
-        BigDecimal(literal.value.asInstanceOf[Double])
+        if (isNumeric) BigDecimal(literal.asInstanceOf[Double])
+        else BigDecimal(literal.asInstanceOf[Literal].value.asInstanceOf[Double])
       case DateType =>
-        val dateLiteral = DateTimeUtils.stringToDate(literal.value.asInstanceOf[UTF8String])
-        BigDecimal(dateLiteral.asInstanceOf[BigInt])
+        if (isNumeric) BigDecimal(literal.asInstanceOf[BigInt])
+        else {
+          val dateLiteral = DateTimeUtils.stringToDate(
+            literal.asInstanceOf[Literal].value.asInstanceOf[UTF8String])
+          BigDecimal(dateLiteral.asInstanceOf[BigInt])
+        }
       case TimestampType =>
-        val tsLiteral = DateTimeUtils.stringToTimestamp(literal.value.asInstanceOf[UTF8String])
-        BigDecimal(tsLiteral.asInstanceOf[BigInt])
+        if (isNumeric) BigDecimal(literal.asInstanceOf[BigInt])
+        else {
+          val tsLiteral = DateTimeUtils.stringToTimestamp(
+            literal.asInstanceOf[Literal].value.asInstanceOf[UTF8String])
+          BigDecimal(tsLiteral.asInstanceOf[BigInt])
+        }
     }
   }
 
@@ -343,7 +363,7 @@ object FilterEstimation extends Logging {
       case _: NumericType | DateType | TimestampType =>
         val statsRange =
           Range(aColStat.min, aColStat.max, aType).asInstanceOf[NumericRange]
-        hSet.map(e => numericLiteralToBigDecimal(e.asInstanceOf[Literal], aType)).
+        hSet.map(e => numericLiteralToBigDecimal(e, aType, true)).
           filter(e => e >= statsRange.min && e <= statsRange.max)
 
       /** We assume the whole set since there is no min/max information for String/Binary type */

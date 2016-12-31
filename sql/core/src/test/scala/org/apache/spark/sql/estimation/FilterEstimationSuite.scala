@@ -21,20 +21,18 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSQLContext
 
+/**
+ * In this test suite, we test the proedicates containing the following operators:
+ * =, <, <=, >, >=, AND, OR, IS NULL, IS NOT NULL, IN, NOT IN
+ */
 
 class FilterEstimationSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  private val data1 = Seq[Long](1, 2, 3, 4, 5)
-  private val colStatAfterFilter = ColumnStat(1, Some(2L), Some(2L), 0, 8, 8)
-  private val expectedFilterStats = Statistics(
-    sizeInBytes = 1 * 8,
-    rowCount = Some(1),
-    colStats = Map("key1" -> colStatAfterFilter),
-    isBroadcastable = false)
+  private val data1 = Seq[Long](1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+  private val table1 = "filter_estimation_test1"
 
-  test("filter estimation with equality comparison using basic formula") {
-    val table1 = "filter_estimation_test1"
+  test("filter estimation with equality comparison") {
     val df1 = data1.toDF("key1")
     withTable(table1) {
       df1.write.saveAsTable(table1)
@@ -44,7 +42,12 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
 
       /** Validate statistics */
       val logicalPlan =
-        sql(s"select * from $table1 where key1=2").queryExecution.optimizedPlan
+        sql(s"SELECT * FROM $table1 WHERE key1 = 2").queryExecution.optimizedPlan
+      val expectedFilterStats = Statistics(
+        sizeInBytes = 1 * 8, rowCount = Some(1),
+        colStats = Map("key1" -> ColumnStat(1, Some(2L), Some(2L), 0, 8, 8)),
+        isBroadcastable = false)
+
       val filterNodes = logicalPlan.collect {
         case filter: Filter =>
           val filterStats = filter.statistics
@@ -54,4 +57,265 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
       assert(filterNodes.size == 1)
     }
   }
+
+  test("filter estimation with less than comparison") {
+    val df1 = data1.toDF("key1")
+    withTable(table1) {
+      df1.write.saveAsTable(table1)
+
+      /** Collect statistics */
+      sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
+
+      /** Validate statistics */
+      val logicalPlan =
+        sql(s"SELECT * FROM $table1 WHERE key1 < 3").queryExecution.optimizedPlan
+      val expectedFilterStats = Statistics(
+        sizeInBytes = 3 * 8, rowCount = Some(3),
+        colStats = Map("key1" -> ColumnStat(2, Some(1L), Some(3L), 0, 8, 8)),
+        isBroadcastable = false)
+
+      val filterNodes = logicalPlan.collect {
+        case filter: Filter =>
+          val filterStats = filter.statistics
+          assert(filterStats == expectedFilterStats)
+          filter
+      }
+      assert(filterNodes.size == 1)
+    }
+  }
+
+  test("filter estimation with less than or equal to comparison") {
+    val df1 = data1.toDF("key1")
+    withTable(table1) {
+      df1.write.saveAsTable(table1)
+
+      /** Collect statistics */
+      sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
+
+      /** Validate statistics */
+      val logicalPlan =
+        sql(s"SELECT * FROM $table1 WHERE key1 <= 3").queryExecution.optimizedPlan
+      val expectedFilterStats = Statistics(
+        sizeInBytes = 3 * 8, rowCount = Some(3),
+        colStats = Map("key1" -> ColumnStat(2, Some(1L), Some(3L), 0, 8, 8)),
+        isBroadcastable = false)
+
+      val filterNodes = logicalPlan.collect {
+        case filter: Filter =>
+          val filterStats = filter.statistics
+          assert(filterStats == expectedFilterStats)
+          filter
+      }
+      assert(filterNodes.size == 1)
+    }
+  }
+
+  test("filter estimation with greater than comparison") {
+    val df1 = data1.toDF("key1")
+    withTable(table1) {
+      df1.write.saveAsTable(table1)
+
+      /** Collect statistics */
+      sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
+
+      /** Validate statistics */
+      val logicalPlan =
+        sql(s"SELECT * FROM $table1 WHERE key1 > 6").queryExecution.optimizedPlan
+      val expectedFilterStats = Statistics(
+        sizeInBytes = 5 * 8, rowCount = Some(5),
+        colStats = Map("key1" -> ColumnStat(4, Some(6L), Some(10L), 0, 8, 8)),
+        isBroadcastable = false)
+
+      val filterNodes = logicalPlan.collect {
+        case filter: Filter =>
+          val filterStats = filter.statistics
+          assert(filterStats == expectedFilterStats)
+          filter
+      }
+      assert(filterNodes.size == 1)
+    }
+  }
+
+  test("filter estimation with greater than or equal to comparison") {
+    val df1 = data1.toDF("key1")
+    withTable(table1) {
+      df1.write.saveAsTable(table1)
+
+      /** Collect statistics */
+      sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
+
+      /** Validate statistics */
+      val logicalPlan =
+        sql(s"SELECT * FROM $table1 WHERE key1 >= 6").queryExecution.optimizedPlan
+      val expectedFilterStats = Statistics(
+        sizeInBytes = 5 * 8, rowCount = Some(5),
+        colStats = Map("key1" -> ColumnStat(4, Some(6L), Some(10L), 0, 8, 8)),
+        isBroadcastable = false)
+
+      val filterNodes = logicalPlan.collect {
+        case filter: Filter =>
+          val filterStats = filter.statistics
+          assert(filterStats == expectedFilterStats)
+          filter
+      }
+      assert(filterNodes.size == 1)
+    }
+  }
+
+  test("filter estimation with IS NULL comparison") {
+    val df1 = data1.toDF("key1")
+    withTable(table1) {
+      df1.write.saveAsTable(table1)
+
+      /** Collect statistics */
+      sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
+
+      /** Validate statistics */
+      val logicalPlan =
+        sql(s"SELECT * FROM $table1 WHERE key1 IS NULL").queryExecution.optimizedPlan
+      val expectedFilterStats = Statistics(
+        sizeInBytes = 0, rowCount = Some(0),
+        colStats = Map("key1" -> ColumnStat(0, None, None, 0, 8, 8)),
+        isBroadcastable = false)
+
+      val filterNodes = logicalPlan.collect {
+        case filter: Filter =>
+          val filterStats = filter.statistics
+          assert(filterStats == expectedFilterStats)
+          filter
+      }
+      assert(filterNodes.size == 1)
+    }
+  }
+
+  test("filter estimation with IS NOT NULL comparison") {
+    val df1 = data1.toDF("key1")
+    withTable(table1) {
+      df1.write.saveAsTable(table1)
+
+      /** Collect statistics */
+      sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
+
+      /** Validate statistics */
+      val logicalPlan =
+        sql(s"SELECT * FROM $table1 WHERE key1 IS NOT NULL").queryExecution.optimizedPlan
+      val expectedFilterStats = Statistics(
+        sizeInBytes = 10 * 8, rowCount = Some(10),
+        colStats = Map("key1" -> ColumnStat(10, Some(1L), Some(10L), 0, 8, 8)),
+        isBroadcastable = false)
+
+      val filterNodes = logicalPlan.collect {
+        case filter: Filter =>
+          val filterStats = filter.statistics
+          assert(filterStats == expectedFilterStats)
+          filter
+      }
+      assert(filterNodes.size == 1)
+    }
+  }
+
+  test("filter estimation with logical AND operator") {
+    val df1 = data1.toDF("key1")
+    withTable(table1) {
+      df1.write.saveAsTable(table1)
+
+      /** Collect statistics */
+      sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
+
+      /** Validate statistics */
+      val logicalPlan =
+        sql(s"SELECT * FROM $table1 WHERE key1 > 3 AND key1 <= 6").queryExecution.optimizedPlan
+      val expectedFilterStats = Statistics(
+        sizeInBytes = 4 * 8, rowCount = Some(4),
+        colStats = Map("key1" -> ColumnStat(3, Some(3L), Some(6L), 0, 8, 8)),
+        isBroadcastable = false)
+
+      val filterNodes = logicalPlan.collect {
+        case filter: Filter =>
+          val filterStats = filter.statistics
+          assert(filterStats == expectedFilterStats)
+          filter
+      }
+      assert(filterNodes.size == 1)
+    }
+  }
+
+  test("filter estimation with logical OR operator") {
+    val df1 = data1.toDF("key1")
+    withTable(table1) {
+      df1.write.saveAsTable(table1)
+
+      /** Collect statistics */
+      sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
+
+      /** Validate statistics */
+      val logicalPlan =
+        sql(s"SELECT * FROM $table1 WHERE key1 = 3 OR key1 = 6").queryExecution.optimizedPlan
+      val expectedFilterStats = Statistics(
+        sizeInBytes = 2 * 8, rowCount = Some(2),
+        colStats = Map("key1" -> ColumnStat(10, Some(1L), Some(10L), 0, 8, 8)),
+        isBroadcastable = false)
+
+      val filterNodes = logicalPlan.collect {
+        case filter: Filter =>
+          val filterStats = filter.statistics
+          assert(filterStats == expectedFilterStats)
+          filter
+      }
+      assert(filterNodes.size == 1)
+    }
+  }
+
+  test("filter estimation with IN operator") {
+    val df1 = data1.toDF("key1")
+    withTable(table1) {
+      df1.write.saveAsTable(table1)
+
+      /** Collect statistics */
+      sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
+
+      /** Validate statistics */
+      val logicalPlan =
+        sql(s"SELECT * FROM $table1 WHERE key1 IN (3, 4, 5)").queryExecution.optimizedPlan
+      val expectedFilterStats = Statistics(
+        sizeInBytes = 3 * 8, rowCount = Some(3),
+        colStats = Map("key1" -> ColumnStat(3, Some(3L), Some(5L), 0, 8, 8)),
+        isBroadcastable = false)
+
+      val filterNodes = logicalPlan.collect {
+        case filter: Filter =>
+          val filterStats = filter.statistics
+          assert(filterStats == expectedFilterStats)
+          filter
+      }
+      assert(filterNodes.size == 1)
+    }
+  }
+
+  test("filter estimation with logical NOT operator") {
+    val df1 = data1.toDF("key1")
+    withTable(table1) {
+      df1.write.saveAsTable(table1)
+
+      /** Collect statistics */
+      sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
+
+      /** Validate statistics */
+      val logicalPlan =
+        sql(s"SELECT * FROM $table1 WHERE key1 NOT IN (3, 4, 5)").queryExecution.optimizedPlan
+      val expectedFilterStats = Statistics(
+        sizeInBytes = 7 * 8, rowCount = Some(7),
+        colStats = Map("key1" -> ColumnStat(10, Some(1L), Some(10L), 0, 8, 8)),
+        isBroadcastable = false)
+
+      val filterNodes = logicalPlan.collect {
+        case filter: Filter =>
+          val filterStats = filter.statistics
+          assert(filterStats == expectedFilterStats)
+          filter
+      }
+      assert(filterNodes.size == 1)
+    }
+  }
+
 }
