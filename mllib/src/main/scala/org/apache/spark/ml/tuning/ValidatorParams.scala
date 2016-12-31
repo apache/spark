@@ -57,6 +57,17 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
   def getEstimatorParamMaps: Array[ParamMap] = $(estimatorParamMaps)
 
   /**
+    * param for groupKFold column name
+    * default: empty
+    * @group param
+    */
+  val groupKFoldCol: Param[String] = new Param[String](this, "groupKFoldCol",
+    "groupKFold column name")
+
+  /** @group getParam */
+  def getGroupCol: String = $(groupKFoldCol)
+
+  /**
    * param for the evaluator used to select hyper-parameters that maximize the validated metric
    *
    * @group param

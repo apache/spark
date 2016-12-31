@@ -91,6 +91,11 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /** @group setParam */
+  @Since("2.1.0")
+  def setGroupCol(value: String): this.type = set(groupKFoldCol, value)
+  setDefault(groupKFoldCol -> "")
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): CrossValidatorModel = {
     val schema = dataset.schema
@@ -101,7 +106,16 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val epm = $(estimatorParamMaps)
     val numModels = epm.length
     val metrics = new Array[Double](epm.length)
-    val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
+
+    val splits = if ($(groupKFoldCol).nonEmpty) {
+      val groupKFoldColIdx = schema.fieldNames.indexOf($(groupKFoldCol))
+      val pairValue = dataset.toDF.rdd.map(row => (row(groupKFoldColIdx), row))
+      val labeledSplits = MLUtils.groupKFold(pairValue, $(numFolds))
+      labeledSplits.map { case (training, validation) => (training.values, validation.values) }
+    } else {
+      MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
+    }
+
     splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
