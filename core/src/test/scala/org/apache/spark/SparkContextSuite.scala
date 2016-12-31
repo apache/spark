@@ -455,16 +455,14 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
   test("register and deregister Spark listener from SparkContext") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-    try {
-      val sparkListener1 = new SparkListener { }
-      val sparkListener2 = new SparkListener { }
-      sc.addSparkListener(sparkListener1)
-      sc.addSparkListener(sparkListener2)
-      assert(sc.listenerBus.listeners.contains(sparkListener1))
-      assert(sc.listenerBus.listeners.contains(sparkListener2))
-      sc.removeSparkListener(sparkListener1)
-      assert(!sc.listenerBus.listeners.contains(sparkListener1))
-      assert(sc.listenerBus.listeners.contains(sparkListener2))
-    }
+    val sparkListener1 = new SparkListener { }
+    val sparkListener2 = new SparkListener { }
+    sc.addSparkListener(sparkListener1)
+    sc.addSparkListener(sparkListener2)
+    assert(sc.listenerBus.listeners.contains(sparkListener1))
+    assert(sc.listenerBus.listeners.contains(sparkListener2))
+    sc.removeSparkListener(sparkListener1)
+    assert(!sc.listenerBus.listeners.contains(sparkListener1))
+    assert(sc.listenerBus.listeners.contains(sparkListener2))
   }
 }
