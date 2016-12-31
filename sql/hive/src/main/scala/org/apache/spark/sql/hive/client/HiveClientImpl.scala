@@ -399,6 +399,7 @@ private[hive] class HiveClientImpl(
             throw new AnalysisException("Hive index table is not supported.")
         },
         schema = schema,
+        originalSchema = Option(h.getProperty("originalSchema")).map(StructType.fromString(_)),
         partitionColumnNames = partCols.map(_.name),
         // We can not populate bucketing information for Hive tables as Spark SQL has a different
         // implementation of hash function from Hive.
@@ -428,6 +429,7 @@ private[hive] class HiveClientImpl(
         comment = properties.get("comment"),
         viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
+        currentDatabase = Option(h.getProperty("currentDatabase")),
         unsupportedFeatures = unsupportedFeatures)
     }
   }
@@ -852,6 +854,8 @@ private[hive] class HiveClientImpl(
     table.comment.foreach { c => hiveTable.setProperty("comment", c) }
     table.viewOriginalText.foreach { t => hiveTable.setViewOriginalText(t) }
     table.viewText.foreach { t => hiveTable.setViewExpandedText(t) }
+    table.currentDatabase.foreach {t => hiveTable.setProperty("currentDatabase", t)}
+    table.originalSchema.foreach {t => hiveTable.setProperty("originalSchema", t.json)}
     hiveTable
   }
 

@@ -164,6 +164,7 @@ case class CatalogTable(
     tableType: CatalogTableType,
     storage: CatalogStorageFormat,
     schema: StructType,
+    originalSchema: Option[StructType] = None,
     provider: Option[String] = None,
     partitionColumnNames: Seq[String] = Seq.empty,
     bucketSpec: Option[BucketSpec] = None,
@@ -174,6 +175,7 @@ case class CatalogTable(
     stats: Option[CatalogStatistics] = None,
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None,
+    currentDatabase: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
     tracksPartitionsInCatalog: Boolean = false) {
@@ -231,11 +233,14 @@ case class CatalogTable(
         s"Last Access: ${new Date(lastAccessTime).toString}",
         s"Type: ${tableType.name}",
         if (schema.nonEmpty) s"Schema: ${schema.mkString("[", ", ", "]")}" else "",
+        if (originalSchema.isDefined) s"Original Schema: ${originalSchema.mkString("[", ", ", "]")}"
+        else "",
         if (provider.isDefined) s"Provider: ${provider.get}" else "",
         if (partitionColumnNames.nonEmpty) s"Partition Columns: $partitionColumns" else ""
       ) ++ bucketStrings ++ Seq(
         viewOriginalText.map("Original View: " + _).getOrElse(""),
         viewText.map("View: " + _).getOrElse(""),
+        currentDatabase.map("Database Hint: " + _).getOrElse(""),
         comment.map("Comment: " + _).getOrElse(""),
         if (properties.nonEmpty) s"Properties: $tableProperties" else "",
         if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",

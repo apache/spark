@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.hive
 
+import scala.util.control.NonFatal
+
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.util.concurrent.Striped
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -126,15 +130,81 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       alias.map(a => SubqueryAlias(a, qualifiedTable, None)).getOrElse(qualifiedTable)
     } else if (table.tableType == CatalogTableType.VIEW) {
       val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
+      val unresolvedPlan = sparkSession.sessionState.sqlParser.parsePlan(viewText).transform {
+        case u: UnresolvedRelation if u.tableIdentifier.database.isEmpty =>
+          u.copy(tableIdentifier = TableIdentifier(u.tableIdentifier.table, table.currentDatabase))
+      }
+      // Resolve the plan and check whether the analyzed plan is valid.
+      val resolvedPlan = try {
+        val resolvedPlan = sparkSession.sessionState.analyzer.execute(unresolvedPlan)
+        sparkSession.sessionState.analyzer.checkAnalysis(resolvedPlan)
+
+        resolvedPlan
+      } catch {
+        case NonFatal(e) =>
+          throw new RuntimeException(s"Failed to analyze the canonicalized SQL: $viewText", e)
+      }
+      val planWithProjection = table.originalSchema.map(withProjection(resolvedPlan, _))
+        .getOrElse(resolvedPlan)
+
       SubqueryAlias(
         alias.getOrElse(table.identifier.table),
-        sparkSession.sessionState.sqlParser.parsePlan(viewText),
+        aliasColumns(planWithProjection, table.schema.fields),
         Option(table.identifier))
     } else {
       val qualifiedTable =
         MetastoreRelation(
           qualifiedTableName.database, qualifiedTableName.name)(table, sparkSession)
       alias.map(a => SubqueryAlias(a, qualifiedTable, None)).getOrElse(qualifiedTable)
+    }
+  }
+
+  /**
+   * Apply Projection on unresolved logical plan to:
+   * 1. Omit the columns which are not referenced by the view;
+   * 2. Reorder the columns to keep the same order with the view;
+   */
+  private def withProjection(plan: LogicalPlan, schema: StructType): LogicalPlan = {
+    // All fields in schema should exist in plan.schema, or we should throw an AnalysisException
+    // to notify the underlying schema has been changed.
+    if (schema.fields.forall { field =>
+      plan.schema.fields.exists(other => compareStructField(field, other))}) {
+      val output = schema.fields.map { field =>
+        plan.output.find { expr =>
+          expr.name == field.name && expr.dataType == field.dataType}.getOrElse(
+            throw new AnalysisException("The underlying schema doesn't match the original " +
+              s"schema, expected ${schema.sql} but got ${plan.schema.sql}")
+          )}
+      Project(output, plan)
+    } else {
+      throw new AnalysisException("The underlying schema doesn't match the original schema, " +
+        s"expected ${schema.sql} but got ${plan.schema.sql}")
+    }
+  }
+
+  /**
+   * Compare the both [[StructField]] to verify whether they have the same name and dataType.
+   */
+  private def compareStructField(field: StructField, other: StructField): Boolean = {
+    field.name == other.name && field.dataType == other.dataType
+  }
+
+  /**
+   * Aliases the schema of the LogicalPlan to the view attribute names
+   */
+  private def aliasColumns(plan: LogicalPlan, fields: Seq[StructField]): LogicalPlan = {
+    val output = fields.map(field => (field.name, field.getComment))
+    if (plan.output.size != output.size) {
+      throw new AnalysisException("The output of plan does not have the same size with the " +
+        s"view schema, expected ${plan.output.size} but got ${output.mkString("[", ",", "]")}")
+    } else {
+      val aliasedOutput = plan.output.zip(output).map {
+        case (attr, (colName, None)) => Alias(attr, colName)()
+        case (attr, (colName, Some(colComment))) =>
+          val meta = new MetadataBuilder().putString("comment", colComment).build()
+          Alias(attr, colName)(explicitMetadata = Some(meta))
+      }
+      Project(aliasedOutput, plan)
     }
   }
 

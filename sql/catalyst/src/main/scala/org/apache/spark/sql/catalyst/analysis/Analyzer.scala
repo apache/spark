@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -510,32 +510,42 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    private def lookupTableFromCatalog(u: UnresolvedRelation): LogicalPlan = {
+    private def lookupTableFromCatalog(
+        u: UnresolvedRelation, db: Option[String] = None): LogicalPlan = {
       try {
-        catalog.lookupRelation(u.tableIdentifier, u.alias)
+        catalog.lookupRelation(u.tableIdentifier, u.alias, db)
       } catch {
         case _: NoSuchTableException =>
           u.failAnalysis(s"Table or view not found: ${u.tableName}")
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
-      case u: UnresolvedRelation =>
-        val table = u.tableIdentifier
-        if (table.database.isDefined && conf.runSQLonFile && !catalog.isTemporaryTable(table) &&
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      var currentDatabase = catalog.getCurrentDatabase
+      plan resolveOperators {
+        case i@InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
+          i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
+        case u: UnresolvedRelation =>
+          val table = u.tableIdentifier
+          if (table.database.isDefined && conf.runSQLonFile && !catalog.isTemporaryTable(table) &&
             (!catalog.databaseExists(table.database.get) || !catalog.tableExists(table))) {
-          // If the database part is specified, and we support running SQL directly on files, and
-          // it's not a temporary view, and the table does not exist, then let's just return the
-          // original UnresolvedRelation. It is possible we are matching a query like "select *
-          // from parquet.`/path/to/query`". The plan will get resolved later.
-          // Note that we are testing (!db_exists || !table_exists) because the catalog throws
-          // an exception from tableExists if the database does not exist.
-          u
-        } else {
-          lookupTableFromCatalog(u)
-        }
+            // If the database part is specified, and we support running SQL directly on files, and
+            // it's not a temporary view, and the table does not exist, then let's just return the
+            // original UnresolvedRelation. It is possible we are matching a query like "select *
+            // from parquet.`/path/to/query`". The plan will get resolved later.
+            // Note that we are testing (!db_exists || !table_exists) because the catalog throws
+            // an exception from tableExists if the database does not exist.
+            u
+          } else {
+            val logicalPlan = lookupTableFromCatalog(u, Some(currentDatabase))
+            currentDatabase = logicalPlan.collectFirst {
+              case relation: CatalogRelation if relation.catalogTable.currentDatabase.isDefined =>
+                relation.catalogTable.currentDatabase.get
+            }.getOrElse(currentDatabase)
+
+            logicalPlan
+          }
+      }
     }
   }
 

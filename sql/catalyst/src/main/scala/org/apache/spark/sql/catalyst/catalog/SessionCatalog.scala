@@ -559,9 +559,12 @@ class SessionCatalog(
    * If the relation is a view, the relation will be wrapped in a [[SubqueryAlias]] which will
    * track the name of the view.
    */
-  def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
+  def lookupRelation(
+      name: TableIdentifier,
+      alias: Option[String] = None,
+      databaseHint: Option[String] = None): LogicalPlan = {
     synchronized {
-      val db = formatDatabaseName(name.database.getOrElse(currentDb))
+      val db = formatDatabaseName(name.database.getOrElse(databaseHint.getOrElse(currentDb)))
       val table = formatTableName(name.table)
       val relationAlias = alias.getOrElse(table)
       if (db == globalTempViewManager.database) {
