@@ -93,7 +93,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
     withTempPath { path =>
       try {
         Seq(1 -> "a").toDF("i", "j").write.parquet(path.getAbsolutePath)
-        sql(s"CREATE GLOBAL TEMP VIEW src USING parquet OPTIONS (PATH '${path.getAbsolutePath}')")
+        sql(s"CREATE GLOBAL TEMP VIEW src USING parquet OPTIONS (PATH '${path.toURI}')")
         checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))
         sql(s"INSERT INTO $globalTempDB.src SELECT 2, 'b'")
         checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a") :: Row(2, "b") :: Nil)

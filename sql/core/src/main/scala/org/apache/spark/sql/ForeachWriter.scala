@@ -28,7 +28,7 @@ import org.apache.spark.annotation.{Experimental, InterfaceStability}
  *
  * Scala example:
  * {{{
- *   datasetOfString.write.foreach(new ForeachWriter[String] {
+ *   datasetOfString.writeStream.foreach(new ForeachWriter[String] {
  *
  *     def open(partitionId: Long, version: Long): Boolean = {
  *       // open connection
@@ -46,7 +46,7 @@ import org.apache.spark.annotation.{Experimental, InterfaceStability}
  *
  * Java example:
  * {{{
- *  datasetOfString.write().foreach(new ForeachWriter<String>() {
+ *  datasetOfString.writeStream().foreach(new ForeachWriter<String>() {
  *
  *    @Override
  *    public boolean open(long partitionId, long version) {

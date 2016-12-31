@@ -240,7 +240,7 @@ object TypedImperativeAggregateSuite {
       new MaxValue(Int.MinValue)
     }
 
-    override def update(buffer: MaxValue, input: InternalRow): Unit = {
+    override def update(buffer: MaxValue, input: InternalRow): MaxValue = {
       child.eval(input) match {
         case inputValue: Int =>
           if (inputValue > buffer.value) {
@@ -249,13 +249,15 @@ object TypedImperativeAggregateSuite {
           }
         case null => // skip
       }
+      buffer
     }
 
-    override def merge(bufferMax: MaxValue, inputMax: MaxValue): Unit = {
+    override def merge(bufferMax: MaxValue, inputMax: MaxValue): MaxValue = {
       if (inputMax.value > bufferMax.value) {
         bufferMax.value = inputMax.value
         bufferMax.isValueSet = bufferMax.isValueSet || inputMax.isValueSet
       }
+      bufferMax
     }
 
     override def eval(bufferMax: MaxValue): Any = {
