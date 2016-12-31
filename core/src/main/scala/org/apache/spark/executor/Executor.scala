@@ -19,7 +19,7 @@ package org.apache.spark.executor
 
 import java.io.{File, NotSerializableException}
 import java.lang.management.ManagementFactory
-import java.net.URL
+import java.net.{URI, URL}
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
@@ -34,11 +34,13 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rpc.RpcTimeout
-import org.apache.spark.scheduler.{AccumulableInfo, DirectTaskResult, IndirectTaskResult, Task}
+import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, Task}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
+
+
 
 /**
  * Spark executor, backed by a threadpool to run tasks.
@@ -649,7 +651,7 @@ private[spark] class Executor(
         currentFiles(name) = timestamp
       }
       for ((name, timestamp) <- newJars) {
-        val localName = name.split("/").last
+        val localName = new URI(name).getPath.split("/").last
         val currentTimeStamp = currentJars.get(name)
           .orElse(currentJars.get(localName))
           .getOrElse(-1L)
