@@ -22,7 +22,25 @@ _DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Preserve the calling directory
 _CALLING_DIR="$(pwd)"
 # Options used during compilation
-_COMPILE_JVM_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
+
+# Options for compiling Spark with Java 7 and earlier
+_JAVA_7_COMPILE_JVM_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
+
+# Options for compiling Spark with Java 8 and later
+_JAVA_8_COMPILE_JVM_OPTS="-Xmx2g"
+
+# Put in place default JVM parameters for the current version of Java.
+# If future versions of Java make this version test not work, then the 
+# "if" statement below should still choose the Java 8+ options.
+_JAVA_VERSION=`${JAVA_HOME}/bin/java -version 2>&1 | head -1 | \
+                awk -F '"' '/version/ {print $2}' | \
+                awk -F '.' '{print $2}'`
+
+if [ "${_JAVA_VERSION}" -lt "8" ]; then
+  _COMPILE_JVM_OPTS=${_JAVA_7_COMPILE_JVM_OPTS}
+else
+  _COMPILE_JVM_OPTS=${_JAVA_8_COMPILE_JVM_OPTS}
+fi
 
 # Installs any application tarball given a URL, the expected tarball name,
 # and, optionally, a checkable binary path to determine if the binary has
@@ -144,8 +162,10 @@ if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`"${ZINC_BIN}" -status -port ${ZINC_PORT}`
   ZINC_JAVA_HOME=
   if [ -n "$JAVA_7_HOME" ]; then
     ZINC_JAVA_HOME="env JAVA_HOME=$JAVA_7_HOME"
+    export ZINC_OPTS=${ZINC_OPTS:-"$_JAVA_7_COMPILE_JVM_OPTS"}
+  else
+    export ZINC_OPTS=${ZINC_OPTS:-"$_COMPILE_JVM_OPTS"}
   fi
-  export ZINC_OPTS=${ZINC_OPTS:-"$_COMPILE_JVM_OPTS"}
   "${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
   $ZINC_JAVA_HOME "${ZINC_BIN}" -start -port ${ZINC_PORT} \
     -scala-compiler "${SCALA_COMPILER}" \
