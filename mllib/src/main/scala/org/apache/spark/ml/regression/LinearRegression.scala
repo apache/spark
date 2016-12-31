@@ -77,6 +77,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   extends Regressor[Vector, LinearRegression, LinearRegressionModel]
   with LinearRegressionParams with DefaultParamsWritable with Logging {
 
+  import LinearRegression._
+
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("linReg"))
 
@@ -175,11 +177,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.6.0")
   def setSolver(value: String): this.type = {
-    require(Set("auto", "l-bfgs", "normal").contains(value),
-      s"Solver $value was not supported. Supported options: auto, l-bfgs, normal")
+    require(supportedSolvers.contains(value),
+      s"Solver $value was not supported. Supported options: ${supportedSolvers.mkString(", ")}")
     set(solver, value)
   }
-  setDefault(solver -> "auto")
+  setDefault(solver -> AUTO)
 
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
@@ -204,8 +206,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         Instance(label, weight, features)
     }
 
-    if (($(solver) == "auto" &&
-      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == "normal") {
+    if (($(solver) == AUTO &&
+      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == NORMAL) {
       // For low dimensional data, WeightedLeastSquares is more efficient since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
 
@@ -410,6 +412,18 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
 @Since("1.6.0")
 object LinearRegression extends DefaultParamsReadable[LinearRegression] {
+
+  /** String name for "auto" solver. */
+  private[regression] val AUTO = "auto"
+
+  /** String name for "l-bfgs" solver. */
+  private[regression] val LBFGS = "l-bfgs"
+
+  /** String name for "normal" solver. */
+  private[regression] val NORMAL = "normal"
+
+  /** Set of solvers that LinearRegression supports. */
+  private[regression] val supportedSolvers = Array(AUTO, LBFGS, NORMAL)
 
   @Since("1.6.0")
   override def load(path: String): LinearRegression = super.load(path)

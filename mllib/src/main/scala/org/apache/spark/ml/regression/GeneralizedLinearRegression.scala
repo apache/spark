@@ -230,8 +230,12 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    * @group setParam
    */
   @Since("2.0.0")
-  def setSolver(value: String): this.type = set(solver, value)
-  setDefault(solver -> "irls")
+  def setSolver(value: String): this.type = {
+    require(supportedSolvers.contains(value),
+      s"Solver $value was not supported. Supported options: ${supportedSolvers.mkString(", ")}")
+    set(solver, value)
+  }
+  setDefault(solver -> IRLS)
 
   /**
    * Sets the link prediction (linear predictor) column name.
@@ -300,6 +304,13 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   @Since("2.0.0")
   override def load(path: String): GeneralizedLinearRegression = super.load(path)
+
+  /** String name for "irls" solver. */
+  private[regression] val IRLS = "irls"
+
+  /** Set of solvers that GeneralizedLinearRegression supports. */
+  private[regression] val supportedSolvers = Array(IRLS)
+
 
   /** Set of family and link pairs that GeneralizedLinearRegression supports. */
   private[regression] lazy val supportedFamilyAndLinkPairs = Set(
