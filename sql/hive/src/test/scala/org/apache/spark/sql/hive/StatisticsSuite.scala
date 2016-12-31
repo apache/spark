@@ -78,7 +78,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("analyze MetastoreRelations") {
+  ignore("analyze MetastoreRelations") {
     def queryTotalSize(tableName: String): BigInt =
       spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName)).statistics.sizeInBytes
 
