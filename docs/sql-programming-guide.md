@@ -996,6 +996,8 @@ creating table, you can create a table using storage handler at Hive side, and u
   </tr>
 </table>
 
+All other properties defined with `OPTIONS` will be regarded as Hive serde properties.
+
 ### Interacting with Different Versions of Hive Metastore
 
 One of the most important pieces of Spark SQL's Hive support is interaction with Hive metastore,
