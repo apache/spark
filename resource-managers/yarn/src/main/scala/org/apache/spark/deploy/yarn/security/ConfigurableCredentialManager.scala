@@ -38,6 +38,8 @@ import org.apache.spark.util.Utils
  *
  * Also each credential provider is controlled by
  * spark.yarn.security.credentials.{service}.enabled, it will not be loaded in if set to false.
+ * E.g., hive's credential provider [[HiveCredentialProvider]] can be enable/disable by
+ * the configuration spark.yarn.security.credentials.hive.enabled.
  */
 private[yarn] final class ConfigurableCredentialManager(
     sparkConf: SparkConf, hadoopConf: Configuration) extends Logging {
