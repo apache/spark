@@ -17,13 +17,9 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.concurrent.Executors
-
-import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.session.SessionManager
+import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
@@ -34,28 +30,13 @@ import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: SQLContext)
-  extends SessionManager(hiveServer)
-  with ReflectedCompositeService {
+  extends SessionManager(hiveServer) {
 
   private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
 
   override def init(hiveConf: HiveConf) {
-    setSuperField(this, "hiveConf", hiveConf)
-
-    // Create operation log root directory, if operation logging is enabled
-    if (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
-      invoke(classOf[SessionManager], this, "initOperationLogRootDir")
-    }
-
-    val backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS)
-    setSuperField(this, "backgroundOperationPool", Executors.newFixedThreadPool(backgroundPoolSize))
-    getAncestorField[Log](this, 3, "LOG").info(
-      s"HiveServer2: Async execution pool size $backgroundPoolSize")
-
     setSuperField(this, "operationManager", sparkSqlOperationManager)
-    addService(sparkSqlOperationManager)
-
-    initCompositeService(hiveConf)
+    super.init(hiveConf)
   }
 
   override def openSession(
