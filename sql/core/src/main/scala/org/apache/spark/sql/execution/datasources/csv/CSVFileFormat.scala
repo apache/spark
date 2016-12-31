@@ -154,7 +154,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         val linesReader = new HadoopFileLinesReader(file, conf)
         Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
         linesReader.map { line =>
-          new String(line.getBytes, 0, line.getLength, csvOptions.readCharSet)
+          new String(line.getBytes, 0, line.getLength, csvOptions.charset)
         }
       }
 
@@ -195,7 +195,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: CSVOptions,
       inputPaths: Seq[String]): Dataset[String] = {
-    if (Charset.forName(options.readCharSet) == StandardCharsets.UTF_8) {
+    if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
       sparkSession.baseRelationToDataFrame(
         DataSource.apply(
           sparkSession,
@@ -204,7 +204,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         ).resolveRelation(checkFilesExist = false))
         .select("value").as[String](Encoders.STRING)
     } else {
-      val charset = options.readCharSet
+      val charset = options.charset
       val rdd = sparkSession.sparkContext
         .hadoopFile[LongWritable, Text, TextInputFormat](inputPaths.mkString(","))
         .mapPartitions(_.map(pair => new String(pair._2.getBytes, 0, pair._2.getLength, charset)))

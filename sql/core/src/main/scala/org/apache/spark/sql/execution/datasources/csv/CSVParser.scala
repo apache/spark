@@ -71,7 +71,7 @@ private[csv] class LineCsvWriter(
     output: OutputStream) extends Logging {
   private val writerSettings = new CsvWriterSettings
   private val format = writerSettings.getFormat
-  private val writerCharset = Charset.forName(params.writeCharSet)
+  private val writerCharset = Charset.forName(params.charset)
 
   format.setDelimiter(params.delimiter)
   format.setQuote(params.quote)

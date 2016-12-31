@@ -71,9 +71,7 @@ private[csv] class CSVOptions(@transient private val parameters: CaseInsensitive
   val delimiter = CSVTypeCast.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
-  val readCharSet = parameters.getOrElse("encoding",
-    parameters.getOrElse("charset", StandardCharsets.UTF_8.name()))
-  val writeCharSet = parameters.getOrElse("writeEncoding",
+  val charset = parameters.getOrElse("encoding",
     parameters.getOrElse("charset", StandardCharsets.UTF_8.name()))
 
   val quote = getChar("quote", '\"')

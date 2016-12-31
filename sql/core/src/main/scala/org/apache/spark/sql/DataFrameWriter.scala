@@ -573,7 +573,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * </ul>
-   * <li>`writeEncoding`(default `utf-8`) save dataFrame 2 csv by giving encoding</li>
+   * <li>`encoding`(default `utf-8`) save dataFrame 2 csv by giving encoding</li>
    *
    * @since 2.0.0
    */
