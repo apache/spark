@@ -19,6 +19,7 @@ package org.apache.spark.util.random
 
 import java.util.Random
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.math3.distribution.PoissonDistribution
@@ -373,10 +374,21 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
     d = medianKSD(gaps(sampler1.sample(Iterator.from(0))), gaps(sampler2.sample(Iterator.from(0))))
     d should be (0.0)
 
+    // With Java iterator
+    d = medianKSD(gaps(sampler1.sample(Iterator.from(0).asJava)),
+      gaps(sampler2.sample(Iterator.from(0).asJava)))
+    d should be (0.0)
+
     // should be different for different seeds
     sampler1.setSeed(73)
     sampler2.setSeed(37)
     d = medianKSD(gaps(sampler1.sample(Iterator.from(0))), gaps(sampler2.sample(Iterator.from(0))))
+    d should be > 0.0
+    d should be < D
+
+    // With Java iterator
+    d = medianKSD(gaps(sampler1.sample(Iterator.from(0).asJava)),
+      gaps(sampler2.sample(Iterator.from(0).asJava)))
     d should be > 0.0
     d should be < D
 
@@ -389,10 +401,20 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
     d = medianKSD(gaps(sampler1.sample(Iterator.from(0))), gaps(sampler2.sample(Iterator.from(0))))
     d should be (0.0)
 
+    // With Java iterator
+    d = medianKSD(gaps(sampler1.sample(Iterator.from(0).asJava)),
+      gaps(sampler2.sample(Iterator.from(0).asJava)))
+    d should be (0.0)
+
     // should be different for different seeds
     sampler1.setSeed(73)
     sampler2.setSeed(37)
     d = medianKSD(gaps(sampler1.sample(Iterator.from(0))), gaps(sampler2.sample(Iterator.from(0))))
+    d should be > 0.0
+    d should be < D
+
+    d = medianKSD(gaps(sampler1.sample(Iterator.from(0).asJava)),
+      gaps(sampler2.sample(Iterator.from(0).asJava)))
     d should be > 0.0
     d should be < D
   }
@@ -408,9 +430,19 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
     d = medianKSD(gaps(sampler.sample(Iterator.from(0))), gaps(sampleWR(Iterator.from(0), 0.5)))
     d should be < D
 
+    // With Java iterator
+    d = medianKSD(gaps(sampler.sample(Iterator.from(0).asJava)),
+      gaps(sampleWR(Iterator.from(0), 0.5)))
+    d should be < D
+
     sampler = new PoissonSampler[Int](0.7)
     sampler.setSeed(rngSeed.nextLong)
     d = medianKSD(gaps(sampler.sample(Iterator.from(0))), gaps(sampleWR(Iterator.from(0), 0.7)))
+    d should be < D
+
+    // With Java iterator
+    d = medianKSD(gaps(sampler.sample(Iterator.from(0).asJava)),
+      gaps(sampleWR(Iterator.from(0), 0.7)))
     d should be < D
 
     sampler = new PoissonSampler[Int](0.9)
@@ -418,10 +450,20 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
     d = medianKSD(gaps(sampler.sample(Iterator.from(0))), gaps(sampleWR(Iterator.from(0), 0.9)))
     d should be < D
 
+    // With Java iterator
+    d = medianKSD(gaps(sampler.sample(Iterator.from(0).asJava)),
+      gaps(sampleWR(Iterator.from(0), 0.9)))
+    d should be < D
+
     // sampling at different frequencies should show up as statistically different:
     sampler = new PoissonSampler[Int](0.5)
     sampler.setSeed(rngSeed.nextLong)
     d = medianKSD(gaps(sampler.sample(Iterator.from(0))), gaps(sampleWR(Iterator.from(0), 0.6)))
+    d should be > D
+
+    // With Java iterator
+    d = medianKSD(gaps(sampler.sample(Iterator.from(0).asJava)),
+      gaps(sampleWR(Iterator.from(0), 0.6)))
     d should be > D
   }
 
