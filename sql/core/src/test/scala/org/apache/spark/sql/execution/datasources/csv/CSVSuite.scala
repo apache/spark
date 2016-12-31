@@ -33,7 +33,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
-//noinspection ScalaStyle
 class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   import testImplicits._
 
@@ -908,19 +907,21 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("save data with gb18030") {
-    withTempPath{ path =>
-      Seq(("1", "中文"))
-        .toDF("num", "lanaguage")
-        .write
-        .option("encoding", "GB18030")
-        .option("header", "true")
-        .csv(path.getAbsolutePath)
-      val df = spark.read
+    withTempPath { path =>
+      // scalastyle:off
+      val df = Seq(("1", "中文")).toDF("num", "lanaguage")
+      // scalastyle:on
+      df.write
         .option("header", "true")
         .option("encoding", "GB18030")
         .csv(path.getAbsolutePath)
 
-      checkAnswer(df, Row("1", "中文"))
+      val readBack = spark.read
+        .option("header", "true")
+        .option("encoding", "GB18030")
+        .csv(path.getAbsolutePath)
+
+      checkAnswer(df, readBack)
     }
   }
 }

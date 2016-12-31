@@ -659,9 +659,9 @@ class DataFrameWriter(OptionUtils):
         self._jwrite.text(path)
 
     @since(2.0)
-    def csv(self, path, mode=None, compression=None, sep=None, encoding=None, quote=None, escape=None,
+    def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
             header=None, nullValue=None, escapeQuotes=None, quoteAll=None, dateFormat=None,
-            timestampFormat=None):
+            timestampFormat=None, encoding=None):
         """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -677,8 +677,6 @@ class DataFrameWriter(OptionUtils):
                             snappy and deflate).
         :param sep: sets the single character as a separator for each field and value. If None is
                     set, it uses the default value, ``,``.
-        :param encoding: sets writer CSV files by the given encoding type. If None is set,
-                         it uses the default value, ``UTF-8``.
         :param quote: sets the single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
                       value, ``"``. If you would like to turn off quotations, you need to set an
@@ -703,13 +701,15 @@ class DataFrameWriter(OptionUtils):
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
+        :param encoding: encodes the CSV files by the given encoding type. If None is set,
+                         it uses the default value, ``UTF-8``.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
-        self._set_opts(compression=compression, sep=sep, encoding=encoding, quote=quote, escape=escape, header=header,
+        self._set_opts(compression=compression, sep=sep, quote=quote, escape=escape, header=header,
                        nullValue=nullValue, escapeQuotes=escapeQuotes, quoteAll=quoteAll,
-                       dateFormat=dateFormat, timestampFormat=timestampFormat)
+                       dateFormat=dateFormat, timestampFormat=timestampFormat, encoding=encoding)
         self._jwrite.csv(path)
 
     @since(1.5)
