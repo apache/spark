@@ -50,7 +50,7 @@ private[hive] class SparkExecuteStatementOperation(
   with Logging {
 
   private var result: DataFrame = _
-  private var resultList: Option[Array[org.apache.spark.sql.Row]] = _
+  private var resultList: Option[Array[SparkRow]] = _
   private var iter: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
   private var statementId: String = _
