@@ -202,6 +202,11 @@ trait CheckAnalysis extends PredicateHelper {
               case e if PredicateSubquery.hasNullAwarePredicateWithinNot(e) =>
                 failAnalysis(s"Null-aware predicate sub-queries cannot be used in nested" +
                   s" conditions: $e")
+              // @nsyca
+              // Incomplete fix. This is to address a subset of problem
+              // specific to "= <scalar-subquery>"
+              case e @ EqualTo(_, x: ScalarSubquery) =>
+                checkAnalysis(x.plan)
               case e =>
             }
 
