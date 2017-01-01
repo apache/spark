@@ -190,7 +190,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       assertEventStats { e =>
         assert(timestampFormat.parse(e.get("max")).getTime === (currentTimeMs / 1000) * 1000)
         val watermarkTime = timestampFormat.parse(e.get("watermark"))
-        assert(monthsSinceEpoch(currentTime) - monthsSinceEpoch(watermarkTime) === 29)
+        val monthDiff = monthsSinceEpoch(currentTime) - monthsSinceEpoch(watermarkTime)
+        // monthsSinceEpoch is like `math.floor(num)`, so monthDiff has two possible values.
+        assert(monthDiff === 29 || monthDiff === 30,
+          s"currentTime: $currentTime, watermarkTime: $watermarkTime")
       }
     )
   }
