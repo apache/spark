@@ -1067,7 +1067,7 @@ noAggDF
 
 // Write new data to Parquet files
 noAggDF
-  .writeStream
+  .writeStream()
   .format("parquet")
   .option("checkpointLocation", "path/to/checkpoint/dir")
   .option("path", "path/to/destination/dir")
