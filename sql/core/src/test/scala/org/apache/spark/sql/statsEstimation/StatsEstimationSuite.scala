@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.estimation
+package org.apache.spark.sql.statsEstimation
 
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.IntegerType
 
 
-class EstimationSuite extends SharedSQLContext {
+class StatsEstimationSuite extends SharedSQLContext {
   test("statistics for a plan based on the cbo switch") {
     val expectedDefaultStats =
       Statistics(

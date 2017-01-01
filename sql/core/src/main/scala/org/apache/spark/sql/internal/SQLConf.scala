@@ -644,7 +644,6 @@ object SQLConf {
 
   val CBO_ENABLED =
     SQLConfigBuilder("spark.sql.cbo.enabled")
-      .internal()
       .doc("Enables CBO for estimation of plan statistics when set true.")
       .booleanConf
       .createWithDefault(false)

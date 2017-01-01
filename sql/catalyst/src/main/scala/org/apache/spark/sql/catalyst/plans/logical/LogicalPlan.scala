@@ -100,10 +100,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   final def planStats(conf: CatalystConf): Statistics = {
     if (conf.cboEnabled) {
-      if (estimatedStats == null) {
-        estimatedStats = cboStatistics(conf)
+      if (estimatedStats.isEmpty) {
+        estimatedStats = Some(cboStatistics(conf))
       }
-      estimatedStats
+      estimatedStats.get
     } else {
       statistics
     }
@@ -113,10 +113,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * Returns statistics estimated by cbo. If the plan doesn't override this, it returns the
    * default statistics.
    */
-  def cboStatistics(conf: CatalystConf): Statistics = statistics
+  protected def cboStatistics(conf: CatalystConf): Statistics = statistics
 
   /** A cache for the estimated statistics, such that it will only be computed once. */
-  private var estimatedStats: Statistics = _
+  private var estimatedStats: Option[Statistics] = None
 
   /**
    * Returns the maximum number of rows that this plan may compute.
