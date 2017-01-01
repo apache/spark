@@ -1,117 +1,239 @@
 -- A test suite for GROUP BY in parent side, subquery, and both predicate subquery
 -- It includes correlated cases.
 
--- tables and data types
+create temporary view t1 as select * from values
+  ("t1a", 6S, 8, 10L, float(15.0), 20D, 20E2, timestamp '2014-04-04 01:00:00.000', date '2014-04-04'),
+  ("t1b", 8S, 16, 19L, float(17.0), 25D, 26E2, timestamp '2014-05-04 01:01:00.000', date '2014-05-04'),
+  ("t1a", 16S, 12, 21L, float(15.0), 20D, 20E2, timestamp '2014-06-04 01:02:00.001', date '2014-06-04'),
+  ("t1a", 16S, 12, 10L, float(15.0), 20D, 20E2, timestamp '2014-07-04 01:01:00.000', date '2014-07-04'),
+  ("t1c", 8S, 16, 19L, float(17.0), 25D, 26E2, timestamp '2014-05-04 01:02:00.001', date '2014-05-05'),
+  ("t1d", null, 16, 22L, float(17.0), 25D, 26E2, timestamp '2014-06-04 01:01:00.000', null),
+  ("t1d", null, 16, 19L, float(17.0), 25D, 26E2, timestamp '2014-07-04 01:02:00.001', null),
+  ("t1e", 10S, null, 25L, float(17.0), 25D, 26E2, timestamp '2014-08-04 01:01:00.000', date '2014-08-04'),
+  ("t1e", 10S, null, 19L, float(17.0), 25D, 26E2, timestamp '2014-09-04 01:02:00.001', date '2014-09-04'),
+  ("t1d", 10S, null, 12L, float(17.0), 25D, 26E2, timestamp '2015-05-04 01:01:00.000', date '2015-05-04'),
+  ("t1a", 6S, 8, 10L, float(15.0), 20D, 20E2, timestamp '2014-04-04 01:02:00.001', date '2014-04-04'),
+  ("t1e", 10S, null, 19L, float(17.0), 25D, 26E2, timestamp '2014-05-04 01:01:00.000', date '2014-05-04')
+  as t1(t1a, t1b, t1c, t1d, t1e, t1f, t1g, t1h, t1i);
 
-CREATE DATABASE indb;
-CREATE TABLE t1(t1a String, t1b Short, t1c Int, t1d Long, t1e float, t1f double, t1g DECIMAL, t1h TIMESTAMP, t1i Date)
-using parquet;
-CREATE TABLE t2(t2a String, t2b Short, t2c Int, t2d Long, t2e float, t2f double, t2g DECIMAL, t2h TIMESTAMP, t2i Date)
-using parquet;
-CREATE TABLE t3(t3a String, t3b Short, t3c Int, t3d Long, t3e float, t3f double, t3g DECIMAL, t3h TIMESTAMP, t3i Date)
-using parquet;
+create temporary view t2 as select * from values
+  ("t2a", 6S, 12, 14L, float(15), 20D, 20E2, timestamp '2014-04-04 01:01:00.000', date '2014-04-04'),
+  ("t1b", 10S, 12, 19L, float(17), 25D, 26E2, timestamp '2014-05-04 01:01:00.000', date '2014-05-04'),
+  ("t1b", 8S, 16, 119L, float(17), 25D, 26E2, timestamp '2015-05-04 01:01:00.000', date '2015-05-04'),
+  ("t1c", 12S, 16, 219L, float(17), 25D, 26E2, timestamp '2016-05-04 01:01:00.000', date '2016-05-04'),
+  ("t1b", null, 16, 319L, float(17), 25D, 26E2, timestamp '2017-05-04 01:01:00.000', null),
+  ("t2e", 8S, null, 419L, float(17), 25D, 26E2, timestamp '2014-06-04 01:01:00.000', date '2014-06-04'),
+  ("t1f", 19S, null, 519L, float(17), 25D, 26E2, timestamp '2014-05-04 01:01:00.000', date '2014-05-04'),
+  ("t1b", 10S, 12, 19L, float(17), 25D, 26E2, timestamp '2014-06-04 01:01:00.000', date '2014-06-04'),
+  ("t1b", 8S, 16, 19L, float(17), 25D, 26E2, timestamp '2014-07-04 01:01:00.000', date '2014-07-04'),
+  ("t1c", 12S, 16, 19L, float(17), 25D, 26E2, timestamp '2014-08-04 01:01:00.000', date '2014-08-05'),
+  ("t1e", 8S, null, 19L, float(17), 25D, 26E2, timestamp '2014-09-04 01:01:00.000', date '2014-09-04'),
+  ("t1f", 19S, null, 19L, float(17), 25D, 26E2, timestamp '2014-10-04 01:01:00.000', date '2014-10-04'),
+  ("t1b", null, 16, 19L, float(17), 25D, 26E2, timestamp '2014-05-04 01:01:00.000', null)
+  as t2(t2a, t2b, t2c, t2d, t2e, t2f, t2g, t2h, t2i);
 
--- insert to tables
-INSERT INTO t1 VALUES
- ('t1a', 6, 8, 10, 15, 20, 20.00, timestamp(date("2014-04-04")), date("2014-04-04")),
- ('t1b', 8, 16, 19, 17, 25, 26.00, timestamp(date("2014-05-04")), date("2014-05-04")),
- ('t1a', 16, 12, 21, 15, 20, 20.00, timestamp(date("2014-06-04")), date("2014-06-04")),
- ('t1a', 16, 12, 10, 15, 20, 20.00, timestamp(date("2014-07-04")), date("2014-07-04")),
- ('t1c', 8, 16, 19, 17, 25, 26.00, timestamp(date("2014-05-04")), date("2014-05-05")),
- ('t1d', null, 16, 22, 17, 25, 26.00, timestamp(date("2014-06-04")), null),
- ('t1d', null, 16, 19, 17, 25, 26.00, timestamp(date("2014-07-04")), null),
- ('t1e', 10, null, 25, 17, 25, 26.00, timestamp(date("2014-08-04")), date("2014-08-04")),
- ('t1e', 10, null, 19, 17, 25, 26.00, timestamp(date("2014-09-04")), date("2014-09-04")),
- ('t1d', 10, null, 12, 17, 25, 26.00, timestamp(date("2015-05-04")), date("2015-05-04")),
- ('t1a', 6, 8, 10, 15, 20, 20.00, timestamp(date("2014-04-04")), date("2014-04-04")),
- ('t1e', 10, null, 19, 17, 25, 26.00, timestamp(date("2014-05-04")), date("2014-05-0=4"));
-
-INSERT INTO t2 VALUES
- ('t2a', 6, 12, 14, 15, 20, 20.00, timestamp(date("2014-04-04")), date("2014-04-04")),
- ('t1b', 10, 12, 19, 17, 25, 26.00, timestamp(date("2014-05-04")), date("2014-05-04")),
- ('t1b', 8, 16, 119, 17, 25, 26.00, timestamp(date("2015-05-04")), date("2015-05-04")),
- ('t1c', 12, 16, 219, 17, 25, 26.00, timestamp(date("2016-05-04")), date("2016-05-04")),
- ('t1b', null, 16, 319, 17, 25, 26.00, timestamp(date("2017-05-04")), null),
- ('t2e', 8, null, 419, 17, 25, 26.00, timestamp(date("2014-06-04")), date("2014-06-04")),
- ('t1f', 19, null, 519, 17, 25, 26.00, timestamp(date("2014-05-04")), date("2014-05-04")),
- ('t1b', 10, 12, 19, 17, 25, 26.00, timestamp(date("2014-06-04")), date("2014-06-04")),
- ('t1b', 8, 16, 19, 17, 25, 26.00, timestamp(date("2014-07-04")), date("2014-07-04")),
- ('t1c', 12, 16, 19, 17, 25, 26.00, timestamp(date("2014-08-04")), date("2014-08-05")),
- ('t1e', 8, null, 19, 17, 25, 26.00, timestamp(date("2014-09-04")), date("2014-09-04")),
- ('t1f', 19, null, 19, 17, 25, 26.00, timestamp(date("2014-10-04")), date("2014-10-04")),
- ('t1b', null, 16, 19, 17, 25, 26.00, timestamp(date("2014-05-04")), null);
-
-INSERT INTO t3 VALUES
- ('t3a', 6, 12, 110, 15, 20, 20.00, timestamp(date("2014-04-04")), date("2014-04-04")),
- ('t3a', 6, 12, 10, 15, 20, 20.00, timestamp(date("2014-05-04")), date("2014-05-04")),
- ('t1b', 10, 12, 219, 17, 25, 26.00, timestamp(date("2014-05-04")), date("2014-05-04")),
- ('t1b', 10, 12, 19, 17, 25, 26.00, timestamp(date("2014-05-04")), date("2014-05-04")),
- ('t1b', 8, 16, 319, 17, 25, 26.00, timestamp(date("2014-06-04")), date("2014-06-04")),
- ('t1b', 8, 16, 19, 17, 25, 26.00, timestamp(date("2014-07-04")), date("2014-07-04")),
- ('t3c', 17, 16, 519, 17, 25, 26.00, timestamp(date("2014-08-04")), date("2014-08-04")),
- ('t3c', 17, 16, 19, 17, 25, 26.00, timestamp(date("2014-09-04")), date("2014-09-05")),
- ('t1b', null, 16, 419, 17, 25, 26.00, timestamp(date("2014-10-04")), null),
- ('t1b', null, 16, 19, 17, 25, 26.00, timestamp(date("2014-11-04")), null),
- ('t3b', 8, null, 719, 17, 25, 26.00, timestamp(date("2014-05-04")), date("2014-05-04")),
- ('t3b', 8, null, 19, 17, 25, 26.00, timestamp(date("2015-05-04")), date("2015-05-04"));
+create temporary view t3 as select * from values
+  ("t3a", 6S, 12, 110L, float(15), 20D, 20E2, timestamp '2014-04-04 01:02:00.000', date '2014-04-04'),
+  ("t3a", 6S, 12, 10L, float(15), 20D, 20E2, timestamp '2014-05-04 01:02:00.000', date '2014-05-04'),
+  ("t1b", 10S, 12, 219L, float(17), 25D, 26E2, timestamp '2014-05-04 01:02:00.000', date '2014-05-04'),
+  ("t1b", 10S, 12, 19L, float(17), 25D, 26E2, timestamp '2014-05-04 01:02:00.000', date '2014-05-04'),
+  ("t1b", 8S, 16, 319L, float(17), 25D, 26E2, timestamp '2014-06-04 01:02:00.000', date '2014-06-04'),
+  ("t1b", 8S, 16, 19L, float(17), 25D, 26E2, timestamp '2014-07-04 01:02:00.000', date '2014-07-04'),
+  ("t3c", 17S, 16, 519L, float(17), 25D, 26E2, timestamp '2014-08-04 01:02:00.000', date '2014-08-04'),
+  ("t3c", 17S, 16, 19L, float(17), 25D, 26E2, timestamp '2014-09-04 01:02:00.000', date '2014-09-05'),
+  ("t1b", null, 16, 419L, float(17), 25D, 26E2, timestamp '2014-10-04 01:02:00.000', null),
+  ("t1b", null, 16, 19L, float(17), 25D, 26E2, timestamp '2014-11-04 01:02:00.000', null),
+  ("t3b", 8S, null, 719L, float(17), 25D, 26E2, timestamp '2014-05-04 01:02:00.000', date '2014-05-04'),
+  ("t3b", 8S, null, 19L, float(17), 25D, 26E2, timestamp '2015-05-04 01:02:00.000', date '2015-05-04')
+  as t3(t3a, t3b, t3c, t3d, t3e, t3f, t3g, t3h, t3i);
 
 -- correlated IN subquery
 -- GROUP BY in parent side
 -- TC 01.01
-select t1a, avg(t1b) from t1 where t1a in (select t2a from t2) group by t1a;
+SELECT t1a,
+       Avg(t1b)
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2)
+GROUP  BY t1a;
+
 -- TC 01.02
-select t1a, max(t1b) from t1 where t1b in (select t2b from t2 where t1a = t2a) group by t1a, t1d;
+SELECT t1a,
+       Max(t1b)
+FROM   t1
+WHERE  t1b IN (SELECT t2b
+               FROM   t2
+               WHERE  t1a = t2a)
+GROUP  BY t1a,
+          t1d;
+
 -- TC 01.03
-select t1a, t1b from t1 where t1c in (select t2c from t2 where t1a = t2a) group by t1a, t1b;
+SELECT t1a,
+       t1b
+FROM   t1
+WHERE  t1c IN (SELECT t2c
+               FROM   t2
+               WHERE  t1a = t2a)
+GROUP  BY t1a,
+          t1b;
+
 -- TC 01.04
-select t1a, sum(distinct(t1b)) from t1 where t1c in (select t2c from t2 where t1a = t2a) or
-t1c in (select t3c from t3 where t1a = t3a) group by t1a, t1c;
+SELECT t1a,
+       Sum(DISTINCT( t1b ))
+FROM   t1
+WHERE  t1c IN (SELECT t2c
+               FROM   t2
+               WHERE  t1a = t2a)
+        OR t1c IN (SELECT t3c
+                   FROM   t3
+                   WHERE  t1a = t3a)
+GROUP  BY t1a,
+          t1c;
+
 -- TC 01.05
-select t1a, sum(distinct(t1b)) from t1 where t1c in (select t2c from t2 where t1a = t2a) and
-t1c in (select t3c from t3 where t1a = t3a) group by t1a, t1c;
+SELECT t1a,
+       Sum(DISTINCT( t1b ))
+FROM   t1
+WHERE  t1c IN (SELECT t2c
+               FROM   t2
+               WHERE  t1a = t2a)
+       AND t1c IN (SELECT t3c
+                   FROM   t3
+                   WHERE  t1a = t3a)
+GROUP  BY t1a,
+          t1c;
+
 -- TC 01.06
-select t1a, count(distinct(t1b)) from t1 where t1c in (select t2c from t2 where t1a = t2a)
-group by t1a, t1c having t1a = "t1b";
+SELECT t1a,
+       Count(DISTINCT( t1b ))
+FROM   t1
+WHERE  t1c IN (SELECT t2c
+               FROM   t2
+               WHERE  t1a = t2a)
+GROUP  BY t1a,
+          t1c
+HAVING t1a = "t1b";
 
 -- GROUP BY in subquery
 -- TC 01.07
-select * from t1 where t1b in (select max(t2b) from t2 group by t2a);
+SELECT *
+FROM   t1
+WHERE  t1b IN (SELECT Max(t2b)
+               FROM   t2
+               GROUP  BY t2a);
+
 -- TC 01.08
-select * from (select t2a, t2b from t2 where t2a in (select t1a from t1 where t1b = t2b) group by t2a, t2b) t2;
+SELECT *
+FROM   (SELECT t2a,
+               t2b
+        FROM   t2
+        WHERE  t2a IN (SELECT t1a
+                       FROM   t1
+                       WHERE  t1b = t2b)
+        GROUP  BY t2a,
+                  t2b) t2;
+
 -- TC 01.09
-select count(distinct(*)) from t1 where t1b in (select min(t2b) from t2 where t1a = t2a and t1c = t2c group by t2a);
+SELECT Count(DISTINCT( * ))
+FROM   t1
+WHERE  t1b IN (SELECT Min(t2b)
+               FROM   t2
+               WHERE  t1a = t2a
+                      AND t1c = t2c
+               GROUP  BY t2a);
+
 -- TC 01.10
-select t1a, t1b from t1 where t1c in (select max(t2c) from t2 where t1a = t2a group by t2a, t2c having t2c > 8);
+SELECT t1a,
+       t1b
+FROM   t1
+WHERE  t1c IN (SELECT Max(t2c)
+               FROM   t2
+               WHERE  t1a = t2a
+               GROUP  BY t2a,
+                         t2c
+               HAVING t2c > 8);
+
 -- TC 01.11
-select t1a, t1b from t1 where t1c in (select t2c from t2 where t2a in
-(select min(t3a) from t3 where t3a = t2a group by t3b) group by t2c);
--- TC 01.12, comment out pending SPARK-18863
---select * from t1 where t1a in
---(select min(t2a) from t2 where t2a = t2a and t2c >= 1 group by t2c having t2c in
---(select t3c from t3 group by t3c, t3b having t2b > 6 and t3b > t2b ));
--- TC 01.13, comment out pending SPARK-18863
---select * from (select * from t2 where t2a in (select t1a from t1 where t1b = t2b)) t2 where t2a in
---(select t2a from t2 where t2a = t2a and t2c > 1 group by t2a having t2c > 8);
+SELECT t1a,
+       t1b
+FROM   t1
+WHERE  t1c IN (SELECT t2c
+               FROM   t2
+               WHERE  t2a IN (SELECT Min(t3a)
+                              FROM   t3
+                              WHERE  t3a = t2a
+                              GROUP  BY t3b)
+               GROUP  BY t2c);
 
 -- GROUP BY in both
--- TC 01.14
-select t1a, min(t1b) from t1 where t1c in (select min(t2c) from t2 where t2b = t1b group by t2a) group by t1a;
--- TC 01.15
-select t1a, min(t1b) from t1 where t1c in (select min(t2c) from t2 where t2b in (select min(t3b) from t3
-where t2a = t3a group by t3a) group by t2c) group by t1a, t1d;
--- TC 01.16
-select t1a, min(t1b) from t1 where t1c in (select min(t2c) from t2 where t2b = t1b group by t2a) and
-t1d in (select t3d from t3 where t1c = t3c group by t3d) group by t1a;
--- TC 01.17
-select t1a, min(t1b) from t1 where t1c in (select min(t2c) from t2 where t2b = t1b group by t2a) or
-t1d in (select t3d from t3 where t1c = t3c group by t3d) group by t1a;
--- TC 01.18
-select t1a, min(t1b) from t1 where t1c in (select min(t2c) from t2 where t2b = t1b group by t2a having t2a > t1a) or
-t1d in (select t3d from t3 where t1c = t3c group by t3d having t3d = t1d) group by t1a having min(t1b) is NOT NULL;
+-- TC 01.12
+SELECT t1a,
+       Min(t1b)
+FROM   t1
+WHERE  t1c IN (SELECT Min(t2c)
+               FROM   t2
+               WHERE  t2b = t1b
+               GROUP  BY t2a)
+GROUP  BY t1a;
 
--- Clean Up
-DROP TABLE t1;
-DROP TABLE t2;
-DROP TABLE t3;
-USE default;
-DROP DATABASE indb;
+-- TC 01.13
+SELECT t1a,
+       Min(t1b)
+FROM   t1
+WHERE  t1c IN (SELECT Min(t2c)
+               FROM   t2
+               WHERE  t2b IN (SELECT Min(t3b)
+                              FROM   t3
+                              WHERE  t2a = t3a
+                              GROUP  BY t3a)
+               GROUP  BY t2c)
+GROUP  BY t1a,
+          t1d;
+
+-- TC 01.14
+SELECT t1a,
+       Min(t1b)
+FROM   t1
+WHERE  t1c IN (SELECT Min(t2c)
+               FROM   t2
+               WHERE  t2b = t1b
+               GROUP  BY t2a)
+       AND t1d IN (SELECT t3d
+                   FROM   t3
+                   WHERE  t1c = t3c
+                   GROUP  BY t3d)
+GROUP  BY t1a;
+
+-- TC 01.15
+SELECT t1a,
+       Min(t1b)
+FROM   t1
+WHERE  t1c IN (SELECT Min(t2c)
+               FROM   t2
+               WHERE  t2b = t1b
+               GROUP  BY t2a)
+        OR t1d IN (SELECT t3d
+                   FROM   t3
+                   WHERE  t1c = t3c
+                   GROUP  BY t3d)
+GROUP  BY t1a;
+
+-- TC 01.16
+SELECT t1a,
+       Min(t1b)
+FROM   t1
+WHERE  t1c IN (SELECT Min(t2c)
+               FROM   t2
+               WHERE  t2b = t1b
+               GROUP  BY t2a
+               HAVING t2a > t1a)
+        OR t1d IN (SELECT t3d
+                   FROM   t3
+                   WHERE  t1c = t3c
+                   GROUP  BY t3d
+                   HAVING t3d = t1d)
+GROUP  BY t1a
+HAVING Min(t1b) IS NOT NULL;
+
+
+
