@@ -346,6 +346,46 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(new Path(partitionLocation) == defaultPartitionLocation)
   }
 
+  test("create/drop partitions in managed tables with location") {
+    val catalog = newBasicCatalog()
+    val table = CatalogTable(
+      identifier = TableIdentifier("tbl", Some("db1")),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat(None, None, None, None, false, Map.empty),
+      schema = new StructType()
+        .add("col1", "int")
+        .add("col2", "string")
+        .add("partCol1", "int")
+        .add("partCol2", "string"),
+      provider = Some("hive"),
+      partitionColumnNames = Seq("partCol1", "partCol2"))
+    catalog.createTable(table, ignoreIfExists = false)
+
+    val newLocationPart1 = newUriForDatabase()
+    val newLocationPart2 = newUriForDatabase()
+
+    val partition1 =
+      CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "2"),
+        storageFormat.copy(locationUri = Some(newLocationPart1)))
+    val partition2 =
+      CatalogTablePartition(Map("partCol1" -> "3", "partCol2" -> "4"),
+        storageFormat.copy(locationUri = Some(newLocationPart2)))
+    catalog.createPartitions("db1", "tbl", Seq(partition1), ignoreIfExists = false)
+    catalog.createPartitions("db1", "tbl", Seq(partition2), ignoreIfExists = false)
+
+    assert(exists(newLocationPart1))
+    assert(exists(newLocationPart2))
+
+    // the corresponding directory is dropped.
+    catalog.dropPartitions("db1", "tbl", Seq(partition1.spec),
+      ignoreIfNotExists = false, purge = false, retainData = false)
+    assert(!exists(newLocationPart1))
+
+    // all the remaining directories are dropped.
+    catalog.dropTable("db1", "tbl", ignoreIfNotExists = false, purge = false)
+    assert(!exists(newLocationPart2))
+  }
+
   test("list partition names") {
     val catalog = newBasicCatalog()
     val newPart = CatalogTablePartition(Map("a" -> "1", "b" -> "%="), storageFormat)
