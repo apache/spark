@@ -110,23 +110,3 @@ WHERE  t1a NOT IN (SELECT t2a
                    FROM   t2);
 
 
--- TC 01.08
-SELECT DISTINCT( t1a ),
-               t1b
-FROM   t1
-WHERE  t1b NOT IN (SELECT t2b
-                   FROM   t2
-                   WHERE  t1a < t2a
-                          AND t2b > 8);
-
--- TC 01.09
-SELECT t1a,
-       t1b
-FROM   t1
-WHERE  t1h NOT IN (SELECT t2h
-                   FROM   t2
-                   WHERE  t2a = t1a)
-       AND t1b NOT IN ((SELECT Min(t3b)
-                        FROM   t3
-                        WHERE  t3d = t1d));
-
