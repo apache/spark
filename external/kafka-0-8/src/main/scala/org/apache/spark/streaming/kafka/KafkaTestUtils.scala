@@ -34,6 +34,7 @@ import kafka.serializer.StringEncoder
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.utils.{ZKStringSerializer, ZkUtils}
 import org.I0Itec.zkclient.ZkClient
+import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.RandomUtils
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
@@ -268,8 +269,14 @@ private[kafka] class KafkaTestUtils extends Logging {
 
     def shutdown() {
       factory.shutdown()
-      Utils.deleteRecursively(snapshotDir)
-      Utils.deleteRecursively(logDir)
+      if (Utils.isWindows) {
+        // `snapshotDir` is not closed within ZooKeeper server. Please see ZOOKEEPER-1844.
+        FileUtils.deleteQuietly(snapshotDir)
+        FileUtils.deleteQuietly(logDir)
+      } else {
+        Utils.deleteRecursively(snapshotDir)
+        Utils.deleteRecursively(logDir)
+      }
     }
   }
 }

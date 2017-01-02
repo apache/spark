@@ -32,6 +32,7 @@ import kafka.api.Request
 import kafka.common.TopicAndPartition
 import kafka.server.{KafkaConfig, KafkaServer, OffsetCheckpoint}
 import kafka.utils.ZkUtils
+import org.apache.commons.io.FileUtils
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
@@ -374,8 +375,14 @@ class KafkaTestUtils extends Logging {
 
     def shutdown() {
       factory.shutdown()
-      Utils.deleteRecursively(snapshotDir)
-      Utils.deleteRecursively(logDir)
+      if (Utils.isWindows) {
+        // `snapshotDir` is not closed within ZooKeeper server. Please see ZOOKEEPER-1844.
+        FileUtils.deleteQuietly(snapshotDir)
+        FileUtils.deleteQuietly(logDir)
+      } else {
+        Utils.deleteRecursively(snapshotDir)
+        Utils.deleteRecursively(logDir)
+      }
     }
   }
 }
