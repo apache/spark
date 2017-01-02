@@ -21,6 +21,8 @@ import java.io._
 import java.util.Properties
 import javax.annotation.Nullable
 
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
@@ -59,6 +61,8 @@ case class HiveScriptTransformationExec(
   extends UnaryExecNode with ScriptTransformBase {
 
   override def producedAttributes: AttributeSet = outputSet -- inputSet
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def processIterator(
       inputIterator: Iterator[InternalRow],
