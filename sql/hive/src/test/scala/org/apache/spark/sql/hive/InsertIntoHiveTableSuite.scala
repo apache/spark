@@ -76,8 +76,6 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       sql("SELECT * FROM createAndInsertTest"),
       testData.collect().toSeq
     )
-
-
   }
 
   test("Double create fails when allowExisting = false") {
