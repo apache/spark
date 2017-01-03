@@ -225,8 +225,8 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
           val stats = t.statistics
           stats.rowCount match {
             case Some(rowCount) if rowCount >= 0 =>
-              if (stats.colStats.nonEmpty && stats.colStats.contains(col.name)) {
-                val colStats = stats.colStats.get(col.name)
+              if (stats.attributeStats.nonEmpty && stats.attributeStats.contains(col)) {
+                val colStats = stats.attributeStats.get(col)
                 if (colStats.get.nullCount > 0) {
                   false
                 } else {
@@ -278,7 +278,7 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
         case Some(col) if t.outputSet.contains(col) =>
           val stats = t.statistics
           val dataType = col.dataType
-          stats.colStats.nonEmpty && stats.colStats.contains(col.name)
+          stats.attributeStats.nonEmpty && stats.attributeStats.contains(col)
         case None => false
       }
     case _ => false
