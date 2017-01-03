@@ -20,23 +20,26 @@ package org.apache.spark.sql.catalyst.plans.logical.estimation
 import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, Expression}
-import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
 import org.apache.spark.sql.types.StringType
+
 
 object EstimationUtils extends Logging {
 
   def ceil(bigDecimal: BigDecimal): BigInt = bigDecimal.setScale(0, RoundingMode.CEILING).toBigInt()
 
-  def getRowSize(attributes: Seq[Attribute], colStats: Map[String, ColumnStat]): Long = {
-    attributes.map { attr =>
-      if (colStats.contains(attr.name)) {
+  def getRowSize(attributes: Seq[Attribute], attrStats: AttributeMap[ColumnStat]): Long = {
+    // We assign a generic overhead for a Row object, the actual overhead is different for different
+    // Row format.
+    8 + attributes.map { attr =>
+      if (attrStats.contains(attr)) {
         attr.dataType match {
           case StringType =>
-            // base + offset + numBytes
-            colStats(attr.name).avgLen + 8 + 4
+            // UTF8String: base + offset + numBytes
+            attrStats(attr).avgLen + 8 + 4
           case _ =>
-            colStats(attr.name).avgLen
+            attrStats(attr).avgLen
         }
       } else {
         attr.dataType.defaultSize
@@ -49,7 +52,6 @@ object EstimationUtils extends Logging {
 object ExtractAttr {
   def unapply(exp: Expression): Option[AttributeReference] = exp match {
     case ar: AttributeReference => Some(ar)
-    case Cast(ar: AttributeReference, dataType) => Some(ar)
     case _ => None
   }
 }

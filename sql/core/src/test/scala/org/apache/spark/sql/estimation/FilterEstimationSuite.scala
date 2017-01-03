@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.estimation
 
+import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.estimation.EstimationUtils._
 import org.apache.spark.sql.test.SharedSQLContext
 
 /**
@@ -41,20 +43,9 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
       sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
 
       /** Validate statistics */
-      val logicalPlan =
-        sql(s"SELECT * FROM $table1 WHERE key1 = 2").queryExecution.optimizedPlan
-      val expectedFilterStats = Statistics(
-        sizeInBytes = 1 * 8, rowCount = Some(1),
-        colStats = Map("key1" -> ColumnStat(1, Some(2L), Some(2L), 0, 8, 8)),
-        isBroadcastable = false)
-
-      val filterNodes = logicalPlan.collect {
-        case filter: Filter =>
-          val filterStats = filter.statistics
-          assert(filterStats == expectedFilterStats)
-          filter
-      }
-      assert(filterNodes.size == 1)
+      val sqlStmt = s"SELECT * FROM $table1 WHERE key1 = 2"
+      val colStats = Seq("key1" -> ColumnStat(1, Some(2L), Some(2L), 0, 8, 8))
+      validateEstimatedStats(sqlStmt, colStats, Some(1L))
     }
   }
 
@@ -67,20 +58,9 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
       sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
 
       /** Validate statistics */
-      val logicalPlan =
-        sql(s"SELECT * FROM $table1 WHERE key1 < 3").queryExecution.optimizedPlan
-      val expectedFilterStats = Statistics(
-        sizeInBytes = 3 * 8, rowCount = Some(3),
-        colStats = Map("key1" -> ColumnStat(2, Some(1L), Some(3L), 0, 8, 8)),
-        isBroadcastable = false)
-
-      val filterNodes = logicalPlan.collect {
-        case filter: Filter =>
-          val filterStats = filter.statistics
-          assert(filterStats == expectedFilterStats)
-          filter
-      }
-      assert(filterNodes.size == 1)
+      val sqlStmt = s"SELECT * FROM $table1 WHERE key1 < 3"
+      val colStats = Seq("key1" -> ColumnStat(2, Some(1L), Some(3L), 0, 8, 8))
+      validateEstimatedStats(sqlStmt, colStats, Some(3L))
     }
   }
 
@@ -93,20 +73,9 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
       sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
 
       /** Validate statistics */
-      val logicalPlan =
-        sql(s"SELECT * FROM $table1 WHERE key1 <= 3").queryExecution.optimizedPlan
-      val expectedFilterStats = Statistics(
-        sizeInBytes = 3 * 8, rowCount = Some(3),
-        colStats = Map("key1" -> ColumnStat(2, Some(1L), Some(3L), 0, 8, 8)),
-        isBroadcastable = false)
-
-      val filterNodes = logicalPlan.collect {
-        case filter: Filter =>
-          val filterStats = filter.statistics
-          assert(filterStats == expectedFilterStats)
-          filter
-      }
-      assert(filterNodes.size == 1)
+      val sqlStmt = s"SELECT * FROM $table1 WHERE key1 <= 3"
+      val colStats = Seq("key1" -> ColumnStat(2, Some(1L), Some(3L), 0, 8, 8))
+      validateEstimatedStats(sqlStmt, colStats, Some(3L))
     }
   }
 
@@ -119,20 +88,9 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
       sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
 
       /** Validate statistics */
-      val logicalPlan =
-        sql(s"SELECT * FROM $table1 WHERE key1 > 6").queryExecution.optimizedPlan
-      val expectedFilterStats = Statistics(
-        sizeInBytes = 5 * 8, rowCount = Some(5),
-        colStats = Map("key1" -> ColumnStat(4, Some(6L), Some(10L), 0, 8, 8)),
-        isBroadcastable = false)
-
-      val filterNodes = logicalPlan.collect {
-        case filter: Filter =>
-          val filterStats = filter.statistics
-          assert(filterStats == expectedFilterStats)
-          filter
-      }
-      assert(filterNodes.size == 1)
+      val sqlStmt = s"SELECT * FROM $table1 WHERE key1 > 6"
+      val colStats = Seq("key1" -> ColumnStat(4, Some(6L), Some(10L), 0, 8, 8))
+      validateEstimatedStats(sqlStmt, colStats, Some(5L))
     }
   }
 
@@ -145,20 +103,9 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
       sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
 
       /** Validate statistics */
-      val logicalPlan =
-        sql(s"SELECT * FROM $table1 WHERE key1 >= 6").queryExecution.optimizedPlan
-      val expectedFilterStats = Statistics(
-        sizeInBytes = 5 * 8, rowCount = Some(5),
-        colStats = Map("key1" -> ColumnStat(4, Some(6L), Some(10L), 0, 8, 8)),
-        isBroadcastable = false)
-
-      val filterNodes = logicalPlan.collect {
-        case filter: Filter =>
-          val filterStats = filter.statistics
-          assert(filterStats == expectedFilterStats)
-          filter
-      }
-      assert(filterNodes.size == 1)
+      val sqlStmt = s"SELECT * FROM $table1 WHERE key1 >= 6"
+      val colStats = Seq("key1" -> ColumnStat(4, Some(6L), Some(10L), 0, 8, 8))
+      validateEstimatedStats(sqlStmt, colStats, Some(5L))
     }
   }
 
@@ -171,20 +118,9 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
       sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
 
       /** Validate statistics */
-      val logicalPlan =
-        sql(s"SELECT * FROM $table1 WHERE key1 IS NULL").queryExecution.optimizedPlan
-      val expectedFilterStats = Statistics(
-        sizeInBytes = 0, rowCount = Some(0),
-        colStats = Map("key1" -> ColumnStat(0, None, None, 0, 8, 8)),
-        isBroadcastable = false)
-
-      val filterNodes = logicalPlan.collect {
-        case filter: Filter =>
-          val filterStats = filter.statistics
-          assert(filterStats == expectedFilterStats)
-          filter
-      }
-      assert(filterNodes.size == 1)
+      val sqlStmt = s"SELECT * FROM $table1 WHERE key1 IS NULL"
+      val colStats = Seq("key1" -> ColumnStat(0, None, None, 0, 8, 8))
+      validateEstimatedStats(sqlStmt, colStats, Some(0L))
     }
   }
 
@@ -197,20 +133,9 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
       sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
 
       /** Validate statistics */
-      val logicalPlan =
-        sql(s"SELECT * FROM $table1 WHERE key1 IS NOT NULL").queryExecution.optimizedPlan
-      val expectedFilterStats = Statistics(
-        sizeInBytes = 10 * 8, rowCount = Some(10),
-        colStats = Map("key1" -> ColumnStat(10, Some(1L), Some(10L), 0, 8, 8)),
-        isBroadcastable = false)
-
-      val filterNodes = logicalPlan.collect {
-        case filter: Filter =>
-          val filterStats = filter.statistics
-          assert(filterStats == expectedFilterStats)
-          filter
-      }
-      assert(filterNodes.size == 1)
+      val sqlStmt = s"SELECT * FROM $table1 WHERE key1 IS NOT NULL"
+      val colStats = Seq("key1" -> ColumnStat(10, Some(1L), Some(10L), 0, 8, 8))
+      validateEstimatedStats(sqlStmt, colStats, Some(10L))
     }
   }
 
@@ -223,20 +148,9 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
       sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
 
       /** Validate statistics */
-      val logicalPlan =
-        sql(s"SELECT * FROM $table1 WHERE key1 > 3 AND key1 <= 6").queryExecution.optimizedPlan
-      val expectedFilterStats = Statistics(
-        sizeInBytes = 4 * 8, rowCount = Some(4),
-        colStats = Map("key1" -> ColumnStat(3, Some(3L), Some(6L), 0, 8, 8)),
-        isBroadcastable = false)
-
-      val filterNodes = logicalPlan.collect {
-        case filter: Filter =>
-          val filterStats = filter.statistics
-          assert(filterStats == expectedFilterStats)
-          filter
-      }
-      assert(filterNodes.size == 1)
+      val sqlStmt = s"SELECT * FROM $table1 WHERE key1 > 3 AND key1 <= 6"
+      val colStats = Seq("key1" -> ColumnStat(3, Some(3L), Some(6L), 0, 8, 8))
+      validateEstimatedStats(sqlStmt, colStats, Some(4L))
     }
   }
 
@@ -249,20 +163,9 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
       sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
 
       /** Validate statistics */
-      val logicalPlan =
-        sql(s"SELECT * FROM $table1 WHERE key1 = 3 OR key1 = 6").queryExecution.optimizedPlan
-      val expectedFilterStats = Statistics(
-        sizeInBytes = 2 * 8, rowCount = Some(2),
-        colStats = Map("key1" -> ColumnStat(10, Some(1L), Some(10L), 0, 8, 8)),
-        isBroadcastable = false)
-
-      val filterNodes = logicalPlan.collect {
-        case filter: Filter =>
-          val filterStats = filter.statistics
-          assert(filterStats == expectedFilterStats)
-          filter
-      }
-      assert(filterNodes.size == 1)
+      val sqlStmt = s"SELECT * FROM $table1 WHERE key1 = 3 OR key1 = 6"
+      val colStats = Seq("key1" -> ColumnStat(10, Some(1L), Some(10L), 0, 8, 8))
+      validateEstimatedStats(sqlStmt, colStats, Some(2L))
     }
   }
 
@@ -275,20 +178,9 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
       sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
 
       /** Validate statistics */
-      val logicalPlan =
-        sql(s"SELECT * FROM $table1 WHERE key1 IN (3, 4, 5)").queryExecution.optimizedPlan
-      val expectedFilterStats = Statistics(
-        sizeInBytes = 3 * 8, rowCount = Some(3),
-        colStats = Map("key1" -> ColumnStat(3, Some(3L), Some(5L), 0, 8, 8)),
-        isBroadcastable = false)
-
-      val filterNodes = logicalPlan.collect {
-        case filter: Filter =>
-          val filterStats = filter.statistics
-          assert(filterStats == expectedFilterStats)
-          filter
-      }
-      assert(filterNodes.size == 1)
+      val sqlStmt = s"SELECT * FROM $table1 WHERE key1 IN (3, 4, 5)"
+      val colStats = Seq("key1" -> ColumnStat(3, Some(3L), Some(5L), 0, 8, 8))
+      validateEstimatedStats(sqlStmt, colStats, Some(3L))
     }
   }
 
@@ -301,21 +193,36 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
       sql(s"analyze table $table1 compute STATISTICS FOR COLUMNS key1")
 
       /** Validate statistics */
-      val logicalPlan =
-        sql(s"SELECT * FROM $table1 WHERE key1 NOT IN (3, 4, 5)").queryExecution.optimizedPlan
-      val expectedFilterStats = Statistics(
-        sizeInBytes = 7 * 8, rowCount = Some(7),
-        colStats = Map("key1" -> ColumnStat(10, Some(1L), Some(10L), 0, 8, 8)),
-        isBroadcastable = false)
-
-      val filterNodes = logicalPlan.collect {
-        case filter: Filter =>
-          val filterStats = filter.statistics
-          assert(filterStats == expectedFilterStats)
-          filter
-      }
-      assert(filterNodes.size == 1)
+      val sqlStmt = s"SELECT * FROM $table1 WHERE key1 NOT IN (3, 4, 5)"
+      val colStats = Seq("key1" -> ColumnStat(10, Some(1L), Some(10L), 0, 8, 8))
+      validateEstimatedStats(sqlStmt, colStats, Some(7L))
     }
+  }
+
+  private def validateEstimatedStats(
+      sqlStmt: String,
+      expectedColStats: Seq[(String, ColumnStat)],
+      rowCount: Option[Long] = None)
+  : Unit = {
+    val logicalPlan = sql(sqlStmt).queryExecution.optimizedPlan
+    val operNode = logicalPlan.collect {
+      case oper: Filter =>
+        oper
+    }.head
+    val expectedRowCount = rowCount.getOrElse(sql(sqlStmt).collect().head.getLong(0))
+    val nameToAttr = operNode.output.map(a => (a.name, a)).toMap
+    val expectedAttrStats =
+      AttributeMap(expectedColStats.map(kv => nameToAttr(kv._1) -> kv._2))
+    val expectedStats = Statistics(
+      sizeInBytes = expectedRowCount * getRowSize(operNode.output, expectedAttrStats),
+      rowCount = Some(expectedRowCount),
+      attributeStats = expectedAttrStats,
+      isBroadcastable = false)
+
+    val filterStats = operNode.statistics
+    assert(filterStats.sizeInBytes == expectedStats.sizeInBytes)
+    assert(filterStats.rowCount == expectedStats.rowCount)
+    assert(filterStats.isBroadcastable == expectedStats.isBroadcastable)
   }
 
 }

@@ -34,20 +34,30 @@ object FilterEstimation extends Logging {
    * We use a mutable colStats because we need to update the corresponding ColumnStat
    * for a column after we apply a predicate condition.
    */
-  private var mutableColStats: mutable.Map[String, ColumnStat] = mutable.Map.empty
+  // private var mutableColStats: mutable.Map[AttributeReference, ColumnStat] = mutable.Map.empty
+  private var mutableColStats: mutable.Map[ExprId, ColumnStat] = mutable.Map.empty
 
   def estimate(plan: Filter): Option[Statistics] = {
     val stats: Statistics = plan.child.statistics
     if (stats.rowCount.isEmpty) return None
 
     /** save a mutable copy of colStats so that we can later change it recursively */
-    mutableColStats = mutable.HashMap(stats.colStats.toSeq: _*)
+    val statsSeq: Seq[(ExprId, ColumnStat)] =
+      stats.attributeStats.map(kv => (kv._1.exprId, kv._2)).toSeq
+    mutableColStats = mutable.HashMap[ExprId, ColumnStat](statsSeq: _*)
+
+    // mutableColStats = mutable.HashMap(stats.attributeStats.toSeq: _*)
 
     /** estimate selectivity for this filter */
-    val percent: Double = calculateConditions(plan, stats, plan.condition)
+    val percent: Double = calculateConditions(plan, plan.condition)
 
-    /** copy mutableColStats contents to an immutable map */
-    val newColStats = mutableColStats.toMap
+    /** copy mutableColStats contents to an immutable AttributeMap */
+    var mutableAttributeStats: mutable.Map[Attribute, ColumnStat] = mutable.Map.empty
+    for ( (k, v) <- mutableColStats) {
+      val attr = mapExprIdToAttribute(stats.attributeStats, k).asInstanceOf[Attribute]
+      mutableAttributeStats += (attr -> v)
+    }
+    val newColStats = AttributeMap(mutableAttributeStats.toSeq)
 
     val filteredRowCountValue: BigInt =
       EstimationUtils.ceil(BigDecimal(stats.rowCount.get) * percent)
@@ -56,12 +66,18 @@ object FilterEstimation extends Logging {
       EstimationUtils.ceil(BigDecimal(filteredRowCountValue) * avgRowSize)
 
     Some(stats.copy(sizeInBytes = filteredSizeInBytes, rowCount = Some(filteredRowCountValue),
-      colStats = newColStats))
+      attributeStats = newColStats))
+  }
+
+  def mapExprIdToAttribute(
+       attrStats: AttributeMap[ColumnStat],
+       exId: ExprId)
+    : Unit = {
+    attrStats.foreach( arg => if (arg._1.exprId == exId) return arg._1 )
   }
 
   def calculateConditions(
       plan: Filter,
-      planStat: Statistics,
       condition: Expression,
       update: Boolean = true)
     : Double = {
@@ -72,25 +88,22 @@ object FilterEstimation extends Logging {
      */
     condition match {
       case And(cond1, cond2) =>
-        val newStats1 = planStat.copy(colStats = mutableColStats.toMap)
-        val p1 = calculateConditions(plan, newStats1, cond1, update)
-        val newStats2 = planStat.copy(colStats = mutableColStats.toMap)
-        val p2 = calculateConditions(plan, newStats2, cond2, update)
+        val p1 = calculateConditions(plan, cond1, update)
+        val p2 = calculateConditions(plan, cond2, update)
         p1 * p2
 
       case Or(cond1, cond2) =>
-        val p1 = calculateConditions(plan, planStat, cond1, update = false)
-        val p2 = calculateConditions(plan, planStat, cond2, update = false)
+        val p1 = calculateConditions(plan, cond1, update = false)
+        val p2 = calculateConditions(plan, cond2, update = false)
         math.min(1.0, p1 + p2 - (p1 * p2))
 
-      case Not(cond) => calculateSingleCondition(plan, planStat, cond, isNot = true, update = false)
-      case _ => calculateSingleCondition(plan, planStat, condition, isNot = false, update)
+      case Not(cond) => calculateSingleCondition(plan, cond, isNot = true, update = false)
+      case _ => calculateSingleCondition(plan, condition, isNot = false, update)
     }
   }
 
   def calculateSingleCondition(
       plan: Filter,
-      planStat: Statistics,
       condition: Expression,
       isNot: Boolean,
       update: Boolean)
@@ -104,30 +117,30 @@ object FilterEstimation extends Logging {
        * so we will change the predicate order if not.
        */
       case op@LessThan(ExtractAttr(ar), l: Literal) =>
-        evaluateBinary(op, planStat, ar, l, update)
+        evaluateBinary(op, ar, l, update)
       case op@LessThan(l: Literal, ExtractAttr(ar)) =>
-        evaluateBinary(GreaterThan(ar, l), planStat, ar, l, update)
+        evaluateBinary(GreaterThan(ar, l), ar, l, update)
 
       case op@LessThanOrEqual(ExtractAttr(ar), l: Literal) =>
-        evaluateBinary(op, planStat, ar, l, update)
+        evaluateBinary(op, ar, l, update)
       case op@LessThanOrEqual(l: Literal, ExtractAttr(ar)) =>
-        evaluateBinary(GreaterThanOrEqual(ar, l), planStat, ar, l, update)
+        evaluateBinary(GreaterThanOrEqual(ar, l), ar, l, update)
 
       case op@GreaterThan(ExtractAttr(ar), l: Literal) =>
-        evaluateBinary(op, planStat, ar, l, update)
+        evaluateBinary(op, ar, l, update)
       case op@GreaterThan(l: Literal, ExtractAttr(ar)) =>
-        evaluateBinary(LessThan(ar, l), planStat, ar, l, update)
+        evaluateBinary(LessThan(ar, l), ar, l, update)
 
       case op@GreaterThanOrEqual(ExtractAttr(ar), l: Literal) =>
-        evaluateBinary(op, planStat, ar, l, update)
+        evaluateBinary(op, ar, l, update)
       case op@GreaterThanOrEqual(l: Literal, ExtractAttr(ar)) =>
-        evaluateBinary(LessThanOrEqual(ar, l), planStat, ar, l, update)
+        evaluateBinary(LessThanOrEqual(ar, l), ar, l, update)
 
       /** EqualTo does not care about the order */
       case op@EqualTo(ExtractAttr(ar), l: Literal) =>
-        evaluateBinary(op, planStat, ar, l, update)
+        evaluateBinary(op, ar, l, update)
       case op@EqualTo(l: Literal, ExtractAttr(ar)) =>
-        evaluateBinary(op, planStat, ar, l, update)
+        evaluateBinary(op, ar, l, update)
 
       case In(ExtractAttr(ar), expList) if !expList.exists(!_.isInstanceOf[Literal]) =>
         /**
@@ -136,10 +149,10 @@ object FilterEstimation extends Logging {
          * Here we convert In into InSet anyway, because they share the same processing logic.
          */
         val hSet = expList.map(e => e.eval())
-        evaluateInSet(planStat, ar, HashSet() ++ hSet, update)
+        evaluateInSet(ar, HashSet() ++ hSet, update)
 
       case InSet(ExtractAttr(ar), set) =>
-        evaluateInSet(planStat, ar, set, update)
+        evaluateInSet(ar, set, update)
 
       /**
        * It's difficult to estimate IsNull after outer joins.  Hence,
@@ -147,13 +160,13 @@ object FilterEstimation extends Logging {
        */
       case IsNull(ExtractAttr(ar)) =>
         if (plan.child.isInstanceOf[LeafNode ]) {
-          evaluateIsNull(planStat, ar, true, update)
+          evaluateIsNull(plan, ar, true, update)
         }
         else 1.0
 
       case IsNotNull(ExtractAttr(ar)) =>
         if (plan.child.isInstanceOf[LeafNode ]) {
-          evaluateIsNull(planStat, ar, false, update)
+          evaluateIsNull(plan, ar, false, update)
         }
         else 1.0
 
@@ -177,27 +190,35 @@ object FilterEstimation extends Logging {
   }
 
   def evaluateIsNull(
-      planStat: Statistics,
+      plan: Filter,
       attrRef: AttributeReference,
       isNull: Boolean,
       update: Boolean)
     : Double = {
-    if (!planStat.colStats.contains(attrRef.name)) {
+    if (!mutableColStats.contains(attrRef.exprId)) {
       logDebug("[CBO] No statistics for " + attrRef)
       return 1.0
     }
-    val aColStat = planStat.colStats(attrRef.name)
-    val rowCountValue = planStat.rowCount.get
+    val aColStat = mutableColStats(attrRef.exprId)
+    val rowCountValue = plan.child.statistics.rowCount.get
     val nullPercent: BigDecimal =
       if (rowCountValue == 0) 0.0
       else BigDecimal(aColStat.nullCount)/BigDecimal(rowCountValue)
+
+    /**
+     * For predicate "WHERE key = 2", parser generates additional conditions to make it
+     * "WHERE key is not null AND key = 2".  We avoid updating mutableColStats for this case.
+     * val redundant =
+     *   if ((!isNull) && (aColStat.nullCount == 0)) true
+     *   else false
+     */
 
     if (update) {
       val newStats =
         if (isNull) aColStat.copy(distinctCount = 0, min = None, max = None)
         else aColStat.copy(nullCount = 0)
 
-      mutableColStats += (attrRef.name -> newStats)
+      mutableColStats += (attrRef.exprId -> newStats)
     }
 
     val percent =
@@ -213,12 +234,11 @@ object FilterEstimation extends Logging {
   /** This method evaluates binary comparison operators such as =, <, <=, >, >= */
   def evaluateBinary(
       op: BinaryComparison,
-      planStat: Statistics,
       attrRef: AttributeReference,
       literal: Literal,
       update: Boolean)
     : Double = {
-    if (!planStat.colStats.contains(attrRef.name)) {
+    if (!mutableColStats.contains(attrRef.exprId)) {
       logDebug("[CBO] No statistics for " + attrRef)
       return 1.0
     }
@@ -241,11 +261,11 @@ object FilterEstimation extends Logging {
     }
 
     op match {
-      case EqualTo(l, r) => evaluateEqualTo(op, planStat, attrRef, literal, update)
+      case EqualTo(l, r) => evaluateEqualTo(op, attrRef, literal, update)
       case _ =>
         attrRef.dataType match {
           case _: NumericType | DateType | TimestampType =>
-            evaluateBinaryForNumeric(op, planStat, attrRef, literal, update)
+            evaluateBinaryForNumeric(op, attrRef, literal, update)
           case StringType | BinaryType =>
             /**
              * TODO: It is difficult to support other binary comparisons for String/Binary
@@ -293,13 +313,12 @@ object FilterEstimation extends Logging {
   /** This method evaluates the equality predicate for all data types. */
   def evaluateEqualTo(
       op: BinaryComparison,
-      planStat: Statistics,
       attrRef: AttributeReference,
       literal: Literal,
       update: Boolean)
     : Double = {
 
-    val aColStat = planStat.colStats(attrRef.name)
+    val aColStat = mutableColStats(attrRef.exprId)
     val ndv = aColStat.distinctCount
 
     /**
@@ -332,7 +351,7 @@ object FilterEstimation extends Logging {
                 max = newValue, nullCount = 0)
             case _ => aColStat.copy(distinctCount = 1, nullCount = 0)
           }
-          mutableColStats += (attrRef.name -> newStats)
+          mutableColStats += (attrRef.exprId -> newStats)
         }
 
         1.0 / ndv.toDouble
@@ -344,17 +363,16 @@ object FilterEstimation extends Logging {
   }
 
   def evaluateInSet(
-      planStat: Statistics,
       attrRef: AttributeReference,
       hSet: Set[Any],
       update: Boolean)
     : Double = {
-    if (!planStat.colStats.contains(attrRef.name)) {
+    if (!mutableColStats.contains(attrRef.exprId)) {
       logDebug("[CBO] No statistics for " + attrRef)
       return 1.0
     }
 
-    val aColStat = planStat.colStats(attrRef.name)
+    val aColStat = mutableColStats(attrRef.exprId)
     val ndv = aColStat.distinctCount
     val aType = attrRef.dataType
 
@@ -390,7 +408,7 @@ object FilterEstimation extends Logging {
         case StringType | BinaryType =>
           aColStat.copy(distinctCount = newNdv, nullCount = 0)
       }
-      mutableColStats += (attrRef.name -> newStats)
+      mutableColStats += (attrRef.exprId -> newStats)
     }
 
     /**
@@ -402,14 +420,13 @@ object FilterEstimation extends Logging {
 
   def evaluateBinaryForNumeric(
       op: BinaryComparison,
-      planStat: Statistics,
       attrRef: AttributeReference,
       literal: Literal,
       update: Boolean)
     : Double = {
 
     var percent = 1.0
-    val aColStat = planStat.colStats(attrRef.name)
+    val aColStat = mutableColStats(attrRef.exprId)
     val ndv = aColStat.distinctCount
     val statsRange =
       Range(aColStat.min, aColStat.max, attrRef.dataType).asInstanceOf[NumericRange]
@@ -469,7 +486,7 @@ object FilterEstimation extends Logging {
         val newStats = aColStat.copy(distinctCount = newNdv, min = newMin,
           max = newMax, nullCount = 0)
 
-        mutableColStats += (attrRef.name -> newStats)
+        mutableColStats += (attrRef.exprId -> newStats)
       }
     }
 
