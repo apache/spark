@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -258,17 +259,17 @@ class StreamSuite extends StreamTest {
         override def stop(): Unit = {}
       }
       val df = Dataset[Int](sqlContext.sparkSession, StreamingExecutionRelation(source))
+      // These error are fatal errors and should be ignored in `testStream` to not fail the test.
       testStream(df)(
-        ExpectFailure()(ClassTag(e.getClass))
+        ExpectFailure(isFatalError = true)(ClassTag(e.getClass))
       )
     }
   }
 
   test("output mode API in Scala") {
-    val o1 = OutputMode.Append
-    assert(o1 === InternalOutputModes.Append)
-    val o2 = OutputMode.Complete
-    assert(o2 === InternalOutputModes.Complete)
+    assert(OutputMode.Append === InternalOutputModes.Append)
+    assert(OutputMode.Complete === InternalOutputModes.Complete)
+    assert(OutputMode.Update === InternalOutputModes.Update)
   }
 
   test("explain") {
