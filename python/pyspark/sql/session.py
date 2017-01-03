@@ -162,7 +162,7 @@ class SparkSession(object):
                 from pyspark.context import SparkContext
                 from pyspark.conf import SparkConf
                 session = SparkSession._instantiatedContext
-                if session is None:
+                if session is None or session._sc._jsc is None:
                     sparkConf = SparkConf()
                     for key, value in self._options.items():
                         sparkConf.set(key, value)
@@ -216,6 +216,12 @@ class SparkSession(object):
         install_exception_handler()
         if SparkSession._instantiatedContext is None:
             SparkSession._instantiatedContext = self
+        else:
+            # If we had an instantiated SparkSession attached with a SparkContext
+            # which is stopped now, we need to renew the instantiated SparkSession.
+            # Otherwise, we will use invalid SparkSession when we call Builder.getOrCreate.
+            if SparkSession._instantiatedContext._sc._jsc is None:
+                SparkSession._instantiatedContext = self
 
     @since(2.0)
     def newSession(self):
