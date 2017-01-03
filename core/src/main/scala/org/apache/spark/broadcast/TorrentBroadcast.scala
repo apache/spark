@@ -74,7 +74,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](
     obj: T,
     id: Long,
     isExecutorSide: Boolean = false,
-    nBlocks: Option[Int] = None)
+    nBlocks: Option[Int] = None,
+    cSums: Option[Array[Int]] = None)
   extends Broadcast[T](id) with Logging with Serializable {
 
   /**
@@ -90,6 +91,11 @@ private[spark] class TorrentBroadcast[T: ClassTag](
   /** Size of each block. Default value is 4MB.  This value is only read by the broadcaster. */
   @transient private var blockSize: Int = _
 
+  /** Whether to generate checksum for blocks or not. */
+  private var checksumEnabled: Boolean = false
+  /** The checksum for all the blocks. */
+  private var checksums: Array[Int] = cSums.getOrElse(null)
+
   private def setConf(conf: SparkConf) {
     compressionCodec = if (conf.getBoolean("spark.broadcast.compress", true)) {
       Some(CompressionCodec.createCodec(conf))
@@ -104,15 +110,14 @@ private[spark] class TorrentBroadcast[T: ClassTag](
 
   private val broadcastId = BroadcastBlockId(id)
 
-  def getNumBlocks: Int = numBlocks
+  def getNumBlocksAndChecksums: Seq[Int] = if (checksumEnabled) {
+    Seq(numBlocks) ++ checksums
+  } else {
+    Seq(numBlocks)
+  }
 
   /** Total number of blocks this broadcast variable contains. */
-  private val numBlocks: Int = nBlocks.getOrElse(writeBlocks(obj))
-
-  /** Whether to generate checksum for blocks or not. */
-  private var checksumEnabled: Boolean = false
-  /** The checksum for all the blocks. */
-  private var checksums: Array[Int] = _
+  private val numBlocks: Int = nBlocks.getOrElse(writeBlocks(obj)) // this must be after checkSums
 
   override protected def getValue() = {
     _value

@@ -37,12 +37,14 @@ private[spark] class TorrentBroadcastFactory extends BroadcastFactory {
   override def newExecutorBroadcast[T: ClassTag](
       value: T,
       id: Long,
-      nBlocks: Int): Broadcast[T] = {
-    new TorrentBroadcast[T](value, id, true, Option(nBlocks))
+      nBlocks: Int,
+      cSums: Array[Int]): Broadcast[T] = {
+    new TorrentBroadcast[T](value, id, true, Option(nBlocks), Option(cSums))
   }
 
-  override def uploadBroadcast[T: ClassTag](value_ : T, id: Long): Int = {
-    new TorrentBroadcast[T](value_, id, true).getNumBlocks
+  override def uploadBroadcast[T: ClassTag](value_ : T, id: Long): Seq[Int] = {
+    val executorBroadcast = new TorrentBroadcast[T](value_, id, true)
+    executorBroadcast.getNumBlocksAndChecksums
   }
 
   override def stop() { }
