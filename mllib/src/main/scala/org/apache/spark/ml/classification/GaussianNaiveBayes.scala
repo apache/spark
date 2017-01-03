@@ -183,6 +183,10 @@ class GaussianNaiveBayesModel private[ml] (
   extends ProbabilisticClassificationModel[Vector, GaussianNaiveBayesModel]
   with GaussianNaiveBayesParams with MLWritable {
 
+  require(pi.size == theta.numCols)
+  require(theta.numRows == sigma.numRows)
+  require(theta.numCols == sigma.numCols)
+
   import GaussianNaiveBayesModel._
 
   @Since("2.2.0")
