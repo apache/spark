@@ -70,6 +70,23 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     ParamsSuite.checkParams(model)
   }
 
+  test("Verify predicted probabilities correspond to labels") {
+    val rawPredictionCol = "MyRawPrediction"
+    val predictionCol = "MyPrediction"
+    val gbt = new GBTClassifier()
+      .setMaxDepth(2)
+      .setLossType("logistic")
+      .setMaxIter(5)
+      .setStepSize(0.1)
+      .setCheckpointInterval(2)
+      .setSeed(123)
+      .setRawPredictionCol(rawPredictionCol)
+      .setPredictionCol(predictionCol)
+    val gbtModel = gbt.fit(trainData.toDF())
+    val scoredData = gbtModel.transform(validationData.toDF())
+    scoredData.select(rawPredictionCol, predictionCol).foreach(row => print(row(0)))
+  }
+
   test("GBT parameter stepSize should be in interval (0, 1]") {
     withClue("GBT parameter stepSize should be in interval (0, 1]") {
       intercept[IllegalArgumentException] {

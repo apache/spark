@@ -20,7 +20,6 @@ package org.apache.spark.ml.classification
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.LabeledPoint
@@ -33,6 +32,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -272,21 +272,24 @@ class GBTClassificationModel private[ml](
   }
 
   override protected def predictRaw(features: Vector): Vector = {
-    val treeProbabilities = _trees
-      .map(_.rootNode.predictImpl(features).impurityStats.stats.clone())
-    val weightedVectors = treeProbabilities.zipWithIndex
-      .map(zipped => zipped._1.map(value => value * _treeWeights.apply(zipped._2)))
-    // Return the averaged weighted vector
-    Vectors.dense(weightedVectors.reduce((a, b) => (a, b)
-      .zipped
-      .map(_ + _))
-      .map(value => value / numTrees))
+    val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
+    val prediction = blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
+    Vectors.dense(Array(-prediction, prediction))
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {
+      // The probability can be calculated for positive result:
+      // p+(x) = 1 / (1 + e^(-2*F(x)))
+      // and negative result:
+      // p-(x) = 1 / (1 + e^(2*F(x)))
       case dv: DenseVector =>
-        ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(dv)
+        var i = 0
+        val size = dv.size
+        while (i < size) {
+          dv.values(i) = 1 / MLUtils.log1pExp(-dv.values(i))
+          i += 1
+        }
         dv
       case sv: SparseVector =>
         throw new RuntimeException("Unexpected error in GBTClassificationModel:" +
