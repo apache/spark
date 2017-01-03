@@ -990,16 +990,11 @@ private[spark] object SparkSubmitUtils {
       ivyPath: Option[String]): IvySettings = {
     val ivySettings: IvySettings = new IvySettings
 
-    // set ivy settings for location of cache
-    val alternateIvyCache = ivyPath.getOrElse("")
-    val packagesDirectory: File =
-      if (alternateIvyCache == null || alternateIvyCache.trim.isEmpty) {
-        new File(ivySettings.getDefaultIvyUserDir, "jars")
-      } else {
-        ivySettings.setDefaultIvyUserDir(new File(alternateIvyCache))
-        ivySettings.setDefaultCache(new File(alternateIvyCache, "cache"))
-        new File(alternateIvyCache, "jars")
-      }
+    // set ivy settings for location of cache, if option is supplied
+    ivyPath.foreach { alternateIvyCache =>
+      ivySettings.setDefaultIvyUserDir(new File(alternateIvyCache))
+      ivySettings.setDefaultCache(new File(alternateIvyCache, "cache"))
+    }
 
     // create a pattern matcher
     ivySettings.addMatcher(new GlobPatternMatcher)
