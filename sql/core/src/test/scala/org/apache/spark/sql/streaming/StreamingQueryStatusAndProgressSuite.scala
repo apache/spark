@@ -30,10 +30,16 @@ import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
 
 
 class StreamingQueryStatusAndProgressSuite extends StreamTest {
+  implicit class EqualsIgnoreCRLF(source: String) {
+    def equalsIgnoreCRLF(target: String): Boolean = {
+      source.replaceAll("\r\n|\r|\n", System.lineSeparator) ===
+        target.replaceAll("\r\n|\r|\n", System.lineSeparator)
+    }
+  }
 
   test("StreamingQueryProgress - prettyJson") {
     val json1 = testProgress1.prettyJson
-    assert(json1 ===
+    assert(json1.equalsIgnoreCRLF(
       s"""
         |{
         |  "id" : "${testProgress1.id.toString}",
@@ -66,12 +72,12 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest {
         |    "description" : "sink"
         |  }
         |}
-      """.stripMargin.trim)
+      """.stripMargin.trim))
     assert(compact(parse(json1)) === testProgress1.json)
 
     val json2 = testProgress2.prettyJson
     assert(
-      json2 ===
+      json2.equalsIgnoreCRLF(
         s"""
          |{
          |  "id" : "${testProgress2.id.toString}",
@@ -96,7 +102,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest {
          |    "description" : "sink"
          |  }
          |}
-      """.stripMargin.trim)
+      """.stripMargin.trim))
     assert(compact(parse(json2)) === testProgress2.json)
   }
 
@@ -112,14 +118,14 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest {
 
   test("StreamingQueryStatus - prettyJson") {
     val json = testStatus.prettyJson
-    assert(json ===
+    assert(json.equalsIgnoreCRLF(
       """
         |{
         |  "message" : "active",
         |  "isDataAvailable" : true,
         |  "isTriggerActive" : false
         |}
-      """.stripMargin.trim)
+      """.stripMargin.trim))
   }
 
   test("StreamingQueryStatus - json") {
