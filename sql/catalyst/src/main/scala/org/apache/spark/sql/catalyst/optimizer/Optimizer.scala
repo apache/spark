@@ -82,7 +82,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       EliminateOuterJoin,
       PushPredicateThroughJoin,
       PushDownPredicate,
-      LimitPushDown,
+      LimitPushDown(conf),
       ColumnPruning,
       InferFiltersFromConstraints,
       // Operator combine
@@ -209,7 +209,7 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
 /**
  * Pushes down [[LocalLimit]] beneath UNION ALL and beneath the streamed inputs of outer joins.
  */
-object LimitPushDown extends Rule[LogicalPlan] {
+case class LimitPushDown(conf: CatalystConf) extends Rule[LogicalPlan] {
 
   private def stripGlobalLimitIfPresent(plan: LogicalPlan): LogicalPlan = {
     plan match {
@@ -253,7 +253,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
         case FullOuter =>
           (left.maxRows, right.maxRows) match {
             case (None, None) =>
-              if (left.statistics.sizeInBytes >= right.statistics.sizeInBytes) {
+              if (left.planStats(conf).sizeInBytes >= right.planStats(conf).sizeInBytes) {
                 join.copy(left = maybePushLimit(exp, left))
               } else {
                 join.copy(right = maybePushLimit(exp, right))

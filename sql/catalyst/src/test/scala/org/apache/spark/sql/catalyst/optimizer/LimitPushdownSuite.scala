@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -32,7 +33,7 @@ class LimitPushdownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
       Batch("Limit pushdown", FixedPoint(100),
-        LimitPushDown,
+        LimitPushDown(SimpleCatalystConf(caseSensitiveAnalysis = true)),
         CombineLimits,
         ConstantFolding,
         BooleanSimplification) :: Nil
