@@ -25,7 +25,7 @@ import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.test.SQLTestUtils
