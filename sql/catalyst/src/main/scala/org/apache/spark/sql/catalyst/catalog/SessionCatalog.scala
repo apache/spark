@@ -573,7 +573,7 @@ class SessionCatalog(
         val view = Option(metadata.tableType).collect {
           case CatalogTableType.VIEW => name
         }
-        SubqueryAlias(relationAlias, SimpleCatalogRelation(db, metadata), view)
+        SubqueryAlias(relationAlias, SimpleCatalogRelation(metadata), view)
       } else {
         SubqueryAlias(relationAlias, tempTables(table), Option(name))
       }
