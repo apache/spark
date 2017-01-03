@@ -111,7 +111,7 @@ class GaussianNaiveBayes @Since("2.2.0") (
     // will cause numerical errors. To address this, we artificially
     // boost the variance by epsilon, a small fraction of the standard
     // deviation of the largest dimension.
-    // Refer scikit-learn's implement
+    // Refer to scikit-learn's implement
     // [https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/naive_bayes.py#L337]
     // and discussion [https://github.com/scikit-learn/scikit-learn/pull/5349] for detail.
     var epsilon = Double.MinValue
@@ -237,7 +237,7 @@ class GaussianNaiveBayesModel private[ml] (
         }
         dv
       case sv: SparseVector =>
-        throw new RuntimeException("Unexpected error in NaiveBayesModel:" +
+        throw new RuntimeException("Unexpected error in GaussianNaiveBayesModel:" +
           " raw2probabilityInPlace encountered SparseVector")
     }
   }

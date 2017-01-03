@@ -209,7 +209,6 @@ object GaussianNaiveBayesSuite {
     val D = theta(0).length
     val rnd = new Random(seed)
     val _pi = pi.map(math.exp)
-    val _theta = theta.map(row => row.map(math.exp))
 
     for (i <- 0 until nPoints) yield {
       val y = calcLabel(rnd.nextDouble(), _pi)
