@@ -220,9 +220,7 @@ class FilterEstimationSuite extends QueryTest with SharedSQLContext {
       isBroadcastable = false)
 
     val filterStats = operNode.statistics
-    assert(filterStats.sizeInBytes == expectedStats.sizeInBytes)
-    assert(filterStats.rowCount == expectedStats.rowCount)
-    assert(filterStats.isBroadcastable == expectedStats.isBroadcastable)
+    assert(filterStats == expectedStats)
   }
 
 }

@@ -45,8 +45,9 @@ object FilterEstimation extends Logging {
     val statsSeq: Seq[(ExprId, ColumnStat)] =
       stats.attributeStats.map(kv => (kv._1.exprId, kv._2)).toSeq
     mutableColStats = mutable.HashMap[ExprId, ColumnStat](statsSeq: _*)
-
-    // mutableColStats = mutable.HashMap(stats.attributeStats.toSeq: _*)
+    /** save a copy of ExprId-to-Attribute map for later conversion */
+    val expridToAttrMap: Map[ExprId, Attribute] =
+      stats.attributeStats.map(kv => (kv._1.exprId, kv._1))
 
     /** estimate selectivity for this filter */
     val percent: Double = calculateConditions(plan, plan.condition)
@@ -54,7 +55,7 @@ object FilterEstimation extends Logging {
     /** copy mutableColStats contents to an immutable AttributeMap */
     var mutableAttributeStats: mutable.Map[Attribute, ColumnStat] = mutable.Map.empty
     for ( (k, v) <- mutableColStats) {
-      val attr = mapExprIdToAttribute(stats.attributeStats, k).asInstanceOf[Attribute]
+      val attr = expridToAttrMap(k)
       mutableAttributeStats += (attr -> v)
     }
     val newColStats = AttributeMap(mutableAttributeStats.toSeq)
@@ -204,14 +205,6 @@ object FilterEstimation extends Logging {
     val nullPercent: BigDecimal =
       if (rowCountValue == 0) 0.0
       else BigDecimal(aColStat.nullCount)/BigDecimal(rowCountValue)
-
-    /**
-     * For predicate "WHERE key = 2", parser generates additional conditions to make it
-     * "WHERE key is not null AND key = 2".  We avoid updating mutableColStats for this case.
-     * val redundant =
-     *   if ((!isNull) && (aColStat.nullCount == 0)) true
-     *   else false
-     */
 
     if (update) {
       val newStats =
