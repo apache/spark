@@ -337,11 +337,8 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     }
 
 
-    // Keeps track of the start and end indices of the blocks. blockBounds(start) gives the
-    // index of the end of the block and blockBounds(end) gives the index of the start of the
-    // block. Entries that are not the start or end of the block are meaningless. The idea is that
-    // if you know the index s at which a block starts, blockBounds(s) gives you the index
-    // of the end of the block, and vice versa.
+    // Keeps track of the start and end indices of the blocks. if [i, j] is a valid block from
+    // input(i) to input(j) (inclusive), then blockBounds(i) = j and blockBounds(j) = i
     val blockBounds = Array.range(0, input.length) // Initially, each data point is its own block
 
     // Keep track of the sum of weights and sum of weight * y for each block. weights(start)
@@ -352,10 +349,21 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     }
 
     // a few convenience functions to make the code more readable
+
+    // blockStart and blockEnd have identical implementations. We create two different
+    // functions to make the code more expressive
     def blockEnd(start: Int): Int = blockBounds(start)
     def blockStart(end: Int): Int = blockBounds(end)
+
+    // the next block starts at the index after the end of this block
     def nextBlock(start: Int): Int = blockEnd(start) + 1
+
+    // the previous block ends at the index before the start of this block
+    // we then use blockStart to find the start
     def prevBlock(start: Int): Int = blockStart(start - 1)
+
+    // Merge two adjacent blocks, updating blockBounds and weights to reflect the merge
+    // Return the start index of the merged block
     def merge(block1: Int, block2: Int): Int = {
       assert(blockEnd(block1) + 1 == block2, "attempting to merge non-consecutive blocks")
       blockBounds(block1) = blockEnd(block2)
@@ -365,6 +373,8 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       weights(block1) = (w1._1 + w2._1, w1._2 + w2._2)
       block1
     }
+
+    // average value of a block
     def average(start: Int): Double = weights(start)._2 / weights(start)._1
 
     // Implement Algorithm PAV from [3].
