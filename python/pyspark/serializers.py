@@ -389,6 +389,14 @@ def _hijack_namedtuple():
                                   f.__defaults__, f.__closure__)
 
     def _kwdefaults(f):
+        # __kwdefaults__ contains the default values of keyword-only arguments which are
+        # introduced from Python 3. The possible cases for __kwdefaults__ in namedtuple
+        # are as below:
+        #
+        # - Does not exist in Python 2.
+        # - Returns None in <= Python 3.5.x.
+        # - Returns a dictionary containing the default values to the keys from Python 3.6.x
+        #    (See https://bugs.python.org/issue25628).
         kargs = getattr(f, "__kwdefaults__", None)
         if kargs is None:
             return {}
