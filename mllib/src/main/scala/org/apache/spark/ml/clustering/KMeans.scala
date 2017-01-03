@@ -98,7 +98,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 /**
  * Model fitted by KMeans.
  *
- * @param parentModel a model trained by spark.mllib.clustering.KMeans.
+ * @param parentModel a model trained by [[org.apache.spark.mllib.clustering.KMeans]].
  */
 @Since("1.5.0")
 class KMeansModel private[ml] (

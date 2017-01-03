@@ -26,4 +26,6 @@ import org.apache.spark.ml.linalg.Vector
  * @param weight The weight of this instance.
  * @param features The vector of features for this data point.
  */
-private[ml] case class Instance(label: Double, weight: Double, features: Vector)
+private[ml] case class Instance(label: Double, weight: Double, features: Vector) {
+  require(weight >= 0, s"weight of instance must be non-negative but got $weight")
+}
