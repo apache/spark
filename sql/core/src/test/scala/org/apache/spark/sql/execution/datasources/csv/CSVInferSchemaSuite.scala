@@ -125,5 +125,10 @@ class CSVInferSchemaSuite extends SparkFunSuite {
     // BigDecimal("12345678901234567890.01234567890123456789") is precision 40 and scale 20.
     val value = "12345678901234567890.01234567890123456789"
     assert(CSVInferSchema.inferField(DecimalType(3, -10), value, options) == DoubleType)
+
+    // Seq(s"${Long.MaxValue}1", "2015-12-01 00:00:00") should be StringType
+    assert(CSVInferSchema.inferField(NullType, s"${Long.MaxValue}1", options) == DecimalType(20, 0))
+    assert(CSVInferSchema.inferField(DecimalType(20, 0), "2015-12-01 00:00:00", options)
+      == StringType)
   }
 }
