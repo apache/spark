@@ -53,9 +53,10 @@ class UISuite extends SparkFunSuite {
   }
 
   private def sslEnabledConf(): (SparkConf, SSLOptions) = {
+    val keyStoreFilePath = getTestResourcePath("spark.keystore")
     val conf = new SparkConf()
       .set("spark.ssl.ui.enabled", "true")
-      .set("spark.ssl.ui.keyStore", "./src/test/resources/spark.keystore")
+      .set("spark.ssl.ui.keyStore", keyStoreFilePath)
       .set("spark.ssl.ui.keyStorePassword", "123456")
       .set("spark.ssl.ui.keyPassword", "123456")
     (conf, new SecurityManager(conf).getSSLOptions("ui"))
@@ -65,7 +66,7 @@ class UISuite extends SparkFunSuite {
     withSpark(newSparkContext()) { sc =>
       // test if the ui is visible, and all the expected tabs are visible
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        val html = Source.fromURL(sc.ui.get.appUIAddress).mkString
+        val html = Source.fromURL(sc.ui.get.webUrl).mkString
         assert(!html.contains("random data that should not be present"))
         assert(html.toLowerCase.contains("stages"))
         assert(html.toLowerCase.contains("storage"))
@@ -175,19 +176,18 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  test("verify appUIAddress contains the scheme") {
+  test("verify webUrl contains the scheme") {
     withSpark(newSparkContext()) { sc =>
       val ui = sc.ui.get
-      val uiAddress = ui.appUIAddress
-      val uiHostPort = ui.appUIHostPort
-      assert(uiAddress.equals("http://" + uiHostPort))
+      val uiAddress = ui.webUrl
+      assert(uiAddress.startsWith("http://") || uiAddress.startsWith("https://"))
     }
   }
 
-  test("verify appUIAddress contains the port") {
+  test("verify webUrl contains the port") {
     withSpark(newSparkContext()) { sc =>
       val ui = sc.ui.get
-      val splitUIAddress = ui.appUIAddress.split(':')
+      val splitUIAddress = ui.webUrl.split(':')
       val boundPort = ui.boundPort
       assert(splitUIAddress(2).toInt == boundPort)
     }

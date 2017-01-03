@@ -21,13 +21,13 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 
 import org.apache.spark.sql.TypedImperativeAggregateSuite.TypedMax
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericMutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericInternalRow, ImplicitCastInputTypes, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
-import org.apache.spark.sql.execution.aggregate.SortAggregateExec
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, IntegerType, LongType}
+import org.apache.spark.sql.types._
 
 class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
 
@@ -64,7 +64,7 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     assert(agg.eval(mergeBuffer) == data.map(_._1).max)
 
     // Tests low level eval(row: InternalRow) API.
-    val row = new GenericMutableRow(Array(mergeBuffer): Array[Any])
+    val row = new GenericInternalRow(Array(mergeBuffer): Array[Any])
 
     // Evaluates directly on row consist of aggregation buffer object.
     assert(agg.eval(row) == data.map(_._1).max)
@@ -73,7 +73,7 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
   test("supports SpecificMutableRow as mutable row") {
     val aggregationBufferSchema = Seq(IntegerType, LongType, BinaryType, IntegerType)
     val aggBufferOffset = 2
-    val buffer = new SpecificMutableRow(aggregationBufferSchema)
+    val buffer = new SpecificInternalRow(aggregationBufferSchema)
     val agg = new TypedMax(BoundReference(ordinal = 1, dataType = IntegerType, nullable = false))
       .withNewMutableAggBufferOffset(aggBufferOffset)
 
@@ -87,11 +87,11 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("dataframe aggregate with object aggregate buffer, should not use HashAggregate") {
     val df = data.toDF("a", "b")
-    val max = new TypedMax($"a".expr)
+    val max = TypedMax($"a".expr)
 
     // Always uses SortAggregateExec
     val sparkPlan = df.select(Column(max.toAggregateExpression())).queryExecution.sparkPlan
-    assert(sparkPlan.isInstanceOf[SortAggregateExec])
+    assert(!sparkPlan.isInstanceOf[HashAggregateExec])
   }
 
   test("dataframe aggregate with object aggregate buffer, no group by") {
@@ -231,7 +231,8 @@ object TypedImperativeAggregateSuite {
       child: Expression,
       nullable: Boolean = false,
       mutableAggBufferOffset: Int = 0,
-      inputAggBufferOffset: Int = 0) extends TypedImperativeAggregate[MaxValue] {
+      inputAggBufferOffset: Int = 0)
+    extends TypedImperativeAggregate[MaxValue] with ImplicitCastInputTypes {
 
 
     override def createAggregationBuffer(): MaxValue = {
@@ -239,7 +240,7 @@ object TypedImperativeAggregateSuite {
       new MaxValue(Int.MinValue)
     }
 
-    override def update(buffer: MaxValue, input: InternalRow): Unit = {
+    override def update(buffer: MaxValue, input: InternalRow): MaxValue = {
       child.eval(input) match {
         case inputValue: Int =>
           if (inputValue > buffer.value) {
@@ -248,13 +249,15 @@ object TypedImperativeAggregateSuite {
           }
         case null => // skip
       }
+      buffer
     }
 
-    override def merge(bufferMax: MaxValue, inputMax: MaxValue): Unit = {
+    override def merge(bufferMax: MaxValue, inputMax: MaxValue): MaxValue = {
       if (inputMax.value > bufferMax.value) {
         bufferMax.value = inputMax.value
         bufferMax.isValueSet = bufferMax.isValueSet || inputMax.isValueSet
       }
+      bufferMax
     }
 
     override def eval(bufferMax: MaxValue): Any = {

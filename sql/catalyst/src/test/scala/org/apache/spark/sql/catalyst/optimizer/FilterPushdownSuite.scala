@@ -514,6 +514,56 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
   }
 
+  test("joins: push down where clause into left anti join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val originalQuery =
+      x.join(y, LeftAnti, Some("x.b".attr === "y.b".attr))
+        .where("x.a".attr > 10)
+        .analyze
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      x.where("x.a".attr > 10)
+        .join(y, LeftAnti, Some("x.b".attr === "y.b".attr))
+        .analyze
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+  }
+
+  test("joins: only push down join conditions to the right of a left anti join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val originalQuery =
+      x.join(y,
+        LeftAnti,
+        Some("x.b".attr === "y.b".attr && "y.a".attr > 10 && "x.a".attr > 10)).analyze
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      x.join(
+        y.where("y.a".attr > 10),
+        LeftAnti,
+        Some("x.b".attr === "y.b".attr && "x.a".attr > 10))
+        .analyze
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+  }
+
+  test("joins: only push down join conditions to the right of an existence join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val fillerVal = 'val.boolean
+    val originalQuery =
+      x.join(y,
+        ExistenceJoin(fillerVal),
+        Some("x.a".attr > 1 && "y.b".attr > 2)).analyze
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      x.join(
+        y.where("y.b".attr > 2),
+        ExistenceJoin(fillerVal),
+        Some("x.a".attr > 1))
+      .analyze
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+  }
+
   val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
 
   test("generate: predicate referenced no generated column") {
@@ -682,6 +732,23 @@ class FilterPushdownSuite extends PlanTest {
       .select('a, 'b)
       .groupBy('a)('a + Rand(10) as 'aa, count('b) as 'c, Rand(11).as("rnd"))
       .where('c === 2L && 'aa + Rand(10).as("rnd") === 3 && 'rnd === 5)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-17712: aggregate: don't push down filters that are data-independent") {
+    val originalQuery = LocalRelation.apply(testRelation.output, Seq.empty)
+      .select('a, 'b)
+      .groupBy('a)(count('a))
+      .where(false)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = testRelation
+      .select('a, 'b)
+      .groupBy('a)(count('a))
+      .where(false)
       .analyze
 
     comparePlans(optimized, correctAnswer)

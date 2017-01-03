@@ -19,25 +19,26 @@ package org.apache.spark.sql.streaming
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, ForeachWriter}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink}
 
 /**
  * :: Experimental ::
- * Interface used to write a streaming [[Dataset]] to external storage systems (e.g. file systems,
- * key-value stores, etc). Use [[Dataset.writeStream]] to access this.
+ * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
+ * key-value stores, etc). Use `Dataset.writeStream` to access this.
  *
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private val df = ds.toDF()
 
   /**
-   * :: Experimental ::
    * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
    *   - `OutputMode.Append()`: only the new rows in the streaming DataFrame/Dataset will be
    *                            written to the sink
@@ -46,15 +47,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    *
    * @since 2.0.0
    */
-  @Experimental
   def outputMode(outputMode: OutputMode): DataStreamWriter[T] = {
     this.outputMode = outputMode
     this
   }
 
-
   /**
-   * :: Experimental ::
    * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
    *   - `append`:   only the new rows in the streaming DataFrame/Dataset will be written to
    *                 the sink
@@ -63,22 +61,22 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    *
    * @since 2.0.0
    */
-  @Experimental
   def outputMode(outputMode: String): DataStreamWriter[T] = {
     this.outputMode = outputMode.toLowerCase match {
       case "append" =>
         OutputMode.Append
       case "complete" =>
         OutputMode.Complete
+      case "update" =>
+        OutputMode.Update
       case _ =>
         throw new IllegalArgumentException(s"Unknown output mode $outputMode. " +
-          "Accepted output modes are 'append' and 'complete'")
+          "Accepted output modes are 'append', 'complete', 'update'")
     }
     this
   }
 
   /**
-   * :: Experimental ::
    * Set the trigger for the stream query. The default value is `ProcessingTime(0)` and it will run
    * the query as fast as possible.
    *
@@ -100,33 +98,27 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    *
    * @since 2.0.0
    */
-  @Experimental
   def trigger(trigger: Trigger): DataStreamWriter[T] = {
     this.trigger = trigger
     this
   }
 
-
   /**
-   * :: Experimental ::
    * Specifies the name of the [[StreamingQuery]] that can be started with `start()`.
    * This name must be unique among all the currently active queries in the associated SQLContext.
    *
    * @since 2.0.0
    */
-  @Experimental
   def queryName(queryName: String): DataStreamWriter[T] = {
     this.extraOptions += ("queryName" -> queryName)
     this
   }
 
   /**
-   * :: Experimental ::
    * Specifies the underlying output data source. Built-in options include "parquet" for now.
    *
    * @since 2.0.0
    */
-  @Experimental
   def format(source: String): DataStreamWriter[T] = {
     this.source = source
     this
@@ -156,107 +148,102 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * :: Experimental ::
    * Adds an output option for the underlying data source.
    *
    * @since 2.0.0
    */
-  @Experimental
   def option(key: String, value: String): DataStreamWriter[T] = {
     this.extraOptions += (key -> value)
     this
   }
 
   /**
-   * :: Experimental ::
    * Adds an output option for the underlying data source.
    *
    * @since 2.0.0
    */
-  @Experimental
   def option(key: String, value: Boolean): DataStreamWriter[T] = option(key, value.toString)
 
   /**
-   * :: Experimental ::
    * Adds an output option for the underlying data source.
    *
    * @since 2.0.0
    */
-  @Experimental
   def option(key: String, value: Long): DataStreamWriter[T] = option(key, value.toString)
 
   /**
-   * :: Experimental ::
    * Adds an output option for the underlying data source.
    *
    * @since 2.0.0
    */
-  @Experimental
   def option(key: String, value: Double): DataStreamWriter[T] = option(key, value.toString)
 
   /**
-   * :: Experimental ::
    * (Scala-specific) Adds output options for the underlying data source.
    *
    * @since 2.0.0
    */
-  @Experimental
   def options(options: scala.collection.Map[String, String]): DataStreamWriter[T] = {
     this.extraOptions ++= options
     this
   }
 
   /**
-   * :: Experimental ::
    * Adds output options for the underlying data source.
    *
    * @since 2.0.0
    */
-  @Experimental
   def options(options: java.util.Map[String, String]): DataStreamWriter[T] = {
     this.options(options.asScala)
     this
   }
 
   /**
-   * :: Experimental ::
    * Starts the execution of the streaming query, which will continually output results to the given
    * path as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
    * the stream.
    *
    * @since 2.0.0
    */
-  @Experimental
   def start(path: String): StreamingQuery = {
     option("path", path).start()
   }
 
   /**
-   * :: Experimental ::
    * Starts the execution of the streaming query, which will continually output results to the given
    * path as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
    * the stream.
    *
    * @since 2.0.0
    */
-  @Experimental
   def start(): StreamingQuery = {
     if (source == "memory") {
       assertNotPartitioned("memory")
       if (extraOptions.get("queryName").isEmpty) {
         throw new AnalysisException("queryName must be specified for memory sink")
       }
-
+      val supportedModes = "Output modes supported by the memory sink are 'append' and 'complete'."
+      outputMode match {
+        case Append | Complete => // allowed
+        case Update =>
+          throw new AnalysisException(
+            s"Update output mode is not supported for memory sink. $supportedModes")
+        case _ =>
+          throw new AnalysisException(
+            s"$outputMode is not supported for memory sink. $supportedModes")
+      }
       val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
+      val chkpointLoc = extraOptions.get("checkpointLocation")
+      val recoverFromChkpoint = outputMode == OutputMode.Complete()
       val query = df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
-        extraOptions.get("checkpointLocation"),
+        chkpointLoc,
         df,
         sink,
         outputMode,
         useTempCheckpointLocation = true,
-        recoverFromCheckpointLocation = false,
+        recoverFromCheckpointLocation = recoverFromChkpoint,
         trigger = trigger)
       resultDf.createOrReplaceTempView(query.name)
       query
@@ -297,10 +284,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * :: Experimental ::
    * Starts the execution of the streaming query, which will continually send results to the given
-   * [[ForeachWriter]] as as new data arrives. The [[ForeachWriter]] can be used to send the data
-   * generated by the [[DataFrame]]/[[Dataset]] to an external system.
+   * `ForeachWriter` as as new data arrives. The `ForeachWriter` can be used to send the data
+   * generated by the `DataFrame`/`Dataset` to an external system.
    *
    * Scala example:
    * {{{
@@ -343,7 +329,6 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    *
    * @since 2.0.0
    */
-  @Experimental
   def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
     this.source = "foreach"
     this.foreachWriter = if (writer != null) {

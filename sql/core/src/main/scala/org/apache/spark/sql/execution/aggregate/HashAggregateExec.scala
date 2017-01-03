@@ -63,6 +63,8 @@ case class HashAggregateExec(
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
   override def producedAttributes: AttributeSet =
     AttributeSet(aggregateAttributes) ++
     AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
@@ -552,7 +554,7 @@ case class HashAggregateExec(
       } else {
         ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
           s"$fastHashMapTerm = new $fastHashMapClassName(" +
-            s"agg_plan.getTaskMemoryManager(), agg_plan.getEmptyAggregationBuffer());")
+            s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());")
         ctx.addMutableState(
           "org.apache.spark.unsafe.KVIterator",
           iterTermForFastHashMap, "")

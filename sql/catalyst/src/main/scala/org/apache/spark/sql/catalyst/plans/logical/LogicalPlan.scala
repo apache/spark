@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -93,6 +94,29 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     }
     Statistics(sizeInBytes = children.map(_.statistics.sizeInBytes).product)
   }
+
+  /**
+   * Returns the default statistics or statistics estimated by cbo based on configuration.
+   */
+  final def planStats(conf: CatalystConf): Statistics = {
+    if (conf.cboEnabled) {
+      if (estimatedStats.isEmpty) {
+        estimatedStats = Some(cboStatistics(conf))
+      }
+      estimatedStats.get
+    } else {
+      statistics
+    }
+  }
+
+  /**
+   * Returns statistics estimated by cbo. If the plan doesn't override this, it returns the
+   * default statistics.
+   */
+  protected def cboStatistics(conf: CatalystConf): Statistics = statistics
+
+  /** A cache for the estimated statistics, such that it will only be computed once. */
+  private var estimatedStats: Option[Statistics] = None
 
   /**
    * Returns the maximum number of rows that this plan may compute.
@@ -276,7 +300,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
  * A logical plan node with no children.
  */
 abstract class LeafNode extends LogicalPlan {
-  override def children: Seq[LogicalPlan] = Nil
+  override final def children: Seq[LogicalPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
 }
 
@@ -286,22 +310,26 @@ abstract class LeafNode extends LogicalPlan {
 abstract class UnaryNode extends LogicalPlan {
   def child: LogicalPlan
 
-  override def children: Seq[LogicalPlan] = child :: Nil
+  override final def children: Seq[LogicalPlan] = child :: Nil
 
   /**
    * Generates an additional set of aliased constraints by replacing the original constraint
    * expressions with the corresponding alias
    */
   protected def getAliasedConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
-    projectList.flatMap {
+    var allConstraints = child.constraints.asInstanceOf[Set[Expression]]
+    projectList.foreach {
       case a @ Alias(e, _) =>
-        child.constraints.map(_ transform {
+        // For every alias in `projectList`, replace the reference in constraints by its attribute.
+        allConstraints ++= allConstraints.map(_ transform {
           case expr: Expression if expr.semanticEquals(e) =>
             a.toAttribute
-        }).union(Set(EqualNullSafe(e, a.toAttribute)))
-      case _ =>
-        Set.empty[Expression]
-    }.toSet
+        })
+        allConstraints += EqualNullSafe(e, a.toAttribute)
+      case _ => // Don't change.
+    }
+
+    allConstraints -- child.constraints
   }
 
   override protected def validConstraints: Set[Expression] = child.constraints
@@ -330,5 +358,5 @@ abstract class BinaryNode extends LogicalPlan {
   def left: LogicalPlan
   def right: LogicalPlan
 
-  override def children: Seq[LogicalPlan] = Seq(left, right)
+  override final def children: Seq[LogicalPlan] = Seq(left, right)
 }

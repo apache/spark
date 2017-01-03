@@ -65,7 +65,9 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       val conditionalJoin = rest.find { planJoinPair =>
         val plan = planJoinPair._1
         val refs = left.outputSet ++ plan.outputSet
-        conditions.filterNot(canEvaluate(_, left)).filterNot(canEvaluate(_, plan))
+        conditions
+          .filterNot(l => l.references.nonEmpty && canEvaluate(l, left))
+          .filterNot(r => r.references.nonEmpty && canEvaluate(r, plan))
           .exists(_.references.subsetOf(refs))
       }
       // pick the next one if no condition left
@@ -109,7 +111,9 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     if (!e.deterministic || SubqueryExpression.hasCorrelatedSubquery(e)) return false
     val attributes = e.references.toSeq
     val emptyRow = new GenericInternalRow(attributes.length)
-    val v = BindReferences.bindReference(e, attributes).eval(emptyRow)
+    val boundE = BindReferences.bindReference(e, attributes)
+    if (boundE.find(_.isInstanceOf[Unevaluable]).isDefined) return false
+    val v = boundE.eval(emptyRow)
     v == null || v == false
   }
 
