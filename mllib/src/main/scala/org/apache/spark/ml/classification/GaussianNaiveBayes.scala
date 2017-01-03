@@ -199,7 +199,7 @@ class GaussianNaiveBayesModel private[ml] (
   private lazy val logVarSum = {
     val logVarSum = (0 until numClasses).map { i =>
       (0 until numFeatures).map { j =>
-        math.log(theta(i * 2 + 1, j))
+        math.log(sigma(i, j))
       }.sum
     }.toArray
     Vectors.dense(logVarSum)
@@ -285,7 +285,7 @@ object GaussianNaiveBayesModel extends MLReadable[GaussianNaiveBayesModel] {
   private class GaussianNaiveBayesModelReader extends MLReader[GaussianNaiveBayesModel] {
 
     /** Checked against metadata when loading model */
-    private val className = classOf[NaiveBayesModel].getName
+    private val className = classOf[GaussianNaiveBayesModel].getName
 
     override def load(path: String): GaussianNaiveBayesModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
