@@ -438,6 +438,7 @@ $(document).ready(function () {
     
                 var dt = $(selector).DataTable(conf);
                 dt.column(15).visible(logsExist(response));
+                dt.column(17).visible(workersExist(response));
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
     
                 var sumSelector = "#summary-execs-table";
