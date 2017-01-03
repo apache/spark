@@ -439,8 +439,6 @@ object SparkSubmit extends CommandLineUtils {
         sysProp = "spark.submit.deployMode"),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
       OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars.ivy"),
-      OptionAssigner(args.ivySettingsFile, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        sysProp = "spark.ivy.settings"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
         sysProp = "spark.driver.memory"),
       OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
