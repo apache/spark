@@ -19,17 +19,12 @@ package org.apache.spark.ml.python
 
 import java.io.OutputStream
 import java.nio.{ByteBuffer, ByteOrder}
-import java.util.{ArrayList => JArrayList}
-
-import scala.collection.JavaConverters._
 
 import net.razorvine.pickle._
 
-import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.ml.linalg._
 import org.apache.spark.mllib.api.python.SerDeBase
-import org.apache.spark.rdd.RDD
 
 /**
  * SerDe utility functions for pyspark.ml.

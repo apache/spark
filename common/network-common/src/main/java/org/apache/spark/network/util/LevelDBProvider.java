@@ -121,7 +121,7 @@ public class LevelDBProvider {
 
   public static class StoreVersion {
 
-    final static byte[] KEY = "StoreVersion".getBytes(StandardCharsets.UTF_8);
+    static final byte[] KEY = "StoreVersion".getBytes(StandardCharsets.UTF_8);
 
     public final int major;
     public final int minor;

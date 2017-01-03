@@ -36,8 +36,7 @@ abstract class ColumnarIterator extends Iterator[InternalRow] {
  *
  * WARNING: These setter MUST be called in increasing order of ordinals.
  */
-class MutableUnsafeRow(val writer: UnsafeRowWriter) extends GenericMutableRow(null) {
-
+class MutableUnsafeRow(val writer: UnsafeRowWriter) extends BaseGenericInternalRow {
   override def isNullAt(i: Int): Boolean = writer.isNullAt(i)
   override def setNullAt(i: Int): Unit = writer.setNullAt(i)
 
@@ -55,6 +54,9 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends GenericMutableRow(nu
   override def update(i: Int, v: Any): Unit = throw new UnsupportedOperationException
 
   // all other methods inherited from GenericMutableRow are not need
+  override protected def genericGet(ordinal: Int): Any = throw new UnsupportedOperationException
+  override def numFields: Int = throw new UnsupportedOperationException
+  override def copy(): InternalRow = throw new UnsupportedOperationException
 }
 
 /**

@@ -80,7 +80,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     conf.set("spark.memory.offHeap.size", maxMem.toString)
     val serializer = new KryoSerializer(conf)
     val transfer = transferService
-      .getOrElse(new NettyBlockTransferService(conf, securityMgr, "localhost", numCores = 1))
+      .getOrElse(new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1))
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
     val blockManager = new BlockManager(name, rpcEnv, master, serializerManager, conf,
@@ -107,7 +107,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
     conf.set("spark.driver.port", rpcEnv.address.port.toString)
 
-    sc = new SparkContext("local", "test", conf)
+    // Mock SparkContext to reduce the memory usage of tests. It's fine since the only reason we
+    // need to create a SparkContext is to initialize LiveListenerBus.
+    sc = mock(classOf[SparkContext])
+    when(sc.conf).thenReturn(conf)
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
         new LiveListenerBus(sc))), conf, true)
@@ -854,7 +857,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
     conf.set("spark.testing.memory", "1200")
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", numCores = 1)
+    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
     val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
     store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,

@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.Decimal._
 
 class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
   /** Check that a Decimal has the given string representation, precision and scale */
@@ -190,5 +191,19 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     assert(new Decimal().set(10L, 10, 0).toUnscaledLong === 10L)
     assert(new Decimal().set(100L, 10, 0).toUnscaledLong === 100L)
     assert(Decimal(Long.MaxValue, 100, 0).toUnscaledLong === Long.MaxValue)
+  }
+
+  test("changePrecision() on compact decimal should respect rounding mode") {
+    Seq(ROUND_FLOOR, ROUND_CEILING, ROUND_HALF_UP, ROUND_HALF_EVEN).foreach { mode =>
+      Seq("0.4", "0.5", "0.6", "1.0", "1.1", "1.6", "2.5", "5.5").foreach { n =>
+        Seq("", "-").foreach { sign =>
+          val bd = BigDecimal(sign + n)
+          val unscaled = (bd * 10).toLongExact
+          val d = Decimal(unscaled, 8, 1)
+          assert(d.changePrecision(10, 0, mode))
+          assert(d.toString === bd.setScale(0, mode).toString(), s"num: $sign$n, mode: $mode")
+        }
+      }
+    }
   }
 }

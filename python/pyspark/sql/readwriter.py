@@ -160,8 +160,9 @@ class DataFrameReader(OptionUtils):
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None):
         """
-        Loads a JSON file (one object per line) or an RDD of Strings storing JSON objects
-        (one object per record) and returns the result as a :class`DataFrame`.
+        Loads a JSON file (`JSON Lines text format or newline-delimited JSON
+        <http://jsonlines.org/>`_) or an RDD of Strings storing JSON objects (one object per
+        record) and returns the result as a :class`DataFrame`.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
@@ -289,8 +290,8 @@ class DataFrameReader(OptionUtils):
         [Row(value=u'hello'), Row(value=u'this')]
         """
         if isinstance(paths, basestring):
-            path = [paths]
-        return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(path)))
+            paths = [paths]
+        return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
 
     @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
@@ -329,7 +330,8 @@ class DataFrameReader(OptionUtils):
                                          being read should be skipped. If None is set, it uses
                                          the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
-                          the default value, empty string.
+                          the default value, empty string. Since 2.0.1, this ``nullValue`` param
+                          applies to all supported types including the string type.
         :param nanValue: sets the string representation of a non-number value. If None is set, it
                          uses the default value, ``NaN``.
         :param positiveInf: sets the string representation of a positive infinity value. If None
@@ -348,7 +350,7 @@ class DataFrameReader(OptionUtils):
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
                                   value being read. If None is set, it uses the default value,
-                                  ``1000000``.
+                                  ``-1`` meaning unlimited length.
         :param maxMalformedLogPerPartition: sets the maximum number of malformed rows Spark will
                                             log for each partition. Malformed records beyond this
                                             number will be ignored. If None is set, it

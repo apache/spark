@@ -29,7 +29,7 @@ struct<-5.2:decimal(2,1)>
 -- !query 3
 select +6.8e0
 -- !query 3 schema
-struct<6.8:double>
+struct<6.8:decimal(2,1)>
 -- !query 3 output
 6.8
 

@@ -112,6 +112,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       // as join keys.
       val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
       val joinKeys = predicates.flatMap {
+        case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => None
         case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => Some((l, r))
         case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => Some((r, l))
         // Replace null with default value for joining key, then those rows with null in it could
@@ -125,6 +126,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         case other => None
       }
       val otherPredicates = predicates.filterNot {
+        case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
         case EqualTo(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
             canEvaluate(l, right) && canEvaluate(r, left)
@@ -185,33 +187,6 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
     case j @ Join(_, _, joinType, _) =>
       Some(flattenJoin(j))
     case _ => None
-  }
-}
-
-
-/**
- * A pattern that collects all adjacent unions and returns their children as a Seq.
- */
-object Unions {
-  def unapply(plan: LogicalPlan): Option[Seq[LogicalPlan]] = plan match {
-    case u: Union => Some(collectUnionChildren(mutable.Stack(u), Seq.empty[LogicalPlan]))
-    case _ => None
-  }
-
-  // Doing a depth-first tree traversal to combine all the union children.
-  @tailrec
-  private def collectUnionChildren(
-      plans: mutable.Stack[LogicalPlan],
-      children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
-    if (plans.isEmpty) children
-    else {
-      plans.pop match {
-        case Union(grandchildren) =>
-          grandchildren.reverseMap(plans.push(_))
-          collectUnionChildren(plans, children)
-        case other => collectUnionChildren(plans, children :+ other)
-      }
-    }
   }
 }
 

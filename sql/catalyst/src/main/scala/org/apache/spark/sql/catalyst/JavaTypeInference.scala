@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import java.beans.{Introspector, PropertyDescriptor}
 import java.lang.{Iterable => JIterable}
+import java.lang.reflect.Type
 import java.util.{Iterator => JIterator, List => JList, Map => JMap}
 
 import scala.language.existentials
@@ -52,6 +53,15 @@ object JavaTypeInference {
    */
   def inferDataType(beanClass: Class[_]): (DataType, Boolean) = {
     inferDataType(TypeToken.of(beanClass))
+  }
+
+  /**
+   * Infers the corresponding SQL data type of a Java type.
+   * @param beanType Java type
+   * @return (SQL data type, nullable)
+   */
+  private[sql] def inferDataType(beanType: Type): (DataType, Boolean) = {
+    inferDataType(TypeToken.of(beanType))
   }
 
   /**
@@ -396,12 +406,14 @@ object JavaTypeInference {
 
         case _ if mapType.isAssignableFrom(typeToken) =>
           val (keyType, valueType) = mapKeyValueType(typeToken)
+
           ExternalMapToCatalyst(
             inputObject,
             ObjectType(keyType.getRawType),
             serializerFor(_, keyType),
             ObjectType(valueType.getRawType),
-            serializerFor(_, valueType)
+            serializerFor(_, valueType),
+            valueNullable = true
           )
 
         case other =>

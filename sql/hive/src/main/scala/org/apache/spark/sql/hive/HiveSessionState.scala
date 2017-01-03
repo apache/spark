@@ -45,6 +45,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   override lazy val catalog = {
     new HiveSessionCatalog(
       sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
+      sparkSession.sharedState.globalTempViewManager,
       sparkSession,
       functionResourceLoader,
       functionRegistry,
@@ -138,12 +139,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
    */
   def hiveThriftServerAsync: Boolean = {
     conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
-  }
-
-  // TODO: why do we get this from SparkConf but not SQLConf?
-  def hiveThriftServerSingleSession: Boolean = {
-    sparkSession.sparkContext.conf.getBoolean(
-      "spark.sql.hive.thriftServer.singleSession", defaultValue = false)
   }
 
 }

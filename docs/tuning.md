@@ -45,6 +45,7 @@ and calling `conf.set("spark.serializer", "org.apache.spark.serializer.KryoSeria
 This setting configures the serializer used for not only shuffling data between worker
 nodes but also when serializing RDDs to disk.  The only reason Kryo is not the default is because of the custom
 registration requirement, but we recommend trying it in any network-intensive application.
+Since Spark 2.0.0, we internally use Kryo serializer when shuffling RDDs with simple types, arrays of simple types, or string type.
 
 Spark automatically includes Kryo serializers for the many commonly-used core Scala classes covered
 in the AllScalaRegistrar from the [Twitter chill](https://github.com/twitter/chill) library.
@@ -223,8 +224,8 @@ temporary objects created during task execution. Some steps which may be useful 
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
   the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the
-  size of the block. So if we wish to have 3 or 4 tasks' worth of working space, and the HDFS block size is 64 MB,
-  we can estimate size of Eden to be `4*3*64MB`.
+  size of the block. So if we wish to have 3 or 4 tasks' worth of working space, and the HDFS block size is 128 MB,
+  we can estimate size of Eden to be `4*3*128MB`.
 
 * Monitor how the frequency and time taken by garbage collection changes with the new settings.
 

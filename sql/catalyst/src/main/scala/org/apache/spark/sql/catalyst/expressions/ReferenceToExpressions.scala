@@ -63,15 +63,30 @@ case class ReferenceToExpressions(result: Expression, children: Seq[Expression])
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childrenGen = children.map(_.genCode(ctx))
-    val childrenVars = childrenGen.zip(children).map {
-      case (childGen, child) => LambdaVariable(childGen.value, childGen.isNull, child.dataType)
-    }
+    val (classChildrenVars, initClassChildrenVars) = childrenGen.zip(children).map {
+      case (childGen, child) =>
+        // SPARK-18125: The children vars are local variables. If the result expression uses
+        // splitExpression, those variables cannot be accessed so compilation fails.
+        // To fix it, we use class variables to hold those local variables.
+        val classChildVarName = ctx.freshName("classChildVar")
+        val classChildVarIsNull = ctx.freshName("classChildVarIsNull")
+        ctx.addMutableState(ctx.javaType(child.dataType), classChildVarName, "")
+        ctx.addMutableState("boolean", classChildVarIsNull, "")
+
+        val classChildVar =
+          LambdaVariable(classChildVarName, classChildVarIsNull, child.dataType, child.nullable)
+
+        val initCode = s"${classChildVar.value} = ${childGen.value};\n" +
+          s"${classChildVar.isNull} = ${childGen.isNull};"
+
+        (classChildVar, initCode)
+    }.unzip
 
     val resultGen = result.transform {
-      case b: BoundReference => childrenVars(b.ordinal)
+      case b: BoundReference => classChildrenVars(b.ordinal)
     }.genCode(ctx)
 
-    ExprCode(code = childrenGen.map(_.code).mkString("\n") + "\n" + resultGen.code,
-      isNull = resultGen.isNull, value = resultGen.value)
+    ExprCode(code = childrenGen.map(_.code).mkString("\n") + initClassChildrenVars.mkString("\n") +
+      resultGen.code, isNull = resultGen.isNull, value = resultGen.value)
   }
 }
