@@ -19,7 +19,7 @@ package org.apache.spark.mllib.regression
 
 import org.scalatest.Matchers
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkException}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
@@ -170,10 +170,9 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
   }
 
   test("weighted isotonic regression with zero weights") {
-    val model = runIsotonicRegression(Seq[Double](1, 2, 3, 2, 1), Seq[Double](0, 0, 0, 1, 0), true)
-
-    assert(model.boundaries === Array(0.0, 1.0, 4.0))
-    assert(model.predictions === Array(1, 2, 2))
+    intercept[SparkException] {
+      runIsotonicRegression(Seq[Double](1, 2, 3, 2, 1), Seq[Double](0, 0, 0, 1, 0), true)
+    }
   }
 
   test("SPARK-16426 isotonic regression with duplicate features that produce NaNs") {
