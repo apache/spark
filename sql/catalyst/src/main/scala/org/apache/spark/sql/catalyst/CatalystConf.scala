@@ -49,6 +49,11 @@ trait CatalystConf {
   def resolver: Resolver = {
     if (caseSensitiveAnalysis) caseSensitiveResolution else caseInsensitiveResolution
   }
+
+  /**
+   * Enables CBO for estimation of plan statistics when set true.
+   */
+  def cboEnabled: Boolean
 }
 
 
@@ -62,5 +67,6 @@ case class SimpleCatalystConf(
     maxCaseBranchesForCodegen: Int = 20,
     runSQLonFile: Boolean = true,
     crossJoinEnabled: Boolean = false,
+    cboEnabled: Boolean = false,
     warehousePath: String = "/user/hive/warehouse")
   extends CatalystConf

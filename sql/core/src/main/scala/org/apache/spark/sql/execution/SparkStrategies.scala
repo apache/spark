@@ -114,9 +114,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      * Matches a plan whose output should be small enough to be used in broadcast join.
      */
     private def canBroadcast(plan: LogicalPlan): Boolean = {
-      plan.statistics.isBroadcastable ||
-        (plan.statistics.sizeInBytes >= 0 &&
-          plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold)
+      plan.planStats(conf).isBroadcastable ||
+        (plan.planStats(conf).sizeInBytes >= 0 &&
+          plan.planStats(conf).sizeInBytes <= conf.autoBroadcastJoinThreshold)
     }
 
     /**
@@ -126,7 +126,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      * dynamic.
      */
     private def canBuildLocalHashMap(plan: LogicalPlan): Boolean = {
-      plan.statistics.sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions
+      plan.planStats(conf).sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions
     }
 
     /**
@@ -137,7 +137,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      * use the size of bytes here as estimation.
      */
     private def muchSmaller(a: LogicalPlan, b: LogicalPlan): Boolean = {
-      a.statistics.sizeInBytes * 3 <= b.statistics.sizeInBytes
+      a.planStats(conf).sizeInBytes * 3 <= b.planStats(conf).sizeInBytes
     }
 
     private def canBuildRight(joinType: JoinType): Boolean = joinType match {
@@ -206,7 +206,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case logical.Join(left, right, joinType, condition) =>
         val buildSide =
-          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
+          if (right.planStats(conf).sizeInBytes <= left.planStats(conf).sizeInBytes) {
             BuildRight
           } else {
             BuildLeft

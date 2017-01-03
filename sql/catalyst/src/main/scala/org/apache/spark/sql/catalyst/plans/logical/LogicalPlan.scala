@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -93,6 +94,29 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     }
     Statistics(sizeInBytes = children.map(_.statistics.sizeInBytes).product)
   }
+
+  /**
+   * Returns the default statistics or statistics estimated by cbo based on configuration.
+   */
+  final def planStats(conf: CatalystConf): Statistics = {
+    if (conf.cboEnabled) {
+      if (estimatedStats.isEmpty) {
+        estimatedStats = Some(cboStatistics(conf))
+      }
+      estimatedStats.get
+    } else {
+      statistics
+    }
+  }
+
+  /**
+   * Returns statistics estimated by cbo. If the plan doesn't override this, it returns the
+   * default statistics.
+   */
+  protected def cboStatistics(conf: CatalystConf): Statistics = statistics
+
+  /** A cache for the estimated statistics, such that it will only be computed once. */
+  private var estimatedStats: Option[Statistics] = None
 
   /**
    * Returns the maximum number of rows that this plan may compute.
