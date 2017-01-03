@@ -28,7 +28,7 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
 
 /**
  * Description of a task that gets passed onto executors to be executed, usually created by
-  * `TaskSetManager.resourceOffer`.
+ * `TaskSetManager.resourceOffer`.
  *
  * TaskDescriptions and the associated Task need to be serialized carefully for two reasons:
  *
@@ -58,6 +58,14 @@ private[spark] class TaskDescription(
 }
 
 private[spark] object TaskDescription {
+  private def serializeStringLongMap(map: Map[String, Long], dataOut: DataOutputStream): Unit = {
+    dataOut.writeInt(map.size)
+    for ((key, value) <- map) {
+      dataOut.writeUTF(key)
+      dataOut.writeLong(value)
+    }
+  }
+
   def encode(taskDescription: TaskDescription): ByteBuffer = {
     val bytesOut = new ByteBufferOutputStream(4096)
     val dataOut = new DataOutputStream(bytesOut)
@@ -69,36 +77,33 @@ private[spark] object TaskDescription {
     dataOut.writeInt(taskDescription.index)
 
     // Write files.
-    dataOut.writeInt(taskDescription.addedFiles.size)
-    for ((name, timestamp) <- taskDescription.addedFiles) {
-      dataOut.writeUTF(name)
-      dataOut.writeLong(timestamp)
-    }
+    serializeStringLongMap(taskDescription.addedFiles, dataOut)
 
     // Write jars.
-    dataOut.writeInt(taskDescription.addedJars.size)
-    for ((name, timestamp) <- taskDescription.addedJars) {
-      dataOut.writeUTF(name)
-      dataOut.writeLong(timestamp)
-    }
+    serializeStringLongMap(taskDescription.addedJars, dataOut)
 
     // Write properties.
     dataOut.writeInt(taskDescription.properties.size())
-    taskDescription.properties.stringPropertyNames.asScala.foreach { name =>
-      dataOut.writeUTF(name)
-      dataOut.writeUTF(taskDescription.properties.getProperty(name))
+    taskDescription.properties.asScala.foreach { case (key, value) =>
+      dataOut.writeUTF(key)
+      dataOut.writeUTF(value)
     }
 
-    // Write the task. The task is already serialized, so write it directly to the byte buffer
-    // (this requires first flushing the data output stream, so that all of the data has been
-    // written from the data output stream so the underlying ByteBufferOutputStream before
-    // we write the task).
-    dataOut.flush()
+    // Write the task. The task is already serialized, so write it directly to the byte buffer.
     Utils.writeByteBuffer(taskDescription.serializedTask, bytesOut)
 
     dataOut.close()
     bytesOut.close()
     bytesOut.toByteBuffer
+  }
+
+  private def deserializeStringLongMap(dataIn: DataInputStream): HashMap[String, Long] = {
+    val map = new HashMap[String, Long]()
+    val mapSize = dataIn.readInt()
+    for (i <- 0 until mapSize) {
+      map(dataIn.readUTF()) = dataIn.readLong()
+    }
+    map
   }
 
   def decode(byteBuffer: ByteBuffer): TaskDescription = {
@@ -110,18 +115,10 @@ private[spark] object TaskDescription {
     val index = dataIn.readInt()
 
     // Read files.
-    val taskFiles = new HashMap[String, Long]()
-    val numFiles = dataIn.readInt()
-    for (i <- 0 until numFiles) {
-      taskFiles(dataIn.readUTF()) = dataIn.readLong()
-    }
+    val taskFiles = deserializeStringLongMap(dataIn)
 
     // Read jars.
-    val taskJars = new HashMap[String, Long]()
-    val numJars = dataIn.readInt()
-    for (i <- 0 until numJars) {
-      taskJars(dataIn.readUTF()) = dataIn.readLong()
-    }
+    val taskJars = deserializeStringLongMap(dataIn)
 
     // Read properties.
     val properties = new Properties()
