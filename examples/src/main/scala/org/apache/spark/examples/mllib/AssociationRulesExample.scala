@@ -47,6 +47,8 @@ object AssociationRulesExample {
         + rule.consequent.mkString(",") + "]," + rule.confidence)
     }
     // $example off$
+
+    sc.stop()
   }
 
 }
