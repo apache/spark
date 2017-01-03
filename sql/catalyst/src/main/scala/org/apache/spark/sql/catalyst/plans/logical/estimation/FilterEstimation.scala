@@ -34,7 +34,6 @@ object FilterEstimation extends Logging {
    * We use a mutable colStats because we need to update the corresponding ColumnStat
    * for a column after we apply a predicate condition.
    */
-  // private var mutableColStats: mutable.Map[AttributeReference, ColumnStat] = mutable.Map.empty
   private var mutableColStats: mutable.Map[ExprId, ColumnStat] = mutable.Map.empty
 
   def estimate(plan: Filter): Option[Statistics] = {
@@ -45,7 +44,8 @@ object FilterEstimation extends Logging {
     val statsSeq: Seq[(ExprId, ColumnStat)] =
       stats.attributeStats.map(kv => (kv._1.exprId, kv._2)).toSeq
     mutableColStats = mutable.HashMap[ExprId, ColumnStat](statsSeq: _*)
-    /** save a copy of ExprId-to-Attribute map for later conversion */
+
+    /** save a copy of ExprId-to-Attribute map for later conversion use */
     val expridToAttrMap: Map[ExprId, Attribute] =
       stats.attributeStats.map(kv => (kv._1.exprId, kv._1))
 
@@ -53,11 +53,8 @@ object FilterEstimation extends Logging {
     val percent: Double = calculateConditions(plan, plan.condition)
 
     /** copy mutableColStats contents to an immutable AttributeMap */
-    var mutableAttributeStats: mutable.Map[Attribute, ColumnStat] = mutable.Map.empty
-    for ( (k, v) <- mutableColStats) {
-      val attr = expridToAttrMap(k)
-      mutableAttributeStats += (attr -> v)
-    }
+    val mutableAttributeStats: mutable.Map[Attribute, ColumnStat] =
+      mutableColStats.map(kv => (expridToAttrMap(kv._1) -> kv._2))
     val newColStats = AttributeMap(mutableAttributeStats.toSeq)
 
     val filteredRowCountValue: BigInt =
@@ -68,13 +65,6 @@ object FilterEstimation extends Logging {
 
     Some(stats.copy(sizeInBytes = filteredSizeInBytes, rowCount = Some(filteredRowCountValue),
       attributeStats = newColStats))
-  }
-
-  def mapExprIdToAttribute(
-       attrStats: AttributeMap[ColumnStat],
-       exId: ExprId)
-    : Unit = {
-    attrStats.foreach( arg => if (arg._1.exprId == exId) return arg._1 )
   }
 
   def calculateConditions(
