@@ -27,7 +27,6 @@ import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions.{col, lit}
-import org.apache.spark.sql.types.DoubleType
 
 
 /**
@@ -82,7 +81,7 @@ class GaussianNaiveBayes @Since("2.2.0") (
     // Aggregates sum and square-sum per label.
     // TODO: Calling aggregateByKey and collect creates two stages, we can implement something
     // TODO: similar to reduceByKeyLocally to save one stage.
-    val aggregated = dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd
+    val aggregated = dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd
       .map { row => (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2)))
       }.aggregateByKey((0.0, Vectors.zeros(numFeatures).toDense,
       Vectors.zeros(numFeatures).toDense))(
