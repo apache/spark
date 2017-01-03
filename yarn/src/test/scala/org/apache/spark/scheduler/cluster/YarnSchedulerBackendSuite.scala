@@ -52,6 +52,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       // Serialize to make sure serialization doesn't throw an error
       ser.serialize(req)
     }
+    sc.stop()
   }
 
 }
