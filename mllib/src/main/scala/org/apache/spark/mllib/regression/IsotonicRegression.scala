@@ -345,8 +345,9 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     // gives the values for the block. Entries that are not at the start of a block
     // are meaningless.
     val weights: Array[(Double, Double)] = input.map {
-      case (y, _, weight) => if (weight == 0d) throw new SparkException("Input contains zero weight")
-                             else (weight, weight * y)
+      case (_, _, weight) if weight == 0d =>
+        throw new SparkException("Input contains zero weight")
+      case (y, _, weight) => (weight, weight * y)
     }
 
     // a few convenience functions to make the code more readable
