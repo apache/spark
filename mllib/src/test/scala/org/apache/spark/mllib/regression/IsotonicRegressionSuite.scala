@@ -19,7 +19,7 @@ package org.apache.spark.mllib.regression
 
 import org.scalatest.Matchers
 
-import org.apache.spark.{SparkFunSuite, SparkException}
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
