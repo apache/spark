@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import scala.collection.generic.Growable
-import scala.collection.mutable.{ArrayBuffer, HashSet}
+import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
@@ -92,17 +92,17 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 case class CollectList(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect[ArrayBuffer[Any]] {
+    inputAggBufferOffset: Int = 0) extends Collect[mutable.ArrayBuffer[Any]] {
 
   def this(child: Expression) = this(child, 0, 0)
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): CollectList =
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override def createAggregationBuffer(): ArrayBuffer[Any] = new ArrayBuffer[Any]()
+  override def createAggregationBuffer(): mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
 
   override def prettyName: String = "collect_list"
 }
@@ -115,7 +115,7 @@ case class CollectList(
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect[HashSet[Any]] {
+    inputAggBufferOffset: Int = 0) extends Collect[mutable.HashSet[Any]] {
 
   def this(child: Expression) = this(child, 0, 0)
 
@@ -135,5 +135,5 @@ case class CollectSet(
 
   override def prettyName: String = "collect_set"
 
-  override def createAggregationBuffer(): HashSet[Any] = new HashSet[Any]()
+  override def createAggregationBuffer(): mutable.HashSet[Any] = mutable.HashSet.empty
 }
