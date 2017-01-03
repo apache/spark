@@ -642,6 +642,12 @@ object SQLConf {
       .doubleConf
       .createWithDefault(0.05)
 
+  val CBO_ENABLED =
+    SQLConfigBuilder("spark.sql.cbo.enabled")
+      .doc("Enables CBO for estimation of plan statistics when set true.")
+      .booleanConf
+      .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -831,6 +837,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def warehousePath: String = new Path(getConf(StaticSQLConf.WAREHOUSE_PATH)).toString
 
+  def hiveThriftServerSingleSession: Boolean =
+    getConf(StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION)
+
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
   override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
@@ -838,6 +847,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   override def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
+
+  override def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
@@ -1006,6 +1018,13 @@ object StaticSQLConf {
   val DEBUG_MODE = buildConf("spark.sql.debug")
     .internal()
     .doc("Only used for internal debugging. Not all functions are supported when it is enabled.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val HIVE_THRIFT_SERVER_SINGLESESSION = buildConf("spark.sql.hive.thriftServer.singleSession")
+    .doc("When set to true, Hive Thrift server is running in a single session mode. " +
+      "All the JDBC/ODBC connections share the temporary views, function registries, " +
+      "SQL configuration and the current database.")
     .booleanConf
     .createWithDefault(false)
 }
