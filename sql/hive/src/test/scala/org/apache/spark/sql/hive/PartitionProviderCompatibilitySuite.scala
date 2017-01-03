@@ -38,7 +38,7 @@ class PartitionProviderCompatibilitySuite
     spark.sql(s"""
       |create table $tableName (fieldOne long, partCol int)
       |using parquet
-      |options (path "${dir.getAbsolutePath}")
+      |options (path "${dir.toURI}")
       |partitioned by (partCol)""".stripMargin)
   }
 
@@ -70,7 +70,7 @@ class PartitionProviderCompatibilitySuite
         }
         withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
           verifyIsLegacyTable("test")
-          spark.sql("msck repair table test")
+          spark.catalog.recoverPartitions("test")
           spark.sql("show partitions test").count()  // check we are a new table
 
           // sanity check table performance
@@ -90,7 +90,7 @@ class PartitionProviderCompatibilitySuite
           setupPartitionedDatasourceTable("test", dir)
           spark.sql("show partitions test").count()  // check we are a new table
           assert(spark.sql("select * from test").count() == 0)  // needs repair
-          spark.sql("msck repair table test")
+          spark.catalog.recoverPartitions("test")
           assert(spark.sql("select * from test").count() == 5)
         }
       }
@@ -160,7 +160,7 @@ class PartitionProviderCompatibilitySuite
       withTable("test") {
         withTempDir { dir =>
           setupPartitionedDatasourceTable("test", dir)
-          sql("msck repair table test")
+          spark.catalog.recoverPartitions("test")
           spark.sql(
             """insert overwrite table test
               |partition (partCol=1)
@@ -239,7 +239,7 @@ class PartitionProviderCompatibilitySuite
           // custom locations sanity check
           spark.sql(s"""
             |alter table test partition (A=0, B='%')
-            |set location '${dir.getAbsolutePath}'""".stripMargin)
+            |set location '${dir.toURI}'""".stripMargin)
           assert(spark.sql("select * from test").count() == 28)  // moved to empty dir
 
           // rename partition sanity check
@@ -315,11 +315,11 @@ class PartitionProviderCompatibilitySuite
       spark.sql(s"""
         |create table test (id long, P1 int, P2 int)
         |using parquet
-        |options (path "${base.getAbsolutePath}")
+        |options (path "${base.toURI}")
         |partitioned by (P1, P2)""".stripMargin)
-      spark.sql(s"alter table test add partition (P1=0, P2=0) location '${a.getAbsolutePath}'")
-      spark.sql(s"alter table test add partition (P1=0, P2=1) location '${b.getAbsolutePath}'")
-      spark.sql(s"alter table test add partition (P1=1, P2=0) location '${c.getAbsolutePath}'")
+      spark.sql(s"alter table test add partition (P1=0, P2=0) location '${a.toURI}'")
+      spark.sql(s"alter table test add partition (P1=0, P2=1) location '${b.toURI}'")
+      spark.sql(s"alter table test add partition (P1=1, P2=0) location '${c.toURI}'")
       spark.sql(s"alter table test add partition (P1=1, P2=1)")
 
       testFn
