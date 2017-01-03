@@ -33,10 +33,9 @@ import org.apache.spark.util.collection.OpenHashMap
  * The Percentile aggregate function returns the exact percentile(s) of numeric column `expr` at
  * the given percentage(s) with value range in [0.0, 1.0].
  *
- * The operator is bound to the slower sort based aggregation path because the number of elements
- * and their partial order cannot be determined in advance. Therefore we have to store all the
- * elements in memory, and that too many elements can cause GC paused and eventually OutOfMemory
- * Errors.
+ * Because the number of elements and their partial order cannot be determined in advance.
+ * Therefore we have to store all the elements in memory, and so notice that too many elements can
+ * cause GC paused and eventually OutOfMemory Errors.
  *
  * @param child child expression that produce numeric column value with `child.eval(inputRow)`
  * @param percentageExpression Expression that represents a single percentage value or an array of
