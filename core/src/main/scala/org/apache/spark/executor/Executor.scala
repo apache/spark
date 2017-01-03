@@ -206,12 +206,12 @@ private[spark] class Executor(
 
   class TaskRunner(
       execBackend: ExecutorBackend,
-      val taskDescription: TaskDescription)
+      private val taskDescription: TaskDescription)
     extends Runnable {
 
     val taskId = taskDescription.taskId
-    val taskName = taskDescription.name
     val threadName = s"Executor task launch worker for task $taskId"
+    private val taskName = taskDescription.name
 
     /** Whether this task has been killed. */
     @volatile private var killed = false
@@ -672,7 +672,7 @@ private[spark] class Executor(
         taskRunner.task.metrics.mergeShuffleReadMetrics()
         taskRunner.task.metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
         accumUpdates +=
-          ((taskRunner.taskDescription.taskId, taskRunner.task.metrics.accumulators()))
+          ((taskRunner.taskId, taskRunner.task.metrics.accumulators()))
       }
     }
 
