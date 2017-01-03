@@ -155,7 +155,7 @@ class GaussianNaiveBayes @Since("2.2.0") (
   }
 
   @Since("2.2.0")
-  override def copy(extra: ParamMap): NaiveBayes = defaultCopy(extra)
+  override def copy(extra: ParamMap): GaussianNaiveBayes = defaultCopy(extra)
 }
 
 
