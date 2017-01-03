@@ -453,11 +453,11 @@ private[deploy] class Worker(
                 Some(appDir.getAbsolutePath())
               } catch {
                 case e: IOException =>
-                  logError(s"${e.getMessage}. Ignoring this directory.")
+                  logWarning(s"${e.getMessage}. Ignoring this directory.")
                   None
               }
             }.toSeq
-            if (dirs.length <= 0) {
+            if (dirs.isEmpty) {
               throw new IOException("None subfolder can be created in " +
                 s"${Utils.getOrCreateLocalRootDirs(conf).mkString(",")}.")
             }
