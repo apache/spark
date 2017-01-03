@@ -26,7 +26,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
 import org.apache.spark.ml.{Pipeline, PipelineModel, PipelineStage}
-import org.apache.spark.ml.clustering.{LDA, LDAModel}
+import org.apache.spark.ml.clustering.{DistributedLDAModel, LDA, LDAModel}
 import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel, RegexTokenizer, StopWordsRemover}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.ParamPair
@@ -45,6 +45,11 @@ private[r] class LDAWrapper private (
   import LDAWrapper._
 
   private val lda: LDAModel = pipeline.stages.last.asInstanceOf[LDAModel]
+  private val distributedMoel = lda.isDistributed match {
+    case true => pipeline.stages.last.asInstanceOf[DistributedLDAModel]
+    case _ => null
+  }
+
   private val preprocessor: PipelineModel =
     new PipelineModel(s"${Identifiable.randomUID(pipeline.uid)}", pipeline.stages.dropRight(1))
 
@@ -77,6 +82,14 @@ private[r] class LDAWrapper private (
   lazy val vocabSize: Int = lda.vocabSize
   lazy val docConcentration: Array[Double] = lda.getEffectiveDocConcentration
   lazy val topicConcentration: Double = lda.getEffectiveTopicConcentration
+  lazy val trainingLogLikelihood: Double = distributedMoel match {
+    case null => Double.NaN
+    case _ => distributedMoel.trainingLogLikelihood
+  }
+  lazy val logPrior: Double = distributedMoel match {
+    case null => Double.NaN
+    case _ => distributedMoel.logPrior
+  }
 
   override def write: MLWriter = new LDAWrapper.LDAWrapperWriter(this)
 }
@@ -122,6 +135,10 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
       .setK(k)
       .setMaxIter(maxIter)
       .setSubsamplingRate(subsamplingRate)
+
+    if (optimizer == "em") {
+      lda.setOptimizer(optimizer)
+    }
 
     val featureSchema = data.schema(features)
     val stages = featureSchema.dataType match {
