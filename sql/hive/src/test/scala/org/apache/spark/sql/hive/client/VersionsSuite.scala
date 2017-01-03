@@ -25,11 +25,12 @@ import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+
 
 /**
  * A simple set of tests that call the methods of a hive ClientInterface, loading different version
@@ -235,8 +236,8 @@ class VersionsSuite extends SparkFunSuite  with SQLTestUtils with TestHiveSingle
                |location '${tmpDir.toURI.toString}'
              """.stripMargin)
 
-          sqlContext.sql("CREATE TABLE tbl AS SELECT 1 AS a")
-
+          import sqlContext.implicits._
+          Seq(Tuple1("a")).toDF("value").registerTempTable("tbl")
           sqlContext.sql(s"INSERT OVERWRITE TABLE tab SELECT * from tbl ")
 
           def listFiles(path: File): List[String] = {
