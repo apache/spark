@@ -868,7 +868,7 @@ private[hive] class HiveClientImpl(
     }
     val storageDesc = new StorageDescriptor
     val serdeInfo = new SerDeInfo
-    p.storage.locationUri.map(_.toString).foreach(storageDesc.setLocation)
+    p.storage.locationUri.map(new Path(_).toString).foreach(storageDesc.setLocation)
     p.storage.inputFormat.foreach(storageDesc.setInputFormat)
     p.storage.outputFormat.foreach(storageDesc.setOutputFormat)
     p.storage.serde.foreach(serdeInfo.setSerializationLib)
