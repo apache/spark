@@ -647,7 +647,6 @@ private[spark] class MesosClusterScheduler(
    */
   private def shouldRelaunch(state: MesosTaskState): Boolean = {
     state == MesosTaskState.TASK_FAILED ||
-      state == MesosTaskState.TASK_KILLED ||
       state == MesosTaskState.TASK_LOST
   }
 
