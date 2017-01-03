@@ -93,7 +93,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *
    * @note Rows containing any NaN values will be removed before calculation
    *
-   * @since 2.1.0
+   * @since 2.2.0
    */
   def approxQuantile(
       cols: Array[String],

@@ -1382,7 +1382,7 @@ class DataFrame(object):
           list, but each element in it is a list of float, i.e., the output
           is a list of list of float.
 
-        .. versionchanged:: 2.1
+        .. versionchanged:: 2.2
            Added support for multiple columns.
         """
 
