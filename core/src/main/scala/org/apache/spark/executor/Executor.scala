@@ -210,6 +210,7 @@ private[spark] class Executor(
     extends Runnable {
 
     val taskId = taskDescription.taskId
+    val taskName = taskDescription.name
     val threadName = s"Executor task launch worker for task $taskId"
 
     /** Whether this task has been killed. */
@@ -235,7 +236,7 @@ private[spark] class Executor(
     @volatile var task: Task[Any] = _
 
     def kill(interruptThread: Boolean): Unit = {
-      logInfo(s"Executor is trying to kill ${taskDescription.name} (TID ${taskDescription.taskId})")
+      logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
       killed = true
       if (task != null) {
         synchronized {
@@ -262,8 +263,6 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
-      val taskName = taskDescription.name
-
       threadId = Thread.currentThread.getId
       Thread.currentThread.setName(threadName)
       val threadMXBean = ManagementFactory.getThreadMXBean
