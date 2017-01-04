@@ -59,8 +59,8 @@ private[deploy] class Worker(
   assert (port > 0)
 
   // A separated thread to send Heartbeat message.
-  private val heartbeatThreadExecutor = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonSingleThreadExecutor("heartbeat-send-thread"))
+  private val heartbeatThreadExecutor =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("heartbeat-send-thread")
 
   // A scheduled executor used to send messages at the specified time.
   private val forwordMessageScheduler =
