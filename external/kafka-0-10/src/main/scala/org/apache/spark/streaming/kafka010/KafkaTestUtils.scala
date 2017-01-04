@@ -282,10 +282,10 @@ private[kafka010] class KafkaTestUtils extends Logging {
       // The directories are not closed even if the ZooKeeper server is shut-downed.
       // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures
       // on Windows if these are not ignored.
-      if (FileUtils.deleteQuietly(snapshotDir)) {
+      if (!FileUtils.deleteQuietly(snapshotDir)) {
         logWarning("Failed to delete: " + snapshotDir.getAbsolutePath)
       }
-      if (FileUtils.deleteQuietly(logDir)) {
+      if (!FileUtils.deleteQuietly(logDir)) {
         logWarning("Failed to delete: " + logDir.getAbsolutePath)
       }
     }
