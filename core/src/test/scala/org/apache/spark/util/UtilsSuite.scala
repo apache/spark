@@ -17,7 +17,8 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, FileOutputStream, PrintStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
+  FileOutputStream, PrintStream}
 import java.lang.{Double => JDouble, Float => JFloat}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -387,6 +388,28 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     bbuf.putLong(testval)
     assert(bbuf.array.length === 8)
     assert(Utils.deserializeLongValue(bbuf.array) === testval)
+  }
+
+  test("writeByteBuffer should not change ByteBuffer position") {
+    // Test a buffer with an underlying array, for both writeByteBuffer methods.
+    val testBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
+    assert(testBuffer.hasArray)
+    val bytesOut = new ByteBufferOutputStream(4096)
+    Utils.writeByteBuffer(testBuffer, bytesOut)
+    assert(testBuffer.position() === 0)
+
+    val dataOut = new DataOutputStream(bytesOut)
+    Utils.writeByteBuffer(testBuffer, dataOut: DataOutput)
+    assert(testBuffer.position() === 0)
+
+    // Test a buffer without an underlying array, for both writeByteBuffer methods.
+    val testDirectBuffer = ByteBuffer.allocateDirect(8)
+    assert(!testDirectBuffer.hasArray())
+    Utils.writeByteBuffer(testDirectBuffer, bytesOut)
+    assert(testDirectBuffer.position() === 0)
+
+    Utils.writeByteBuffer(testDirectBuffer, dataOut: DataOutput)
+    assert(testDirectBuffer.position() === 0)
   }
 
   test("get iterator size") {
