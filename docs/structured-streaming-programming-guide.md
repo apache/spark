@@ -774,12 +774,12 @@ is considered "too late" and therefore ignored. Note that after every trigger,
 the updated counts (i.e. purple rows) are written to sink as the trigger output, as dictated by 
 the Update mode.
 
-
 Some sinks (e.g. files) may not supported fine-grained updates that Update Mode requires. To work
 with them, we have also support Append Mode, where only the *final counts* are written to sink.
 This is illustrated below.
 
 ![Watermarking in Append Mode](img/structured-streaming-watermark-append-mode.png)
+
 Similar to the Update Mode earlier, the engine maintains intermediate counts for each window. 
 However, the partial counts are not updated to the Result Table and not written to sink. The engine
 waits for "10 mins" for late date to be counted, 
