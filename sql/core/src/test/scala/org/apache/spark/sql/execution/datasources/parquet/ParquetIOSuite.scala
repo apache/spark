@@ -811,6 +811,27 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       }
     }
   }
+
+  test("Timestamp INT64 Dictionary encoding") {
+    val data = (1 to 1000).map { i =>
+      if (i < 500) {
+        Row(new java.sql.Timestamp(10))
+      } else {
+        Row(new java.sql.Timestamp(i))
+      }
+    }
+    val schema = StructType(List(StructField("time", TimestampType, false)).toArray)
+    withSQLConf(ParquetOutputFormat.DICTIONARY_PAGE_SIZE -> "64",
+        ParquetOutputFormat.PAGE_SIZE -> "128",
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      withTempPath { file =>
+        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+        df.coalesce(1).write.parquet(file.getCanonicalPath)
+        val df2 = spark.read.parquet(file.getCanonicalPath)
+        checkAnswer(df2, df.collect().toSeq)
+      }
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
