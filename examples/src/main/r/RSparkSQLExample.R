@@ -18,7 +18,7 @@
 library(SparkR)
 
 # $example on:init_session$
-sparkR.session(appName = "MyApp", sparkConfig = list(spark.some.config.option = "some-value"))
+sparkR.session(appName = "R Spark SQL basic example", sparkConfig = list(spark.some.config.option = "some-value"))
 # $example off:init_session$
 
 
@@ -204,7 +204,11 @@ results <- collect(sql("FROM src SELECT key, value"))
 
 
 # $example on:jdbc_dataset$
+# Loading data from a JDBC source
 df <- read.jdbc("jdbc:postgresql:dbserver", "schema.tablename", user = "username", password = "password")
+
+# Saving data to a JDBC source
+write.jdbc(df, "jdbc:postgresql:dbserver", "schema.tablename", user = "username", password = "password")
 # $example off:jdbc_dataset$
 
 # Stop the SparkSession now

@@ -184,7 +184,7 @@ class ExternalAppendOnlyMap[K, V, C](
   override protected[this] def spill(collection: SizeTracker): Unit = {
     val inMemoryIterator = currentMap.destructiveSortedIterator(keyComparator)
     val diskMapIterator = spillMemoryIteratorToDisk(inMemoryIterator)
-    spilledMaps.append(diskMapIterator)
+    spilledMaps += diskMapIterator
   }
 
   /**
@@ -215,7 +215,7 @@ class ExternalAppendOnlyMap[K, V, C](
     // Flush the disk writer's contents to disk, and update relevant variables
     def flush(): Unit = {
       val segment = writer.commitAndGet()
-      batchSizes.append(segment.length)
+      batchSizes += segment.length
       _diskBytesSpilled += segment.length
       objectsWritten = 0
     }
@@ -486,8 +486,8 @@ class ExternalAppendOnlyMap[K, V, C](
           ", batchOffsets = " + batchOffsets.mkString("[", ", ", "]"))
 
         val bufferedStream = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
-        val compressedStream = serializerManager.wrapForCompression(blockId, bufferedStream)
-        ser.deserializeStream(compressedStream)
+        val wrappedStream = serializerManager.wrapStream(blockId, bufferedStream)
+        ser.deserializeStream(wrappedStream)
       } else {
         // No more batches left
         cleanup()

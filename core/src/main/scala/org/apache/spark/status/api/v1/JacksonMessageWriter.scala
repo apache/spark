@@ -21,7 +21,7 @@ import java.lang.annotation.Annotation
 import java.lang.reflect.Type
 import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
-import java.util.{Calendar, SimpleTimeZone}
+import java.util.{Calendar, Locale, SimpleTimeZone}
 import javax.ws.rs.Produces
 import javax.ws.rs.core.{MediaType, MultivaluedMap}
 import javax.ws.rs.ext.{MessageBodyWriter, Provider}
@@ -86,7 +86,7 @@ private[v1] class JacksonMessageWriter extends MessageBodyWriter[Object]{
 
 private[spark] object JacksonMessageWriter {
   def makeISODateFormat: SimpleDateFormat = {
-    val iso8601 = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'GMT'")
+    val iso8601 = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'GMT'", Locale.US)
     val cal = Calendar.getInstance(new SimpleTimeZone(0, "GMT"))
     iso8601.setCalendar(cal)
     iso8601

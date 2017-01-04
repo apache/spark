@@ -38,7 +38,7 @@ import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -289,6 +289,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   } else {
     // Hive 1.2 + not supported in CLI
     throw new RuntimeException("Remote operations not supported")
+  }
+
+  override def setHiveVariables(hiveVariables: java.util.Map[String, String]): Unit = {
+    hiveVariables.asScala.foreach(kv => SparkSQLEnv.sqlContext.conf.setConfString(kv._1, kv._2))
   }
 
   override def processCmd(cmd: String): Int = {

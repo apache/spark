@@ -197,27 +197,12 @@ private[ui] class BlockDataSource(
    * Return Ordering according to sortColumn and desc
    */
   private def ordering(sortColumn: String, desc: Boolean): Ordering[BlockTableRowData] = {
-    val ordering = sortColumn match {
-      case "Block Name" => new Ordering[BlockTableRowData] {
-        override def compare(x: BlockTableRowData, y: BlockTableRowData): Int =
-          Ordering.String.compare(x.blockName, y.blockName)
-      }
-      case "Storage Level" => new Ordering[BlockTableRowData] {
-        override def compare(x: BlockTableRowData, y: BlockTableRowData): Int =
-          Ordering.String.compare(x.storageLevel, y.storageLevel)
-      }
-      case "Size in Memory" => new Ordering[BlockTableRowData] {
-        override def compare(x: BlockTableRowData, y: BlockTableRowData): Int =
-          Ordering.Long.compare(x.memoryUsed, y.memoryUsed)
-      }
-      case "Size on Disk" => new Ordering[BlockTableRowData] {
-        override def compare(x: BlockTableRowData, y: BlockTableRowData): Int =
-          Ordering.Long.compare(x.diskUsed, y.diskUsed)
-      }
-      case "Executors" => new Ordering[BlockTableRowData] {
-        override def compare(x: BlockTableRowData, y: BlockTableRowData): Int =
-          Ordering.String.compare(x.executors, y.executors)
-      }
+    val ordering: Ordering[BlockTableRowData] = sortColumn match {
+      case "Block Name" => Ordering.by(_.blockName)
+      case "Storage Level" => Ordering.by(_.storageLevel)
+      case "Size in Memory" => Ordering.by(_.memoryUsed)
+      case "Size on Disk" => Ordering.by(_.diskUsed)
+      case "Executors" => Ordering.by(_.executors)
       case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
     }
     if (desc) {

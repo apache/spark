@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.master
 
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Date, Locale}
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
@@ -51,7 +51,8 @@ private[deploy] class Master(
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
 
-  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss") // For application IDs
+  // For application IDs
+  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
 
   private val WORKER_TIMEOUT_MS = conf.getLong("spark.worker.timeout", 60) * 1000
   private val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 200)
@@ -114,6 +115,7 @@ private[deploy] class Master(
 
   // Default maxCores for applications that don't specify it (i.e. pass Int.MaxValue)
   private val defaultCores = conf.getInt("spark.deploy.defaultCores", Int.MaxValue)
+  val reverseProxy = conf.getBoolean("spark.ui.reverseProxy", false)
   if (defaultCores < 1) {
     throw new SparkException("spark.deploy.defaultCores must be positive")
   }
@@ -129,6 +131,11 @@ private[deploy] class Master(
     webUi = new MasterWebUI(this, webUiPort)
     webUi.bind()
     masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
+    if (reverseProxy) {
+      masterWebUiUrl = conf.get("spark.ui.reverseProxyUrl", masterWebUiUrl)
+      logInfo(s"Spark Master is acting as a reverse proxy. Master, Workers and " +
+       s"Applications UIs are available at $masterWebUiUrl")
+    }
     checkForWorkerTimeOutTask = forwardMessageThread.scheduleAtFixedRate(new Runnable {
       override def run(): Unit = Utils.tryLogNonFatalError {
         self.send(CheckForWorkerTimeOut)
@@ -224,6 +231,29 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
+    case RegisterWorker(id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl) =>
+      logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
+        workerHost, workerPort, cores, Utils.megabytesToString(memory)))
+      if (state == RecoveryState.STANDBY) {
+        workerRef.send(MasterInStandby)
+      } else if (idToWorker.contains(id)) {
+        workerRef.send(RegisterWorkerFailed("Duplicate worker ID"))
+      } else {
+        val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
+          workerRef, workerWebUiUrl)
+        if (registerWorker(worker)) {
+          persistenceEngine.addWorker(worker)
+          workerRef.send(RegisteredWorker(self, masterWebUiUrl))
+          schedule()
+        } else {
+          val workerAddress = worker.endpoint.address
+          logWarning("Worker registration failed. Attempted to re-register worker at same " +
+            "address: " + workerAddress)
+          workerRef.send(RegisterWorkerFailed("Attempted to re-register worker at same address: "
+            + workerAddress))
+        }
+      }
+
     case RegisterApplication(description, driver) =>
       // TODO Prevent repeated registrations from some driver
       if (state == RecoveryState.STANDBY) {
@@ -252,7 +282,7 @@ private[deploy] class Master(
             appInfo.resetRetryCount()
           }
 
-          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus))
+          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus, false))
 
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
@@ -379,30 +409,6 @@ private[deploy] class Master(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case RegisterWorker(
-        id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl) =>
-      logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
-        workerHost, workerPort, cores, Utils.megabytesToString(memory)))
-      if (state == RecoveryState.STANDBY) {
-        context.reply(MasterInStandby)
-      } else if (idToWorker.contains(id)) {
-        context.reply(RegisterWorkerFailed("Duplicate worker ID"))
-      } else {
-        val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-          workerRef, workerWebUiUrl)
-        if (registerWorker(worker)) {
-          persistenceEngine.addWorker(worker)
-          context.reply(RegisteredWorker(self, masterWebUiUrl))
-          schedule()
-        } else {
-          val workerAddress = worker.endpoint.address
-          logWarning("Worker registration failed. Attempted to re-register worker at same " +
-            "address: " + workerAddress)
-          context.reply(RegisterWorkerFailed("Attempted to re-register worker at same address: "
-            + workerAddress))
-        }
-      }
-
     case RequestSubmitDriver(description) =>
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
@@ -755,6 +761,9 @@ private[deploy] class Master(
     workers += worker
     idToWorker(worker.id) = worker
     addressToWorker(workerAddress) = worker
+    if (reverseProxy) {
+       webUi.addProxyTargets(worker.id, worker.webUiAddress)
+    }
     true
   }
 
@@ -763,10 +772,13 @@ private[deploy] class Master(
     worker.setState(WorkerState.DEAD)
     idToWorker -= worker.id
     addressToWorker -= worker.endpoint.address
+    if (reverseProxy) {
+      webUi.removeProxyTargets(worker.id)
+    }
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
       exec.application.driver.send(ExecutorUpdated(
-        exec.id, ExecutorState.LOST, Some("worker lost"), None))
+        exec.id, ExecutorState.LOST, Some("worker lost"), None, workerLost = true))
       exec.state = ExecutorState.LOST
       exec.application.removeExecutor(exec)
     }
@@ -810,6 +822,9 @@ private[deploy] class Master(
     endpointToApp(app.driver) = app
     addressToApp(appAddress) = app
     waitingApps += app
+    if (reverseProxy) {
+      webUi.addProxyTargets(app.id, app.desc.appUiUrl)
+    }
   }
 
   private def finishApplication(app: ApplicationInfo) {
@@ -823,6 +838,9 @@ private[deploy] class Master(
       idToApp -= app.id
       endpointToApp -= app.driver
       addressToApp -= app.driver.address
+      if (reverseProxy) {
+        webUi.removeProxyTargets(app.id)
+      }
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
         completedApps.take(toRemove).foreach { a =>

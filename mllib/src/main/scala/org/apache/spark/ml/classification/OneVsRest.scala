@@ -135,6 +135,14 @@ final class OneVsRestModel private[ml] (
     @Since("1.4.0") val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams with MLWritable {
 
+  /** @group setParam */
+  @Since("2.1.0")
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = false, getClassifier.featuresDataType)
@@ -170,6 +178,7 @@ final class OneVsRestModel private[ml] (
         val updateUDF = udf { (predictions: Map[Int, Double], prediction: Vector) =>
           predictions + ((index, prediction(1)))
         }
+        model.setFeaturesCol($(featuresCol))
         val transformedDataset = model.transform(df).select(columns: _*)
         val updatedDataset = transformedDataset
           .withColumn(tmpColName, updateUDF(col(accColName), col(rawPredictionCol)))

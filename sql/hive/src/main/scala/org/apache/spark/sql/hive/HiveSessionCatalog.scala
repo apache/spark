@@ -27,14 +27,13 @@ import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, Gener
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchTableException}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
-import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
 import org.apache.spark.util.Utils
@@ -42,7 +41,7 @@ import org.apache.spark.util.Utils
 
 private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
-    client: HiveClient,
+    globalTempViewManager: GlobalTempViewManager,
     sparkSession: SparkSession,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
@@ -50,28 +49,32 @@ private[sql] class HiveSessionCatalog(
     hadoopConf: Configuration)
   extends SessionCatalog(
     externalCatalog,
+    globalTempViewManager,
     functionResourceLoader,
     functionRegistry,
     conf,
     hadoopConf) {
 
-  override def setCurrentDatabase(db: String): Unit = {
-    super.setCurrentDatabase(db)
-    client.setCurrentDatabase(db)
-  }
-
   override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
-    val table = formatTableName(name.table)
-    if (name.database.isDefined || !tempTables.contains(table)) {
-      val database = name.database.map(formatDatabaseName)
-      val newName = name.copy(database = database, table = table)
-      metastoreCatalog.lookupRelation(newName, alias)
-    } else {
-      val relation = tempTables(table)
-      val tableWithQualifiers = SubqueryAlias(table, relation, None)
-      // If an alias was specified by the lookup, wrap the plan in a subquery so that
-      // attributes are properly qualified with this alias.
-      alias.map(a => SubqueryAlias(a, tableWithQualifiers, None)).getOrElse(tableWithQualifiers)
+    synchronized {
+      val table = formatTableName(name.table)
+      val db = formatDatabaseName(name.database.getOrElse(currentDb))
+      if (db == globalTempViewManager.database) {
+        val relationAlias = alias.getOrElse(table)
+        globalTempViewManager.get(table).map { viewDef =>
+          SubqueryAlias(relationAlias, viewDef, Some(name))
+        }.getOrElse(throw new NoSuchTableException(db, table))
+      } else if (name.database.isDefined || !tempTables.contains(table)) {
+        val database = name.database.map(formatDatabaseName)
+        val newName = name.copy(database = database, table = table)
+        metastoreCatalog.lookupRelation(newName, alias)
+      } else {
+        val relation = tempTables(table)
+        val tableWithQualifiers = SubqueryAlias(table, relation, None)
+        // If an alias was specified by the lookup, wrap the plan in a subquery so that
+        // attributes are properly qualified with this alias.
+        alias.map(a => SubqueryAlias(a, tableWithQualifiers, None)).getOrElse(tableWithQualifiers)
+      }
     }
   }
 
@@ -87,7 +90,6 @@ private[sql] class HiveSessionCatalog(
 
   val ParquetConversions: Rule[LogicalPlan] = metastoreCatalog.ParquetConversions
   val OrcConversions: Rule[LogicalPlan] = metastoreCatalog.OrcConversions
-  val CreateTables: Rule[LogicalPlan] = metastoreCatalog.CreateTables
 
   override def refreshTable(name: TableIdentifier): Unit = {
     super.refreshTable(name)
@@ -230,14 +232,10 @@ private[sql] class HiveSessionCatalog(
   // List of functions we are explicitly not supporting are:
   // compute_stats, context_ngrams, create_union,
   // current_user, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
-  // in_file, index, java_method,
-  // matchpath, ngrams, noop, noopstreaming, noopwithmap, noopwithmapstreaming,
-  // parse_url_tuple, posexplode, reflect2,
-  // str_to_map, windowingtablefunction.
+  // in_file, index, matchpath, ngrams, noop, noopstreaming, noopwithmap,
+  // noopwithmapstreaming, parse_url_tuple, reflect2, windowingtablefunction.
+  // Note: don't forget to update SessionCatalog.isTemporaryFunction
   private val hiveFunctions = Seq(
-    "hash",
-    "histogram_numeric",
-    "percentile",
-    "percentile_approx"
+    "histogram_numeric"
   )
 }

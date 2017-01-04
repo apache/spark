@@ -176,7 +176,7 @@ class SparkSession(object):
                         sc._conf.set(key, value)
                     session = SparkSession(sc)
                 for key, value in self._options.items():
-                    session.conf.set(key, value)
+                    session._jsparkSession.sessionState().conf().setConfString(key, value)
                 for key, value in self._options.items():
                     session.sparkContext._conf.set(key, value)
                 return session
@@ -595,6 +595,7 @@ class SparkSession(object):
         """Stop the underlying :class:`SparkContext`.
         """
         self._sc.stop()
+        SparkSession._instantiatedContext = None
 
     @since(2.0)
     def __enter__(self):

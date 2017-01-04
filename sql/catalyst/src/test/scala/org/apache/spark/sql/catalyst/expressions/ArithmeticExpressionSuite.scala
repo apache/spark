@@ -170,11 +170,20 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Remainder(positiveLongLit, positiveLongLit), 0L)
     checkEvaluation(Remainder(negativeLongLit, negativeLongLit), 0L)
 
-    // TODO: the following lines would fail the test due to inconsistency result of interpret
-    // and codegen for remainder between giant values, seems like a numeric stability issue
-    // DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
-    //  checkConsistencyBetweenInterpretedAndCodegen(Remainder, tpe, tpe)
-    // }
+    DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen(Remainder, tpe, tpe)
+    }
+  }
+
+  test("SPARK-17617: % (Remainder) double % double on super big double") {
+    val leftDouble = Literal(-5083676433652386516D)
+    val rightDouble = Literal(10D)
+    checkEvaluation(Remainder(leftDouble, rightDouble), -6.0D)
+
+    // Float has smaller precision
+    val leftFloat = Literal(-5083676433652386516F)
+    val rightFloat = Literal(10F)
+    checkEvaluation(Remainder(leftFloat, rightFloat), -2.0F)
   }
 
   test("Abs") {

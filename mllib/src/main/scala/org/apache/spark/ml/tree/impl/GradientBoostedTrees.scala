@@ -34,7 +34,7 @@ private[spark] object GradientBoostedTrees extends Logging {
 
   /**
    * Method to train a gradient boosting model
-   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @param input Training dataset: RDD of `LabeledPoint`.
    * @param seed Random seed.
    * @return tuple of ensemble models and weights:
    *         (array of decision tree models, array of model weights)
@@ -59,12 +59,12 @@ private[spark] object GradientBoostedTrees extends Logging {
 
   /**
    * Method to validate a gradient boosting model
-   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @param input Training dataset: RDD of `LabeledPoint`.
    * @param validationInput Validation dataset.
    *                        This dataset should be different from the training dataset,
    *                        but it should follow the same distribution.
    *                        E.g., these two datasets could be created from an original dataset
-   *                        by using [[org.apache.spark.rdd.RDD.randomSplit()]]
+   *                        by using `org.apache.spark.rdd.RDD.randomSplit()`
    * @param seed Random seed.
    * @return tuple of ensemble models and weights:
    *         (array of decision tree models, array of model weights)
@@ -98,7 +98,7 @@ private[spark] object GradientBoostedTrees extends Logging {
    * @param initTreeWeight: learning rate assigned to the first tree.
    * @param initTree: first DecisionTreeModel.
    * @param loss: evaluation metric.
-   * @return a RDD with each element being a zip of the prediction and error
+   * @return an RDD with each element being a zip of the prediction and error
    *         corresponding to every sample.
    */
   def computeInitialPredictionAndError(
@@ -121,7 +121,7 @@ private[spark] object GradientBoostedTrees extends Logging {
    * @param treeWeight: Learning rate.
    * @param tree: Tree using which the prediction and error should be updated.
    * @param loss: evaluation metric.
-   * @return a RDD with each element being a zip of the prediction and error
+   * @return an RDD with each element being a zip of the prediction and error
    *         corresponding to each sample.
    */
   def updatePredictionError(
@@ -162,7 +162,7 @@ private[spark] object GradientBoostedTrees extends Logging {
    * Method to calculate error of the base learner for the gradient boosting calculation.
    * Note: This method is not used by the gradient boosting algorithm but is useful for debugging
    * purposes.
-   * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @param data Training dataset: RDD of `LabeledPoint`.
    * @param trees Boosted Decision Tree models
    * @param treeWeights Learning rates at each boosting iteration.
    * @param loss evaluation metric.
@@ -184,7 +184,7 @@ private[spark] object GradientBoostedTrees extends Logging {
   /**
    * Method to compute error or loss for every iteration of gradient boosting.
    *
-   * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param data RDD of `LabeledPoint`
    * @param trees Boosted Decision Tree models
    * @param treeWeights Learning rates at each boosting iteration.
    * @param loss evaluation metric.

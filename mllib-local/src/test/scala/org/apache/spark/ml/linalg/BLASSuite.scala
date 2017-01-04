@@ -392,6 +392,23 @@ class BLASSuite extends SparkMLFunSuite {
       }
     }
 
+    val y17 = new DenseVector(Array(0.0, 0.0))
+    val y18 = y17.copy
+
+    val sA3 = new SparseMatrix(3, 2, Array(0, 2, 4), Array(1, 2, 0, 1), Array(2.0, 1.0, 1.0, 2.0))
+      .transpose
+    val sA4 =
+      new SparseMatrix(2, 3, Array(0, 1, 3, 4), Array(1, 0, 1, 0), Array(1.0, 2.0, 2.0, 1.0))
+    val sx3 = new SparseVector(3, Array(1, 2), Array(2.0, 1.0))
+
+    val expected4 = new DenseVector(Array(5.0, 4.0))
+
+    gemv(1.0, sA3, sx3, 0.0, y17)
+    gemv(1.0, sA4, sx3, 0.0, y18)
+
+    assert(y17 ~== expected4 absTol 1e-15)
+    assert(y18 ~== expected4 absTol 1e-15)
+
     val dAT =
       new DenseMatrix(3, 4, Array(0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 3.0))
     val sAT =
@@ -404,5 +421,50 @@ class BLASSuite extends SparkMLFunSuite {
     assert(sATT.multiply(dx) ~== expected absTol 1e-15)
     assert(dATT.multiply(sx) ~== expected absTol 1e-15)
     assert(sATT.multiply(sx) ~== expected absTol 1e-15)
+  }
+
+  test("spmv") {
+    /*
+      A = [[3.0, -2.0, 2.0, -4.0],
+           [-2.0, -8.0, 4.0, 7.0],
+           [2.0, 4.0, -3.0, -3.0],
+           [-4.0, 7.0, -3.0, 0.0]]
+      x =  [5.0, 2.0, -1.0, -9.0]
+      Ax = [ 45., -93.,  48.,  -3.]
+     */
+    val A = new DenseVector(Array(3.0, -2.0, -8.0, 2.0, 4.0, -3.0, -4.0, 7.0, -3.0, 0.0))
+    val x = new DenseVector(Array(5.0, 2.0, -1.0, -9.0))
+    val n = 4
+
+    val y1 = new DenseVector(Array(-3.0, 6.0, -8.0, -3.0))
+    val y2 = y1.copy
+    val y3 = y1.copy
+    val y4 = y1.copy
+    val y5 = y1.copy
+    val y6 = y1.copy
+    val y7 = y1.copy
+
+    val expected1 = new DenseVector(Array(42.0, -87.0, 40.0, -6.0))
+    val expected2 = new DenseVector(Array(19.5, -40.5, 16.0, -4.5))
+    val expected3 = new DenseVector(Array(-25.5, 52.5, -32.0, -1.5))
+    val expected4 = new DenseVector(Array(-3.0, 6.0, -8.0, -3.0))
+    val expected5 = new DenseVector(Array(43.5, -90.0, 44.0, -4.5))
+    val expected6 = new DenseVector(Array(46.5, -96.0, 52.0, -1.5))
+    val expected7 = new DenseVector(Array(45.0, -93.0, 48.0, -3.0))
+
+    dspmv(n, 1.0, A, x, 1.0, y1)
+    dspmv(n, 0.5, A, x, 1.0, y2)
+    dspmv(n, -0.5, A, x, 1.0, y3)
+    dspmv(n, 0.0, A, x, 1.0, y4)
+    dspmv(n, 1.0, A, x, 0.5, y5)
+    dspmv(n, 1.0, A, x, -0.5, y6)
+    dspmv(n, 1.0, A, x, 0.0, y7)
+    assert(y1 ~== expected1 absTol 1e-8)
+    assert(y2 ~== expected2 absTol 1e-8)
+    assert(y3 ~== expected3 absTol 1e-8)
+    assert(y4 ~== expected4 absTol 1e-8)
+    assert(y5 ~== expected5 absTol 1e-8)
+    assert(y6 ~== expected6 absTol 1e-8)
+    assert(y7 ~== expected7 absTol 1e-8)
   }
 }

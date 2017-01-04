@@ -51,7 +51,8 @@ object LocalFileLR {
 
     showWarning()
 
-    val lines = scala.io.Source.fromFile(args(0)).getLines().toArray
+    val fileSrc = scala.io.Source.fromFile(args(0))
+    val lines = fileSrc.getLines().toArray
     val points = lines.map(parsePoint _)
     val ITERATIONS = args(1).toInt
 
@@ -69,6 +70,7 @@ object LocalFileLR {
       w -= gradient
     }
 
+    fileSrc.close()
     println("Final w: " + w)
   }
 }

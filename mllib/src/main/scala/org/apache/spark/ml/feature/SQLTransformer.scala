@@ -32,9 +32,11 @@ import org.apache.spark.sql.types.StructType
  * the output, it can be any select clause that Spark SQL supports. Users can also
  * use Spark SQL built-in function and UDFs to operate on these selected columns.
  * For example, [[SQLTransformer]] supports statements like:
- *  - SELECT a, a + b AS a_b FROM __THIS__
- *  - SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a > 5
- *  - SELECT a, b, SUM(c) AS c_sum FROM __THIS__ GROUP BY a, b
+ * {{{
+ *  SELECT a, a + b AS a_b FROM __THIS__
+ *  SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a > 5
+ *  SELECT a, b, SUM(c) AS c_sum FROM __THIS__ GROUP BY a, b
+ * }}}
  */
 @Since("1.6.0")
 class SQLTransformer @Since("1.6.0") (@Since("1.6.0") override val uid: String) extends Transformer
@@ -67,7 +69,9 @@ class SQLTransformer @Since("1.6.0") (@Since("1.6.0") override val uid: String) 
     val tableName = Identifiable.randomUID(uid)
     dataset.createOrReplaceTempView(tableName)
     val realStatement = $(statement).replace(tableIdentifier, tableName)
-    dataset.sparkSession.sql(realStatement)
+    val result = dataset.sparkSession.sql(realStatement)
+    dataset.sparkSession.catalog.dropTempView(tableName)
+    result
   }
 
   @Since("1.6.0")

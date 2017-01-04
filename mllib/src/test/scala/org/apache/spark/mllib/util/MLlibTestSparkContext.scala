@@ -23,7 +23,7 @@ import org.scalatest.Suite
 
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.util.TempDirectory
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SparkSession, SQLContext, SQLImplicits}
 import org.apache.spark.util.Utils
 
 trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
@@ -54,5 +54,16 @@ trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
     } finally {
       super.afterAll()
     }
+  }
+
+  /**
+   * A helper object for importing SQL implicits.
+   *
+   * Note that the alternative of importing `spark.implicits._` is not possible here.
+   * This is because we create the [[SQLContext]] immediately before the first test is run,
+   * but the implicits import is needed in the constructor.
+   */
+  protected object testImplicits extends SQLImplicits {
+    protected override def _sqlContext: SQLContext = self.spark.sqlContext
   }
 }

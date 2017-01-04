@@ -337,9 +337,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - non-partitioned table - ErrorIfExists") {
-    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
-
-    withTempView("t") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT) USING parquet")
       intercept[AnalysisException] {
         testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).saveAsTable("t")
       }
@@ -347,9 +346,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - non-partitioned table - Ignore") {
-    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
-
-    withTempView("t") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT) USING parquet")
       testDF.write.format(dataSourceName).mode(SaveMode.Ignore).saveAsTable("t")
       assert(spark.table("t").collect().isEmpty)
     }
@@ -448,7 +446,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     // Using only a subset of all partition columns
-    intercept[Throwable] {
+    intercept[AnalysisException] {
       partitionedTestDF2.write
         .format(dataSourceName)
         .mode(SaveMode.Append)
@@ -849,7 +847,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       "fs.file.impl.disable.cache" -> "true"
     )
     withTempPath { dir =>
-      val path = "file://" + dir.getCanonicalPath
+      val path = dir.toURI.toString
       val df1 = spark.range(4)
       df1.coalesce(1).write.mode("overwrite").options(options).format(dataSourceName).save(path)
       df1.coalesce(1).write.mode("append").options(options).format(dataSourceName).save(path)
@@ -877,6 +875,23 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
         checkLocality()
       }
+    }
+  }
+
+  test("SPARK-16975: Partitioned table with the column having '_' should be read correctly") {
+    withTempDir { dir =>
+      val childDir = new File(dir, dataSourceName).getCanonicalPath
+      val dataDf = spark.range(10).toDF()
+      val df = dataDf.withColumn("_col", $"id")
+      df.write.format(dataSourceName).partitionBy("_col").save(childDir)
+      val reader = spark.read.format(dataSourceName)
+
+      // This is needed for SimpleTextHadoopFsRelationSuite as SimpleTextSource needs schema.
+      if (dataSourceName == classOf[SimpleTextSource].getCanonicalName) {
+        reader.option("dataSchema", dataDf.schema.json)
+      }
+      val readBack = reader.load(childDir)
+      checkAnswer(df, readBack)
     }
   }
 }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal, SortOrder}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -406,6 +406,44 @@ class PlannerSuite extends SharedSQLContext {
     val inputPlan = DummySparkPlan(
       children = DummySparkPlan(outputOrdering = Seq(orderingA, orderingB)) :: Nil,
       requiredChildOrdering = Seq(Seq(orderingA)),
+      requiredChildDistribution = Seq(UnspecifiedDistribution)
+    )
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case s: SortExec => true }.nonEmpty) {
+      fail(s"No sorts should have been added:\n$outputPlan")
+    }
+  }
+
+  test("EnsureRequirements skips sort when required ordering is semantically equal to " +
+    "existing ordering") {
+    val exprId: ExprId = NamedExpression.newExprId
+    val attribute1 =
+      AttributeReference(
+        name = "col1",
+        dataType = LongType,
+        nullable = false
+      ) (exprId = exprId,
+        qualifier = Some("col1_qualifier")
+      )
+
+    val attribute2 =
+      AttributeReference(
+        name = "col1",
+        dataType = LongType,
+        nullable = false
+      ) (exprId = exprId)
+
+    val orderingA1 = SortOrder(attribute1, Ascending)
+    val orderingA2 = SortOrder(attribute2, Ascending)
+
+    assert(orderingA1 != orderingA2, s"$orderingA1 should NOT equal to $orderingA2")
+    assert(orderingA1.semanticEquals(orderingA2),
+      s"$orderingA1 should be semantically equal to $orderingA2")
+
+    val inputPlan = DummySparkPlan(
+      children = DummySparkPlan(outputOrdering = Seq(orderingA1)) :: Nil,
+      requiredChildOrdering = Seq(Seq(orderingA2)),
       requiredChildDistribution = Seq(UnspecifiedDistribution)
     )
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
