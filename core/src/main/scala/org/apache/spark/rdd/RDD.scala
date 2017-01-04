@@ -953,13 +953,13 @@ abstract class RDD[T: ClassTag](
           SparkEnv.get.broadcastManager
             .uploadBroadcast(transFunc.transform(iter.toArray), id).iterator
       }.collect()
+      val nblocks = numBlocksAndChecksums.head
 
       // then: create broadcast from driver, this will not write blocks
       val res = SparkEnv.get.broadcastManager.newExecutorBroadcast(
         transFunc.transform(Array.empty[T]),
         id,
-        numBlocksAndChecksums.head,
-        numBlocksAndChecksums.tail)
+        nblocks)
 
       val callSite = sc.getCallSite
       logInfo("Created executor side broadcast " + res.id + " from " + callSite.shortForm)

@@ -48,8 +48,7 @@ private[spark] trait BroadcastFactory {
   def newExecutorBroadcast[T: ClassTag](
       value: T,
       id: Long,
-      nBlocks: Int,
-      cSums: Array[Int]): Broadcast[T]
+      nBlocks: Int): Broadcast[T]
 
   // Called from executor to put broadcast data to blockmanager.
   def uploadBroadcast[T: ClassTag](value_ : T, id: Long): Seq[Int]
