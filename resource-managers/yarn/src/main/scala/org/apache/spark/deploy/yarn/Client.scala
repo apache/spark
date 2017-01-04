@@ -158,8 +158,6 @@ private[spark] class Client(
       val newApp = yarnClient.createApplication()
       val newAppResponse = newApp.getNewApplicationResponse()
       appId = newAppResponse.getApplicationId()
-      reportLauncherState(SparkAppHandle.State.SUBMITTED)
-      launcherBackend.setAppId(appId.toString)
 
       new CallerContext("CLIENT", sparkConf.get(APP_CALLER_CONTEXT),
         Option(appId.toString)).setCurrentContext()
@@ -174,6 +172,9 @@ private[spark] class Client(
       // Finally, submit and monitor the application
       logInfo(s"Submitting application $appId to ResourceManager")
       yarnClient.submitApplication(appContext)
+      launcherBackend.setAppId(appId.toString)
+      reportLauncherState(SparkAppHandle.State.SUBMITTED)
+
       appId
     } catch {
       case e: Throwable =>
