@@ -41,9 +41,9 @@ object FilterEstimation extends Logging {
     if (stats.rowCount.isEmpty) return None
 
     /** save a mutable copy of colStats so that we can later change it recursively */
-    val statsSeq: Seq[(ExprId, ColumnStat)] =
-      stats.attributeStats.map(kv => (kv._1.exprId, kv._2)).toSeq
-    mutableColStats = mutable.HashMap[ExprId, ColumnStat](statsSeq: _*)
+    val statsExprIdMap: Map[ExprId, ColumnStat] =
+      stats.attributeStats.map(kv => (kv._1.exprId, kv._2))
+    mutableColStats = mutable.Map.empty ++= statsExprIdMap
 
     /** save a copy of ExprId-to-Attribute map for later conversion use */
     val expridToAttrMap: Map[ExprId, Attribute] =
