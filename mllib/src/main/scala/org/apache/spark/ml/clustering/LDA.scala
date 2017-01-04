@@ -512,7 +512,7 @@ abstract class LDAModel private[ml] (
   }
 
   /**
-   * Calculate an upper bound bound on perplexity.  (Lower is better.)
+   * Calculate an upper bound on perplexity.  (Lower is better.)
    * See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
    *
    * WARNING: If this model is an instance of [[DistributedLDAModel]] (produced when [[optimizer]]

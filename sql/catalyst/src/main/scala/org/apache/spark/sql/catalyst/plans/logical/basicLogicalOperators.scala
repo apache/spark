@@ -795,7 +795,7 @@ case object OneRowRelation extends LeafNode {
 
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
-   * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
+   * cardinality is the product of all child plan's cardinality, i.e. applies in the case
    * of cartesian joins.
    *
    * [[LeafNode]]s must override this.

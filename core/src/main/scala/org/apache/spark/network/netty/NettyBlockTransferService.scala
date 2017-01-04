@@ -37,7 +37,7 @@ import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
 /**
- * A BlockTransferService that uses Netty to fetch a set of blocks at at time.
+ * A BlockTransferService that uses Netty to fetch a set of blocks at time.
  */
 private[spark] class NettyBlockTransferService(
     conf: SparkConf,
