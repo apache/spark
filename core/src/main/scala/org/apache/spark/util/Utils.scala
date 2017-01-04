@@ -1484,8 +1484,8 @@ private[spark] object Utils extends Logging {
 
   /** Return uncompressed file length of a compressed file. */
   private def getCompressedFileLength(file: File): Long = {
-    tryWithResource(new GZIPInputStream(new FileInputStream(file))) { gzInputStream =>
-      try {
+    try {
+      tryWithResource(new GZIPInputStream(new FileInputStream(file))) { gzInputStream =>
         // Uncompress .gz file to determine file size.
         var fileSize = 0L
         val bufSize = 1024
@@ -1496,11 +1496,11 @@ private[spark] object Utils extends Logging {
           numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
         }
         fileSize
-      } catch {
-        case e: Throwable =>
-          logError(s"Cannot get file length of ${file}", e)
-          throw e
       }
+    } catch {
+      case e: Throwable =>
+        logError(s"Cannot get file length of ${file}", e)
+        throw e
     }
   }
 

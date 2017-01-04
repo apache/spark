@@ -233,7 +233,7 @@ case class LoadDataCommand(
           }
 
           // Note that special characters such as "*" on Windows are not allowed as a path.
-          // calling `WindowsFileSystem.getPath` throws an exception with these.
+          // Calling `WindowsFileSystem.getPath` throws an exception if there are in the path.
           val dirPath = fileSystem.getPath(dir)
           val pathPattern = new File(dirPath.toAbsolutePath.toString, file.getName).toURI.getPath
           val safePathPattern = if (Utils.isWindows) {
