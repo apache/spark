@@ -79,10 +79,6 @@ private[streaming] class ReceiverSupervisorImpl(
       override def receive: PartialFunction[Any, Unit] = {
         case StopReceiver =>
           logInfo("Received stop signal")
-          receivedBlockHandler match {
-            case w: WriteAheadLogBasedBlockHandler => w.stop()
-            case _ =>
-          }
           ReceiverSupervisorImpl.this.stop("Stopped by driver", None)
         case CleanupOldBlocks(threshTime) =>
           logDebug("Received delete old batch signal")
@@ -179,6 +175,12 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
   override protected def onStop(message: String, error: Option[Throwable]) {
+    receivedBlockHandler match {
+      case handler: WriteAheadLogBasedBlockHandler =>
+        // Write ahead log should be closed.
+        handler.stop()
+      case _ =>
+    }
     registeredBlockGenerators.asScala.foreach { _.stop() }
     env.rpcEnv.stop(endpoint)
   }
