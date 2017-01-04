@@ -59,7 +59,6 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
     val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
     StructType(outputFields)
   }
-
 }
 
 /**
