@@ -312,22 +312,26 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td>Details for the storage status of a given RDD.</td>
   </tr>
   <tr>
-    <td><code>/applications/[app-id]/logs</code></td>
-    <td>Download the event logs of the given application as files within
+    <td><code>/applications/[base-app-id]/logs</code></td>
+    <td>Download the event logs for all attempts of the given application as files within
     a zip file.
     </td>
   </tr>
   <tr>
+    <td><code>/applications/[base-app-id]/[attempt-id]/logs</code></td>
+    <td>Download the event logs for a specific application attempt as a zip file.</td>
+  </tr>
+  <tr>
     <td><code>/applications/[app-id]/streaming/statistics</code></td>
-    <td>Statistics information of stream.</td>
+    <td>Statistics for the streaming context.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/streaming/receivers</code></td>
-    <td>A list of all receiver streams.</td>
+    <td>A list of all streaming receivers.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/streaming/receivers/[stream-id]</code></td>
-    <td>Details of the given receiver stream.</td>
+    <td>Details of the given receiver.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/streaming/batches</code></td>
