@@ -196,7 +196,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     assertIndexIsValid(i);
     BitSetMethods.set(baseObject, baseOffset, i);
     // To preserve row equality, zero out the value when setting the column to null.
-    // Since this row does does not currently support updates to variable-length values, we don't
+    // Since this row does not currently support updates to variable-length values, we don't
     // have to worry about zeroing out that data.
     Platform.putLong(baseObject, getFieldOffset(i), 0);
   }

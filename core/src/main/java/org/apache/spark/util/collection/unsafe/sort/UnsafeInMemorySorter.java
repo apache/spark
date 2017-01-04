@@ -86,7 +86,7 @@ public final class UnsafeInMemorySorter {
   private final PrefixComparators.RadixSortSupport radixSortSupport;
 
   /**
-   * Within this buffer, position {@code 2 * i} holds a pointer pointer to the record at
+   * Within this buffer, position {@code 2 * i} holds a pointer to the record at
    * index {@code i}, while position {@code 2 * i + 1} in the array holds an 8-byte key prefix.
    *
    * Only part of the array will be used to store the pointers, the rest part is preserved as

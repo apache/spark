@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
  * The Hive table scan operator.  Column and partition pruning are both handled.
  *
  * @param requestedAttributes Attributes to be fetched from the Hive table.
- * @param relation The Hive table be be scanned.
+ * @param relation The Hive table be scanned.
  * @param partitionPruningPred An optional partition pruning predicate for partitioned table.
  */
 private[hive]

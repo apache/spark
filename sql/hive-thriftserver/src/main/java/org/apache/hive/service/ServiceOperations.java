@@ -33,7 +33,7 @@ public final class ServiceOperations {
   }
 
   /**
-   * Verify that that a service is in a given state.
+   * Verify that a service is in a given state.
    * @param state the actual state a service is in
    * @param expectedState the desired state
    * @throws IllegalStateException if the service state is different from

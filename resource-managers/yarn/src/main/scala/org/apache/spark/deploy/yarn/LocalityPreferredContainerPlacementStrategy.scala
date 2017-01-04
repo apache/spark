@@ -32,7 +32,7 @@ private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], rack
 
 /**
  * This strategy is calculating the optimal locality preferences of YARN containers by considering
- * the node ratio of pending tasks, number of required cores/containers and and locality of current
+ * the node ratio of pending tasks, number of required cores/containers and locality of current
  * existing and pending allocated containers. The target of this algorithm is to maximize the number
  * of tasks that would run locally.
  *

@@ -212,7 +212,7 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
            |Instead set the source option '$STARTING_OFFSETS_OPTION_KEY' to 'earliest' or 'latest'
            |to specify where to start. Structured Streaming manages which offsets are consumed
            |internally, rather than relying on the kafkaConsumer to do it. This will ensure that no
-           |data is missed when when new topics/partitions are dynamically subscribed. Note that
+           |data is missed when new topics/partitions are dynamically subscribed. Note that
            |'$STARTING_OFFSETS_OPTION_KEY' only applies when a new Streaming query is started, and
            |that resuming will always pick up from where the query left off. See the docs for more
            |details.

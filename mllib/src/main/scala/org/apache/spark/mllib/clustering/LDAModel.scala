@@ -245,7 +245,7 @@ class LocalLDAModel private[spark] (
   }
 
   /**
-   * Calculate an upper bound bound on perplexity.  (Lower is better.)
+   * Calculate an upper bound on perplexity.  (Lower is better.)
    * See Equation (16) in original Online LDA paper.
    *
    * @param documents test corpus to use for calculating perplexity

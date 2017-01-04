@@ -253,7 +253,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     assertNotFound(appId, None)
   }
 
-  test("Test that if an attempt ID is is set, it must be used in lookups") {
+  test("Test that if an attempt ID is set, it must be used in lookups") {
     val operations = new StubCacheOperations()
     val clock = new ManualClock(1)
     implicit val cache = new ApplicationCache(operations, retainedApplications = 10, clock = clock)

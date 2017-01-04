@@ -88,7 +88,7 @@ abstract class InputDStream[T: ClassTag](_ssc: StreamingContext)
     if (!super.isTimeValid(time)) {
       false // Time not valid
     } else {
-      // Time is valid, but check it it is more than lastValidTime
+      // Time is valid, but check it is more than lastValidTime
       if (lastValidTime != null && time < lastValidTime) {
         logWarning(s"isTimeValid called with $time whereas the last valid time " +
           s"is $lastValidTime")

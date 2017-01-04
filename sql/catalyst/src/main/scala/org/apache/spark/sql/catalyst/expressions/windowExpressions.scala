@@ -516,7 +516,7 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
  * into the number of buckets); both variables are based on the size of the current partition.
  * During the calculation process the function keeps track of the current row number, the current
  * bucket number, and the row number at which the bucket will change (bucketThreshold). When the
- * current row number reaches bucket threshold, the bucket value is increased by one and the the
+ * current row number reaches bucket threshold, the bucket value is increased by one and the
  * threshold is increased by the bucket size (plus one extra if the current bucket is padded).
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
