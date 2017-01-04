@@ -233,12 +233,12 @@ case class LoadDataCommand(
           }
 
           // Note that special characters such as "*" on Windows are not allowed as a path.
-          // So, we just concatenate both the name and dir below via `java.io.File`.
+          // calling `WindowsFileSystem.getPath` throws an exception with these.
           val dirPath = fileSystem.getPath(dir)
-          val pathPattern = new File(dirPath.toAbsolutePath.toString, file.getName).getAbsolutePath
+          val pathPattern = new File(dirPath.toAbsolutePath.toString, file.getName).toURI.getPath
           val safePathPattern = if (Utils.isWindows) {
-            // On Windows, back-slashes in the pattern should be escaped.
-            StringEscapeUtils.escapeJava(pathPattern)
+            // On Windows, the pattern should not start with slashes for absolute file paths.
+            pathPattern.stripPrefix("/")
           } else {
             pathPattern
           }

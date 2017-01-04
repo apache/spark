@@ -1071,11 +1071,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("CTAS: persisted bucketed data source table") {
     withTempPath { dir =>
       withTable("t") {
-        val path = dir.getCanonicalPath
-
         sql(
           s"""CREATE TABLE t USING PARQUET
-             |OPTIONS (PATH '$path')
+             |OPTIONS (PATH '${dir.toURI}')
              |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
              |AS SELECT 1 AS a, 2 AS b
            """.stripMargin
@@ -1093,11 +1091,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
     withTempPath { dir =>
       withTable("t") {
-        val path = dir.getCanonicalPath
-
         sql(
           s"""CREATE TABLE t USING PARQUET
-             |OPTIONS (PATH '$path')
+             |OPTIONS (PATH '${dir.toURI}')
              |CLUSTERED BY (a) INTO 2 BUCKETS
              |AS SELECT 1 AS a, 2 AS b
            """.stripMargin
