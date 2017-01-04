@@ -53,7 +53,6 @@ class DirectKafkaStreamSuite
     .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
 
-  private var sc: SparkContext = _
   private var ssc: StreamingContext = _
   private var testDir: File = _
 
@@ -73,11 +72,7 @@ class DirectKafkaStreamSuite
 
   after {
     if (ssc != null) {
-      ssc.stop()
-      sc = null
-    }
-    if (sc != null) {
-      sc.stop()
+      ssc.stop(stopSparkContext = true)
     }
     if (testDir != null) {
       Utils.deleteRecursively(testDir)
