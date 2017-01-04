@@ -680,7 +680,7 @@ windowedCounts = words.groupBy(
 
 ### Handling Late Data and Watermarking
 Now consider what happens if one of the events arrives late to the application.
-For example, say, a word generated at 12:04 (i.e. event time) could be received received by 
+For example, say, a word generated at 12:04 (i.e. event time) could be received by 
 the application at 12:11. The application should use the time 12:04 instead of 12:11
 to update the older counts for the window `12:00 - 12:10`. This occurs 
 naturally in our window-based grouping – Structured Streaming can maintain the intermediate state 

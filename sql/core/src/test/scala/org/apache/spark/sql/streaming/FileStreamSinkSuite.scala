@@ -144,7 +144,7 @@ class FileStreamSinkSuite extends StreamTest {
   }
 
   // This tests whether FileStreamSink works with aggregations. Specifically, it tests
-  // whether the the correct streaming QueryExecution (i.e. IncrementalExecution) is used to
+  // whether the correct streaming QueryExecution (i.e. IncrementalExecution) is used to
   // to execute the trigger for writing data to file sink. See SPARK-18440 for more details.
   test("writing with aggregation") {
 
