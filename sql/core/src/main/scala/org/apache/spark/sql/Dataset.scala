@@ -2752,7 +2752,9 @@ class Dataset[T] private[sql](
         plan.resetMetrics()
       }
       val start = System.nanoTime()
-      val result = withNewExecutionId(action(qe.executedPlan))
+      val result = SQLExecution.withNewExecutionId(sparkSession, qe) {
+        action(qe.executedPlan)
+      }
       val end = System.nanoTime()
       sparkSession.listenerManager.onSuccess(name, qe, end - start)
       result
