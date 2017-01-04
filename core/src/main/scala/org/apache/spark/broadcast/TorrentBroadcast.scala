@@ -71,7 +71,7 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
  * @param nBlocks how many blocks for executor broadcast.
  */
 private[spark] class TorrentBroadcast[T: ClassTag](
-    obj: T,
+    @transient val obj: T,
     id: Long,
     isExecutorSide: Boolean = false,
     nBlocks: Option[Int] = None,
