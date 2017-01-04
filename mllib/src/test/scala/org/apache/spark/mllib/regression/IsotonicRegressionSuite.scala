@@ -170,9 +170,10 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
   }
 
   test("weighted isotonic regression with zero weights") {
-    intercept[SparkException] {
+    val ex = intercept[SparkException] {
       runIsotonicRegression(Seq[Double](1, 2, 3, 2, 1), Seq[Double](0, 0, 0, 1, 0), true)
     }
+    assert(ex.getCause.isInstanceOf[IllegalArgumentException])
   }
 
   test("SPARK-16426 isotonic regression with duplicate features that produce NaNs") {
