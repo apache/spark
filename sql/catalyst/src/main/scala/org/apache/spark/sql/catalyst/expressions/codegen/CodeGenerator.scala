@@ -365,7 +365,7 @@ class CodegenContext {
       val setNull = if (!isVectorized && isMutableVarLenField) {
         s"""
           if ($row instanceof UnsafeRow) {
-            ((UnsafeRow) $row).setNullData($ordinal);
+            ((UnsafeRow) $row).setNullForFixedLengthNonPrimitive($ordinal);
           } else {
             $row.setNullAt($ordinal);
           }

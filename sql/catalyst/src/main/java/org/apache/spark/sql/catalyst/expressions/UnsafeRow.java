@@ -210,7 +210,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     Platform.putLong(baseObject, getFieldOffset(i), 0);
   }
 
-  public void setNullData(int ordinal) {
+  public void setNullForFixedLengthNonPrimitive(int ordinal) {
     if (isNullAt(ordinal)) {
       return;
     }
