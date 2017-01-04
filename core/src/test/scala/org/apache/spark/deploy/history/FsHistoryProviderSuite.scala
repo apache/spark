@@ -39,6 +39,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
+import org.apache.spark.security.GroupMappingServiceProvider
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 
 class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
@@ -474,6 +475,48 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
   }
 
+
+  test("support history server ui admin acls") {
+    val conf = createTestConf()
+      .set("spark.history.ui.acls.enable", "true")
+      .set("spark.history.ui.admin.acls", "user1,user2")
+      .set("spark.history.ui.admin.acls.groups", "group1")
+      .set("spark.user.groups.mapping", classOf[TestGroupsMappingProvider].getName)
+
+    val provider = new FsHistoryProvider(conf)
+
+    val log = newLogFile("app1", Some("attempt1"), inProgress = false)
+    writeFile(log, true, None,
+      SparkListenerApplicationStart("app1", Some("app1"), System.currentTimeMillis(),
+        "test", Some("attempt1")),
+      SparkListenerEnvironmentUpdate(Map(
+        "Spark Properties" -> Seq(
+          ("spark.admin.acls", "user"),
+          ("spark.admin.acls.groups", "group")),
+        "JVM Information" -> Seq.empty,
+        "System Properties" -> Seq.empty,
+        "Classpath Entries" -> Seq.empty
+      )),
+      SparkListenerApplicationEnd(System.currentTimeMillis()))
+
+    provider.checkForLogs()
+    val appUi = provider.getAppUI("app1", Some("attempt1"))
+
+    assert (appUi.nonEmpty)
+    val securityManager = appUi.get.ui.securityManager
+
+    // Test whether user has permission to access UI.
+    securityManager.checkUIViewPermissions("user1") should be (true)
+    securityManager.checkUIViewPermissions("user2") should be (true)
+    securityManager.checkUIViewPermissions("user") should be (true)
+    securityManager.checkUIViewPermissions("abc") should be (false)
+
+    // Test whether user with admin group has permission to access UI.
+    securityManager.checkUIViewPermissions("user3") should be (true)
+    securityManager.checkUIViewPermissions("user4") should be (true)
+    securityManager.checkUIViewPermissions("user5") should be (false)
+  }
+
   /**
    * Asks the provider to check for logs and calls a function to perform checks on the updated
    * app list. Example:
@@ -532,3 +575,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
 }
+
+class TestGroupsMappingProvider extends GroupMappingServiceProvider {
+  private val mappings = Map(
+    "user3" -> "group1",
+    "user4" -> "group1")
+
+  override def getGroups(username: String): Set[String] = {
+    mappings.get(username).map(Set(_)).getOrElse(Set.empty)
+  }
+}
+

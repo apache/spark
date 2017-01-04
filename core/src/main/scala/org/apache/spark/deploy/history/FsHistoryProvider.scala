@@ -253,10 +253,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
             ui.getSecurityManager.setAcls(uiAclsEnabled)
             // make sure to set admin acls before view acls so they are properly picked up
-            ui.getSecurityManager.setAdminAcls(appListener.adminAcls.getOrElse(""))
-            ui.getSecurityManager.setViewAcls(attempt.sparkUser,
-              appListener.viewAcls.getOrElse(""))
-            ui.getSecurityManager.setAdminAclsGroups(appListener.adminAclsGroups.getOrElse(""))
+            val adminAcls = conf.get("spark.history.ui.admin.acls", "") + "," +
+              appListener.adminAcls.getOrElse("")
+            ui.getSecurityManager.setAdminAcls(adminAcls)
+            ui.getSecurityManager.setViewAcls(attempt.sparkUser, appListener.viewAcls.getOrElse(""))
+            val adminAclsGroups = conf.get("spark.history.ui.admin.acls.groups", "") + "," +
+              appListener.adminAclsGroups.getOrElse("")
+            ui.getSecurityManager.setAdminAclsGroups(adminAclsGroups)
             ui.getSecurityManager.setViewAclsGroups(appListener.viewAclsGroups.getOrElse(""))
             Some(LoadedAppUI(ui, updateProbe(appId, attemptId, attempt.fileSize)))
           } else {
