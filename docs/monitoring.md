@@ -276,7 +276,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]</code></td>
-    <td>Details for the given stage attempt</td>
+    <td>Details for the given stage attempt.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskSummary</code></td>
@@ -321,6 +321,34 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td><code>/applications/[base-app-id]/[attempt-id]/logs</code></td>
     <td>Download the event logs for a specific application attempt as a zip file.</td>
   </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/statistics</code></td>
+    <td>Statistics for the streaming context.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/receivers</code></td>
+    <td>A list of all streaming receivers.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/receivers/[stream-id]</code></td>
+    <td>Details of the given receiver.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches</code></td>
+    <td>A list of all retained batches.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches/[batch-id]</code></td>
+    <td>Details of the given batch.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations</code></td>
+    <td>A list of all output operations of the given batch.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations/[outputOp-id]</code></td>
+    <td>Details of the given operation and given batch.</td>
+  </tr>       
 </table>
 
 The number of jobs and stages which can retrieved is constrained by the same retention
