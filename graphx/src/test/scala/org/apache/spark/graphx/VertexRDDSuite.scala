@@ -20,6 +20,7 @@ package org.apache.spark.graphx
 import org.apache.spark.{HashPartitioner, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 class VertexRDDSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -194,6 +195,23 @@ class VertexRDDSuite extends SparkFunSuite with LocalSparkContext {
       assert(rdd.getStorageLevel == StorageLevel.NONE)
       rdd.cache()
       assert(rdd.getStorageLevel == StorageLevel.MEMORY_ONLY)
+    }
+  }
+
+  test("checkpointed transformations") {
+    withSpark { sc =>
+      val tempDir = Utils.createTempDir()
+      val path = tempDir.toURI.toString
+
+      sc.setCheckpointDir(path)
+
+      val verts = vertices(sc, 5)
+      verts.checkpoint()
+      verts.count()
+
+      assert(verts.collect.toSet == Set(0L -> 0, 1L -> 1, 2L -> 2, 3L -> 3, 4L -> 4, 5L -> 5))
+
+      Utils.deleteRecursively(tempDir)
     }
   }
 
