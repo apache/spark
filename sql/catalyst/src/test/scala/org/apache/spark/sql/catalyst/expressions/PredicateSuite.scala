@@ -324,4 +324,9 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(struct, structType),
       Literal.create(unsafeStruct, structType)), true)
   }
+
+  test("EqualTo double/float infinity") {
+    val infinity = Literal(Double.PositiveInfinity)
+    checkEvaluation(EqualTo(infinity, infinity), true)
+  }
 }
