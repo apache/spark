@@ -131,11 +131,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         }
     }
 
-    // Check if the aggregates contains functions that do not support partial aggregation.
-    val existsNonPartial = aggExpressions.exists(!_.aggregateFunction.supportsPartial)
-
-    // Aggregation strategy can handle queries with a single distinct group and partial aggregates.
-    if (distinctAggGroups.size > 1 || (distinctAggGroups.size == 1 && existsNonPartial)) {
+    // Aggregation strategy can handle queries with a single distinct group.
+    if (distinctAggGroups.size > 1) {
       // Create the attributes for the grouping id and the group by clause.
       val gid = AttributeReference("gid", IntegerType, nullable = false)(isGenerated = true)
       val groupByMap = a.groupingExpressions.collect {

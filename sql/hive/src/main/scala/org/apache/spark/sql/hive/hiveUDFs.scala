@@ -380,8 +380,6 @@ private[hive] case class HiveUDAFFunction(
 
   override def nullable: Boolean = true
 
-  override def supportsPartial: Boolean = true
-
   override lazy val dataType: DataType = inspectorToDataType(returnInspector)
 
   override def prettyName: String = name
