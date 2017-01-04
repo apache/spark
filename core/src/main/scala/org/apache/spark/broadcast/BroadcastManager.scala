@@ -101,8 +101,9 @@ private[spark] class BroadcastManager(
   def newExecutorBroadcast[T: ClassTag](
       value_ : T,
       id: Long,
-      nBlocks: Int): Broadcast[T] = {
-    broadcastFactory.newExecutorBroadcast[T](value_, id, nBlocks)
+      nBlocks: Int,
+      cSums: Array[Int]): Broadcast[T] = {
+    broadcastFactory.newExecutorBroadcast[T](value_, id, nBlocks, cSums)
   }
 
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {

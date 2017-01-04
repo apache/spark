@@ -74,7 +74,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](
     obj: T,
     id: Long,
     isExecutorSide: Boolean = false,
-    @transient val nBlocks: Option[Int] = None)
+    nBlocks: Option[Int] = None,
+    cSums: Option[Array[Int]] = None)
   extends Broadcast[T](id) with Logging with Serializable {
 
   /**
@@ -93,7 +94,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](
   /** Whether to generate checksum for blocks or not. */
   private var checksumEnabled: Boolean = false
   /** The checksum for all the blocks. */
-  private var checksums: Array[Int] = _
+  private var checksums: Array[Int] = cSums.getOrElse(null)
 
   private def setConf(conf: SparkConf) {
     compressionCodec = if (conf.getBoolean("spark.broadcast.compress", true)) {
@@ -103,7 +104,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](
     }
     // Note: use getSizeAsKb (not bytes) to maintain compatibility if no units are provided
     blockSize = conf.getSizeAsKb("spark.broadcast.blockSize", "4m").toInt * 1024
-    checksumEnabled = conf.getBoolean("spark.broadcast.checksum", false)
+    checksumEnabled = conf.getBoolean("spark.broadcast.checksum", true)
   }
   setConf(SparkEnv.get.conf)
 
