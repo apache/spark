@@ -69,7 +69,8 @@ case class InsertIntoHadoopFsRelationCommand(
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
-    val partitionsTrackedByCatalog = catalogTable.isDefined &&
+    val partitionsTrackedByCatalog = sparkSession.sessionState.conf.manageFilesourcePartitions &&
+      catalogTable.isDefined &&
       catalogTable.get.partitionColumnNames.nonEmpty &&
       catalogTable.get.tracksPartitionsInCatalog
 
@@ -83,7 +84,7 @@ case class InsertIntoHadoopFsRelationCommand(
         catalogTable.get.identifier, Some(staticPartitions))
       initialMatchingPartitions = matchingPartitions.map(_.spec)
       customPartitionLocations = getCustomPartitionLocations(
-        fs, qualifiedOutputPath, matchingPartitions)
+        fs, catalogTable.get, qualifiedOutputPath, matchingPartitions)
     }
 
     val pathExists = fs.exists(qualifiedOutputPath)
@@ -200,9 +201,9 @@ case class InsertIntoHadoopFsRelationCommand(
    */
   private def getCustomPartitionLocations(
       fs: FileSystem,
+      table: CatalogTable,
       qualifiedOutputPath: Path,
       partitions: Seq[CatalogTablePartition]): Map[TablePartitionSpec, String] = {
-    val table = catalogTable.get
     partitions.flatMap { p =>
       val defaultLocation = qualifiedOutputPath.suffix(
         "/" + PartitioningUtils.getPathFragment(p.spec, table.partitionSchema)).toString
