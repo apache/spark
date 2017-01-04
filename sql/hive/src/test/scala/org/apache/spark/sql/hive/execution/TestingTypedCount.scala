@@ -42,8 +42,6 @@ case class TestingTypedCount(
 
   override def nullable: Boolean = false
 
-  override val supportsPartial: Boolean = true
-
   override def createAggregationBuffer(): State = TestingTypedCount.State(0L)
 
   override def update(buffer: State, input: InternalRow): State = {
