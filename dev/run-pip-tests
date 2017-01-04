@@ -80,6 +80,7 @@ for python in "${PYTHON_EXECS[@]}"; do
     source "$VIRTUALENV_PATH"/bin/activate
     # Upgrade pip & friends
     pip install --upgrade pip pypandoc wheel
+    pip install numpy # Needed so we can verify mllib imports
 
     echo "Creating pip installable source dist"
     cd "$FWDIR"/python
