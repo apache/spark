@@ -374,7 +374,7 @@ The "Output" is defined as what gets written out to the external storage. The ou
 
   - *Append Mode* - Only the new rows appended in the Result Table since the last trigger will be written to the external storage. This is applicable only on the queries where existing rows in the Result Table are not expected to change.
   
-  - *Update Mode* - Only the rows that were updated in the Result Table since the last trigger will be written to the external storage (not available yet in Spark 2.0). Note that this is different from the Complete Mode in that this mode does not output the rows that are not changed.
+  - *Update Mode* - Only the rows that were updated in the Result Table since the last trigger will be written to the external storage (available since Spark 2.1.1). Note that this is different from the Complete Mode in that this mode only outputs the rows that have changed since the last trigger.
 
 Note that each mode is applicable on certain types of queries. This is discussed in detail [later](#output-modes).
 
@@ -753,34 +753,47 @@ windowedCounts = words
 
 In this example, we are defining the watermark of the query on the value of the column "timestamp", 
 and also defining "10 minutes" as the threshold of how late is the data allowed to be. If this query 
-is run in Append output mode (discussed later in [Output Modes](#output-modes) section), 
-the engine will track the current event time from the column "timestamp" and wait for additional
-"10 minutes" in event time before finalizing the windowed counts and adding them to the Result Table.
+is run in Update output mode (discussed later in [Output Modes](#output-modes) section), 
+the engine will keep updating counts of a window in the Resule Table until the window is older 
+than the watermark, which lags behind the current event time in column "timestamp" by 10 minutes.
 Here is an illustration. 
 
-![Watermarking in Append Mode](img/structured-streaming-watermark.png)
+![Watermarking in Update Mode](img/structured-streaming-watermark-update-mode.png)
 
 As shown in the illustration, the maximum event time tracked by the engine is the 
 *blue dashed line*, and the watermark set as `(max event time - '10 mins')`
 at the beginning of every trigger is the red line  For example, when the engine observes the data 
 `(12:14, dog)`, it sets the watermark for the next trigger as `12:04`.
-For the window `12:00 - 12:10`, the partial counts are maintained as internal state while the system
-is waiting for late data. After the system finds data (i.e. `(12:21, owl)`) such that the 
-watermark exceeds 12:10, the partial count is finalized and appended to the table. This count will
-not change any further as all "too-late" data older than 12:10 will be ignored.  
+This watermark lets the engine maintain intermediate state for additional 10 minutes to allow late
+data to be counted. For example, the data `(12:09, cat)` is out of order and late, and it falls in
+windows `12:05 - 12:15` and `12:10 - 12:20`. Since, it is still ahead of the watermark `12:04` in 
+the trigger, the engine still maintains the intermediate counts as state and correctly updates the 
+counts of the related windows. However, when the watermark is updated to 12:11, the intermediate 
+state for window `(12:00 - 12:10)` is cleared, and all subsequent data (e.g. `(12:04, donkey)`) 
+is considered "too late" and therefore ignored. Note that after every trigger, 
+the updated counts (i.e. purple rows) are written to sink as the trigger output, as dictated by 
+the Update mode.
 
-Note that in Append output mode, the system has to wait for "late threshold" time 
-before it can output the aggregation of a window. This may not be ideal if data can be very late, 
-(say 1 day) and you like to have partial counts without waiting for a day. In future, we will add
-Update output mode which would allows every update to aggregates to be written to sink every trigger. 
+
+Some sinks (e.g. files) may not supported fine-grained updates that Update Mode requires. To work
+with them, we have also support Append Mode, where only the *final counts* are written to sink.
+This is illustrated below.
+
+![Watermarking in Append Mode](img/structured-streaming-watermark-append-mode.png)
+Similar to the Update Mode earlier, the engine maintains intermediate counts for each window. 
+However, the partial counts are not updated to the Result Table and not written to sink. The engine
+waits for "10 mins" for late date to be counted, 
+then drops intermediate state of a window < watermark, and appends the final
+counts to the Result Table/sink. For example, the final counts of window `12:00 - 12:10` is 
+appended to the Result Table only after the watermark is updated to `12:11`. 
 
 **Conditions for watermarking to clean aggregation state**
 It is important to note that the following conditions must be satisfied for the watermarking to 
-clean the state in aggregation queries *(as of Spark 2.1, subject to change in the future)*.
+clean the state in aggregation queries *(as of Spark 2.1.1, subject to change in the future)*.
 
-- **Output mode must be Append.** Complete mode requires all aggregate data to be preserved, and hence 
-cannot use watermarking to drop intermediate state. See the [Output Modes](#output-modes) section 
-for detailed explanation of the semantics of each output mode.
+- **Output mode must be Append or Update.** Complete mode requires all aggregate data to be preserved, 
+and hence cannot use watermarking to drop intermediate state. See the [Output Modes](#output-modes) 
+section for detailed explanation of the semantics of each output mode.
 
 - The aggregation must have either the event-time column, or a `window` on the event-time column. 
 
@@ -894,7 +907,7 @@ fault-tolerant sink). For example, queries with only `select`,
 - **Complete mode** - The whole Result Table will be outputted to the sink after every trigger.
  This is supported for aggregation queries.
 
-- **Update mode** - (*not available in Spark 2.1*) Only the rows in the Result Table that were 
+- **Update mode** - (*Available since Spark 2.1.1*) Only the rows in the Result Table that were 
 updated since the last trigger will be outputted to the sink. 
 More information to be added in future releases.
 
@@ -910,7 +923,7 @@ Here is the compatibility matrix.
   </tr>
   <tr>
     <td colspan="2" valign="middle"><br/>Queries without aggregation</td>
-    <td>Append</td>
+    <td>Append, Update</td>
     <td>
         Complete mode note supported as it is infeasible to keep all data in the Result Table.
     </td>
@@ -918,13 +931,15 @@ Here is the compatibility matrix.
   <tr>
     <td rowspan="2">Queries with aggregation</td>
     <td>Aggregation on event-time with watermark</td>
-    <td>Append, Complete</td>
+    <td>Append, Update, Complete</td>
     <td>
         Append mode uses watermark to drop old aggregation state. But the output of a 
         windowed aggregation is delayed the late threshold specified in `withWatermark()` as by
         the modes semantics, rows can be added to the Result Table only once after they are 
         finalized (i.e. after watermark is crossed). See 
-        <a href="#handling-late-data">Late Data</a> section for more details.
+        <a href="#handling-late-data-and-watermarking">Late Data</a> section for more details.
+        <br/><br/>
+        Update mode uses watermark to drop old aggregation state.
         <br/><br/>
         Complete mode does drop not old aggregation state since by definition this mode
         preserves all data in the Result Table.
@@ -932,13 +947,13 @@ Here is the compatibility matrix.
   </tr>
   <tr>
     <td>Other aggregations</td>
-    <td>Complete</td>
+    <td>Complete, Update</td>
     <td>
+        Since no watermark is defined (only defined in other category), 
+        old aggregation state is not dropped.
+        <br/><br/>
         Append mode is not supported as aggregates can update thus violating the semantics of 
         this mode.
-        <br/><br/>
-        Complete mode does drop not old aggregation state since by definition this mode
-        preserves all data in the Result Table.
     </td>  
   </tr>
   <tr>
@@ -979,14 +994,14 @@ Here is a table of all the sinks, and the corresponding settings.
   </tr>
   <tr>
     <td><b>Foreach Sink</b></td>
-    <td>All modes</td>
+    <td>Append, Update, Compelete</td>
     <td><pre>writeStream<br/>  .foreach(...)<br/>  .start()</pre></td>
     <td>Depends on ForeachWriter implementation</td>
     <td>More details in the <a href="#using-foreach">next section</a></td>
   </tr>
   <tr>
     <td><b>Console Sink</b></td>
-    <td>Append, Complete</td>
+    <td>Append, Update, Complete</td>
     <td><pre>writeStream<br/>  .format("console")<br/>  .start()</pre></td>
     <td>No</td>
     <td></td>
@@ -995,7 +1010,7 @@ Here is a table of all the sinks, and the corresponding settings.
     <td><b>Memory Sink</b></td>
     <td>Append, Complete</td>
     <td><pre>writeStream<br/>  .format("memory")<br/>  .queryName("table")<br/>  .start()</pre></td>
-    <td>No</td>
+    <td>Yes, but only in Complete Mode</td>
     <td>Saves the output data as a table, for interactive querying. Table name is the query name.</td>
   </tr>
   <tr>
