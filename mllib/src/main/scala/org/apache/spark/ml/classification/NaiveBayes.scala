@@ -130,8 +130,8 @@ class NaiveBayes @Since("1.5.0") (
     if (positiveLabel && isDefined(thresholds)) {
       val numClasses = getNumClasses(dataset)
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
-          ".train() called with non-matching numClasses and thresholds.length." +
-          s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
+        ".train() called with non-matching numClasses and thresholds.length." +
+        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
     val modelTypeValue = $(modelType)
