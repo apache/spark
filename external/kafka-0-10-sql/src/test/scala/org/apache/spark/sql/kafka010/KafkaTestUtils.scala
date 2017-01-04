@@ -146,7 +146,7 @@ class KafkaTestUtils extends Logging {
     // On Windows, `logDirs` is left open even after Kafka server above is completely shut-downed
     // in some cases. It leads to test failures on Windows if these are not ignored.
     brokerConf.logDirs.map(new File(_))
-      .filter(FileUtils.deleteQuietly)
+      .filterNot(FileUtils.deleteQuietly)
       .foreach(f => logWarning("Failed to delete: " + f.getAbsolutePath))
 
     if (zkUtils != null) {
