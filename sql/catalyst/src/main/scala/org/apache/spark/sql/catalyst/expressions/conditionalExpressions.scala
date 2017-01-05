@@ -389,7 +389,7 @@ case class Field(children: Seq[Expression]) extends Expression {
       val ((eval, dataType), index) = evalWithIndex
       dataType.equals(targetDataType)
     }
-    
+
     ev.copy(code =
       code"""
          |${target.code}

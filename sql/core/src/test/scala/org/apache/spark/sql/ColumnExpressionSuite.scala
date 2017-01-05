@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql
 
+<<<<<<< 35be82eec3b22e5af9c0b77ef4978d134bcd5482
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+=======
+import java.sql.{Date, Timestamp}
+>>>>>>> Move Field function test to ColumnExpressionSuite
 
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
-
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
+import org.apache.spark.sql.catalyst.expressions.{Literal, NamedExpression}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -839,5 +842,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(typedLit(("a", 2, 1.0))),
       Row(Row("a", 2, 1.0)) :: Nil)
+  }
+
+  test("field") {
+    val testData = Seq((
+      "花花世界",
+      123,
+      1.23,
+      true,
+      new Timestamp(2016, 12, 27, 14, 22, 1, 1),
+      new Date(1949, 1, 1),
+      "花花世界"
+      )).toDF("a", "b", "c", "d", "e", "f", "g")
+    checkAnswer(testData.select(field($"a", $"b", $"c", $"d", $"e", $"f", $"g")), Row(6))
+    checkAnswer(testData.selectExpr("field('花花世界', 123, 1.23, true, '花花世界')"), Row(4))
   }
 }
