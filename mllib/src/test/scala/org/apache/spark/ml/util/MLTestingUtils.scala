@@ -48,20 +48,17 @@ object MLTestingUtils extends SparkFunSuite {
       genRegressionDFWithNumericLabelCol(spark)
     }
 
-    val expected = estimator match {
+    val finalEstimator = estimator match {
       case weighted: Estimator[M] with HasWeightCol =>
         weighted.set(weighted.weightCol, "weight")
-        weighted.fit(dfs(DoubleType))
-      case _ => estimator.fit(dfs(DoubleType))
+        weighted
+      case _ => estimator
     }
 
+    val expected = finalEstimator.fit(dfs(DoubleType))
+
     val actuals = dfs.keys.filter(_ != DoubleType).map { t =>
-      estimator match {
-        case weighted: Estimator[M] with HasWeightCol =>
-          weighted.set(weighted.weightCol, "weight")
-          weighted.fit(dfs(t))
-        case _ => estimator.fit(dfs(t))
-      }
+      finalEstimator.fit(dfs(t))
     }
 
     actuals.foreach(actual => check(expected, actual))
@@ -148,7 +145,7 @@ object MLTestingUtils extends SparkFunSuite {
     types.map { t =>
         val castDF = df.select(col(labelColName).cast(t), col(featuresColName))
         t -> TreeTests.setMetadata(castDF, 2, labelColName, featuresColName)
-          .withColumn(weightColName, ceil(rand(seed = 42)).cast(t))
+          .withColumn(weightColName, round(rand(seed = 42)).cast(t))
       }.toMap
   }
 
@@ -172,7 +169,7 @@ object MLTestingUtils extends SparkFunSuite {
       val castDF = df.select(col(labelColName).cast(t), col(featuresColName))
       t -> TreeTests.setMetadata(castDF, 0, labelColName, featuresColName)
         .withColumn(censorColName, lit(0.0))
-        .withColumn(weightColName, ceil(rand(seed = 42)).cast(t))
+        .withColumn(weightColName, round(rand(seed = 42)).cast(t))
     }.toMap
   }
 
