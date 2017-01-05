@@ -114,7 +114,7 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           termFrequencies.put(i, setTF(i))
         }
 
-        Vectors.sparse(_numFeatures, termFrequencies.toSeq).compressed
+        Vectors.sparse(_numFeatures, termFrequencies.toSeq)
     }
 
     val t = udf(transformer)

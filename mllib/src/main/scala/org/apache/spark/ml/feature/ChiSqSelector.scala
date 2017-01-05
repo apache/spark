@@ -295,9 +295,10 @@ final class ChiSqSelectorModel private[ml] (
             }
           }
         }
-        Vectors.sparse(newSize, newIndices.result(), newValues.result()).compressed
+        // TODO: Sparse representation might be ineffective if (newSize ~= newValues.size)
+        Vectors.sparse(newSize, newIndices.result(), newValues.result())
       case DenseVector(values) =>
-        Vectors.dense(filterIndices.map(i => values(i))).compressed
+        Vectors.dense(filterIndices.map(i => values(i)))
       case other =>
         throw new UnsupportedOperationException(
           s"Only sparse and dense vectors are supported but got ${other.getClass}.")

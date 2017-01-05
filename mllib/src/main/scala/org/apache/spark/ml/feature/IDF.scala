@@ -141,7 +141,7 @@ class IDFModel private[ml] (
           newValues(k) = values(k) * idfModel.idf(indices(k))
           k += 1
         }
-        Vectors.sparse(size, indices, newValues).compressed
+        Vectors.sparse(size, indices, newValues)
       case DenseVector(values) =>
         val newValues = new Array[Double](values.length)
         var j = 0
@@ -149,7 +149,7 @@ class IDFModel private[ml] (
           newValues(j) = values(j) * idfModel.idf(j)
           j += 1
         }
-        Vectors.dense(newValues).compressed
+        Vectors.dense(newValues)
       case other =>
         throw new UnsupportedOperationException(
           s"Only sparse and dense vectors are supported but got ${other.getClass}.")
