@@ -135,11 +135,21 @@ class FileScanRDD(
           try {
             if (ignoreCorruptFiles) {
               currentIterator = new NextIterator[Object] {
-                private val internalIter = readFunction(currentFile)
+                private val internalIter = {
+                  try {
+                    // The readFunction may read files before consuming the iterator.
+                    // E.g., vectorized Parquet reader.
+                    readFunction(currentFile)
+                  } catch {
+                    case e @(_: RuntimeException | _: IOException) =>
+                      logWarning(s"Skipped the rest content in the corrupted file: $currentFile", e)
+                      null
+                  }
+                }
 
                 override def getNext(): AnyRef = {
                   try {
-                    if (internalIter.hasNext) {
+                    if (internalIter != null && internalIter.hasNext) {
                       internalIter.next()
                     } else {
                       finished = true
