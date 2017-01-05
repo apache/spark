@@ -115,7 +115,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Specifies the underlying output data source. Built-in options include "parquet" for now.
+   * Specifies the underlying output data source.
    *
    * @since 2.0.0
    */
@@ -137,9 +137,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * predicates on the partitioned columns. In order for partitioning to work well, the number
    * of distinct values in each column should typically be less than tens of thousands.
    *
-   * This was initially applicable for Parquet but in 1.5+ covers JSON, text, ORC and avro as well.
-   *
-   * @since 1.4.0
+   * @since 2.0.0
    */
   @scala.annotation.varargs
   def partitionBy(colNames: String*): DataStreamWriter[T] = {

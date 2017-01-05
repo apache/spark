@@ -424,7 +424,7 @@ Streaming DataFrames can be created through the `DataStreamReader` interface
 ([Scala](api/scala/index.html#org.apache.spark.sql.streaming.DataStreamReader)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamReader.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamReader) docs)
 returned by `SparkSession.readStream()`. Similar to the read interface for creating static DataFrame, you can specify the details of the source – data format, schema, options, etc.
 
-#### Data Sources
+#### Input Sources
 In Spark 2.0, there are a few built-in sources.
 
   - **File source** - Reads files written in a directory as a stream of data. Supported file formats are text, csv, json, parquet. See the docs of the DataStreamReader interface for a more up-to-date list, and supported options for each file format. Note that the files must be atomically placed in the given directory, which in most file systems, can be achieved by file move operations.
@@ -432,6 +432,51 @@ In Spark 2.0, there are a few built-in sources.
   - **Kafka source** - Poll data from Kafka. It's compatible with Kafka broker versions 0.10.0 or higher. See the [Kafka Integration Guide](structured-streaming-kafka-integration.html) for more details.
 
   - **Socket source (for testing)** - Reads UTF8 text data from a socket connection. The listening server socket is at the driver. Note that this should be used only for testing as this does not provide end-to-end fault-tolerance guarantees. 
+
+Here are all the source details.
+
+<table class="table">
+  <tr>
+    <th>Source</th>
+    <th>Options</th>
+    <th>Fault-tolerant</th>
+    <th>Notes</th>
+  </tr>
+  <tr>
+    <td><b>File source</b></td>
+    <td>
+        <code>path</code>: path to the input directory, and common to all file formats.
+        <br/><br/>
+        For file-format-specific options, see the related methods in <code>DataStreamReader</code>
+        (<a href="api/scala/index.html#org.apache.spark.sql.streaming.DataStreamReader">Scala</a>/<a href="api/java/org/apache/spark/sql/streaming/DataStreamReader.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamReader">Python</a>).
+        E.g. for "parquet" format options see <code>DataStreamReader.parquet()</code></td>
+    <td>Yes</td>
+    <td>Supports regular expressions, but does not support multiple comma-separated paths/expressions.</td>
+  </tr>
+  <tr>
+    <td><b>Socket Source</b></td>
+    <td>
+        <code>host</code>: host to connect to, must be specified<br/>
+        <code>port</code>: port to connect to, must be specified
+    </td>
+    <td>No</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><b>Kafka Source</b></td>
+    <td>
+        See the <a href="structured-streaming-kafka-integration.html">Kafka Integration Guide</a>.
+    </td>
+    <td>Yes</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td></td>
+    <td></td>
+    <td></td>
+    <td></td>
+  </tr>
+</table>
 
 Here are some examples.
 
@@ -911,7 +956,7 @@ fault-tolerant sink). For example, queries with only `select`,
 updated since the last trigger will be outputted to the sink. 
 More information to be added in future releases.
 
-Different types of streaming queries support different output modes. 
+Different types of streaming queries support different output modes.
 Here is the compatibility matrix.
 
 <table class="table">
@@ -922,21 +967,21 @@ Here is the compatibility matrix.
     <th>Notes</th>        
   </tr>
   <tr>
-    <td colspan="2" valign="middle"><br/>Queries without aggregation</td>
-    <td>Append, Update</td>
-    <td>
-        Complete mode note supported as it is infeasible to keep all data in the Result Table.
+    <td colspan="2" style="vertical-align: middle;">Queries without aggregation</td>
+    <td style="vertical-align: middle;">Append</td>
+    <td style="vertical-align: middle;">
+        Complete mode not supported as it is infeasible to keep all data in the Result Table.
     </td>
   </tr>
   <tr>
-    <td rowspan="2">Queries with aggregation</td>
-    <td>Aggregation on event-time with watermark</td>
-    <td>Append, Update, Complete</td>
+    <td rowspan="2" style="vertical-align: middle;">Queries with aggregation</td>
+    <td style="vertical-align: middle;">Aggregation on event-time with watermark</td>
+    <td style="vertical-align: middle;">Append, Update, Complete</td>
     <td>
         Append mode uses watermark to drop old aggregation state. But the output of a 
         windowed aggregation is delayed the late threshold specified in `withWatermark()` as by
         the modes semantics, rows can be added to the Result Table only once after they are 
-        finalized (i.e. after watermark is crossed). See 
+        finalized (i.e. after watermark is crossed). See the
         <a href="#handling-late-data-and-watermarking">Late Data</a> section for more details.
         <br/><br/>
         Update mode uses watermark to drop old aggregation state.
@@ -946,8 +991,8 @@ Here is the compatibility matrix.
     </td>    
   </tr>
   <tr>
-    <td>Other aggregations</td>
-    <td>Complete, Update</td>
+    <td style="vertical-align: middle;">Other aggregations</td>
+    <td style="vertical-align: middle;">Complete, Update</td>
     <td>
         Since no watermark is defined (only defined in other category), 
         old aggregation state is not dropped.
@@ -969,49 +1014,93 @@ There are a few types of built-in output sinks.
 
 - **File sink** - Stores the output to a directory. 
 
+{% highlight scala %}
+writeStream
+    .format("parquet")        // can be "orc", "json", "csv", etc.
+    .option("path", "path/to/destination/dir")
+    .start()
+{% endhighlight %}
+
 - **Foreach sink** - Runs arbitrary computation on the records in the output. See later in the section for more details.
+
+{% highlight scala %}
+writeStream
+    .foreach(...)
+    .start()
+{% endhighlight %}
 
 - **Console sink (for debugging)** - Prints the output to the console/stdout every time there is a trigger. Both, Append and Complete output modes, are supported. This should be used for debugging purposes on low data volumes as the entire output is collected and stored in the driver's memory after every trigger.
 
-- **Memory sink (for debugging)** - The output is stored in memory as an in-memory table.  Both, Append and Complete output modes, are supported. This should be used for debugging purposes on low data volumes as the entire output is collected and stored in the driver's memory after every trigger.
+{% highlight scala %}
+writeStream
+    .format("console")
+    .start()
+{% endhighlight %}
 
-Here is a table of all the sinks, and the corresponding settings.
+- **Memory sink (for debugging)** - The output is stored in memory as an in-memory table.
+Both, Append and Complete output modes, are supported. This should be used for debugging purposes
+on low data volumes as the entire output is collected and stored in the driver's memory after
+every trigger. Note that the current implementations saves all the data in the driver memory.
+Hence, use it with caution.
+
+{% highlight scala %}
+writeStream
+    .format("memory")
+    .queryName("tableName")
+    .start()
+{% endhighlight %}
+
+
+Here are all the sinks details.
 
 <table class="table">
   <tr>
     <th>Sink</th>
     <th>Supported Output Modes</th>
-    <th style="width:30%">Usage</th>
+    <th>Options</th>
     <th>Fault-tolerant</th>
     <th>Notes</th>
   </tr>
   <tr>
     <td><b>File Sink</b></td>
     <td>Append</td>
-    <td><pre>writeStream<br/>  .format("parquet")<br/>  .option(<br/>    "checkpointLocation",<br/>    "path/to/checkpoint/dir")<br/>  .option(<br/>    "path",<br/>    "path/to/destination/dir")<br/>  .start()</pre></td>
+    <td>
+        <code>path</code>: path to the output directory, must be specified.
+        <code>maxFilesPerTrigger</code>: maximum number of new files to be considered in every trigger (default: no max)
+        <br/>
+        <code>latestFirst</code>: whether to processs the latest new files first, useful when there is a large backlog of files(default: false)
+        <br/><br/>
+        For file-format-specific options, see the related methods in DataFrameWriter
+        (<a href="api/scala/index.html#org.apache.spark.sql.DataFrameWriter">Scala</a>/<a href="api/java/org/apache/spark/sql/DataFrameWriter.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.DataFrameWriter">Python</a>).
+        E.g. for "parquet" format options see <code>DataFrameWriter.parquet()</code>
+    </td>
     <td>Yes</td>
     <td>Supports writes to partitioned tables. Partitioning by time may be useful.</td>
   </tr>
   <tr>
     <td><b>Foreach Sink</b></td>
     <td>Append, Update, Compelete</td>
-    <td><pre>writeStream<br/>  .foreach(...)<br/>  .start()</pre></td>
+    <td>None</td>
     <td>Depends on ForeachWriter implementation</td>
     <td>More details in the <a href="#using-foreach">next section</a></td>
   </tr>
   <tr>
     <td><b>Console Sink</b></td>
     <td>Append, Update, Complete</td>
-    <td><pre>writeStream<br/>  .format("console")<br/>  .start()</pre></td>
+    <td>
+        <code>numRows</code>: Number of rows to print every trigger (default: 20)
+        <br/>
+        <code>truncate</code>: Whether to truncate the output if too long (default: true)
+    </td>
     <td>No</td>
     <td></td>
   </tr>
   <tr>
     <td><b>Memory Sink</b></td>
     <td>Append, Complete</td>
-    <td><pre>writeStream<br/>  .format("memory")<br/>  .queryName("table")<br/>  .start()</pre></td>
+    <td>None</td>
     <td>Yes, but only in Complete Mode</td>
-    <td>Saves the output data as a table, for interactive querying. Table name is the query name.</td>
+    <td>Table name is the query name.</td>
   </tr>
   <tr>
     <td></td>
@@ -1022,7 +1111,7 @@ Here is a table of all the sinks, and the corresponding settings.
   </tr>
 </table>
 
-Finally, you have to call `start()` to actually start the execution of the query. This returns a StreamingQuery object which is a handle to the continuously running execution. You can use this object to manage the query, which we will discuss in the next subsection. For now, let’s understand all this with a few examples.
+Note that you have to call `start()` to actually start the execution of the query. This returns a StreamingQuery object which is a handle to the continuously running execution. You can use this object to manage the query, which we will discuss in the next subsection. For now, let’s understand all this with a few examples.
 
 
 <div class="codetabs">
