@@ -36,39 +36,33 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
  */
 class DetermineHiveSerde(conf: SQLConf) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case c @ CreateTable(t, _, _) if DDLUtils.isHiveTable(t) && t.storage.inputFormat.isEmpty =>
-      if (t.bucketSpec.nonEmpty) {
-        throw new AnalysisException("Cannot create bucketed Hive serde table.")
+    case c @ CreateTable(t, _, query) if DDLUtils.isHiveTable(t) && t.storage.serde.isEmpty =>
+      if (t.bucketSpec.isDefined) {
+        throw new AnalysisException("Creating bucketed Hive serde table is not supported yet.")
+      }
+      if (t.partitionColumnNames.nonEmpty && query.isDefined) {
+        val errorMessage = "A Create Table As Select (CTAS) statement is not allowed to " +
+          "create a partitioned table using Hive's file formats. " +
+          "Please use the syntax of \"CREATE TABLE tableName USING dataSource " +
+          "OPTIONS (...) PARTITIONED BY ...\" to create a partitioned table through a " +
+          "CTAS statement."
+        throw new AnalysisException(errorMessage)
       }
 
-      val defaultStorage: CatalogStorageFormat = {
-        val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
-        val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType)
-        CatalogStorageFormat(
-          locationUri = None,
-          inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
-            .orElse(Some("org.apache.hadoop.mapred.TextInputFormat")),
-          outputFormat = defaultHiveSerde.flatMap(_.outputFormat)
-            .orElse(Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
-          serde = defaultHiveSerde.flatMap(_.serde)
-            .orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
-          compressed = false,
-          properties = Map())
-      }
-
+      val defaultStorage = HiveSerDe.getDefaultStorage(conf)
       val options = new HiveOptions(t.storage.properties)
 
-      val fileStorage = if (options.format.isDefined) {
-        HiveSerDe.sourceToSerDe(options.format.get) match {
+      val fileStorage = if (options.fileFormat.isDefined) {
+        HiveSerDe.sourceToSerDe(options.fileFormat.get) match {
           case Some(s) =>
             CatalogStorageFormat.empty.copy(
               inputFormat = s.inputFormat,
               outputFormat = s.outputFormat,
               serde = s.serde)
           case None =>
-            throw new IllegalArgumentException(s"invalid format: '${options.format.get}'")
+            throw new IllegalArgumentException(s"invalid fileFormat: '${options.fileFormat.get}'")
         }
-      } else if (options.inputFormat.isDefined) {
+      } else if (options.hasInputOutputFormat) {
         CatalogStorageFormat.empty.copy(
           inputFormat = options.inputFormat,
           outputFormat = options.outputFormat)

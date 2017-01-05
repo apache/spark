@@ -245,7 +245,8 @@ class DDLCommandSuite extends PlanTest {
       val ct = parseAs[CreateTable](query)
       val hiveSerde = HiveSerDe.sourceToSerDe(s)
       assert(hiveSerde.isDefined)
-      assert(ct.tableDesc.storage.serde == hiveSerde.get.serde)
+      assert(ct.tableDesc.storage.serde ==
+        hiveSerde.get.serde.orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")))
       assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
       assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
     }
@@ -262,8 +263,10 @@ class DDLCommandSuite extends PlanTest {
     assert(parsed1.tableDesc.storage.serde == Some("anything"))
     assert(parsed1.tableDesc.storage.inputFormat == Some("inputfmt"))
     assert(parsed1.tableDesc.storage.outputFormat == Some("outputfmt"))
+
     val parsed2 = parseAs[CreateTable](query2)
-    assert(parsed2.tableDesc.storage.serde.isEmpty)
+    assert(parsed2.tableDesc.storage.serde ==
+      Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     assert(parsed2.tableDesc.storage.inputFormat == Some("inputfmt"))
     assert(parsed2.tableDesc.storage.outputFormat == Some("outputfmt"))
   }
@@ -297,7 +300,8 @@ class DDLCommandSuite extends PlanTest {
         val ct = parseAs[CreateTable](query)
         val hiveSerde = HiveSerDe.sourceToSerDe(s)
         assert(hiveSerde.isDefined)
-        assert(ct.tableDesc.storage.serde == hiveSerde.get.serde)
+        assert(ct.tableDesc.storage.serde ==
+          hiveSerde.get.serde.orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")))
         assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
         assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
       } else {
@@ -427,7 +431,7 @@ class DDLCommandSuite extends PlanTest {
     val e = intercept[ParseException] {
       parser.parsePlan(v2)
     }
-    assert(e.message.contains("Cannot specify LOCATION when there is 'path' in OPTIONS"))
+    assert(e.message.contains("you can only specify one of them."))
   }
 
   // ALTER TABLE table_name RENAME TO new_table_name;

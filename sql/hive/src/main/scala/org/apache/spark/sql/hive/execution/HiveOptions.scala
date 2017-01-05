@@ -20,14 +20,15 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 /**
- * Options for the Hive data source.
+ * Options for the Hive data source. Note that rule `DetermineHiveSerde` will extract Hive
+ * serde/format information from these options.
  */
 class HiveOptions(@transient private val parameters: CaseInsensitiveMap) extends Serializable {
   import HiveOptions._
 
   def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
 
-  val format = parameters.get(FORMAT).map(_.toLowerCase)
+  val fileFormat = parameters.get(FILE_FORMAT).map(_.toLowerCase)
   val inputFormat = parameters.get(INPUT_FORMAT)
   val outputFormat = parameters.get(OUTPUT_FORMAT)
 
@@ -36,24 +37,35 @@ class HiveOptions(@transient private val parameters: CaseInsensitiveMap) extends
       "have to specify both of them.")
   }
 
-  if (format.isDefined && inputFormat.isDefined) {
-    throw new IllegalArgumentException("Cannot specify format and inputFormat/outputFormat " +
+  def hasInputOutputFormat: Boolean = inputFormat.isDefined
+
+  if (fileFormat.isDefined && inputFormat.isDefined) {
+    throw new IllegalArgumentException("Cannot specify fileFormat and inputFormat/outputFormat " +
       "together for Hive data source.")
   }
 
   val serde = parameters.get(SERDE)
 
-  for (f <- format if serde.isDefined) {
-    if (!Set("sequencefile", "textfile", "rcfile").contains(f)) {
-      throw new IllegalArgumentException(s"format '$f' already specifies a serde.")
+  if (fileFormat.isDefined && serde.isDefined) {
+    if (!Set("sequencefile", "textfile", "rcfile").contains(fileFormat.get)) {
+      throw new IllegalArgumentException(
+        s"fileFormat '${fileFormat.get}' already specifies a serde.")
     }
   }
 
   val containsDelimiters = delimiterOptions.keys.exists(parameters.contains)
 
-  for (f <- format if f != "textfile" && containsDelimiters) {
-    throw new IllegalArgumentException("Cannot specify delimiters as they are only compatible " +
-      s"with format 'textfile', not $f.")
+  if (containsDelimiters) {
+    if (serde.isDefined) {
+      throw new IllegalArgumentException("Cannot specify delimiters with a custom serde.")
+    }
+    if (fileFormat.isEmpty) {
+      throw new IllegalArgumentException("Cannot specify delimiters without fileFormat.")
+    }
+    if (fileFormat.get != "textfile") {
+      throw new IllegalArgumentException("Cannot specify delimiters as they are only compatible " +
+        s"with fileFormat 'textfile', not ${fileFormat.get}.")
+    }
   }
 
   for (lineDelim <- parameters.get("lineDelim") if lineDelim != "\n") {
@@ -74,7 +86,7 @@ object HiveOptions {
     name
   }
 
-  val FORMAT = newOption("format")
+  val FILE_FORMAT = newOption("fileFormat")
   val INPUT_FORMAT = newOption("inputFormat")
   val OUTPUT_FORMAT = newOption("outputFormat")
   val SERDE = newOption("serde")

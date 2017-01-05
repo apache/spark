@@ -956,17 +956,17 @@ adds support for finding tables in the MetaStore and writing queries using HiveQ
 When you create a Hive table, you need to define how this table should read/write data from/to file system,
 i.e. the "input format" and "output format". You also need to define how this table should deserialize the data
 to rows, or serialize rows to data, i.e. the "serde". The following options can be used to specify the storage
-format("serde", "input format", "output format"), e.g. `CREATE TABLE src(id int) USING hive OPTIONS(format 'parquet')`.
+format("serde", "input format", "output format"), e.g. `CREATE TABLE src(id int) USING hive OPTIONS(fileFormat 'parquet')`.
 By default, we will read the table files as plain text. Note that, Hive storage handler is not supported yet when
 creating table, you can create a table using storage handler at Hive side, and use Spark SQL to read it.
 
 <table class="table">
   <tr><th>Property Name</th><th>Meaning</th></tr>
   <tr>
-    <td><code>format</code></td>
+    <td><code>fileFormat</code></td>
     <td>
-      A format is kind of a package of storage format specification, including "serde", "input format" and
-      "output format". Currently we supports 6 formats: 'sequencefile', 'rcfile', 'orc', 'parquet', 'textfile' and 'avro'.
+      A fileFormat is kind of a package of storage format specifications, including "serde", "input format" and
+      "output format". Currently we support 6 fileFormats: 'sequencefile', 'rcfile', 'orc', 'parquet', 'textfile' and 'avro'.
     </td>
   </tr>
 
@@ -975,23 +975,23 @@ creating table, you can create a table using storage handler at Hive side, and u
     <td>
       These 2 options specify the name of a corresponding `InputFormat` and `OutputFormat` class as a string literal,
       e.g. `org.apache.hadoop.hive.ql.io.orc.OrcInputFormat`. These 2 options must be appeared in pair, and you can not
-      specify them if you already specified the `format` option.
+      specify them if you already specified the `fileFormat` option.
     </td>
   </tr>
 
   <tr>
     <td><code>serde</code></td>
     <td>
-      This option specifies the name of a serde class. When the `format` option is specified, do not specify this option
-      if the given `format` already include the information of serde. Currently "sequencefile", "textfile" and "rcfile"
-      don't include the serde information and you can use this option with these 3 formats.
+      This option specifies the name of a serde class. When the `fileFormat` option is specified, do not specify this option
+      if the given `fileFormat` already include the information of serde. Currently "sequencefile", "textfile" and "rcfile"
+      don't include the serde information and you can use this option with these 3 fileFormats.
     </td>
   </tr>
 
   <tr>
     <td><code>fieldDelim, escapeDelim, collectionDelim, mapkeyDelim, lineDelim</code></td>
     <td>
-      These options can only be used with "textfile" format. They define how to read delimited files into rows.
+      These options can only be used with "textfile" fileFormat. They define how to read delimited files into rows.
     </td>
   </tr>
 </table>

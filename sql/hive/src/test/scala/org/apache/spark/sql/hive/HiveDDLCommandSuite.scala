@@ -130,7 +130,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
       Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
-    assert(desc.storage.serde.isEmpty)
+    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     assert(desc.properties == Map())
   }
 
@@ -310,7 +310,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
       Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
       Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
-    assert(desc.storage.serde.isEmpty)
+    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     assert(desc.storage.properties.isEmpty)
     assert(desc.properties.isEmpty)
     assert(desc.comment.isEmpty)
@@ -417,7 +417,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     val (desc2, _) = extractTableDesc(query2)
     assert(desc1.storage.inputFormat == Some("winput"))
     assert(desc1.storage.outputFormat == Some("wowput"))
-    assert(desc1.storage.serde.isEmpty)
+    assert(desc1.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     assert(desc2.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
     assert(desc2.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
     assert(desc2.storage.serde == Some("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
@@ -604,7 +604,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
         |CREATE TABLE t
         |(id int, name string COMMENT 'blabla')
         |USING hive
-        |OPTIONS (format 'parquet', my_prop 1)
+        |OPTIONS (fileFormat 'parquet', my_prop 1)
         |LOCATION '/tmp/file'
         |COMMENT 'BLABLA'
       """.stripMargin
@@ -638,8 +638,16 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
       Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
 
     val v2 = "CREATE TABLE t (c1 int, c2 int) USING hive CLUSTERED BY (c2) INTO 4 BUCKETS"
-    val e = intercept[AnalysisException](analyzeCreateTable(v2))
-    assert(e.message.contains("Cannot create bucketed Hive serde table"))
+    val e2 = intercept[AnalysisException](analyzeCreateTable(v2))
+    assert(e2.message.contains("Creating bucketed Hive serde table is not supported yet"))
+
+    val v3 =
+      """
+        |CREATE TABLE t (c1 int, c2 int) USING hive
+        |PARTITIONED BY (c2)
+        |CLUSTERED BY (c2) INTO 4 BUCKETS""".stripMargin
+    val e3 = intercept[AnalysisException](analyzeCreateTable(v3))
+    assert(e3.message.contains("Creating bucketed Hive serde table is not supported yet"))
   }
 
   test("create hive serde table with new syntax - Hive options error checking") {
@@ -648,26 +656,35 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(e1.getMessage.contains("Cannot specify only inputFormat or outputFormat"))
 
     val v2 = "CREATE TABLE t (c1 int) USING hive OPTIONS " +
-      "(format 'x', inputFormat 'a', outputFormat 'b')"
+      "(fileFormat 'x', inputFormat 'a', outputFormat 'b')"
     val e2 = intercept[IllegalArgumentException](analyzeCreateTable(v2))
-    assert(e2.getMessage.contains("Cannot specify format and inputFormat/outputFormat together"))
+    assert(e2.getMessage.contains(
+      "Cannot specify fileFormat and inputFormat/outputFormat together"))
 
-    val v3 = "CREATE TABLE t (c1 int) USING hive OPTIONS (format 'parquet', serde 'a')"
+    val v3 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fileFormat 'parquet', serde 'a')"
     val e3 = intercept[IllegalArgumentException](analyzeCreateTable(v3))
-    assert(e3.getMessage.contains("format 'parquet' already specifies a serde"))
+    assert(e3.getMessage.contains("fileFormat 'parquet' already specifies a serde"))
 
-    val v4 = "CREATE TABLE t (c1 int) USING hive OPTIONS (format 'parquet', 'fieldDelim' ' ')"
+    val v4 = "CREATE TABLE t (c1 int) USING hive OPTIONS (serde 'a', fieldDelim ' ')"
     val e4 = intercept[IllegalArgumentException](analyzeCreateTable(v4))
-    assert(e4.getMessage.contains(
-      "Cannot specify delimiters as they are only compatible with format 'textfile'"))
+    assert(e4.getMessage.contains("Cannot specify delimiters with a custom serde"))
 
-    // The value of 'format' option is case-insensitive.
-    val v5 = "CREATE TABLE t (c1 int) USING hive OPTIONS (format 'TEXTFILE', 'lineDelim' ',')"
+    val v5 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fieldDelim ' ')"
     val e5 = intercept[IllegalArgumentException](analyzeCreateTable(v5))
-    assert(e5.getMessage.contains("Hive data source only support newline '\\n' as line delimiter"))
+    assert(e5.getMessage.contains("Cannot specify delimiters without fileFormat"))
 
-    val v6 = "CREATE TABLE t (c1 int) USING hive OPTIONS (format 'wrong')"
+    val v6 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fileFormat 'parquet', fieldDelim ' ')"
     val e6 = intercept[IllegalArgumentException](analyzeCreateTable(v6))
-    assert(e6.getMessage.contains("invalid format: 'wrong'"))
+    assert(e6.getMessage.contains(
+      "Cannot specify delimiters as they are only compatible with fileFormat 'textfile'"))
+
+    // The value of 'fileFormat' option is case-insensitive.
+    val v7 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fileFormat 'TEXTFILE', lineDelim ',')"
+    val e7 = intercept[IllegalArgumentException](analyzeCreateTable(v7))
+    assert(e7.getMessage.contains("Hive data source only support newline '\\n' as line delimiter"))
+
+    val v8 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fileFormat 'wrong')"
+    val e8 = intercept[IllegalArgumentException](analyzeCreateTable(v8))
+    assert(e8.getMessage.contains("invalid fileFormat: 'wrong'"))
   }
 }

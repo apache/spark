@@ -377,7 +377,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val storage = DataSource.buildStorageFormatFromOptions(options)
 
     if (location.isDefined && storage.locationUri.isDefined) {
-      throw new ParseException("Cannot specify LOCATION when there is 'path' in OPTIONS.", ctx)
+      throw new ParseException(
+        "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
+          "you can only specify one of them.", ctx)
     }
     val customLocation = storage.locationUri.orElse(location)
 
@@ -1060,19 +1062,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val schema = StructType(dataCols ++ partitionCols)
 
     // Storage format
-    val defaultStorage: CatalogStorageFormat = {
-      val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
-      val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType)
-      CatalogStorageFormat(
-        locationUri = None,
-        inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
-          .orElse(Some("org.apache.hadoop.mapred.TextInputFormat")),
-        outputFormat = defaultHiveSerde.flatMap(_.outputFormat)
-          .orElse(Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
-        serde = defaultHiveSerde.flatMap(_.serde),
-        compressed = false,
-        properties = Map())
-    }
+    val defaultStorage = HiveSerDe.getDefaultStorage(conf)
     validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
     val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
       .getOrElse(CatalogStorageFormat.empty)
