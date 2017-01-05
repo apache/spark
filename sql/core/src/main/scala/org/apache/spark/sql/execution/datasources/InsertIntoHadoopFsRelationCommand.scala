@@ -45,7 +45,7 @@ case class InsertIntoHadoopFsRelationCommand(
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
     options: Map[String, String],
-    @transient query: LogicalPlan,
+    query: LogicalPlan,
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex])
