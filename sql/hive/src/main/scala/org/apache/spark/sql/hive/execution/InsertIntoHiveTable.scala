@@ -70,7 +70,7 @@ case class InsertIntoHiveTable(
     val rand: Random = new Random
     val format: SimpleDateFormat = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS")
     val executionId: String = "hive_" + format.format(new Date) + "_" + Math.abs(rand.nextLong)
-     executionId
+    executionId
   }
 
   private def getStagingDir(inputPath: Path, hadoopConf: Configuration): Path = {
