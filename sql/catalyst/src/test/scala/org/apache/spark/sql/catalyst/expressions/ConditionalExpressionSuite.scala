@@ -267,7 +267,5 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Field(Seq(int4, double3, str5, bool1, date1, timeStamp2, int3)), 0)
     checkEvaluation(Field(Seq(int1, strNull, intNull, bool1, date1, timeStamp2, int3)), 0)
     checkEvaluation(Field(Seq(strNull, int1, str1, str2, str3)), 0)
-
-
   }
 }
