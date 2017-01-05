@@ -20,6 +20,7 @@ package org.apache.spark.ml.classification
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.LabeledPoint
@@ -32,7 +33,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -280,14 +280,14 @@ class GBTClassificationModel private[ml](
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {
       // The probability can be calculated for positive result:
-      // p+(x) = 1 / (1 + e^(-F(x)))
+      // p+(x) = 1 / (1 + e^(-2 * F(x)))
       // and negative result:
-      // p-(x) = 1 / (1 + e^(F(x)))
+      // p-(x) = 1 / (1 + e^(2 * F(x)))
       case dv: DenseVector =>
         var i = 0
         val size = dv.size
         while (i < size) {
-          dv.values(i) = 1 / (1 + math.exp(-dv.values(i)))
+          dv.values(i) = 1 / (1 + math.exp(-2 * dv.values(i)))
           i += 1
         }
         dv

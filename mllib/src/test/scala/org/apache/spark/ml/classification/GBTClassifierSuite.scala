@@ -19,7 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg.{DenseVector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.LeafNode
@@ -28,7 +28,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.util.{MLUtils, MLlibTestSparkContext}
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.util.Utils
@@ -91,7 +91,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     scoredData.select(rawPredictionCol, predictionCol).collect()
       .foreach(row => {
         val probabilities = Vectors.dense(row(0).asInstanceOf[DenseVector]
-          .values.map(value => 1 / (1 + math.exp(-value))))
+          .values.map(value => 1 / (1 + math.exp(-2 * value))))
         // Verify probabilities make sense
         assert(probabilities.toDense.values.forall(prob => prob <= 1 && prob >= 0))
         // Verify probabilities correspond to labels
