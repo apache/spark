@@ -26,7 +26,6 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -148,11 +147,102 @@ class HiveDDLSuite
     }
   }
 
+  test("create Hive-serde table and view with unicode columns and comment") {
+    val catalog = spark.sessionState.catalog
+    val tabName = "tab1"
+    val viewName = "view1"
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    val colName1 = "和"
+    val colName2 = "尼"
+    val comment = "庙"
+    // scalastyle:on
+    withTable(tabName) {
+      sql(s"""
+             |CREATE TABLE $tabName(`$colName1` int COMMENT '$comment')
+             |COMMENT '$comment'
+             |PARTITIONED BY (`$colName2` int)
+           """.stripMargin)
+      sql(s"INSERT OVERWRITE TABLE $tabName partition (`$colName2`=2) SELECT 1")
+      withView(viewName) {
+        sql(
+          s"""
+             |CREATE VIEW $viewName(`$colName1` COMMENT '$comment', `$colName2`)
+             |COMMENT '$comment'
+             |AS SELECT `$colName1`, `$colName2` FROM $tabName
+           """.stripMargin)
+        val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+        val viewMetadata = catalog.getTableMetadata(TableIdentifier(viewName, Some("default")))
+        assert(tableMetadata.comment == Option(comment))
+        assert(viewMetadata.comment == Option(comment))
+
+        assert(tableMetadata.schema.fields.length == 2 && viewMetadata.schema.fields.length == 2)
+        val column1InTable = tableMetadata.schema.fields.head
+        val column1InView = viewMetadata.schema.fields.head
+        assert(column1InTable.name == colName1 && column1InView.name == colName1)
+        assert(column1InTable.getComment() == Option(comment))
+        assert(column1InView.getComment() == Option(comment))
+
+        assert(tableMetadata.schema.fields(1).name == colName2 &&
+          viewMetadata.schema.fields(1).name == colName2)
+
+        checkAnswer(sql(s"SELECT `$colName1`, `$colName2` FROM $tabName"), Row(1, 2) :: Nil)
+        checkAnswer(sql(s"SELECT `$colName1`, `$colName2` FROM $viewName"), Row(1, 2) :: Nil)
+      }
+    }
+  }
+
   test("create table: partition column names exist in table definition") {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int) PARTITIONED BY (a string)")
     }
     assert(e.message == "Found duplicate column(s) in table definition of `tbl`: a")
+  }
+
+  test("add/drop partition with location - managed table") {
+    val tab = "tab_with_partitions"
+    withTempDir { tmpDir =>
+      val basePath = new File(tmpDir.getCanonicalPath)
+      val part1Path = new File(basePath + "/part1")
+      val part2Path = new File(basePath + "/part2")
+      val dirSet = part1Path :: part2Path :: Nil
+
+      // Before data insertion, all the directory are empty
+      assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
+
+      withTable(tab) {
+        sql(
+          s"""
+             |CREATE TABLE $tab (key INT, value STRING)
+             |PARTITIONED BY (ds STRING, hr STRING)
+           """.stripMargin)
+        sql(
+          s"""
+             |ALTER TABLE $tab ADD
+             |PARTITION (ds='2008-04-08', hr=11) LOCATION '$part1Path'
+             |PARTITION (ds='2008-04-08', hr=12) LOCATION '$part2Path'
+           """.stripMargin)
+        assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
+
+        sql(s"INSERT OVERWRITE TABLE $tab partition (ds='2008-04-08', hr=11) SELECT 1, 'a'")
+        sql(s"INSERT OVERWRITE TABLE $tab partition (ds='2008-04-08', hr=12) SELECT 2, 'b'")
+        // add partition will not delete the data
+        assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
+        checkAnswer(
+          spark.table(tab),
+          Row(1, "a", "2008-04-08", "11") :: Row(2, "b", "2008-04-08", "12") :: Nil
+        )
+
+        sql(s"ALTER TABLE $tab DROP PARTITION (ds='2008-04-08', hr=11)")
+        // drop partition will delete the data
+        assert(part1Path.listFiles == null || part1Path.listFiles.isEmpty)
+        assert(part2Path.listFiles.nonEmpty)
+
+        sql(s"DROP TABLE $tab")
+        // drop table will delete the data of the managed table
+        assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
+      }
+    }
   }
 
   test("add/drop partitions - external table") {
@@ -213,9 +303,15 @@ class HiveDDLSuite
         // drop partition will not delete the data of external table
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
 
-        sql(s"ALTER TABLE $externalTab ADD PARTITION (ds='2008-04-08', hr='12')")
+        sql(
+          s"""
+             |ALTER TABLE $externalTab ADD PARTITION (ds='2008-04-08', hr='12')
+             |PARTITION (ds='2008-04-08', hr=11)
+          """.stripMargin)
         assert(catalog.listPartitions(TableIdentifier(externalTab)).map(_.spec).toSet ==
-          Set(Map("ds" -> "2008-04-08", "hr" -> "12"), Map("ds" -> "2008-04-09", "hr" -> "11")))
+          Set(Map("ds" -> "2008-04-08", "hr" -> "11"),
+            Map("ds" -> "2008-04-08", "hr" -> "12"),
+            Map("ds" -> "2008-04-09", "hr" -> "11")))
         // add partition will not delete the data
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
 
@@ -223,108 +319,6 @@ class HiveDDLSuite
         // drop table will not delete the data of external table
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
       }
-    }
-  }
-
-  test("SPARK-17732: Drop partitions by filter") {
-    withTable("sales") {
-      sql("CREATE TABLE sales(id INT) PARTITIONED BY (country STRING, quarter STRING)")
-
-      for (country <- Seq("US", "CA", "KR")) {
-        for (quarter <- 1 to 4) {
-          sql(s"ALTER TABLE sales ADD PARTITION (country = '$country', quarter = '$quarter')")
-        }
-      }
-
-      sql("ALTER TABLE sales DROP PARTITION (country < 'KR', quarter > '2')")
-      checkAnswer(sql("SHOW PARTITIONS sales"),
-        Row("country=CA/quarter=1") ::
-        Row("country=CA/quarter=2") ::
-        Row("country=KR/quarter=1") ::
-        Row("country=KR/quarter=2") ::
-        Row("country=KR/quarter=3") ::
-        Row("country=KR/quarter=4") ::
-        Row("country=US/quarter=1") ::
-        Row("country=US/quarter=2") ::
-        Row("country=US/quarter=3") ::
-        Row("country=US/quarter=4") :: Nil)
-
-      sql("ALTER TABLE sales DROP PARTITION (country < 'KR'), PARTITION (quarter <= '1')")
-      checkAnswer(sql("SHOW PARTITIONS sales"),
-        Row("country=KR/quarter=2") ::
-        Row("country=KR/quarter=3") ::
-        Row("country=KR/quarter=4") ::
-        Row("country=US/quarter=2") ::
-        Row("country=US/quarter=3") ::
-        Row("country=US/quarter=4") :: Nil)
-
-      sql("ALTER TABLE sales DROP PARTITION (country='KR', quarter='4')")
-      sql("ALTER TABLE sales DROP PARTITION (country='US', quarter='3')")
-      checkAnswer(sql("SHOW PARTITIONS sales"),
-        Row("country=KR/quarter=2") ::
-        Row("country=KR/quarter=3") ::
-        Row("country=US/quarter=2") ::
-        Row("country=US/quarter=4") :: Nil)
-
-      sql("ALTER TABLE sales DROP PARTITION (quarter <= 2), PARTITION (quarter >= '4')")
-      checkAnswer(sql("SHOW PARTITIONS sales"),
-        Row("country=KR/quarter=3") :: Nil)
-
-      // According to the declarative partition spec definitions, this drops the union of target
-      // partitions without exceptions. Hive raises exceptions because it handles them sequentially.
-      sql("ALTER TABLE sales DROP PARTITION (quarter <= 4), PARTITION (quarter <= '3')")
-      checkAnswer(sql("SHOW PARTITIONS sales"), Nil)
-    }
-  }
-
-  test("SPARK-17732: Error handling for drop partitions by filter") {
-    withTable("sales") {
-      sql("CREATE TABLE sales(id INT) PARTITIONED BY (country STRING, quarter STRING)")
-
-      val m = intercept[AnalysisException] {
-        sql("ALTER TABLE sales DROP PARTITION (unknown = 'KR')")
-      }.getMessage
-      assert(m.contains("unknown is not a valid partition column in table"))
-
-      val m2 = intercept[AnalysisException] {
-        sql("ALTER TABLE sales DROP PARTITION (unknown < 'KR')")
-      }.getMessage
-      assert(m2.contains("unknown is not a valid partition column in table"))
-
-      val m3 = intercept[AnalysisException] {
-        sql("ALTER TABLE sales DROP PARTITION (unknown <=> 'KR')")
-      }.getMessage
-      assert(m3.contains("'<=>' operator is not allowed in partition specification"))
-
-      val m4 = intercept[ParseException] {
-        sql("ALTER TABLE sales DROP PARTITION (unknown <=> upper('KR'))")
-      }.getMessage
-      assert(m4.contains("'<=>' operator is not allowed in partition specification"))
-
-      val m5 = intercept[ParseException] {
-        sql("ALTER TABLE sales DROP PARTITION (country < 'KR', quarter)")
-      }.getMessage
-      assert(m5.contains("Invalid partition filter specification"))
-
-      sql(s"ALTER TABLE sales ADD PARTITION (country = 'KR', quarter = '3')")
-      val m6 = intercept[AnalysisException] {
-        sql("ALTER TABLE sales DROP PARTITION (quarter <= '4'), PARTITION (quarter <= '2')")
-      }.getMessage
-      // The query is not executed because `PARTITION (quarter <= '2')` is invalid.
-      checkAnswer(sql("SHOW PARTITIONS sales"),
-        Row("country=KR/quarter=3") :: Nil)
-      assert(m6.contains("There is no partition for (`quarter` <= '2')"))
-    }
-  }
-
-  test("SPARK-17732: Partition filter is not allowed in ADD PARTITION") {
-    withTable("sales") {
-      sql("CREATE TABLE sales(id INT) PARTITIONED BY (country STRING, quarter STRING)")
-
-      val m = intercept[ParseException] {
-        sql("ALTER TABLE sales ADD PARTITION (country = 'US', quarter < '1')")
-      }.getMessage()
-      assert(m.contains("Invalid partition filter specification"))
     }
   }
 

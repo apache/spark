@@ -118,28 +118,6 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.driver.memory</code></td>
-  <td>1g</td>
-  <td>
-    Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
-    (e.g. <code>1g</code>, <code>2g</code>).
-
-    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
-    directly in your application, because the driver JVM has already started at that point.
-    Instead, please set this through the <code>--driver-memory</code> command line option
-    or in your default properties file.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.driver.cores</code></td>
-  <td><code>1</code></td>
-  <td>
-    Number of cores used by the driver in YARN cluster mode.
-    Since the driver is run in the same JVM as the YARN Application Master in cluster mode, this also controls the cores used by the YARN Application Master.
-    In client mode, use <code>spark.yarn.am.cores</code> to control the number of cores used by the YARN Application Master instead.
-  </td>
-</tr>
-<tr>
   <td><code>spark.yarn.am.cores</code></td>
   <td><code>1</code></td>
   <td>
@@ -234,24 +212,10 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.cores</code></td>
-  <td>1 in YARN mode, all the available cores on the worker in standalone mode.</td>
-  <td>
-    The number of cores to use on each executor. For YARN and standalone mode only.
-  </td>
-</tr>
-<tr>
  <td><code>spark.executor.instances</code></td>
   <td><code>2</code></td>
   <td>
     The number of executors for static allocation. With <code>spark.dynamicAllocation.enabled</code>, the initial set of executors will be at least this large.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.executor.memory</code></td>
-  <td>1g</td>
-  <td>
-    Amount of memory to use per executor process (e.g. <code>2g</code>, <code>8g</code>).
   </td>
 </tr>
 <tr>
@@ -542,7 +506,7 @@ Spark supports integrating with other security-aware services through Java Servi
 `java.util.ServiceLoader`). To do that, implementations of `org.apache.spark.deploy.yarn.security.ServiceCredentialProvider`
 should be available to Spark by listing their names in the corresponding file in the jar's
 `META-INF/services` directory. These plug-ins can be disabled by setting
-`spark.yarn.security.tokens.{service}.enabled` to `false`, where `{service}` is the name of
+`spark.yarn.security.credentials.{service}.enabled` to `false`, where `{service}` is the name of
 credential provider.
 
 ## Configuring the External Shuffle Service
@@ -554,7 +518,7 @@ instructions:
 pre-packaged distribution.
 1. Locate the `spark-<version>-yarn-shuffle.jar`. This should be under
 `$SPARK_HOME/common/network-yarn/target/scala-<version>` if you are building Spark yourself, and under
-`lib` if you are using a distribution.
+`yarn` if you are using a distribution.
 1. Add this jar to the classpath of all `NodeManager`s in your cluster.
 1. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,
 then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
@@ -606,8 +570,8 @@ the Spark configuration must be set to disable token collection for the services
 The Spark configuration must include the lines:
 
 ```
-spark.yarn.security.tokens.hive.enabled   false
-spark.yarn.security.tokens.hbase.enabled  false
+spark.yarn.security.credentials.hive.enabled   false
+spark.yarn.security.credentials.hbase.enabled  false
 ```
 
 The configuration option `spark.yarn.access.namenodes` must be unset.

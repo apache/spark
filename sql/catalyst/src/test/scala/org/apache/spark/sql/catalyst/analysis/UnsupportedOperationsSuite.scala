@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.InternalOutputModes._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -27,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.IntegerType
 
@@ -97,6 +97,19 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     Aggregate(Nil, aggExprs("c"), Aggregate(Nil, aggExprs("d"), streamRelation)),
     outputMode = Update,
     expectedMsgs = Seq("multiple streaming aggregations"))
+
+  // Aggregation: Distinct aggregates not supported on streaming relation
+  val distinctAggExprs = Seq(Count("*").toAggregateExpression(isDistinct = true).as("c"))
+  assertSupportedInStreamingPlan(
+    "distinct aggregate - aggregate on batch relation",
+    Aggregate(Nil, distinctAggExprs, batchRelation),
+    outputMode = Append)
+
+  assertNotSupportedInStreamingPlan(
+    "distinct aggregate - aggregate on streaming relation",
+    Aggregate(Nil, distinctAggExprs, streamRelation),
+    outputMode = Complete,
+    expectedMsgs = Seq("distinct aggregation"))
 
   // Inner joins: Stream-stream not supported
   testBinaryOperationInStreamingPlan(
@@ -200,7 +213,6 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
 
   // Other unary operations
-  testUnaryOperatorInStreamingPlan("sort partitions", SortPartitions(Nil, _), expectedMsg = "sort")
   testUnaryOperatorInStreamingPlan(
     "sample", Sample(0.1, 1, true, 1L, _)(), expectedMsg = "sampling")
   testUnaryOperatorInStreamingPlan(

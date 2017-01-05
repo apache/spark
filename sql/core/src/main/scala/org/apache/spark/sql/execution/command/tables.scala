@@ -203,7 +203,7 @@ case class LoadDataCommand(
         throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
           s"but number of columns in provided partition spec (${partition.get.size}) " +
           s"do not match number of partitioned columns in table " +
-          s"(s${targetTable.partitionColumnNames.size})")
+          s"(${targetTable.partitionColumnNames.size})")
       }
       partition.get.keys.foreach { colName =>
         if (!targetTable.partitionColumnNames.contains(colName)) {
@@ -297,13 +297,15 @@ case class LoadDataCommand(
         partition.get,
         isOverwrite,
         holdDDLTime = false,
-        inheritTableSpecs = true)
+        inheritTableSpecs = true,
+        isSrcLocal = isLocal)
     } else {
       catalog.loadTable(
         targetTable.identifier,
         loadPath.toString,
         isOverwrite,
-        holdDDLTime = false)
+        holdDDLTime = false,
+        isSrcLocal = isLocal)
     }
     Seq.empty[Row]
   }
@@ -431,7 +433,13 @@ case class DescribeTableCommand(
       describeSchema(catalog.lookupRelation(table).schema, result)
     } else {
       val metadata = catalog.getTableMetadata(table)
-      describeSchema(metadata.schema, result)
+      if (metadata.schema.isEmpty) {
+        // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
+        // inferred at runtime. We should still support it.
+        describeSchema(catalog.lookupRelation(metadata.identifier).schema, result)
+      } else {
+        describeSchema(metadata.schema, result)
+      }
 
       describePartitionInfo(metadata, result)
 
@@ -483,7 +491,7 @@ case class DescribeTableCommand(
     if (table.tableType == CatalogTableType.VIEW) describeViewInfo(table, buffer)
 
     if (DDLUtils.isDatasourceTable(table) && table.tracksPartitionsInCatalog) {
-      append(buffer, "Partition Provider:", "Hive", "")
+      append(buffer, "Partition Provider:", "Catalog", "")
     }
   }
 
@@ -497,7 +505,8 @@ case class DescribeTableCommand(
     describeBucketingInfo(metadata, buffer)
 
     append(buffer, "Storage Desc Parameters:", "", "")
-    metadata.storage.properties.foreach { case (key, value) =>
+    val maskedProperties = CatalogUtils.maskCredentials(metadata.storage.properties)
+    maskedProperties.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
     }
   }
@@ -584,17 +593,25 @@ case class DescribeTableCommand(
  * The syntax of using this command in SQL is:
  * {{{
  *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
+ *   SHOW TABLE EXTENDED [(IN|FROM) database_name] LIKE 'identifier_with_wildcards';
  * }}}
  */
 case class ShowTablesCommand(
     databaseName: Option[String],
-    tableIdentifierPattern: Option[String]) extends RunnableCommand {
+    tableIdentifierPattern: Option[String],
+    isExtended: Boolean = false) extends RunnableCommand {
 
-  // The result of SHOW TABLES has three columns: database, tableName and isTemporary.
+  // The result of SHOW TABLES/SHOW TABLE has three basic columns: database, tableName and
+  // isTemporary. If `isExtended` is true, append column `information` to the output columns.
   override val output: Seq[Attribute] = {
+    val tableExtendedInfo = if (isExtended) {
+      AttributeReference("information", StringType, nullable = false)() :: Nil
+    } else {
+      Nil
+    }
     AttributeReference("database", StringType, nullable = false)() ::
       AttributeReference("tableName", StringType, nullable = false)() ::
-      AttributeReference("isTemporary", BooleanType, nullable = false)() :: Nil
+      AttributeReference("isTemporary", BooleanType, nullable = false)() :: tableExtendedInfo
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -605,8 +622,15 @@ case class ShowTablesCommand(
     val tables =
       tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
     tables.map { tableIdent =>
+      val database = tableIdent.database.getOrElse("")
+      val tableName = tableIdent.table
       val isTemp = catalog.isTemporaryTable(tableIdent)
-      Row(tableIdent.database.getOrElse(""), tableIdent.table, isTemp)
+      if (isExtended) {
+        val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).toString
+        Row(database, tableName, isTemp, s"${information}\n")
+      } else {
+        Row(database, tableName, isTemp)
+      }
     }
   }
 }
@@ -708,13 +732,6 @@ case class ShowPartitionsCommand(
     AttributeReference("partition", StringType, nullable = false)() :: Nil
   }
 
-  private def getPartName(spec: TablePartitionSpec, partColNames: Seq[String]): String = {
-    partColNames.map { name =>
-      ExternalCatalogUtils.escapePathName(name) + "=" +
-        ExternalCatalogUtils.escapePathName(spec(name))
-    }.mkString(File.separator)
-  }
-
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
@@ -751,10 +768,7 @@ case class ShowPartitionsCommand(
       }
     }
 
-    val partNames = catalog.listPartitions(tableName, spec).map { p =>
-      getPartName(p.spec, table.partitionColumnNames)
-    }
-
+    val partNames = catalog.listPartitionNames(tableName, spec)
     partNames.map(Row(_))
   }
 }

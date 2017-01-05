@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation,
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, _}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * Concrete parser for Spark SQL statements.
@@ -132,7 +132,27 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
     ShowTablesCommand(
       Option(ctx.db).map(_.getText),
-      Option(ctx.pattern).map(string))
+      Option(ctx.pattern).map(string),
+      isExtended = false)
+  }
+
+  /**
+   * Create a [[ShowTablesCommand]] logical plan.
+   * Example SQL :
+   * {{{
+   *   SHOW TABLE EXTENDED [(IN|FROM) database_name] LIKE 'identifier_with_wildcards'
+   *   [PARTITION(partition_spec)];
+   * }}}
+   */
+  override def visitShowTable(ctx: ShowTableContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.partitionSpec != null) {
+      operationNotAllowed("SHOW TABLE EXTENDED ... PARTITION", ctx)
+    }
+
+    ShowTablesCommand(
+      Option(ctx.db).map(_.getText),
+      Option(ctx.pattern).map(string),
+      isExtended = true)
   }
 
   /**
@@ -233,7 +253,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * Create an [[UncacheTableCommand]] logical plan.
    */
   override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
-    UncacheTableCommand(visitTableIdentifier(ctx.tableIdentifier))
+    UncacheTableCommand(visitTableIdentifier(ctx.tableIdentifier), ctx.EXISTS != null)
   }
 
   /**
@@ -322,7 +342,20 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a [[CreateTable]] logical plan.
+   * Create a data source table, returning a [[CreateTable]] logical plan.
+   *
+   * Expected format:
+   * {{{
+   *   CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
+   *   USING table_provider
+   *   [OPTIONS table_property_list]
+   *   [PARTITIONED BY (col_name, col_name, ...)]
+   *   [CLUSTERED BY (col_name, col_name, ...)
+   *    [SORTED BY (col_name [ASC|DESC], ...)]
+   *    INTO num_buckets BUCKETS
+   *   ]
+   *   [AS select_statement];
+   * }}}
    */
   override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
@@ -371,6 +404,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         operationNotAllowed("CREATE TEMPORARY TABLE ... USING ... AS query", ctx)
       }
 
+      // Don't allow explicit specification of schema for CTAS
+      if (schema.nonEmpty) {
+        operationNotAllowed(
+          "Schema may not be specified in a Create Table As Select (CTAS) statement",
+          ctx)
+      }
       CreateTable(tableDesc, mode, Some(query))
     } else {
       if (temp) {
@@ -813,9 +852,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
     AlterTableDropPartitionCommand(
       visitTableIdentifier(ctx.tableIdentifier),
-      ctx.partitionSpec.asScala.map(visitPartitionFilterSpec),
-      ctx.EXISTS != null,
-      ctx.PURGE != null)
+      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
+      ifExists = ctx.EXISTS != null,
+      purge = ctx.PURGE != null,
+      retainData = false)
   }
 
   /**
@@ -844,6 +884,33 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       visitLocationSpec(ctx.locationSpec))
+  }
+
+  /**
+   * Create a [[AlterTableChangeColumnCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table [PARTITION partition_spec]
+   *   CHANGE [COLUMN] column_old_name column_new_name column_dataType [COMMENT column_comment]
+   *   [FIRST | AFTER column_name];
+   * }}}
+   */
+  override def visitChangeColumn(ctx: ChangeColumnContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.partitionSpec != null) {
+      operationNotAllowed("ALTER TABLE table PARTITION partition_spec CHANGE COLUMN", ctx)
+    }
+
+    if (ctx.colPosition != null) {
+      operationNotAllowed(
+        "ALTER TABLE table [PARTITION partition_spec] CHANGE COLUMN ... FIRST | AFTER otherCol",
+        ctx)
+    }
+
+    AlterTableChangeColumnCommand(
+      tableName = visitTableIdentifier(ctx.tableIdentifier),
+      columnName = ctx.identifier.getText,
+      newColumn = visitColType(ctx.colType))
   }
 
   /**
@@ -1052,7 +1119,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
             "CTAS statement."
           operationNotAllowed(errorMessage, ctx)
         }
-        // Just use whatever is projected in the select statement as our schema
+
+        // Don't allow explicit specification of schema for CTAS.
         if (schema.nonEmpty) {
           operationNotAllowed(
             "Schema may not be specified in a Create Table As Select (CTAS) statement",

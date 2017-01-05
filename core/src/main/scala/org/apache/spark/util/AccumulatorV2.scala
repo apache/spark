@@ -59,8 +59,9 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   }
 
   /**
-   * Returns true if this accumulator has been registered.  Note that all accumulators must be
-   * registered before use, or it will throw exception.
+   * Returns true if this accumulator has been registered.
+   *
+   * @note All accumulators must be registered before use, or it will throw exception.
    */
   final def isRegistered: Boolean =
     metadata != null && AccumulatorContext.get(metadata.id).isDefined
@@ -223,7 +224,7 @@ private[spark] object AccumulatorContext {
    * Registers an [[AccumulatorV2]] created on the driver such that it can be used on the executors.
    *
    * All accumulators registered here can later be used as a container for accumulating partial
-   * values across multiple tasks. This is what [[org.apache.spark.scheduler.DAGScheduler]] does.
+   * values across multiple tasks. This is what `org.apache.spark.scheduler.DAGScheduler` does.
    * Note: if an accumulator is registered here, it should also be registered with the active
    * context cleaner for cleanup so as to avoid memory leaks.
    *

@@ -24,7 +24,7 @@ import java.nio.charset.StandardCharsets
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer, OffsetOutOfRangeException}
+import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsumer, OffsetOutOfRangeException}
 import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
@@ -32,9 +32,12 @@ import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSource._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.UninterruptibleThread
 
 /**
@@ -78,14 +81,16 @@ import org.apache.spark.util.UninterruptibleThread
  * To avoid this issue, you should make sure stopping the query before stopping the Kafka brokers
  * and not use wrong broker addresses.
  */
-private[kafka010] case class KafkaSource(
+private[kafka010] class KafkaSource(
     sqlContext: SQLContext,
     consumerStrategy: ConsumerStrategy,
+    driverKafkaParams: ju.Map[String, Object],
     executorKafkaParams: ju.Map[String, Object],
     sourceOptions: Map[String, String],
     metadataPath: String,
     startingOffsets: StartingOffsets,
-    failOnDataLoss: Boolean)
+    failOnDataLoss: Boolean,
+    driverGroupIdPrefix: String)
   extends Source with Logging {
 
   private val sc = sqlContext.sparkContext
@@ -99,16 +104,36 @@ private[kafka010] case class KafkaSource(
     sourceOptions.getOrElse("fetchOffset.numRetries", "3").toInt
 
   private val offsetFetchAttemptIntervalMs =
-    sourceOptions.getOrElse("fetchOffset.retryIntervalMs", "10").toLong
+    sourceOptions.getOrElse("fetchOffset.retryIntervalMs", "1000").toLong
 
   private val maxOffsetsPerTrigger =
     sourceOptions.get("maxOffsetsPerTrigger").map(_.toLong)
+
+  private var groupId: String = null
+
+  private var nextId = 0
+
+  private def nextGroupId(): String = {
+    groupId = driverGroupIdPrefix + "-" + nextId
+    nextId += 1
+    groupId
+  }
 
   /**
    * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the
    * offsets and never commits them.
    */
-  private val consumer = consumerStrategy.createConsumer()
+  private var consumer: Consumer[Array[Byte], Array[Byte]] = createConsumer()
+
+  /**
+   * Create a consumer using the new generated group id. We always use a new consumer to avoid
+   * just using a broken consumer to retry on Kafka errors, which likely will fail again.
+   */
+  private def createConsumer(): Consumer[Array[Byte], Array[Byte]] = synchronized {
+    val newKafkaParams = new ju.HashMap[String, Object](driverKafkaParams)
+    newKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, nextGroupId())
+    consumerStrategy.createConsumer(newKafkaParams)
+  }
 
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
@@ -166,6 +191,11 @@ private[kafka010] case class KafkaSource(
     currentPartitionOffsets = Some(offsets)
     logDebug(s"GetOffset: ${offsets.toSeq.map(_.toString).sorted}")
     Some(KafkaSourceOffset(offsets))
+  }
+
+  private def resetConsumer(): Unit = synchronized {
+    consumer.close()
+    consumer = createConsumer()
   }
 
   /** Proportionally distribute limit number of offsets among topicpartitions */
@@ -279,10 +309,17 @@ private[kafka010] case class KafkaSource(
       }
     }.toArray
 
-    // Create a RDD that reads from Kafka and get the (key, value) pair as byte arrays.
+    // Create an RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD(
-      sc, executorKafkaParams, offsetRanges, pollTimeoutMs).map { cr =>
-      Row(cr.key, cr.value, cr.topic, cr.partition, cr.offset, cr.timestamp, cr.timestampType.id)
+      sc, executorKafkaParams, offsetRanges, pollTimeoutMs, failOnDataLoss).map { cr =>
+      InternalRow(
+        cr.key,
+        cr.value,
+        UTF8String.fromString(cr.topic),
+        cr.partition,
+        cr.offset,
+        DateTimeUtils.fromJavaTimestamp(new java.sql.Timestamp(cr.timestamp)),
+        cr.timestampType.id)
     }
 
     logInfo("GetBatch generating RDD of offset range: " +
@@ -293,7 +330,7 @@ private[kafka010] case class KafkaSource(
       currentPartitionOffsets = Some(untilPartitionOffsets)
     }
 
-    sqlContext.createDataFrame(rdd, schema)
+    sqlContext.internalCreateDataFrame(rdd, schema)
   }
 
   /** Stop this source and free any resources it has allocated. */
@@ -431,13 +468,12 @@ private[kafka010] case class KafkaSource(
               try {
                 result = Some(body)
               } catch {
-                case x: OffsetOutOfRangeException =>
-                  reportDataLoss(x.getMessage)
                 case NonFatal(e) =>
                   lastException = e
                   logWarning(s"Error in attempt $attempt getting Kafka offsets: ", e)
                   attempt += 1
                   Thread.sleep(offsetFetchAttemptIntervalMs)
+                  resetConsumer()
               }
             }
           case _ =>
@@ -463,10 +499,9 @@ private[kafka010] case class KafkaSource(
    */
   private def reportDataLoss(message: String): Unit = {
     if (failOnDataLoss) {
-      throw new IllegalStateException(message +
-        ". Set the source option 'failOnDataLoss' to 'false' if you want to ignore these checks.")
+      throw new IllegalStateException(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE")
     } else {
-      logWarning(message)
+      logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
     }
   }
 }
@@ -475,23 +510,39 @@ private[kafka010] case class KafkaSource(
 /** Companion object for the [[KafkaSource]]. */
 private[kafka010] object KafkaSource {
 
+  val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE =
+    """
+      |Some data may have been lost because they are not available in Kafka any more; either the
+      | data was aged out by Kafka or the topic may have been deleted before all the data in the
+      | topic was processed. If you want your streaming query to fail on such cases, set the source
+      | option "failOnDataLoss" to "true".
+    """.stripMargin
+
+  val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE =
+    """
+      |Some data may have been lost because they are not available in Kafka any more; either the
+      | data was aged out by Kafka or the topic may have been deleted before all the data in the
+      | topic was processed. If you don't want your streaming query to fail on such cases, set the
+      | source option "failOnDataLoss" to "false".
+    """.stripMargin
+
   def kafkaSchema: StructType = StructType(Seq(
     StructField("key", BinaryType),
     StructField("value", BinaryType),
     StructField("topic", StringType),
     StructField("partition", IntegerType),
     StructField("offset", LongType),
-    StructField("timestamp", LongType),
+    StructField("timestamp", TimestampType),
     StructField("timestampType", IntegerType)
   ))
 
   sealed trait ConsumerStrategy {
-    def createConsumer(): Consumer[Array[Byte], Array[Byte]]
+    def createConsumer(kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]]
   }
 
-  case class AssignStrategy(partitions: Array[TopicPartition], kafkaParams: ju.Map[String, Object])
-    extends ConsumerStrategy {
-    override def createConsumer(): Consumer[Array[Byte], Array[Byte]] = {
+  case class AssignStrategy(partitions: Array[TopicPartition]) extends ConsumerStrategy {
+    override def createConsumer(
+        kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
       val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
       consumer.assign(ju.Arrays.asList(partitions: _*))
       consumer
@@ -500,9 +551,9 @@ private[kafka010] object KafkaSource {
     override def toString: String = s"Assign[${partitions.mkString(", ")}]"
   }
 
-  case class SubscribeStrategy(topics: Seq[String], kafkaParams: ju.Map[String, Object])
-    extends ConsumerStrategy {
-    override def createConsumer(): Consumer[Array[Byte], Array[Byte]] = {
+  case class SubscribeStrategy(topics: Seq[String]) extends ConsumerStrategy {
+    override def createConsumer(
+        kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
       val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
       consumer.subscribe(topics.asJava)
       consumer
@@ -511,10 +562,10 @@ private[kafka010] object KafkaSource {
     override def toString: String = s"Subscribe[${topics.mkString(", ")}]"
   }
 
-  case class SubscribePatternStrategy(
-    topicPattern: String, kafkaParams: ju.Map[String, Object])
+  case class SubscribePatternStrategy(topicPattern: String)
     extends ConsumerStrategy {
-    override def createConsumer(): Consumer[Array[Byte], Array[Byte]] = {
+    override def createConsumer(
+        kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
       val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
       consumer.subscribe(
         ju.regex.Pattern.compile(topicPattern),

@@ -143,7 +143,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("roundtrip in to_json and from_json") {
-    val dfOne = Seq(Some(Tuple1(Tuple1(1))), None).toDF("struct")
+    val dfOne = Seq(Tuple1(Tuple1(1)), Tuple1(null)).toDF("struct")
     val schemaOne = dfOne.schema(0).dataType.asInstanceOf[StructType]
     val readBackOne = dfOne.select(to_json($"struct").as("json"))
       .select(from_json($"json", schemaOne).as("struct"))

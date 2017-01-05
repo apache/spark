@@ -43,9 +43,10 @@ import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, S
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
- * A Spark serializer that uses the [[https://code.google.com/p/kryo/ Kryo serialization library]].
+ * A Spark serializer that uses the <a href="https://code.google.com/p/kryo/">
+ * Kryo serialization library</a>.
  *
- * Note that this serializer is not guaranteed to be wire-compatible across different versions of
+ * @note This serializer is not guaranteed to be wire-compatible across different versions of
  * Spark. It is intended to be used to serialize/de-serialize data within a single
  * Spark application.
  */
@@ -312,7 +313,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer, useUnsafe: Boole
     } catch {
       case e: KryoException if e.getMessage.startsWith("Buffer overflow") =>
         throw new SparkException(s"Kryo serialization failed: ${e.getMessage}. To avoid this, " +
-          "increase spark.kryoserializer.buffer.max value.")
+          "increase spark.kryoserializer.buffer.max value.", e)
     } finally {
       releaseKryo(kryo)
     }

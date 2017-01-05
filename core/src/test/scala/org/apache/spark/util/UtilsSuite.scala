@@ -17,7 +17,8 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, FileOutputStream, PrintStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
+  FileOutputStream, PrintStream}
 import java.lang.{Double => JDouble, Float => JFloat}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -387,6 +388,28 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     bbuf.putLong(testval)
     assert(bbuf.array.length === 8)
     assert(Utils.deserializeLongValue(bbuf.array) === testval)
+  }
+
+  test("writeByteBuffer should not change ByteBuffer position") {
+    // Test a buffer with an underlying array, for both writeByteBuffer methods.
+    val testBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
+    assert(testBuffer.hasArray)
+    val bytesOut = new ByteBufferOutputStream(4096)
+    Utils.writeByteBuffer(testBuffer, bytesOut)
+    assert(testBuffer.position() === 0)
+
+    val dataOut = new DataOutputStream(bytesOut)
+    Utils.writeByteBuffer(testBuffer, dataOut: DataOutput)
+    assert(testBuffer.position() === 0)
+
+    // Test a buffer without an underlying array, for both writeByteBuffer methods.
+    val testDirectBuffer = ByteBuffer.allocateDirect(8)
+    assert(!testDirectBuffer.hasArray())
+    Utils.writeByteBuffer(testDirectBuffer, bytesOut)
+    assert(testDirectBuffer.position() === 0)
+
+    Utils.writeByteBuffer(testDirectBuffer, dataOut: DataOutput)
+    assert(testDirectBuffer.position() === 0)
   }
 
   test("get iterator size") {
@@ -973,5 +996,25 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val pValue = chi.chiSquareTest(expected, observed)
 
     assert(pValue > threshold)
+  }
+
+  test("redact sensitive information") {
+    val sparkConf = new SparkConf
+
+    // Set some secret keys
+    val secretKeys = Seq(
+      "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
+      "spark.my.password",
+      "spark.my.sECreT")
+    secretKeys.foreach { key => sparkConf.set(key, "secret_password") }
+    // Set a non-secret key
+    sparkConf.set("spark.regular.property", "not_a_secret")
+
+    // Redact sensitive information
+    val redactedConf = Utils.redact(sparkConf, sparkConf.getAll).toMap
+
+    // Assert that secret information got redacted while the regular property remained the same
+    secretKeys.foreach { key => assert(redactedConf(key) === Utils.REDACTION_REPLACEMENT_TEXT) }
+    assert(redactedConf("spark.regular.property") === "not_a_secret")
   }
 }

@@ -95,6 +95,18 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     }
   }
 
+  test("Event logging with password redaction") {
+    val key = "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD"
+    val secretPassword = "secret_password"
+    val conf = getLoggingConf(testDirPath, None)
+      .set(key, secretPassword)
+    val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    val envDetails = SparkEnv.environmentDetails(conf, "FIFO", Seq.empty, Seq.empty)
+    val event = SparkListenerEnvironmentUpdate(envDetails)
+    val redactedProps = eventLogger.redactEvent(event).environmentDetails("Spark Properties").toMap
+    assert(redactedProps(key) == "*********(redacted)")
+  }
+
   test("Log overwriting") {
     val logUri = EventLoggingListener.getLogPath(testDir.toURI, "test", None)
     val logPath = new URI(logUri).getPath
@@ -107,19 +119,20 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   test("Event log name") {
+    val baseDirUri = Utils.resolveURI("/base-dir")
     // without compression
-    assert(s"file:/base-dir/app1" === EventLoggingListener.getLogPath(
-      Utils.resolveURI("/base-dir"), "app1", None))
+    assert(s"${baseDirUri.toString}/app1" === EventLoggingListener.getLogPath(
+      baseDirUri, "app1", None))
     // with compression
-    assert(s"file:/base-dir/app1.lzf" ===
-      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"), "app1", None, Some("lzf")))
+    assert(s"${baseDirUri.toString}/app1.lzf" ===
+      EventLoggingListener.getLogPath(baseDirUri, "app1", None, Some("lzf")))
     // illegal characters in app ID
-    assert(s"file:/base-dir/a-fine-mind_dollar_bills__1" ===
-      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"),
+    assert(s"${baseDirUri.toString}/a-fine-mind_dollar_bills__1" ===
+      EventLoggingListener.getLogPath(baseDirUri,
         "a fine:mind$dollar{bills}.1", None))
     // illegal characters in app ID with compression
-    assert(s"file:/base-dir/a-fine-mind_dollar_bills__1.lz4" ===
-      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"),
+    assert(s"${baseDirUri.toString}/a-fine-mind_dollar_bills__1.lz4" ===
+      EventLoggingListener.getLogPath(baseDirUri,
         "a fine:mind$dollar{bills}.1", None, Some("lz4")))
   }
 
@@ -277,7 +290,7 @@ object EventLoggingListenerSuite {
     val conf = new SparkConf
     conf.set("spark.eventLog.enabled", "true")
     conf.set("spark.eventLog.testing", "true")
-    conf.set("spark.eventLog.dir", logDir.toString)
+    conf.set("spark.eventLog.dir", logDir.toUri.toString)
     compressionCodec.foreach { codec =>
       conf.set("spark.eventLog.compress", "true")
       conf.set("spark.io.compression.codec", codec)

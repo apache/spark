@@ -177,15 +177,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       throw new ParseException(s"Dynamic partitions do not support IF NOT EXISTS. Specified " +
         "partitions with value: " + dynamicPartitionKeys.keys.mkString("[", ",", "]"), ctx)
     }
-    val overwrite = ctx.OVERWRITE != null
-    val staticPartitionKeys: Map[String, String] =
-      partitionKeys.filter(_._2.nonEmpty).map(t => (t._1, t._2.get))
 
     InsertIntoTable(
       UnresolvedRelation(tableIdent, None),
       partitionKeys,
       query,
-      OverwriteOptions(overwrite, if (overwrite) staticPartitionKeys else Map.empty),
+      ctx.OVERWRITE != null,
       ctx.EXISTS != null)
   }
 
@@ -194,38 +191,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
-    val parts = ctx.expression.asScala.map { pVal =>
-      expression(pVal) match {
-        case UnresolvedAttribute(name :: Nil, _) =>
-          name -> None
-        case cmp @ EqualTo(UnresolvedAttribute(name :: Nil, _), constant: Literal) =>
-          name -> Option(constant.toString)
-        case _ =>
-          throw new ParseException("Invalid partition filter specification", ctx)
-      }
+    val parts = ctx.partitionVal.asScala.map { pVal =>
+      val name = pVal.identifier.getText
+      val value = Option(pVal.constant).map(visitStringConstant)
+      name -> value
     }
     // Before calling `toMap`, we check duplicated keys to avoid silently ignore partition values
     // in partition spec like PARTITION(a='1', b='2', a='3'). The real semantical check for
     // partition columns will be done in analyzer.
     checkDuplicateKeys(parts, ctx)
     parts.toMap
-  }
-
-  /**
-   * Create a partition filter specification.
-   */
-  def visitPartitionFilterSpec(ctx: PartitionSpecContext): Expression = withOrigin(ctx) {
-    val parts = ctx.expression.asScala.map { pVal =>
-      expression(pVal) match {
-        case EqualNullSafe(_, _) =>
-          throw new ParseException("'<=>' operator is not allowed in partition specification.", ctx)
-        case cmp @ BinaryComparison(UnresolvedAttribute(name :: Nil, _), constant: Literal) =>
-          cmp.withNewChildren(Seq(AttributeReference(name, StringType)(), constant))
-        case _ =>
-          throw new ParseException("Invalid partition filter specification", ctx)
-      }
-    }
-    parts.reduceLeft(And)
   }
 
   /**
@@ -577,10 +552,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         // Resolve the join type and join condition
         val (joinType, condition) = Option(join.joinCriteria) match {
           case Some(c) if c.USING != null =>
-            val columns = c.identifier.asScala.map { column =>
-              UnresolvedAttribute.quoted(column.getText)
-            }
-            (UsingJoin(baseJoinType, columns), None)
+            (UsingJoin(baseJoinType, c.identifier.asScala.map(_.getText)), None)
           case Some(c) if c.booleanExpression != null =>
             (baseJoinType, Option(expression(c.booleanExpression)))
           case None if join.NATURAL != null =>

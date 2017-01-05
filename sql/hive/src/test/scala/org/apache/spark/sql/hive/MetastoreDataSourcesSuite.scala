@@ -179,7 +179,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           s"""CREATE TABLE jsonTable
              |USING org.apache.spark.sql.json
              |OPTIONS (
-             |  path '${tempDir.getCanonicalPath}'
+             |  path '${tempDir.toURI}'
              |)
            """.stripMargin)
 
@@ -215,7 +215,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           s"""CREATE TABLE jsonTable
              |USING org.apache.spark.sql.json
              |OPTIONS (
-             |  path '${tempDir.getCanonicalPath}'
+             |  path '${tempDir.toURI}'
              |)
            """.stripMargin)
 
@@ -232,7 +232,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           s"""CREATE TABLE jsonTable
              |USING org.apache.spark.sql.json
              |OPTIONS (
-             |  path '${tempDir.getCanonicalPath}'
+             |  path '${tempDir.toURI}'
              |)
            """.stripMargin)
 
@@ -291,7 +291,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           s"""CREATE TABLE ctasJsonTable
              |USING org.apache.spark.sql.json.DefaultSource
              |OPTIONS (
-             |  path '$tempPath'
+             |  path '${tempPath.toURI}'
              |) AS
              |SELECT * FROM jsonTable
            """.stripMargin)
@@ -307,7 +307,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
   test("CTAS with IF NOT EXISTS") {
     withTempPath { path =>
-      val tempPath = path.getCanonicalPath
+      val tempPath = path.toURI
 
       withTable("jsonTable", "ctasJsonTable") {
         sql(
@@ -410,6 +410,26 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
       sql("DROP TABLE ctasJsonTable")
       assert(!fs.exists(filesystemPath), s"$expectedPath should not exist after we drop the table.")
+    }
+  }
+
+  test("saveAsTable(CTAS) using append and insertInto when the target table is Hive serde") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName STORED AS SEQUENCEFILE AS SELECT 1 AS key, 'abc' AS value")
+
+      val df = sql(s"SELECT key, value FROM $tableName")
+      val e = intercept[AnalysisException] {
+        df.write.mode(SaveMode.Append).saveAsTable(tableName)
+      }.getMessage
+      assert(e.contains("Saving data in the Hive serde table default.tab1 is not supported " +
+        "yet. Please use the insertInto() API as an alternative."))
+
+      df.write.insertInto(tableName)
+      checkAnswer(
+        sql(s"SELECT * FROM $tableName"),
+        Row(1, "abc") :: Row(1, "abc") :: Nil
+      )
     }
   }
 
@@ -908,9 +928,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         createDF(10, 19).write.mode(SaveMode.Append).format("orc").saveAsTable("appendOrcToParquet")
       }
       assert(e.getMessage.contains(
-        "The file format of the existing table default.appendOrcToParquet " +
-        "is `org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat`. " +
-        "It doesn't match the specified format `orc`"))
+        "The format of the existing table default.appendOrcToParquet is `ParquetFileFormat`. " +
+          "It doesn't match the specified format `OrcFileFormat`"))
     }
 
     withTable("appendParquetToJson") {
@@ -920,9 +939,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           .saveAsTable("appendParquetToJson")
       }
       assert(e.getMessage.contains(
-        "The file format of the existing table default.appendParquetToJson " +
-        "is `org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
-        "It doesn't match the specified format `parquet`"))
+        "The format of the existing table default.appendParquetToJson is `JsonFileFormat`. " +
+        "It doesn't match the specified format `ParquetFileFormat`"))
     }
 
     withTable("appendTextToJson") {
@@ -932,9 +950,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           .saveAsTable("appendTextToJson")
       }
       assert(e.getMessage.contains(
-        "The file format of the existing table default.appendTextToJson is " +
-        "`org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
-        "It doesn't match the specified format `text`"))
+        "The format of the existing table default.appendTextToJson is `JsonFileFormat`. " +
+        "It doesn't match the specified format `TextFileFormat`"))
     }
   }
 
@@ -1032,11 +1049,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("CTAS: persisted partitioned data source table") {
     withTempPath { dir =>
       withTable("t") {
-        val path = dir.getCanonicalPath
-
         sql(
           s"""CREATE TABLE t USING PARQUET
-             |OPTIONS (PATH '$path')
+             |OPTIONS (PATH '${dir.toURI}')
              |PARTITIONED BY (a)
              |AS SELECT 1 AS a, 2 AS b
            """.stripMargin
@@ -1102,11 +1117,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("CTAS: persisted partitioned bucketed data source table") {
     withTempPath { dir =>
       withTable("t") {
-        val path = dir.getCanonicalPath
-
         sql(
           s"""CREATE TABLE t USING PARQUET
-             |OPTIONS (PATH '$path')
+             |OPTIONS (PATH '${dir.toURI}')
              |PARTITIONED BY (a)
              |CLUSTERED BY (b) SORTED BY (c) INTO 2 BUCKETS
              |AS SELECT 1 AS a, 2 AS b, 3 AS c
@@ -1222,7 +1235,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       var e = intercept[AnalysisException] {
         table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
       }.getMessage
-      assert(e.contains(s"Cannot overwrite table `$tableName` that is also being read from"))
+      assert(e.contains(s"Cannot overwrite table default.$tableName that is also being read from"))
 
       e = intercept[AnalysisException] {
         table(tableName).write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
@@ -1272,11 +1285,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("SPARK-15025: create datasource table with path with select") {
     withTempPath { dir =>
       withTable("t") {
-        val path = dir.getCanonicalPath
-
         sql(
           s"""CREATE TABLE t USING PARQUET
-             |OPTIONS (PATH '$path')
+             |OPTIONS (PATH '${dir.toURI}')
              |AS SELECT 1 AS a, 2 AS b, 3 AS c
            """.stripMargin
         )
@@ -1290,7 +1301,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
   test("SPARK-15269 external data source table creation") {
     withTempPath { dir =>
-      val path = dir.getCanonicalPath
+      val path = dir.toURI.toString
       spark.range(1).write.json(path)
 
       withTable("t") {
@@ -1348,27 +1359,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       f
     } finally {
       sparkSession.sparkContext.conf.set(DEBUG_MODE, previousValue)
-    }
-  }
-
-  test("SPARK-17470: support old table that stores table location in storage properties") {
-    withTable("old") {
-      withTempPath { path =>
-        Seq(1 -> "a").toDF("i", "j").write.parquet(path.getAbsolutePath)
-        val tableDesc = CatalogTable(
-          identifier = TableIdentifier("old", Some("default")),
-          tableType = CatalogTableType.EXTERNAL,
-          storage = CatalogStorageFormat.empty.copy(
-            properties = Map("path" -> path.getAbsolutePath)
-          ),
-          schema = new StructType(),
-          properties = Map(
-            HiveExternalCatalog.DATASOURCE_PROVIDER -> "parquet",
-            HiveExternalCatalog.DATASOURCE_SCHEMA ->
-              new StructType().add("i", "int").add("j", "string").json))
-        hiveClient.createTable(tableDesc, ignoreIfExists = false)
-        checkAnswer(spark.table("old"), Row(1, "a"))
-      }
     }
   }
 }

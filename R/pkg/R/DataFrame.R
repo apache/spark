@@ -737,26 +737,32 @@ setMethod("repartition",
 
 #' toJSON
 #'
-#' Convert the rows of a SparkDataFrame into JSON objects and return an RDD where
-#' each element contains a JSON string.
+#' Converts a SparkDataFrame into a SparkDataFrame of JSON string.
 #'
-#' @param x A SparkDataFrame
-#' @return A StringRRDD of JSON objects
+#' Each row is turned into a JSON document with columns as different fields.
+#' The returned SparkDataFrame has a single character column with the name \code{value}
+#'
+#' @param x a SparkDataFrame
+#' @return a SparkDataFrame
+#' @family SparkDataFrame functions
+#' @rdname toJSON
+#' @name toJSON
 #' @aliases toJSON,SparkDataFrame-method
-#' @noRd
+#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' newRDD <- toJSON(df)
+#' path <- "path/to/file.parquet"
+#' df <- read.parquet(path)
+#' df_json <- toJSON(df)
 #'}
+#' @note toJSON since 2.2.0
 setMethod("toJSON",
           signature(x = "SparkDataFrame"),
           function(x) {
-            rdd <- callJMethod(x@sdf, "toJSON")
-            jrdd <- callJMethod(rdd, "toJavaRDD")
-            RDD(jrdd, serializedMode = "string")
+            jsonDS <- callJMethod(x@sdf, "toJSON")
+            df <- callJMethod(jsonDS, "toDF")
+            dataFrame(df)
           })
 
 #' Save the contents of SparkDataFrame as a JSON file
@@ -937,6 +943,8 @@ setMethod("unique",
 #' Sample
 #'
 #' Return a sampled subset of this SparkDataFrame using a random seed.
+#' Note: this is not guaranteed to provide exactly the fraction specified
+#' of the total count of of the given SparkDataFrame.
 #'
 #' @param x A SparkDataFrame
 #' @param withReplacement Sampling with replacement or not
@@ -2539,7 +2547,8 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #'
 #' Return a new SparkDataFrame containing the union of rows in this SparkDataFrame
 #' and another SparkDataFrame. This is equivalent to \code{UNION ALL} in SQL.
-#' Note that this does not remove duplicate rows across the two SparkDataFrames.
+#'
+#' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #'
 #' @param x A SparkDataFrame
 #' @param y A SparkDataFrame
@@ -2582,7 +2591,8 @@ setMethod("unionAll",
 #' Union two or more SparkDataFrames
 #'
 #' Union two or more SparkDataFrames. This is equivalent to \code{UNION ALL} in SQL.
-#' Note that this does not remove duplicate rows across the two SparkDataFrames.
+#'
+#' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #'
 #' @param x a SparkDataFrame.
 #' @param ... additional SparkDataFrame(s).

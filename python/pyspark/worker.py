@@ -27,6 +27,7 @@ import traceback
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
+from pyspark.taskcontext import TaskContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, write_int, read_long, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, BatchedSerializer
@@ -125,6 +126,11 @@ def main(infile, outfile):
                             ("%d.%d" % sys.version_info[:2], version))
 
         # initialize global state
+        taskContext = TaskContext._getOrCreate()
+        taskContext._stageId = read_int(infile)
+        taskContext._partitionId = read_int(infile)
+        taskContext._attemptNumber = read_int(infile)
+        taskContext._taskAttemptId = read_long(infile)
         shuffle.MemoryBytesSpilled = 0
         shuffle.DiskBytesSpilled = 0
         _accumulatorRegistry.clear()

@@ -85,13 +85,10 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
         case None => LatestOffsets
       }
 
-    val kafkaParamsForStrategy =
+    val kafkaParamsForDriver =
       ConfigUpdater("source", specifiedKafkaParams)
         .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
         .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
-
-        // So that consumers in Kafka source do not mess with any existing group id
-        .set(ConsumerConfig.GROUP_ID_CONFIG, s"$uniqueGroupId-driver")
 
         // Set to "earliest" to avoid exceptions. However, KafkaSource will fetch the initial
         // offsets by itself instead of counting on KafkaConsumer.
@@ -129,17 +126,11 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
 
     val strategy = caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
       case ("assign", value) =>
-        AssignStrategy(
-          JsonUtils.partitions(value),
-          kafkaParamsForStrategy)
+        AssignStrategy(JsonUtils.partitions(value))
       case ("subscribe", value) =>
-        SubscribeStrategy(
-          value.split(",").map(_.trim()).filter(_.nonEmpty),
-          kafkaParamsForStrategy)
+        SubscribeStrategy(value.split(",").map(_.trim()).filter(_.nonEmpty))
       case ("subscribepattern", value) =>
-        SubscribePatternStrategy(
-          value.trim(),
-          kafkaParamsForStrategy)
+        SubscribePatternStrategy(value.trim())
       case _ =>
         // Should never reach here as we are already matching on
         // matched strategy names
@@ -152,11 +143,13 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
     new KafkaSource(
       sqlContext,
       strategy,
+      kafkaParamsForDriver,
       kafkaParamsForExecutors,
       parameters,
       metadataPath,
       startingOffsets,
-      failOnDataLoss)
+      failOnDataLoss,
+      driverGroupIdPrefix = s"$uniqueGroupId-driver")
   }
 
   private def validateOptions(parameters: Map[String, String]): Unit = {
@@ -219,7 +212,7 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
            |Instead set the source option '$STARTING_OFFSETS_OPTION_KEY' to 'earliest' or 'latest'
            |to specify where to start. Structured Streaming manages which offsets are consumed
            |internally, rather than relying on the kafkaConsumer to do it. This will ensure that no
-           |data is missed when when new topics/partitions are dynamically subscribed. Note that
+           |data is missed when new topics/partitions are dynamically subscribed. Note that
            |'$STARTING_OFFSETS_OPTION_KEY' only applies when a new Streaming query is started, and
            |that resuming will always pick up from where the query left off. See the docs for more
            |details.
