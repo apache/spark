@@ -26,30 +26,26 @@ object AggregateEstimation {
 
   def estimate(agg: Aggregate): Option[Statistics] = {
     val childStats = agg.child.statistics
-    // Check if we have column stats for all group by columns.
+    // Check if we have column stats for all group-by columns.
     val colStatsExist = agg.groupingExpressions.forall { e =>
       e.isInstanceOf[Attribute] && childStats.attributeStats.contains(e.asInstanceOf[Attribute])
     }
     if (rowCountsExist(agg.child) && colStatsExist) {
       // Initial value for agg without group expressions
       var outputRows: BigInt = 1
-      var maxNdv: BigInt = -1
-      agg.groupingExpressions.foreach { e =>
-        val colStat = childStats.attributeStats(e.asInstanceOf[Attribute])
-        if (colStat.distinctCount > maxNdv) maxNdv = colStat.distinctCount
+      agg.groupingExpressions.map(_.asInstanceOf[Attribute]).foreach { attr =>
+        val colStat = childStats.attributeStats(attr)
         // Multiply distinct counts of group by columns. This is an upper bound, which assumes
         // the data contains all combinations of distinct values of group by columns.
         outputRows *= colStat.distinctCount
       }
 
-      // Check if there's a primary key
-      outputRows = if (BigDecimal(maxNdv) / BigDecimal(childStats.rowCount.get) == 1) {
-        // If the column is unique, the number of output rows is the same as its distinct count.
-        maxNdv
-      } else {
-        // Should not be larger than child's row count
-        outputRows.min(childStats.rowCount.get)
-      }
+      // The number of output rows must not be larger than child's number of rows.
+      // Note that this also covers the case of uniqueness of column. If one of the group-by columns
+      // is a primary key (unique), the number of output rows is equal to its distinct count, which
+      // is equal to child's number of rows.
+      outputRows = outputRows.min(childStats.rowCount.get)
+
       val outputAttrStats = getOutputMap(childStats.attributeStats, agg.output)
       Some(Statistics(
         sizeInBytes = outputRows * getRowSize(agg.output, outputAttrStats),
