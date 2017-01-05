@@ -22,7 +22,7 @@ import java.io.IOException
 import scala.collection.JavaConverters._
 
 import com.google.common.base.Objects
-import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.FieldSchema
@@ -181,7 +181,7 @@ private[hive] case class MetastoreRelation(
       }
       sd.setCols(schema.asJava)
 
-      p.storage.locationUri.map(_.toString).foreach(sd.setLocation)
+      p.storage.locationUri.map(uri => new Path(uri).toString).foreach(sd.setLocation)
       p.storage.inputFormat.foreach(sd.setInputFormat)
       p.storage.outputFormat.foreach(sd.setOutputFormat)
 
