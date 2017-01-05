@@ -116,6 +116,11 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     }
     validationDataset.unpersist()
 
+    val instrLog = Instrumentation.create(this, dataset)
+    // parameters: metrics, split sizes, number of tries (numModels),
+    instrLog.logParams(trainRatio)
+    instrLog.logNamedValue(s"numModels", numModels)
+    instrLog.log(s"evaluator: ${eval.name}")
     logInfo(s"Train validation split metrics: ${metrics.toSeq}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
@@ -123,6 +128,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best train validation split metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
+    instrLog.logSuccess(bestModel)
     copyValues(new TrainValidationSplitModel(uid, bestModel, metrics).setParent(this))
   }
 

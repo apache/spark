@@ -22,10 +22,10 @@ import java.util.concurrent.atomic.AtomicLong
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
 
@@ -82,6 +82,22 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
 
   def logNumClasses(num: Long): Unit = {
     log(compact(render("numClasses" -> num)))
+  }
+
+  /**
+    * Log params for validation estimators that search for best params by wrapping another evaluator
+    * and following given metrics.
+    *
+    * @param estimator
+    * @param evaluator
+    * @param estimatorParamMaps
+    */
+  def logValidationParams(
+    evaluator: Param[Evaluator],
+    estimator: Param[Estimator[_]],
+    estimatorParamMaps: Param[Array[ParamMap]]): Unit = {
+    log(compact(render(map2jvalue(Map("estimator" -> estimator.name,
+      "evaluator" -> evaluator.name, "numModels" -> estimatorParamMaps.length)))))
   }
 
   /**
