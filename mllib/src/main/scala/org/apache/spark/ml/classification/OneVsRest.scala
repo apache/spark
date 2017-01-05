@@ -344,6 +344,10 @@ final class OneVsRest @Since("1.4.0") (
       multiclassLabeled.unpersist()
     }
 
+    val instrLog = Instrumentation.create(this, multiclassLabeled)
+    instrLog.logParams(labelCol, featuresCol, predictionCol)
+    instrLog.logNumClasses(numClasses)
+    instrLog.logNamedValue("classifier", $(classifier).getClass.getSimpleName)
     // extract label metadata from label column if present, or create a nominal attribute
     // to output the number of labels
     val labelAttribute = Attribute.fromStructField(labelSchema) match {
@@ -352,6 +356,7 @@ final class OneVsRest @Since("1.4.0") (
       case attr: Attribute => attr
     }
     val model = new OneVsRestModel(uid, labelAttribute.toMetadata(), models).setParent(this)
+    instrLog.logSuccess(model)
     copyValues(model)
   }
 

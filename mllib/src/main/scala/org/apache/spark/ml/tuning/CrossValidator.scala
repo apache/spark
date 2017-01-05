@@ -120,6 +120,9 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       validationDataset.unpersist()
     }
     f2jBLAS.dscal(numModels, 1.0 / $(numFolds), metrics, 1)
+    val instrLog = Instrumentation.create(this, dataset)
+    instrLog.logParams(numFolds, seed)
+    instrLog.logTuningParams(est, epm, eval)
     logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
@@ -127,6 +130,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
+    instrLog.logSuccess(bestModel)
     copyValues(new CrossValidatorModel(uid, bestModel, metrics).setParent(this))
   }
 
