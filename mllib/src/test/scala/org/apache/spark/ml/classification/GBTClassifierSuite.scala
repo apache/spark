@@ -19,7 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.LeafNode
@@ -28,7 +28,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.{MLUtils, MLlibTestSparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.util.Utils
@@ -70,9 +70,11 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     ParamsSuite.checkParams(model)
   }
 
-  test("Verify predicted probabilities correspond to labels") {
+  test("Verify raw scores correspond to labels") {
     val rawPredictionCol = "MyRawPrediction"
     val predictionCol = "MyPrediction"
+    val labelCol = "label"
+    val featuresCol = "features"
     val gbt = new GBTClassifier()
       .setMaxDepth(2)
       .setLossType("logistic")
@@ -82,9 +84,19 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
       .setSeed(123)
       .setRawPredictionCol(rawPredictionCol)
       .setPredictionCol(predictionCol)
-    val gbtModel = gbt.fit(trainData.toDF())
-    val scoredData = gbtModel.transform(validationData.toDF())
-    scoredData.select(rawPredictionCol, predictionCol).foreach(row => print(row(0)))
+      .setLabelCol(labelCol)
+      .setFeaturesCol(featuresCol)
+    val gbtModel = gbt.fit(trainData.toDF(labelCol, featuresCol))
+    val scoredData = gbtModel.transform(validationData.toDF(labelCol, featuresCol))
+    scoredData.select(rawPredictionCol, predictionCol).collect()
+      .foreach(row => {
+        val probabilities = Vectors.dense(row(0).asInstanceOf[DenseVector]
+          .values.map(value => 1 / (1 + math.exp(-value))))
+        // Verify probabilities make sense
+        assert(probabilities.toDense.values.forall(prob => prob <= 1 && prob >= 0))
+        // Verify probabilities correspond to labels
+        assert(probabilities.argmax == row(1))
+      })
   }
 
   test("GBT parameter stepSize should be in interval (0, 1]") {

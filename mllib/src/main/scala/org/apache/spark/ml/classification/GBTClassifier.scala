@@ -280,14 +280,14 @@ class GBTClassificationModel private[ml](
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {
       // The probability can be calculated for positive result:
-      // p+(x) = 1 / (1 + e^(-2*F(x)))
+      // p+(x) = 1 / (1 + e^(-F(x)))
       // and negative result:
-      // p-(x) = 1 / (1 + e^(2*F(x)))
+      // p-(x) = 1 / (1 + e^(F(x)))
       case dv: DenseVector =>
         var i = 0
         val size = dv.size
         while (i < size) {
-          dv.values(i) = 1 / MLUtils.log1pExp(-dv.values(i))
+          dv.values(i) = 1 / (1 + math.exp(-dv.values(i)))
           i += 1
         }
         dv
