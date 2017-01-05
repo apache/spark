@@ -1669,9 +1669,8 @@ object functions {
     * @since 2.2.0
     */
   @scala.annotation.varargs
-  def field(exprs: Column*): Column = withExpr {
-    require(exprs.length > 1, "field requires at least 2 arguments.")
-    Field(exprs.map(_.expr))
+  def field(expr1: Column, expr2: Column, exprs: Column*): Column = withExpr {
+    Field((expr1 +: expr2 +: exprs).map(_.expr))
   }
 
   /**
