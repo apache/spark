@@ -473,6 +473,11 @@ case class DataSource(
               s"Unable to resolve $name given [${plan.output.map(_.name).mkString(", ")}]")
           }.asInstanceOf[Attribute]
         }
+        val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
+          sparkSession.table(tableIdent).queryExecution.analyzed.collect {
+            case LogicalRelation(t: HadoopFsRelation, _, _) => t.location
+          }.head
+        }
         // For partitioned relation r, r.schema's column ordering can be different from the column
         // ordering of data.logicalPlan (partition columns are all moved after data column).  This
         // will be adjusted within InsertIntoHadoopFsRelation.
@@ -480,15 +485,14 @@ case class DataSource(
           InsertIntoHadoopFsRelationCommand(
             outputPath = outputPath,
             staticPartitions = Map.empty,
-            customPartitionLocations = Map.empty,
             partitionColumns = columns,
             bucketSpec = bucketSpec,
             fileFormat = format,
-            refreshFunction = _ => Unit, // No existing table needs to be refreshed.
             options = options,
             query = data.logicalPlan,
             mode = mode,
-            catalogTable = catalogTable)
+            catalogTable = catalogTable,
+            fileIndex = fileIndex)
         sparkSession.sessionState.executePlan(plan).toRdd
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring it.
         copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()

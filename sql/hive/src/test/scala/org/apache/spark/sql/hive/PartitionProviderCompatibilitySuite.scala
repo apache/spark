@@ -28,6 +28,7 @@ import org.apache.spark.util.Utils
 
 class PartitionProviderCompatibilitySuite
   extends QueryTest with TestHiveSingleton with SQLTestUtils {
+  import testImplicits._
 
   private def setupPartitionedDatasourceTable(tableName: String, dir: File): Unit = {
     spark.range(5).selectExpr("id as fieldOne", "id as partCol").write
@@ -195,12 +196,30 @@ class PartitionProviderCompatibilitySuite
           withTempDir { dir =>
             setupPartitionedDatasourceTable("test", dir)
             if (enabled) {
-              spark.sql("msck repair table test")
+              assert(spark.table("test").count() == 0)
+            } else {
+              assert(spark.table("test").count() == 5)
             }
-            assert(spark.sql("select * from test").count() == 5)
-            spark.range(10).selectExpr("id as fieldOne", "id as partCol")
+            // Table `test` has 5 partitions, from `partCol=0` to `partCol=4`, which are invisible
+            // because we have not run `REPAIR TABLE` yet. Here we add 10 more partitions from
+            // `partCol=3` to `partCol=12`, to test the following behaviors:
+            //   1. invisible partitions are still invisible if they are not overwritten.
+            //   2. invisible partitions become visible if they are overwritten.
+            //   3. newly added partitions should be visible.
+            spark.range(3, 13).selectExpr("id as fieldOne", "id as partCol")
               .write.partitionBy("partCol").mode("append").saveAsTable("test")
-            assert(spark.sql("select * from test").count() == 15)
+
+            if (enabled) {
+              // Only the newly written partitions are visible, which means the partitions
+              // `partCol=0`, `partCol=1` and `partCol=2` are still invisible, so we can only see
+              // 5 + 10 - 3 = 12 records.
+              assert(spark.table("test").count() == 12)
+              // Repair the table to make all partitions visible.
+              sql("msck repair table test")
+              assert(spark.table("test").count() == 15)
+            } else {
+              assert(spark.table("test").count() == 15)
+            }
           }
         }
       }
@@ -446,6 +465,19 @@ class PartitionProviderCompatibilitySuite
       assert(spark.sql("show partitions test").count() == 4)
       spark.sql("insert overwrite table test partition (P1=1, P2=2) select id from range(5)")
       assert(spark.sql("select * from test").count() == 15)
+      assert(spark.sql("show partitions test").count() == 5)
+    }
+  }
+
+  test("append data with DataFrameWriter") {
+    testCustomLocations {
+      val df = Seq((1L, 0, 0), (2L, 0, 0)).toDF("id", "P1", "P2")
+      df.write.partitionBy("P1", "P2").mode("append").saveAsTable("test")
+      assert(spark.sql("select * from test").count() == 2)
+      assert(spark.sql("show partitions test").count() == 4)
+      val df2 = Seq((3L, 2, 2)).toDF("id", "P1", "P2")
+      df2.write.partitionBy("P1", "P2").mode("append").saveAsTable("test")
+      assert(spark.sql("select * from test").count() == 3)
       assert(spark.sql("show partitions test").count() == 5)
     }
   }

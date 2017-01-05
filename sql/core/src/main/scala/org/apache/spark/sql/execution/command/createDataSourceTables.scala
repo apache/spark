@@ -138,7 +138,7 @@ case class CreateDataSourceTableAsSelectCommand(
     val tableIdentWithDB = table.identifier.copy(database = Some(db))
     val tableName = tableIdentWithDB.unquotedString
 
-    val result = if (sessionState.catalog.tableExists(tableIdentWithDB)) {
+    if (sessionState.catalog.tableExists(tableIdentWithDB)) {
       assert(mode != SaveMode.Overwrite,
         s"Expect the table $tableName has been dropped when the save mode is Overwrite")
 
@@ -150,14 +150,16 @@ case class CreateDataSourceTableAsSelectCommand(
         return Seq.empty
       }
 
-      saveDataIntoTable(sparkSession, table, table.storage.locationUri, query, mode)
+      saveDataIntoTable(
+        sparkSession, table, table.storage.locationUri, query, mode, tableExists = true)
     } else {
       val tableLocation = if (table.tableType == CatalogTableType.MANAGED) {
         Some(sessionState.catalog.defaultTablePath(table.identifier))
       } else {
         table.storage.locationUri
       }
-      val result = saveDataIntoTable(sparkSession, table, tableLocation, query, mode)
+      val result = saveDataIntoTable(
+        sparkSession, table, tableLocation, query, mode, tableExists = false)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
@@ -165,20 +167,17 @@ case class CreateDataSourceTableAsSelectCommand(
         // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
         schema = result.schema)
       sessionState.catalog.createTable(newTable, ignoreIfExists = false)
-      result
+
+      result match {
+        case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
+            sparkSession.sqlContext.conf.manageFilesourcePartitions =>
+          // Need to recover partitions into the metastore so our saved data is visible.
+          sparkSession.sessionState.executePlan(
+            AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
+        case _ =>
+      }
     }
 
-    result match {
-      case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
-          sparkSession.sqlContext.conf.manageFilesourcePartitions =>
-        // Need to recover partitions into the metastore so our saved data is visible.
-        sparkSession.sessionState.executePlan(
-          AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
-      case _ =>
-    }
-
-    // Refresh the cache of the table in the catalog.
-    sessionState.catalog.refreshTable(tableIdentWithDB)
     Seq.empty[Row]
   }
 
@@ -187,7 +186,8 @@ case class CreateDataSourceTableAsSelectCommand(
       table: CatalogTable,
       tableLocation: Option[String],
       data: LogicalPlan,
-      mode: SaveMode): BaseRelation = {
+      mode: SaveMode,
+      tableExists: Boolean): BaseRelation = {
     // Create the relation based on the input logical plan: `data`.
     val pathOption = tableLocation.map("path" -> _)
     val dataSource = DataSource(
@@ -196,7 +196,7 @@ case class CreateDataSourceTableAsSelectCommand(
       partitionColumns = table.partitionColumnNames,
       bucketSpec = table.bucketSpec,
       options = table.storage.properties ++ pathOption,
-      catalogTable = Some(table))
+      catalogTable = if (tableExists) Some(table) else None)
 
     try {
       dataSource.write(mode, Dataset.ofRows(session, query))

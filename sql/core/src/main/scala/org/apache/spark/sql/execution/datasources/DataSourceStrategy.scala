@@ -197,91 +197,19 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
       val partitionSchema = actualQuery.resolve(
         t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
-      val partitionsTrackedByCatalog =
-        t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
-        l.catalogTable.isDefined && l.catalogTable.get.partitionColumnNames.nonEmpty &&
-        l.catalogTable.get.tracksPartitionsInCatalog
-
-      var initialMatchingPartitions: Seq[TablePartitionSpec] = Nil
-      var customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty
-
       val staticPartitions = parts.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
 
-      // When partitions are tracked by the catalog, compute all custom partition locations that
-      // may be relevant to the insertion job.
-      if (partitionsTrackedByCatalog) {
-        val matchingPartitions = t.sparkSession.sessionState.catalog.listPartitions(
-          l.catalogTable.get.identifier, Some(staticPartitions))
-        initialMatchingPartitions = matchingPartitions.map(_.spec)
-        customPartitionLocations = getCustomPartitionLocations(
-          t.sparkSession, l.catalogTable.get, outputPath, matchingPartitions)
-      }
-
-      // Callback for updating metastore partition metadata after the insertion job completes.
-      // TODO(ekl) consider moving this into InsertIntoHadoopFsRelationCommand
-      def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
-        if (partitionsTrackedByCatalog) {
-          val newPartitions = updatedPartitions.toSet -- initialMatchingPartitions
-          if (newPartitions.nonEmpty) {
-            AlterTableAddPartitionCommand(
-              l.catalogTable.get.identifier, newPartitions.toSeq.map(p => (p, None)),
-              ifNotExists = true).run(t.sparkSession)
-          }
-          if (overwrite) {
-            val deletedPartitions = initialMatchingPartitions.toSet -- updatedPartitions
-            if (deletedPartitions.nonEmpty) {
-              AlterTableDropPartitionCommand(
-                l.catalogTable.get.identifier, deletedPartitions.toSeq,
-                ifExists = true, purge = false,
-                retainData = true /* already deleted */).run(t.sparkSession)
-            }
-          }
-        }
-        t.location.refresh()
-      }
-
-      val insertCmd = InsertIntoHadoopFsRelationCommand(
+      InsertIntoHadoopFsRelationCommand(
         outputPath,
         staticPartitions,
-        customPartitionLocations,
         partitionSchema,
         t.bucketSpec,
         t.fileFormat,
-        refreshPartitionsCallback,
         t.options,
         actualQuery,
         mode,
-        table)
-
-      insertCmd
-  }
-
-  /**
-   * Given a set of input partitions, returns those that have locations that differ from the
-   * Hive default (e.g. /k1=v1/k2=v2). These partitions were manually assigned locations by
-   * the user.
-   *
-   * @return a mapping from partition specs to their custom locations
-   */
-  private def getCustomPartitionLocations(
-      spark: SparkSession,
-      table: CatalogTable,
-      basePath: Path,
-      partitions: Seq[CatalogTablePartition]): Map[TablePartitionSpec, String] = {
-    val hadoopConf = spark.sessionState.newHadoopConf
-    val fs = basePath.getFileSystem(hadoopConf)
-    val qualifiedBasePath = basePath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    partitions.flatMap { p =>
-      val defaultLocation = qualifiedBasePath.suffix(
-        "/" + PartitioningUtils.getPathFragment(p.spec, table.partitionSchema)).toString
-      val catalogLocation = new Path(p.location).makeQualified(
-        fs.getUri, fs.getWorkingDirectory).toString
-      if (catalogLocation != defaultLocation) {
-        Some(p.spec -> catalogLocation)
-      } else {
-        None
-      }
-    }.toMap
+        table,
+        Some(t.location))
   }
 }
 

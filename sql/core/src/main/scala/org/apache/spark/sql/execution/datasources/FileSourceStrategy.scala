@@ -106,7 +106,7 @@ object FileSourceStrategy extends Strategy with Logging {
       val outputAttributes = readDataColumns ++ partitionColumns
 
       val scan =
-        new FileSourceScanExec(
+        FileSourceScanExec(
           fsRelation,
           outputAttributes,
           outputSchema,
