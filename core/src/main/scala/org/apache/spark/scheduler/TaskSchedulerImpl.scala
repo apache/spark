@@ -337,7 +337,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       }
     }.getOrElse(offers)
 
-    // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
     val shuffledOffers = shuffleOffers(filteredOffers)
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))

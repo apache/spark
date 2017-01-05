@@ -159,7 +159,12 @@ private[spark] class TaskSetManager(
     addPendingTask(i)
   }
 
-  // Figure out which locality levels we have in our TaskSet, so we can do delay scheduling
+  /**
+   * Track the set of locality levels which are valid given the tasks locality preferences and
+   * the set of currently available executors.  This is updated as executors are added and removed.
+   * This allows a performance optimization, of skipping levels that aren't relevant (eg., skip
+   * PROCESS_LOCAL if no tasks could be run PROCESS_LOCAL for the current set of executors).
+   */
   var myLocalityLevels = computeValidLocalityLevels()
   var localityWaits = myLocalityLevels.map(getLocalityWait) // Time to wait at each level
 
