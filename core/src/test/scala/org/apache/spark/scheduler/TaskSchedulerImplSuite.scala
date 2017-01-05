@@ -869,7 +869,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
   }
 
-  test("With delay scheduling off, tasks can be run at any locality level immediatley") {
+  test("With delay scheduling off, tasks can be run at any locality level immediately") {
     val conf = new SparkConf()
       .set("spark.locality.wait", "0")
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
