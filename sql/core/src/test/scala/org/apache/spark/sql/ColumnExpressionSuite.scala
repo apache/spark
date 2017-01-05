@@ -845,16 +845,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("field") {
-    val testData = Seq((
+    val testData = Seq[(String, Int, Double, Boolean, Timestamp, Date, String)]((
       "花花世界",
       123,
       1.23,
       true,
       new Timestamp(2016, 12, 27, 14, 22, 1, 1),
       new Date(1949, 1, 1),
-      "花花世界"
+      null
       )).toDF("a", "b", "c", "d", "e", "f", "g")
-    checkAnswer(testData.select(field($"a", $"b", $"c", $"d", $"e", $"f", $"g")), Row(6))
+    checkAnswer(testData.select(field($"g", $"b", $"c", $"d", $"e", $"f", $"g", $"a")), Row(0))
+    checkAnswer(testData.select(field($"a", $"b", $"c", $"d", $"e", $"f", $"g", $"a")), Row(7))
     checkAnswer(testData.selectExpr("field('花花世界', 123, 1.23, true, '花花世界')"), Row(4))
   }
 }

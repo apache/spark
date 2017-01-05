@@ -350,12 +350,15 @@ case class Field(children: Seq[Expression]) extends Expression {
     def findEqual(target: Any, params: Seq[Expression], index: Int): Int = {
       params.toList match {
         case Nil => 0
-        case head::tail
-          if targetDataType == head.dataType && ordering.equiv(target, head.eval(input)) => index
+        case head::tail if targetDataType == head.dataType
+          && head.eval(input) != null && ordering.equiv(target, head.eval(input)) => index
         case _ => findEqual(target, params.tail, index + 1)
       }
     }
-    findEqual(target, children.tail, 1)
+    if(target == null)
+      0
+    else
+     findEqual(target, children.tail, 1)
   }
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

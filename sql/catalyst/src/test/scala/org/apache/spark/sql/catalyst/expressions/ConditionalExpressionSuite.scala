@@ -231,6 +231,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     val str3 = Literal("b")
     val str4 = Literal("")
     val str5 = Literal("999")
+    val strNull = Literal.create(null, StringType)
 
     val bool1 = Literal(true)
     val bool2 = Literal(false)
@@ -239,6 +240,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     val int2 = Literal(2)
     val int3 = Literal(3)
     val int4 = Literal(999)
+    val intNull = Literal.create(null, IntegerType)
 
     val double1 = Literal(1.221)
     val double2 = Literal(1.222)
@@ -263,5 +265,9 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Field(Seq(int4, double3, str5, bool1, date1, timeStamp2, int4)), 6)
     checkEvaluation(Field(Seq(str5, str1, str2, str4)), 0)
     checkEvaluation(Field(Seq(int4, double3, str5, bool1, date1, timeStamp2, int3)), 0)
+    checkEvaluation(Field(Seq(int1, strNull, intNull, bool1, date1, timeStamp2, int3)), 0)
+    checkEvaluation(Field(Seq(strNull, int1, str1, str2, str3)), 0)
+
+
   }
 }
