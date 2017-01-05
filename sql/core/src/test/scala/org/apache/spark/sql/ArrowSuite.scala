@@ -19,14 +19,13 @@ package org.apache.spark.sql
 import java.io.File
 
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.tools.Integration
-import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
+import org.apache.arrow.vector.{BitVector, VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.file.json.JsonFileReader
+import org.apache.arrow.vector.util.Validator
 
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
 class ArrowSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
-  import testImplicits._
   private val nullIntsFile = "test-data/arrowNullInts.json"
 
   private def testFile(fileName: String): String = {
@@ -43,8 +42,7 @@ class ArrowSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     val arrowSchema = df.schemaToArrowSchema(df.schema)
     val jsonSchema = jsonReader.start()
-    // TODO - requires changing to public API in arrow, will be addressed in ARROW-411
-    //Integration.compareSchemas(arrowSchema, jsonSchema)
+    Validator.compareSchemas(arrowSchema, jsonSchema)
 
     val arrowRecordBatch = df.collectAsArrow(allocator)
     val arrowRoot = new VectorSchemaRoot(arrowSchema, allocator)
@@ -52,7 +50,6 @@ class ArrowSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     vectorLoader.load(arrowRecordBatch)
     val jsonRoot = jsonReader.read()
 
-    // TODO - requires changing to public API in arrow, will be addressed in ARROW-411
-    //Integration.compare(arrowRoot, jsonRoot)
+    Validator.compareVectorSchemaRoot(arrowRoot, jsonRoot)
   }
 }

@@ -29,6 +29,7 @@ import scala.util.control.NonFatal
 
 import io.netty.buffer.ArrowBuf
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.BitVector
 import org.apache.arrow.vector.file.ArrowWriter
 import org.apache.arrow.vector.schema.{ArrowFieldNode, ArrowRecordBatch}
 import org.apache.arrow.vector.types.FloatingPointPrecision
@@ -62,7 +63,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
-
 
 private[sql] object Dataset {
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
@@ -2424,6 +2424,29 @@ class Dataset[T] private[sql](
     Math.ceil(numOfRows / 64.0).toInt * 8
   }
 
+  private def fillArrow(buf: ArrowBuf, dataType: DataType): Unit = {
+    dataType match {
+      case NullType =>
+      case BooleanType =>
+        buf.writeBoolean(false)
+      case ShortType =>
+        buf.writeShort(0)
+      case IntegerType =>
+        buf.writeInt(0)
+      case LongType =>
+        buf.writeLong(0L)
+      case FloatType =>
+        buf.writeFloat(0f)
+      case DoubleType =>
+        buf.writeDouble(0d)
+      case ByteType =>
+        buf.writeByte(0)
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Unsupported data type ${dataType.simpleString}")
+    }
+  }
+
   /**
    * Get an entry from the InternalRow, and then set to ArrowBuf.
    * Note: No Null check for the entry.
@@ -2464,20 +2487,29 @@ class Dataset[T] private[sql](
 
     field.dataType match {
       case IntegerType | LongType | DoubleType | FloatType | BooleanType | ByteType =>
-        val validity = allocator.buffer(numBytesOfBitmap(numOfRows))
+        val validityVector = new BitVector("validity", allocator)
+        val validityMutator = validityVector.getMutator
+        validityVector.allocateNew(numOfRows)
+        validityMutator.setValueCount(numOfRows)
         val buf = allocator.buffer(numOfRows * field.dataType.defaultSize)
         var nullCount = 0
-        rows.foreach { row =>
+        var index = 0
+        while (index < rows.length) {
+          val row = rows(index)
           if (row.isNullAt(ordinal)) {
             nullCount += 1
+            validityMutator.set(index, 0)
+            fillArrow(buf, field.dataType)
           } else {
+            validityMutator.set(index, 1)
             getAndSetToArrow(row, buf, field.dataType, ordinal)
           }
+          index += 1
         }
 
         val fieldNode = new ArrowFieldNode(numOfRows, nullCount)
 
-        (Array(validity, buf), Array(fieldNode))
+        (Array(validityVector.getBuffer, buf), Array(fieldNode))
 
       case StringType =>
         val validityOffset = allocator.buffer(numBytesOfBitmap(numOfRows))
