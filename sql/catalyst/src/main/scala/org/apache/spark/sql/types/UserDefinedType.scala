@@ -19,8 +19,15 @@ package org.apache.spark.sql.types
 
 import java.util.Objects
 
+import scala.collection.mutable
+
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
+
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.InternalRow
 
 /**
  * The data type for User Defined Types (UDTs).
@@ -29,16 +36,13 @@ import org.json4s.JsonDSL._
  * e.g., by creating a [[UserDefinedType]] for a class X, it becomes possible to create
  * a `DataFrame` which has class X in the schema.
  *
- * For SparkSQL to recognize UDTs, the UDT must be annotated with
- * [[SQLUserDefinedType]].
+ * For SparkSQL to recognize UDTs, there are two options:
+ * 1. Make the UDT be annotated with [[SQLUserDefinedType]].
+ * 2. Register the UDT and the user class with [[UDTRegistration]].
  *
  * The conversion via `serialize` occurs when instantiating a `DataFrame` from another RDD.
  * The conversion via `deserialize` occurs when reading from a `DataFrame`.
- *
- * Note: This was previously a developer API in Spark 1.x. We are making this private in Spark 2.0
- * because we will very likely create a new version of this that works better with Datasets.
  */
-private[spark]
 abstract class UserDefinedType[UserType >: Null] extends DataType with Serializable {
 
   /** Underlying storage type for this UDT */
@@ -50,13 +54,46 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
   /** Serialized Python UDT class, if exists. */
   def serializedPyClass: String = null
 
-  /**
-   * Convert the user type to a SQL datum
-   */
-  def serialize(obj: UserType): Any
+  /** The RowEncoder used to serialize/deserialize extenal row to internal row format. */
+  private lazy val rowEncoder = UserDefinedType.getRowEncoder(sqlType)
+
+  /** Convert the external row to a SQL datum */
+  private def encodeToInternalRow(row: Row): Any = {
+    val internalRow = rowEncoder.toRow(row)
+    sqlType match {
+      // Those types are based on unsafe data. We need to copy the content.
+      case _: StructType => internalRow.copy()
+      case _: StringType | _: ArrayType | _: MapType => internalRow.copy().get(0, sqlType)
+      // For primitive types, just get the result without copying the row.
+      case _ => internalRow.get(0, sqlType)
+    }
+  }
+
+  /** Convert a SQL datum to the external row */
+  private def decodeFromInternalRow(datum: Any): Row = {
+    sqlType match {
+      case _: StructType => rowEncoder.fromRow(datum.asInstanceOf[InternalRow])
+      case _ =>
+        UserDefinedType.inputRow(0) = datum
+        rowEncoder.fromRow(UserDefinedType.inputRow)
+    }
+  }
+
+  /** Convert the user type to a SQL datum */
+  final def serialize(obj: UserType): Any = rowEncoder.synchronized {
+    encodeToInternalRow(writeRow(obj))
+  }
 
   /** Convert a SQL datum to the user type */
-  def deserialize(datum: Any): UserType
+  final def deserialize(datum: Any): UserType = rowEncoder.synchronized {
+    readRow(decodeFromInternalRow(datum))
+  }
+
+  /** Convert the object of user type to an external row. Must be implemented in subclasses. */
+  def writeRow(obj: UserType): Row
+
+  /** Convert the external row to an object of user type. Must be implemented in subclasses. */
+  def readRow(row: Row): UserType
 
   override private[sql] def jsonValue: JValue = {
     ("type" -> "udt") ~
@@ -104,8 +141,8 @@ private[sql] class PythonUserDefinedType(
     override val serializedPyClass: String) extends UserDefinedType[Any] {
 
   /* The serialization is handled by UDT class in Python */
-  override def serialize(obj: Any): Any = obj
-  override def deserialize(datam: Any): Any = datam
+  override def writeRow(obj: Any): Row = Row(obj)
+  override def readRow(row: Row): Any = row(0)
 
   /* There is no Java class for Python UDT */
   override def userClass: java.lang.Class[Any] = null
@@ -123,4 +160,22 @@ private[sql] class PythonUserDefinedType(
   }
 
   override def hashCode(): Int = Objects.hashCode(pyUDT)
+}
+
+object UserDefinedType {
+  private[spark] lazy val inputRow = new GenericInternalRow(1)
+
+  private lazy val rowEncoderMap: mutable.HashMap[DataType, ExpressionEncoder[Row]] =
+    mutable.HashMap.empty
+
+  private def newRowEncoder(sqlType: DataType): ExpressionEncoder[Row] = {
+     sqlType match {
+      case s: StructType => RowEncoder(s).resolveAndBind()
+      case _ => RowEncoder(StructType(StructField("value", sqlType) :: Nil)).resolveAndBind()
+    }
+  }
+
+  private[spark] def getRowEncoder(sqlType: DataType): ExpressionEncoder[Row] = {
+    rowEncoderMap.getOrElseUpdate(sqlType, newRowEncoder(sqlType))
+  }
 }

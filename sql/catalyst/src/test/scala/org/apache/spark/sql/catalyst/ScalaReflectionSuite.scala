@@ -23,6 +23,7 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.typeOf
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.types._
@@ -93,19 +94,12 @@ object TestingUDT {
       .add("b", LongType, nullable = false)
       .add("c", DoubleType, nullable = false)
 
-    override def serialize(n: NestedStruct): Any = {
-      val row = new SpecificInternalRow(sqlType.asInstanceOf[StructType].map(_.dataType))
-      row.setInt(0, n.a)
-      row.setLong(1, n.b)
-      row.setDouble(2, n.c)
-    }
+    override def writeRow(n: NestedStruct): Row = Row(n.a, n.b, n.c)
 
     override def userClass: Class[NestedStruct] = classOf[NestedStruct]
 
-    override def deserialize(datum: Any): NestedStruct = datum match {
-      case row: InternalRow =>
-        new NestedStruct(row.getInt(0), row.getLong(1), row.getDouble(2))
-    }
+    override def readRow(row: Row): NestedStruct =
+      new NestedStruct(row.getInt(0), row.getLong(1), row.getDouble(2))
   }
 }
 

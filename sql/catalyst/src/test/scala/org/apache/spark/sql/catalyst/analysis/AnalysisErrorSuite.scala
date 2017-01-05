@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.beans.{BeanInfo, BeanProperty}
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -36,13 +36,9 @@ private[sql] class GroupableUDT extends UserDefinedType[GroupableData] {
 
   override def sqlType: DataType = IntegerType
 
-  override def serialize(groupableData: GroupableData): Int = groupableData.data
+  override def writeRow(groupableData: GroupableData): Row = Row(groupableData.data)
 
-  override def deserialize(datum: Any): GroupableData = {
-    datum match {
-      case data: Int => GroupableData(data)
-    }
-  }
+  override def readRow(row: Row): GroupableData = GroupableData(row.getInt(0))
 
   override def userClass: Class[GroupableData] = classOf[GroupableData]
 
@@ -56,22 +52,9 @@ private[sql] class UngroupableUDT extends UserDefinedType[UngroupableData] {
 
   override def sqlType: DataType = MapType(IntegerType, IntegerType)
 
-  override def serialize(ungroupableData: UngroupableData): MapData = {
-    val keyArray = new GenericArrayData(ungroupableData.data.keys.toSeq)
-    val valueArray = new GenericArrayData(ungroupableData.data.values.toSeq)
-    new ArrayBasedMapData(keyArray, valueArray)
-  }
+  override def writeRow(ungroupableData: UngroupableData): Row = Row(ungroupableData.data)
 
-  override def deserialize(datum: Any): UngroupableData = {
-    datum match {
-      case data: MapData =>
-        val keyArray = data.keyArray().array
-        val valueArray = data.valueArray().array
-        assert(keyArray.length == valueArray.length)
-        val mapData = keyArray.zip(valueArray).toMap.asInstanceOf[Map[Int, Int]]
-        UngroupableData(mapData)
-    }
-  }
+  override def readRow(row: Row): UngroupableData = UngroupableData(row.getMap[Int, Int](0).toMap)
 
   override def userClass: Class[UngroupableData] = classOf[UngroupableData]
 

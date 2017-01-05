@@ -33,6 +33,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.{AlphaComponent, Since}
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.NumericParser
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
@@ -213,41 +214,28 @@ class VectorUDT extends UserDefinedType[Vector] {
       StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
   }
 
-  override def serialize(obj: Vector): InternalRow = {
+  override def writeRow(obj: Vector): Row = {
     obj match {
       case SparseVector(size, indices, values) =>
-        val row = new GenericInternalRow(4)
-        row.setByte(0, 0)
-        row.setInt(1, size)
-        row.update(2, UnsafeArrayData.fromPrimitiveArray(indices))
-        row.update(3, UnsafeArrayData.fromPrimitiveArray(values))
-        row
+        Row(0.toByte, size, indices, values)
       case DenseVector(values) =>
-        val row = new GenericInternalRow(4)
-        row.setByte(0, 1)
-        row.setNullAt(1)
-        row.setNullAt(2)
-        row.update(3, UnsafeArrayData.fromPrimitiveArray(values))
-        row
+        Row(1.toByte, null, null, values)
     }
   }
 
-  override def deserialize(datum: Any): Vector = {
-    datum match {
-      case row: InternalRow =>
-        require(row.numFields == 4,
-          s"VectorUDT.deserialize given row with length ${row.numFields} but requires length == 4")
-        val tpe = row.getByte(0)
-        tpe match {
-          case 0 =>
-            val size = row.getInt(1)
-            val indices = row.getArray(2).toIntArray()
-            val values = row.getArray(3).toDoubleArray()
-            new SparseVector(size, indices, values)
-          case 1 =>
-            val values = row.getArray(3).toDoubleArray()
-            new DenseVector(values)
-        }
+  override def readRow(row: Row): Vector = {
+    require(row.length == 4,
+      s"VectorUDT.deserialize given row with length ${row.length} but requires length == 4")
+    val tpe = row.getByte(0)
+    tpe match {
+      case 0 =>
+        val size = row.getInt(1)
+        val indices = row.getSeq[Int](2).toArray
+        val values = row.getSeq[Double](3).toArray
+        new SparseVector(size, indices, values)
+      case 1 =>
+        val values = row.getSeq[Double](3).toArray
+        new DenseVector(values)
     }
   }
 

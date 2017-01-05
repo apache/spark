@@ -47,22 +47,20 @@ class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
 
   override def pyUDT: String = "pyspark.sql.tests.ExamplePointUDT"
 
-  override def serialize(p: ExamplePoint): GenericArrayData = {
+  override def writeRow(p: ExamplePoint): Row = {
     val output = new Array[Any](2)
     output(0) = p.x
     output(1) = p.y
-    new GenericArrayData(output)
+    Row(output)
   }
 
-  override def deserialize(datum: Any): ExamplePoint = {
-    datum match {
-      case values: ArrayData =>
-        if (values.numElements() > 1) {
-          new ExamplePoint(values.getDouble(0), values.getDouble(1))
-        } else {
-          val random = new Random()
-          new ExamplePoint(random.nextDouble(), random.nextDouble())
-        }
+  override def readRow(row: Row): ExamplePoint = {
+    val array = row.getSeq[Double](0)
+    if (array.size > 1) {
+      new ExamplePoint(array(0), array(1))
+    } else {
+      val random = new Random()
+      new ExamplePoint(random.nextDouble(), random.nextDouble())
     }
   }
 

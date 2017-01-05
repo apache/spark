@@ -29,7 +29,6 @@ import org.apache.spark.util.Utils
  * However, by doing this, we add SparkSQL dependency on user classes. This object provides
  * alternative approach to register UDTs for user classes.
  */
-private[spark]
 object UDTRegistration extends Serializable with Logging {
 
   /** The mapping between the Class between UserDefinedType and user classes. */

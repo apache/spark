@@ -35,9 +35,9 @@ private[sql] class NonUserDefinedType {
 private[sql] class TestUserClassUDT extends UserDefinedType[TestUserClass] {
 
   override def sqlType: DataType = IntegerType
-  override def serialize(input: TestUserClass): Int = 1
+  override def writeRow(input: TestUserClass): Row = Row(1)
 
-  override def deserialize(datum: Any): TestUserClass = new TestUserClass
+  override def readRow(row: Row): TestUserClass = new TestUserClass
 
   override def userClass: Class[TestUserClass] = classOf[TestUserClass]
 

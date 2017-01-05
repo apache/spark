@@ -27,6 +27,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{linalg => newlinalg}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
@@ -196,48 +197,31 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
       ))
   }
 
-  override def serialize(obj: Matrix): InternalRow = {
-    val row = new GenericInternalRow(7)
+  override def writeRow(obj: Matrix): Row = {
     obj match {
       case sm: SparseMatrix =>
-        row.setByte(0, 0)
-        row.setInt(1, sm.numRows)
-        row.setInt(2, sm.numCols)
-        row.update(3, UnsafeArrayData.fromPrimitiveArray(sm.colPtrs))
-        row.update(4, UnsafeArrayData.fromPrimitiveArray(sm.rowIndices))
-        row.update(5, UnsafeArrayData.fromPrimitiveArray(sm.values))
-        row.setBoolean(6, sm.isTransposed)
+        Row(0.toByte, sm.numRows, sm.numCols, sm.colPtrs, sm.rowIndices, sm.values, sm.isTransposed)
 
       case dm: DenseMatrix =>
-        row.setByte(0, 1)
-        row.setInt(1, dm.numRows)
-        row.setInt(2, dm.numCols)
-        row.setNullAt(3)
-        row.setNullAt(4)
-        row.update(5, UnsafeArrayData.fromPrimitiveArray(dm.values))
-        row.setBoolean(6, dm.isTransposed)
+        Row(1.toByte, dm.numRows, dm.numCols, null, null, dm.values, dm.isTransposed)
     }
-    row
   }
 
-  override def deserialize(datum: Any): Matrix = {
-    datum match {
-      case row: InternalRow =>
-        require(row.numFields == 7,
-          s"MatrixUDT.deserialize given row with length ${row.numFields} but requires length == 7")
-        val tpe = row.getByte(0)
-        val numRows = row.getInt(1)
-        val numCols = row.getInt(2)
-        val values = row.getArray(5).toDoubleArray()
-        val isTransposed = row.getBoolean(6)
-        tpe match {
-          case 0 =>
-            val colPtrs = row.getArray(3).toIntArray()
-            val rowIndices = row.getArray(4).toIntArray()
-            new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
-          case 1 =>
-            new DenseMatrix(numRows, numCols, values, isTransposed)
-        }
+  override def readRow(row: Row): Matrix = {
+    require(row.length == 7,
+      s"MatrixUDT.deserialize given row with length ${row.length} but requires length == 7")
+    val tpe = row.getByte(0)
+    val numRows = row.getInt(1)
+    val numCols = row.getInt(2)
+    val values = row.getSeq[Double](5).toArray
+    val isTransposed = row.getBoolean(6)
+    tpe match {
+      case 0 =>
+        val colPtrs = row.getSeq[Int](3).toArray
+        val rowIndices = row.getSeq[Int](4).toArray
+        new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
+      case 1 =>
+        new DenseMatrix(numRows, numCols, values, isTransposed)
     }
   }
 

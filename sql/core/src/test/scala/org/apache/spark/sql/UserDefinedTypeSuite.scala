@@ -49,15 +49,12 @@ object UDT {
 
     override def sqlType: DataType = ArrayType(DoubleType, containsNull = false)
 
-    override def serialize(features: MyDenseVector): ArrayData = {
-      new GenericArrayData(features.data.map(_.asInstanceOf[Any]))
+    override def writeRow(obj: MyDenseVector): Row = {
+      Row(obj.data)
     }
 
-    override def deserialize(datum: Any): MyDenseVector = {
-      datum match {
-        case data: ArrayData =>
-          new MyDenseVector(data.toDoubleArray())
-      }
+    override def readRow(row: Row): MyDenseVector = {
+      new MyDenseVector(row.getSeq[Double](0).toArray)
     }
 
     override def userClass: Class[MyDenseVector] = classOf[MyDenseVector]

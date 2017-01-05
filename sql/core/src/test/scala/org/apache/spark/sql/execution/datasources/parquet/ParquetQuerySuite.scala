@@ -718,20 +718,11 @@ object TestingUDT {
         .add("b", LongType, nullable = false)
         .add("c", DoubleType, nullable = false)
 
-    override def serialize(n: NestedStruct): Any = {
-      val row = new SpecificInternalRow(sqlType.asInstanceOf[StructType].map(_.dataType))
-      row.setInt(0, n.a)
-      row.setLong(1, n.b)
-      row.setDouble(2, n.c)
-    }
+    override def writeRow(n: NestedStruct): Row = Row(n.a, n.b, n.c)
 
     override def userClass: Class[NestedStruct] = classOf[NestedStruct]
 
-    override def deserialize(datum: Any): NestedStruct = {
-      datum match {
-        case row: InternalRow =>
-          NestedStruct(row.getInt(0), row.getLong(1), row.getDouble(2))
-      }
-    }
+    override def readRow(row: Row): NestedStruct =
+      NestedStruct(row.getInt(0), row.getLong(1), row.getDouble(2))
   }
 }

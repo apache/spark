@@ -24,7 +24,7 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.{Encoder, Encoders}
+import org.apache.spark.sql.{Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -94,15 +94,13 @@ class UDTForCaseClass extends UserDefinedType[UDTCaseClass] {
 
   override def sqlType: DataType = StringType
 
-  override def serialize(obj: UDTCaseClass): UTF8String = {
-    UTF8String.fromString(obj.uri.toString)
+  override def writeRow(obj: UDTCaseClass): Row = {
+    Row(obj.uri.toString)
   }
 
   override def userClass: Class[UDTCaseClass] = classOf[UDTCaseClass]
 
-  override def deserialize(datum: Any): UDTCaseClass = datum match {
-    case uri: UTF8String => UDTCaseClass(new java.net.URI(uri.toString))
-  }
+  override def readRow(row: Row): UDTCaseClass = UDTCaseClass(new java.net.URI(row.getString(0)))
 }
 
 case class PrimitiveValueClass(wrapped: Int) extends AnyVal
