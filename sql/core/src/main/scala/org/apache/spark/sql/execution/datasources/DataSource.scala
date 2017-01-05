@@ -413,10 +413,16 @@ case class DataSource(
     relation
   }
 
-  /** Writes the given [[DataFrame]] out to this [[DataSource]]. */
+  /**
+   * Writes the given [[DataFrame]] out to this [[DataSource]].
+   *
+   * @param isForWriteOnly Whether to exit early and just write the data without returning
+   *                       a [[BaseRelation]].
+   */
   def write(
       mode: SaveMode,
-      data: DataFrame): BaseRelation = {
+      data: DataFrame,
+      isForWriteOnly: Boolean = false): BaseRelation = {
     if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
@@ -494,8 +500,13 @@ case class DataSource(
             catalogTable = catalogTable,
             fileIndex = fileIndex)
         sparkSession.sessionState.executePlan(plan).toRdd
-        // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring it.
-        copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
+        if (isForWriteOnly) {
+          // Exit earlier and return null
+          null
+        } else {
+          // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
+          copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
+        }
 
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
