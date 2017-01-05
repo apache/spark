@@ -159,7 +159,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
  *  - "binomial" : "logit", "probit", "cloglog"
  *  - "poisson"  : "log", "identity", "sqrt"
  *  - "gamma"    : "inverse", "identity", "log"
- *  - "tweedie"  : "log", "identity"
+ *  - "tweedie"  : "log", "identity", "inverse", "sqrt"
  */
 @Experimental
 @Since("2.0.0")
@@ -190,7 +190,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     */
   @Since("2.2.0")
   def setVariancePower(value: Double): this.type = set(variancePower, value)
-  setDefault(variancePower -> 1.5)
+  setDefault(variancePower -> 0.0)
 
   /**
    * Sets the value of param [[link]].
@@ -342,7 +342,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     "binomial" -> Logit, "binomial" -> Probit, "binomial" -> CLogLog,
     "poisson" -> Log, "poisson" -> Identity, "poisson" -> Sqrt,
     "gamma" -> Inverse, "gamma" -> Identity, "gamma" -> Log,
-    "tweedie" -> Identity, "tweedie" -> Log
+    "tweedie" -> Identity, "tweedie" -> Log, "tweedie" -> Inverse, "tweedie" -> Sqrt
   )
 
   /** Set of family names that GeneralizedLinearRegression supports. */
@@ -401,6 +401,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
   /**
    * A description of the error distribution to be used in the model.
    *
+   * @param name the name of the family.
    */
   private[regression] abstract class Family(val name: String) extends Serializable {
 
@@ -455,7 +456,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
             case 0.0 => Gaussian
             case 1.0 => Poisson
             case 2.0 => Gamma
-            case default => new Tweedie(default)
+            case others => new Tweedie(others)
           }
       }
     }
@@ -472,8 +473,9 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
       The canonical link is 1 - variancePower, which becomes Identity for Gaussian,
       Log for Poisson, and Inverse for Gamma. Except for these special cases,
       the canonical link is rarely used. For example, the canonical link is 1/Sqrt
-      when variancePower = 1.5. We set Log as the default link, which may be overridden
-      in subclasses.
+      when variancePower = 1.5. We set Log as the default link, which is used
+      for distributions in the Tweedie family other than Gaussian, Poisson or Gamma.
+      The default link is overridden in the subclass Gaussian, Poisson or Gamma.
     */
     override val defaultLink: Link = Log
 
@@ -483,7 +485,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
           s"should be non-negative, but got $y")
       } else if (variancePower >= 2.0) {
         require(y > 0.0, s"The response variable of $name($variancePower) family " +
-          s"should be non-negative, but got $y")
+          s"should be positive, but got $y")
       }
       if (y == 0) Tweedie.delta else y
     }
