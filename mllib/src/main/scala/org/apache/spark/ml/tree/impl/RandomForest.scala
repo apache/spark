@@ -839,11 +839,11 @@ private[spark] object RandomForest extends Logging {
         val parentImpurityCalculator = binAggregates.getImpurityCalculator(
           binAggregates.getFeatureOffset(dummyFeatureIndex), 0)
         if (binAggregates.metadata.isContinuous(dummyFeatureIndex)) {
-          return (new ContinuousSplit(dummyFeatureIndex, 0),
+          (new ContinuousSplit(dummyFeatureIndex, 0),
             ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator))
         } else {
           val numCategories = binAggregates.metadata.numBins(dummyFeatureIndex)
-          return (new CategoricalSplit(dummyFeatureIndex, Array(), numCategories),
+          (new CategoricalSplit(dummyFeatureIndex, Array(), numCategories),
             ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator))
         }
       } else {
