@@ -29,7 +29,7 @@ import org.scalatest.mock.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.internal.Logging
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.ManualClock
 
 class FakeSchedulerBackend extends SchedulerBackend {
   def start() {}
@@ -825,14 +825,19 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val conf = new SparkConf()
       .set("spark.locality.wait", "0")
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
+    // we create a manual clock just so we can be sure the clock doesn't advance at all in this test
+    val clock = new ManualClock()
 
     // We customize the task scheduler just to let us control the way offers are shuffled, so we
-    // can be sure we try both permutations.
+    // can be sure we try both permutations, and to control the clock on the tasksetmanager.
     val taskScheduler = new TaskSchedulerImpl(sc) {
       override def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
         // Don't shuffle the offers around for this test.  Instead, we'll just pass in all
         // the permutations we care about directly.
         offers
+      }
+      override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
+        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock)
       }
     }
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
@@ -862,5 +867,36 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         assert(taskDescs.head.executorId === "exec1")
       }
     }
+  }
+
+  test("With delay scheduling off, tasks can be run at any locality level immediatley") {
+    val conf = new SparkConf()
+      .set("spark.locality.wait", "0")
+    sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
+
+    // we create a manual clock just so we can be sure the clock doesn't advance at all in this test
+    val clock = new ManualClock()
+    val taskScheduler = new TaskSchedulerImpl(sc) {
+      override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
+        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock)
+      }
+    }
+    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
+    new DAGScheduler(sc, taskScheduler) {
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
+      override def executorAdded(execId: String, host: String) {}
+    }
+    taskScheduler.initialize(new FakeSchedulerBackend)
+
+    // Submit a taskset with locality preferences.
+    val taskSet = FakeTask.createTaskSet(
+      1, stageId = 1, stageAttemptId = 0, Seq(TaskLocation("host1", "exec1")))
+    taskScheduler.submitTasks(taskSet)
+    // make an offer on a non-preferred location.  Since the delay is 0, we should still schedule
+    // immediately.
+    val taskDescs =
+      taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec2", "host2", 1))).flatten
+    assert(taskDescs.size === 1)
+    assert(taskDescs.head.executorId === "exec2")
   }
 }
