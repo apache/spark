@@ -96,32 +96,94 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
 
   // Seqs
 
-  /** @since 1.6.1 */
-  implicit def newIntSeqEncoder[T <: Seq[Int] : TypeTag]: Encoder[T] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newIntSequenceEncoder]]
+   */
+  def newIntSeqEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newLongSeqEncoder[T <: Seq[Long] : TypeTag]: Encoder[T] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newLongSequenceEncoder]]
+   */
+  def newLongSeqEncoder: Encoder[Seq[Long]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newDoubleSeqEncoder[T <: Seq[Double] : TypeTag]: Encoder[T] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newDoubleSequenceEncoder]]
+   */
+  def newDoubleSeqEncoder: Encoder[Seq[Double]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newFloatSeqEncoder[T <: Seq[Float] : TypeTag]: Encoder[T] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newFloatSequenceEncoder]]
+   */
+  def newFloatSeqEncoder: Encoder[Seq[Float]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newByteSeqEncoder[T <: Seq[Byte] : TypeTag]: Encoder[T] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newByteSequenceEncoder]]
+   */
+  def newByteSeqEncoder: Encoder[Seq[Byte]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newShortSeqEncoder[T <: Seq[Short] : TypeTag]: Encoder[T] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newShortSequenceEncoder]]
+   */
+  def newShortSeqEncoder: Encoder[Seq[Short]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newBooleanSeqEncoder[T <: Seq[Boolean] : TypeTag]: Encoder[T] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newBooleanSequenceEncoder]]
+   */
+  def newBooleanSeqEncoder: Encoder[Seq[Boolean]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newStringSeqEncoder[T <: Seq[String] : TypeTag]: Encoder[T] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newStringSequenceEncoder]]
+   */
+  def newStringSeqEncoder: Encoder[Seq[String]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newProductSeqEncoder[T <: Seq[Product] : TypeTag]: Encoder[T] =
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newProductSequenceEncoder]]
+   */
+  implicit def newProductSeqEncoder[A <: Product : TypeTag]: Encoder[Seq[A]] = ExpressionEncoder()
+
+  /** @since 2.2.0 */
+  implicit def newIntSequenceEncoder[T <: Seq[Int] : TypeTag]: Encoder[T] =
+    ExpressionEncoder()
+
+  /** @since 2.2.0 */
+  implicit def newLongSequenceEncoder[T <: Seq[Long] : TypeTag]: Encoder[T] =
+    ExpressionEncoder()
+
+  /** @since 2.2.0 */
+  implicit def newDoubleSequenceEncoder[T <: Seq[Double] : TypeTag]: Encoder[T] =
+    ExpressionEncoder()
+
+  /** @since 2.2.0 */
+  implicit def newFloatSequenceEncoder[T <: Seq[Float] : TypeTag]: Encoder[T] =
+    ExpressionEncoder()
+
+  /** @since 2.2.0 */
+  implicit def newByteSequenceEncoder[T <: Seq[Byte] : TypeTag]: Encoder[T] =
+    ExpressionEncoder()
+
+  /** @since 2.2.0 */
+  implicit def newShortSequenceEncoder[T <: Seq[Short] : TypeTag]: Encoder[T] =
+    ExpressionEncoder()
+
+  /** @since 2.2.0 */
+  implicit def newBooleanSequenceEncoder[T <: Seq[Boolean] : TypeTag]: Encoder[T] =
+    ExpressionEncoder()
+
+  /** @since 2.2.0 */
+  implicit def newStringSequenceEncoder[T <: Seq[String] : TypeTag]: Encoder[T] =
+    ExpressionEncoder()
+
+  /** @since 2.2.0 */
+  implicit def newProductSequenceEncoder[T <: Seq[Product] : TypeTag]: Encoder[T] =
     ExpressionEncoder()
 
   // Arrays
