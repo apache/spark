@@ -320,7 +320,6 @@ trait CatalogRelation {
  * Note that in the future we should consolidate this and HiveCatalogRelation.
  */
 case class SimpleCatalogRelation(
-    databaseName: String,
     metadata: CatalogTable)
   extends LeafNode with CatalogRelation {
 
@@ -337,8 +336,4 @@ case class SimpleCatalogRelation(
       }
     dataCols ++ partCols
   }
-
-  require(
-    metadata.identifier.database == Some(databaseName),
-    "provided database does not match the one specified in the table definition")
 }
