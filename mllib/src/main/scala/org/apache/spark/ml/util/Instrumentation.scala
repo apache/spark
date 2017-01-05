@@ -25,8 +25,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.param.{Param, ParamMap}
+import org.apache.spark.ml.param.Param
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
 
@@ -86,28 +85,10 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   }
 
   /**
-   * Log params for tuning estimators that search for the best params by wrapping another
-   * estimator and using metrics computed by an evaluator.
-   *
-   * @param estimator the inner estimator called by the tuning estimator
-   * @param estimatorParamMaps different params tried by the tuning estimator
-   * @param evaluator evaluator used to compute the metric for each estimator param value
-   */
-  def logTuningParams(
-    estimator: Estimator[_],
-    estimatorParamMaps: Array[ParamMap],
-    evaluator: Evaluator): Unit = {
-    log(compact(render(map2jvalue(Map[String, JValue](
-      "estimator" -> estimator.getClass.getSimpleName,
-      "evaluator" -> evaluator.getClass.getSimpleName,
-      "numModels" -> estimatorParamMaps.length)))))
-  }
-
-  /**
    * Logs the value with customized name field.
    */
-  def logNamedValue(name: String, num: JValue): Unit = {
-    log(compact(render(name -> num)))
+  def logNamedValue(name: String, value: String): Unit = {
+    log(compact(render(name -> value)))
   }
 
   /**

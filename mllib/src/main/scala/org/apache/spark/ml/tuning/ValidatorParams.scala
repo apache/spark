@@ -20,13 +20,14 @@ package org.apache.spark.ml.tuning
 import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, _}
 import org.json4s.jackson.JsonMethods._
+import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.HasSeed
-import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter, MetaAlgorithmReadWrite, MLWritable}
+import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.sql.types.StructType
 
@@ -75,6 +76,18 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
       est.copy(paramMap).transformSchema(schema)
     }
     est.copy(firstEstimatorParamMap).transformSchema(schema)
+  }
+
+  /**
+   * Instrumentation logging for tuning params including the inner estimator and evaluator info.
+   *
+   * @param instrumentation instrumentation logger
+   */
+  protected def logTuningParams(instrumentation: Instrumentation[_]): Unit = {
+    instrumentation.log(compact(render(map2jvalue(Map[String, JValue](
+      "estimator" -> $(estimator).getClass.getCanonicalName,
+      "evaluator" -> $(evaluator).getClass.getCanonicalName,
+      "numModels" -> $(estimatorParamMaps).length)))))
   }
 }
 
