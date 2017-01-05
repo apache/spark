@@ -169,7 +169,7 @@ private[csv] class CsvOutputWriter(
     dataSchema: StructType,
     context: TaskAttemptContext,
     params: CSVOptions) extends OutputWriter with Logging {
-  private val writer = CodecStreams.createOutputStream(context, new Path(path))
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
   private val gen = new UnivocityGenerator(dataSchema, writer, params)
   private var printHeader = params.headerFlag
 

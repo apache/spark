@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.io.OutputStream
+import java.io.Writer
 
 import com.univocity.parsers.csv.CsvWriter
 
@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
 
 private[csv] class UnivocityGenerator(
     schema: StructType,
-    writer: OutputStream,
+    writer: Writer,
     options: CSVOptions = new CSVOptions(Map.empty[String, String])) {
   private val writerSettings = options.asWriterSettings
   writerSettings.setHeaders(schema.fieldNames: _*)
@@ -84,4 +84,6 @@ private[csv] class UnivocityGenerator(
   }
 
   def close(): Unit = gen.close()
+
+  def flush(): Unit = gen.flush()
 }
