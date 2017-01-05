@@ -100,7 +100,6 @@ class ChiSqSelectorModel @Since("1.3.0") (
         // TODO: Sparse representation might be ineffective if (newSize ~= newValues.size)
         Vectors.sparse(newSize, newIndices.result(), newValues.result())
       case DenseVector(values) =>
-        val values = features.toArray
         Vectors.dense(filterIndices.map(i => values(i)))
       case other =>
         throw new UnsupportedOperationException(
