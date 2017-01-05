@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -661,6 +661,36 @@ class Analyzer(
       // Skips plan which contains deserializer expressions, as they should be resolved by another
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
+
+      // Some commands (AlterTableDropPartitionCommand) use expressions, so we need to resolve.
+      case c: CommandWithExpression =>
+        val catalogTable = catalog.getTableMetadata(c.getTableName)
+
+        // We should not do this here in order to support general CommandWithExpression
+        if (catalogTable.tableType == CatalogTableType.VIEW) {
+          throw new AnalysisException(
+            "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
+        }
+
+        val table = try {
+          catalog.lookupRelation(catalogTable.identifier, None)
+        } catch {
+          case _: NoSuchTableException =>
+            c.failAnalysis(s"Table or view not found: ${catalogTable.identifier.quotedString}")
+        }
+
+        c transformExpressionsUp  {
+          case UnresolvedAttribute(nameParts) =>
+            table.resolve(nameParts, resolver) match {
+              case Some(a) if a.isInstanceOf[AttributeReference] => a
+              case _ =>
+                throw new AnalysisException(
+                  s"${nameParts.mkString(".")} is not a valid partition column" +
+                    s" in table ${catalogTable.identifier.quotedString}.")
+            }
+          case v @ BinaryComparison(left @ AttributeReference(_, dataType, _, _), right: Literal) =>
+            v.makeCopy(Array(left, Cast(right, dataType)))
+        }
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")

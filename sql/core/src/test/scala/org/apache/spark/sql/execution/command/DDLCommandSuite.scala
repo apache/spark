@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution.command
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -612,8 +614,12 @@ class DDLCommandSuite extends PlanTest {
     val expected1_table = AlterTableDropPartitionCommand(
       tableIdent,
       Seq(
-        Map("dt" -> "2008-08-08", "country" -> "us"),
-        Map("dt" -> "2009-09-09", "country" -> "uk")),
+        And(
+          EqualTo(UnresolvedAttribute("dt"), Literal.create("2008-08-08", StringType)),
+          EqualTo(UnresolvedAttribute("country"), Literal.create("us", StringType))),
+        And(
+          EqualTo(UnresolvedAttribute("dt"), Literal.create("2009-09-09", StringType)),
+          EqualTo(UnresolvedAttribute("country"), Literal.create("uk", StringType)))),
       ifExists = true,
       purge = false,
       retainData = false)

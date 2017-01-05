@@ -238,11 +238,7 @@ partitionSpecLocation
     ;
 
 partitionSpec
-    : PARTITION '(' partitionVal (',' partitionVal)* ')'
-    ;
-
-partitionVal
-    : identifier (EQ constant)?
+    : PARTITION '(' expression (',' expression)* ')'
     ;
 
 describeFuncName
