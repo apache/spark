@@ -24,13 +24,13 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 case class IntClass(value: Int)
 
-case class SeqCC(s: Seq[Int])
+case class SeqClass(s: Seq[Int])
 
-case class ListCC(l: List[Int])
+case class ListClass(l: List[Int])
 
-case class QueueCC(q: Queue[Int])
+case class QueueClass(q: Queue[Int])
 
-case class ComplexCC(seq: SeqCC, list: ListCC, queue: QueueCC)
+case class ComplexClass(seq: SeqClass, list: ListClass, queue: QueueClass)
 
 package object packageobject {
   case class PackageClass(value: Int)
@@ -165,26 +165,26 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
 
   test("sequence and product combinations") {
     // Case classes
-    checkDataset(Seq(SeqCC(Seq(1))).toDS(), SeqCC(Seq(1)))
-    checkDataset(Seq(Seq(SeqCC(Seq(1)))).toDS(), Seq(SeqCC(Seq(1))))
-    checkDataset(Seq(List(SeqCC(Seq(1)))).toDS(), List(SeqCC(Seq(1))))
-    checkDataset(Seq(Queue(SeqCC(Seq(1)))).toDS(), Queue(SeqCC(Seq(1))))
+    checkDataset(Seq(SeqClass(Seq(1))).toDS(), SeqClass(Seq(1)))
+    checkDataset(Seq(Seq(SeqClass(Seq(1)))).toDS(), Seq(SeqClass(Seq(1))))
+    checkDataset(Seq(List(SeqClass(Seq(1)))).toDS(), List(SeqClass(Seq(1))))
+    checkDataset(Seq(Queue(SeqClass(Seq(1)))).toDS(), Queue(SeqClass(Seq(1))))
 
-    checkDataset(Seq(ListCC(List(1))).toDS(), ListCC(List(1)))
-    checkDataset(Seq(Seq(ListCC(List(1)))).toDS(), Seq(ListCC(List(1))))
-    checkDataset(Seq(List(ListCC(List(1)))).toDS(), List(ListCC(List(1))))
-    checkDataset(Seq(Queue(ListCC(List(1)))).toDS(), Queue(ListCC(List(1))))
+    checkDataset(Seq(ListClass(List(1))).toDS(), ListClass(List(1)))
+    checkDataset(Seq(Seq(ListClass(List(1)))).toDS(), Seq(ListClass(List(1))))
+    checkDataset(Seq(List(ListClass(List(1)))).toDS(), List(ListClass(List(1))))
+    checkDataset(Seq(Queue(ListClass(List(1)))).toDS(), Queue(ListClass(List(1))))
 
-    checkDataset(Seq(QueueCC(Queue(1))).toDS(), QueueCC(Queue(1)))
-    checkDataset(Seq(Seq(QueueCC(Queue(1)))).toDS(), Seq(QueueCC(Queue(1))))
-    checkDataset(Seq(List(QueueCC(Queue(1)))).toDS(), List(QueueCC(Queue(1))))
-    checkDataset(Seq(Queue(QueueCC(Queue(1)))).toDS(), Queue(QueueCC(Queue(1))))
+    checkDataset(Seq(QueueClass(Queue(1))).toDS(), QueueClass(Queue(1)))
+    checkDataset(Seq(Seq(QueueClass(Queue(1)))).toDS(), Seq(QueueClass(Queue(1))))
+    checkDataset(Seq(List(QueueClass(Queue(1)))).toDS(), List(QueueClass(Queue(1))))
+    checkDataset(Seq(Queue(QueueClass(Queue(1)))).toDS(), Queue(QueueClass(Queue(1))))
 
-    val complexCC = ComplexCC(SeqCC(Seq(1)), ListCC(List(2)), QueueCC(Queue(3)))
-    checkDataset(Seq(complexCC).toDS(), complexCC)
-    checkDataset(Seq(Seq(complexCC)).toDS(), Seq(complexCC))
-    checkDataset(Seq(List(complexCC)).toDS(), List(complexCC))
-    checkDataset(Seq(Queue(complexCC)).toDS(), Queue(complexCC))
+    val complex = ComplexClass(SeqClass(Seq(1)), ListClass(List(2)), QueueClass(Queue(3)))
+    checkDataset(Seq(complex).toDS(), complex)
+    checkDataset(Seq(Seq(complex)).toDS(), Seq(complex))
+    checkDataset(Seq(List(complex)).toDS(), List(complex))
+    checkDataset(Seq(Queue(complex)).toDS(), Queue(complex))
 
     // Tuples
     checkDataset(Seq(Seq(1) -> Seq(2)).toDS(), Seq(1) -> Seq(2))
@@ -193,8 +193,8 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
       List(Seq("test1") -> List(Queue("test2"))))
 
     // Complex
-    checkDataset(Seq(ListCC(List(1)) -> Queue("test" -> SeqCC(Seq(2)))).toDS(),
-      ListCC(List(1)) -> Queue("test" -> SeqCC(Seq(2))))
+    checkDataset(Seq(ListClass(List(1)) -> Queue("test" -> SeqClass(Seq(2)))).toDS(),
+      ListClass(List(1)) -> Queue("test" -> SeqClass(Seq(2))))
   }
 
   test("package objects") {
