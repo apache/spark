@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.{Date, Timestamp}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -221,5 +223,45 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     val ctx = new CodegenContext()
     CaseWhen(Seq((Literal.create(false, BooleanType), Literal(1))), Literal(-1)).genCode(ctx)
     assert(ctx.inlinedMutableStates.size == 1)
+  }
+
+  test("case field") {
+    val str1 = Literal("花花世界")
+    val str2 = Literal("a")
+    val str3 = Literal("b")
+    val str4 = Literal("")
+    val str5 = Literal("999")
+
+    val bool1 = Literal(true)
+    val bool2 = Literal(false)
+
+    val int1 = Literal(1)
+    val int2 = Literal(2)
+    val int3 = Literal(3)
+    val int4 = Literal(999)
+
+    val double1 = Literal(1.221)
+    val double2 = Literal(1.222)
+    val double3 = Literal(1.224)
+
+    val timeStamp1 = Literal(new Timestamp(2016, 12, 27, 14, 22, 1, 1))
+    val timeStamp2 = Literal(new Timestamp(1988, 6, 3, 1, 1, 1, 1))
+    val timeStamp3 = Literal(new Timestamp(1990, 6, 5, 1, 1, 1, 1))
+
+    val date1 = Literal(new Date(1949, 1, 1))
+    val date2 = Literal(new Date(1979, 1, 1))
+    val date3 = Literal(new Date(1989, 1, 1))
+
+    checkEvaluation(Field(Seq(str1, str2, str3, str1)), 3)
+    checkEvaluation(Field(Seq(str2, str2, str2, str1)), 1)
+    checkEvaluation(Field(Seq(str4, str4, str4, str1)), 1)
+    checkEvaluation(Field(Seq(bool1, bool2, bool1, bool1)), 2)
+    checkEvaluation(Field(Seq(int1, int2, int3, int1)), 3)
+    checkEvaluation(Field(Seq(double2, double3, double1, double2)), 3)
+    checkEvaluation(Field(Seq(timeStamp1, timeStamp2, timeStamp3, timeStamp1)), 3)
+    checkEvaluation(Field(Seq(date1, date1, date2, date3)), 1)
+    checkEvaluation(Field(Seq(int4, double3, str5, bool1, date1, timeStamp2, int4)), 6)
+    checkEvaluation(Field(Seq(str5, str1, str2, str4)), 0)
+    checkEvaluation(Field(Seq(int4, double3, str5, bool1, date1, timeStamp2, int3)), 0)
   }
 }
