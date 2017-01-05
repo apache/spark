@@ -31,13 +31,14 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
-private[security] class FileSystemCredentialProvider
+private[security] class HadoopFSCredentialProvider
     extends ServiceCredentialProvider with Logging {
   // Token renewal interval, this value will be set in the first call,
-  // if None means no token renewer specified, so cannot get token renewal interval.
+  // if None means no token renewer specified or no token can be renewed,
+  // so cannot get token renewal interval.
   private var tokenRenewalInterval: Option[Long] = null
 
-  override val serviceName: String = "fs"
+  override val serviceName: String = "hadoopfs"
 
   override def obtainCredentials(
       hadoopConf: Configuration,
@@ -81,7 +82,8 @@ private[security] class FileSystemCredentialProvider
 
       val renewIntervals = creds.getAllTokens.asScala.filter {
         _.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier]
-      }.flatMap { token => Try {
+      }.flatMap { token =>
+        Try {
           val newExpiration = token.renew(hadoopConf)
           val identifier = token.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
           val interval = newExpiration - identifier.getIssueDate
