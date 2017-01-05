@@ -50,7 +50,12 @@ private[hive] class SparkExecuteStatementOperation(
   with Logging {
 
   private var result: DataFrame = _
+
+  // We cache the returned rows to get iterators again in case the user wants to use FETCH_FIRST.
+  // This is only used when `spark.sql.thriftServer.incrementalCollect` is set to `false`.
+  // In case of `true`, this will be `None` and FETCH_FIRST will trigger re-execution.
   private var resultList: Option[Array[SparkRow]] = _
+
   private var iter: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
   private var statementId: String = _
@@ -103,10 +108,6 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private def useIncrementalCollect: Boolean = {
-    sqlContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
-  }
-
   def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = {
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
@@ -115,7 +116,7 @@ private[hive] class SparkExecuteStatementOperation(
 
     // Reset iter to header when fetching start from first row
     if (order.equals(FetchOrientation.FETCH_FIRST)) {
-      iter = if (useIncrementalCollect) {
+      iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
         resultList = None
         result.toLocalIterator.asScala
       } else {
@@ -237,7 +238,7 @@ private[hive] class SparkExecuteStatementOperation(
       }
       HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())
       iter = {
-        if (useIncrementalCollect) {
+        if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
           resultList = None
           result.toLocalIterator.asScala
         } else {
