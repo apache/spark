@@ -161,6 +161,33 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("train with empty arrays") {
+    val lp = LabeledPoint(1.0, Vectors.dense(Array.empty[Double]))
+    val data = Array.fill(5)(lp)
+    val rdd = sc.parallelize(data)
+
+    val strategy = new OldStrategy(OldAlgo.Regression, Gini, maxDepth = 2,
+      maxBins = 100)
+    intercept[IllegalArgumentException] {
+      DecisionTreeMetadata.buildMetadata(rdd, strategy)
+    }
+  }
+
+  test("train with single point") {
+    val lp = LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0))
+    val rdd = sc.parallelize(Seq(lp))
+    val strategy = new OldStrategy(
+      OldAlgo.Classification,
+      Gini,
+      maxDepth = 2,
+      numClasses = 2,
+      maxBins = 100)
+    val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
+    assert(tree.rootNode.impurity === -1.0)
+    assert(tree.depth === 0)
+    assert(tree.rootNode.prediction === lp.label)
+  }
+
   test("train with constant features") {
     val lp = LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0))
     val data = Array.fill(5)(lp)
@@ -176,6 +203,18 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(tree.rootNode.impurity === -1.0)
     assert(tree.depth === 0)
     assert(tree.rootNode.prediction === lp.label)
+
+    // Test with no categorical features
+    val strategy2 = new OldStrategy(
+      OldAlgo.Classification,
+      Gini,
+      maxDepth = 2,
+      numClasses = 2,
+      maxBins = 100)
+    val Array(tree2) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
+    assert(tree2.rootNode.impurity === -1.0)
+    assert(tree2.depth === 0)
+    assert(tree2.rootNode.prediction === lp.label)
   }
 
   test("Multiclass classification with unordered categorical features: split calculations") {
