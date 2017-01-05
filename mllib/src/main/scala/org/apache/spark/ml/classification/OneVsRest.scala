@@ -350,7 +350,6 @@ final class OneVsRest @Since("1.4.0") (
       multiclassLabeled.unpersist()
     }
 
-
     // extract label metadata from label column if present, or create a nominal attribute
     // to output the number of labels
     val labelAttribute = Attribute.fromStructField(labelSchema) match {
