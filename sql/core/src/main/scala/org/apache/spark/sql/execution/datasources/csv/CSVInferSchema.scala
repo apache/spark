@@ -85,7 +85,9 @@ private[csv] object CSVInferSchema {
         case NullType => tryParseInteger(field, options)
         case IntegerType => tryParseInteger(field, options)
         case LongType => tryParseLong(field, options)
-        case _: DecimalType => tryParseDecimal(field, options)
+        case _: DecimalType =>
+          // DecimalTypes have different precisions and scales, so we try to find the common type.
+          findTightestCommonType(typeSoFar, tryParseDecimal(field, options)).getOrElse(StringType)
         case DoubleType => tryParseDouble(field, options)
         case TimestampType => tryParseTimestamp(field, options)
         case BooleanType => tryParseBoolean(field, options)
