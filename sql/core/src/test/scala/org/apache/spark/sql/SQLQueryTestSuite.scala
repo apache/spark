@@ -47,9 +47,9 @@ import org.apache.spark.sql.types.StructType
  *
  * To re-generate golden files, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
- * }}}
  *
+ * }}}
+ *SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
  * The format for input files is simple:
  *  1. A list of SQL queries separated by semicolon.
  *  2. Lines starting with -- are treated as comments and ignored.
@@ -223,7 +223,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     } catch {
       case a: AnalysisException if a.plan.nonEmpty =>
         // Do not output the logical plan tree which contains expression IDs.
-        (StructType(Seq.empty), Seq(a.getClass.getName, a.getSimpleMessage))
+        // Also implement a crude way of masking expression IDs in the error message
+        // with a generic pattern "###".
+        (StructType(Seq.empty),
+          Seq(a.getClass.getName, a.getSimpleMessage.replaceAll("#[0-9]+", "###")))
       case NonFatal(e) =>
         // If there is an exception, put the exception class followed by the message.
         (StructType(Seq.empty), Seq(e.getClass.getName, e.getMessage))

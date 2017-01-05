@@ -40,19 +40,3 @@ where  t1a in (select   min(t2a)
                                 having   t3b > t2b ))
 ;
 
--- TC 01.03
--- The column t2c in the predicate t2c > 8 must be mapped to the t2 in its subquery scope.
--- But t2c is not part of the output of the subquery hence this is an invalid query.
-select *
-from   (select *
-        from   t2
-        where  t2a in (select t1a
-                       from   t1
-                       where  t1b = t2b)) t2
-where  t2a in (select   t2a
-               from     t2
-               where    t2a = t2a
-               and      t2c > 1
-               group by t2a
-               having   t2c > 8)
-;
