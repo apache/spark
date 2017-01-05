@@ -230,8 +230,10 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         summaryModel,
         model.diagInvAtWA.toArray,
         model.objectiveHistory)
+
+      lrModel.setSummary(Some(trainingSummary))
       instr.logSuccess(lrModel)
-      return lrModel.setSummary(Some(trainingSummary))
+      return lrModel
     }
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
@@ -284,8 +286,10 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
           model,
           Array(0D),
           Array(0D))
+
+        model.setSummary(Some(trainingSummary))
         instr.logSuccess(model)
-        return model.setSummary(Some(trainingSummary))
+        return model
       } else {
         require($(regParam) == 0.0, "The standard deviation of the label is zero. " +
           "Model cannot be regularized.")
@@ -407,8 +411,10 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       model,
       Array(0D),
       objectiveHistory)
-    instr.logSuccess(model)
+
     model.setSummary(Some(trainingSummary))
+    instr.logSuccess(model)
+    model
   }
 
   @Since("1.4.0")

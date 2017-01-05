@@ -892,7 +892,7 @@ class LDA @Since("1.6.0") (
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(featuresCol, topicDistributionCol, k, maxIter, subsamplingRate,
       checkpointInterval, keepLastCheckpoint, optimizeDocConcentration, topicConcentration,
-      learningDecay, optimizer, learningOffset, seed)
+      docConcentration, learningDecay, optimizer, learningOffset, seed)
 
     val oldLDA = new OldLDA()
       .setK($(k))
@@ -912,6 +912,7 @@ class LDA @Since("1.6.0") (
         new DistributedLDAModel(uid, m.vocabSize, m, dataset.sparkSession, None)
     }
 
+    instr.logNumFeatures(newModel.vocabSize)
     val model = copyValues(newModel).setParent(this)
     instr.logSuccess(model)
     model
