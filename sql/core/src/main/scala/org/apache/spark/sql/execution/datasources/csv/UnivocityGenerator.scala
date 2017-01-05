@@ -19,15 +19,12 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.OutputStream
 
-import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
+import com.univocity.parsers.csv.CsvWriter
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
-/**
- * Converts a sequence of string to CSV string
- */
 private[csv] class UnivocityGenerator(
     schema: StructType,
     writer: OutputStream,
@@ -75,7 +72,7 @@ private[csv] class UnivocityGenerator(
   }
 
   /**
-   * Transforms a single InternalRow to CSV using Univocity
+   * Writes a single InternalRow to CSV using Univocity
    *
    * @param row The row to convert
    */

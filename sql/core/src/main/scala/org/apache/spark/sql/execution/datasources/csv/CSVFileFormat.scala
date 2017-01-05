@@ -109,14 +109,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
       val linesFiltered = UnivocityParser.filterCommentAndEmpty(linesWithoutHeader, csvOptions)
       val parser = new UnivocityParser(dataSchema, requiredSchema, csvOptions)
-      var numMalformedRecords = 0
-      linesFiltered.flatMap { line =>
-        val row = parser.parse(line, numMalformedRecords)
-        if (row.isEmpty) {
-          numMalformedRecords += 1
-        }
-        row
-      }
+      linesFiltered.flatMap(parser.parse)
     }
   }
 
