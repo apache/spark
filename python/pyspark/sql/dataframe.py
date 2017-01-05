@@ -16,7 +16,6 @@
 #
 
 import sys
-import warnings
 import random
 
 if sys.version >= '3':
@@ -1387,7 +1386,7 @@ class DataFrame(object):
         """
 
         if not isinstance(col, (str, list, tuple)):
-            raise ValueError("col should be a string, list or tuple.")
+            raise ValueError("col should be a string, list or tuple, but got %r" % type(col))
 
         isStr = isinstance(col, str)
 
@@ -1398,7 +1397,7 @@ class DataFrame(object):
 
         for c in col:
             if not isinstance(c, str):
-                raise ValueError("columns should be strings.")
+                raise ValueError("columns should be strings, but got %r" % type(c))
         col = _to_list(self._sc, col)
 
         if not isinstance(probabilities, (list, tuple)):
