@@ -24,6 +24,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, ForeachWrite
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink}
+import org.apache.spark.sql.sources.StreamSinkProvider
 
 /**
  * :: Experimental ::
@@ -116,11 +117,29 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Specifies the underlying output data source. Built-in options include "parquet" for now.
+   * Additionally custom StreamSinkProviders can be specified here using the fully qualified class
+   * name.
    *
    * @since 2.0.0
    */
   def format(source: String): DataStreamWriter[T] = {
     this.source = source
+    this.sinkProvider = null
+    this
+  }
+
+  /**
+   * :: Experimental ::
+   * Specifies the underlying output data source using a StreamSinkProvider. This is useful for
+   * sinks which are constructed with user specified functions (such as a user specified version of
+   * ForeachSink).
+   *
+   * @since 2.1.0
+   */
+  @Experimental
+  def format(sinkProvider: StreamSinkProvider): DataStreamWriter[T] = {
+    this.source = "custom"
+    this.sinkProvider = sinkProvider
     this
   }
 
@@ -258,6 +277,20 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         outputMode,
         useTempCheckpointLocation = true,
         trigger = trigger)
+    } else if (source == "custom") {
+      val sink = sinkProvider.createSink(df.sparkSession.sqlContext,
+        parameters = extraOptions.toMap,
+        partitionColumns = normalizedParCols.getOrElse(Nil),
+        outputMode = outputMode)
+      df.sparkSession.sessionState.streamingQueryManager.startQuery(
+        extraOptions.get("queryName"),
+        extraOptions.get("checkpointLocation"),
+        df,
+        sink,
+        outputMode,
+        useTempCheckpointLocation = false,
+        recoverFromCheckpointLocation = false,
+        trigger = trigger)
     } else {
       val (useTempCheckpointLocation, recoverFromCheckpointLocation) =
         if (source == "console") {
@@ -366,6 +399,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   ///////////////////////////////////////////////////////////////////////////////////////
 
   private var source: String = df.sparkSession.sessionState.conf.defaultDataSourceName
+
+  private var sinkProvider: StreamSinkProvider = null
 
   private var outputMode: OutputMode = OutputMode.Append
 
