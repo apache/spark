@@ -214,14 +214,12 @@ class SparkSession(object):
         self._wrapped = SQLContext(self._sc, self, self._jwrapped)
         _monkey_patch_RDD(self)
         install_exception_handler()
-        if SparkSession._instantiatedSession is None:
+        # If we had an instantiated SparkSession attached with a SparkContext
+        # which is stopped now, we need to renew the instantiated SparkSession.
+        # Otherwise, we will use invalid SparkSession when we call Builder.getOrCreate.
+        if SparkSession._instantiatedSession is None \
+                or SparkSession._instantiatedSession._sc._jsc is None:
             SparkSession._instantiatedSession = self
-        else:
-            # If we had an instantiated SparkSession attached with a SparkContext
-            # which is stopped now, we need to renew the instantiated SparkSession.
-            # Otherwise, we will use invalid SparkSession when we call Builder.getOrCreate.
-            if SparkSession._instantiatedSession._sc._jsc is None:
-                SparkSession._instantiatedSession = self
 
     @since(2.0)
     def newSession(self):
