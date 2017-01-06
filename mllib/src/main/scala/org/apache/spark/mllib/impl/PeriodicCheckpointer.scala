@@ -78,8 +78,8 @@ private[mllib] abstract class PeriodicCheckpointer[T](
    *
    * @param newData  New Dataset created from previous Datasets in the lineage.
    */
-  def update(newData: T): Unit = {
-    persist(newData)
+  def update(newData: T, level: StorageLevel = StorageLevel.MEMORY_AND_DISK): Unit = {
+    persist(newData, level)
     persistedQueue.enqueue(newData)
     // We try to maintain 2 Datasets in persistedQueue to support the semantics of this class:
     // Users should call [[update()]] when a new Dataset has been created,
@@ -119,7 +119,7 @@ private[mllib] abstract class PeriodicCheckpointer[T](
    * Persist the Dataset.
    * Note: This should handle checking the current [[StorageLevel]] of the Dataset.
    */
-  protected def persist(data: T): Unit
+  protected def persist(data: T, level: StorageLevel): Unit
 
   /** Unpersist the Dataset */
   protected def unpersist(data: T): Unit
