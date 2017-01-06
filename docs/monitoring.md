@@ -170,6 +170,28 @@ The history server can be configured as follows:
     </td>
   </tr>
   <tr>
+    <td>spark.history.ui.admin.acls</td>
+    <td>empty</td>
+    <td>
+      Comma separated list of users/administrators that have view access to all the Spark applications in
+      history server. By default only the users permitted to view the application at run-time could
+      access the related application history, with this, configured users/administrators could also
+      have the permission to access it.
+      Putting a "*" in the list means any user can have the privilege of admin.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.ui.admin.acls.groups</td>
+    <td>empty</td>
+    <td>
+      Comma separated list of groups that have view access to all the Spark applications in
+      history server. By default only the groups permitted to view the application at run-time could
+      access the related application history, with this, configured groups could also
+      have the permission to access it.
+      Putting a "*" in the list means any group can have the privilege of admin.
+    </td>
+  </tr>
+  <tr>
     <td>spark.history.fs.cleaner.enabled</td>
     <td>false</td>
     <td>
