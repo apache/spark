@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 import atexit
 import os
 import sys
@@ -24,6 +26,8 @@ import shlex
 import socket
 import platform
 from subprocess import Popen, PIPE
+from threading  import Thread
+
 
 if sys.version >= '3':
     xrange = range
@@ -39,6 +43,9 @@ def launch_gateway(conf=None):
     :param conf: spark configuration passed to spark-submit
     :return:
     """
+    # If running in ijupyter we need to copy through stdout/stderr
+    grab_jvm_output = type(sys.stderr) != file
+
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
     else:
@@ -70,14 +77,36 @@ def launch_gateway(conf=None):
 
         # Launch the Java gateway.
         # We open a pipe to stdin so that the Java gateway can die when the pipe is broken
+        proc_kwargs = {"env": env, "stdin": PIPE}
         if not on_windows:
             # Don't send ctrl-c / SIGINT to the Java gateway:
+            # However, preexec_fn not supported on Windows
             def preexec_func():
                 signal.signal(signal.SIGINT, signal.SIG_IGN)
-            proc = Popen(command, stdin=PIPE, preexec_fn=preexec_func, env=env)
-        else:
-            # preexec_fn not supported on Windows
-            proc = Popen(command, stdin=PIPE, env=env)
+
+            proc_kwargs["preexec_fn"] = preexec_func
+
+        # If we need to copy stderr/stdout through, set up a pipe.
+        if grab_jvm_output:
+            proc_kwargs["stderr"] = PIPE
+            proc_kwargs["stdout"] = PIPE
+
+        proc = Popen(command, **proc_kwargs)
+
+        def connect(input_pipe, out_pipe):
+            """Connect the input pipe to the output. We can't use os.dup for IPython
+            or directly write to them (see https://github.com/ipython/ipython/pull/3072/)."""
+            for line in iter(input_pipe.readline, b''):
+                print(line, file=out_pipe)
+            input_pipe.close()
+
+        if grab_jvm_output:
+            t = Thread(target=connect, args=(proc.stdout, sys.stdout))
+            t.daemon = True
+            t.start()
+            t = Thread(target=connect, args=(proc.stderr, sys.stderr))
+            t.daemon = True
+            t.start()
 
         gateway_port = None
         # We use select() here in order to avoid blocking indefinitely if the subprocess dies
