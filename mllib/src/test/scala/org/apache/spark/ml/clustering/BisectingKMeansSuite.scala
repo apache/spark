@@ -34,7 +34,7 @@ class BisectingKMeansSuite
   override def beforeAll(): Unit = {
     super.beforeAll()
     dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
-    sparseDataset = KMeansSuite.generateSparseData(spark, 100, 1000, k, 42)
+    sparseDataset = KMeansSuite.generateSparseData(spark, 10, 1000, k, 42)
   }
 
   test("default parameters") {
@@ -59,16 +59,14 @@ class BisectingKMeansSuite
     val bkm = new BisectingKMeans().setK(k).setMinDivisibleClusterSize(4).setMaxIter(4)
 
     assert(bkm.getK === k)
-    assert(bkm.getFeaturesCol === "features")
-    assert(bkm.getPredictionCol === "prediction")
     assert(bkm.getMaxIter === 4)
     assert(bkm.getMinDivisibleClusterSize === 4)
     // Verify fit does not fail on very sparse data
     val model = bkm.fit(sparseDataset)
-    assert(model.hasSummary)
     val result = model.transform(sparseDataset)
     val numClusters = result.select("prediction").distinct().collect().length
-    assert(numClusters <= k && numClusters >= 1)
+    // Verify we hit the edge case
+    assert(numClusters < k && numClusters > 1)
   }
 
   test("setter/getter") {

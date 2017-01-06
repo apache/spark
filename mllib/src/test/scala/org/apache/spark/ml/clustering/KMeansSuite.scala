@@ -168,7 +168,7 @@ object KMeansSuite {
     val nnz = random.nextInt(dim)
     val rdd = sc.parallelize(1 to rows)
       .map(i => Vectors.sparse(dim, random.shuffle(0 to dim - 1).slice(0, nnz).sorted.toArray,
-        Array.fill(nnz)(random.nextDouble())))
+        Array.fill(nnz)(random.nextInt(k).toDouble)))
       .map(v => new TestRow(v))
     spark.createDataFrame(rdd)
   }
