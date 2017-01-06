@@ -199,7 +199,9 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.write(mode, Dataset.ofRows(session, query))
+      dataSource.write(mode, Dataset.ofRows(session, query)).getOrElse {
+        throw new AnalysisException(s"Expected a BaseRelation but found None")
+      }
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)

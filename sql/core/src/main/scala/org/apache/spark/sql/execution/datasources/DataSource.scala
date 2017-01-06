@@ -422,14 +422,14 @@ case class DataSource(
   def write(
       mode: SaveMode,
       data: DataFrame,
-      isForWriteOnly: Boolean = false): BaseRelation = {
+      isForWriteOnly: Boolean = false): Option[BaseRelation] = {
     if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
 
     providingClass.newInstance() match {
       case dataSource: CreatableRelationProvider =>
-        dataSource.createRelation(sparkSession.sqlContext, mode, caseInsensitiveOptions, data)
+        Some(dataSource.createRelation(sparkSession.sqlContext, mode, caseInsensitiveOptions, data))
       case format: FileFormat =>
         // Don't glob path for the write path.  The contracts here are:
         //  1. Only one output path can be specified on the write path;
@@ -502,10 +502,10 @@ case class DataSource(
         sparkSession.sessionState.executePlan(plan).toRdd
         if (isForWriteOnly) {
           // Exit earlier and return null
-          null
+          None
         } else {
           // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
-          copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
+          Some(copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation())
         }
 
       case _ =>
