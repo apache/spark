@@ -162,7 +162,15 @@ object PageRank extends Logging {
       iteration += 1
     }
 
-    rankGraph
+    // If the graph has sinks (vertices with no outgoing edges) the sum of ranks will not be correct
+    val rankSum = rankGraph.vertices.values.sum()
+    if (personalized) {
+      rankGraph.mapVertices((id, rank) => rank / rankSum)
+    } else {
+      val numVertices = rankGraph.numVertices
+      val correctionFactor = numVertices.toDouble / rankSum
+      rankGraph.mapVertices((id, rank) => rank * correctionFactor)
+    }
   }
 
   /**
@@ -179,7 +187,8 @@ object PageRank extends Logging {
    * @param resetProb The random reset probability
    * @param sources The list of sources to compute personalized pagerank from
    * @return the graph with vertex attributes
-   *         containing the pagerank relative to all starting nodes (as a sparse vector) and
+   *         containing the pagerank relative to all starting nodes (as a sparse vector
+   *         indexed by the position of nodes in the sources list) and
    *         edge attributes the normalized edge weight
    */
   def runParallelPersonalizedPageRank[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED],
@@ -194,6 +203,8 @@ object PageRank extends Logging {
 
     // TODO if one sources vertex id is outside of the int range
     // we won't be able to store its activations in a sparse vector
+    require(sources.max <= Int.MaxValue.toLong,
+      s"This implementation currently only works for source vertex ids at most ${Int.MaxValue}")
     val zero = Vectors.sparse(sources.size, List()).asBreeze
     val sourcesInitMap = sources.zipWithIndex.map { case (vid, i) =>
       val v = Vectors.sparse(sources.size, Array(i), Array(1.0)).asBreeze
@@ -245,8 +256,10 @@ object PageRank extends Logging {
       i += 1
     }
 
+    // If the graph has sinks (vertices with no outgoing edges) the sum of ranks will not be correct
+    val rankSums = rankGraph.vertices.values.fold(zero)(_ :+ _)
     rankGraph.mapVertices { (vid, attr) =>
-      Vectors.fromBreeze(attr)
+      Vectors.fromBreeze(attr :/ rankSums)
     }
   }
 
@@ -307,7 +320,7 @@ object PageRank extends Logging {
       .mapTriplets( e => 1.0 / e.srcAttr )
       // Set the vertex attributes to (initialPR, delta = 0)
       .mapVertices { (id, attr) =>
-        if (id == src) (1.0, Double.NegativeInfinity) else (0.0, 0.0)
+        if (id == src) (0.0, Double.NegativeInfinity) else (0.0, 0.0)
       }
       .cache()
 
@@ -322,13 +335,12 @@ object PageRank extends Logging {
     def personalizedVertexProgram(id: VertexId, attr: (Double, Double),
       msgSum: Double): (Double, Double) = {
       val (oldPR, lastDelta) = attr
-      var teleport = oldPR
-      val delta = if (src==id) resetProb else 0.0
-      teleport = oldPR*delta
-
-      val newPR = teleport + (1.0 - resetProb) * msgSum
-      val newDelta = if (lastDelta == Double.NegativeInfinity) newPR else newPR - oldPR
-      (newPR, newDelta)
+      val newPR = if (lastDelta == Double.NegativeInfinity) {
+        1.0
+      } else {
+        oldPR + (1.0 - resetProb) * msgSum
+      }
+      (newPR, newPR - oldPR)
     }
 
     def sendMessage(edge: EdgeTriplet[(Double, Double), Double]) = {
@@ -353,9 +365,19 @@ object PageRank extends Logging {
         vertexProgram(id, attr, msgSum)
     }
 
-    Pregel(pagerankGraph, initialMessage, activeDirection = EdgeDirection.Out)(
+    val rankGraph = Pregel(pagerankGraph, initialMessage, activeDirection = EdgeDirection.Out)(
       vp, sendMessage, messageCombiner)
       .mapVertices((vid, attr) => attr._1)
-  } // end of deltaPageRank
+
+    // If the graph has sinks (vertices with no outgoing edges) the sum of ranks will not be correct
+    val rankSum = rankGraph.vertices.values.sum()
+    if (personalized) {
+      rankGraph.mapVertices((id, rank) => rank / rankSum)
+    } else {
+      val numVertices = rankGraph.numVertices
+      val correctionFactor = numVertices.toDouble / rankSum
+      rankGraph.mapVertices((id, rank) => rank * correctionFactor)
+    }
+  }
 
 }
