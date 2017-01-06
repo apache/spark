@@ -278,7 +278,7 @@ case class DataSource(
           throw new IllegalArgumentException("'path' is not specified")
         })
         if (outputMode != OutputMode.Append) {
-          throw new IllegalArgumentException(
+          throw new AnalysisException(
             s"Data source $className does not support $outputMode output mode")
         }
         new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, caseInsensitiveOptions)
@@ -388,10 +388,11 @@ case class DataSource(
 
         val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
             catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog) {
+          val defaultTableSize = sparkSession.sessionState.conf.defaultSizeInBytes
           new CatalogFileIndex(
             sparkSession,
             catalogTable.get,
-            catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(0L))
+            catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
         } else {
           new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(partitionSchema))
         }
@@ -472,22 +473,26 @@ case class DataSource(
               s"Unable to resolve $name given [${plan.output.map(_.name).mkString(", ")}]")
           }.asInstanceOf[Attribute]
         }
+        val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
+          sparkSession.table(tableIdent).queryExecution.analyzed.collect {
+            case LogicalRelation(t: HadoopFsRelation, _, _) => t.location
+          }.head
+        }
         // For partitioned relation r, r.schema's column ordering can be different from the column
         // ordering of data.logicalPlan (partition columns are all moved after data column).  This
         // will be adjusted within InsertIntoHadoopFsRelation.
         val plan =
           InsertIntoHadoopFsRelationCommand(
             outputPath = outputPath,
-            staticPartitionKeys = Map.empty,
-            customPartitionLocations = Map.empty,
+            staticPartitions = Map.empty,
             partitionColumns = columns,
             bucketSpec = bucketSpec,
             fileFormat = format,
-            refreshFunction = _ => Unit, // No existing table needs to be refreshed.
             options = options,
             query = data.logicalPlan,
             mode = mode,
-            catalogTable = catalogTable)
+            catalogTable = catalogTable,
+            fileIndex = fileIndex)
         sparkSession.sessionState.executePlan(plan).toRdd
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring it.
         copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()

@@ -15,18 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.util;
+package org.apache.spark.status.api.v1.streaming;
 
-import java.util.NoSuchElementException;
+import org.apache.spark.util.EnumUtil;
 
-/** Uses System properties to obtain config values. */
-public class SystemPropertyConfigProvider extends ConfigProvider {
-  @Override
-  public String get(String name) {
-    String value = System.getProperty(name);
-    if (value == null) {
-      throw new NoSuchElementException(name);
-    }
-    return value;
+public enum BatchStatus {
+  COMPLETED,
+  QUEUED,
+  PROCESSING;
+
+  public static BatchStatus fromString(String str) {
+    return EnumUtil.parseIgnoreCase(BatchStatus.class, str);
   }
 }

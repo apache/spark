@@ -66,9 +66,9 @@ private[feature] trait QuantileDiscretizerBase extends Params
   def getRelativeError: Double = getOrDefault(relativeError)
 
   /**
-   * Param for how to handle invalid entries. Options are skip (filter out rows with
-   * invalid values), error (throw an error), or keep (keep invalid values in a special additional
-   * bucket).
+   * Param for how to handle invalid entries. Options are 'skip' (filter out rows with
+   * invalid values), 'error' (throw an error), or 'keep' (keep invalid values in a special
+   * additional bucket).
    * Default: "error"
    * @group param
    */
