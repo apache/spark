@@ -347,6 +347,7 @@ class GaussianMixture @Since("2.0.0") (
 
     val instr = Instrumentation.create(this, instances)
     instr.logParams(featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
+    instr.logNumFeatures(numFeatures)
 
     val shouldDistributeGaussians = GaussianMixture.shouldDistributeGaussians(
       numClusters, numFeatures)
@@ -409,8 +410,7 @@ class GaussianMixture @Since("2.0.0") (
     }
 
     val gaussianDists = gaussians.map { case (mean, covVec) =>
-      val cov = new DenseMatrix(numFeatures, numFeatures,
-        GaussianMixture.unpackUpperTriangularMatrix(numFeatures, covVec.values))
+      val cov = GaussianMixture.unpackUpperTriangularMatrix(numFeatures, covVec.values)
       new MultivariateGaussian(mean, cov)
     }
 
@@ -418,7 +418,6 @@ class GaussianMixture @Since("2.0.0") (
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
     model.setSummary(Some(summary))
-    instr.logNumFeatures(model.gaussians.head.mean.size)
     instr.logSuccess(model)
     model
   }
@@ -439,7 +438,7 @@ class GaussianMixture @Since("2.0.0") (
    * @param numFeatures The number of features of training instance.
    * @return The initialized weights and corresponding gaussian distributions. Note the
    *         covariance matrix of multivariate gaussian distribution is symmetric and
-   *         we only save the upper triangular part as a dense vector.
+   *         we only save the upper triangular part as a dense vector (column major).
    */
   private def initRandom(
       instances: RDD[Vector],
@@ -463,8 +462,8 @@ class GaussianMixture @Since("2.0.0") (
          Construct matrix where diagonal entries are element-wise
          variance of input vectors (computes biased variance).
          Since the covariance matrix of multivariate gaussian distribution is symmetric,
-         only the upper triangular part of the matrix will be saved as a dense vector
-         in order to reduce the shuffled data size.
+         only the upper triangular part of the matrix (column major) will be saved as
+         a dense vector in order to reduce the shuffled data size.
        */
       val cov = {
         val ss = new DenseVector(new Array[Double](numFeatures)).asBreeze
@@ -505,20 +504,20 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
 
   /**
    * Convert an n * (n + 1) / 2 dimension array representing the upper triangular part of a matrix
-   * into an n * n array representing the full symmetric matrix.
+   * into an n * n array representing the full symmetric matrix (column major).
    *
    * @param n The order of the n by n matrix.
    * @param triangularValues The upper triangular part of the matrix packed in an array
    *                         (column major).
-   * @return An array which represents the symmetric matrix in column major.
+   * @return A dense matrix which represents the symmetric matrix in column major.
    */
   private[clustering] def unpackUpperTriangularMatrix(
       n: Int,
-      triangularValues: Array[Double]): Array[Double] = {
+      triangularValues: Array[Double]): DenseMatrix = {
     val symmetricValues = new Array[Double](n * n)
     var r = 0
     var i = 0
-    while(i < n) {
+    while (i < n) {
       var j = 0
       while (j <= i) {
         symmetricValues(i * n + j) = triangularValues(r)
@@ -528,7 +527,7 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
       }
       i += 1
     }
-    symmetricValues
+    new DenseMatrix(n, n, symmetricValues)
   }
 
   /**
@@ -536,7 +535,7 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
    *
    * @param mean The mean of the gaussian distribution.
    * @param cov The covariance matrix of the gaussian distribution. Note we only
-   *            save the upper triangular part as a dense vector.
+   *            save the upper triangular part as a dense vector (column major).
    * @param weight The weight of the gaussian distribution.
    * @param sumWeights The sum of weights of all clusters.
    * @return The updated weight, mean and covariance.
@@ -562,8 +561,8 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
  * @param bcWeights The broadcast weights for each Gaussian distribution in the mixture.
  * @param bcGaussians The broadcast array of Multivariate Gaussian (Normal) Distribution
  *                    in the mixture. Note only upper triangular part of the covariance
- *                    matrix of each distribution is stored as dense vector in order to
- *                    reduce shuffled data size.
+ *                    matrix of each distribution is stored as dense vector (column major)
+ *                    in order to reduce shuffled data size.
  */
 private class ExpectationAggregator(
     numFeatures: Int,
@@ -581,8 +580,7 @@ private class ExpectationAggregator(
 
   @transient private lazy val oldGaussians = {
     bcGaussians.value.map { case (mean, covVec) =>
-      val cov = new DenseMatrix(numFeatures, numFeatures,
-        GaussianMixture.unpackUpperTriangularMatrix(numFeatures, covVec.values))
+      val cov = GaussianMixture.unpackUpperTriangularMatrix(numFeatures, covVec.values)
       new MultivariateGaussian(mean, cov)
     }
   }
@@ -611,7 +609,7 @@ private class ExpectationAggregator(
     val prob = new Array[Double](k)
     var probSum = 0.0
     var i = 0
-    while(i < k) {
+    while (i < k) {
       val p = EPSILON + localWeights(i) * localOldGaussians(i).pdf(instance)
       prob(i) = p
       probSum += p
@@ -623,7 +621,7 @@ private class ExpectationAggregator(
     val localNewMeans = newMeans
     val localNewCovs = newCovs
     i = 0
-    while(i < k) {
+    while (i < k) {
       prob(i) /= probSum
       localNewWeights(i) += prob(i)
       BLAS.axpy(prob(i), instance, localNewMeans(i))
@@ -654,7 +652,7 @@ private class ExpectationAggregator(
       val localThisNewCovs = this.newCovs
       val localOtherNewCovs = other.newCovs
       var i = 0
-      while(i < k) {
+      while (i < k) {
         localThisNewWeights(i) += localOtherNewWeights(i)
         BLAS.axpy(1.0, localOtherNewMeans(i), localThisNewMeans(i))
         BLAS.axpy(1.0, localOtherNewCovs(i), localThisNewCovs(i))

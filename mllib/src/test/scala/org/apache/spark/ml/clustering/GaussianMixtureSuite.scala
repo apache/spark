@@ -18,8 +18,9 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.linalg.{Matrices, Vector, Vectors}
+import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -33,6 +34,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
   import GaussianMixtureSuite._
 
   final val k = 5
+  private val seed = 538009335
   @transient var dataset: Dataset[_] = _
   @transient var denseDataset: Dataset[_] = _
   @transient var sparseDataset: Dataset[_] = _
@@ -45,7 +47,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
     denseDataset = denseData.map(FeatureData).toDF()
     sparseDataset = denseData.map { point =>
-      FeatureData(Vectors.sparse(1, Array(0), point.toArray))
+      FeatureData(point.toSparse)
     }.toDF()
     decompositionDataset = decompositionData.map(FeatureData).toDF()
     rDataset = rData.map(FeatureData).toDF()
@@ -144,32 +146,28 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
 
   test("univariate dense data with two clusters") {
     val weights = Array(2.0 / 3.0, 1.0 / 3.0)
-    val mean = Array(Vectors.dense(5.1604), Vectors.dense(-4.3673))
-    val cov = Array(Matrices.dense(1, 1, Array(0.86644)), Matrices.dense(1, 1, Array(1.1098)))
+    val means = Array(Vectors.dense(5.1604), Vectors.dense(-4.3673))
+    val covs = Array(Matrices.dense(1, 1, Array(0.86644)), Matrices.dense(1, 1, Array(1.1098)))
+    val gaussians = means.zip(covs).map { case (mean, cov) =>
+      new MultivariateGaussian(mean, cov)
+    }
 
-    val gmm = new GaussianMixture().setK(2).fit(denseDataset)
-
-    assert(gmm.weights(0) ~== weights(0) absTol 1E-3)
-    assert(gmm.weights(1) ~== weights(1) absTol 1E-3)
-    assert(gmm.gaussians(0).mean ~== mean(0) absTol 1E-3)
-    assert(gmm.gaussians(1).mean ~== mean(1) absTol 1E-3)
-    assert(gmm.gaussians(0).cov ~== cov(0) absTol 1E-3)
-    assert(gmm.gaussians(1).cov ~== cov(1) absTol 1E-3)
+    val expected = new GaussianMixtureModel("dummy", weights, gaussians)
+    val actual = new GaussianMixture().setK(2).setSeed(seed).fit(denseDataset)
+    modelEquals(expected, actual)
   }
 
   test("univariate sparse data with two clusters") {
     val weights = Array(2.0 / 3.0, 1.0 / 3.0)
-    val mean = Array(Vectors.dense(5.1604), Vectors.dense(-4.3673))
-    val cov = Array(Matrices.dense(1, 1, Array(0.86644)), Matrices.dense(1, 1, Array(1.1098)))
+    val means = Array(Vectors.dense(5.1604), Vectors.dense(-4.3673))
+    val covs = Array(Matrices.dense(1, 1, Array(0.86644)), Matrices.dense(1, 1, Array(1.1098)))
+    val gaussians = means.zip(covs).map { case (mean, cov) =>
+      new MultivariateGaussian(mean, cov)
+    }
 
-    val gmm = new GaussianMixture().setK(2).fit(sparseDataset)
-
-    assert(gmm.weights(0) ~== weights(0) absTol 1E-3)
-    assert(gmm.weights(1) ~== weights(1) absTol 1E-3)
-    assert(gmm.gaussians(0).mean ~== mean(0) absTol 1E-3)
-    assert(gmm.gaussians(1).mean ~== mean(1) absTol 1E-3)
-    assert(gmm.gaussians(0).cov ~== cov(0) absTol 1E-3)
-    assert(gmm.gaussians(1).cov ~== cov(1) absTol 1E-3)
+    val expected = new GaussianMixtureModel("dummy", weights, gaussians)
+    val actual = new GaussianMixture().setK(2).setSeed(seed).fit(sparseDataset)
+    modelEquals(expected, actual)
   }
 
   test("check distributed decomposition") {
@@ -177,7 +175,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val d = decompositionData.head.size
     assert(GaussianMixture.shouldDistributeGaussians(k, d))
 
-    val gmm = new GaussianMixture().setK(k).fit(decompositionDataset)
+    val gmm = new GaussianMixture().setK(k).setSeed(seed).fit(decompositionDataset)
     assert(gmm.getK === k)
   }
 
@@ -213,18 +211,16 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
       [2,] 0.1607830 1.008878
      */
     val weights = Array(0.5333333, 0.4666667)
-    val mean = Array(Vectors.dense(10.363673, 9.897081), Vectors.dense(0.11731091, -0.06192351))
-    val cov = Array(Matrices.dense(2, 2, Array(0.2961543, 0.1607830, 0.160783, 1.008878)),
+    val means = Array(Vectors.dense(10.363673, 9.897081), Vectors.dense(0.11731091, -0.06192351))
+    val covs = Array(Matrices.dense(2, 2, Array(0.2961543, 0.1607830, 0.160783, 1.008878)),
       Matrices.dense(2, 2, Array(0.62049934, 0.06880802, 0.06880802, 1.27431874)))
+    val gaussians = means.zip(covs).map { case (mean, cov) =>
+      new MultivariateGaussian(mean, cov)
+    }
 
-    val gmm = new GaussianMixture().setK(2).fit(rDataset)
-
-    assert(gmm.weights(0) ~== weights(0) absTol 1E-3)
-    assert(gmm.weights(1) ~== weights(1) absTol 1E-3)
-    assert(gmm.gaussians(0).mean ~== mean(0) absTol 1E-3)
-    assert(gmm.gaussians(1).mean ~== mean(1) absTol 1E-3)
-    assert(gmm.gaussians(0).cov ~== cov(0) absTol 1E-3)
-    assert(gmm.gaussians(1).cov ~== cov(1) absTol 1E-3)
+    val expected = new GaussianMixtureModel("dummy", weights, gaussians)
+    val actual = new GaussianMixture().setK(2).setSeed(seed).fit(rDataset)
+    modelEquals(expected, actual)
   }
 
   test("upper triangular matrix unpacking") {
@@ -238,12 +234,13 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val triangularValues = Array(1.0, 2.5, 2.0, 3.8, 7.2, 3.0, 0.9, 3.8, 1.0, 4.0)
     val symmetricValues = Array(1.0, 2.5, 3.8, 0.9, 2.5, 2.0, 7.2, 3.8,
       3.8, 7.2, 3.0, 1.0, 0.9, 3.8, 1.0, 4.0)
-    val expected = GaussianMixture.unpackUpperTriangularMatrix(4, triangularValues)
-    assert(symmetricValues === expected)
+    val symmetricMatrix = new DenseMatrix(4, 4, symmetricValues)
+    val expectedMatrix = GaussianMixture.unpackUpperTriangularMatrix(4, triangularValues)
+    assert(symmetricMatrix === expectedMatrix)
   }
 }
 
-object GaussianMixtureSuite {
+object GaussianMixtureSuite extends SparkFunSuite {
   /**
    * Mapping from all Params to valid settings which differ from the defaults.
    * This is useful for tests which need to exercise all Params, such as save/load.
@@ -281,4 +278,12 @@ object GaussianMixtureSuite {
   )
 
   case class FeatureData(features: Vector)
+
+  def modelEquals(m1: GaussianMixtureModel, m2: GaussianMixtureModel): Unit = {
+    assert(m1.weights.length === m2.weights.length)
+    for (i <- m1.weights.indices) {
+      assert(m1.gaussians(i).mean ~== m2.gaussians(i).mean absTol 1E-3)
+      assert(m1.gaussians(i).cov ~== m2.gaussians(i).cov absTol 1E-3)
+    }
+  }
 }
