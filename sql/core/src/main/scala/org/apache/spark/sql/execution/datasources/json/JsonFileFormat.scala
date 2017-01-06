@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions}
-import org.apache.spark.sql.catalyst.util.CompressionCodecs
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -47,7 +47,8 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     if (files.isEmpty) {
       None
     } else {
-      val parsedOptions: JSONOptions = new JSONOptions(options)
+      val optionsWithTimeZone = getOptionsWithTimeZone(sparkSession, options)
+      val parsedOptions: JSONOptions = new JSONOptions(optionsWithTimeZone)
       val columnNameOfCorruptRecord =
         parsedOptions.columnNameOfCorruptRecord
           .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
@@ -67,7 +68,8 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
     val conf = job.getConfiguration
-    val parsedOptions: JSONOptions = new JSONOptions(options)
+    val optionsWithTimeZone = getOptionsWithTimeZone(sparkSession, options)
+    val parsedOptions: JSONOptions = new JSONOptions(optionsWithTimeZone)
     parsedOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
@@ -97,7 +99,8 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    val parsedOptions: JSONOptions = new JSONOptions(options)
+    val optionsWithTimeZone = getOptionsWithTimeZone(sparkSession, options)
+    val parsedOptions: JSONOptions = new JSONOptions(optionsWithTimeZone)
     val columnNameOfCorruptRecord = parsedOptions.columnNameOfCorruptRecord
       .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
@@ -127,6 +130,18 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       classOf[TextInputFormat],
       classOf[LongWritable],
       classOf[Text]).map(_._2.toString) // get the text line
+  }
+
+  private def getOptionsWithTimeZone(
+      sparkSession: SparkSession,
+      options: Map[String, String]): CaseInsensitiveMap = {
+    val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+    if (caseInsensitiveOptions.contains("timeZone")) {
+      caseInsensitiveOptions
+    } else {
+      new CaseInsensitiveMap(
+        options + ("timeZone" -> sparkSession.sessionState.conf.sessionLocalTimeZone))
+    }
   }
 
   /** Constraints to be imposed on schema to be stored. */
