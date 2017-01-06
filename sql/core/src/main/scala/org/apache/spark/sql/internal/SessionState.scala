@@ -132,7 +132,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   /**
    * Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
    */
-  lazy val sqlParser: ParserInterface = new SparkSqlParser(conf)
+  lazy val sqlParser: ParserInterface = new SparkSqlParser(conf, Some(newHadoopConf()))
 
   /**
    * Planner that converts optimized logical plans to physical plans.

@@ -22,6 +22,8 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
@@ -36,8 +38,9 @@ import org.apache.spark.sql.types.{StructField, StructType}
 /**
  * Concrete parser for Spark SQL statements.
  */
-class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser {
-  val astBuilder = new SparkSqlAstBuilder(conf)
+class SparkSqlParser(conf: SQLConf,
+                     hadoopConf: Option[Configuration] = None) extends AbstractSqlParser {
+  val astBuilder = new SparkSqlAstBuilder(conf, hadoopConf)
 
   private val substitutor = new VariableSubstitution(conf)
 
@@ -49,7 +52,8 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser {
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
+class SparkSqlAstBuilder(conf: SQLConf,
+                         hadoopConf: Option[Configuration] = None) extends AstBuilder {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
   /**
@@ -1058,7 +1062,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
     // Storage format
     val defaultStorage: CatalogStorageFormat = {
-      val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
+      val defaultStorageType = if (hadoopConf.isDefined) {
+        hadoopConf.get.get("hive.default.fileformat", "textfile")
+      } else {
+        conf.getConfString("hive.default.fileformat", "textfile")
+      }
+ 
       val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType)
       CatalogStorageFormat(
         locationUri = None,
