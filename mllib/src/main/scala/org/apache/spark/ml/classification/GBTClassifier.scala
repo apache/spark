@@ -225,22 +225,9 @@ class GBTClassificationModel private[ml](
    *
    * @param _trees  Decision trees in the ensemble.
    * @param _treeWeights  Weights for the decision trees in the ensemble.
-   * @param numFeatures  The number of features.
    */
   @Since("1.6.0")
-  def this(uid: String, _trees: Array[DecisionTreeRegressionModel],
-           _treeWeights: Array[Double], numFeatures: Int) =
-    this(uid, _trees, _treeWeights, numFeatures, 2)
-
-  /**
-   * Construct a GBTClassificationModel
-   *
-   * @param _trees  Decision trees in the ensemble.
-   * @param _treeWeights  Weights for the decision trees in the ensemble.
-   */
-  @Since("1.6.0")
-  def this(uid: String, _trees: Array[DecisionTreeRegressionModel],
-           _treeWeights: Array[Double]) =
+  def this(uid: String, _trees: Array[DecisionTreeRegressionModel], _treeWeights: Array[Double]) =
   this(uid, _trees, _treeWeights, -1, 2)
 
   @Since("1.4.0")
@@ -287,7 +274,7 @@ class GBTClassificationModel private[ml](
         var i = 0
         val size = dv.size
         while (i < size) {
-          dv.values(i) = 1 / (1 + math.exp(-2 * dv.values(i)))
+          dv.values(i) = classProbability(getLossType, dv.values(i))
           i += 1
         }
         dv
@@ -323,6 +310,13 @@ class GBTClassificationModel private[ml](
    */
   @Since("2.0.0")
   lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)
+
+  private def classProbability(loss: String, rawPrediction: Double): Double = {
+    loss match {
+      case "logistic" => 1 / (1 + math.exp(-2 * rawPrediction))
+      case _ => throw new Exception("Only logistic loss is supported ...")
+    }
+  }
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {

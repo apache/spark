@@ -17,20 +17,23 @@
 
 package org.apache.spark.ml.classification
 
+import com.github.fommil.netlib.BLAS
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.{DenseVector, Vectors}
+import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.util.Utils
 
 /**
@@ -49,6 +52,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   private var data: RDD[LabeledPoint] = _
   private var trainData: RDD[LabeledPoint] = _
   private var validationData: RDD[LabeledPoint] = _
+  private val eps: Double = 1e-5
 
   override def beforeAll() {
     super.beforeAll()
@@ -70,33 +74,73 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     ParamsSuite.checkParams(model)
   }
 
-  test("Verify raw scores correspond to labels") {
-    val rawPredictionCol = "MyRawPrediction"
-    val predictionCol = "MyPrediction"
+  test("GBTClassifier: Predictor, Classifier methods") {
+    val rawPredictionCol = "rawPrediction"
+    val predictionCol = "prediction"
     val labelCol = "label"
     val featuresCol = "features"
-    val gbt = new GBTClassifier()
-      .setMaxDepth(2)
-      .setLossType("logistic")
-      .setMaxIter(5)
-      .setStepSize(0.1)
-      .setCheckpointInterval(2)
-      .setSeed(123)
-      .setRawPredictionCol(rawPredictionCol)
-      .setPredictionCol(predictionCol)
-      .setLabelCol(labelCol)
-      .setFeaturesCol(featuresCol)
-    val gbtModel = gbt.fit(trainData.toDF(labelCol, featuresCol))
-    val scoredData = gbtModel.transform(validationData.toDF(labelCol, featuresCol))
-    scoredData.select(rawPredictionCol, predictionCol).collect()
-      .foreach(row => {
-        val probabilities = Vectors.dense(row(0).asInstanceOf[DenseVector]
-          .values.map(value => 1 / (1 + math.exp(-2 * value))))
-        // Verify probabilities make sense
-        assert(probabilities.toDense.values.forall(prob => prob <= 1 && prob >= 0))
-        // Verify probabilities correspond to labels
-        assert(probabilities.argmax == row(1))
-      })
+    val probabilityCol = "probability"
+
+    val gbt = new GBTClassifier().setSeed(123)
+    val trainingDataset = trainData.toDF(labelCol, featuresCol)
+    val gbtModel = gbt.fit(trainingDataset)
+    assert(gbtModel.numClasses === 2)
+    val numFeatures = trainingDataset.select(featuresCol).first().getAs[Vector](0).size
+    assert(gbtModel.numFeatures === numFeatures)
+
+    val blas = BLAS.getInstance()
+
+    val validationDataset = validationData.toDF(labelCol, featuresCol)
+    val results = gbtModel.transform(validationDataset)
+    // check that raw prediction is tree predictions dot tree weights
+    results.select(rawPredictionCol, featuresCol).collect().foreach {
+      case Row(raw: Vector, features: Vector) =>
+        assert(raw.size === 2)
+        val treePredictions = gbtModel.trees.map(_.rootNode.predictImpl(features).prediction)
+        val prediction = blas.ddot(gbtModel.numTrees, treePredictions, 1, gbtModel.treeWeights, 1)
+        assert(raw ~== Vectors.dense(-prediction, prediction) relTol eps)
+    }
+
+    // Compare rawPrediction with probability
+    results.select(rawPredictionCol, probabilityCol).collect().foreach {
+      case Row(raw: Vector, prob: Vector) =>
+        assert(raw.size === 2)
+        assert(prob.size === 2)
+        val prodFromRaw = raw.toDense.values.map(value => 1 / (1 + math.exp(-2 * value)))
+        assert(prob(0) ~== prodFromRaw(0) relTol eps)
+        assert(prob(1) ~== prodFromRaw(1) relTol eps)
+    }
+
+    // Compare prediction with probability
+    results.select(predictionCol, probabilityCol).collect().foreach {
+      case Row(pred: Double, prob: Vector) =>
+        val predFromProb = prob.toArray.zipWithIndex.maxBy(_._1)._2
+        assert(pred == predFromProb)
+    }
+
+    // force it to use raw2prediction
+    gbtModel.setRawPredictionCol(rawPredictionCol).setProbabilityCol("")
+    val resultsUsingRaw2Predict =
+      gbtModel.transform(validationDataset).select(predictionCol).as[Double].collect()
+    resultsUsingRaw2Predict.zip(results.select(predictionCol).as[Double].collect()).foreach {
+      case (pred1, pred2) => assert(pred1 === pred2)
+    }
+
+    // force it to use probability2prediction
+    gbtModel.setRawPredictionCol("").setProbabilityCol(probabilityCol)
+    val resultsUsingProb2Predict =
+      gbtModel.transform(validationDataset).select(predictionCol).as[Double].collect()
+    resultsUsingProb2Predict.zip(results.select(predictionCol).as[Double].collect()).foreach {
+      case (pred1, pred2) => assert(pred1 === pred2)
+    }
+
+    // force it to use predict
+    gbtModel.setRawPredictionCol("").setProbabilityCol("")
+    val resultsUsingPredict =
+      gbtModel.transform(validationDataset).select(predictionCol).as[Double].collect()
+    resultsUsingPredict.zip(results.select(predictionCol).as[Double].collect()).foreach {
+      case (pred1, pred2) => assert(pred1 === pred2)
+    }
   }
 
   test("GBT parameter stepSize should be in interval (0, 1]") {
