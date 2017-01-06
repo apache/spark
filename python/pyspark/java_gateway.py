@@ -43,8 +43,9 @@ def launch_gateway(conf=None):
     :param conf: spark configuration passed to spark-submit
     :return:
     """
-    # If running in ijupyter we need to copy through stdout/stderr
-    grab_jvm_output = type(sys.stderr) != file
+    # If sys.stdout has been changed the child processes JVM will not respect that
+    # so grab the jvm output and copy it over. This happens with Jupyter and similar systems.
+    grab_jvm_output = sys.stdout != sys.__stdout__
 
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
