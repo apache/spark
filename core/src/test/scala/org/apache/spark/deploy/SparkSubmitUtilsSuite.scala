@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.ivy.core.module.descriptor.MDArtifact
 import org.apache.ivy.core.settings.IvySettings
-import org.apache.ivy.plugins.resolver.{AbstractResolver, FileSystemResolver, IBiblioResolver}
+import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
@@ -66,22 +66,25 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("create repo resolvers") {
     val settings = new IvySettings
-    val res1 = SparkSubmitUtils.createRepoResolvers(None, settings)
+    val res1 = SparkSubmitUtils.createRepoResolvers(settings.getDefaultIvyUserDir)
     // should have central and spark-packages by default
     assert(res1.getResolvers.size() === 4)
     assert(res1.getResolvers.get(0).asInstanceOf[IBiblioResolver].getName === "local-m2-cache")
     assert(res1.getResolvers.get(1).asInstanceOf[FileSystemResolver].getName === "local-ivy-cache")
     assert(res1.getResolvers.get(2).asInstanceOf[IBiblioResolver].getName === "central")
     assert(res1.getResolvers.get(3).asInstanceOf[IBiblioResolver].getName === "spark-packages")
+  }
 
+  test("create additional resolvers") {
     val repos = "a/1,b/2,c/3"
-    val resolver2 = SparkSubmitUtils.createRepoResolvers(Option(repos), settings)
-    assert(resolver2.getResolvers.size() === 7)
+    val settings = SparkSubmitUtils.buildIvySettings(Option(repos), None)
+    val resolver = settings.getDefaultResolver.asInstanceOf[ChainResolver]
+    assert(resolver.getResolvers.size() === 4)
     val expected = repos.split(",").map(r => s"$r/")
-    resolver2.getResolvers.toArray.zipWithIndex.foreach { case (resolver: AbstractResolver, i) =>
-      if (i < 3) {
-        assert(resolver.getName === s"repo-${i + 1}")
-        assert(resolver.asInstanceOf[IBiblioResolver].getRoot === expected(i))
+    resolver.getResolvers.toArray.zipWithIndex.foreach { case (resolver: AbstractResolver, i) =>
+      if (1 < i && i < 3) {
+        assert(resolver.getName === s"repo-$i")
+        assert(resolver.asInstanceOf[IBiblioResolver].getRoot === expected(i - 1))
       }
     }
   }
