@@ -135,10 +135,7 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
       .setK(k)
       .setMaxIter(maxIter)
       .setSubsamplingRate(subsamplingRate)
-
-    if (optimizer == "em") {
-      lda.setOptimizer(optimizer)
-    }
+      .setOptimizer(optimizer)
 
     val featureSchema = data.schema(features)
     val stages = featureSchema.dataType match {
