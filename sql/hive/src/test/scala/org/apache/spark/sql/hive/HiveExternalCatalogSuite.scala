@@ -68,6 +68,6 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
     val rawTable = externalCatalog.client.getTable("db1", "hive_tbl")
     assert(!rawTable.properties.contains(HiveExternalCatalog.DATASOURCE_PROVIDER))
-    assert(externalCatalog.getTable("db1", "hive_tbl").provider == Some(DDLUtils.HIVE_PROVIDER))
+    assert(DDLUtils.isHiveTable(externalCatalog.getTable("db1", "hive_tbl")))
   }
 }

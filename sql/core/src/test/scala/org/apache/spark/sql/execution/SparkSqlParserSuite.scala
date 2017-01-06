@@ -121,7 +121,8 @@ class SparkSqlParserSuite extends PlanTest {
       tableType: CatalogTableType = CatalogTableType.MANAGED,
       storage: CatalogStorageFormat = CatalogStorageFormat.empty.copy(
         inputFormat = HiveSerDe.sourceToSerDe("textfile").get.inputFormat,
-        outputFormat = HiveSerDe.sourceToSerDe("textfile").get.outputFormat),
+        outputFormat = HiveSerDe.sourceToSerDe("textfile").get.outputFormat,
+        serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
       schema: StructType = new StructType,
       provider: Option[String] = Some("hive"),
       partitionColumnNames: Seq[String] = Seq.empty,

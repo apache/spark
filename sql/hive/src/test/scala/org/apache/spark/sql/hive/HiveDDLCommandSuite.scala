@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformati
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
@@ -49,6 +48,12 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
       parser.parsePlan(sql)
     }
     assert(e.getMessage.toLowerCase.contains("operation not allowed"))
+  }
+
+  private def analyzeCreateTable(sql: String): CatalogTable = {
+    TestHive.sessionState.analyzer.execute(parser.parsePlan(sql)).collect {
+      case CreateTable(tableDesc, mode, _) => tableDesc
+    }.head
   }
 
   test("Test CTAS #1") {
@@ -76,7 +81,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
     assert(desc.storage.serde ==
       Some("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
-    assert(desc.properties == Map(("p1", "v1"), ("p2", "v2")))
+    assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
   }
 
   test("Test CTAS #2") {
@@ -107,7 +112,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.storage.inputFormat == Some("parquet.hive.DeprecatedParquetInputFormat"))
     assert(desc.storage.outputFormat == Some("parquet.hive.DeprecatedParquetOutputFormat"))
     assert(desc.storage.serde == Some("parquet.hive.serde.ParquetHiveSerDe"))
-    assert(desc.properties == Map(("p1", "v1"), ("p2", "v2")))
+    assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
   }
 
   test("Test CTAS #3") {
@@ -125,7 +130,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
       Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
-    assert(desc.storage.serde.isEmpty)
+    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     assert(desc.properties == Map())
   }
 
@@ -305,7 +310,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
       Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
       Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
-    assert(desc.storage.serde.isEmpty)
+    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     assert(desc.storage.properties.isEmpty)
     assert(desc.properties.isEmpty)
     assert(desc.comment.isEmpty)
@@ -412,7 +417,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     val (desc2, _) = extractTableDesc(query2)
     assert(desc1.storage.inputFormat == Some("winput"))
     assert(desc1.storage.outputFormat == Some("wowput"))
-    assert(desc1.storage.serde.isEmpty)
+    assert(desc1.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     assert(desc2.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
     assert(desc2.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
     assert(desc2.storage.serde == Some("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
@@ -591,5 +596,95 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
   test("SPARK-15887: hive-site.xml should be loaded") {
     val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
     assert(hiveClient.getConf("hive.in.test", "") == "true")
+  }
+
+  test("create hive serde table with new syntax - basic") {
+    val sql =
+      """
+        |CREATE TABLE t
+        |(id int, name string COMMENT 'blabla')
+        |USING hive
+        |OPTIONS (fileFormat 'parquet', my_prop 1)
+        |LOCATION '/tmp/file'
+        |COMMENT 'BLABLA'
+      """.stripMargin
+
+    val table = analyzeCreateTable(sql)
+    assert(table.schema == new StructType()
+      .add("id", "int")
+      .add("name", "string", nullable = true, comment = "blabla"))
+    assert(table.provider == Some(DDLUtils.HIVE_PROVIDER))
+    assert(table.storage.locationUri == Some("/tmp/file"))
+    assert(table.storage.properties == Map("my_prop" -> "1"))
+    assert(table.comment == Some("BLABLA"))
+
+    assert(table.storage.inputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
+    assert(table.storage.outputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+    assert(table.storage.serde ==
+      Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+  }
+
+  test("create hive serde table with new syntax - with partition and bucketing") {
+    val v1 = "CREATE TABLE t (c1 int, c2 int) USING hive PARTITIONED BY (c2)"
+    val table = analyzeCreateTable(v1)
+    assert(table.schema == new StructType().add("c1", "int").add("c2", "int"))
+    assert(table.partitionColumnNames == Seq("c2"))
+    // check the default formats
+    assert(table.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+    assert(table.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
+    assert(table.storage.outputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
+
+    val v2 = "CREATE TABLE t (c1 int, c2 int) USING hive CLUSTERED BY (c2) INTO 4 BUCKETS"
+    val e2 = intercept[AnalysisException](analyzeCreateTable(v2))
+    assert(e2.message.contains("Creating bucketed Hive serde table is not supported yet"))
+
+    val v3 =
+      """
+        |CREATE TABLE t (c1 int, c2 int) USING hive
+        |PARTITIONED BY (c2)
+        |CLUSTERED BY (c2) INTO 4 BUCKETS""".stripMargin
+    val e3 = intercept[AnalysisException](analyzeCreateTable(v3))
+    assert(e3.message.contains("Creating bucketed Hive serde table is not supported yet"))
+  }
+
+  test("create hive serde table with new syntax - Hive options error checking") {
+    val v1 = "CREATE TABLE t (c1 int) USING hive OPTIONS (inputFormat 'abc')"
+    val e1 = intercept[IllegalArgumentException](analyzeCreateTable(v1))
+    assert(e1.getMessage.contains("Cannot specify only inputFormat or outputFormat"))
+
+    val v2 = "CREATE TABLE t (c1 int) USING hive OPTIONS " +
+      "(fileFormat 'x', inputFormat 'a', outputFormat 'b')"
+    val e2 = intercept[IllegalArgumentException](analyzeCreateTable(v2))
+    assert(e2.getMessage.contains(
+      "Cannot specify fileFormat and inputFormat/outputFormat together"))
+
+    val v3 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fileFormat 'parquet', serde 'a')"
+    val e3 = intercept[IllegalArgumentException](analyzeCreateTable(v3))
+    assert(e3.getMessage.contains("fileFormat 'parquet' already specifies a serde"))
+
+    val v4 = "CREATE TABLE t (c1 int) USING hive OPTIONS (serde 'a', fieldDelim ' ')"
+    val e4 = intercept[IllegalArgumentException](analyzeCreateTable(v4))
+    assert(e4.getMessage.contains("Cannot specify delimiters with a custom serde"))
+
+    val v5 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fieldDelim ' ')"
+    val e5 = intercept[IllegalArgumentException](analyzeCreateTable(v5))
+    assert(e5.getMessage.contains("Cannot specify delimiters without fileFormat"))
+
+    val v6 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fileFormat 'parquet', fieldDelim ' ')"
+    val e6 = intercept[IllegalArgumentException](analyzeCreateTable(v6))
+    assert(e6.getMessage.contains(
+      "Cannot specify delimiters as they are only compatible with fileFormat 'textfile'"))
+
+    // The value of 'fileFormat' option is case-insensitive.
+    val v7 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fileFormat 'TEXTFILE', lineDelim ',')"
+    val e7 = intercept[IllegalArgumentException](analyzeCreateTable(v7))
+    assert(e7.getMessage.contains("Hive data source only support newline '\\n' as line delimiter"))
+
+    val v8 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fileFormat 'wrong')"
+    val e8 = intercept[IllegalArgumentException](analyzeCreateTable(v8))
+    assert(e8.getMessage.contains("invalid fileFormat: 'wrong'"))
   }
 }

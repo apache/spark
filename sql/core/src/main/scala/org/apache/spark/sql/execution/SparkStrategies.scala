@@ -408,8 +408,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object DDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTable(tableDesc, mode, None)
-        if tableDesc.provider.get == DDLUtils.HIVE_PROVIDER =>
+      case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
         val cmd = CreateTableCommand(tableDesc, ifNotExists = mode == SaveMode.Ignore)
         ExecutedCommandExec(cmd) :: Nil
 
@@ -421,8 +420,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // CREATE TABLE ... AS SELECT ... for hive serde table is handled in hive module, by rule
       // `CreateTables`
 
-      case CreateTable(tableDesc, mode, Some(query))
-        if tableDesc.provider.get != DDLUtils.HIVE_PROVIDER =>
+      case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isDatasourceTable(tableDesc) =>
         val cmd =
           CreateDataSourceTableAsSelectCommand(
             tableDesc,

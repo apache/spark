@@ -27,6 +27,8 @@ class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
 
   override def get(k: String): Option[String] = baseMap.get(k.toLowerCase)
 
+  override def contains(k: String): Boolean = baseMap.contains(k.toLowerCase)
+
   override def + [B1 >: String](kv: (String, B1)): Map[String, B1] =
     baseMap + kv.copy(_1 = kv._1.toLowerCase)
 

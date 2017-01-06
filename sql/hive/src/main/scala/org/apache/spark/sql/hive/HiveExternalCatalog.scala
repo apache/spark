@@ -215,7 +215,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         tableDefinition.storage.locationUri
       }
 
-      if (tableDefinition.provider.get == DDLUtils.HIVE_PROVIDER) {
+      if (DDLUtils.isHiveTable(tableDefinition)) {
         val tableWithDataSourceProps = tableDefinition.copy(
           // We can't leave `locationUri` empty and count on Hive metastore to set a default table
           // location, because Hive metastore uses hive.metastore.warehouse.dir to generate default
@@ -533,7 +533,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     } else {
       val oldTableDef = getRawTable(db, withStatsProps.identifier.table)
 
-      val newStorage = if (tableDefinition.provider.get == DDLUtils.HIVE_PROVIDER) {
+      val newStorage = if (DDLUtils.isHiveTable(tableDefinition)) {
         tableDefinition.storage
       } else {
         // We can't alter the table storage of data source table directly for 2 reasons:
