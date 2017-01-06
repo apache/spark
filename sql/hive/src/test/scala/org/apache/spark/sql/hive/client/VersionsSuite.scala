@@ -228,7 +228,6 @@ class VersionsSuite extends SparkFunSuite  with SQLTestUtils with TestHiveSingle
     }
 
     test(s"$version: Delete the temporary staging directory and files after each insert") {
-      import sqlContext.implicits._
       withTempDir { tmpDir =>
         withTable("tab", "tbl") {
           sqlContext.sql(
@@ -237,7 +236,7 @@ class VersionsSuite extends SparkFunSuite  with SQLTestUtils with TestHiveSingle
                |location '${tmpDir.toURI.toString}'
              """.stripMargin)
 
-          Seq(Tuple1("a")).toDF("value").repartition(1).registerTempTable("tbl")
+          sqlContext.sql("CREATE TABLE tbl AS SELECT 1 AS a")
           sqlContext.sql(s"INSERT OVERWRITE TABLE tab SELECT * from tbl ")
 
           def listFiles(path: File): List[String] = {
