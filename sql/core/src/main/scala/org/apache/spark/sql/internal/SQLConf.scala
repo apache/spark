@@ -311,6 +311,7 @@ object SQLConf {
 
   val THRIFTSERVER_INCREMENTAL_COLLECT =
     SQLConfigBuilder("spark.sql.thriftServer.incrementalCollect")
+      .internal()
       .doc("When true, enable incremental collection for execution in Thrift Server.")
       .booleanConf
       .createWithDefault(false)
