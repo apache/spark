@@ -1189,21 +1189,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
-  test("create a data source table using hive") {
-    val tableName = "tab1"
-    withTable (tableName) {
-      val e = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE TABLE $tableName
-             |(col1 int)
-             |USING hive
-           """.stripMargin)
-      }.getMessage
-      assert(e.contains("Cannot create hive serde table with CREATE TABLE USING"))
-    }
-  }
-
   test("create a temp view using hive") {
     val tableName = "tab1"
     withTable (tableName) {
