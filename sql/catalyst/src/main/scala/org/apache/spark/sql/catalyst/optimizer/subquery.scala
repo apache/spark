@@ -74,8 +74,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // to
           //   (a1=a2 OR isnull(a1=a2)) AND (b1=b2 OR isnull(b1=b2)) AND ...
           val joinConds = splitConjunctivePredicates(joinCond.get)
-          val isNulls = joinConds.map(IsNull)
-          val pairs = joinConds.zip(isNulls).map(Or.tupled).reduceLeft(And)
+          val pairs = joinConds.map(c => Or(c, IsNull(c))).reduceLeft(And)
           Join(outerPlan, sub, LeftAnti, Option(pairs))
         case (p, predicate) =>
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
