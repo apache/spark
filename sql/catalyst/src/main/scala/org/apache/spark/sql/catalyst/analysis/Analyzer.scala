@@ -135,6 +135,8 @@ class Analyzer(
       ResolveInlineTables ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
+    Batch("AliasViewChild", Once,
+      AliasViewChild),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
@@ -748,24 +750,6 @@ class Analyzer(
           Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
         }
 
-      // A special case for View, replace the output attributes with the attributes that have the
-      // same names from the child. If the corresponding attribute is not found, throw an
-      // AnalysisException.
-      // On the resolution of the view, the output attributes are generated from the view schema,
-      // and the view query is resolved later. After the view query has been resolved, we should
-      // map the output of the logical plan to the output of the view, here we simply replace the
-      // output attributes of the view with the attributes that have the same names from the child.
-      // TODO: Also check the dataTypes and nullabilites of the output.
-      //
-      // Note: If the child of a view is empty, we will throw an AnalysisException later in
-      // `checkAnalysis`.
-      case v @ View(_, output, Some(child)) =>
-        val resolver = conf.resolver
-        val newOutput = output.map { attr =>
-          findAttributeByName(attr.name, child.output, resolver)
-        }
-        v.copy(output = newOutput)
-
       // Skips plan which contains deserializer expressions, as they should be resolved by another
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
@@ -793,22 +777,6 @@ class Analyzer(
 
     def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
       AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
-    }
-
-    /**
-     * Find the attribute that has the expected attribute name from an attribute list, the names
-     * are compared using conf.resolver.
-     * If the expected attribute is not found, throw an AnalysisException.
-     */
-    private def findAttributeByName(
-        name: String,
-        attrs: Seq[Attribute],
-        resolver: Resolver): Attribute = {
-      attrs.collectFirst {
-        case attr if resolver(attr.name, name) => attr
-      }.getOrElse(throw new AnalysisException(
-        s"Attribute with name '$name' is not found in " +
-          s"'${attrs.map(_.name).mkString("(", ",", ")")}'"))
     }
 
     /**
@@ -891,7 +859,45 @@ class Analyzer(
     }
   }
 
- /**
+  /**
+   * Alias the output of a view's child to the output of the view, the corresponding attribute is
+   * searched by name. If the corresponding attribute is not found, throw an AnalysisException.
+   * On the resolution of the view, the output attributes are generated from the view schema, and
+   * the view query is resolved later. After the view attributes have been stabilized(when the
+   * resolution batch has finished), we add a Project operator over the child, so that we could
+   * alias the output of the child plan to the view's output attributes.
+   * TODO: Also check the dataTypes and nullabilites of the output.
+   */
+  object AliasViewChild extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case v @ View(_, output, Some(child)) if child.resolved =>
+        val resolver = conf.resolver
+        val newOutput = child.output.map { attr =>
+          val newAttr = findAttributeByName(attr.name, output, resolver)
+          Alias(attr, attr.name)(exprId = newAttr.exprId, qualifier = newAttr.qualifier,
+            explicitMetadata = Some(newAttr.metadata))
+        }
+        v.copy(child = Some(Project(newOutput, child)))
+    }
+
+    /**
+     * Find the attribute that has the expected attribute name from an attribute list, the names
+     * are compared using conf.resolver.
+     * If the expected attribute is not found, throw an AnalysisException.
+     */
+    private def findAttributeByName(
+        name: String,
+        attrs: Seq[Attribute],
+        resolver: Resolver): Attribute = {
+      attrs.collectFirst {
+        case attr if resolver(attr.name, name) => attr
+      }.getOrElse(throw new AnalysisException(
+        s"Attribute with name '$name' is not found in " +
+          s"'${attrs.map(_.name).mkString("(", ",", ")")}'"))
+    }
+  }
+
+  /**
   * In many dialects of SQL it is valid to use ordinal positions in order/sort by and group by
   * clauses. This rule is to convert ordinal positions to the corresponding expressions in the
   * select list. This support is introduced in Spark 2.0.
