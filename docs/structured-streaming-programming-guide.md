@@ -433,7 +433,10 @@ In Spark 2.0, there are a few built-in sources.
 
   - **Socket source (for testing)** - Reads UTF8 text data from a socket connection. The listening server socket is at the driver. Note that this should be used only for testing as this does not provide end-to-end fault-tolerance guarantees. 
 
-Here are all the source details.
+Some sources are not fault-tolerant because they do not guarantee that data can be replayed using 
+checkpointed offsets after a failure. See the earlier section on 
+[fault-tolerance semantics](#fault-tolerance-semantics).
+Here are the details of all the sources in Spark.
 
 <table class="table">
   <tr>
@@ -451,7 +454,7 @@ Here are all the source details.
         (<a href="api/scala/index.html#org.apache.spark.sql.streaming.DataStreamReader">Scala</a>/<a href="api/java/org/apache/spark/sql/streaming/DataStreamReader.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamReader">Python</a>).
         E.g. for "parquet" format options see <code>DataStreamReader.parquet()</code></td>
     <td>Yes</td>
-    <td>Supports regular expressions, but does not support multiple comma-separated paths/expressions.</td>
+    <td>Supports glob paths, but does not support multiple comma-separated paths/globs.</td>
   </tr>
   <tr>
     <td><b>Socket Source</b></td>
@@ -893,8 +896,9 @@ streamingDf.join(staticDf, "type", "right_join")  # right outer join with a stat
 </div>
 
 ### Unsupported Operations
-However, note that all of the operations applicable on static DataFrames/Datasets are not supported in streaming DataFrames/Datasets yet. While some of these unsupported operations will be supported in future releases of Spark, there are others which are fundamentally hard to implement on streaming data efficiently. For example, sorting is not supported on the input streaming Dataset, as it requires keeping track of all the data received in the stream. This is therefore fundamentally hard to execute efficiently. As of Spark 2.0, some of the unsupported operations are as follows
-
+There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets. 
+Some of them are as follows.
+ 
 - Multiple streaming aggregations (i.e. a chain of aggregations on a streaming DF) are not yet supported on streaming Datasets.
 
 - Limit and take first N rows are not supported on streaming Datasets.
@@ -921,7 +925,12 @@ In addition, there are some Dataset methods that will not work on streaming Data
 
 - `show()` - Instead use the console sink (see next section).
 
-If you try any of these operations, you will see an AnalysisException like "operation XYZ is not supported with streaming DataFrames/Datasets".
+If you try any of these operations, you will see an `AnalysisException` like "operation XYZ is not supported with streaming DataFrames/Datasets".
+While some of them may be supported in future releases of Spark, 
+there are others which are fundamentally hard to implement on streaming data efficiently. 
+For example, sorting on the input stream is not supported, as it requires keeping 
+track of all the data received in the stream. This is therefore fundamentally hard to execute 
+efficiently.
 
 ## Starting Streaming Queries
 Once you have defined the final result DataFrame/Dataset, all that is left is for you start the streaming computation. To do that, you have to use the `DataStreamWriter`
@@ -1039,8 +1048,7 @@ writeStream
 
 - **Memory sink (for debugging)** - The output is stored in memory as an in-memory table.
 Both, Append and Complete output modes, are supported. This should be used for debugging purposes
-on low data volumes as the entire output is collected and stored in the driver's memory after
-every trigger. Note that the current implementations saves all the data in the driver memory.
+on low data volumes as the entire output is collected and stored in the driver's memory.
 Hence, use it with caution.
 
 {% highlight scala %}
@@ -1050,8 +1058,10 @@ writeStream
     .start()
 {% endhighlight %}
 
-
-Here are all the sinks details.
+Some sinks are not fault-tolerant because they do not guarantee persistence of the output and are 
+meant for debugging purposes only. See the earlier section on 
+[fault-tolerance semantics](#fault-tolerance-semantics). 
+Here are the details of all the sinks in Spark.
 
 <table class="table">
   <tr>
@@ -1099,7 +1109,7 @@ Here are all the sinks details.
     <td><b>Memory Sink</b></td>
     <td>Append, Complete</td>
     <td>None</td>
-    <td>Yes, but only in Complete Mode</td>
+    <td>No. But in Complete Mode, restarted query will recreate the full table.</td>
     <td>Table name is the query name.</td>
   </tr>
   <tr>
