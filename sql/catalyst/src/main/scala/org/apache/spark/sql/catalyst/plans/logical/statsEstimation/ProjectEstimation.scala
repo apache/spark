@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.logical.estimation
+package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, Statistics}
@@ -29,7 +29,7 @@ object ProjectEstimation {
       val inputAttrStats = childStats.attributeStats
       // Match alias with its child's column stat
       val aliasStats = project.expressions.collect {
-        case alias@Alias(attr: Attribute, _) if inputAttrStats.contains(attr) =>
+        case alias @ Alias(attr: Attribute, _) if inputAttrStats.contains(attr) =>
           alias.toAttribute -> inputAttrStats(attr)
       }
       val outputAttrStats =

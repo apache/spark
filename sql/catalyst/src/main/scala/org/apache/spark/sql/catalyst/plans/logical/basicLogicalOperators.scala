@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.estimation.ProjectEstimation
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ProjectEstimation
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
