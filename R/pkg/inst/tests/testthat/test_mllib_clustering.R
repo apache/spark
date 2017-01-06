@@ -83,7 +83,7 @@ test_that("spark.gaussianMixture", {
   write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
   write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
+  model2 <- read.ml(modelPath, sparkSession)
   stats2 <- summary(model2)
   expect_equal(stats$lambda, stats2$lambda)
   expect_equal(unlist(stats$mu), unlist(stats2$mu))
@@ -124,7 +124,7 @@ test_that("spark.kmeans", {
   write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
   write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
+  model2 <- read.ml(modelPath, sparkSession)
   summary2 <- summary(model2)
   expect_equal(sort(unlist(summary.model$size)), sort(unlist(summary2$size)))
   expect_equal(summary.model$coefficients, summary2$coefficients)
@@ -158,7 +158,7 @@ test_that("spark.lda with libsvm", {
   write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
   write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
+  model2 <- read.ml(modelPath, sparkSession)
   stats2 <- summary(model2)
 
   expect_false(stats2$isDistributed)
@@ -194,7 +194,7 @@ test_that("spark.lda with text input", {
   write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
   write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
+  model2 <- read.ml(modelPath, sparkSession)
   stats2 <- summary(model2)
 
   expect_false(stats2$isDistributed)
@@ -220,3 +220,5 @@ test_that("spark.posterior and spark.perplexity", {
   local.posterior <- collect(posterior)$topicDistribution
   expect_equal(length(local.posterior), sum(unlist(local.posterior)))
 })
+
+sparkR.session.stop()

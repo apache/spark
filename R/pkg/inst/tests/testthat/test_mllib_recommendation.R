@@ -41,7 +41,7 @@ test_that("spark.als", {
   write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
   write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
+  model2 <- read.ml(modelPath, sparkSession)
   stats2 <- summary(model2)
   expect_equal(stats2$rating, "score")
   userFactors <- collect(stats$userFactors)
@@ -61,3 +61,5 @@ test_that("spark.als", {
 
   unlink(modelPath)
 })
+
+sparkR.session.stop()

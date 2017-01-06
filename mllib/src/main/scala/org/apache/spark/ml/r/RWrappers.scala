@@ -23,12 +23,20 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
 import org.apache.spark.ml.util.MLReader
+import org.apache.spark.sql.SparkSession
 
 /**
  * This is the Scala stub of SparkR read.ml. It will dispatch the call to corresponding
  * model wrapper loading function according the class name extracted from rMetadata of the path.
  */
 private[r] object RWrappers extends MLReader[Object] {
+
+  def load(path: String, spark: SparkSession): Object = {
+    if (spark != null) {
+      this.session(spark)
+    }
+    load(path)
+  }
 
   override def load(path: String): Object = {
     implicit val format = DefaultFormats

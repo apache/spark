@@ -49,3 +49,5 @@ test_that("spark.kstest", {
   expect_match(printStats[5],
                "Low presumption against null hypothesis: Sample follows theoretical distribution. ")
 })
+
+sparkR.session.stop()

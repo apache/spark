@@ -174,7 +174,7 @@ test_that("spark.glm save/load", {
   write.ml(m, modelPath)
   expect_error(write.ml(m, modelPath))
   write.ml(m, modelPath, overwrite = TRUE)
-  m2 <- read.ml(modelPath)
+  m2 <- read.ml(modelPath, sparkSession)
   s2 <- summary(m2)
 
   expect_equal(s$coefficients, s2$coefficients)
@@ -302,7 +302,7 @@ test_that("glm save/load", {
   write.ml(m, modelPath)
   expect_error(write.ml(m, modelPath))
   write.ml(m, modelPath, overwrite = TRUE)
-  m2 <- read.ml(modelPath)
+  m2 <- read.ml(modelPath, sparkSession)
   s2 <- summary(m2)
 
   expect_equal(s$coefficients, s2$coefficients)
@@ -346,7 +346,7 @@ test_that("spark.isoreg", {
   write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
   write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
+  model2 <- read.ml(modelPath, sparkSession)
   expect_equal(result, summary(model2))
 
   unlink(modelPath)
@@ -395,7 +395,7 @@ test_that("spark.survreg", {
   write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
   write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
+  model2 <- read.ml(modelPath, sparkSession)
   stats2 <- summary(model2)
   coefs2 <- as.vector(stats2$coefficients[, 1])
   expect_equal(coefs, coefs2)
@@ -413,3 +413,5 @@ test_that("spark.survreg", {
     expect_equal(predict(model, rData)[[1]], 3.724591, tolerance = 1e-4)
   }
 })
+
+sparkR.session.stop()

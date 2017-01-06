@@ -69,6 +69,7 @@ predict_internal <- function(object, newData) {
 #' Load a fitted MLlib model from the input path.
 #'
 #' @param path path of the model to read.
+#' @param sparkSession the user-specified Spark Session to use for loading model.
 #' @return A fitted MLlib model.
 #' @rdname read.ml
 #' @name read.ml
@@ -80,9 +81,9 @@ predict_internal <- function(object, newData) {
 #' model <- read.ml(path)
 #' }
 #' @note read.ml since 2.0.0
-read.ml <- function(path) {
+read.ml <- function(path, sparkSession = NULL) {
   path <- suppressWarnings(normalizePath(path))
-  jobj <- callJStatic("org.apache.spark.ml.r.RWrappers", "load", path)
+  jobj <- callJStatic("org.apache.spark.ml.r.RWrappers", "load", path, sparkSession)
   if (isInstanceOf(jobj, "org.apache.spark.ml.r.NaiveBayesWrapper")) {
     new("NaiveBayesModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.AFTSurvivalRegressionWrapper")) {
