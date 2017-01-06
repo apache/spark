@@ -20,12 +20,12 @@ package org.apache.spark.mllib.clustering
 import java.util.{ArrayList => JArrayList}
 
 import breeze.linalg.{argmax, argtopk, max, DenseMatrix => BDM}
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx.Edge
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
 class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -562,6 +562,49 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val model = lda.run(distributedEmptyDocs)
     assert(model.vocabSize === vocabSize)
+  }
+
+  test("SPARK-17975: Repro EMLDA optimizer error") {
+    // read in the data
+    val corpus: RDD[String] = sc.textFile("/home/ilya/ReproSparkBUG.txt")
+    // Split each document into a sequence of terms (words)
+    val tokenized: RDD[Seq[String]] =
+    corpus.map(_.toLowerCase.split("\\s"))
+      .map(_.filter(_.length > 3)
+        .filter(_.forall(java.lang.Character.isLetter)))
+    // Choose the vocabulary.
+    //   termCounts: Sorted list of (term, termCount) pairs
+    val termCounts: Array[(String, Long)] =
+    tokenized.flatMap(_.map(_ -> 1L)).reduceByKey(_ + _).collect().sortBy(-_._2)
+    //   vocabArray: Chosen vocab (removing common terms)
+    val numStopwords = 20
+    val vocabArray: Array[String] =
+      termCounts.takeRight(termCounts.size - numStopwords).map(_._1)
+    //   vocab: Map term -> term index
+    val vocab: Map[String, Int] = vocabArray.zipWithIndex.toMap
+
+    // Convert documents into term count vectors
+    val documents: RDD[(Long, Vector)] =
+    tokenized.zipWithIndex.map { case (tokens, id) =>
+      val counts = new scala.collection.mutable.HashMap[Int, Double]()
+      tokens.foreach { term =>
+        if (vocab.contains(term)) {
+          val idx = vocab(term)
+          counts(idx) = counts.getOrElse(idx, 0.0) + 1.0
+        }
+      }
+      (id, Vectors.sparse(vocab.size, counts.toSeq))
+    }
+
+    val lda = new LDA
+    val optimizer = new EMLDAOptimizer
+    lda.setOptimizer(optimizer)
+      .setK(10)
+      .setMaxIterations(400)
+      .setAlpha(-1)
+      .setBeta(-1)
+      .setCheckpointInterval(7)
+    val ldaModel = lda.run(documents)
   }
 
 }
