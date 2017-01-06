@@ -118,6 +118,7 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+    verifySchema(dataSchema)
     new OutputWriterFactory {
       override def newInstance(
           path: String,
