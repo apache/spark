@@ -316,9 +316,9 @@ object CaseKeyWhen {
 }
 
 /**
-  * A function that returns the index of str in (str1, str2, ...) list or 0 if not found.
-  * It takes at least 2 parameters, and all parameters' types should be subtypes of AtomicType.
-  */
+ * A function that returns the index of str in (str1, str2, ...) list or 0 if not found.
+ * It takes at least 2 parameters, and all parameters' types should be subtypes of AtomicType.
+ */
 @ExpressionDescription(
   usage = "_FUNC_(str, str1, str2, ...) - Returns the index of str in the str1,str2,... or 0 if not found.",
   extended = """
@@ -358,7 +358,7 @@ case class Field(children: Seq[Expression]) extends Expression {
     if(target == null)
       0
     else
-     findEqual(target, children.tail, 1)
+      findEqual(target, children.tail, 1)
   }
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -368,7 +368,7 @@ case class Field(children: Seq[Expression]) extends Expression {
     val rest = evalChildren.drop(1)
     val restDataType = children.drop(1).map(_.dataType)
 
-    def updateEval(evalWithIndex: Tuple2[Tuple2[ExprCode, DataType], Int]): String = {
+    def updateEval(evalWithIndex: ((ExprCode, DataType), Int)): String = {
       val ((eval, dataType), index) = evalWithIndex
       s"""
         ${eval.code}
@@ -388,7 +388,7 @@ case class Field(children: Seq[Expression]) extends Expression {
        """
     }
 
-    def dataTypeEqualsTarget(evalWithIndex: Tuple2[Tuple2[ExprCode, DataType], Int]): Boolean = {
+    def dataTypeEqualsTarget(evalWithIndex: ((ExprCode, DataType), Int)): Boolean = {
       val ((eval, dataType), index) = evalWithIndex
       dataType.equals(targetDataType)
     }
