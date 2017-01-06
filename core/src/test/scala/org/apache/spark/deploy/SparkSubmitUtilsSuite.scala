@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, OutputStream, PrintStream}
+import java.io.{File, FileWriter, OutputStream, PrintStream}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -218,6 +218,44 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
         isTest = true)
       assert(files.indexOf(main.artifactId) >= 0, "Did not return artifact")
       assert(files.indexOf("my.great.dep") < 0, "Returned excluded artifact")
+    }
+  }
+
+  test("load ivy settings file") {
+    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val dep = "my.great.dep:mydep:0.5"
+    val dummyIvyLocal = new File(tempIvyPath, "local" + File.separator)
+    val settingsText =
+      s"""
+         |<ivysettings>
+         |  <caches defaultCacheDir="$tempIvyPath/cache"/>
+         |  <settings defaultResolver="local-ivy-settings-file-test"/>
+         |  <resolvers>
+         |    <filesystem name="local-ivy-settings-file-test">
+         |      <ivy pattern=
+         |        "$dummyIvyLocal/[organisation]/[module]/[revision]/[type]s/[artifact].[ext]"/>
+         |      <artifact pattern=
+         |        "$dummyIvyLocal/[organisation]/[module]/[revision]/[type]s/[artifact].[ext]"/>
+         |    </filesystem>
+         |  </resolvers>
+         |</ivysettings>
+         |""".stripMargin
+
+    val settingsFile = new File(tempIvyPath, "ivysettings.xml")
+    val settingsWriter = new FileWriter(settingsFile)
+    settingsWriter.write(settingsText)
+    settingsWriter.close()
+    val settings = SparkSubmitUtils.loadIvySettings(settingsFile.toString, None, None)
+    settings.setDefaultIvyUserDir(new File(tempIvyPath))  // NOTE - can't set this through file
+
+    val testUtilSettings = new IvySettings
+    testUtilSettings.setDefaultIvyUserDir(new File(tempIvyPath))
+    IvyTestUtils.withRepository(main, Some(dep), Some(dummyIvyLocal), useIvyLayout = true,
+      ivySettings = testUtilSettings) { repo =>
+      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(main.toString, settings, isTest = true)
+      assert(jarPath.indexOf("mylib") >= 0, "should find artifact")
+      assert(jarPath.indexOf(tempIvyPath) >= 0, "should be in new ivy path")
+      assert(jarPath.indexOf("mydep") >= 0, "should find dependency")
     }
   }
 }
