@@ -260,6 +260,9 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
         Vectors.dense(model2.topicsMatrix.toArray) absTol 1e-6)
       assert(Vectors.dense(model.getDocConcentration) ~==
         Vectors.dense(model2.getDocConcentration) absTol 1e-6)
+      val logPrior = model.asInstanceOf[DistributedLDAModel].logPrior
+      val logPrior2 = model2.asInstanceOf[DistributedLDAModel].logPrior
+      assert(logPrior === logPrior2)
     }
     val lda = new LDA()
     testEstimatorAndModelReadWrite(lda, dataset,
