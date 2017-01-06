@@ -642,7 +642,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       val e = intercept[AnalysisException] {
         spark.read.schema(schema).table("t")
       }.getMessage
-      assert(e.contains("User specified schema not supported with `table`."))
+      assert(e.contains("User specified schema not supported with `table`"))
     }
   }
 }
