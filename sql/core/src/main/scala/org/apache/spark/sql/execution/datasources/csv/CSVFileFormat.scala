@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.CompressionCodecs
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.functions.{length, trim}
@@ -58,7 +58,8 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       files: Seq[FileStatus]): Option[StructType] = {
     require(files.nonEmpty, "Cannot infer schema from an empty set of files")
 
-    val csvOptions = new CSVOptions(options)
+    val optionsWithTimeZone = getOptionsWithTimeZone(sparkSession, options)
+    val csvOptions = new CSVOptions(optionsWithTimeZone)
     val paths = files.map(_.getPath.toString)
     val lines: Dataset[String] = readText(sparkSession, csvOptions, paths)
     val firstLine: String = findFirstLine(csvOptions, lines)
@@ -127,7 +128,8 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       dataSchema: StructType): OutputWriterFactory = {
     verifySchema(dataSchema)
     val conf = job.getConfiguration
-    val csvOptions = new CSVOptions(options)
+    val optionsWithTimeZone = getOptionsWithTimeZone(sparkSession, options)
+    val csvOptions = new CSVOptions(optionsWithTimeZone)
     csvOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
@@ -154,7 +156,8 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    val csvOptions = new CSVOptions(options)
+    val optionsWithTimeZone = getOptionsWithTimeZone(sparkSession, options)
+    val csvOptions = new CSVOptions(optionsWithTimeZone)
     val commentPrefix = csvOptions.comment.toString
 
     val broadcastedHadoopConf =
@@ -230,6 +233,18 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     }
 
     schema.foreach(field => verifyType(field.dataType))
+  }
+
+  private def getOptionsWithTimeZone(
+      sparkSession: SparkSession,
+      options: Map[String, String]): CaseInsensitiveMap = {
+    val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+    if (caseInsensitiveOptions.contains("timeZone")) {
+      caseInsensitiveOptions
+    } else {
+      new CaseInsensitiveMap(
+        options + ("timeZone" -> sparkSession.sessionState.conf.sessionLocalTimeZone))
+    }
   }
 }
 

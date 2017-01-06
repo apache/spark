@@ -76,7 +76,7 @@ private[csv] class UnivocityParser(
       name: String,
       dataType: DataType,
       nullable: Boolean = true,
-      options: CSVOptions = CSVOptions()): ValueConverter = dataType match {
+      options: CSVOptions): ValueConverter = dataType match {
     case _: ByteType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(_.toByte)
 
