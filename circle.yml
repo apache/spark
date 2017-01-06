@@ -1,8 +1,11 @@
 machine:
   java:
     version: oraclejdk8
+  post:
+    - sudo apt-get --assume-yes install r-base r-base-dev
   environment:
     TERM: dumb
+    R_HOME: /usr/lib/R
 
 checkout:
   post:
@@ -14,7 +17,7 @@ checkout:
 
 dependencies:
   override:
-    - ./build/mvn -DskipTests -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive dependency:go-offline
+    - ./build/mvn -DskipTests -Phadoop-2.7 -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr dependency:go-offline
 
 test:
   override:
@@ -30,7 +33,7 @@ test:
             echo "</server></servers></settings>" >> $tmp_settings
 
             ./build/mvn versions:set -DnewVersion=$version
-            ./build/mvn --settings $tmp_settings -DskipTests -Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver clean deploy
+            ./build/mvn --settings $tmp_settings -DskipTests -Phadoop-2.7 -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr clean deploy
           }
 
           make_dist() {
@@ -38,7 +41,6 @@ test:
             build_flags="$2"
             dist_version="${version}-${dist_name}"
             file_name="spark-dist-${dist_version}.tgz"
-            sudo apt-get --assume-yes install r-base r-base-dev
             ./dev/make-distribution.sh --name $dist_name --tgz $build_flags
             curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T $file_name "https://api.bintray.com/content/palantir/releases/spark/${version}/org/apache/spark/spark-dist/${dist_version}/${file_name}"
           }
@@ -48,10 +50,10 @@ test:
             publish_artifacts
             ;;
           1)
-            make_dist hadoop-2.7 "-Phadoop-2.7 -Pmesos -Pkinesis-asl -Pyarn -Phive-thriftserver -Phive"
+            make_dist hadoop-2.7 "-Phadoop-2.7 -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr"
             ;;
           2)
-            make_dist without-hadoop "-Psparkr -Phadoop-provided -Pyarn -Pmesos"
+            make_dist without-hadoop "-Phadoop-provided -Pmesos -Pyarn -Psparkr"
             ;;
           esac
       :
