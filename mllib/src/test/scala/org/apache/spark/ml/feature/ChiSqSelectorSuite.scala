@@ -37,20 +37,20 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
     // These data are chosen such that each feature's test has a distinct p-value.
     /*
      *  Contingency tables
-     *  feature0 = {6.0, 0.0, 8.0}
+     *  feature1 = {6.0, 0.0, 8.0}
      *  class  0 1 2
      *    6.0||1|0|0|
      *    0.0||0|3|0|
      *    8.0||0|0|2|
      *  degree of freedom = 4, statistic = 12, pValue = 0.017
      *
-     *  feature1 = {7.0, 9.0}
+     *  feature2 = {7.0, 9.0}
      *  class  0 1 2
      *    7.0||1|0|0|
      *    9.0||0|3|2|
      *  degree of freedom = 2, statistic = 6, pValue = 0.049
      *
-     *  feature2 = {0.0, 6.0, 3.0, 8.0}
+     *  feature3 = {0.0, 6.0, 3.0, 8.0}
      *  class  0 1 2
      *    0.0||1|0|0|
      *    6.0||0|1|2|
@@ -58,7 +58,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
      *    8.0||0|1|0|
      *  degree of freedom = 6, statistic = 8.66, pValue = 0.193
      *
-     *  feature3 = {7.0, 0.0, 5.0, 4.0}
+     *  feature4 = {7.0, 0.0, 5.0, 4.0}
      *  class  0 1 2
      *    7.0||1|0|0|
      *    0.0||0|2|0|
@@ -66,7 +66,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
      *    4.0||0|0|1|
      *  degree of freedom = 6, statistic = 9.5, pValue = 0.147
      *
-     *  feature4 = {6.0, 5.0, 4.0, 0.0}
+     *  feature5 = {6.0, 5.0, 4.0, 0.0}
      *  class  0 1 2
      *    6.0||1|1|0|
      *    5.0||0|2|0|
@@ -74,7 +74,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
      *    0.0||0|0|1|
      *  degree of freedom = 6, statistic = 8.0, pValue = 0.238
      *
-     *  feature5 = {0.0, 9.0, 5.0, 4.0}
+     *  feature6 = {0.0, 9.0, 5.0, 4.0}
      *  class  0 1 2
      *    0.0||1|0|1|
      *    9.0||0|1|0|
@@ -82,7 +82,21 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
      *    4.0||0|1|1|
      *  degree of freedom = 6, statistic = 5, pValue = 0.54
      *
-     *  Use chi-squared calculator from Internet
+     *  To verify the results with R, run:
+     *  library(stats)
+     *  x1 <- c(6.0, 0.0, 0.0, 0.0, 8.0, 8.0)
+     *  x2 <- c(7.0, 9.0, 9.0, 9.0, 9.0, 9.0)
+     *  x3 <- c(0.0, 6.0, 3.0, 8.0, 6.0, 6.0)
+     *  x4 <- c(7.0, 0.0, 0.0, 5.0, 5.0, 4.0)
+     *  x5 <- c(6.0, 5.0, 5.0, 6.0, 4.0, 0.0)
+     *  x6 <- c(0.0, 9.0, 5.0, 4.0, 4.0, 0.0)
+     *  y <- c(0.0, 1.0, 1.0, 1.0, 2.0, 2.0)
+     *  chisq.test(x1,y)
+     *  chisq.test(x2,y)
+     *  chisq.test(x3,y)
+     *  chisq.test(x4,y)
+     *  chisq.test(x5,y)
+     *  chisq.test(x6,y)
      */
 
     dataset = spark.createDataFrame(Seq(
