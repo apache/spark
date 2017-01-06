@@ -907,12 +907,12 @@ class JDBCSuite extends SparkFunSuite
     val parts = Array[String]("THEID < 2", "THEID >= 2")
     val e1 = intercept[AnalysisException] {
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
-    }.toString
+    }.getMessage
     assert(e1.contains("User specified schema not supported with `jdbc`"))
 
     val e2 = intercept[AnalysisException] {
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
-    }.toString
+    }.getMessage
     assert(e2.contains("User specified schema not supported with `jdbc`"))
   }
 }
