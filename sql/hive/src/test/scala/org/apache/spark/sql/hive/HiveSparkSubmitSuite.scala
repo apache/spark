@@ -340,14 +340,15 @@ class HiveSparkSubmitSuite
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val history = ArrayBuffer.empty[String]
     val sparkSubmit = if (Utils.isWindows) {
+      // On Windows, `ProcessBuilder.directory` does not change the current working directory.
       new File("..\\..\\bin\\spark-submit.cmd").getAbsolutePath
     } else {
-      new File("../../bin/spark-submit").getAbsolutePath
+      "./bin/spark-submit"
     }
     val commands = Seq(sparkSubmit) ++ args
     val commandLine = commands.mkString("'", "' '", "'")
 
-    val builder = new ProcessBuilder(commands: _*)
+    val builder = new ProcessBuilder(commands: _*).directory(new File(sparkHome))
     val env = builder.environment()
     env.put("SPARK_TESTING", "1")
     env.put("SPARK_HOME", sparkHome)
