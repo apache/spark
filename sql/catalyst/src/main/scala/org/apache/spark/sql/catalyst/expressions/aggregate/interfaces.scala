@@ -174,12 +174,6 @@ abstract class AggregateFunction extends Expression {
   def inputAggBufferAttributes: Seq[AttributeReference]
 
   /**
-   * Indicates if this function supports partial aggregation.
-   * Currently Hive UDAF is the only one that doesn't support partial aggregation.
-   */
-  def supportsPartial: Boolean = true
-
-  /**
    * Result of the aggregate function when the input is empty. This is currently only used for the
    * proper rewriting of distinct aggregate functions.
    */
@@ -458,7 +452,9 @@ abstract class DeclarativeAggregate
  * instead of hash based aggregation, as TypedImperativeAggregate use BinaryType as aggregation
  * buffer's storage format, which is not supported by hash based aggregation. Hash based
  * aggregation only support aggregation buffer of mutable types (like LongType, IntType that have
- * fixed length and can be mutated in place in UnsafeRow)
+ * fixed length and can be mutated in place in UnsafeRow).
+ * NOTE: The newly added ObjectHashAggregateExec supports TypedImperativeAggregate functions in
+ * hash based aggregation under some constraints.
  */
 abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
 

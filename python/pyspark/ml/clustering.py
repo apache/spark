@@ -699,7 +699,7 @@ class LDAModel(JavaModel):
     @since("2.0.0")
     def logPerplexity(self, dataset):
         """
-        Calculate an upper bound bound on perplexity.  (Lower is better.)
+        Calculate an upper bound on perplexity.  (Lower is better.)
         See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
 
         WARNING: If this model is an instance of :py:class:`DistributedLDAModel` (produced when
