@@ -23,8 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExecutedCommandExec
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoDataSourceCommand, InsertIntoHadoopFsRelationCommand, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -187,7 +186,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       "normal_parquet",
       "jt",
       "jt_array",
-       "test_parquet")
+      "test_parquet")
+    super.afterAll()
   }
 
   test(s"conversion is working") {
@@ -608,6 +608,42 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       }
     }
   }
+
+  test("Explicitly added partitions should be readable after load") {
+    withTable("test_added_partitions") {
+      withTempDir { src =>
+        val newPartitionDir = new File(src, "partition").getCanonicalPath
+        spark.range(2).selectExpr("cast(id as string)").toDF("a").write
+          .mode("overwrite")
+          .parquet(newPartitionDir)
+
+        sql(
+          """
+            |CREATE TABLE test_added_partitions (a STRING)
+            |PARTITIONED BY (b INT)
+            |STORED AS PARQUET
+          """.stripMargin)
+
+        // Create partition without data files and check whether it can be read
+        sql(s"ALTER TABLE test_added_partitions ADD PARTITION (b='1')")
+        // This table fetch is to fill the cache with zero leaf files
+        checkAnswer(
+          spark.table("test_added_partitions"),
+          Seq.empty)
+
+        sql(
+          s"""
+             |LOAD DATA LOCAL INPATH '$newPartitionDir' OVERWRITE
+             |INTO TABLE test_added_partitions PARTITION(b='1')
+           """.stripMargin)
+
+        checkAnswer(
+          spark.table("test_added_partitions"),
+          Seq(("0", 1), ("1", 1)).toDF("a", "b"))
+      }
+    }
+  }
+
 
   test("self-join") {
     val table = spark.table("normal_parquet")
