@@ -24,6 +24,8 @@ import scala.language.postfixOps
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.CleanerListener
+import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
@@ -564,5 +566,83 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       localRelation.queryExecution.withCachedData.collect {
         case i: InMemoryRelation => i
       }.size == 1)
+  }
+
+  test("SPARK-19093 Caching in side subquery") {
+    withTempView("t1") {
+      Seq(1).toDF("c1").createOrReplaceTempView("t1")
+      spark.catalog.cacheTable("t1")
+      val cachedPlan =
+        sql(
+          """
+            |SELECT * FROM t1
+            |WHERE
+            |NOT EXISTS (SELECT * FROM t1)
+          """.stripMargin).queryExecution.optimizedPlan
+      assert(
+        cachedPlan.collect {
+          case i: InMemoryRelation => i
+        }.size == 2)
+      spark.catalog.uncacheTable("t1")
+    }
+  }
+
+  test("SPARK-19093 scalar and nested predicate query") {
+    def getCachedPlans(plan: LogicalPlan): Seq[LogicalPlan] = {
+      plan collect {
+        case i: InMemoryRelation => i
+      }
+    }
+    withTempView("t1", "t2", "t3", "t4") {
+      Seq(1).toDF("c1").createOrReplaceTempView("t1")
+      Seq(2).toDF("c1").createOrReplaceTempView("t2")
+      Seq(1).toDF("c1").createOrReplaceTempView("t3")
+      Seq(1).toDF("c1").createOrReplaceTempView("t4")
+      spark.catalog.cacheTable("t1")
+      spark.catalog.cacheTable("t2")
+      spark.catalog.cacheTable("t3")
+      spark.catalog.cacheTable("t4")
+
+      // Nested predicate subquery
+      val cachedPlan =
+        sql(
+        """
+          |SELECT * FROM t1
+          |WHERE
+          |c1 IN (SELECT c1 FROM t2 WHERE c1 IN (SELECT c1 FROM t3 WHERE c1 = 1))
+        """.stripMargin).queryExecution.optimizedPlan
+
+      assert(
+        cachedPlan.collect {
+          case i: InMemoryRelation => i
+        }.size == 3)
+
+      // Scalar subquery and predicate subquery
+      val cachedPlan2 =
+        sql(
+          """
+            |SELECT * FROM (SELECT max(c1) FROM t1 GROUP BY c1)
+            |WHERE
+            |c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
+            |OR
+            |EXISTS (SELECT c1 FROM t3)
+            |OR
+            |c1 IN (SELECT c1 FROM t4)
+          """.stripMargin).queryExecution.optimizedPlan
+
+
+      val cachedRelations = scala.collection.mutable.MutableList.empty[Seq[LogicalPlan]]
+      cachedRelations += getCachedPlans(cachedPlan2)
+      cachedPlan2 transformAllExpressions {
+        case e: SubqueryExpression => cachedRelations += getCachedPlans(e.plan)
+          e
+      }
+      assert(cachedRelations.flatten.size == 4)
+
+      spark.catalog.uncacheTable("t1")
+      spark.catalog.uncacheTable("t2")
+      spark.catalog.uncacheTable("t3")
+      spark.catalog.uncacheTable("t4")
+    }
   }
 }
