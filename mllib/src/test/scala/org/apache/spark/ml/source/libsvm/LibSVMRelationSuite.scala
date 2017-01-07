@@ -17,12 +17,12 @@
 
 package org.apache.spark.ml.source.libsvm
 
-import java.io.File
+import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
 
 import com.google.common.io.Files
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Row, SaveMode}
@@ -100,7 +100,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("write libsvm data failed due to invalid schema") {
     val df = spark.read.format("text").load(path)
-    intercept[SparkException] {
+    intercept[IOException] {
       df.write.format("libsvm").save(path + "_2")
     }
   }

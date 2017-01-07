@@ -221,9 +221,7 @@ private[csv] class CsvOutputWriter(
         row.get(ordinal, dt).toString
   }
 
-  override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
-
-  override protected[sql] def writeInternal(row: InternalRow): Unit = {
+  override def write(row: InternalRow): Unit = {
     csvWriter.writeRow(rowToString(row), printHeader)
     printHeader = false
   }

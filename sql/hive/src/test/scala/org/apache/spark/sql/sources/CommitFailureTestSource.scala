@@ -20,7 +20,8 @@ package org.apache.spark.sql.sources
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.types.StructType
 
@@ -42,14 +43,14 @@ class CommitFailureTestSource extends SimpleTextSource {
           path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new SimpleTextOutputWriter(path, context) {
+        new SimpleTextOutputWriter(path, dataSchema, context) {
           var failed = false
           TaskContext.get().addTaskFailureListener { (t: TaskContext, e: Throwable) =>
             failed = true
             SimpleTextRelation.callbackCalled = true
           }
 
-          override def write(row: Row): Unit = {
+          override def write(row: InternalRow): Unit = {
             if (SimpleTextRelation.failWriter) {
               sys.error("Intentional task writer failure for testing purpose.")
 
