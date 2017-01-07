@@ -571,15 +571,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     val documents: RDD[(Long, Vector)] =
     sc.parallelize(Seq((0L, Vectors.sparse(236, Array[Int](), Array[Double]())),
       (1L, Vectors.sparse(236, Array[Int](), Array[Double]()))))
-    val lda = new LDA
-    val optimizer = new EMLDAOptimizer
-    lda.setOptimizer(optimizer)
-      .setK(10)
-      .setMaxIterations(400)
-      .setAlpha(-1)
-      .setBeta(-1)
-      .setCheckpointInterval(7)
-    val ldaModel = lda.run(documents)
+    val lda = new LDA().setOptimizer(new EMLDAOptimizer)
+    lda.run(documents)
   }
 
 }
