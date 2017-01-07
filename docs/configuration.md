@@ -59,6 +59,7 @@ The following format is accepted:
     1p or 1pb (pebibytes = 1024 tebibytes)
 
 ## Dynamically Loading Spark Properties
+
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
 instance, if you'd like to run the same application with different masters or different
 amounts of memory. Spark allows you to simply create an empty conf:
@@ -106,7 +107,8 @@ line will appear. For all other configuration properties, you can assume the def
 Most of the properties that control internal settings have reasonable default values. Some
 of the most common options to set are:
 
-#### Application Properties
+### Application Properties
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -215,7 +217,8 @@ of the most common options to set are:
 
 Apart from these, the following properties are also available, and may be useful in some situations:
 
-#### Runtime Environment
+### Runtime Environment
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -471,7 +474,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Shuffle Behavior
+### Shuffle Behavior
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -612,7 +616,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Spark UI
+### Spark UI
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -745,7 +750,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Compression and Serialization
+### Compression and Serialization
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -891,7 +897,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Memory Management
+### Memory Management
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -981,7 +988,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Execution Behavior
+### Execution Behavior
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -1108,7 +1116,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Networking
+### Networking
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -1139,13 +1148,13 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.driver.bindAddress</code></td>
   <td>(value of spark.driver.host)</td>
   <td>
-    <p>Hostname or IP address where to bind listening sockets. This config overrides the SPARK_LOCAL_IP
-    environment variable (see below).</p>
+    Hostname or IP address where to bind listening sockets. This config overrides the SPARK_LOCAL_IP
+    environment variable (see below).
 
-    <p>It also allows a different address from the local one to be advertised to executors or external systems.
+    <br />It also allows a different address from the local one to be advertised to executors or external systems.
     This is useful, for example, when running containers with bridged networking. For this to properly work,
     the different ports used by the driver (RPC, block manager and UI) need to be forwarded from the
-    container's host.</p>
+    container's host.
   </td>
 </tr>
 <tr>
@@ -1217,7 +1226,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Scheduling
+### Scheduling
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -1467,7 +1477,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Dynamic Allocation
+### Dynamic Allocation
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -1548,7 +1559,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Security
+### Security
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -1729,7 +1741,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### TLS / SSL
+### TLS / SSL
 
 <table class="table">
     <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -1737,21 +1749,21 @@ Apart from these, the following properties are also available, and may be useful
         <td><code>spark.ssl.enabled</code></td>
         <td>false</td>
         <td>
-            <p>Whether to enable SSL connections on all supported protocols.</p>
+            Whether to enable SSL connections on all supported protocols.
 
-            <p>When <code>spark.ssl.enabled</code> is configured, <code>spark.ssl.protocol</code>
-            is required.</p>
+            <br />When <code>spark.ssl.enabled</code> is configured, <code>spark.ssl.protocol</code>
+            is required.
 
-            <p>All the SSL settings like <code>spark.ssl.xxx</code> where <code>xxx</code> is a
+            <br />All the SSL settings like <code>spark.ssl.xxx</code> where <code>xxx</code> is a
             particular configuration property, denote the global configuration for all the supported
             protocols. In order to override the global configuration for the particular protocol,
-            the properties must be overwritten in the protocol-specific namespace.</p>
+            the properties must be overwritten in the protocol-specific namespace.
 
-            <p>Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
+            <br />Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
             particular protocol denoted by <code>YYY</code>. Example values for <code>YYY</code>
             include <code>fs</code>, <code>ui</code>, <code>standalone</code>, and
             <code>historyServer</code>.  See <a href="security.html#ssl-configuration">SSL
-            Configuration</a> for details on hierarchical SSL configuration for services.</p>
+            Configuration</a> for details on hierarchical SSL configuration for services.
         </td>
     </tr>
     <tr>
@@ -1835,7 +1847,8 @@ Apart from these, the following properties are also available, and may be useful
 </table>
 
 
-#### Spark SQL
+### Spark SQL
+
 Running the <code>SET -v</code> command will show the entire list of the SQL configuration.
 
 <div class="codetabs">
@@ -1877,7 +1890,8 @@ showDF(properties, numRows = 200, truncate = FALSE)
 </div>
 
 
-#### Spark Streaming
+### Spark Streaming
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -1998,7 +2012,8 @@ showDF(properties, numRows = 200, truncate = FALSE)
 </tr>
 </table>
 
-#### SparkR
+### SparkR
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -2047,7 +2062,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
 
 </table>
 
-#### Deploy
+### Deploy
 
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -2070,15 +2085,16 @@ showDF(properties, numRows = 200, truncate = FALSE)
 </table>
 
 
-#### Cluster Managers
+### Cluster Managers
+
 Each cluster manager in Spark has additional configuration options. Configurations
 can be found on the pages for each mode:
 
-##### [YARN](running-on-yarn.html#configuration)
+#### [YARN](running-on-yarn.html#configuration)
 
-##### [Mesos](running-on-mesos.html#configuration)
+#### [Mesos](running-on-mesos.html#configuration)
 
-##### [Standalone Mode](spark-standalone.html#cluster-launch-scripts)
+#### [Standalone Mode](spark-standalone.html#cluster-launch-scripts)
 
 # Environment Variables
 
