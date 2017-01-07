@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.csv
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 
+import com.univocity.parsers.csv.CsvWriterSettings
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
@@ -126,6 +127,21 @@ private[csv] class CSVOptions(@transient private val parameters: CaseInsensitive
   val inputBufferSize = 128
 
   val isCommentSet = this.comment != '\u0000'
+
+  def asWriterSettings: CsvWriterSettings = {
+    val writerSettings = new CsvWriterSettings()
+    val format = writerSettings.getFormat
+    format.setDelimiter(delimiter)
+    format.setQuote(quote)
+    format.setQuoteEscape(escape)
+    format.setComment(comment)
+    writerSettings.setNullValue(nullValue)
+    writerSettings.setEmptyValue(nullValue)
+    writerSettings.setSkipEmptyLines(true)
+    writerSettings.setQuoteAllFields(quoteAll)
+    writerSettings.setQuoteEscapingEnabled(escapeQuotes)
+    writerSettings
+  }
 }
 
 object CSVOptions {
