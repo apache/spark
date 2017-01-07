@@ -144,30 +144,19 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
       GaussianMixtureSuite.allParamSettings, checkModelData)
   }
 
-  test("univariate dense data with two clusters") {
+  test("univariate dense/sparse data with two clusters") {
     val weights = Array(2.0 / 3.0, 1.0 / 3.0)
     val means = Array(Vectors.dense(5.1604), Vectors.dense(-4.3673))
     val covs = Array(Matrices.dense(1, 1, Array(0.86644)), Matrices.dense(1, 1, Array(1.1098)))
     val gaussians = means.zip(covs).map { case (mean, cov) =>
       new MultivariateGaussian(mean, cov)
     }
-
     val expected = new GaussianMixtureModel("dummy", weights, gaussians)
-    val actual = new GaussianMixture().setK(2).setSeed(seed).fit(denseDataset)
-    modelEquals(expected, actual)
-  }
 
-  test("univariate sparse data with two clusters") {
-    val weights = Array(2.0 / 3.0, 1.0 / 3.0)
-    val means = Array(Vectors.dense(5.1604), Vectors.dense(-4.3673))
-    val covs = Array(Matrices.dense(1, 1, Array(0.86644)), Matrices.dense(1, 1, Array(1.1098)))
-    val gaussians = means.zip(covs).map { case (mean, cov) =>
-      new MultivariateGaussian(mean, cov)
+    Seq(denseDataset, sparseDataset).foreach { dataset =>
+      val actual = new GaussianMixture().setK(2).setSeed(seed).fit(dataset)
+      modelEquals(expected, actual)
     }
-
-    val expected = new GaussianMixtureModel("dummy", weights, gaussians)
-    val actual = new GaussianMixture().setK(2).setSeed(seed).fit(sparseDataset)
-    modelEquals(expected, actual)
   }
 
   test("check distributed decomposition") {
