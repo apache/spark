@@ -1150,7 +1150,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Hostname or IP address where to bind listening sockets. This config overrides the SPARK_LOCAL_IP
     environment variable (see below).
-    It also allows a different address from the local one to be advertised to executors or external systems.
+
+    <br />It also allows a different address from the local one to be advertised to executors or external systems.
     This is useful, for example, when running containers with bridged networking. For this to properly work,
     the different ports used by the driver (RPC, block manager and UI) need to be forwarded from the
     container's host.
@@ -1750,15 +1751,15 @@ Apart from these, the following properties are also available, and may be useful
         <td>
             Whether to enable SSL connections on all supported protocols.
 
-            When <code>spark.ssl.enabled</code> is configured, <code>spark.ssl.protocol</code>
+            <br />When <code>spark.ssl.enabled</code> is configured, <code>spark.ssl.protocol</code>
             is required.
 
-            All the SSL settings like <code>spark.ssl.xxx</code> where <code>xxx</code> is a
+            <br />All the SSL settings like <code>spark.ssl.xxx</code> where <code>xxx</code> is a
             particular configuration property, denote the global configuration for all the supported
             protocols. In order to override the global configuration for the particular protocol,
             the properties must be overwritten in the protocol-specific namespace.
 
-            Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
+            <br />Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
             particular protocol denoted by <code>YYY</code>. Example values for <code>YYY</code>
             include <code>fs</code>, <code>ui</code>, <code>standalone</code>, and
             <code>historyServer</code>.  See <a href="security.html#ssl-configuration">SSL
