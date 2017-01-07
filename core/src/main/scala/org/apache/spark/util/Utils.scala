@@ -1015,6 +1015,20 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Same with `deleteRecursively` but don't throw an exception even if deletion is unsuccessful.
+   */
+  def deleteRecursivelyAndQuietly(file: File): Boolean = {
+    try {
+      deleteRecursively(file)
+      true
+    } catch {
+      case e: Exception =>
+        logWarning(e.getMessage)
+        false
+    }
+  }
+
+  /**
    * Check to see if file is a symbolic link.
    */
   def isSymlink(file: File): Boolean = {
@@ -1484,23 +1498,27 @@ private[spark] object Utils extends Logging {
 
   /** Return uncompressed file length of a compressed file. */
   private def getCompressedFileLength(file: File): Long = {
+    var gzInputStream: GZIPInputStream = null
     try {
-      tryWithResource(new GZIPInputStream(new FileInputStream(file))) { gzInputStream =>
-        // Uncompress .gz file to determine file size.
-        var fileSize = 0L
-        val bufSize = 1024
-        val buf = new Array[Byte](bufSize)
-        var numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
-        while (numBytes > 0) {
-          fileSize += numBytes
-          numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
-        }
-        fileSize
+      // Uncompress .gz file to determine file size.
+      var fileSize = 0L
+      gzInputStream = new GZIPInputStream(new FileInputStream(file))
+      val bufSize = 1024
+      val buf = new Array[Byte](bufSize)
+      var numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
+      while (numBytes > 0) {
+        fileSize += numBytes
+        numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
       }
+      fileSize
     } catch {
       case e: Throwable =>
         logError(s"Cannot get file length of ${file}", e)
         throw e
+    } finally {
+      if (gzInputStream != null) {
+        gzInputStream.close()
+      }
     }
   }
 

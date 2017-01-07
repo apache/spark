@@ -31,7 +31,6 @@ import kafka.admin.AdminUtils
 import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.utils.ZkUtils
-import org.apache.commons.io.FileUtils
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
@@ -139,11 +138,10 @@ private[kafka010] class KafkaTestUtils extends Logging {
       server = null
     }
 
-    // On Windows, `logDirs` is left open even after Kafka server above is completely shut-downed
-    // in some cases. It leads to test failures on Windows if these are not ignored.
-    brokerConf.logDirs.map(new File(_))
-      .filterNot(FileUtils.deleteQuietly)
-      .foreach(f => logWarning("Failed to delete: " + f.getAbsolutePath))
+    // On Windows, `logDirs` is left open even after Kafka server above is completely shut down
+    // in some cases. It leads to test failures on Windows if the directory deletion failure
+    // throws an exception.
+    brokerConf.logDirs.foreach { f => Utils.deleteRecursivelyAndQuietly(new File(f)) }
 
     if (zkUtils != null) {
       zkUtils.close()
@@ -279,15 +277,11 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
     def shutdown() {
       factory.shutdown()
-      // The directories are not closed even if the ZooKeeper server is shut-downed.
+      // The directories are not closed even if the ZooKeeper server is shut down.
       // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures
-      // on Windows if these are not ignored.
-      if (!FileUtils.deleteQuietly(snapshotDir)) {
-        logWarning("Failed to delete: " + snapshotDir.getAbsolutePath)
-      }
-      if (!FileUtils.deleteQuietly(logDir)) {
-        logWarning("Failed to delete: " + logDir.getAbsolutePath)
-      }
+      // on Windows if the directory deletion failure throws an exception.
+      Utils.deleteRecursivelyAndQuietly(snapshotDir)
+      Utils.deleteRecursivelyAndQuietly(logDir)
     }
   }
 }
