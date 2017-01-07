@@ -511,6 +511,54 @@ class SQLTests(ReusedPySparkTestCase):
         non_callable = None
         self.assertRaises(TypeError, UserDefinedFunction, non_callable, StringType())
 
+    def test_udf_with_decorator(self):
+        from pyspark.sql.functions import lit, udf
+        from pyspark.sql.types import IntegerType, DoubleType
+
+        @udf(IntegerType())
+        def add_one(x):
+            if x is not None:
+                return x + 1
+
+        @udf(returnType=DoubleType())
+        def add_two(x):
+            if x is not None:
+                return float(x + 2)
+
+        @udf
+        def to_upper(x):
+            if x is not None:
+                return x.upper()
+
+        @udf()
+        def to_lower(x):
+            if x is not None:
+                return x.lower()
+
+        @udf
+        def substr(x, start, end):
+            if x is not None:
+                return x[start:end]
+
+        df = (
+            self.spark
+                .createDataFrame(
+                    [(1, "Foo", "foobar")], ("one", "Foo", "foobar"))
+                .select(
+                    add_one("one"), add_two("one"),
+                    to_upper("Foo"), to_lower("Foo"),
+                    substr("foobar", lit(0), lit(3))))
+
+        self.assertListEqual(
+            [tpe for _, tpe in df.dtypes],
+            ["int", "double", "string", "string", "string"]
+        )
+
+        self.assertListEqual(
+            list(df.first()),
+            [2, 3.0, "FOO", "foo", "foo"]
+        )
+
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
         df = self.spark.read.json(rdd)
