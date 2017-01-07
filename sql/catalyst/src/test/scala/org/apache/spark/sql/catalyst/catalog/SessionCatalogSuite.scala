@@ -22,8 +22,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range, SubqueryAlias, View}
-
 
 /**
  * Tests for [[SessionCatalog]] that assume that [[InMemoryCatalog]] is correctly implemented.
@@ -471,27 +472,40 @@ class SessionCatalogSuite extends SparkFunSuite {
     val metadata = externalCatalog.getTable("db3", "view1")
     sessionCatalog.setCurrentDatabase("default")
     // Look up a view.
-    val view = normalizeView(View(metadata))
+    assert(metadata.viewText.isDefined)
+    val view = normalizeExprIds(View(desc = metadata, output = metadata.schema.toAttributes,
+      child = CatalystSqlParser.parsePlan(metadata.viewText.get)))
     assert(
-      normalizeView(sessionCatalog.lookupRelation(TableIdentifier("view1", Some("db3"))))
+      normalizeExprIds(sessionCatalog.lookupRelation(TableIdentifier("view1", Some("db3"))))
         == SubqueryAlias("view1", view, Some(TableIdentifier("view1", Some("db3")))))
     // Look up a view using current database of the session catalog.
     sessionCatalog.setCurrentDatabase("db3")
     assert(
-      normalizeView(sessionCatalog.lookupRelation(TableIdentifier("view1")))
+      normalizeExprIds(sessionCatalog.lookupRelation(TableIdentifier("view1")))
         == SubqueryAlias("view1", view, Some(TableIdentifier("view1"))))
   }
 
   /**
-   * Normalize the exprIds of the View.output, so we could check whether two different View
-   * operators are identical.
+   * Since attribute references are given globally unique ids during analysis,
+   * we must normalize them to check if two different queries are identical.
    */
-  private def normalizeView(plan: LogicalPlan): LogicalPlan = plan transform {
-    case view: View =>
-      val newOutput = view.output.map { attr =>
-        AttributeReference(attr.name, attr.dataType, attr.nullable)(exprId = ExprId(0))
-      }
-      view.copy(output = newOutput)
+  protected def normalizeExprIds(plan: LogicalPlan) = {
+    plan transformAllExpressions {
+      case s: ScalarSubquery =>
+        s.copy(exprId = ExprId(0))
+      case e: Exists =>
+        e.copy(exprId = ExprId(0))
+      case l: ListQuery =>
+        l.copy(exprId = ExprId(0))
+      case p: PredicateSubquery =>
+        p.copy(exprId = ExprId(0))
+      case a: AttributeReference =>
+        AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
+      case a: Alias =>
+        Alias(a.child, a.name)(exprId = ExprId(0))
+      case ae: AggregateExpression =>
+        ae.copy(resultId = ExprId(0))
+    }
   }
 
   test("table exists") {
@@ -1169,5 +1183,4 @@ class SessionCatalogSuite extends SparkFunSuite {
       catalog.listFunctions("unknown_db", "func*")
     }
   }
-
 }

@@ -50,11 +50,13 @@ object SimpleAnalyzer extends Analyzer(
     new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 /**
- * Provides a location for Analyzer to ask about the context of current resolution, this enables
- * us to decouple the concerns of analysis environment from the catalog.
+ * Provides a way to keep state during the analysis, this enables us to decouple the concerns
+ * of analysis environment from the catalog.
  *
- * @param defaultDatabase The default database used in the view resolution, this has a higher
- *                        priority than the `currentDb` in the catalog.
+ * Note this is thread local.
+ *
+ * @param defaultDatabase The default database used in the view resolution, this overrules the
+ *                        current catalog database.
  * @param nestedViewLevel The nested level in the view resolution, this enables us to limit the
  *                        depth of nested views.
  */
@@ -73,8 +75,7 @@ object AnalysisContext {
   def withAnalysisContext[A](context: AnalysisContext)(f: => A): A = {
     val originContext = value.get()
     set(context)
-    val ret = try f finally { set(originContext) }
-    ret
+    try f finally { set(originContext) }
   }
 }
 
@@ -135,7 +136,7 @@ class Analyzer(
       ResolveInlineTables ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
-    Batch("AliasViewChild", Once,
+    Batch("View", Once,
       AliasViewChild),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
@@ -570,25 +571,22 @@ class Analyzer(
     def resolveRelation(
         plan: LogicalPlan,
         defaultDatabase: Option[String] = None): LogicalPlan = plan match {
-      case u @ UnresolvedRelation(table: TableIdentifier, _) if isRunningDirectlyOnFiles(table) =>
-        u
-      case u: UnresolvedRelation =>
+      case u: UnresolvedRelation if !isRunningDirectlyOnFiles(u.tableIdentifier) =>
         val defaultDatabase = AnalysisContext.get.defaultDatabase
         val relation = lookupTableFromCatalog(u, defaultDatabase)
         resolveRelation(relation, defaultDatabase)
-      // Hive support is required to resolve a persistent view, the logical plan returned by
-      // catalog.lookupRelation() should be:
-      // `SubqueryAlias(_, View(desc: CatalogTable, desc.output, child: LogicalPlan), _)`,
-      // where the child should be a logical plan parsed from `desc.viewText`.
-      // If the child of a view is empty, we will throw an AnalysisException later in
-      // `checkAnalysis`.
-      case view @ View(desc, _, Some(child)) =>
-        val context = AnalysisContext(defaultDatabase = desc.viewDefaultDatabase)
+      // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
+      // `viewText` should be defined, or else we throw an error on the generation of the View
+      // operator.
+      case view @ View(desc, _, child) if !child.resolved =>
+        val nestedViewLevel = AnalysisContext.get.nestedViewLevel + 1
+        val context = AnalysisContext(defaultDatabase = desc.viewDefaultDatabase,
+          nestedViewLevel = nestedViewLevel)
         // Resolve all the UnresolvedRelations and Views in the child.
         val newChild = AnalysisContext.withAnalysisContext(context) {
           execute(child)
         }
-        view.copy(child = Some(newChild))
+        view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View, _) =>
         val newChild = resolveRelation(view, defaultDatabase)
         p.copy(child = newChild)
@@ -604,14 +602,14 @@ class Analyzer(
     // Look up the table with the given name from catalog. The database we look up the table from
     // is decided follow the steps:
     // 1. If the database part is defined in the table identifier, use that database name;
-    // 2. Else If the defaultDatabase is defined, use the default database name;
+    // 2. Else If the defaultDatabase is defined, use the default database name(In this case, no
+    //    temporary objects can be used, and the default database is only used to look up a view);
     // 3. Else use the currentDb of the SessionCatalog.
     private def lookupTableFromCatalog(
         u: UnresolvedRelation,
         defaultDatabase: Option[String] = None): LogicalPlan = {
       try {
-        val tableIdentWithDb = u.tableIdentifier.copy(
-          database = u.tableIdentifier.database.orElse(defaultDatabase))
+        val tableIdentWithDb = u.tableIdentifier.withDatabase(defaultDatabase)
         catalog.lookupRelation(tableIdentWithDb, u.alias)
       } catch {
         case _: NoSuchTableException =>
@@ -870,14 +868,14 @@ class Analyzer(
    */
   object AliasViewChild extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case v @ View(_, output, Some(child)) if child.resolved =>
+      case v @ View(_, output, child) if child.resolved =>
         val resolver = conf.resolver
         val newOutput = child.output.map { attr =>
           val newAttr = findAttributeByName(attr.name, output, resolver)
           Alias(attr, attr.name)(exprId = newAttr.exprId, qualifier = newAttr.qualifier,
             explicitMetadata = Some(newAttr.metadata))
         }
-        v.copy(child = Some(Project(newOutput, child)))
+        v.copy(child = Project(newOutput, child))
     }
 
     /**
@@ -2359,9 +2357,9 @@ object EliminateSubqueryAliases extends Rule[LogicalPlan] {
  */
 object EliminateView extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    // If the child of a view is empty, we will throw an AnalysisException later in
-    // `checkAnalysis`.
-    case View(_, output, Some(child)) => Project(output, child)
+    // The child should have the same output attributes with the View operator, so we simply
+    // remove the View operator.
+    case View(_, output, child) => child
   }
 }
 

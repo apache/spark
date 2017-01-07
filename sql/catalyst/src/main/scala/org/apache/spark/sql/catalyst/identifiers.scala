@@ -61,6 +61,10 @@ case class TableIdentifier(table: String, database: Option[String])
 
   def this(table: String) = this(table, None)
 
+  // If `database` is not defined, copy the current identifier with a new database name.
+  def withDatabase(newDatabase: Option[String]): TableIdentifier =
+    copy(database = database.orElse(newDatabase))
+
 }
 
 object TableIdentifier {

@@ -388,31 +388,27 @@ case class InsertIntoTable(
   override lazy val resolved: Boolean = childrenResolved && table.resolved
 }
 
-/** Factory for constructing new `View` nodes. */
-object View {
-  def apply(desc: CatalogTable): View = View(desc, desc.schema.toAttributes, None)
-}
-
 /**
  * A container for holding the view description(CatalogTable), and the output of the view. The
- * child will be defined if the view is resolved with Hive support, else it should be None.
+ * child should be a logical plan parsed from the `CatalogTable.viewText`, should throw an error
+ * if the `viewText` is not defined.
  * This operator will be removed at the end of analysis stage.
  *
  * @param desc A view description(CatalogTable) that provides necessary information to resolve the
  *             view.
  * @param output The output of a view operator, this is generated during planning the view, so that
  *               we are able to decouple the output from the underlying structure.
- * @param child The logical plan of a view operator, it should be non-empty if the view is resolved
- *              with Hive support, else it should be None.
+ * @param child The logical plan of a view operator, it should be a logical plan parsed from the
+ *              `CatalogTable.viewText`, should throw an error if the `viewText` is not defined.
  */
 case class View(
     desc: CatalogTable,
     output: Seq[Attribute],
-    child: Option[LogicalPlan] = None) extends LogicalPlan with MultiInstanceRelation {
+    child: LogicalPlan) extends LogicalPlan with MultiInstanceRelation {
 
-  override lazy val resolved: Boolean = child.exists(_.resolved)
+  override lazy val resolved: Boolean = child.resolved
 
-  override def children: Seq[LogicalPlan] = child.toSeq
+  override def children: Seq[LogicalPlan] = child :: Nil
 
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 

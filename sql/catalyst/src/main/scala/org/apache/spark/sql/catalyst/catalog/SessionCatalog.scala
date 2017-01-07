@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
 
@@ -51,7 +52,8 @@ class SessionCatalog(
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
     conf: CatalystConf,
-    hadoopConf: Configuration) extends Logging {
+    hadoopConf: Configuration,
+    parser: ParserInterface) extends Logging {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
@@ -66,7 +68,8 @@ class SessionCatalog(
       DummyFunctionResourceLoader,
       functionRegistry,
       conf,
-      new Configuration())
+      new Configuration(),
+      CatalystSqlParser)
   }
 
   // For testing only.
@@ -574,10 +577,15 @@ class SessionCatalog(
       } else if (name.database.isDefined || !tempTables.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
         if (metadata.tableType == CatalogTableType.VIEW) {
+          val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
           // The relation is a view, so we wrap the relation by:
           // 1. Add a [[View]] operator over the relation to keep track of the view desc;
           // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
-          SubqueryAlias(relationAlias, View(metadata), Some(name))
+          val child = View(
+            desc = metadata,
+            output = metadata.schema.toAttributes,
+            child = parser.parsePlan(viewText))
+          SubqueryAlias(relationAlias, child, Option(name))
         } else {
           SubqueryAlias(relationAlias, SimpleCatalogRelation(metadata), None)
         }

@@ -220,7 +220,7 @@ class SQLBuilder private (
       ""
 
     case p: View =>
-      toSQL(p.child.get)
+      toSQL(p.child)
 
     case _ =>
       throw new UnsupportedOperationException(s"unsupported plan $node")

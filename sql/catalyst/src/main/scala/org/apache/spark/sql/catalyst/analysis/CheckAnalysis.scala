@@ -404,13 +404,6 @@ trait CheckAnalysis extends PredicateHelper {
                   s"$numStaticPartitions partition column(s) having constant value(s).")
             }
 
-          case v: View if v.child.isEmpty =>
-            failAnalysis(
-              s"""
-                 |Hive support is required to select over the following views:
-                 |${v.desc.identifier}
-               """.stripMargin)
-
           case o if !o.resolved =>
             failAnalysis(
               s"unresolved operator ${operator.simpleString}")
