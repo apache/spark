@@ -39,6 +39,14 @@ private case class BigData(s: String)
 class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext {
   import testImplicits._
 
+  override def afterEach(): Unit = {
+    try {
+      spark.catalog.clearCache()
+    } finally {
+      super.afterEach()
+    }
+  }
+
   def rddIdOf(tableName: String): Int = {
     val plan = spark.table(tableName).queryExecution.sparkPlan
     plan.collect {
@@ -589,17 +597,11 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
             |WHERE
             |NOT EXISTS (SELECT * FROM t1)
           """.stripMargin).queryExecution.optimizedPlan
-      assert(
-        cachedPlan.collect {
-          case i: InMemoryRelation => i
-        }.size == 2)
-      spark.catalog.uncacheTable("t1")
+      assert(getNumInMemoryRelations(cachedPlan) == 2)
     }
   }
 
   test("SPARK-19093 scalar and nested predicate query") {
-
-
     withTempView("t1", "t2", "t3", "t4") {
       Seq(1).toDF("c1").createOrReplaceTempView("t1")
       Seq(2).toDF("c1").createOrReplaceTempView("t2")
@@ -618,7 +620,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
           |WHERE
           |c1 IN (SELECT c1 FROM t2 WHERE c1 IN (SELECT c1 FROM t3 WHERE c1 = 1))
         """.stripMargin).queryExecution.optimizedPlan
-      assert (getNumInMemoryRelations(cachedPlan) == 3)
+      assert(getNumInMemoryRelations(cachedPlan) == 3)
 
       // Scalar subquery and predicate subquery
       val cachedPlan2 =
@@ -632,12 +634,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
             |OR
             |c1 IN (SELECT c1 FROM t4)
           """.stripMargin).queryExecution.optimizedPlan
-      assert (getNumInMemoryRelations(cachedPlan2) == 4)
-
-      spark.catalog.uncacheTable("t1")
-      spark.catalog.uncacheTable("t2")
-      spark.catalog.uncacheTable("t3")
-      spark.catalog.uncacheTable("t4")
+      assert(getNumInMemoryRelations(cachedPlan2) == 4)
     }
   }
 }
