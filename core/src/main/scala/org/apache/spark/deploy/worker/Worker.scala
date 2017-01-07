@@ -446,7 +446,8 @@ private[deploy] class Worker(
           // SPARK_EXECUTOR_DIRS environment variable, and deleted by the Worker when the
           // application finishes.
           val appLocalDirs = appDirectories.getOrElse(appId, {
-            val dirs = Utils.getOrCreateLocalRootDirs(conf).flatMap { dir =>
+            val localRootDirs = Utils.getOrCreateLocalRootDirs(conf)
+            val dirs = localRootDirs.flatMap { dir =>
               try {
                 val appDir = Utils.createDirectory(dir, namePrefix = "executor")
                 Utils.chmod700(appDir)
@@ -458,8 +459,8 @@ private[deploy] class Worker(
               }
             }.toSeq
             if (dirs.isEmpty) {
-              throw new IOException("None subfolder can be created in " +
-                s"${Utils.getOrCreateLocalRootDirs(conf).mkString(",")}.")
+              throw new IOException("No subfolder can be created in " +
+                s"${localRootDirs.mkString(",")}.")
             }
             dirs
           })
