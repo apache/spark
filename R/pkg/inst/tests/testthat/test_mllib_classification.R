@@ -83,7 +83,7 @@ test_that("spark.logit", {
   write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
   write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath, sparkSession)
+  model2 <- read.ml(modelPath)
   coefs <- summary(model)$coefficients
   coefs2 <- summary(model2)$coefficients
   expect_equal(coefs, coefs2)
@@ -190,7 +190,7 @@ test_that("spark.mlp", {
   write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
   write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath, sparkSession)
+  model2 <- read.ml(modelPath)
   summary2 <- summary(model2)
 
   expect_equal(summary2$numOfInputs, 4)
@@ -314,7 +314,7 @@ test_that("spark.naiveBayes", {
   write.ml(m, modelPath)
   expect_error(write.ml(m, modelPath))
   write.ml(m, modelPath, overwrite = TRUE)
-  m2 <- read.ml(modelPath, sparkSession)
+  m2 <- read.ml(modelPath)
   s2 <- summary(m2)
   expect_equal(s$apriori, s2$apriori)
   expect_equal(s$tables, s2$tables)
