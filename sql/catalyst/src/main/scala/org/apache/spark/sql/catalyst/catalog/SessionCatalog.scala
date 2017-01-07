@@ -311,12 +311,13 @@ class SessionCatalog(
       name: TableIdentifier,
       loadPath: String,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean): Unit = {
+      holdDDLTime: Boolean,
+      isSrcLocal: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
-    externalCatalog.loadTable(db, table, loadPath, isOverwrite, holdDDLTime)
+    externalCatalog.loadTable(db, table, loadPath, isOverwrite, holdDDLTime, isSrcLocal)
   }
 
   /**
@@ -330,13 +331,14 @@ class SessionCatalog(
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean): Unit = {
+      inheritTableSpecs: Boolean,
+      isSrcLocal: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
     externalCatalog.loadPartition(
-      db, table, loadPath, partition, isOverwrite, holdDDLTime, inheritTableSpecs)
+      db, table, loadPath, partition, isOverwrite, holdDDLTime, inheritTableSpecs, isSrcLocal)
   }
 
   def defaultTablePath(tableIdent: TableIdentifier): String = {
@@ -571,7 +573,7 @@ class SessionCatalog(
         val view = Option(metadata.tableType).collect {
           case CatalogTableType.VIEW => name
         }
-        SubqueryAlias(relationAlias, SimpleCatalogRelation(db, metadata), view)
+        SubqueryAlias(relationAlias, SimpleCatalogRelation(metadata), view)
       } else {
         SubqueryAlias(relationAlias, tempTables(table), Option(name))
       }
@@ -632,7 +634,7 @@ class SessionCatalog(
   /**
    * Refresh the cache entry for a metastore table, if any.
    */
-  def refreshTable(name: TableIdentifier): Unit = {
+  def refreshTable(name: TableIdentifier): Unit = synchronized {
     // Go through temporary tables and invalidate them.
     // If the database is defined, this is definitely not a temp table.
     // If the database is not defined, there is a good chance this is a temp table.

@@ -55,7 +55,7 @@ import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
 import org.apache.spark.network.util.JavaUtils;
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class SaslIntegrationSuite {
@@ -73,7 +73,7 @@ public class SaslIntegrationSuite {
 
   @BeforeClass
   public static void beforeAll() throws IOException {
-    conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+    conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
     context = new TransportContext(conf, new TestRpcHandler());
 
     secretKeyHolder = mock(SecretKeyHolder.class);

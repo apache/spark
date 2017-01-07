@@ -1546,7 +1546,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("specifying database name for a temporary table is not allowed") {
     withTempPath { dir =>
-      val path = dir.getCanonicalPath
+      val path = dir.toURI.toString
       val df =
         sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
       df

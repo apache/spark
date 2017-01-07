@@ -205,6 +205,7 @@ test_that("create DataFrame from RDD", {
                c(16))
   expect_equal(collect(sql("SELECT height from people WHERE name ='Bob'"))$height,
                c(176.5))
+  sql("DROP TABLE people")
   unsetHiveContext()
 })
 
@@ -576,7 +577,7 @@ test_that("test tableNames and tables", {
   tables <- tables()
   expect_equal(count(tables), 2)
   suppressWarnings(dropTempTable("table1"))
-  dropTempView("table2")
+  expect_true(dropTempView("table2"))
 
   tables <- tables()
   expect_equal(count(tables), 0)
@@ -589,7 +590,7 @@ test_that(
   newdf <- sql("SELECT * FROM table1 where name = 'Michael'")
   expect_is(newdf, "SparkDataFrame")
   expect_equal(count(newdf), 1)
-  dropTempView("table1")
+  expect_true(dropTempView("table1"))
 
   createOrReplaceTempView(df, "dfView")
   sqlCast <- collect(sql("select cast('2' as decimal) as x from dfView limit 1"))
@@ -600,7 +601,7 @@ test_that(
   expect_equal(ncol(sqlCast), 1)
   expect_equal(out[1], "  x")
   expect_equal(out[2], "1 2")
-  dropTempView("dfView")
+  expect_true(dropTempView("dfView"))
 })
 
 test_that("test cache, uncache and clearCache", {
@@ -609,7 +610,7 @@ test_that("test cache, uncache and clearCache", {
   cacheTable("table1")
   uncacheTable("table1")
   clearCache()
-  dropTempView("table1")
+  expect_true(dropTempView("table1"))
 })
 
 test_that("insertInto() on a registered table", {
@@ -630,13 +631,13 @@ test_that("insertInto() on a registered table", {
   insertInto(dfParquet2, "table1")
   expect_equal(count(sql("select * from table1")), 5)
   expect_equal(first(sql("select * from table1 order by age"))$name, "Michael")
-  dropTempView("table1")
+  expect_true(dropTempView("table1"))
 
   createOrReplaceTempView(dfParquet, "table1")
   insertInto(dfParquet2, "table1", overwrite = TRUE)
   expect_equal(count(sql("select * from table1")), 2)
   expect_equal(first(sql("select * from table1 order by age"))$name, "Bob")
-  dropTempView("table1")
+  expect_true(dropTempView("table1"))
 
   unlink(jsonPath2)
   unlink(parquetPath2)
@@ -650,7 +651,7 @@ test_that("tableToDF() returns a new DataFrame", {
   expect_equal(count(tabledf), 3)
   tabledf2 <- tableToDF("table1")
   expect_equal(count(tabledf2), 3)
-  dropTempView("table1")
+  expect_true(dropTempView("table1"))
 })
 
 test_that("toRDD() returns an RRDD", {
@@ -1688,12 +1689,13 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   unlink(jsonPath3)
 })
 
-test_that("toJSON() returns an RDD of the correct values", {
-  df <- read.json(jsonPath)
-  testRDD <- toJSON(df)
-  expect_is(testRDD, "RDD")
-  expect_equal(getSerializedMode(testRDD), "string")
-  expect_equal(collectRDD(testRDD)[[1]], mockLines[1])
+test_that("toJSON() on DataFrame", {
+  df <- as.DataFrame(cars)
+  df_json <- toJSON(df)
+  expect_is(df_json, "SparkDataFrame")
+  expect_equal(colnames(df_json), c("value"))
+  expect_equal(head(df_json, 1),
+              data.frame(value = "{\"speed\":4.0,\"dist\":2.0}", stringsAsFactors = FALSE))
 })
 
 test_that("showDF()", {
@@ -2612,7 +2614,7 @@ test_that("randomSplit", {
   expect_true(all(sapply(abs(counts / num - weights / sum(weights)), function(e) { e < 0.05 })))
 })
 
-test_that("Setting and getting config on SparkSession", {
+test_that("Setting and getting config on SparkSession, sparkR.conf(), sparkR.uiWebUrl()", {
   # first, set it to a random but known value
   conf <- callJMethod(sparkSession, "conf")
   property <- paste0("spark.testing.", as.character(runif(1)))
@@ -2636,6 +2638,9 @@ test_that("Setting and getting config on SparkSession", {
   expect_equal(appNameValue, "sparkSession test")
   expect_equal(testValue, value)
   expect_error(sparkR.conf("completely.dummy"), "Config 'completely.dummy' is not set")
+
+  url <- sparkR.uiWebUrl()
+  expect_equal(substr(url, 1, 7), "http://")
 })
 
 test_that("enableHiveSupport on SparkSession", {

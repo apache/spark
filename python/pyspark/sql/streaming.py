@@ -28,6 +28,7 @@ from abc import ABCMeta, abstractmethod
 
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
+from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.types import *
 from pyspark.sql.utils import StreamingQueryException
@@ -114,21 +115,26 @@ class StreamingQuery(object):
 
     @property
     @since(2.1)
-    def recentProgresses(self):
+    def recentProgress(self):
         """Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
         The number of progress updates retained for each stream is configured by Spark session
-        configuration `spark.sql.streaming.numRecentProgresses`.
+        configuration `spark.sql.streaming.numRecentProgressUpdates`.
         """
-        return [json.loads(p.json()) for p in self._jsq.recentProgresses()]
+        return [json.loads(p.json()) for p in self._jsq.recentProgress()]
 
     @property
     @since(2.1)
     def lastProgress(self):
         """
-        Returns the most recent :class:`StreamingQueryProgress` update of this streaming query.
+        Returns the most recent :class:`StreamingQueryProgress` update of this streaming query or
+        None if there were no progress updates
         :return: a map
         """
-        return json.loads(self._jsq.lastProgress().json())
+        lastProgress = self._jsq.lastProgress()
+        if lastProgress:
+            return json.loads(lastProgress.json())
+        else:
+            return None
 
     @since(2.0)
     def processAllAvailable(self):

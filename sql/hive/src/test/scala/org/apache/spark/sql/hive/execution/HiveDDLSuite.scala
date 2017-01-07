@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, Cat
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.HiveExternalCatalog
+import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -199,6 +200,52 @@ class HiveDDLSuite
     assert(e.message == "Found duplicate column(s) in table definition of `tbl`: a")
   }
 
+  test("add/drop partition with location - managed table") {
+    val tab = "tab_with_partitions"
+    withTempDir { tmpDir =>
+      val basePath = new File(tmpDir.getCanonicalPath)
+      val part1Path = new File(basePath + "/part1")
+      val part2Path = new File(basePath + "/part2")
+      val dirSet = part1Path :: part2Path :: Nil
+
+      // Before data insertion, all the directory are empty
+      assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
+
+      withTable(tab) {
+        sql(
+          s"""
+             |CREATE TABLE $tab (key INT, value STRING)
+             |PARTITIONED BY (ds STRING, hr STRING)
+           """.stripMargin)
+        sql(
+          s"""
+             |ALTER TABLE $tab ADD
+             |PARTITION (ds='2008-04-08', hr=11) LOCATION '$part1Path'
+             |PARTITION (ds='2008-04-08', hr=12) LOCATION '$part2Path'
+           """.stripMargin)
+        assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
+
+        sql(s"INSERT OVERWRITE TABLE $tab partition (ds='2008-04-08', hr=11) SELECT 1, 'a'")
+        sql(s"INSERT OVERWRITE TABLE $tab partition (ds='2008-04-08', hr=12) SELECT 2, 'b'")
+        // add partition will not delete the data
+        assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
+        checkAnswer(
+          spark.table(tab),
+          Row(1, "a", "2008-04-08", "11") :: Row(2, "b", "2008-04-08", "12") :: Nil
+        )
+
+        sql(s"ALTER TABLE $tab DROP PARTITION (ds='2008-04-08', hr=11)")
+        // drop partition will delete the data
+        assert(part1Path.listFiles == null || part1Path.listFiles.isEmpty)
+        assert(part2Path.listFiles.nonEmpty)
+
+        sql(s"DROP TABLE $tab")
+        // drop table will delete the data of the managed table
+        assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
+      }
+    }
+  }
+
   test("add/drop partitions - external table") {
     val catalog = spark.sessionState.catalog
     withTempDir { tmpDir =>
@@ -257,9 +304,15 @@ class HiveDDLSuite
         // drop partition will not delete the data of external table
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
 
-        sql(s"ALTER TABLE $externalTab ADD PARTITION (ds='2008-04-08', hr='12')")
+        sql(
+          s"""
+             |ALTER TABLE $externalTab ADD PARTITION (ds='2008-04-08', hr='12')
+             |PARTITION (ds='2008-04-08', hr=11)
+          """.stripMargin)
         assert(catalog.listPartitions(TableIdentifier(externalTab)).map(_.spec).toSet ==
-          Set(Map("ds" -> "2008-04-08", "hr" -> "12"), Map("ds" -> "2008-04-09", "hr" -> "11")))
+          Set(Map("ds" -> "2008-04-08", "hr" -> "11"),
+            Map("ds" -> "2008-04-08", "hr" -> "12"),
+            Map("ds" -> "2008-04-09", "hr" -> "11")))
         // add partition will not delete the data
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
 
@@ -1196,6 +1249,44 @@ class HiveDDLSuite
         sql("TRUNCATE TABLE partTable PARTITION (unknown=1)")
       }
       assert(e.message.contains("unknown is not a valid partition column"))
+    }
+  }
+
+  test("create hive serde table with new syntax") {
+    withTable("t", "t2", "t3") {
+      withTempPath { path =>
+        sql(
+          s"""
+            |CREATE TABLE t(id int) USING hive
+            |OPTIONS(fileFormat 'orc', compression 'Zlib')
+            |LOCATION '${path.getCanonicalPath}'
+          """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(DDLUtils.isHiveTable(table))
+        assert(table.storage.serde == Some("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
+        assert(table.storage.properties.get("compression") == Some("Zlib"))
+        assert(spark.table("t").collect().isEmpty)
+
+        sql("INSERT INTO t SELECT 1")
+        checkAnswer(spark.table("t"), Row(1))
+        // Check if this is compressed as ZLIB.
+        val maybeOrcFile = path.listFiles().find(_.getName.endsWith("part-00000"))
+        assert(maybeOrcFile.isDefined)
+        val orcFilePath = maybeOrcFile.get.toPath.toString
+        val expectedCompressionKind =
+          OrcFileOperator.getFileReader(orcFilePath).get.getCompression
+        assert("ZLIB" === expectedCompressionKind.name())
+
+        sql("CREATE TABLE t2 USING HIVE AS SELECT 1 AS c1, 'a' AS c2")
+        val table2 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
+        assert(DDLUtils.isHiveTable(table2))
+        assert(table2.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+        checkAnswer(spark.table("t2"), Row(1, "a"))
+
+        sql("CREATE TABLE t3(a int, p int) USING hive PARTITIONED BY (p)")
+        sql("INSERT INTO t3 PARTITION(p=1) SELECT 0")
+        checkAnswer(spark.table("t3"), Row(0, 1))
+      }
     }
   }
 }

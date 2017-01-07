@@ -165,8 +165,8 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
               typeConverter=TypeConverters.toListFloat)
 
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
-                          "Options are skip (filter out rows with invalid values), " +
-                          "error (throw an error), or keep (keep invalid values in a special " +
+                          "Options are 'skip' (filter out rows with invalid values), " +
+                          "'error' (throw an error), or 'keep' (keep invalid values in a special " +
                           "additional bucket).",
                           typeConverter=TypeConverters.toString)
 
@@ -2629,8 +2629,28 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     """
     .. note:: Experimental
 
-    Chi-Squared feature selection, which selects categorical features to use for predicting a
-    categorical label.
+    Creates a ChiSquared feature selector.
+    The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`,
+    `fdr`, `fwe`.
+
+     * `numTopFeatures` chooses a fixed number of top features according to a chi-squared test.
+
+     * `percentile` is similar but chooses a fraction of all features
+       instead of a fixed number.
+
+     * `fpr` chooses all features whose p-value is below a threshold,
+       thus controlling the false positive rate of selection.
+
+     * `fdr` uses the `Benjamini-Hochberg procedure <https://en.wikipedia.org/wiki/
+       False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure>`_
+       to choose all features whose false discovery rate is below a threshold.
+
+     * `fwe` chooses all features whose p-values is below a threshold,
+       thus controlling the family-wise error rate of selection.
+
+    By default, the selection method is `numTopFeatures`, with the default number of top features
+    set to 50.
+
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame(
@@ -2676,27 +2696,37 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     fpr = Param(Params._dummy(), "fpr", "The highest p-value for features to be kept.",
                 typeConverter=TypeConverters.toFloat)
 
+    fdr = Param(Params._dummy(), "fdr", "The upper bound of the expected false discovery rate.",
+                typeConverter=TypeConverters.toFloat)
+
+    fwe = Param(Params._dummy(), "fwe", "The upper bound of the expected family-wise error rate.",
+                typeConverter=TypeConverters.toFloat)
+
     @keyword_only
     def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None,
-                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05):
+                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
+                 fdr=0.05, fwe=0.05):
         """
         __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05)
+                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
+                 fdr=0.05, fwe=0.05)
         """
         super(ChiSqSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
         self._setDefault(numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1,
-                         fpr=0.05)
+                         fpr=0.05, fdr=0.05, fwe=0.05)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.0.0")
     def setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
-                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05):
+                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
+                  fdr=0.05, fwe=0.05):
         """
         setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05)
+                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
+                  fdr=0.05, fwe=0.05)
         Sets params for this ChiSqSelector.
         """
         kwargs = self.setParams._input_kwargs
@@ -2760,6 +2790,36 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         Gets the value of fpr or its default value.
         """
         return self.getOrDefault(self.fpr)
+
+    @since("2.2.0")
+    def setFdr(self, value):
+        """
+        Sets the value of :py:attr:`fdr`.
+        Only applicable when selectorType = "fdr".
+        """
+        return self._set(fdr=value)
+
+    @since("2.2.0")
+    def getFdr(self):
+        """
+        Gets the value of fdr or its default value.
+        """
+        return self.getOrDefault(self.fdr)
+
+    @since("2.2.0")
+    def setFwe(self, value):
+        """
+        Sets the value of :py:attr:`fwe`.
+        Only applicable when selectorType = "fwe".
+        """
+        return self._set(fwe=value)
+
+    @since("2.2.0")
+    def getFwe(self):
+        """
+        Gets the value of fwe or its default value.
+        """
+        return self.getOrDefault(self.fwe)
 
     def _create_model(self, java_model):
         return ChiSqSelectorModel(java_model)

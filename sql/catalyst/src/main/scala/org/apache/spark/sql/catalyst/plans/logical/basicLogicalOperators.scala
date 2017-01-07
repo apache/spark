@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -347,22 +345,6 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
 }
 
 /**
- * Options for writing new data into a table.
- *
- * @param enabled whether to overwrite existing data in the table.
- * @param staticPartitionKeys if non-empty, specifies that we only want to overwrite partitions
- *                            that match this partial partition spec. If empty, all partitions
- *                            will be overwritten.
- */
-case class OverwriteOptions(
-    enabled: Boolean,
-    staticPartitionKeys: CatalogTypes.TablePartitionSpec = Map.empty) {
-  if (staticPartitionKeys.nonEmpty) {
-    assert(enabled, "Overwrite must be enabled when specifying specific partitions.")
-  }
-}
-
-/**
  * Insert some data into a table.
  *
  * @param table the logical plan representing the table. In the future this should be a
@@ -382,14 +364,14 @@ case class InsertIntoTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],
     child: LogicalPlan,
-    overwrite: OverwriteOptions,
+    overwrite: Boolean,
     ifNotExists: Boolean)
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty
 
-  assert(overwrite.enabled || !ifNotExists)
+  assert(overwrite || !ifNotExists)
   assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
 
   override lazy val resolved: Boolean = childrenResolved && table.resolved
@@ -411,7 +393,7 @@ case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) 
     s"CTE $cteAliases"
   }
 
-  override def innerChildren: Seq[QueryPlan[_]] = cteRelations.map(_._2)
+  override def innerChildren: Seq[LogicalPlan] = cteRelations.map(_._2)
 }
 
 case class WithWindowDefinition(
@@ -783,6 +765,28 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 }
 
 /**
+ * This method repartitions data using [[Expression]]s into `numPartitions`, and receives
+ * information about the number of partitions during execution. Used when a specific ordering or
+ * distribution is expected by the consumer of the query result. Use [[Repartition]] for RDD-like
+ * `coalesce` and `repartition`.
+ * If `numPartitions` is not specified, the number of partitions will be the number set by
+ * `spark.sql.shuffle.partitions`.
+ */
+case class RepartitionByExpression(
+    partitionExpressions: Seq[Expression],
+    child: LogicalPlan,
+    numPartitions: Option[Int] = None) extends UnaryNode {
+
+  numPartitions match {
+    case Some(n) => require(n > 0, s"Number of partitions ($n) must be positive.")
+    case None => // Ok
+  }
+
+  override def maxRows: Option[Long] = child.maxRows
+  override def output: Seq[Attribute] = child.output
+}
+
+/**
  * A relation with one row. This is used in "SELECT ..." without a from clause.
  */
 case object OneRowRelation extends LeafNode {
@@ -791,7 +795,7 @@ case object OneRowRelation extends LeafNode {
 
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
-   * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
+   * cardinality is the product of all child plan's cardinality, i.e. applies in the case
    * of cartesian joins.
    *
    * [[LeafNode]]s must override this.

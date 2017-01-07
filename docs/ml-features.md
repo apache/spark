@@ -752,7 +752,7 @@ for more details on the API.
 
 `Interaction` is a `Transformer` which takes vector or double-valued columns, and generates a single vector column that contains the product of all combinations of one value from each input column.
 
-For example, if you have 2 vector type columns each of which has 3 dimensions as input columns, then then you'll get a 9-dimensional vector as the output column.
+For example, if you have 2 vector type columns each of which has 3 dimensions as input columns, then you'll get a 9-dimensional vector as the output column.
 
 **Examples**
 
@@ -1423,12 +1423,12 @@ for more details on the API.
 `ChiSqSelector` stands for Chi-Squared feature selection. It operates on labeled data with
 categorical features. ChiSqSelector uses the
 [Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test) to decide which
-features to choose. It supports three selection methods: `numTopFeatures`, `percentile`, `fpr`:
-
+features to choose. It supports five selection methods: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
 * `numTopFeatures` chooses a fixed number of top features according to a chi-squared test. This is akin to yielding the features with the most predictive power.
 * `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
 * `fpr` chooses all features whose p-value is below a threshold, thus controlling the false positive rate of selection.
-
+* `fdr` uses the [Benjamini-Hochberg procedure](https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure) to choose all features whose false discovery rate is below a threshold.
+* `fwe` chooses all features whose p-values is below a threshold, thus controlling the family-wise error rate of selection.
 By default, the selection method is `numTopFeatures`, with the default number of top features set to 50.
 The user can choose a selection method using `setSelectorType`.
 

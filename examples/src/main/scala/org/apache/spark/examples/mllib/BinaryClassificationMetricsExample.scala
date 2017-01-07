@@ -98,6 +98,7 @@ object BinaryClassificationMetricsExample {
     val auROC = metrics.areaUnderROC
     println("Area under ROC = " + auROC)
     // $example off$
+    sc.stop()
   }
 }
 // scalastyle:on println

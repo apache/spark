@@ -75,10 +75,10 @@ class TypedColumn[-T, U](
     val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
     val newExpr = expr transform {
       case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
-        ta.copy(
-          inputDeserializer = Some(unresolvedDeserializer),
-          inputClass = Some(inputEncoder.clsTag.runtimeClass),
-          inputSchema = Some(inputEncoder.schema))
+        ta.withInputInfo(
+          deser = unresolvedDeserializer,
+          cls = inputEncoder.clsTag.runtimeClass,
+          schema = inputEncoder.schema)
     }
     new TypedColumn[T, U](newExpr, encoder)
   }

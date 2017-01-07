@@ -24,27 +24,39 @@ import scala.collection.JavaConverters._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
 
 
-class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
+class StreamingQueryStatusAndProgressSuite extends StreamTest {
+  implicit class EqualsIgnoreCRLF(source: String) {
+    def equalsIgnoreCRLF(target: String): Boolean = {
+      source.replaceAll("\r\n|\r|\n", System.lineSeparator) ===
+        target.replaceAll("\r\n|\r|\n", System.lineSeparator)
+    }
+  }
 
   test("StreamingQueryProgress - prettyJson") {
     val json1 = testProgress1.prettyJson
-    assert(json1 ===
+    assert(json1.equalsIgnoreCRLF(
       s"""
         |{
         |  "id" : "${testProgress1.id.toString}",
         |  "runId" : "${testProgress1.runId.toString}",
         |  "name" : "myName",
-        |  "timestamp" : 1,
+        |  "timestamp" : "2016-12-05T20:54:20.827Z",
         |  "numInputRows" : 678,
         |  "inputRowsPerSecond" : 10.0,
         |  "durationMs" : {
         |    "total" : 0
         |  },
-        |  "currentWatermark" : 3,
+        |  "eventTime" : {
+        |    "avg" : "2016-12-05T20:54:20.827Z",
+        |    "max" : "2016-12-05T20:54:20.827Z",
+        |    "min" : "2016-12-05T20:54:20.827Z",
+        |    "watermark" : "2016-12-05T20:54:20.827Z"
+        |  },
         |  "stateOperators" : [ {
         |    "numRowsTotal" : 0,
         |    "numRowsUpdated" : 1
@@ -60,23 +72,22 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
         |    "description" : "sink"
         |  }
         |}
-      """.stripMargin.trim)
+      """.stripMargin.trim))
     assert(compact(parse(json1)) === testProgress1.json)
 
     val json2 = testProgress2.prettyJson
     assert(
-      json2 ===
+      json2.equalsIgnoreCRLF(
         s"""
          |{
          |  "id" : "${testProgress2.id.toString}",
          |  "runId" : "${testProgress2.runId.toString}",
          |  "name" : null,
-         |  "timestamp" : 1,
+         |  "timestamp" : "2016-12-05T20:54:20.827Z",
          |  "numInputRows" : 678,
          |  "durationMs" : {
          |    "total" : 0
          |  },
-         |  "currentWatermark" : 3,
          |  "stateOperators" : [ {
          |    "numRowsTotal" : 0,
          |    "numRowsUpdated" : 1
@@ -91,7 +102,7 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
          |    "description" : "sink"
          |  }
          |}
-      """.stripMargin.trim)
+      """.stripMargin.trim))
     assert(compact(parse(json2)) === testProgress2.json)
   }
 
@@ -107,14 +118,14 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
 
   test("StreamingQueryStatus - prettyJson") {
     val json = testStatus.prettyJson
-    assert(json ===
+    assert(json.equalsIgnoreCRLF(
       """
         |{
         |  "message" : "active",
         |  "isDataAvailable" : true,
         |  "isTriggerActive" : false
         |}
-      """.stripMargin.trim)
+      """.stripMargin.trim))
   }
 
   test("StreamingQueryStatus - json") {
@@ -124,6 +135,42 @@ class StreamingQueryStatusAndProgressSuite extends SparkFunSuite {
   test("StreamingQueryStatus - toString") {
     assert(testStatus.toString === testStatus.prettyJson)
   }
+
+  test("progress classes should be Serializable") {
+    import testImplicits._
+
+    val inputData = MemoryStream[Int]
+
+    val query = inputData.toDS()
+      .groupBy($"value")
+      .agg(count("*"))
+      .writeStream
+      .queryName("progress_serializable_test")
+      .format("memory")
+      .outputMode("complete")
+      .start()
+    try {
+      inputData.addData(1, 2, 3)
+      query.processAllAvailable()
+
+      val progress = query.recentProgress
+
+      // Make sure it generates the progress objects we want to test
+      assert(progress.exists { p =>
+        p.sources.size >= 1 && p.stateOperators.size >= 1 && p.sink != null
+      })
+
+      val array = spark.sparkContext.parallelize(progress).collect()
+      assert(array.length === progress.length)
+      array.zip(progress).foreach { case (p1, p2) =>
+        // Make sure we did serialize and deserialize the object
+        assert(p1 ne p2)
+        assert(p1.json === p2.json)
+      }
+    } finally {
+      query.stop()
+    }
+  }
 }
 
 object StreamingQueryStatusAndProgressSuite {
@@ -131,10 +178,14 @@ object StreamingQueryStatusAndProgressSuite {
     id = UUID.randomUUID,
     runId = UUID.randomUUID,
     name = "myName",
-    timestamp = 1L,
+    timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
-    durationMs = Map("total" -> 0L).mapValues(long2Long).asJava,
-    currentWatermark = 3L,
+    durationMs = new java.util.HashMap(Map("total" -> 0L).mapValues(long2Long).asJava),
+    eventTime = new java.util.HashMap(Map(
+      "max" -> "2016-12-05T20:54:20.827Z",
+      "min" -> "2016-12-05T20:54:20.827Z",
+      "avg" -> "2016-12-05T20:54:20.827Z",
+      "watermark" -> "2016-12-05T20:54:20.827Z").asJava),
     stateOperators = Array(new StateOperatorProgress(numRowsTotal = 0, numRowsUpdated = 1)),
     sources = Array(
       new SourceProgress(
@@ -153,10 +204,11 @@ object StreamingQueryStatusAndProgressSuite {
     id = UUID.randomUUID,
     runId = UUID.randomUUID,
     name = null, // should not be present in the json
-    timestamp = 1L,
+    timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
-    durationMs = Map("total" -> 0L).mapValues(long2Long).asJava,
-    currentWatermark = 3L,
+    durationMs = new java.util.HashMap(Map("total" -> 0L).mapValues(long2Long).asJava),
+    // empty maps should be handled correctly
+    eventTime = new java.util.HashMap(Map.empty[String, String].asJava),
     stateOperators = Array(new StateOperatorProgress(numRowsTotal = 0, numRowsUpdated = 1)),
     sources = Array(
       new SourceProgress(

@@ -68,7 +68,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       Utils.tryWithResource(factory.createParser(writer.toString)) { jsonParser =>
         jsonParser.nextToken()
-        val converter = parser.makeRootConverter(dataType)
+        val converter = parser.makeConverter(dataType)
         converter.apply(jsonParser)
       }
     }
@@ -845,7 +845,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("Loading a JSON dataset from a text file with SQL") {
     val dir = Utils.createTempDir()
     dir.delete()
-    val path = dir.getCanonicalPath
+    val path = dir.toURI.toString
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
 
     sql(

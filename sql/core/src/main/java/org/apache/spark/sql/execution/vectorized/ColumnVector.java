@@ -246,6 +246,12 @@ public abstract class ColumnVector implements AutoCloseable {
     public Object get(int ordinal, DataType dataType) {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public void update(int ordinal, Object value) { throw new UnsupportedOperationException(); }
+
+    @Override
+    public void setNullAt(int ordinal) { throw new UnsupportedOperationException(); }
   }
 
   /**
