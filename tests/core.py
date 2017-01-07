@@ -2053,6 +2053,8 @@ class EmailSmtpTest(unittest.TestCase):
         assert msg['Subject'] == 'subject'
         assert msg['From'] == configuration.get('smtp', 'SMTP_MAIL_FROM')
         assert len(msg.get_payload()) == 2
+        assert msg.get_payload()[-1].get(u'Content-Disposition') == \
+               u'attachment; filename="' + os.path.basename(attachment.name) + '"'
         mimeapp = MIMEApplication('attachment')
         assert msg.get_payload()[-1].get_payload() == mimeapp.get_payload()
 
@@ -2070,6 +2072,8 @@ class EmailSmtpTest(unittest.TestCase):
         assert msg['Subject'] == 'subject'
         assert msg['From'] == configuration.get('smtp', 'SMTP_MAIL_FROM')
         assert len(msg.get_payload()) == 2
+        assert msg.get_payload()[-1].get(u'Content-Disposition') == \
+               u'attachment; filename="' + os.path.basename(attachment.name) + '"'
         mimeapp = MIMEApplication('attachment')
         assert msg.get_payload()[-1].get_payload() == mimeapp.get_payload()
 
