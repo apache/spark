@@ -235,7 +235,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
    */
   def testStream(
       _stream: Dataset[_],
-      outputMode: OutputMode = OutputMode.Append)(actions: StreamAction*): Unit = {
+      outputMode: OutputMode = OutputMode.Append)(actions: StreamAction*): Unit = synchronized {
+    // `synchronized` is added to prevent the user from calling `testStream` concurrently because
+    // this method uses `StreamingQueryListener` and it may not work correctly when `testStream`
+    // runs concurrently.
 
     val stream = _stream.toDF()
     val sparkSession = stream.sparkSession  // use the session in DF, not the default session
