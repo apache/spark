@@ -34,8 +34,8 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
 
 private[spark] class KubernetesClusterSchedulerBackend(
-  scheduler: TaskSchedulerImpl,
-  val sc: SparkContext)
+    scheduler: TaskSchedulerImpl,
+    val sc: SparkContext)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
   import KubernetesClusterSchedulerBackend._
@@ -167,6 +167,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val executorMemoryLimitQuantity = new QuantityBuilder(false)
       .withAmount(executorMemoryWithOverhead.toString)
       .build()
+    val executorCpuQuantity = new QuantityBuilder(false)
+      .withAmount(executorCores)
+      .build()
     val requiredEnv = new ArrayBuffer[EnvVar]
     requiredEnv += new EnvVarBuilder()
       .withName("SPARK_EXECUTOR_PORT")
@@ -214,6 +217,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
           .withNewResources()
             .addToRequests("memory", executorMemoryQuantity)
             .addToLimits("memory", executorMemoryLimitQuantity)
+            .addToRequests("cpu", executorCpuQuantity)
+            .addToLimits("cpu", executorCpuQuantity)
             .endResources()
           .withEnv(requiredEnv.asJava)
           .withPorts(requiredPorts.asJava)
