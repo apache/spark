@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.kafka
 
-import java.io.File
+import java.io.{File, IOException}
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
 import java.util.{Map => JMap, Properties}
@@ -144,7 +144,14 @@ private[kafka] class KafkaTestUtils extends Logging {
     // On Windows, `logDirs` is left open even after Kafka server above is completely shut down
     // in some cases. It leads to test failures on Windows if the directory deletion failure
     // throws an exception.
-    brokerConf.logDirs.foreach { f => Utils.deleteRecursivelyAndQuietly(new File(f)) }
+    brokerConf.logDirs.foreach { f =>
+      try {
+        Utils.deleteRecursively(new File(f))
+      } catch {
+        case e: IOException if Utils.isWindows =>
+          logWarning(e.getMessage)
+      }
+    }
 
     if (zkClient != null) {
       zkClient.close()
@@ -275,8 +282,18 @@ private[kafka] class KafkaTestUtils extends Logging {
       // The directories are not closed even if the ZooKeeper server is shut down.
       // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures
       // on Windows if the directory deletion failure throws an exception.
-      Utils.deleteRecursivelyAndQuietly(snapshotDir)
-      Utils.deleteRecursivelyAndQuietly(logDir)
+      try {
+        Utils.deleteRecursively(snapshotDir)
+      } catch {
+        case e: IOException if Utils.isWindows =>
+          logWarning(e.getMessage)
+      }
+      try {
+        Utils.deleteRecursively(logDir)
+      } catch {
+        case e: IOException if Utils.isWindows =>
+          logWarning(e.getMessage)
+      }
     }
   }
 }

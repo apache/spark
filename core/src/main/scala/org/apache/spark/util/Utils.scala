@@ -1015,20 +1015,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Same with `deleteRecursively` but don't throw an exception even if deletion is unsuccessful.
-   */
-  def deleteRecursivelyAndQuietly(file: File): Boolean = {
-    try {
-      deleteRecursively(file)
-      true
-    } catch {
-      case e: Exception =>
-        logWarning(e.getMessage)
-        false
-    }
-  }
-
-  /**
    * Check to see if file is a symbolic link.
    */
   def isSymlink(file: File): Boolean = {
