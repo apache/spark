@@ -50,18 +50,34 @@ import org.apache.spark.util.collection.OpenHashMap
       _FUNC_(col, array(percentage1 [, percentage2]...)) - Returns the exact percentile value array
       of numeric column `col` at the given percentage(s). Each value of the percentage array must
       be between 0.0 and 1.0.
+      
+      _FUNC_(col, frequency, percentage) - Returns the exact percentile value of numeric column `col` 
+      with frequency column `frequency` at the given percentage. The value of percentage must be 
+      between 0.0 and 1.0.
+
+      _FUNC_(col, frequency, array(percentage1 [, percentage2]...)) - Returns the exact percentile 
+      value array of numeric column `col` with frequency column `frequency` at the given percentage(s).
+      Each value of the percentage array must be between 0.0 and 1.0.
+
     """)
 case class Percentile(
     child: Expression,
+    frequency : Expression,
     percentageExpression: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
   extends TypedImperativeAggregate[OpenHashMap[Number, Long]] with ImplicitCastInputTypes {
 
   def this(child: Expression, percentageExpression: Expression) = {
-    this(child, percentageExpression, 0, 0)
+    this(child, Literal(1l), percentageExpression, 0, 0)
+  }
+  
+  def this(child: Expression, frequency: Expression, percentageExpression: Expression) = {
+    this(child, frequency, percentageExpression, 0, 0)
   }
 
+  private val unit = Literal(1l)
+  
   override def prettyName: String = "percentile"
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Percentile =
@@ -69,7 +85,7 @@ case class Percentile(
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): Percentile =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
-
+  
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
   @transient
   private lazy val returnPercentileArray = percentageExpression.dataType.isInstanceOf[ArrayType]
@@ -80,7 +96,11 @@ case class Percentile(
       case arrayData: ArrayData => arrayData.toDoubleArray().toSeq
   }
 
-  override def children: Seq[Expression] = child :: percentageExpression :: Nil
+  override def children: Seq[Expression] = if( frequency != unit){
+    child :: frequency :: percentageExpression :: Nil
+  }else {
+    child :: percentageExpression :: Nil
+  }
 
   // Returns null for empty inputs
   override def nullable: Boolean = true
@@ -90,10 +110,19 @@ case class Percentile(
     case _ => DoubleType
   }
 
-  override def inputTypes: Seq[AbstractDataType] = percentageExpression.dataType match {
-    case _: ArrayType => Seq(NumericType, ArrayType(DoubleType))
-    case _ => Seq(NumericType, DoubleType)
-  }
+  override def inputTypes: Seq[AbstractDataType] =
+    if (frequency == unit) {
+      percentageExpression.dataType match {
+        case _: ArrayType => Seq(NumericType, ArrayType(DoubleType))
+        case _            => Seq(NumericType, DoubleType)
+      }
+    } else {
+      percentageExpression.dataType match {
+        case _: ArrayType => Seq(NumericType, IntegralType, ArrayType(DoubleType))
+        case _            => Seq(NumericType, IntegralType, DoubleType)
+      }
+    }
+  
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
   // 1. percentageExpression must be foldable;
@@ -125,10 +154,15 @@ case class Percentile(
       buffer: OpenHashMap[Number, Long],
       input: InternalRow): OpenHashMap[Number, Long] = {
     val key = child.eval(input).asInstanceOf[Number]
-
+    val frqValue = frequency.eval(input)
+    
     // Null values are ignored in counts map.
-    if (key != null) {
-      buffer.changeValue(key, 1L, _ + 1L)
+    if (key != null && frqValue != null) {
+      val frqLong = frqValue.asInstanceOf[Number].longValue()
+      //add only when frequency is positive
+      if(frqLong > 0 ){
+        buffer.changeValue(key, frqLong, _ + frqLong)
+      }
     }
     buffer
   }
