@@ -55,6 +55,16 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     maybeBlock.nonEmpty
   }
 
+  private def getNumInMemoryRelations(plan: LogicalPlan): Int = {
+    var sum = plan.collect { case _: InMemoryRelation => 1 }.sum
+    plan.transformAllExpressions {
+      case e: SubqueryExpression =>
+        sum += getNumInMemoryRelations(e.plan)
+        e
+    }
+    sum
+  }
+
   test("withColumn doesn't invalidate cached dataframe") {
     var evalCount = 0
     val myUDF = udf((x: String) => { evalCount += 1; "result" })
@@ -588,11 +598,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("SPARK-19093 scalar and nested predicate query") {
-    def getCachedPlans(plan: LogicalPlan): Seq[LogicalPlan] = {
-      plan collect {
-        case i: InMemoryRelation => i
-      }
-    }
+
+
     withTempView("t1", "t2", "t3", "t4") {
       Seq(1).toDF("c1").createOrReplaceTempView("t1")
       Seq(2).toDF("c1").createOrReplaceTempView("t2")
@@ -611,11 +618,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
           |WHERE
           |c1 IN (SELECT c1 FROM t2 WHERE c1 IN (SELECT c1 FROM t3 WHERE c1 = 1))
         """.stripMargin).queryExecution.optimizedPlan
-
-      assert(
-        cachedPlan.collect {
-          case i: InMemoryRelation => i
-        }.size == 3)
+      assert (getNumInMemoryRelations(cachedPlan) == 3)
 
       // Scalar subquery and predicate subquery
       val cachedPlan2 =
@@ -629,15 +632,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
             |OR
             |c1 IN (SELECT c1 FROM t4)
           """.stripMargin).queryExecution.optimizedPlan
-
-
-      val cachedRelations = scala.collection.mutable.MutableList.empty[Seq[LogicalPlan]]
-      cachedRelations += getCachedPlans(cachedPlan2)
-      cachedPlan2 transformAllExpressions {
-        case e: SubqueryExpression => cachedRelations += getCachedPlans(e.plan)
-          e
-      }
-      assert(cachedRelations.flatten.size == 4)
+      assert (getNumInMemoryRelations(cachedPlan2) == 4)
 
       spark.catalog.uncacheTable("t1")
       spark.catalog.uncacheTable("t2")

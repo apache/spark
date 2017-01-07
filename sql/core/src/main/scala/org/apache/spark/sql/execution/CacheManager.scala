@@ -132,17 +132,15 @@ class CacheManager extends Logging {
 
   /** Replaces segments of the given logical plan with cached versions where possible. */
   def useCachedData(plan: LogicalPlan): LogicalPlan = {
-    useCachedDataInternal(plan) transformAllExpressions {
-      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan))
-    }
-  }
-
-  private def useCachedDataInternal(plan: LogicalPlan): LogicalPlan = {
-    plan transformDown {
+    val newPlan = plan transformDown {
       case currentFragment =>
         lookupCachedData(currentFragment)
           .map(_.cachedRepresentation.withOutput(currentFragment.output))
           .getOrElse(currentFragment)
+    }
+
+    newPlan transformAllExpressions {
+      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan))
     }
   }
 
