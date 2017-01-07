@@ -66,9 +66,12 @@ private[spark] class Client(
     .getOption("spark.kubernetes.driver.uploads.driverExtraClasspath")
   private val uploadedJars = sparkConf.getOption("spark.kubernetes.driver.uploads.jars")
 
-  private val secretBytes = new Array[Byte](128)
-  SECURE_RANDOM.nextBytes(secretBytes)
-  private val secretBase64String = Base64.encodeBase64String(secretBytes)
+  private val secretBase64String = {
+    val secretBytes = new Array[Byte](128)
+    SECURE_RANDOM.nextBytes(secretBytes)
+    Base64.encodeBase64String(secretBytes)
+  }
+
   private val serviceAccount = sparkConf.get("spark.kubernetes.submit.serviceAccountName",
     "default")
 
@@ -105,11 +108,7 @@ private[spark] class Client(
         .done()
       try {
         val selectors = Map(DRIVER_LAUNCHER_SELECTOR_LABEL -> driverLauncherSelectorValue).asJava
-        val uiPort = sparkConf
-          .getOption("spark.ui.port")
-          .map(_.toInt)
-          .getOrElse(DEFAULT_UI_PORT)
-        val (servicePorts, containerPorts) = configurePorts(uiPort)
+        val (servicePorts, containerPorts) = configurePorts()
         val service = kubernetesClient.services().createNew()
           .withNewMetadata()
             .withName(kubernetesAppId)
@@ -120,11 +119,11 @@ private[spark] class Client(
             .endSpec()
           .done()
         sparkConf.set("spark.kubernetes.driver.service.name", service.getMetadata.getName)
-        sparkConf.setIfMissing("spark.driver.port", DRIVER_PORT.toString)
-        sparkConf.setIfMissing("spark.blockmanager.port", BLOCKMANAGER_PORT.toString)
+        sparkConf.setIfMissing("spark.driver.port", DEFAULT_DRIVER_PORT.toString)
+        sparkConf.setIfMissing("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT.toString)
         val submitRequest = buildSubmissionRequest()
         val submitCompletedFuture = SettableFuture.create[Boolean]
-        val secretDirectory = s"/var/run/secrets/spark-submission/$kubernetesAppId"
+        val secretDirectory = s"$SPARK_SUBMISSION_SECRET_BASE_DIR/$kubernetesAppId"
 
         val podWatcher = new Watcher[Pod] {
           override def eventReceived(action: Action, t: Pod): Unit = {
@@ -228,7 +227,7 @@ private[spark] class Client(
     })
   }
 
-  private def configurePorts(uiPort: Int): (Seq[ServicePort], Seq[ContainerPort]) = {
+  private def configurePorts(): (Seq[ServicePort], Seq[ContainerPort]) = {
     val servicePorts = new ArrayBuffer[ServicePort]
     val containerPorts = new ArrayBuffer[ContainerPort]
 
@@ -251,15 +250,20 @@ private[spark] class Client(
       sparkConf
         .getOption("spark.driver.port")
         .map(_.toInt)
-        .getOrElse(DRIVER_PORT))
+        .getOrElse(DEFAULT_DRIVER_PORT))
     addPortToServiceAndContainer(
       BLOCKMANAGER_PORT_NAME,
       sparkConf
         .getOption("spark.blockmanager.port")
         .map(_.toInt)
-        .getOrElse(BLOCKMANAGER_PORT))
+        .getOrElse(DEFAULT_BLOCKMANAGER_PORT))
 
-    addPortToServiceAndContainer(UI_PORT_NAME, uiPort)
+    addPortToServiceAndContainer(
+      UI_PORT_NAME,
+      sparkConf
+        .getOption("spark.ui.port")
+        .map(_.toInt)
+        .getOrElse(DEFAULT_UI_PORT))
     (servicePorts.toSeq, containerPorts.toSeq)
   }
 
@@ -331,8 +335,8 @@ private object Client {
   private val SUBMISSION_SERVER_SECRET_NAME = "spark-submission-server-secret"
   private val DRIVER_LAUNCHER_SELECTOR_LABEL = "driver-launcher-selector"
   private val DRIVER_LAUNCHER_SERVICE_INTERNAL_PORT = 7077
-  private val DRIVER_PORT = 7078
-  private val BLOCKMANAGER_PORT = 7079
+  private val DEFAULT_DRIVER_PORT = 7078
+  private val DEFAULT_BLOCKMANAGER_PORT = 7079
   private val DEFAULT_UI_PORT = 4040
   private val UI_PORT_NAME = "spark-ui-port"
   private val DRIVER_LAUNCHER_SERVICE_PORT_NAME = "driver-launcher-port"
@@ -340,6 +344,7 @@ private object Client {
   private val BLOCKMANAGER_PORT_NAME = "block-manager-port"
   private val DRIVER_LAUNCHER_CONTAINER_NAME = "spark-kubernetes-driver-launcher"
   private val SECURE_RANDOM = new SecureRandom()
+  private val SPARK_SUBMISSION_SECRET_BASE_DIR = "/var/run/secrets/spark-submission"
 
   def main(args: Array[String]): Unit = {
     require(args.length >= 2, s"Too few arguments. Usage: ${getClass.getName} <mainAppResource>" +
