@@ -1826,7 +1826,14 @@ class UserDefinedFunction(object):
     def __init__(self, func, returnType, name=None):
         self.func = func
         self.returnType = returnType
-        self._judf = self._create_judf(name)
+        self._judf_placeholder = None
+        self._name = name
+
+    @property
+    def _judf(self):
+        if self._judf_placeholder is None:
+            self._judf_placeholder = self._create_judf(self._name)
+        return self._judf_placeholder
 
     def _create_judf(self, name):
         from pyspark.sql import SparkSession
