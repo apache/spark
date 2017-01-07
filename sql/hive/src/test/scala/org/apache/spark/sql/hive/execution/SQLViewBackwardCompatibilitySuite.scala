@@ -40,7 +40,7 @@ class SQLViewBackwardCompatibilitySuite extends QueryTest
   }
 
   override def afterAll(): Unit = {
-    sql(s"DROP DATABASE IF EXISTS $DATABASE_NAME")
+    sql(s"DROP DATABASE IF EXISTS $DATABASE_NAME CASCADE")
   }
 
   private val simpleSchema = new StructType().add("id", "int").add("id1", "int")
