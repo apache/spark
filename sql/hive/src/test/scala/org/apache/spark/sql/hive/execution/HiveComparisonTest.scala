@@ -226,7 +226,8 @@ abstract class HiveComparisonTest
       testCaseName: String,
       sql: String,
       reset: Boolean = true,
-      tryWithoutResettingFirst: Boolean = false) {
+      tryWithoutResettingFirst: Boolean = false,
+      assumption: Boolean = true) {
     // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
     assert(!testCaseName.contains(":"))
 
@@ -255,6 +256,7 @@ abstract class HiveComparisonTest
     }
 
     test(testCaseName) {
+      assume(assumption)
       logDebug(s"=== HIVE TEST: $testCaseName ===")
 
       val sqlWithoutComment =
