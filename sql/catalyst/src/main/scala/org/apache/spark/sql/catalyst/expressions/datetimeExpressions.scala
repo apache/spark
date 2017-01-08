@@ -1065,7 +1065,7 @@ case class ParseToDate(left: Expression, format: Expression, child: Expression)
   }
 
   def this(left: Expression) = {
-    this(left, null, ToDate(left))
+    this(left, Literal(""), ToDate(left))
   }
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
