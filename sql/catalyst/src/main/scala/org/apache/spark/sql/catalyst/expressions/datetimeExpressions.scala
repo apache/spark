@@ -1064,6 +1064,10 @@ case class ParseToDate(left: Expression, format: Expression, child: Expression)
     this(left, format, Cast(new ParseToTimestamp(left, format), DateType))
   }
 
+  def this(left: Expression) = {
+    this(left, null, ToDate(left))
+  }
+
   override def flatArguments: Iterator[Any] = Iterator(left, format)
   override def sql: String = s"$prettyName(${left.sql}, ${format.sql})"
 
