@@ -2313,10 +2313,9 @@ setMethod("dropDuplicates",
 #' @param joinExpr (Optional) The expression used to perform the join. joinExpr must be a
 #' Column expression. If joinExpr is omitted, the default, inner join is attempted and an error is
 #' thrown if it would be a Cartesian Product. For Cartesian join, use crossJoin instead.
-#' @param joinType The type of join to perform. The following join types are available:
-#' 'inner', 'cross', 'outer', 'full', 'full_outer', 'left', 'left_outer',
-#' 'right', 'right_outer', 'left_semi', 'left_anti', 'cross'.
-#' and 'cross'. The default joinType is "inner".
+#' @param joinType The type of join to perform, default 'inner'.
+#' Must be one of: 'inner', 'cross', 'outer', 'full', 'full_outer',
+#' 'left', 'left_outer', 'right', 'right_outer', 'left_semi', and 'left_anti'.
 #' @return A SparkDataFrame containing the result of the join operation.
 #' @family SparkDataFrame functions
 #' @aliases join,SparkDataFrame,SparkDataFrame-method

@@ -759,8 +759,9 @@ class Dataset[T] private[sql](
    *
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
-   * @param joinType One of: `inner`, `cross`, `outer`, `full`, `full_outer`,
-   *                 `left`, `left_outer`, `right`, `right_outer`, `left_semi`, `left_anti`.
+   * @param joinType Type of join to perform. Default `inner`. Must be any of:
+   *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
+   *                 `right`, `right_outer`, `left_semi`, `left_anti`.
    *
    * @note If you perform a self-join using this function without aliasing the input
    * `DataFrame`s, you will NOT be able to reference any columns after the join, since
@@ -815,8 +816,9 @@ class Dataset[T] private[sql](
    *
    * @param right Right side of the join.
    * @param joinExprs Join expression.
-   * @param joinType One of: `inner`, `cross`, `outer`, `full`, `full_outer`,
-   *                 `left`, `left_outer`, `right`, `right_outer`, `left_semi`, `left_anti`.
+   * @param joinType Type of join to perform. Default `inner`. Must be any of:
+   *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
+   *                 `right`, `right_outer`, `left_semi`, `left_anti`.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -893,8 +895,9 @@ class Dataset[T] private[sql](
    *
    * @param other Right side of the join.
    * @param condition Join expression.
-   * @param joinType One of: `inner`, `cross`, `outer`, `full`, `full_outer`,
-   *                 `left`, `left_outer`, `right`, `right_outer`, `left_semi`, `left_anti`.
+   * @param joinType Type of join to perform. Default `inner`. Must be any of:
+   *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
+   *                 `right`, `right_outer`, `left_semi`, `left_anti`.
    *
    * @group typedrel
    * @since 1.6.0
