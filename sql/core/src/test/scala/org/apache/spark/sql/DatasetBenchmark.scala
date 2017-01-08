@@ -192,14 +192,14 @@ object DatasetBenchmark {
     benchmark2.run()
 
     /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.12.1
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     aggregate:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    RDD sum                                       1420 / 1523         70.4          14.2       1.0X
-    DataFrame sum                                   31 /   49       3214.3           0.3      45.6X
-    Dataset sum using Aggregator                  3216 / 3257         31.1          32.2       0.4X
-    Dataset complex Aggregator                    7948 / 8461         12.6          79.5       0.2X
+    RDD sum                                       1913 / 1942         52.3          19.1       1.0X
+    DataFrame sum                                   46 /   61       2157.7           0.5      41.3X
+    Dataset sum using Aggregator                  4656 / 4758         21.5          46.6       0.4X
+    Dataset complex Aggregator                    6636 / 7039         15.1          66.4       0.3X
     */
     benchmark3.run()
   }

@@ -79,6 +79,12 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
     ChiSqSelectorSuite.testSelector(selector, dataset)
   }
 
+  test("Test Chi-Square selector: fwe") {
+    val selector = new ChiSqSelector()
+      .setOutputCol("filtered").setSelectorType("fwe").setFwe(0.6)
+    ChiSqSelectorSuite.testSelector(selector, dataset)
+  }
+
   test("read/write") {
     def checkModelData(model: ChiSqSelectorModel, model2: ChiSqSelectorModel): Unit = {
       assert(model.selectedFeatures === model2.selectedFeatures)

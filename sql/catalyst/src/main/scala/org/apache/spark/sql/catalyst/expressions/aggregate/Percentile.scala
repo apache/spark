@@ -33,10 +33,9 @@ import org.apache.spark.util.collection.OpenHashMap
  * The Percentile aggregate function returns the exact percentile(s) of numeric column `expr` at
  * the given percentage(s) with value range in [0.0, 1.0].
  *
- * The operator is bound to the slower sort based aggregation path because the number of elements
- * and their partial order cannot be determined in advance. Therefore we have to store all the
- * elements in memory, and that too many elements can cause GC paused and eventually OutOfMemory
- * Errors.
+ * Because the number of elements and their partial order cannot be determined in advance.
+ * Therefore we have to store all the elements in memory, and so notice that too many elements can
+ * cause GC paused and eventually OutOfMemory Errors.
  *
  * @param child child expression that produce numeric column value with `child.eval(inputRow)`
  * @param percentageExpression Expression that represents a single percentage value or an array of
@@ -77,15 +76,9 @@ case class Percentile(
   private lazy val returnPercentileArray = percentageExpression.dataType.isInstanceOf[ArrayType]
 
   @transient
-  private lazy val percentages =
-    (percentageExpression.dataType, percentageExpression.eval()) match {
-      case (_, num: Double) => Seq(num)
-      case (ArrayType(baseType: NumericType, _), arrayData: ArrayData) =>
-        val numericArray = arrayData.toObjectArray(baseType)
-        numericArray.map { x =>
-          baseType.numeric.toDouble(x.asInstanceOf[baseType.InternalType])}.toSeq
-      case other =>
-        throw new AnalysisException(s"Invalid data type ${other._1} for parameter percentages")
+  private lazy val percentages = percentageExpression.eval() match {
+      case num: Double => Seq(num)
+      case arrayData: ArrayData => arrayData.toDoubleArray().toSeq
   }
 
   override def children: Seq[Expression] = child :: percentageExpression :: Nil
@@ -99,7 +92,7 @@ case class Percentile(
   }
 
   override def inputTypes: Seq[AbstractDataType] = percentageExpression.dataType match {
-    case _: ArrayType => Seq(NumericType, ArrayType)
+    case _: ArrayType => Seq(NumericType, ArrayType(DoubleType))
     case _ => Seq(NumericType, DoubleType)
   }
 
@@ -129,19 +122,25 @@ case class Percentile(
     new OpenHashMap[Number, Long]()
   }
 
-  override def update(buffer: OpenHashMap[Number, Long], input: InternalRow): Unit = {
+  override def update(
+      buffer: OpenHashMap[Number, Long],
+      input: InternalRow): OpenHashMap[Number, Long] = {
     val key = child.eval(input).asInstanceOf[Number]
 
     // Null values are ignored in counts map.
     if (key != null) {
       buffer.changeValue(key, 1L, _ + 1L)
     }
+    buffer
   }
 
-  override def merge(buffer: OpenHashMap[Number, Long], other: OpenHashMap[Number, Long]): Unit = {
+  override def merge(
+      buffer: OpenHashMap[Number, Long],
+      other: OpenHashMap[Number, Long]): OpenHashMap[Number, Long] = {
     other.foreach { case (key, count) =>
       buffer.changeValue(key, count, _ + count)
     }
+    buffer
   }
 
   override def eval(buffer: OpenHashMap[Number, Long]): Any = {

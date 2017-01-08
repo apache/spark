@@ -23,37 +23,32 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.execution.command._
 
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
  * Writing to dynamic partitions is also supported.
  *
- * @param staticPartitionKeys partial partitioning spec for write. This defines the scope of
- *                            partition overwrites: when the spec is empty, all partitions are
- *                            overwritten. When it covers a prefix of the partition keys, only
- *                            partitions matching the prefix are overwritten.
- * @param customPartitionLocations mapping of partition specs to their custom locations. The
- *                                 caller should guarantee that exactly those table partitions
- *                                 falling under the specified static partition keys are contained
- *                                 in this map, and that no other partitions are.
+ * @param staticPartitions partial partitioning spec for write. This defines the scope of partition
+ *                         overwrites: when the spec is empty, all partitions are overwritten.
+ *                         When it covers a prefix of the partition keys, only partitions matching
+ *                         the prefix are overwritten.
  */
 case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
-    staticPartitionKeys: TablePartitionSpec,
-    customPartitionLocations: Map[TablePartitionSpec, String],
+    staticPartitions: TablePartitionSpec,
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
-    refreshFunction: Seq[TablePartitionSpec] => Unit,
     options: Map[String, String],
-    @transient query: LogicalPlan,
+    query: LogicalPlan,
     mode: SaveMode,
-    catalogTable: Option[CatalogTable])
+    catalogTable: Option[CatalogTable],
+    fileIndex: Option[FileIndex])
   extends RunnableCommand {
 
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
@@ -74,12 +69,30 @@ case class InsertIntoHadoopFsRelationCommand(
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
+    val partitionsTrackedByCatalog = sparkSession.sessionState.conf.manageFilesourcePartitions &&
+      catalogTable.isDefined &&
+      catalogTable.get.partitionColumnNames.nonEmpty &&
+      catalogTable.get.tracksPartitionsInCatalog
+
+    var initialMatchingPartitions: Seq[TablePartitionSpec] = Nil
+    var customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty
+
+    // When partitions are tracked by the catalog, compute all custom partition locations that
+    // may be relevant to the insertion job.
+    if (partitionsTrackedByCatalog) {
+      val matchingPartitions = sparkSession.sessionState.catalog.listPartitions(
+        catalogTable.get.identifier, Some(staticPartitions))
+      initialMatchingPartitions = matchingPartitions.map(_.spec)
+      customPartitionLocations = getCustomPartitionLocations(
+        fs, catalogTable.get, qualifiedOutputPath, matchingPartitions)
+    }
+
     val pathExists = fs.exists(qualifiedOutputPath)
     val doInsertion = (mode, pathExists) match {
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
       case (SaveMode.Overwrite, true) =>
-        deleteMatchingPartitions(fs, qualifiedOutputPath)
+        deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations)
         true
       case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
         true
@@ -98,6 +111,27 @@ case class InsertIntoHadoopFsRelationCommand(
         outputPath = outputPath.toString,
         isAppend = isAppend)
 
+      // Callback for updating metastore partition metadata after the insertion job completes.
+      def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
+        if (partitionsTrackedByCatalog) {
+          val newPartitions = updatedPartitions.toSet -- initialMatchingPartitions
+          if (newPartitions.nonEmpty) {
+            AlterTableAddPartitionCommand(
+              catalogTable.get.identifier, newPartitions.toSeq.map(p => (p, None)),
+              ifNotExists = true).run(sparkSession)
+          }
+          if (mode == SaveMode.Overwrite) {
+            val deletedPartitions = initialMatchingPartitions.toSet -- updatedPartitions
+            if (deletedPartitions.nonEmpty) {
+              AlterTableDropPartitionCommand(
+                catalogTable.get.identifier, deletedPartitions.toSeq,
+                ifExists = true, purge = false,
+                retainData = true /* already deleted */).run(sparkSession)
+            }
+          }
+        }
+      }
+
       FileFormatWriter.write(
         sparkSession = sparkSession,
         queryExecution = Dataset.ofRows(sparkSession, query).queryExecution,
@@ -108,8 +142,10 @@ case class InsertIntoHadoopFsRelationCommand(
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
-        refreshFunction = refreshFunction,
+        refreshFunction = refreshPartitionsCallback,
         options = options)
+
+      fileIndex.foreach(_.refresh())
     } else {
       logInfo("Skipping insertion into a relation that already exists.")
     }
@@ -121,10 +157,13 @@ case class InsertIntoHadoopFsRelationCommand(
    * Deletes all partition files that match the specified static prefix. Partitions with custom
    * locations are also cleared based on the custom locations map given to this class.
    */
-  private def deleteMatchingPartitions(fs: FileSystem, qualifiedOutputPath: Path): Unit = {
-    val staticPartitionPrefix = if (staticPartitionKeys.nonEmpty) {
+  private def deleteMatchingPartitions(
+      fs: FileSystem,
+      qualifiedOutputPath: Path,
+      customPartitionLocations: Map[TablePartitionSpec, String]): Unit = {
+    val staticPartitionPrefix = if (staticPartitions.nonEmpty) {
       "/" + partitionColumns.flatMap { p =>
-        staticPartitionKeys.get(p.name) match {
+        staticPartitions.get(p.name) match {
           case Some(value) =>
             Some(escapePathName(p.name) + "=" + escapePathName(value))
           case None =>
@@ -143,7 +182,7 @@ case class InsertIntoHadoopFsRelationCommand(
     // now clear all custom partition locations (e.g. /custom/dir/where/foo=2/bar=4)
     for ((spec, customLoc) <- customPartitionLocations) {
       assert(
-        (staticPartitionKeys.toSet -- spec).isEmpty,
+        (staticPartitions.toSet -- spec).isEmpty,
         "Custom partition location did not match static partitioning keys")
       val path = new Path(customLoc)
       if (fs.exists(path) && !fs.delete(path, true)) {
@@ -151,5 +190,30 @@ case class InsertIntoHadoopFsRelationCommand(
           s"directory $path prior to writing to it")
       }
     }
+  }
+
+  /**
+   * Given a set of input partitions, returns those that have locations that differ from the
+   * Hive default (e.g. /k1=v1/k2=v2). These partitions were manually assigned locations by
+   * the user.
+   *
+   * @return a mapping from partition specs to their custom locations
+   */
+  private def getCustomPartitionLocations(
+      fs: FileSystem,
+      table: CatalogTable,
+      qualifiedOutputPath: Path,
+      partitions: Seq[CatalogTablePartition]): Map[TablePartitionSpec, String] = {
+    partitions.flatMap { p =>
+      val defaultLocation = qualifiedOutputPath.suffix(
+        "/" + PartitioningUtils.getPathFragment(p.spec, table.partitionSchema)).toString
+      val catalogLocation = new Path(p.location).makeQualified(
+        fs.getUri, fs.getWorkingDirectory).toString
+      if (catalogLocation != defaultLocation) {
+        Some(p.spec -> catalogLocation)
+      } else {
+        None
+      }
+    }.toMap
   }
 }
