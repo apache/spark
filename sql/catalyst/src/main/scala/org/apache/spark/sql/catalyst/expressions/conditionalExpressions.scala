@@ -316,18 +316,24 @@ object CaseKeyWhen {
 }
 
 /**
- * A function that returns the index of str in (str1, str2, ...) list or 0 if not found.
+ * A function that returns the index of expr in (expr1, expr2, ...) list or 0 if not found.
  * It takes at least 2 parameters, and all parameters' types should be subtypes of AtomicType.
+ * It's also acceptable to give parameters of different types
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str, str1, str2, ...) - Returns the index of str in the str1,str2,... or 0 if not found.",
+  usage = "_FUNC_(expr, expr1, expr2, ...) - Returns the index of expr in the expr1, expr2, ... or 0 if not found.",
   extended = """
     Examples:
       > SELECT _FUNC_(10, 9, 3, 10, 4);
        3
+      > SELECT _FUNC_('a', 'b', 'c', 'd', 'a');
+       4
+      > SELECT _FUNC_('999', 'a', 999, 9.99, '999');
+       4
   """)
 case class Field(children: Seq[Expression]) extends Expression {
 
+  /** Even if expr is not found in (expr1, expr2, ...) list, the value will be 0, not null */
   override def nullable: Boolean = false
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -355,10 +361,7 @@ case class Field(children: Seq[Expression]) extends Expression {
         case _ => findEqual(target, params.tail, index + 1)
       }
     }
-    if(target == null)
-      0
-    else
-      findEqual(target, children.tail, 1)
+    if (target == null) 0 else findEqual(target, children.tail, index = 1)
   }
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -372,8 +375,7 @@ case class Field(children: Seq[Expression]) extends Expression {
       val ((eval, dataType), index) = evalWithIndex
       s"""
         ${eval.code}
-        if (${dataType.equals(targetDataType)}
-          && ${ctx.genEqual(targetDataType, eval.value, target.value)}) {
+        if (${ctx.genEqual(targetDataType, eval.value, target.value)}) {
           ${ev.value} = ${index};
         }
       """

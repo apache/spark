@@ -225,11 +225,10 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(ctx.inlinedMutableStates.size == 1)
   }
 
-  test("case field") {
+  test("field") {
     val str1 = Literal("花花世界")
     val str2 = Literal("a")
     val str3 = Literal("b")
-    val str4 = Literal("")
     val str5 = Literal("999")
     val strNull = Literal.create(null, StringType)
 
@@ -256,14 +255,12 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkEvaluation(Field(Seq(str1, str2, str3, str1)), 3)
     checkEvaluation(Field(Seq(str2, str2, str2, str1)), 1)
-    checkEvaluation(Field(Seq(str4, str4, str4, str1)), 1)
     checkEvaluation(Field(Seq(bool1, bool2, bool1, bool1)), 2)
     checkEvaluation(Field(Seq(int1, int2, int3, int1)), 3)
     checkEvaluation(Field(Seq(double2, double3, double1, double2)), 3)
     checkEvaluation(Field(Seq(timeStamp1, timeStamp2, timeStamp3, timeStamp1)), 3)
     checkEvaluation(Field(Seq(date1, date1, date2, date3)), 1)
     checkEvaluation(Field(Seq(int4, double3, str5, bool1, date1, timeStamp2, int4)), 6)
-    checkEvaluation(Field(Seq(str5, str1, str2, str4)), 0)
     checkEvaluation(Field(Seq(int4, double3, str5, bool1, date1, timeStamp2, int3)), 0)
     checkEvaluation(Field(Seq(int1, strNull, intNull, bool1, date1, timeStamp2, int3)), 0)
     checkEvaluation(Field(Seq(strNull, int1, str1, str2, str3)), 0)

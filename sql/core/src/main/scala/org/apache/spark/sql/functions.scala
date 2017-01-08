@@ -1662,18 +1662,6 @@ object functions {
   def factorial(e: Column): Column = withExpr { Factorial(e.expr) }
 
   /**
-    * Returns the index of str in (str1, str2, ...) list or 0 if not found.
-    * It takes at least 2 parameters, and all parameters' types should be subtypes of AtomicType.
-    *
-    * @group normal_funcs
-    * @since 2.2.0
-    */
-  @scala.annotation.varargs
-  def field(expr1: Column, expr2: Column, exprs: Column*): Column = withExpr {
-    Field((expr1 +: expr2 +: exprs).map(_.expr))
-  }
-
-  /**
    * Computes the floor of the given value.
    *
    * @group math_funcs
