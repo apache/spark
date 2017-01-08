@@ -351,11 +351,6 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-07-30"))))
   }
 
-
-//  test("function to_timestamp") {
-//
-//  }
-
   test("function to_date") {
     val d1 = Date.valueOf("2015-07-22")
     val d2 = Date.valueOf("2015-07-01")
@@ -511,6 +506,8 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
   test("to_timestamp") {
     val date1 = Date.valueOf("2015-07-24")
     val date2 = Date.valueOf("2015-07-25")
+    val ts_date1 = Timestamp.valueOf("2015-07-24 00:00:00")
+    val ts_date2 = Timestamp.valueOf("2015-07-25 00:00:00")
     val ts1 = Timestamp.valueOf("2015-07-24 10:00:00")
     val ts2 = Timestamp.valueOf("2015-07-25 02:02:02")
     val s1 = "2015/07/24 10:00:00.5"
@@ -526,7 +523,10 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(ts1), Row(ts2)))
     checkAnswer(df.select(to_timestamp(col("s"), fmt)), Seq(
       Row(ts1), Row(ts2)))
-
+    checkAnswer(df.select(to_timestamp(col("ts"), fmt)), Seq(
+      Row(ts1), Row(ts2)))
+    checkAnswer(df.select(to_timestamp(col("d"), "yyyy-MM-dd")), Seq(
+      Row(ts_date1), Row(ts_date2)))
   }
 
   test("datediff") {

@@ -1048,29 +1048,21 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
 }
 
 /**
- * Parses a column with a format to a timestamp.
+ * Parses a column to a date based on the given format.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp_str, fmt) - Parses the `timestamp` expression " +
-    "with the `fmt` expression.",
+  usage = "_FUNC_(date_str, fmt) - Parses the `left` expression with the `fmt` expression.",
   extended = """
     Examples:
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31
-             """)
+  """)
 case class ParseToDate(left: Expression, format: Expression, child: Expression)
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
     this(left, format, Cast(new ParseToTimestamp(left, format), DateType))
   }
-
-//  override def checkInputDataTypes(): TypeCheckResult = {
-//    if (left.dataType != StringType || format.dataType != StringType) {
-//      TypeCheckResult.TypeCheckFailure(s"TO_TIMESTAMP requires both inputs to be strings")
-//    }
-//    TypeCheckResult.TypeCheckSuccess
-//  }
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
   override def sql: String = s"$prettyName(${left.sql}, ${format.sql})"
@@ -1080,28 +1072,23 @@ case class ParseToDate(left: Expression, format: Expression, child: Expression)
 }
 
 /**
- * Parses a column with a format to a timestamp.
+ * Parses a column to a timestamp based on the supplied format.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, fmt) - Parses the `timestamp` expression with the `fmt` expression.",
+  usage = "_FUNC_(timestamp, fmt) - Parses the `left` expression with the `format` expression to a timestamp.",
   extended = """
     Examples:
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31 00:00:00.0
   """)
+// scalastyle:on line.size.limit
 case class ParseToTimestamp(left: Expression, format: Expression, child: Expression)
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
   this(left, format, Cast(UnixTimestamp(left, format), TimestampType))
 }
-
-//  override def checkInputDataTypes(): TypeCheckResult = {
-//    if (left.dataType != StringType) {
-//      TypeCheckResult.TypeCheckFailure(s"TO_TIMESTAMP requires both inputs to be strings")
-//    }
-//    TypeCheckResult.TypeCheckSuccess
-//  }
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
   override def sql: String = s"$prettyName(${left.sql}, ${format.sql})"
