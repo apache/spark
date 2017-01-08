@@ -756,8 +756,9 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
       }
     } finally {
       try {
-        // As the driver shuts down in the middle of processing above, `testDir` is not closed
-        // correctly which causes the test failure on Windows.
+        // As the driver shuts down in the middle of processing and the thread above sleeps
+        // for a while, `testDir` can be not closed correctly at this point which causes the
+        // test failure on Windows.
         Utils.deleteRecursively(testDir)
       } catch {
         case e: IOException if Utils.isWindows =>
