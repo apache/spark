@@ -627,9 +627,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         // Create partition without data files and check whether it can be read
         sql(s"ALTER TABLE test_added_partitions ADD PARTITION (b='1')")
         // This table fetch is to fill the cache with zero leaf files
-        checkAnswer(
-          spark.table("test_added_partitions"),
-          Seq.empty)
+        checkAnswer(spark.table("test_added_partitions"), Seq.empty)
 
         sql(
           s"""
@@ -640,6 +638,30 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         checkAnswer(
           spark.table("test_added_partitions"),
           Seq(("0", 1), ("1", 1)).toDF("a", "b"))
+      }
+    }
+  }
+
+  test("Table readable after load") {
+    withTable("tab") {
+      withTempDir { src =>
+        val newPartitionDir = new File(src, "data").getCanonicalPath
+        spark.range(2).selectExpr("cast(id as string)").toDF("a").write
+          .mode("overwrite")
+          .parquet(newPartitionDir)
+
+        sql("CREATE TABLE tab (a STRING) STORED AS PARQUET")
+
+        // This table fetch is to fill the cache with zero leaf files
+        checkAnswer(spark.table("tab"), Seq.empty)
+
+        sql(
+          s"""
+             |LOAD DATA LOCAL INPATH '$newPartitionDir' OVERWRITE
+             |INTO TABLE tab
+           """.stripMargin)
+
+        checkAnswer(spark.table("tab"), Seq(Row("0"), Row("1")))
       }
     }
   }

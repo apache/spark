@@ -299,8 +299,6 @@ case class LoadDataCommand(
         holdDDLTime = false,
         inheritTableSpecs = true,
         isSrcLocal = isLocal)
-      // Refresh the metadata cache to ensure the data visible to the users
-      catalog.refreshTable(targetTable.identifier)
     } else {
       catalog.loadTable(
         targetTable.identifier,
@@ -309,6 +307,10 @@ case class LoadDataCommand(
         holdDDLTime = false,
         isSrcLocal = isLocal)
     }
+
+    // Refresh the metadata cache to ensure the data visible to the users
+    catalog.refreshTable(targetTable.identifier)
+
     Seq.empty[Row]
   }
 }
