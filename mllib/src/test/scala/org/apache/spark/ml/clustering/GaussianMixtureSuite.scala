@@ -24,7 +24,7 @@ import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{Dataset, Row}
 
 
 class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
@@ -109,6 +109,15 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val expectedColumns = Array("features", predictionColName, probabilityColName)
     expectedColumns.foreach { column =>
       assert(transformed.columns.contains(column))
+    }
+
+    // Check prediction matches the highest probability, and probabilities sum to one.
+    transformed.select(predictionColName, probabilityColName).collect().foreach {
+      case Row(pred: Int, prob: Vector) =>
+        val probArray = prob.toArray
+        val predFromProb = probArray.zipWithIndex.maxBy(_._1)._2
+        assert(pred === predFromProb)
+        assert(probArray.sum ~== 1.0 absTol 1E-5)
     }
 
     // Check validity of model summary
