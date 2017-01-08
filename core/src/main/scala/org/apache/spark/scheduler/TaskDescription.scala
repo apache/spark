@@ -23,7 +23,10 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, Map}
+import scala.util.control.NonFatal
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.TaskNotSerializableException
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 /**
@@ -52,7 +55,36 @@ private[spark] class TaskDescription(
     val addedFiles: Map[String, Long],
     val addedJars: Map[String, Long],
     val properties: Properties,
-    val serializedTask: ByteBuffer) {
+    private var serializedTask_ : ByteBuffer,
+    private var task_ : Task[_] = null) extends  Logging {
+
+  def this(
+      taskId: Long,
+      attemptNumber: Int,
+      executorId: String,
+      name: String,
+      index: Int, // Index within this task's TaskSet
+      addedFiles: Map[String, Long],
+      addedJars: Map[String, Long],
+      properties: Properties,
+      task: Task[_]) {
+    this(taskId, attemptNumber, executorId, name, index,
+      addedFiles, addedJars, properties, null, task)
+  }
+
+  lazy val serializedTask: ByteBuffer = {
+    if (serializedTask_ == null) {
+      serializedTask_ = try {
+        ByteBuffer.wrap(Utils.serialize(task_))
+      } catch {
+        case NonFatal(e) =>
+          val msg = s"Failed to serialize task $taskId, not attempting to retry it."
+          logError(msg, e)
+          throw new TaskNotSerializableException(e)
+      }
+    }
+    serializedTask_
+  }
 
   override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
 }
@@ -66,6 +98,7 @@ private[spark] object TaskDescription {
     }
   }
 
+  @throws[TaskNotSerializableException]
   def encode(taskDescription: TaskDescription): ByteBuffer = {
     val bytesOut = new ByteBufferOutputStream(4096)
     val dataOut = new DataOutputStream(bytesOut)
