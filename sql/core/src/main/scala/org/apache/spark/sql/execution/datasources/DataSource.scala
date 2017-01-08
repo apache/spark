@@ -416,8 +416,7 @@ case class DataSource(
   /**
    * Writes the given [[DataFrame]] out to this [[DataSource]].
    *
-   * @param isForWriteOnly Whether to exit early and just write the data without returning
-   *                       a [[BaseRelation]].
+   * @param isForWriteOnly Whether to just write the data without returning a [[BaseRelation]].
    */
   def write(
       mode: SaveMode,
@@ -501,7 +500,6 @@ case class DataSource(
             fileIndex = fileIndex)
         sparkSession.sessionState.executePlan(plan).toRdd
         if (isForWriteOnly) {
-          // Exit earlier and return null
           None
         } else {
           // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
