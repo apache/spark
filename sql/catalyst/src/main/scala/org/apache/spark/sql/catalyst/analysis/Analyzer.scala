@@ -137,7 +137,7 @@ class Analyzer(
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("View", Once,
-      AliasViewChild),
+      AliasViewChild(conf)),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
@@ -854,44 +854,6 @@ class Analyzer(
       }
     } catch {
       case a: AnalysisException if !throws => expr
-    }
-  }
-
-  /**
-   * Alias the output of a view's child to the output of the view, the corresponding attribute is
-   * searched by name. If the corresponding attribute is not found, throw an AnalysisException.
-   * On the resolution of the view, the output attributes are generated from the view schema, and
-   * the view query is resolved later. After the view attributes have been stabilized(when the
-   * resolution batch has finished), we add a Project operator over the child, so that we could
-   * alias the output of the child plan to the view's output attributes.
-   * TODO: Also check the dataTypes and nullabilites of the output.
-   */
-  object AliasViewChild extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case v @ View(_, output, child) if child.resolved =>
-        val resolver = conf.resolver
-        val newOutput = child.output.map { attr =>
-          val newAttr = findAttributeByName(attr.name, output, resolver)
-          Alias(attr, attr.name)(exprId = newAttr.exprId, qualifier = newAttr.qualifier,
-            explicitMetadata = Some(newAttr.metadata))
-        }
-        v.copy(child = Project(newOutput, child))
-    }
-
-    /**
-     * Find the attribute that has the expected attribute name from an attribute list, the names
-     * are compared using conf.resolver.
-     * If the expected attribute is not found, throw an AnalysisException.
-     */
-    private def findAttributeByName(
-        name: String,
-        attrs: Seq[Attribute],
-        resolver: Resolver): Attribute = {
-      attrs.collectFirst {
-        case attr if resolver(attr.name, name) => attr
-      }.getOrElse(throw new AnalysisException(
-        s"Attribute with name '$name' is not found in " +
-          s"'${attrs.map(_.name).mkString("(", ",", ")")}'"))
     }
   }
 
@@ -2348,18 +2310,6 @@ class Analyzer(
 object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case SubqueryAlias(_, child, _) => child
-  }
-}
-
-/**
- * Removes [[View]] operators from the plan. The operator is respected till the end of analysis
- * stage because we want to see which part of a analyzed logical plan is generated from a view.
- */
-object EliminateView extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    // The child should have the same output attributes with the View operator, so we simply
-    // remove the View operator.
-    case View(_, output, child) => child
   }
 }
 

@@ -655,4 +655,31 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       assertInvalidReference("SELECT * FROM view3")
     }
   }
+
+  test("make sure we can resolve view created by old version of Spark") {
+    withTable("hive_table") {
+      withView("old_view") {
+        spark.sql("CREATE TABLE hive_table AS SELECT 1 AS a, 2 AS b")
+        // The views defined by older versions of Spark(before 2.2) will have empty view default
+        // database name, and all the relations referenced in the viewText will have database part
+        // defined.
+        val view = CatalogTable(
+          identifier = TableIdentifier("old_view"),
+          tableType = CatalogTableType.VIEW,
+          storage = CatalogStorageFormat.empty,
+          schema = new StructType().add("a", "int").add("b", "int"),
+          viewOriginalText = Some(s"SELECT * FROM hive_table"),
+          viewText = Some("SELECT `gen_attr_0` AS `a`, `gen_attr_1` AS `b` FROM (SELECT " +
+            "`gen_attr_0`, `gen_attr_1` FROM (SELECT `a` AS `gen_attr_0`, `b` AS " +
+            "`gen_attr_1` FROM hive_table) AS gen_subquery_0) AS hive_table")
+        )
+        hiveContext.sessionState.catalog.createTable(view, ignoreIfExists = false)
+        val df = sql("SELECT * FROM old_view")
+        // Check the output rows.
+        checkAnswer(df, Row(1, 2))
+        // Check the output schema.
+        assert(df.schema.sameType(view.schema))
+      }
+    }
+  }
 }

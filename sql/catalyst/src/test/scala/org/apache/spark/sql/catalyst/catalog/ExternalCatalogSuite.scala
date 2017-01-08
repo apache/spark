@@ -917,10 +917,7 @@ abstract class CatalogTestUtils {
         .add("a", "int")
         .add("b", "string"),
       viewOriginalText = Some("SELECT * FROM tbl1"),
-      viewText = Some("SELECT `gen_attr_0` AS `col1`, `gen_attr_1` AS `col2`, `gen_attr_2` AS " +
-        "`a`, `gen_attr_3` AS `b` FROM (SELECT `gen_attr_0`, `gen_attr_1`, `gen_attr_2`, " +
-        "`gen_attr_3` FROM (SELECT `col1` AS `gen_attr_0`, `col2` AS `gen_attr_1`, `a` AS " +
-        "`gen_attr_2`, `b` AS `gen_attr_3` FROM `db2`.`tbl1`) AS gen_subquery_0) AS tbl1"))
+      viewText = Some("SELECT * FROM tbl1"))
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {

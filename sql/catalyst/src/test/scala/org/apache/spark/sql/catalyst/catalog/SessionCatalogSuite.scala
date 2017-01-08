@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
 
 /**
  * Tests for [[SessionCatalog]] that assume that [[InMemoryCatalog]] is correctly implemented.
@@ -34,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range, Subquery
  * signatures but do not extend a common parent. This is largely by design but
  * unfortunately leads to very similar test code in two places.
  */
-class SessionCatalogSuite extends SparkFunSuite {
+class SessionCatalogSuite extends PlanTest {
   private val utils = new CatalogTestUtils {
     override val tableInputFormat: String = "com.fruit.eyephone.CameraInputFormat"
     override val tableOutputFormat: String = "com.fruit.eyephone.CameraOutputFormat"
@@ -483,29 +482,6 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(
       normalizeExprIds(sessionCatalog.lookupRelation(TableIdentifier("view1")))
         == SubqueryAlias("view1", view, Some(TableIdentifier("view1"))))
-  }
-
-  /**
-   * Since attribute references are given globally unique ids during analysis,
-   * we must normalize them to check if two different queries are identical.
-   */
-  protected def normalizeExprIds(plan: LogicalPlan) = {
-    plan transformAllExpressions {
-      case s: ScalarSubquery =>
-        s.copy(exprId = ExprId(0))
-      case e: Exists =>
-        e.copy(exprId = ExprId(0))
-      case l: ListQuery =>
-        l.copy(exprId = ExprId(0))
-      case p: PredicateSubquery =>
-        p.copy(exprId = ExprId(0))
-      case a: AttributeReference =>
-        AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
-      case a: Alias =>
-        Alias(a.child, a.name)(exprId = ExprId(0))
-      case ae: AggregateExpression =>
-        ae.copy(resultId = ExprId(0))
-    }
   }
 
   test("table exists") {
