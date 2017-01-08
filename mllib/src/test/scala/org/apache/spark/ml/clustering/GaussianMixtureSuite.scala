@@ -280,6 +280,7 @@ object GaussianMixtureSuite extends SparkFunSuite {
   def modelEquals(m1: GaussianMixtureModel, m2: GaussianMixtureModel): Unit = {
     assert(m1.weights.length === m2.weights.length)
     for (i <- m1.weights.indices) {
+      assert(m1.weights(i) ~== m2.weights(i) absTol 1E-3)
       assert(m1.gaussians(i).mean ~== m2.gaussians(i).mean absTol 1E-3)
       assert(m1.gaussians(i).cov ~== m2.gaussians(i).cov absTol 1E-3)
     }
