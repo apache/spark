@@ -83,8 +83,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("script") {
-    assume(
-      TestUtils.testCommandAvailable("/bin/bash") && TestUtils.testCommandAvailable("echo | sed"))
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    assume(TestUtils.testCommandAvailable("echo | sed"))
     val scriptFilePath = getTestResourcePath("test_script.sh")
     val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
     df.createOrReplaceTempView("script_table")
