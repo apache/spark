@@ -472,16 +472,14 @@ class SessionCatalogSuite extends PlanTest {
     sessionCatalog.setCurrentDatabase("default")
     // Look up a view.
     assert(metadata.viewText.isDefined)
-    val view = normalizeExprIds(View(desc = metadata, output = metadata.schema.toAttributes,
-      child = CatalystSqlParser.parsePlan(metadata.viewText.get)))
-    assert(
-      normalizeExprIds(sessionCatalog.lookupRelation(TableIdentifier("view1", Some("db3"))))
-        == SubqueryAlias("view1", view, Some(TableIdentifier("view1", Some("db3")))))
+    val view = View(desc = metadata, output = metadata.schema.toAttributes,
+      child = CatalystSqlParser.parsePlan(metadata.viewText.get))
+    comparePlans(sessionCatalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
+      SubqueryAlias("view1", view, Some(TableIdentifier("view1", Some("db3")))))
     // Look up a view using current database of the session catalog.
     sessionCatalog.setCurrentDatabase("db3")
-    assert(
-      normalizeExprIds(sessionCatalog.lookupRelation(TableIdentifier("view1")))
-        == SubqueryAlias("view1", view, Some(TableIdentifier("view1"))))
+    comparePlans(sessionCatalog.lookupRelation(TableIdentifier("view1")),
+      SubqueryAlias("view1", view, Some(TableIdentifier("view1"))))
   }
 
   test("table exists") {

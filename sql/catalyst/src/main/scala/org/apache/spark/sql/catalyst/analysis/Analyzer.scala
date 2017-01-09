@@ -858,18 +858,18 @@ class Analyzer(
   }
 
   /**
-  * In many dialects of SQL it is valid to use ordinal positions in order/sort by and group by
-  * clauses. This rule is to convert ordinal positions to the corresponding expressions in the
-  * select list. This support is introduced in Spark 2.0.
-  *
-  * - When the sort references or group by expressions are not integer but foldable expressions,
-  * just ignore them.
-  * - When spark.sql.orderByOrdinal/spark.sql.groupByOrdinal is set to false, ignore the position
-  * numbers too.
-  *
-  * Before the release of Spark 2.0, the literals in order/sort by and group by clauses
-  * have no effect on the results.
-  */
+   * In many dialects of SQL it is valid to use ordinal positions in order/sort by and group by
+   * clauses. This rule is to convert ordinal positions to the corresponding expressions in the
+   * select list. This support is introduced in Spark 2.0.
+   *
+   * - When the sort references or group by expressions are not integer but foldable expressions,
+   * just ignore them.
+   * - When spark.sql.orderByOrdinal/spark.sql.groupByOrdinal is set to false, ignore the position
+   * numbers too.
+   *
+   * Before the release of Spark 2.0, the literals in order/sort by and group by clauses
+   * have no effect on the results.
+   */
   object ResolveOrdinalInOrderByAndGroupBy extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p if !p.childrenResolved => p

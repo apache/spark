@@ -71,7 +71,8 @@ case class AliasViewChild(conf: CatalystConf) extends Rule[LogicalPlan] {
   private def checkDataType(attr: Attribute, other: Attribute): Unit = {
     if (!Cast.canCast(attr.dataType, other.dataType)) {
       throw new AnalysisException(
-        s"Attribute '$other' don't match up with the output attribute '$attr'")
+        s"The dataType of attribute '$other' is '${other.dataType}', which can't be casted to " +
+          s"that of '$attr', expected '${attr.dataType}'.")
     }
   }
 }
