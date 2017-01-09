@@ -52,7 +52,7 @@ class VectorizedHashMapGenerator(
     val generatedSchema: String =
       s"new org.apache.spark.sql.types.StructType()" +
         (groupingKeySchema ++ bufferSchema).map { key =>
-          val keyName = ctx.addReferenceObj(key.name)
+          val keyName = ctx.addReferenceMinorObj(key.name)
           key.dataType match {
             case d: DecimalType =>
               s""".add("$keyName", org.apache.spark.sql.types.DataTypes.createDecimalType(
@@ -65,7 +65,7 @@ class VectorizedHashMapGenerator(
     val generatedAggBufferSchema: String =
       s"new org.apache.spark.sql.types.StructType()" +
         bufferSchema.map { key =>
-          val keyName = ctx.addReferenceObj(key.name)
+          val keyName = ctx.addReferenceMinorObj(key.name)
           key.dataType match {
             case d: DecimalType =>
               s""".add("$keyName", org.apache.spark.sql.types.DataTypes.createDecimalType(
