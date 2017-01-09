@@ -2639,16 +2639,16 @@
     <profile>
       <id>kubernetes</id>
       <modules>
-        <module>kubernetes/core</module>
+        <module>resource-managers/kubernetes/core</module>
       </modules>
     </profile>
 
     <profile>
       <id>kubernetes-integration-tests</id>
       <modules>
-        <module>kubernetes/docker-minimal-bundle</module>
-        <module>kubernetes/integration-tests</module>
-        <module>kubernetes/integration-tests-spark-jobs</module>
+        <module>resource-managers/kubernetes/docker-minimal-bundle</module>
+        <module>resource-managers/kubernetes/integration-tests</module>
+        <module>resource-managers/kubernetes/integration-tests-spark-jobs</module>
       </modules>  
     </profile>
 

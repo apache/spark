@@ -233,7 +233,7 @@ object SparkSubmit extends CommandLineUtils {
       case m if m.startsWith("k8s") => KUBERNETES
       case m if m.startsWith("local") => LOCAL
       case _ =>
-        printErrorAndExit("Master must either be yarn or start with spark, mesos, local")
+        printErrorAndExit("Master must either be yarn or start with spark, mesos, k8s, or local")
         -1
     }
 
