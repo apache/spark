@@ -730,7 +730,7 @@ class DataFrame(object):
             a join expression (Column), or a list of Columns.
             If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
-        :param how: str, default ``inner``. Must be any of: ``inner``, ``cross``, ``outer``,
+        :param how: str, default ``inner``. Must be one of: ``inner``, ``cross``, ``outer``,
             ``full``, ``full_outer``, ``left``, ``left_outer``, ``right``, ``right_outer``,
             ``left_semi``, and ``left_anti``.
 
