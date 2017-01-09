@@ -238,7 +238,7 @@ class StreamSuite extends StreamTest {
     }
   }
 
-  testQuietly("handle fatal errors thrown from the stream thread correctly") {
+  testQuietly("handle fatal errors thrown from the stream thread") {
     for (e <- Seq(
       new VirtualMachineError {},
       new ThreadDeath,
