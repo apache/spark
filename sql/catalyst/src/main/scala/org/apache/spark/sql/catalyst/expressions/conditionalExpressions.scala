@@ -359,19 +359,18 @@ case class Field(children: Seq[Expression]) extends Expression {
   override def eval(input: InternalRow): Any = {
     val target = children.head.eval(input)
     val targetDataType = children.head.dataType
-    @tailrec def findEqual(target: Any, params: Seq[Expression], index: Int): Int = {
-        if (params == Nil) {
-          0
-        } else {
-          val head = params.head
-          if (dataTypeMatchIndex.contains(index) && head.eval(input) != null
-            && ordering.equiv(target, head.eval(input)))
-            index
-          else
-            findEqual(target, params.tail, index + 1)
-        }
+    @tailrec def findEqual(index: Int): Int = {
+      if (index == dataTypeMatchIndex.size) {
+        0
+      } else {
+        val value = children(dataTypeMatchIndex(index)).eval(input)
+        if (value != null && ordering.equiv(target, value))
+          dataTypeMatchIndex(index)
+        else
+          findEqual(index + 1)
       }
-    if (target == null) 0 else findEqual(target, children.tail, index = 1)
+    }
+    if (target == null) 0 else findEqual(index = 0)
   }
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
