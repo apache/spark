@@ -349,7 +349,8 @@ case class Field(children: Seq[Expression]) extends Expression {
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
       TypeCheckResult.TypeCheckFailure(s"FIELD requires at least 2 arguments")
-    } else if (!children.forall(_.dataType.isInstanceOf[AtomicType])) {
+    } else if (!children.forall(
+        e => e.dataType.isInstanceOf[AtomicType] || e.dataType.isInstanceOf[NullType])) {
       TypeCheckResult.TypeCheckFailure(s"FIELD requires all arguments to be of AtomicType")
     } else
       TypeCheckResult.TypeCheckSuccess
