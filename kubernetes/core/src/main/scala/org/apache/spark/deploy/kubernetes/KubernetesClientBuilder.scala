@@ -27,11 +27,11 @@ private[spark] object KubernetesClientBuilder {
   private val CA_CERT_FILE = new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)
 
   /**
-    * Creates a {@link KubernetesClient}, expecting to be from
-    * within the context of a pod. When doing so, credentials files
-    * are picked up from canonical locations, as they are injected
-    * into the pod's disk space.
-    */
+   * Creates a {@link KubernetesClient}, expecting to be from
+   * within the context of a pod. When doing so, credentials files
+   * are picked up from canonical locations, as they are injected
+   * into the pod's disk space.
+   */
   def buildFromWithinPod(
       kubernetesMaster: String,
       kubernetesNamespace: String): DefaultKubernetesClient = {
