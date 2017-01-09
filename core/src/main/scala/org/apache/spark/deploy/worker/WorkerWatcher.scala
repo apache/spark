@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.worker
 
 import java.net.InetAddress
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 
