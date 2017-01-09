@@ -754,6 +754,8 @@ case class AlterTableSetLocationCommand(
         // No partition spec is specified, so we set the location for the table itself
         catalog.alterTable(table.withNewStorage(locationUri = Some(location)))
     }
+    catalog.refreshTable(table.identifier)
+
     Seq.empty[Row]
   }
 }
