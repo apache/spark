@@ -31,12 +31,12 @@ import org.apache.hadoop.hive.serde2.Deserializer
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
-import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
+import org.apache.hadoop.mapred.{FileInputFormat, FileSplit, InputFormat, JobConf, TextInputFormat}
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
+import org.apache.spark.rdd.{EmptyRDD, HadoopPartition, HadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -113,6 +113,10 @@ class HadoopTableReader(
 
     val tablePath = hiveTable.getPath
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
+    val skipHeaderLineCount =
+      tableDesc.getProperties.getProperty("skip.header.line.count", "0").toInt
+    val isTextInputFormatTable =
+      classOf[TextInputFormat].isAssignableFrom(hiveTable.getInputFormatClass)
 
     // logDebug("Table input: %s".format(tablePath))
     val ifc = hiveTable.getInputFormatClass
@@ -122,10 +126,22 @@ class HadoopTableReader(
     val attrsWithIndex = attributes.zipWithIndex
     val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
 
-    val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
+    val deserializedHadoopRDD = hadoopRDD.mapPartitionsWithIndex { (index, iter) =>
       val hconf = broadcastedHadoopConf.value.value
       val deserializer = deserializerClass.newInstance()
       deserializer.initialize(hconf, tableDesc.getProperties)
+      if (skipHeaderLineCount > 0 && isTextInputFormatTable) {
+        hadoopRDD.partitions(index) match {
+          case partition: HadoopPartition =>
+            if (partition.inputSplit.t.asInstanceOf[FileSplit].getStart() == 0) {
+              var i = 0
+              while (i < skipHeaderLineCount && iter.hasNext) {
+                i += 1
+                iter.next()
+              }
+            }
+        }
+      }
       HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
     }
 
