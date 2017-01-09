@@ -393,7 +393,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
         // Drop the existing table
         catalog.dropTable(tableIdentWithDB, ignoreIfNotExists = true, purge = false)
-        createTable(tableIdent)
+        createTable(tableIdentWithDB)
+        // Refresh the cache of the table in the catalog.
+        catalog.refreshTable(tableIdentWithDB)
 
       case _ => createTable(tableIdent)
     }
