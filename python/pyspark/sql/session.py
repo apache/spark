@@ -161,7 +161,12 @@ class SparkSession(object):
             with self._lock:
                 from pyspark.context import SparkContext
                 from pyspark.conf import SparkConf
-                session = SparkSession._instantiatedContext
+                sc = SparkContext.get
+                if sc:
+                    session = SparkSession._instantiatedContext
+                    if session._sc != sc:
+                        SparkSession._instantiatedContext = None
+                        session = None
                 if session is None:
                     sparkConf = SparkConf()
                     for key, value in self._options.items():
