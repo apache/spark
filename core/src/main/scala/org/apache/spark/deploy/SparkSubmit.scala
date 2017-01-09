@@ -230,7 +230,7 @@ object SparkSubmit extends CommandLineUtils {
         YARN
       case m if m.startsWith("spark") => STANDALONE
       case m if m.startsWith("mesos") => MESOS
-      case m if m.startsWith("kubernetes") => KUBERNETES
+      case m if m.startsWith("k8s") => KUBERNETES
       case m if m.startsWith("local") => LOCAL
       case _ =>
         printErrorAndExit("Master must either be yarn or start with spark, mesos, local")
@@ -460,9 +460,6 @@ object SparkSubmit extends CommandLineUtils {
       OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.principal"),
       OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.keytab"),
 
-      // Kubernetes only
-      OptionAssigner(args.kubernetesMaster, KUBERNETES, ALL_DEPLOY_MODES,
-        sysProp = "spark.kubernetes.master"),
       OptionAssigner(args.kubernetesNamespace, KUBERNETES, ALL_DEPLOY_MODES,
         sysProp = "spark.kubernetes.namespace"),
       OptionAssigner(args.kubernetesUploadJars, KUBERNETES, CLUSTER,

@@ -49,9 +49,11 @@ private[spark] class Client(
 
   private val namespace = sparkConf.getOption("spark.kubernetes.namespace").getOrElse(
     throw new IllegalArgumentException("Namespace must be provided in spark.kubernetes.namespace"))
-  private val master = sparkConf
-    .getOption("spark.kubernetes.master")
-    .getOrElse("Master must be provided in spark.kubernetes.master")
+  private val rawMaster = sparkConf.get("spark.master")
+  if (!rawMaster.startsWith("k8s://")) {
+    throw new IllegalArgumentException("Master should be a URL with scheme k8s://")
+  }
+  private val master = rawMaster.replaceFirst("k8s://", "")
 
   private val launchTime = System.currentTimeMillis
   private val kubernetesAppId = sparkConf.getOption("spark.app.name")
