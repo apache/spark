@@ -23,10 +23,10 @@ from pyspark.ml.feature import NGram
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("NGramExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("NGramExample")
+             .getOrCreate())
 
     # $example on$
     wordDataFrame = spark.createDataFrame([

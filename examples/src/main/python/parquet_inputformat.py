@@ -1,4 +1,3 @@
-from __future__ import print_function
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -16,9 +15,12 @@ from __future__ import print_function
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 import sys
 
 from pyspark.sql import SparkSession
+
 
 """
 Read data file users.parquet in local Spark distro:
@@ -48,10 +50,10 @@ if __name__ == "__main__":
 
     path = sys.argv[1]
 
-    spark = SparkSession\
-        .builder\
-        .appName("ParquetInputFormat")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("ParquetInputFormat")
+             .getOrCreate())
 
     sc = spark.sparkContext
 

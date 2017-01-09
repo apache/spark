@@ -20,11 +20,11 @@ from __future__ import print_function
 # $example on$
 from numpy import array
 # $example off$
-
 from pyspark import SparkContext
 # $example on$
 from pyspark.mllib.clustering import GaussianMixture, GaussianMixtureModel
 # $example off$
+
 
 if __name__ == "__main__":
     sc = SparkContext(appName="GaussianMixtureExample")  # SparkContext
@@ -39,8 +39,8 @@ if __name__ == "__main__":
 
     # Save and load model
     gmm.save(sc, "target/org/apache/spark/PythonGaussianMixtureExample/GaussianMixtureModel")
-    sameModel = GaussianMixtureModel\
-        .load(sc, "target/org/apache/spark/PythonGaussianMixtureExample/GaussianMixtureModel")
+    sameModel = GaussianMixtureModel.load(
+        sc, "target/org/apache/spark/PythonGaussianMixtureExample/GaussianMixtureModel")
 
     # output parameters of model
     for i in range(2):

@@ -22,9 +22,11 @@ from __future__ import print_function
 
 from pyspark import SparkContext
 # $example on$
-from pyspark.mllib.classification import LogisticRegressionWithLBFGS, LogisticRegressionModel
+from pyspark.mllib.classification import (LogisticRegressionModel,
+                                          LogisticRegressionWithLBFGS)
 from pyspark.mllib.regression import LabeledPoint
 # $example off$
+#
 
 if __name__ == "__main__":
 

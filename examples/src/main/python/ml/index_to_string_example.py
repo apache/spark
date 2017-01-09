@@ -23,10 +23,10 @@ from pyspark.ml.feature import IndexToString, StringIndexer
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("IndexToStringExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("IndexToStringExample")
+             .getOrCreate())
 
     # $example on$
     df = spark.createDataFrame(

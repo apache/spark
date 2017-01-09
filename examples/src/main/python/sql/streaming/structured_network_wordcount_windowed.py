@@ -44,9 +44,8 @@ from __future__ import print_function
 import sys
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import explode
-from pyspark.sql.functions import split
-from pyspark.sql.functions import window
+from pyspark.sql.functions import explode, split, window
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 5 and len(sys.argv) != 4:

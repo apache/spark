@@ -22,11 +22,12 @@ from pyspark.ml.feature import Word2Vec
 # $example off$
 from pyspark.sql import SparkSession
 
+
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("Word2VecExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("Word2VecExample")
+             .getOrCreate())
 
     # $example on$
     # Input data: Each row is a bag of words from a sentence or document.

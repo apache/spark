@@ -39,8 +39,9 @@ if __name__ == "__main__":
         filepath = 'data/mllib/sample_linear_regression_data.txt'
     corrType = 'pearson'
 
-    points = MLUtils.loadLibSVMFile(sc, filepath)\
-        .map(lambda lp: LabeledPoint(lp.label, lp.features.toArray()))
+    points = (MLUtils
+              .loadLibSVMFile(sc, filepath)
+              .map(lambda lp: LabeledPoint(lp.label, lp.features.toArray())))
 
     print()
     print('Summary of data file: ' + filepath)

@@ -32,8 +32,8 @@ from __future__ import print_function
 import sys
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import explode
-from pyspark.sql.functions import split
+from pyspark.sql.functions import explode, split
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
@@ -43,18 +43,18 @@ if __name__ == "__main__":
     host = sys.argv[1]
     port = int(sys.argv[2])
 
-    spark = SparkSession\
-        .builder\
-        .appName("StructuredNetworkWordCount")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("StructuredNetworkWordCount")
+             .getOrCreate())
 
     # Create DataFrame representing the stream of input lines from connection to host:port
-    lines = spark\
-        .readStream\
-        .format('socket')\
-        .option('host', host)\
-        .option('port', port)\
-        .load()
+    lines = (spark
+             .readStream
+             .format('socket')
+             .option('host', host)
+             .option('port', port)
+             .load())
 
     # Split the lines into words
     words = lines.select(
@@ -68,10 +68,10 @@ if __name__ == "__main__":
     wordCounts = words.groupBy('word').count()
 
     # Start running the query that prints the running counts to the console
-    query = wordCounts\
-        .writeStream\
-        .outputMode('complete')\
-        .format('console')\
-        .start()
+    query = (wordCounts
+             .writeStream
+             .outputMode('complete')
+             .format('console')
+             .start())
 
     query.awaitTermination()

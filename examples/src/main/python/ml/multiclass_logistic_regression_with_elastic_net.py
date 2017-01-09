@@ -23,17 +23,17 @@ from pyspark.ml.classification import LogisticRegression
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession \
-        .builder \
-        .appName("MulticlassLogisticRegressionWithElasticNet") \
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("MulticlassLogisticRegressionWithElasticNet")
+             .getOrCreate())
 
     # $example on$
     # Load training data
-    training = spark \
-        .read \
-        .format("libsvm") \
-        .load("data/mllib/sample_multiclass_classification_data.txt")
+    training = (spark
+                .read
+                .format("libsvm")
+                .load("data/mllib/sample_multiclass_classification_data.txt"))
 
     lr = LogisticRegression(maxIter=10, regParam=0.3, elasticNetParam=0.8)
 

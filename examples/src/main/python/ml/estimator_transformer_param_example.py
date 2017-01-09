@@ -21,16 +21,17 @@ Estimator Transformer Param Example.
 from __future__ import print_function
 
 # $example on$
-from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.linalg import Vectors
 # $example off$
 from pyspark.sql import SparkSession
 
+
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("EstimatorTransformerParamExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("EstimatorTransformerParamExample")
+             .getOrCreate())
 
     # $example on$
     # Prepare training data from a list of (label, features) tuples.
@@ -82,8 +83,9 @@ if __name__ == "__main__":
     # Note that model2.transform() outputs a "myProbability" column instead of the usual
     # 'probability' column since we renamed the lr.probabilityCol parameter previously.
     prediction = model2.transform(test)
-    result = prediction.select("features", "label", "myProbability", "prediction") \
-        .collect()
+    result = (prediction
+              .select("features", "label", "myProbability", "prediction")
+              .collect())
 
     for row in result:
         print("features=%s, label=%s -> prob=%s, prediction=%s"

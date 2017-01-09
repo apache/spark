@@ -23,11 +23,12 @@ from pyspark.ml.linalg import Vectors
 # $example off$
 from pyspark.sql import SparkSession
 
+
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("NormalizerExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("NormalizerExample")
+             .getOrCreate())
 
     # $example on$
     dataFrame = spark.createDataFrame([

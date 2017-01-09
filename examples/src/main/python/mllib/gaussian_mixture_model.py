@@ -20,16 +20,16 @@ A Gaussian Mixture Model clustering program using MLlib.
 """
 from __future__ import print_function
 
-import sys
-if sys.version >= '3':
-    long = int
-
-import random
 import argparse
-import numpy as np
+import random
+import sys
 
+import numpy as np
 from pyspark import SparkConf, SparkContext
 from pyspark.mllib.clustering import GaussianMixture
+
+if sys.version >= '3':
+    long = int
 
 
 def parseVector(line):

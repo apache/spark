@@ -54,10 +54,10 @@ if __name__ == "__main__":
           file=sys.stderr)
 
     # Initialize the spark context.
-    spark = SparkSession\
-        .builder\
-        .appName("PythonPageRank")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("PythonPageRank")
+             .getOrCreate())
 
     # Loads in input file. It should be in format of:
     #     URL         neighbor URL

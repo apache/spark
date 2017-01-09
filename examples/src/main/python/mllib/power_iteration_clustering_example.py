@@ -19,7 +19,9 @@ from __future__ import print_function
 
 from pyspark import SparkContext
 # $example on$
-from pyspark.mllib.clustering import PowerIterationClustering, PowerIterationClusteringModel
+from pyspark.mllib.clustering import (PowerIterationClustering,
+                                      PowerIterationClusteringModel)
+
 # $example off$
 
 if __name__ == "__main__":
@@ -36,9 +38,9 @@ if __name__ == "__main__":
     model.assignments().foreach(lambda x: print(str(x.id) + " -> " + str(x.cluster)))
 
     # Save and load model
-    model.save(sc, "target/org/apache/spark/PythonPowerIterationClusteringExample/PICModel")
-    sameModel = PowerIterationClusteringModel\
-        .load(sc, "target/org/apache/spark/PythonPowerIterationClusteringExample/PICModel")
+    pic_model = "target/org/apache/spark/PythonPowerIterationClusteringExample/PICModel"
+    model.save(sc, pic_model)
+    sameModel = PowerIterationClusteringModel.load(sc, pic_model)
     # $example off$
 
     sc.stop()

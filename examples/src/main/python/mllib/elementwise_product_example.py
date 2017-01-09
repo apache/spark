@@ -23,6 +23,7 @@ from pyspark.mllib.feature import ElementwiseProduct
 from pyspark.mllib.linalg import Vectors
 # $example off$
 
+
 if __name__ == "__main__":
     sc = SparkContext(appName="ElementwiseProductExample")  # SparkContext
 

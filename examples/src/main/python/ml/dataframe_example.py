@@ -22,13 +22,13 @@ An example of how to use DataFrame for ML. Run with::
 from __future__ import print_function
 
 import os
+import shutil
 import sys
 import tempfile
-import shutil
 
-from pyspark.sql import SparkSession
 from pyspark.mllib.stat import Statistics
 from pyspark.mllib.util import MLUtils
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
     if len(sys.argv) > 2:
@@ -39,10 +39,10 @@ if __name__ == "__main__":
     else:
         input = "data/mllib/sample_libsvm_data.txt"
 
-    spark = SparkSession \
-        .builder \
-        .appName("DataFrameExample") \
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("DataFrameExample")
+             .getOrCreate())
 
     # Load input data
     print("Loading LIBSVM file with UDT from " + input + ".")
@@ -57,8 +57,10 @@ if __name__ == "__main__":
     labelSummary.show()
 
     # Convert features column to an RDD of vectors.
-    features = MLUtils.convertVectorColumnsFromML(df, "features") \
-        .select("features").rdd.map(lambda r: r.features)
+    features = (MLUtils
+                .convertVectorColumnsFromML(df, "features")
+                .select("features")
+                .rdd.map(lambda r: r.features))
     summary = Statistics.colStats(features)
     print("Selected features column with average values:\n" +
           str(summary.mean()))

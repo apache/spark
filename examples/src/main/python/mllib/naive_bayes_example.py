@@ -24,15 +24,16 @@ Usage:
 
 from __future__ import print_function
 
+# $example on$
 import shutil
+# $example off$
 
 from pyspark import SparkContext
 # $example on$
 from pyspark.mllib.classification import NaiveBayes, NaiveBayesModel
 from pyspark.mllib.util import MLUtils
-
-
 # $example off$
+
 
 if __name__ == "__main__":
 

@@ -18,17 +18,20 @@
 from __future__ import print_function
 
 # $example on$
-from pyspark.ml.feature import Tokenizer, RegexTokenizer
+from pyspark.ml.feature import RegexTokenizer, Tokenizer
+# $example off$
+from pyspark.sql import SparkSession
+# $example on$
 from pyspark.sql.functions import col, udf
 from pyspark.sql.types import IntegerType
 # $example off$
-from pyspark.sql import SparkSession
+
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("TokenizerExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("TokenizerExample")
+             .getOrCreate())
 
     # $example on$
     sentenceDataFrame = spark.createDataFrame([

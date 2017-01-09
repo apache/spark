@@ -18,12 +18,14 @@
 Binary Classification Metrics Example.
 """
 from __future__ import print_function
-from pyspark.sql import SparkSession
+
 # $example on$
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS
 from pyspark.mllib.evaluation import BinaryClassificationMetrics
 from pyspark.mllib.regression import LabeledPoint
 # $example off$
+from pyspark.sql import SparkSession
+
 
 if __name__ == "__main__":
     spark = SparkSession\
@@ -34,9 +36,10 @@ if __name__ == "__main__":
     # $example on$
     # Several of the methods available in scala are currently missing from pyspark
     # Load training data in LIBSVM format
-    data = spark\
-        .read.format("libsvm").load("data/mllib/sample_binary_classification_data.txt")\
-        .rdd.map(lambda row: LabeledPoint(row[0], row[1]))
+    data = (spark
+            .read.format("libsvm")
+            .load("data/mllib/sample_binary_classification_data.txt")
+            .rdd.map(lambda row: LabeledPoint(row[0], row[1])))
 
     # Split data into training (60%) and test (40%)
     training, test = data.randomSplit([0.6, 0.4], seed=11)

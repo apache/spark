@@ -17,9 +17,9 @@
 
 from __future__ import print_function
 
-import time
-import threading
 import Queue
+import threading
+import time
 
 from pyspark import SparkConf, SparkContext
 

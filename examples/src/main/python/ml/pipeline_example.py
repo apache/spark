@@ -26,11 +26,12 @@ from pyspark.ml.feature import HashingTF, Tokenizer
 # $example off$
 from pyspark.sql import SparkSession
 
+
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("PipelineExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("PipelineExample")
+             .getOrCreate())
 
     # $example on$
     # Prepare training documents from a list of (id, text, label) tuples.

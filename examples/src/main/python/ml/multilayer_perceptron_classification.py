@@ -24,13 +24,15 @@ from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder.appName("multilayer_perceptron_classification_example").getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("multilayer_perceptron_classification_example")
+             .getOrCreate())
 
     # $example on$
     # Load training data
-    data = spark.read.format("libsvm")\
-        .load("data/mllib/sample_multiclass_classification_data.txt")
+    data = (spark.read.format("libsvm")
+            .load("data/mllib/sample_multiclass_classification_data.txt"))
 
     # Split the data into train and test
     splits = data.randomSplit([0.6, 0.4], 1234)

@@ -22,11 +22,12 @@ from pyspark.ml.feature import SQLTransformer
 # $example off$
 from pyspark.sql import SparkSession
 
+
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("SQLTransformerExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("SQLTransformerExample")
+             .getOrCreate())
 
     # $example on$
     df = spark.createDataFrame([

@@ -23,16 +23,16 @@ from __future__ import print_function
 # $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import GBTClassifier
-from pyspark.ml.feature import StringIndexer, VectorIndexer
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.ml.feature import StringIndexer, VectorIndexer
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("GradientBoostedTreeClassifierExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("GradientBoostedTreeClassifierExample")
+             .getOrCreate())
 
     # $example on$
     # Load and parse the data file, converting it to a DataFrame.
@@ -43,8 +43,9 @@ if __name__ == "__main__":
     labelIndexer = StringIndexer(inputCol="label", outputCol="indexedLabel").fit(data)
     # Automatically identify categorical features, and index them.
     # Set maxCategories so features with > 4 distinct values are treated as continuous.
-    featureIndexer =\
-        VectorIndexer(inputCol="features", outputCol="indexedFeatures", maxCategories=4).fit(data)
+    featureIndexer = VectorIndexer(inputCol="features",
+                                   outputCol="indexedFeatures",
+                                   maxCategories=4).fit(data)
 
     # Split the data into training and test sets (30% held out for testing)
     (trainingData, testData) = data.randomSplit([0.7, 0.3])
@@ -65,8 +66,9 @@ if __name__ == "__main__":
     predictions.select("prediction", "indexedLabel", "features").show(5)
 
     # Select (prediction, true label) and compute test error
-    evaluator = MulticlassClassificationEvaluator(
-        labelCol="indexedLabel", predictionCol="prediction", metricName="accuracy")
+    evaluator = MulticlassClassificationEvaluator(labelCol="indexedLabel",
+                                                  predictionCol="prediction",
+                                                  metricName="accuracy")
     accuracy = evaluator.evaluate(predictions)
     print("Test Error = %g" % (1.0 - accuracy))
 

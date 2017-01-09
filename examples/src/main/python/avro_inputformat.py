@@ -18,9 +18,10 @@
 from __future__ import print_function
 
 import sys
-
 from functools import reduce
+
 from pyspark.sql import SparkSession
+
 
 """
 Read data file users.avro in local Spark distro:
@@ -65,10 +66,10 @@ if __name__ == "__main__":
 
     path = sys.argv[1]
 
-    spark = SparkSession\
-        .builder\
-        .appName("AvroKeyInputFormat")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("AvroKeyInputFormat")
+             .getOrCreate())
 
     sc = spark.sparkContext
 

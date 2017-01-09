@@ -22,6 +22,7 @@ from pyspark import SparkContext
 from pyspark.mllib.feature import Word2Vec
 # $example off$
 
+
 if __name__ == "__main__":
     sc = SparkContext(appName="Word2VecExample")  # SparkContext
 

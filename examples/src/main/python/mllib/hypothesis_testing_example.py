@@ -24,6 +24,7 @@ from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat import Statistics
 # $example off$
 
+
 if __name__ == "__main__":
     sc = SparkContext(appName="HypothesisTestingExample")
 

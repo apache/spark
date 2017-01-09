@@ -18,22 +18,23 @@
 from __future__ import print_function
 
 import sys
-if sys.version >= '3':
-    long = int
-
-from pyspark.sql import SparkSession
 
 # $example on$
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.recommendation import ALS
 from pyspark.sql import Row
 # $example off$
+from pyspark.sql import SparkSession
+
+if sys.version >= '3':
+    long = int
+
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("ALSExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("ALSExample")
+             .getOrCreate())
 
     # $example on$
     lines = spark.read.text("data/mllib/als/sample_movielens_ratings.txt").rdd
