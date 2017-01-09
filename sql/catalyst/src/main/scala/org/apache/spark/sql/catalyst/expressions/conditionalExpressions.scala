@@ -343,6 +343,9 @@ case class Field(children: Seq[Expression]) extends Expression {
 
   private lazy val ordering = TypeUtils.getInterpretedOrdering(children(0).dataType)
 
+  private val dataTypeMatchIndex: Seq[Int] = children.tail.zip(Stream from 1).filter(
+    _._1.dataType == children.head.dataType).map(_._2)
+
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
       TypeCheckResult.TypeCheckFailure(s"FIELD requires at least 2 arguments")
@@ -357,13 +360,17 @@ case class Field(children: Seq[Expression]) extends Expression {
     val target = children.head.eval(input)
     val targetDataType = children.head.dataType
     @tailrec def findEqual(target: Any, params: Seq[Expression], index: Int): Int = {
-      params match {
-        case Nil => 0
-        case head +: tail if targetDataType == head.dataType
-          && head.eval(input) != null && ordering.equiv(target, head.eval(input)) => index
-        case _ => findEqual(target, params.tail, index + 1)
+        if (params == Nil) {
+          0
+        } else {
+          val head = params.head
+          if (dataTypeMatchIndex.contains(index) && head.eval(input) != null
+            && ordering.equiv(target, head.eval(input)))
+            index
+          else
+            findEqual(target, params.tail, index + 1)
+        }
       }
-    }
     if (target == null) 0 else findEqual(target, children.tail, index = 1)
   }
 
@@ -404,7 +411,7 @@ case class Field(children: Seq[Expression]) extends Expression {
          |boolean ${ev.isNull} = false;
          |int ${ev.value} = 0;
          |${rest.zip(restDataType).zip(Stream from 1).filter(
-        dataTypeEqualsTarget).map(updateEval).reduceRight(genIfElseStructure)}
+        x => dataTypeMatchIndex.contains(x._2)).map(updateEval).reduceRight(genIfElseStructure)}
        """.stripMargin)
   }
 }
