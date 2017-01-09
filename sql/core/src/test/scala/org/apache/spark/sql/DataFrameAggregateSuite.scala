@@ -97,6 +97,15 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-18952: regexes fail codegen when used as keys due to bad forward-slash escapes") {
+    val df = Seq(("some[thing]", "random-string")).toDF("key", "val")
+
+    checkAnswer(
+      df.groupBy(regexp_extract('key, "([a-z]+)\\[", 1)).count(),
+      Row("some", 1) :: Nil
+    )
+  }
+
   test("rollup") {
     checkAnswer(
       courseSales.rollup("course", "year").sum("earnings"),
