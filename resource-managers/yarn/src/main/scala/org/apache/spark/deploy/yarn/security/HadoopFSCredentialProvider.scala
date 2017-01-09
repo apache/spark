@@ -47,7 +47,7 @@ private[security] class HadoopFSCredentialProvider
     // NameNode to access, used to get tokens from different FileSystems
     nnsToAccess(hadoopConf, sparkConf).foreach { dst =>
       val dstFs = dst.getFileSystem(hadoopConf)
-      logInfo("getting token for namenode: " + dst)
+      logInfo("getting token for: " + dst)
       dstFs.addDelegationTokens(getTokenRenewer(hadoopConf), creds)
     }
 
