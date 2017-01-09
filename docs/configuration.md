@@ -433,7 +433,7 @@ Apart from these, the following properties are also available, and may be useful
   <td></td>
   <td>
     Comma-separated list of maven coordinates of jars to include on the driver and executor
-    classpaths. If <code>spark.ivy.settings</code> is given artifacts will be resolved according
+    classpaths. If <code>spark.jars.ivySettings</code> is given artifacts will be resolved according
     to the configuration in the file, otherwise artifacts will be searched for in the local maven repo,
     then maven central and finally any additional remote repositories given by the command-line option
     <code>--repositories</code> see <a href="submitting-applications.html#advanced-dependency-management">Advanced Dependency Management</a>.
@@ -458,7 +458,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.ivy.settings</code></td>
+  <td><code>spark.jars.ivySettings</code></td>
   <td></td>
   <td>
     Path to an Ivy settings file to customize resolution of jars specified using <code>spark.jars.packages</code>
