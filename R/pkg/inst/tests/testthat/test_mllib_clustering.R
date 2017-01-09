@@ -99,7 +99,8 @@ test_that("spark.kmeans", {
 
   take(training, 1)
 
-  model <- spark.kmeans(data = training, ~ ., k = 2, maxIter = 10, initMode = "random")
+  model <- spark.kmeans(data = training, ~ ., k = 2, maxIter = 10, initMode = "random", seed = 1, initSteps = 3,
+                        tol = 1E-5)
   sample <- take(select(predict(model, training), "prediction"), 1)
   expect_equal(typeof(sample$prediction), "integer")
   expect_equal(sample$prediction, 1)
