@@ -110,8 +110,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("Run a simple example") {
     val sparkConf = new SparkConf(true)
-      .setMaster("kubernetes")
-      .set("spark.kubernetes.master", s"https://${Minikube.getMinikubeIp}:8443")
+      .setMaster(s"k8s://https://${Minikube.getMinikubeIp}:8443")
       .set("spark.kubernetes.submit.caCertFile", clientConfig.getCaCertFile)
       .set("spark.kubernetes.submit.clientKeyFile", clientConfig.getClientKeyFile)
       .set("spark.kubernetes.submit.clientCertFile", clientConfig.getClientCertFile)
@@ -136,9 +135,8 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("Run using spark-submit") {
     val args = Array(
-      "--master", "kubernetes",
+      "--master", s"k8s://https://${Minikube.getMinikubeIp}:8443",
       "--deploy-mode", "cluster",
-      "--kubernetes-master", s"https://${Minikube.getMinikubeIp}:8443",
       "--kubernetes-namespace", NAMESPACE,
       "--name", "spark-pi",
       "--executor-memory", "512m",

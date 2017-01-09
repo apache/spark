@@ -43,10 +43,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val EXECUTOR_MODIFICATION_LOCK = new Object
   private val runningExecutorPods = new scala.collection.mutable.HashMap[String, Pod]
 
-  private val kubernetesMaster = conf
-    .getOption("spark.kubernetes.master")
-    .getOrElse(
-      throw new SparkException("Kubernetes master must be specified in kubernetes mode."))
+  private val kubernetesMaster = sc.master.replaceFirst("k8s://", "")
 
   private val executorDockerImage = conf
     .get("spark.kubernetes.executor.docker.image", s"spark-executor:${sc.version}")
