@@ -31,6 +31,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -249,7 +250,8 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
  * (Wikipedia)</a>
  */
 @Since("1.3.0")
-class IsotonicRegression private (private var isotonic: Boolean) extends Serializable {
+class IsotonicRegression private (private var isotonic: Boolean)
+  extends Serializable with Logging {
 
   /**
    * Constructs IsotonicRegression instance with default parameter isotonic = true.
@@ -332,20 +334,29 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
   private def poolAdjacentViolators(
       input: Array[(Double, Double, Double)]): Array[(Double, Double, Double)] = {
 
-    if (input.isEmpty) {
+    val cleanInput = input.flatMap{ case (y, x, weight) =>
+      require(weight >= 0.0, "weights must be non-negative")
+      if (weight == 0.0) {
+        logWarning(s"Dropping zero-weight point ($y, $x, $weight)")
+        Array[(Double, Double, Double)]()
+      } else {
+        Array((y, x, weight))
+      }
+    }
+
+    if (cleanInput.isEmpty) {
       return Array.empty
     }
 
-
     // Keeps track of the start and end indices of the blocks. if [i, j] is a valid block from
-    // input(i) to input(j) (inclusive), then blockBounds(i) = j and blockBounds(j) = i
-    val blockBounds = Array.range(0, input.length) // Initially, each data point is its own block
+    // cleanInput(i) to cleanInput(j) (inclusive), then blockBounds(i) = j and blockBounds(j) = i
+    // Initially, each data point is its own block.
+    val blockBounds = Array.range(0, cleanInput.length)
 
     // Keep track of the sum of weights and sum of weight * y for each block. weights(start)
     // gives the values for the block. Entries that are not at the start of a block
     // are meaningless.
-    val weights: Array[(Double, Double)] = input.map { case (y, _, weight) =>
-      require(weight != 0.0)
+    val weights: Array[(Double, Double)] = cleanInput.map { case (y, _, weight) =>
       (weight, weight * y)
     }
 
@@ -366,7 +377,12 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     // Merge two adjacent blocks, updating blockBounds and weights to reflect the merge
     // Return the start index of the merged block
     def merge(block1: Int, block2: Int): Int = {
-      assert(blockEnd(block1) + 1 == block2, "attempting to merge non-consecutive blocks")
+      assert(
+        blockEnd(block1) + 1 == block2,
+        s"Attempting to merge non-consecutive blocks [${block1}, ${blockEnd(block1)}]" +
+        s" and [${block2}, ${blockEnd(block2)}. This is likely a bug in the isotonic regression" +
+        " implementation. Please file a bug report."
+      )
       blockBounds(block1) = blockEnd(block2)
       blockBounds(blockEnd(block2)) = block1
       val w1 = weights(block1)
@@ -382,7 +398,7 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     // Merge on >= instead of > because it eliminates adjacent blocks with the same average, and we
     // want to compress our output as much as possible. Both give correct results.
     var i = 0
-    while (nextBlock(i) < input.length) {
+    while (nextBlock(i) < cleanInput.length) {
       if (average(i) >= average(nextBlock(i))) {
         merge(i, nextBlock(i))
         while((i > 0) && (average(prevBlock(i)) >= average(i))) {
@@ -396,15 +412,15 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     // construct the output by walking through the blocks in order
     val output = ArrayBuffer.empty[(Double, Double, Double)]
     i = 0
-    while (i < input.length) {
+    while (i < cleanInput.length) {
       // If block size is > 1, a point at the start and end of the block,
       // each receiving half the weight. Otherwise, a single point with
       // all the weight.
-      if (input(blockEnd(i))._2 > input(i)._2) {
-        output += ((average(i), input(i)._2, weights(i)._1 / 2))
-        output += ((average(i), input(blockEnd(i))._2, weights(i)._1 / 2))
+      if (cleanInput(blockEnd(i))._2 > cleanInput(i)._2) {
+        output += ((average(i), cleanInput(i)._2, weights(i)._1 / 2))
+        output += ((average(i), cleanInput(blockEnd(i))._2, weights(i)._1 / 2))
       } else {
-        output += ((average(i), input(i)._2, weights(i)._1))
+        output += ((average(i), cleanInput(i)._2, weights(i)._1))
       }
       i = nextBlock(i)
     }
