@@ -286,10 +286,10 @@ object SparkSubmit extends CommandLineUtils {
       }
 
     // Create the IvySettings, either load from file or build defaults
-    val ivySettings = if (Option(args.ivySettingsFile).isDefined) {
-      SparkSubmitUtils.loadIvySettings(args.ivySettingsFile, Option(args.repositories),
+    val ivySettings = args.sparkProperties.get("spark.jars.ivySettings").map { ivySettingsFile =>
+      SparkSubmitUtils.loadIvySettings(ivySettingsFile, Option(args.repositories),
         Option(args.ivyRepoPath))
-    } else {
+    }.getOrElse {
       SparkSubmitUtils.buildIvySettings(Option(args.repositories), Option(args.ivyRepoPath))
     }
 
