@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.logical.estimation
+package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Statistics}
@@ -40,10 +40,8 @@ object AggregateEstimation {
         outputRows *= colStat.distinctCount
       }
 
-      // The number of output rows must not be larger than child's number of rows.
-      // Note that this also covers the case of uniqueness of column. If one of the group-by columns
-      // is a primary key (unique), the number of output rows is equal to its distinct count, which
-      // is equal to child's number of rows.
+      // Here we set another upper bound for the number of output rows: it must not be larger than
+      // child's number of rows.
       outputRows = outputRows.min(childStats.rowCount.get)
 
       val outputAttrStats = getOutputMap(childStats.attributeStats, agg.output)

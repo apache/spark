@@ -18,11 +18,14 @@
 package org.apache.spark.sql.catalyst.statsEstimation
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.types.IntegerType
 
 
 class StatsEstimationTestBase extends SparkFunSuite {
+
+  def attr(colName: String): AttributeReference = AttributeReference(colName, IntegerType)()
 
   /** Convert (column name, column stat) pairs to an AttributeMap based on plan output. */
   def toAttributeMap(colStats: Seq[(String, ColumnStat)], plan: LogicalPlan)
