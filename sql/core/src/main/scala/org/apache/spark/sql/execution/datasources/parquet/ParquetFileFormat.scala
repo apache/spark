@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.IOException
 import java.net.URI
-import java.util.concurrent.{Callable, ExecutionException, Executors, ExecutorService, Future}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.collection.parallel.ForkJoinTaskSupport
+import scala.concurrent.forkjoin.ForkJoinPool
 import scala.util.{Failure, Try}
 
 import org.apache.hadoop.conf.Configuration
@@ -550,51 +551,29 @@ object ParquetFileFormat extends Logging {
    * If the config "spark.sql.files.ignoreCorruptFiles" is set to true, we will ignore the corrupted
    * files when reading footers.
    */
-  private def readParquetFootersInParallel(
+  private[parquet] def readParquetFootersInParallel(
       conf: Configuration,
       partFiles: Seq[FileStatus],
       ignoreCorruptFiles: Boolean): Seq[Footer] = {
-    val footers = partFiles.map { currentFile =>
-      new Callable[Option[Footer]]() {
-        override def call(): Option[Footer] = {
-          try {
-            // Skips row group information since we only need the schema.
-            // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
-            // when it can't read the footer.
-            Some(new Footer(currentFile.getPath(),
-              ParquetFileReader.readFooter(
-                conf, currentFile, SKIP_ROW_GROUPS)))
-          } catch { case e: RuntimeException =>
-            if (ignoreCorruptFiles) {
-              logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
-              None
-            } else {
-              throw new IOException(s"Could not read footer for file: $currentFile", e)
-            }
-          }
+    val parFiles = partFiles.par
+    parFiles.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(8))
+    parFiles.flatMap { currentFile =>
+      try {
+        // Skips row group information since we only need the schema.
+        // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
+        // when it can't read the footer.
+        Some(new Footer(currentFile.getPath(),
+          ParquetFileReader.readFooter(
+            conf, currentFile, SKIP_ROW_GROUPS)))
+      } catch { case e: RuntimeException =>
+        if (ignoreCorruptFiles) {
+          logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
+          None
+        } else {
+          throw new IOException(s"Could not read footer for file: $currentFile", e)
         }
       }
-    }
-    val parallelism = conf.getInt(ParquetFileReader.PARQUET_READ_PARALLELISM, 5)
-    val threadPool: ExecutorService = Executors.newFixedThreadPool(parallelism)
-    try {
-      val futures: mutable.ArrayBuffer[Future[Option[Footer]]] = mutable.ArrayBuffer.empty
-      footers.foreach(callable => futures += threadPool.submit(callable))
-      val result: mutable.ArrayBuffer[Footer] = mutable.ArrayBuffer.empty
-      futures.foreach { future =>
-        try {
-          val footer = future.get()
-          footer.foreach(f => result += f)
-        } catch { case e: InterruptedException =>
-          throw new RuntimeException("The thread was interrupted", e)
-        }
-      }
-      result.toSeq
-    } catch { case e: ExecutionException =>
-      throw new IOException("Could not read footer: " + e.getMessage(), e.getCause())
-    } finally {
-      threadPool.shutdownNow()
-    }
+    }.seq
   }
 
   /**
