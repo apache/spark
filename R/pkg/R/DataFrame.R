@@ -1957,7 +1957,7 @@ setMethod("selectExpr",
 #' @param col a Column expression, or an atomic vector in the length of 1 as literal value.
 #' @return A SparkDataFrame with the new column added or the existing column replaced.
 #' @family SparkDataFrame functions
-#' @aliases withColumn,SparkDataFrame,character,Column-method
+#' @aliases withColumn,SparkDataFrame,character-method
 #' @rdname withColumn
 #' @name withColumn
 #' @seealso \link{rename} \link{mutate}
