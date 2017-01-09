@@ -24,6 +24,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
+import scala.annotation.tailrec
+import scala.collection.mutable.ArrayBuffer
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, expr3) - If `expr1` evaluates to true, then returns `expr2`; otherwise returns `expr3`.",
@@ -352,10 +355,10 @@ case class Field(children: Seq[Expression]) extends Expression {
   override def eval(input: InternalRow): Any = {
     val target = children.head.eval(input)
     val targetDataType = children.head.dataType
-    def findEqual(target: Any, params: Seq[Expression], index: Int): Int = {
-      params.toList match {
+    @tailrec def findEqual(target: Any, params: Seq[Expression], index: Int): Int = {
+      params match {
         case Nil => 0
-        case head::tail if targetDataType == head.dataType
+        case head +: tail if targetDataType == head.dataType
           && head.eval(input) != null && ordering.equiv(target, head.eval(input)) => index
         case _ => findEqual(target, params.tail, index + 1)
       }
