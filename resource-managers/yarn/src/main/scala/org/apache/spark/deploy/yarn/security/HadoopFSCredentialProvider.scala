@@ -45,10 +45,11 @@ private[security] class HadoopFSCredentialProvider
       sparkConf: SparkConf,
       creds: Credentials): Option[Long] = {
     // NameNode to access, used to get tokens from different FileSystems
+    val tmpCreds = new Credentials()
     nnsToAccess(hadoopConf, sparkConf).foreach { dst =>
       val dstFs = dst.getFileSystem(hadoopConf)
       logInfo("getting token for: " + dst)
-      dstFs.addDelegationTokens(getTokenRenewer(hadoopConf), creds)
+      dstFs.addDelegationTokens(getTokenRenewer(hadoopConf), tmpCreds)
     }
 
     // Get the token renewal interval if it is not set. It will only be called once.
@@ -57,8 +58,8 @@ private[security] class HadoopFSCredentialProvider
     }
 
     // Get the time of next renewal.
-    tokenRenewalInterval.flatMap { interval =>
-      val nextRenewalDates = creds.getAllTokens.asScala
+    val nextRenewalDate = tokenRenewalInterval.flatMap { interval =>
+      val nextRenewalDates = tmpCreds.getAllTokens.asScala
         .filter(_.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier])
         .map { t =>
           val identifier = t.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
@@ -66,6 +67,9 @@ private[security] class HadoopFSCredentialProvider
         }
       if (nextRenewalDates.isEmpty) None else Some(nextRenewalDates.min)
     }
+
+    creds.addAll(tmpCreds)
+    nextRenewalDate
   }
 
   private def getTokenRenewalInterval(
