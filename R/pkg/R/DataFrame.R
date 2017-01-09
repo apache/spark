@@ -2313,9 +2313,9 @@ setMethod("dropDuplicates",
 #' @param joinExpr (Optional) The expression used to perform the join. joinExpr must be a
 #' Column expression. If joinExpr is omitted, the default, inner join is attempted and an error is
 #' thrown if it would be a Cartesian Product. For Cartesian join, use crossJoin instead.
-#' @param joinType The type of join to perform. The following join types are available:
-#' 'inner', 'outer', 'full', 'fullouter', leftouter', 'left_outer', 'left',
-#' 'right_outer', 'rightouter', 'right', and 'leftsemi'. The default joinType is "inner".
+#' @param joinType The type of join to perform, default 'inner'.
+#' Must be one of: 'inner', 'cross', 'outer', 'full', 'full_outer',
+#' 'left', 'left_outer', 'right', 'right_outer', 'left_semi', or 'left_anti'.
 #' @return A SparkDataFrame containing the result of the join operation.
 #' @family SparkDataFrame functions
 #' @aliases join,SparkDataFrame,SparkDataFrame-method
@@ -2344,15 +2344,18 @@ setMethod("join",
               if (is.null(joinType)) {
                 sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc)
               } else {
-                if (joinType %in% c("inner", "outer", "full", "fullouter",
-                    "leftouter", "left_outer", "left",
-                    "rightouter", "right_outer", "right", "leftsemi")) {
+                if (joinType %in% c("inner", "cross",
+                    "outer", "full", "fullouter", "full_outer",
+                    "left", "leftouter", "left_outer",
+                    "right", "rightouter", "right_outer",
+                    "left_semi", "leftsemi", "left_anti", "leftanti")) {
                   joinType <- gsub("_", "", joinType)
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
                 } else {
                   stop("joinType must be one of the following types: ",
-                      "'inner', 'outer', 'full', 'fullouter', 'leftouter', 'left_outer', 'left',
-                      'rightouter', 'right_outer', 'right', 'leftsemi'")
+                       "'inner', 'cross', 'outer', 'full', 'full_outer',",
+                       "'left', 'left_outer', 'right', 'right_outer',",
+                       "'left_semi', or 'left_anti'.")
                 }
               }
             }
