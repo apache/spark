@@ -115,7 +115,6 @@ class ExternalAppendOnlyMap[K, V, C](
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
 
-  @volatile private var isReadingIterator: Boolean = false
   @volatile private var readingIterator: SpillableIterator = null
 
   /**
@@ -193,8 +192,7 @@ class ExternalAppendOnlyMap[K, V, C](
    * It will be called by TaskMemoryManager when there is not enough memory for the task.
    */
   override protected[this] def forceSpill(): Boolean = {
-    if (isReadingIterator) {
-      assert(readingIterator != null)
+    if (readingIterator != null) {
       val isSpilled = readingIterator.spill()
       if (isSpilled) {
         currentMap = null
@@ -266,7 +264,6 @@ class ExternalAppendOnlyMap[K, V, C](
    */
   def destructiveIterator(inMemoryIterator: Iterator[(K, C)]): Iterator[(K, C)] = {
     readingIterator = new SpillableIterator(inMemoryIterator)
-    isReadingIterator = true
     readingIterator
   }
 
