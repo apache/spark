@@ -405,7 +405,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     s"""
       |SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
       |USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll("\n", " "),
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("transform with custom field delimiter2",
     s"""
