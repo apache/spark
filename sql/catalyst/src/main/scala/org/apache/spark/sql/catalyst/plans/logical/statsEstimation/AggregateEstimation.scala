@@ -24,6 +24,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Statistics}
 object AggregateEstimation {
   import EstimationUtils._
 
+  /**
+   * Estimate the number of output rows based on column stats of group-by columns, and propagate
+   * column stats for aggregate expressions.
+   */
   def estimate(agg: Aggregate): Option[Statistics] = {
     val childStats = agg.child.statistics
     // Check if we have column stats for all group-by columns.
@@ -31,14 +35,10 @@ object AggregateEstimation {
       e.isInstanceOf[Attribute] && childStats.attributeStats.contains(e.asInstanceOf[Attribute])
     }
     if (rowCountsExist(agg.child) && colStatsExist) {
-      // Initial value for agg without group expressions
-      var outputRows: BigInt = 1
-      agg.groupingExpressions.map(_.asInstanceOf[Attribute]).foreach { attr =>
-        val colStat = childStats.attributeStats(attr)
-        // Multiply distinct counts of group by columns. This is an upper bound, which assumes
-        // the data contains all combinations of distinct values of group by columns.
-        outputRows *= colStat.distinctCount
-      }
+      // Multiply distinct counts of group-by columns. This is an upper bound, which assumes
+      // the data contains all combinations of distinct values of group-by columns.
+      var outputRows: BigInt = agg.groupingExpressions.foldLeft(BigInt(1))(
+        (res, expr) => res * childStats.attributeStats(expr.asInstanceOf[Attribute]).distinctCount)
 
       // Here we set another upper bound for the number of output rows: it must not be larger than
       // child's number of rows.
