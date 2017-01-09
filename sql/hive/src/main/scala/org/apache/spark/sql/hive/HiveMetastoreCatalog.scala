@@ -129,7 +129,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             // If we have the same paths, same schema, and same partition spec,
             // we will use the cached relation.
             val useCached =
-            isSamePath &&
+              isSamePath &&
               l.schema == table.schema &&
               relation.bucketSpec == table.bucketSpec &&
               relation.partitionSchema == table.partitionSchema
