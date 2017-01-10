@@ -32,23 +32,4 @@ class S3InstantiationSuite extends SparkFunSuite {
     new S3AFileSystem()
   }
 
-  test("Create S3N FS Instance") {
-    new NativeS3FileSystem()
-  }
-
-  test("Create Jets3t class") {
-    new S3ServiceException("jets3t")
-  }
-
-  test("Create class in Amazon com.amazonaws.services.s3 JAR") {
-    new S3ClientOptions()
-  }
-
-  test("Create Joda Time class") {
-    new LocalTime()
-  }
-
-  test("http core") {
-    new TokenParser()
-  }
 }
