@@ -101,6 +101,57 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     MLTestingUtils.checkCopy(model)
   }
 
+  test("setThreshold, getThreshold") {
+    val gbt = new GBTClassifier
+
+    // default
+    withClue("GBTClassifier should not have thresholds set by default.") {
+      intercept[NoSuchElementException] {
+        gbt.getThresholds
+      }
+    }
+
+    // Set via thresholds
+    val gbt2 = new GBTClassifier
+    val threshold = Array(0.3, 0.7)
+    gbt2.setThresholds(threshold)
+    assert(gbt2.getThresholds.zipWithIndex.forall(valueWithIndex =>
+      threshold(valueWithIndex._2) == valueWithIndex._1))
+  }
+
+  test("thresholds prediction") {
+    val gbt = new GBTClassifier
+    val df = trainData.toDF()
+    val binaryModel = gbt.fit(df)
+
+    // should predict all zeros
+    binaryModel.setThresholds(Array(0.0, 1.0))
+    val binaryZeroPredictions = binaryModel.transform(df).select("prediction").collect()
+    assert(binaryZeroPredictions.forall(_.getDouble(0) === 0.0))
+
+    // should predict all ones
+    binaryModel.setThresholds(Array(1.0, 0.0))
+    val binaryOnePredictions = binaryModel.transform(df).select("prediction").collect()
+    assert(binaryOnePredictions.forall(_.getDouble(0) === 1.0))
+
+
+    val gbtBase = new GBTClassifier
+    val model = gbtBase.fit(df)
+    val basePredictions = model.transform(df).select("prediction").collect()
+
+    // constant threshold scaling is the same as no thresholds
+    binaryModel.setThresholds(Array(1.0, 1.0))
+    val scaledPredictions = binaryModel.transform(df).select("prediction").collect()
+    assert(scaledPredictions.zip(basePredictions).forall { case (scaled, base) =>
+      scaled.getDouble(0) === base.getDouble(0)
+    })
+
+    // force it to use the predict method
+    model.setRawPredictionCol("").setProbabilityCol("").setThresholds(Array(0, 1))
+    val predictionsWithPredict = model.transform(df).select("prediction").collect()
+    assert(predictionsWithPredict.forall(_.getDouble(0) === 0.0))
+  }
+
   test("GBTClassifier: Predictor, Classifier methods") {
     val rawPredictionCol = "rawPrediction"
     val predictionCol = "prediction"

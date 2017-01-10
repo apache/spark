@@ -263,8 +263,13 @@ class GBTClassificationModel private[ml](
   }
 
   override protected def predict(features: Vector): Double = {
-    val prediction: Double = margin(features)
-    if (prediction > 0.0) 1.0 else 0.0
+    // If thresholds defined, use predictRaw to get probabilities, otherwise use optimization
+    if (isDefined(thresholds)) {
+      super.predict(features)
+    } else {
+      val prediction: Double = margin(features)
+      if (prediction > 0.0) 1.0 else 0.0
+    }
   }
 
   override protected def predictRaw(features: Vector): Vector = {
