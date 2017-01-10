@@ -97,8 +97,8 @@ Where:
 - INIV: initialization vector used to initialize the input channel of the client.
 - OUTIV: initialization vector used to initialize the output channel of the client.
 
-The server expects a response to its challenge in the same format as the one expected by
-the client.
+At this point the server considers the client to be authenticated, and will try to
+decrypt any data further sent by the client using the session key.
 
 
 Default Algorithms
