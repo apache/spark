@@ -1352,4 +1352,18 @@ class HiveDDLSuite
         "CTAS for hive serde tables does not support append or overwrite semantics"))
     }
   }
+
+  test("read/write files with hive data source is not allowed") {
+    withTempDir { dir =>
+      val e = intercept[AnalysisException] {
+        spark.read.format("hive").load(dir.getAbsolutePath)
+      }
+      assert(e.message.contains("Hive data source can only be used with tables"))
+
+      val e2 = intercept[AnalysisException] {
+        Seq(1 -> "a").toDF("i", "j").write.format("hive").save(dir.getAbsolutePath)
+      }
+      assert(e2.message.contains("Hive data source can only be used with tables"))
+    }
+  }
 }
