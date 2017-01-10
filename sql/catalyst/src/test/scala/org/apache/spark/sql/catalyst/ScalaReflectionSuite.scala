@@ -312,14 +312,6 @@ class ScalaReflectionSuite extends SparkFunSuite {
       ArrayType(IntegerType, containsNull = false))
     val arrayBufferDeserializer = deserializerFor[ArrayBuffer[Int]]
     assert(arrayBufferDeserializer.dataType == ObjectType(classOf[ArrayBuffer[_]]))
-
-    // Check whether conversion is skipped when using WrappedArray[_] supertype
-    // (would otherwise needlessly add overhead)
-    import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-    val seqDeserializer = deserializerFor[Seq[Int]]
-    assert(seqDeserializer.asInstanceOf[StaticInvoke].staticObject ==
-      scala.collection.mutable.WrappedArray.getClass)
-    assert(seqDeserializer.asInstanceOf[StaticInvoke].functionName == "make")
   }
 
   private val dataTypeForComplexData = dataTypeFor[ComplexData]
