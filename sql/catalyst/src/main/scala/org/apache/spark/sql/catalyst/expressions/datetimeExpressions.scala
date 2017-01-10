@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  */
 trait TimeZoneAwareExpression extends Expression {
 
-  /** the timezone ID. */
+  /** the timezone ID to be used to evaluate value. */
   def timeZoneId: Option[String]
 
   /**
