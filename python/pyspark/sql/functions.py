@@ -157,17 +157,21 @@ _window_functions = {
     'dense_rank':
         """returns the rank of rows within a window partition, without any gaps.
 
-        The difference between rank and denseRank is that denseRank leaves no gaps in ranking
-        sequence when there are ties. That is, if you were ranking a competition using denseRank
+        The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
+        sequence when there are ties. That is, if you were ranking a competition using dense_rank
         and had three people tie for second place, you would say that all three were in second
-        place and that the next person came in third.""",
+        place and that the next person came in third. Rank would give me sequential numbers, making
+        the person that came in third place (after the ties) would register as coming in fifth.
+
+        This is equivalent to the DENSE_RANK function in SQL.""",
     'rank':
         """returns the rank of rows within a window partition.
 
-        The difference between rank and denseRank is that denseRank leaves no gaps in ranking
-        sequence when there are ties. That is, if you were ranking a competition using denseRank
+        The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
+        sequence when there are ties. That is, if you were ranking a competition using dense_rank
         and had three people tie for second place, you would say that all three were in second
-        place and that the next person came in third.
+        place and that the next person came in third. Rank would give me sequential numbers, making
+        the person that came in third place (after the ties) would register as coming in fifth.
 
         This is equivalent to the RANK function in SQL.""",
     'cume_dist':
@@ -359,7 +363,7 @@ def grouping_id(*cols):
 
        (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
 
-    .. note:: the list of columns should match with grouping columns exactly, or empty (means all
+    .. note:: The list of columns should match with grouping columns exactly, or empty (means all
         the grouping columns).
 
     >>> df.cube("name").agg(grouping_id(), sum("age")).orderBy("name").show()
@@ -547,7 +551,7 @@ def shiftRightUnsigned(col, numBits):
 def spark_partition_id():
     """A column for partition ID.
 
-    Note that this is indeterministic because it depends on data partitioning and task scheduling.
+    .. note:: This is indeterministic because it depends on data partitioning and task scheduling.
 
     >>> df.repartition(1).select(spark_partition_id().alias("pid")).collect()
     [Row(pid=0), Row(pid=0)]
@@ -1852,9 +1856,10 @@ class UserDefinedFunction(object):
 @since(1.3)
 def udf(f, returnType=StringType()):
     """Creates a :class:`Column` expression representing a user defined function (UDF).
-    Note that the user-defined functions must be deterministic. Due to optimization,
-    duplicate invocations may be eliminated or the function may even be invoked more times than
-    it is present in the query.
+
+    .. note:: The user-defined functions must be deterministic. Due to optimization,
+        duplicate invocations may be eliminated or the function may even be invoked more times than
+        it is present in the query.
 
     :param f: python function
     :param returnType: a :class:`pyspark.sql.types.DataType` object

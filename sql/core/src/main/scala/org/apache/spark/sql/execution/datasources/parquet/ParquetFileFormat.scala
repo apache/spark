@@ -61,7 +61,7 @@ class ParquetFileFormat
 
   override def shortName(): String = "parquet"
 
-  override def toString: String = "ParquetFormat"
+  override def toString: String = "Parquet"
 
   override def hashCode(): Int = getClass.hashCode()
 
@@ -241,12 +241,7 @@ class ParquetFileFormat
       commonMetadata: Seq[FileStatus])
 
   private def splitFiles(allFiles: Seq[FileStatus]): FileTypes = {
-    // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
-    val leaves = allFiles.filter { f =>
-      isSummaryFile(f.getPath) ||
-        !((f.getPath.getName.startsWith("_") && !f.getPath.getName.contains("=")) ||
-          f.getPath.getName.startsWith("."))
-    }.toArray.sortBy(_.getPath.toString)
+    val leaves = allFiles.toArray.sortBy(_.getPath.toString)
 
     FileTypes(
       data = leaves.filterNot(f => isSummaryFile(f.getPath)),

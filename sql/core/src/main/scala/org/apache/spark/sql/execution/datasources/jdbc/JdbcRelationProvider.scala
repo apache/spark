@@ -35,11 +35,13 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val upperBound = jdbcOptions.upperBound
     val numPartitions = jdbcOptions.numPartitions
 
-    val partitionInfo = if (partitionColumn == null) {
+    val partitionInfo = if (partitionColumn.isEmpty) {
+      assert(lowerBound.isEmpty && upperBound.isEmpty)
       null
     } else {
+      assert(lowerBound.nonEmpty && upperBound.nonEmpty && numPartitions.nonEmpty)
       JDBCPartitioningInfo(
-        partitionColumn, lowerBound.toLong, upperBound.toLong, numPartitions.toInt)
+        partitionColumn.get, lowerBound.get, upperBound.get, numPartitions.get)
     }
     val parts = JDBCRelation.columnPartition(partitionInfo)
     JDBCRelation(parts, jdbcOptions)(sqlContext.sparkSession)
@@ -55,6 +57,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val table = jdbcOptions.table
     val createTableOptions = jdbcOptions.createTableOptions
     val isTruncate = jdbcOptions.isTruncate
+    val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
 
     val conn = JdbcUtils.createConnectionFactory(jdbcOptions)()
     try {
@@ -65,16 +68,18 @@ class JdbcRelationProvider extends CreatableRelationProvider
             if (isTruncate && isCascadingTruncateTable(url) == Some(false)) {
               // In this case, we should truncate table and then load.
               truncateTable(conn, table)
-              saveTable(df, url, table, jdbcOptions)
+              val tableSchema = JdbcUtils.getSchemaOption(conn, url, table)
+              saveTable(df, url, table, tableSchema, isCaseSensitive, jdbcOptions)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, table)
               createTable(df.schema, url, table, createTableOptions, conn)
-              saveTable(df, url, table, jdbcOptions)
+              saveTable(df, url, table, Some(df.schema), isCaseSensitive, jdbcOptions)
             }
 
           case SaveMode.Append =>
-            saveTable(df, url, table, jdbcOptions)
+            val tableSchema = JdbcUtils.getSchemaOption(conn, url, table)
+            saveTable(df, url, table, tableSchema, isCaseSensitive, jdbcOptions)
 
           case SaveMode.ErrorIfExists =>
             throw new AnalysisException(
@@ -87,7 +92,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
         }
       } else {
         createTable(df.schema, url, table, createTableOptions, conn)
-        saveTable(df, url, table, jdbcOptions)
+        saveTable(df, url, table, Some(df.schema), isCaseSensitive, jdbcOptions)
       }
     } finally {
       conn.close()

@@ -136,7 +136,7 @@ case class RowDataSourceScanExec(
  * @param outputSchema Output schema of the scan.
  * @param partitionFilters Predicates to use for partition pruning.
  * @param dataFilters Data source filters to use for filtering data within partitions.
- * @param metastoreTableIdentifier
+ * @param metastoreTableIdentifier identifier for the table in the metastore.
  */
 case class FileSourceScanExec(
     @transient relation: HadoopFsRelation,
@@ -147,10 +147,10 @@ case class FileSourceScanExec(
     override val metastoreTableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
 
-  val supportsBatch = relation.fileFormat.supportBatch(
+  val supportsBatch: Boolean = relation.fileFormat.supportBatch(
     relation.sparkSession, StructType.fromAttributes(output))
 
-  val needsUnsafeRowConversion = if (relation.fileFormat.isInstanceOf[ParquetSource]) {
+  val needsUnsafeRowConversion: Boolean = if (relation.fileFormat.isInstanceOf[ParquetSource]) {
     SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
   } else {
     false
@@ -516,7 +516,6 @@ case class FileSourceScanExec(
     }
 
     // Assign files to partitions using "First Fit Decreasing" (FFD)
-    // TODO: consider adding a slop factor here?
     splitFiles.foreach { file =>
       if (currentSize + file.length > maxSplitBytes) {
         closePartition()

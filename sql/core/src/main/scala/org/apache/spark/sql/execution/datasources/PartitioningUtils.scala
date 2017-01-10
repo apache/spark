@@ -41,7 +41,7 @@ object PartitionPath {
 }
 
 /**
- * Holds a directory in a partitioned collection of files as well as as the partition values
+ * Holds a directory in a partitioned collection of files as well as the partition values
  * in the form of a Row.  Before scanning, the files at `path` need to be enumerated.
  */
 case class PartitionPath(values: InternalRow, path: Path)
@@ -244,13 +244,22 @@ object PartitioningUtils {
 
   /**
    * Given a partition path fragment, e.g. `fieldOne=1/fieldTwo=2`, returns a parsed spec
-   * for that fragment, e.g. `Map(("fieldOne", "1"), ("fieldTwo", "2"))`.
+   * for that fragment as a `TablePartitionSpec`, e.g. `Map(("fieldOne", "1"), ("fieldTwo", "2"))`.
    */
   def parsePathFragment(pathFragment: String): TablePartitionSpec = {
+    parsePathFragmentAsSeq(pathFragment).toMap
+  }
+
+  /**
+   * Given a partition path fragment, e.g. `fieldOne=1/fieldTwo=2`, returns a parsed spec
+   * for that fragment as a `Seq[(String, String)]`, e.g.
+   * `Seq(("fieldOne", "1"), ("fieldTwo", "2"))`.
+   */
+  def parsePathFragmentAsSeq(pathFragment: String): Seq[(String, String)] = {
     pathFragment.split("/").map { kv =>
       val pair = kv.split("=", 2)
       (unescapePathName(pair(0)), unescapePathName(pair(1)))
-    }.toMap
+    }
   }
 
   /**

@@ -18,7 +18,7 @@
 package org.apache.spark.util
 
 import java.io._
-import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo}
+import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
@@ -55,7 +55,7 @@ import org.slf4j.Logger
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{DYN_ALLOCATION_INITIAL_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS, EXECUTOR_INSTANCES}
+import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.util.logging.RollingFileAppender
@@ -237,9 +237,11 @@ private[spark] object Utils extends Logging {
     if (bb.hasArray) {
       out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
     } else {
+      val originalPosition = bb.position()
       val bbval = new Array[Byte](bb.remaining())
       bb.get(bbval)
       out.write(bbval)
+      bb.position(originalPosition)
     }
   }
 
@@ -250,9 +252,11 @@ private[spark] object Utils extends Logging {
     if (bb.hasArray) {
       out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
     } else {
+      val originalPosition = bb.position()
       val bbval = new Array[Byte](bb.remaining())
       bb.get(bbval)
       out.write(bbval)
+      bb.position(originalPosition)
     }
   }
 
@@ -1249,7 +1253,7 @@ private[spark] object Utils extends Logging {
         val currentThreadName = Thread.currentThread().getName
         if (sc != null) {
           logError(s"uncaught error in thread $currentThreadName, stopping SparkContext", t)
-          sc.stop()
+          sc.stopInNewThread()
         }
         if (!NonFatal(t)) {
           logError(s"throw uncaught fatal error in thread $currentThreadName", t)
@@ -1484,10 +1488,11 @@ private[spark] object Utils extends Logging {
 
   /** Return uncompressed file length of a compressed file. */
   private def getCompressedFileLength(file: File): Long = {
+    var gzInputStream: GZIPInputStream = null
     try {
       // Uncompress .gz file to determine file size.
       var fileSize = 0L
-      val gzInputStream = new GZIPInputStream(new FileInputStream(file))
+      gzInputStream = new GZIPInputStream(new FileInputStream(file))
       val bufSize = 1024
       val buf = new Array[Byte](bufSize)
       var numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
@@ -1500,6 +1505,10 @@ private[spark] object Utils extends Logging {
       case e: Throwable =>
         logError(s"Cannot get file length of ${file}", e)
         throw e
+    } finally {
+      if (gzInputStream != null) {
+        gzInputStream.close()
+      }
     }
   }
 
@@ -1673,8 +1682,8 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * NaN-safe version of [[java.lang.Double.compare()]] which allows NaN values to be compared
-   * according to semantics where NaN == NaN and NaN > any non-NaN double.
+   * NaN-safe version of `java.lang.Double.compare()` which allows NaN values to be compared
+   * according to semantics where NaN == NaN and NaN is greater than any non-NaN double.
    */
   def nanSafeCompareDoubles(x: Double, y: Double): Int = {
     val xIsNan: Boolean = java.lang.Double.isNaN(x)
@@ -1687,8 +1696,8 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * NaN-safe version of [[java.lang.Float.compare()]] which allows NaN values to be compared
-   * according to semantics where NaN == NaN and NaN > any non-NaN float.
+   * NaN-safe version of `java.lang.Float.compare()` which allows NaN values to be compared
+   * according to semantics where NaN == NaN and NaN is greater than any non-NaN float.
    */
   def nanSafeCompareFloats(x: Float, y: Float): Int = {
     val xIsNan: Boolean = java.lang.Float.isNaN(x)
@@ -2056,6 +2065,20 @@ private[spark] object Utils extends Logging {
     path
   }
 
+  /**
+   * Updates Spark config with properties from a set of Properties.
+   * Provided properties have the highest priority.
+   */
+  def updateSparkConfigFromProperties(
+      conf: SparkConf,
+      properties: Map[String, String]) : Unit = {
+    properties.filter { case (k, v) =>
+      k.startsWith("spark.")
+    }.foreach { case (k, v) =>
+      conf.set(k, v)
+    }
+  }
+
   /** Load properties present in the given file. */
   def getPropertiesFromFile(filename: String): Map[String, String] = {
     val file = new File(filename)
@@ -2117,26 +2140,44 @@ private[spark] object Utils extends Logging {
     // We need to filter out null values here because dumpAllThreads() may return null array
     // elements for threads that are dead / don't exist.
     val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
-    threadInfos.sortBy(_.getThreadId).map { case threadInfo =>
-      val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackFrame -> m).toMap
-      val stackTrace = threadInfo.getStackTrace.map { frame =>
-        monitors.get(frame) match {
-          case Some(monitor) =>
-            monitor.getLockedStackFrame.toString + s" => holding ${monitor.lockString}"
-          case None =>
-            frame.toString
-        }
-      }.mkString("\n")
+    threadInfos.sortBy(_.getThreadId).map(threadInfoToThreadStackTrace)
+  }
 
-      // use a set to dedup re-entrant locks that are held at multiple places
-      val heldLocks = (threadInfo.getLockedSynchronizers.map(_.lockString)
-          ++ threadInfo.getLockedMonitors.map(_.lockString)
-        ).toSet
-
-      ThreadStackTrace(threadInfo.getThreadId, threadInfo.getThreadName, threadInfo.getThreadState,
-        stackTrace, if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
-        Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""), heldLocks.toSeq)
+  def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {
+    if (threadId <= 0) {
+      None
+    } else {
+      // The Int.MaxValue here requests the entire untruncated stack trace of the thread:
+      val threadInfo =
+        Option(ManagementFactory.getThreadMXBean.getThreadInfo(threadId, Int.MaxValue))
+      threadInfo.map(threadInfoToThreadStackTrace)
     }
+  }
+
+  private def threadInfoToThreadStackTrace(threadInfo: ThreadInfo): ThreadStackTrace = {
+    val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackFrame -> m).toMap
+    val stackTrace = threadInfo.getStackTrace.map { frame =>
+      monitors.get(frame) match {
+        case Some(monitor) =>
+          monitor.getLockedStackFrame.toString + s" => holding ${monitor.lockString}"
+        case None =>
+          frame.toString
+      }
+    }.mkString("\n")
+
+    // use a set to dedup re-entrant locks that are held at multiple places
+    val heldLocks =
+      (threadInfo.getLockedSynchronizers ++ threadInfo.getLockedMonitors).map(_.lockString).toSet
+
+    ThreadStackTrace(
+      threadId = threadInfo.getThreadId,
+      threadName = threadInfo.getThreadName,
+      threadState = threadInfo.getThreadState,
+      stackTrace = stackTrace,
+      blockedByThreadId =
+        if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
+      blockedByLock = Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
+      holdingLocks = heldLocks.toSeq)
   }
 
   /**
@@ -2340,8 +2381,9 @@ private[spark] object Utils extends Logging {
    * A spark url (`spark://host:port`) is a special URI that its scheme is `spark` and only contains
    * host and port.
    *
-   * @throws SparkException if `sparkUrl` is invalid.
+   * @throws org.apache.spark.SparkException if sparkUrl is invalid.
    */
+  @throws(classOf[SparkException])
   def extractHostPortFromSparkUrl(sparkUrl: String): (String, Int) = {
     try {
       val uri = new java.net.URI(sparkUrl)
@@ -2541,6 +2583,18 @@ private[spark] object Utils extends Logging {
       sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
     }
   }
+
+  private[util] val REDACTION_REPLACEMENT_TEXT = "*********(redacted)"
+
+  def redact(conf: SparkConf, kvs: Seq[(String, String)]): Seq[(String, String)] = {
+    val redactionPattern = conf.get(SECRET_REDACTION_PATTERN).r
+    kvs.map { kv =>
+      redactionPattern.findFirstIn(kv._1)
+        .map { ignore => (kv._1, REDACTION_REPLACEMENT_TEXT) }
+        .getOrElse(kv)
+    }
+  }
+
 }
 
 private[util] object CallerContext extends Logging {

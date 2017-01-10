@@ -56,11 +56,6 @@ object SQLConf {
 
   }
 
-  val WAREHOUSE_PATH = SQLConfigBuilder("spark.sql.warehouse.dir")
-    .doc("The default location for managed databases and tables.")
-    .stringConf
-    .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
-
   val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
     .internal()
     .doc("The max number of iterations the optimizer and analyzer runs.")
@@ -113,7 +108,7 @@ object SQLConf {
     .doc("Configures the maximum size in bytes for a table that will be broadcast to all worker " +
       "nodes when performing a join.  By setting this value to -1 broadcasting can be disabled. " +
       "Note that currently statistics are only supported for Hive Metastore tables where the " +
-      "command<code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been " +
+      "command <code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been " +
       "run, and file-based data source tables where the statistics are computed directly on " +
       "the files of data.")
     .longConf
@@ -141,7 +136,7 @@ object SQLConf {
       "That is to say by default the optimizer will not choose to broadcast a table unless it " +
       "knows for sure its size is small enough.")
     .longConf
-    .createWithDefault(-1)
+    .createWithDefault(Long.MaxValue)
 
   val SHUFFLE_PARTITIONS = SQLConfigBuilder("spark.sql.shuffle.partitions")
     .doc("The default number of partitions to use when shuffling data for joins or aggregations.")
@@ -314,6 +309,13 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val THRIFTSERVER_INCREMENTAL_COLLECT =
+    SQLConfigBuilder("spark.sql.thriftServer.incrementalCollect")
+      .internal()
+      .doc("When true, enable incremental collection for execution in Thrift Server.")
+      .booleanConf
+      .createWithDefault(false)
+
   val THRIFTSERVER_UI_STATEMENT_LIMIT =
     SQLConfigBuilder("spark.sql.thriftserver.ui.retainedStatements")
       .doc("The number of SQL statements kept in the JDBC/ODBC web UI history.")
@@ -471,6 +473,19 @@ object SQLConf {
     .longConf
     .createWithDefault(4 * 1024 * 1024)
 
+  val IGNORE_CORRUPT_FILES = SQLConfigBuilder("spark.sql.files.ignoreCorruptFiles")
+    .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
+      "encountering corrupted or non-existing and contents that have been read will still be " +
+      "returned.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val MAX_RECORDS_PER_FILE = SQLConfigBuilder("spark.sql.files.maxRecordsPerFile")
+    .doc("Maximum number of records to write out to a single file. " +
+      "If this value is zero or negative, there is no limit.")
+    .longConf
+    .createWithDefault(0)
+
   val EXCHANGE_REUSE_ENABLED = SQLConfigBuilder("spark.sql.exchange.reuse")
     .internal()
     .doc("When true, the planner will try to find out duplicated exchanges and re-use them.")
@@ -485,17 +500,16 @@ object SQLConf {
       .intConf
       .createWithDefault(10)
 
-  val STATE_STORE_MIN_VERSIONS_TO_RETAIN =
-    SQLConfigBuilder("spark.sql.streaming.stateStore.minBatchesToRetain")
-      .internal()
-      .doc("Minimum number of versions of a state store's data to retain after cleaning.")
-      .intConf
-      .createWithDefault(2)
-
   val CHECKPOINT_LOCATION = SQLConfigBuilder("spark.sql.streaming.checkpointLocation")
     .doc("The default location for storing checkpoint data for streaming queries.")
     .stringConf
     .createOptional
+
+  val MIN_BATCHES_TO_RETAIN = SQLConfigBuilder("spark.sql.streaming.minBatchesToRetain")
+    .internal()
+    .doc("The minimum number of batches that must be retained and made recoverable.")
+    .intConf
+    .createWithDefault(100)
 
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     SQLConfigBuilder("spark.sql.streaming.unsupportedOperationCheck")
@@ -608,11 +622,24 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10L)
 
+  val STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL =
+    SQLConfigBuilder("spark.sql.streaming.noDataProgressEventInterval")
+      .internal()
+      .doc("How long to wait between two progress events when there is no data")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(10000L)
+
   val STREAMING_METRICS_ENABLED =
     SQLConfigBuilder("spark.sql.streaming.metricsEnabled")
       .doc("Whether Dropwizard/Codahale metrics will be reported for active streaming queries.")
       .booleanConf
       .createWithDefault(false)
+
+  val STREAMING_PROGRESS_RETENTION =
+    SQLConfigBuilder("spark.sql.streaming.numRecentProgressUpdates")
+      .doc("The number of progress updates to retain for a streaming query")
+      .intConf
+      .createWithDefault(100)
 
   val NDV_MAX_ERROR =
     SQLConfigBuilder("spark.sql.statistics.ndv.maxError")
@@ -622,11 +649,11 @@ object SQLConf {
       .doubleConf
       .createWithDefault(0.05)
 
-  val IGNORE_CORRUPT_FILES = SQLConfigBuilder("spark.sql.files.ignoreCorruptFiles")
-    .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
-      "encountering corrupt files and contents that have been read will still be returned.")
-    .booleanConf
-    .createWithDefault(false)
+  val CBO_ENABLED =
+    SQLConfigBuilder("spark.sql.cbo.enabled")
+      .doc("Enables CBO for estimation of plan statistics when set true.")
+      .booleanConf
+      .createWithDefault(false)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -659,8 +686,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
-  def stateStoreMinVersionsToRetain: Int = getConf(STATE_STORE_MIN_VERSIONS_TO_RETAIN)
-
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
@@ -683,11 +708,20 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def streamingPollingDelay: Long = getConf(STREAMING_POLLING_DELAY)
 
+  def streamingNoDataProgressEventInterval: Long =
+    getConf(STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL)
+
   def streamingMetricsEnabled: Boolean = getConf(STREAMING_METRICS_ENABLED)
+
+  def streamingProgressRetention: Int = getConf(STREAMING_PROGRESS_RETENTION)
 
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
+
+  def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
+
+  def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
@@ -708,6 +742,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def minNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
+
+  def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
@@ -750,7 +786,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
-  def defaultSizeInBytes: Long = getConf(DEFAULT_SIZE_IN_BYTES, Long.MaxValue)
+  def defaultSizeInBytes: Long = getConf(DEFAULT_SIZE_IN_BYTES)
 
   def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
 
@@ -806,9 +842,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
-  def warehousePath: String = new Path(getConf(WAREHOUSE_PATH)).toString
+  def warehousePath: String = new Path(getConf(StaticSQLConf.WAREHOUSE_PATH)).toString
 
-  def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
+  def hiveThriftServerSingleSession: Boolean =
+    getConf(StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION)
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
@@ -817,6 +854,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   override def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
+
+  override def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
@@ -951,6 +991,11 @@ object StaticSQLConf {
     }
   }
 
+  val WAREHOUSE_PATH = buildConf("spark.sql.warehouse.dir")
+    .doc("The default location for managed databases and tables.")
+    .stringConf
+    .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
+
   val CATALOG_IMPLEMENTATION = buildConf("spark.sql.catalogImplementation")
     .internal()
     .stringConf
@@ -980,6 +1025,13 @@ object StaticSQLConf {
   val DEBUG_MODE = buildConf("spark.sql.debug")
     .internal()
     .doc("Only used for internal debugging. Not all functions are supported when it is enabled.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val HIVE_THRIFT_SERVER_SINGLESESSION = buildConf("spark.sql.hive.thriftServer.singleSession")
+    .doc("When set to true, Hive Thrift server is running in a single session mode. " +
+      "All the JDBC/ODBC connections share the temporary views, function registries, " +
+      "SQL configuration and the current database.")
     .booleanConf
     .createWithDefault(false)
 }

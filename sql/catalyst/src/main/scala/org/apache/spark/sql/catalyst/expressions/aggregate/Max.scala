@@ -33,9 +33,6 @@ case class Max(child: Expression) extends DeclarativeAggregate {
   // Return data type.
   override def dataType: DataType = child.dataType
 
-  // Expected input data type.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
-
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForOrderingExpr(child.dataType, "function max")
 

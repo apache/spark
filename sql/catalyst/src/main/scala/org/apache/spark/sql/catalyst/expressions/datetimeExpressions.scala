@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Timestamp
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
 
 import scala.util.Try
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback,
-  ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -69,6 +69,35 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
   }
 
   override def prettyName: String = "current_timestamp"
+}
+
+/**
+ * Expression representing the current batch time, which is used by StreamExecution to
+ * 1. prevent optimizer from pushing this expression below a stateful operator
+ * 2. allow IncrementalExecution to substitute this expression with a Literal(timestamp)
+ *
+ * There is no code generation since this expression should be replaced with a literal.
+ */
+case class CurrentBatchTimestamp(timestampMs: Long, dataType: DataType)
+  extends LeafExpression with Nondeterministic with CodegenFallback {
+
+  override def nullable: Boolean = false
+
+  override def prettyName: String = "current_batch_timestamp"
+
+  override protected def initializeInternal(partitionIndex: Int): Unit = {}
+
+  /**
+   * Need to return literal value in order to support compile time expression evaluation
+   * e.g., select(current_date())
+   */
+  override protected def evalInternal(input: InternalRow): Any = toLiteral.value
+
+  def toLiteral: Literal = dataType match {
+    case _: TimestampType =>
+      Literal(DateTimeUtils.fromJavaTimestamp(new Timestamp(timestampMs)), TimestampType)
+    case _: DateType => Literal(DateTimeUtils.millisToDays(timestampMs), DateType)
+  }
 }
 
 /**
@@ -1101,11 +1130,14 @@ case class TruncDate(date: Expression, format: Expression)
  * Returns the number of days from startDate to endDate.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(date1, date2) - Returns the number of days between `date1` and `date2`.",
+  usage = "_FUNC_(endDate, startDate) - Returns the number of days from `startDate` to `endDate`.",
   extended = """
     Examples:
-      > SELECT _FUNC_('2009-07-30', '2009-07-31');
+      > SELECT _FUNC_('2009-07-31', '2009-07-30');
        1
+
+      > SELECT _FUNC_('2009-07-30', '2009-07-31');
+       -1
   """)
 case class DateDiff(endDate: Expression, startDate: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {

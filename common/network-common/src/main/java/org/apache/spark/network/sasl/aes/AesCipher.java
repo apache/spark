@@ -60,7 +60,7 @@ public class AesCipher {
   private final Properties properties;
 
   public AesCipher(AesConfigMessage configMessage, TransportConf conf) throws IOException  {
-    this.properties = CryptoStreamUtils.toCryptoConf(conf);
+    this.properties = conf.cryptoConf();
     this.inKeySpec = new SecretKeySpec(configMessage.inKey, "AES");
     this.inIvSpec = new IvParameterSpec(configMessage.inIv);
     this.outKeySpec = new SecretKeySpec(configMessage.outKey, "AES");
@@ -105,7 +105,7 @@ public class AesCipher {
    */
   public static AesConfigMessage createConfigMessage(TransportConf conf) {
     int keySize = conf.aesCipherKeySize();
-    Properties properties = CryptoStreamUtils.toCryptoConf(conf);
+    Properties properties = conf.cryptoConf();
 
     try {
       int paramLen = CryptoCipherFactory.getCryptoCipher(AesCipher.TRANSFORM, properties)
@@ -125,19 +125,6 @@ public class AesCipher {
     } catch (Exception e) {
       logger.error("AES config error", e);
       throw Throwables.propagate(e);
-    }
-  }
-
-  /**
-   * CryptoStreamUtils is used to convert config from TransportConf to AES Crypto config.
-   */
-  private static class CryptoStreamUtils {
-    public static Properties toCryptoConf(TransportConf conf) {
-      Properties props = new Properties();
-      if (conf.aesCipherClass() != null) {
-        props.setProperty(CryptoCipherFactory.CLASSES_KEY, conf.aesCipherClass());
-      }
-      return props;
     }
   }
 

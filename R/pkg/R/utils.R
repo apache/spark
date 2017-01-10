@@ -777,6 +777,10 @@ isMasterLocal <- function(master) {
   grepl("^local(\\[([0-9]+|\\*)\\])?$", master, perl = TRUE)
 }
 
+isClientMode <- function(master) {
+  grepl("([a-z]+)-client$", master, perl = TRUE)
+}
+
 isSparkRShell <- function() {
   grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)
 }
@@ -837,7 +841,7 @@ captureJVMException <- function(e, method) {
 #
 # @param inputData a list of rows, with each row a list
 # @return data.frame with raw columns as lists
-rbindRaws <- function(inputData){
+rbindRaws <- function(inputData) {
   row1 <- inputData[[1]]
   rawcolumns <- ("raw" == sapply(row1, class))
 
@@ -846,4 +850,16 @@ rbindRaws <- function(inputData){
   out <- as.data.frame(listmatrix)
   out[!rawcolumns] <- lapply(out[!rawcolumns], unlist)
   out
+}
+
+# Get basename without extension from URL
+basenameSansExtFromUrl <- function(url) {
+  # split by '/'
+  splits <- unlist(strsplit(url, "^.+/"))
+  last <- tail(splits, 1)
+  # this is from file_path_sans_ext
+  # first, remove any compression extension
+  filename <- sub("[.](gz|bz2|xz)$", "", last)
+  # then, strip extension by the last '.'
+  sub("([^.]+)\\.[[:alnum:]]+$", "\\1", filename)
 }

@@ -29,6 +29,7 @@ import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.CompletionIterator
+import org.apache.spark.util.NextIterator
 
 
 /** Offset range that one partition of the KafkaSourceRDD has to read */
@@ -63,6 +64,7 @@ private[kafka010] class KafkaSourceRDD(
     executorKafkaParams: ju.Map[String, Object],
     offsetRanges: Seq[KafkaSourceRDDOffsetRange],
     pollTimeoutMs: Long,
+    failOnDataLoss: Boolean,
     reuseCachedConsumers: Boolean = true)
   extends RDD[ConsumerRecord[Array[Byte], Array[Byte]]](sc, Nil) {
 
@@ -132,7 +134,6 @@ private[kafka010] class KafkaSourceRDD(
       logInfo(s"Beginning offset ${range.fromOffset} is the same as ending offset " +
         s"skipping ${range.topic} ${range.partition}")
       Iterator.empty
-
     } else {
       if (!reuseCachedConsumers) {
         // if we can't reuse CachedKafkaConsumers, let's reset the groupId, because we will have
@@ -140,25 +141,39 @@ private[kafka010] class KafkaSourceRDD(
         val old = executorKafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
         executorKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, old + "-" + thePart.index.toString)
       }
-      val consumer = CachedKafkaConsumer.getOrCreate(
-        range.topic, range.partition, executorKafkaParams, reuseCachedConsumers)
-      var requestOffset = range.fromOffset
 
       logDebug(s"Creating iterator for $range")
 
-      val underlying = new Iterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
-        override def hasNext(): Boolean = requestOffset < range.untilOffset
-        override def next(): ConsumerRecord[Array[Byte], Array[Byte]] = {
-          assert(hasNext(), "Can't call next() once untilOffset has been reached")
-          val r = consumer.get(requestOffset, pollTimeoutMs)
-          requestOffset += 1
-          r
+      val underlying = new NextIterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
+        val consumer = CachedKafkaConsumer.getOrCreate(
+          range.topic, range.partition, executorKafkaParams, reuseCachedConsumers)
+        var requestOffset = range.fromOffset
+
+        override def getNext(): ConsumerRecord[Array[Byte], Array[Byte]] = {
+          if (requestOffset >= range.untilOffset) {
+            // Processed all offsets in this partition.
+            finished = true
+            null
+          } else {
+            val r = consumer.get(requestOffset, range.untilOffset, pollTimeoutMs, failOnDataLoss)
+            if (r == null) {
+              // Losing some data. Skip the rest offsets in this partition.
+              finished = true
+              null
+            } else {
+              requestOffset = r.offset + 1
+              r
+            }
+          }
         }
+
+        override protected def close(): Unit = {}
       }
       if (!reuseCachedConsumers) {
         // Don't forget to close consumers! You may take down your Kafka cluster.
         CompletionIterator[ConsumerRecord[Array[Byte], Array[Byte]],
-          Iterator[ConsumerRecord[Array[Byte], Array[Byte]]]](underlying, consumer.close())
+          NextIterator[ConsumerRecord[Array[Byte], Array[Byte]]]](underlying,
+          underlying.consumer.close())
       } else {
         underlying
       }

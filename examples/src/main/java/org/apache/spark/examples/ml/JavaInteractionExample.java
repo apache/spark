@@ -19,7 +19,6 @@ package org.apache.spark.examples.ml;
 
 import org.apache.spark.ml.feature.Interaction;
 import org.apache.spark.ml.feature.VectorAssembler;
-import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
@@ -48,7 +47,7 @@ public class JavaInteractionExample {
       RowFactory.create(5, 9, 2, 7, 10, 7, 3),
       RowFactory.create(6, 1, 1, 4, 2, 8, 4)
     );
-    
+
     StructType schema = new StructType(new StructField[]{
       new StructField("id1", DataTypes.IntegerType, false, Metadata.empty()),
       new StructField("id2", DataTypes.IntegerType, false, Metadata.empty()),

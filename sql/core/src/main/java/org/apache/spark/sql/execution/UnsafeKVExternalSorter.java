@@ -97,7 +97,9 @@ public final class UnsafeKVExternalSorter {
         canUseRadixSort);
     } else {
       // The array will be used to do in-place sort, which require half of the space to be empty.
-      assert(map.numKeys() <= map.getArray().size() / 2);
+      // Note: each record in the map takes two entries in the array, one is record pointer,
+      // another is the key prefix.
+      assert(map.numKeys() * 2 <= map.getArray().size() / 2);
       // During spilling, the array in map will not be used, so we can borrow that and use it
       // as the underlying array for in-memory sorter (it's always large enough).
       // Since we will not grow the array, it's fine to pass `null` as consumer.

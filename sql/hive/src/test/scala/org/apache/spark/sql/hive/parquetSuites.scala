@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExecutedCommandExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoDataSourceCommand, InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -80,7 +81,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
        STORED AS
        INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      location '${partitionedTableDir.getCanonicalPath}'
+      location '${partitionedTableDir.toURI}'
     """)
 
     sql(s"""
@@ -94,7 +95,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
        STORED AS
        INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      location '${partitionedTableDirWithKey.getCanonicalPath}'
+      location '${partitionedTableDirWithKey.toURI}'
     """)
 
     sql(s"""
@@ -107,7 +108,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
        STORED AS
        INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      location '${new File(normalTableDir, "normal").getCanonicalPath}'
+      location '${new File(normalTableDir, "normal").toURI}'
     """)
 
     sql(s"""
@@ -123,7 +124,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
        STORED AS
        INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      LOCATION '${partitionedTableDirWithComplexTypes.getCanonicalPath}'
+      LOCATION '${partitionedTableDirWithComplexTypes.toURI}'
     """)
 
     sql(s"""
@@ -139,7 +140,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
        STORED AS
        INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      LOCATION '${partitionedTableDirWithKeyAndComplexTypes.getCanonicalPath}'
+      LOCATION '${partitionedTableDirWithKeyAndComplexTypes.toURI}'
     """)
 
     sql(
@@ -560,7 +561,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   test("SPARK-15248: explicitly added partitions should be readable") {
     withTable("test_added_partitions", "test_temp") {
       withTempDir { src =>
-        val partitionDir = new File(src, "partition").getCanonicalPath
+        val partitionDir = new File(src, "partition").toURI
         sql(
           """
             |CREATE TABLE test_added_partitions (a STRING)
@@ -635,7 +636,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
       CREATE TEMPORARY VIEW partitioned_parquet
       USING org.apache.spark.sql.parquet
       OPTIONS (
-        path '${partitionedTableDir.getCanonicalPath}'
+        path '${partitionedTableDir.toURI}'
       )
     """)
 
@@ -643,7 +644,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
       CREATE TEMPORARY VIEW partitioned_parquet_with_key
       USING org.apache.spark.sql.parquet
       OPTIONS (
-        path '${partitionedTableDirWithKey.getCanonicalPath}'
+        path '${partitionedTableDirWithKey.toURI}'
       )
     """)
 
@@ -651,7 +652,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
       CREATE TEMPORARY VIEW normal_parquet
       USING org.apache.spark.sql.parquet
       OPTIONS (
-        path '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
+        path '${new File(partitionedTableDir, "p=1").toURI}'
       )
     """)
 
@@ -659,7 +660,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
       CREATE TEMPORARY VIEW partitioned_parquet_with_key_and_complextypes
       USING org.apache.spark.sql.parquet
       OPTIONS (
-        path '${partitionedTableDirWithKeyAndComplexTypes.getCanonicalPath}'
+        path '${partitionedTableDirWithKeyAndComplexTypes.toURI}'
       )
     """)
 
@@ -667,7 +668,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
       CREATE TEMPORARY VIEW partitioned_parquet_with_complextypes
       USING org.apache.spark.sql.parquet
       OPTIONS (
-        path '${partitionedTableDirWithComplexTypes.getCanonicalPath}'
+        path '${partitionedTableDirWithComplexTypes.toURI}'
       )
     """)
   }
@@ -700,8 +701,6 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
 
   test("SPARK-8811: compatibility with array of struct in Hive") {
     withTempPath { dir =>
-      val path = dir.getCanonicalPath
-
       withTable("array_of_struct") {
         val conf = Seq(
           HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false",
@@ -711,7 +710,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
         withSQLConf(conf: _*) {
           sql(
             s"""CREATE TABLE array_of_struct
-               |STORED AS PARQUET LOCATION '$path'
+               |STORED AS PARQUET LOCATION '${dir.toURI}'
                |AS SELECT
                |  '1st' AS a,
                |  '2nd' AS b,
@@ -719,7 +718,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
              """.stripMargin)
 
           checkAnswer(
-            spark.read.parquet(path),
+            spark.read.parquet(dir.getCanonicalPath),
             Row("1st", "2nd", Seq(Row("val_a", "val_b"))))
         }
       }

@@ -240,10 +240,11 @@ Kafka's own configurations can be set via `DataStreamReader.option` with `kafka.
 [Kafka consumer config docs](http://kafka.apache.org/documentation.html#newconsumerconfigs).
 
 Note that the following Kafka params cannot be set and the Kafka source will throw an exception:
+
 - **group.id**: Kafka source will create a unique group id for each query automatically.
 - **auto.offset.reset**: Set the source option `startingOffsets` to specify
  where to start instead. Structured Streaming manages which offsets are consumed internally, rather 
- than rely on the kafka Consumer to do it. This will ensure that no data is missed when when new 
+ than rely on the kafka Consumer to do it. This will ensure that no data is missed when new 
  topics/partitions are dynamically subscribed. Note that `startingOffsets` only applies when a new
  Streaming query is started, and that resuming will always pick up from where the query left off.
 - **key.deserializer**: Keys are always deserialized as byte arrays with ByteArrayDeserializer. Use 

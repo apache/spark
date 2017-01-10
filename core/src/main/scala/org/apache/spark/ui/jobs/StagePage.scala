@@ -70,8 +70,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   // if we find that it's okay.
   private val MAX_TIMELINE_TASKS = parent.conf.getInt("spark.ui.timeline.tasks.maximum", 1000)
 
-  private val displayPeakExecutionMemory = parent.conf.getBoolean("spark.sql.unsafe.enabled", true)
-
   private def getLocalitySummaryString(stageData: StageUIData): String = {
     val localities = stageData.taskData.values.map(_.taskInfo.taskLocality)
     val localityCounts = localities.groupBy(identity).mapValues(_.size)
@@ -252,15 +250,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                   <span class="additional-metric-title">Getting Result Time</span>
                 </span>
               </li>
-              {if (displayPeakExecutionMemory) {
-                <li>
-                  <span data-toggle="tooltip"
-                        title={ToolTips.PEAK_EXECUTION_MEMORY} data-placement="right">
-                    <input type="checkbox" name={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}/>
-                    <span class="additional-metric-title">Peak Execution Memory</span>
-                  </span>
-                </li>
-              }}
+              <li>
+                <span data-toggle="tooltip"
+                      title={ToolTips.PEAK_EXECUTION_MEMORY} data-placement="right">
+                  <input type="checkbox" name={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}/>
+                  <span class="additional-metric-title">Peak Execution Memory</span>
+                </span>
+              </li>
             </ul>
           </div>
         </div>
@@ -532,13 +528,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               {serializationQuantiles}
             </tr>,
             <tr class={TaskDetailsClassNames.GETTING_RESULT_TIME}>{gettingResultQuantiles}</tr>,
-            if (displayPeakExecutionMemory) {
-              <tr class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
-                {peakExecutionMemoryQuantiles}
-              </tr>
-            } else {
-              Nil
-            },
+            <tr class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
+              {peakExecutionMemoryQuantiles}
+            </tr>,
             if (stageData.hasInput) <tr>{inputQuantiles}</tr> else Nil,
             if (stageData.hasOutput) <tr>{outputQuantiles}</tr> else Nil,
             if (stageData.hasShuffleRead) {
@@ -1166,9 +1158,6 @@ private[ui] class TaskPagedTable(
     desc: Boolean,
     executorsListener: ExecutorsListener) extends PagedTable[TaskTableRowData] {
 
-  // We only track peak memory used for unsafe operators
-  private val displayPeakExecutionMemory = conf.getBoolean("spark.sql.unsafe.enabled", true)
-
   override def tableId: String = "task-table"
 
   override def tableCssClass: String =
@@ -1217,14 +1206,8 @@ private[ui] class TaskPagedTable(
         ("Task Deserialization Time", TaskDetailsClassNames.TASK_DESERIALIZATION_TIME),
         ("GC Time", ""),
         ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
-        ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
-        {
-          if (displayPeakExecutionMemory) {
-            Seq(("Peak Execution Memory", TaskDetailsClassNames.PEAK_EXECUTION_MEMORY))
-          } else {
-            Nil
-          }
-        } ++
+        ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME),
+        ("Peak Execution Memory", TaskDetailsClassNames.PEAK_EXECUTION_MEMORY)) ++
         {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
         {if (hasInput) Seq(("Input Size / Records", "")) else Nil} ++
         {if (hasOutput) Seq(("Output Size / Records", "")) else Nil} ++
@@ -1316,11 +1299,9 @@ private[ui] class TaskPagedTable(
       <td class={TaskDetailsClassNames.GETTING_RESULT_TIME}>
         {UIUtils.formatDuration(task.gettingResultTime)}
       </td>
-      {if (displayPeakExecutionMemory) {
-        <td class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
-          {Utils.bytesToString(task.peakExecutionMemoryUsed)}
-        </td>
-      }}
+      <td class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
+        {Utils.bytesToString(task.peakExecutionMemoryUsed)}
+      </td>
       {if (task.accumulators.nonEmpty) {
         <td>{Unparsed(task.accumulators.get)}</td>
       }}

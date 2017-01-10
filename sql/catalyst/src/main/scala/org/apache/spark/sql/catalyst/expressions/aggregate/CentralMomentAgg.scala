@@ -37,12 +37,13 @@ import org.apache.spark.sql.types._
  *  - Xiangrui Meng.  "Simpler Online Updates for Arbitrary-Order Central Moments."
  *      2015. http://arxiv.org/abs/1510.04923
  *
- * @see [[https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
- *     Algorithms for calculating variance (Wikipedia)]]
+ * @see <a href="https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance">
+ * Algorithms for calculating variance (Wikipedia)</a>
  *
  * @param child to compute central moments of.
  */
-abstract class CentralMomentAgg(child: Expression) extends DeclarativeAggregate {
+abstract class CentralMomentAgg(child: Expression)
+  extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   /**
    * The central moment order to be computed.

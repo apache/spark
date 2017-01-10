@@ -82,16 +82,46 @@ private[feature] trait ChiSqSelectorParams extends Params
    * Default value is 0.05.
    * @group param
    */
+  @Since("2.1.0")
   final val fpr = new DoubleParam(this, "fpr", "The highest p-value for features to be kept.",
     ParamValidators.inRange(0, 1))
   setDefault(fpr -> 0.05)
 
   /** @group getParam */
+  @Since("2.1.0")
   def getFpr: Double = $(fpr)
 
   /**
+   * The upper bound of the expected false discovery rate.
+   * Only applicable when selectorType = "fdr".
+   * Default value is 0.05.
+   * @group param
+   */
+  @Since("2.2.0")
+  final val fdr = new DoubleParam(this, "fdr",
+    "The upper bound of the expected false discovery rate.", ParamValidators.inRange(0, 1))
+  setDefault(fdr -> 0.05)
+
+  /** @group getParam */
+  def getFdr: Double = $(fdr)
+
+  /**
+   * The upper bound of the expected family-wise error rate.
+   * Only applicable when selectorType = "fwe".
+   * Default value is 0.05.
+   * @group param
+   */
+  @Since("2.2.0")
+  final val fwe = new DoubleParam(this, "fwe",
+    "The upper bound of the expected family-wise error rate.", ParamValidators.inRange(0, 1))
+  setDefault(fwe -> 0.05)
+
+  /** @group getParam */
+  def getFwe: Double = $(fwe)
+
+  /**
    * The selector type of the ChisqSelector.
-   * Supported options: "numTopFeatures" (default), "percentile", "fpr".
+   * Supported options: "numTopFeatures" (default), "percentile", "fpr", "fdr", "fwe".
    * @group param
    */
   @Since("2.1.0")
@@ -109,11 +139,17 @@ private[feature] trait ChiSqSelectorParams extends Params
 /**
  * Chi-Squared feature selection, which selects categorical features to use for predicting a
  * categorical label.
- * The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`.
+ * The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`,
+ * `fdr`, `fwe`.
  *  - `numTopFeatures` chooses a fixed number of top features according to a chi-squared test.
  *  - `percentile` is similar but chooses a fraction of all features instead of a fixed number.
- *  - `fpr` chooses all features whose p-value is below a threshold, thus controlling the false
+ *  - `fpr` chooses all features whose p-value are below a threshold, thus controlling the false
  *    positive rate of selection.
+ *  - `fdr` uses the [Benjamini-Hochberg procedure]
+ *    (https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure)
+ *    to choose all features whose false discovery rate is below a threshold.
+ *  - `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by
+ *    1/numFeatures, thus controlling the family-wise error rate of selection.
  * By default, the selection method is `numTopFeatures`, with the default number of top features
  * set to 50.
  */
@@ -135,6 +171,14 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
   /** @group setParam */
   @Since("2.1.0")
   def setFpr(value: Double): this.type = set(fpr, value)
+
+  /** @group setParam */
+  @Since("2.2.0")
+  def setFdr(value: Double): this.type = set(fdr, value)
+
+  /** @group setParam */
+  @Since("2.2.0")
+  def setFwe(value: Double): this.type = set(fwe, value)
 
   /** @group setParam */
   @Since("2.1.0")
@@ -165,6 +209,8 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
       .setNumTopFeatures($(numTopFeatures))
       .setPercentile($(percentile))
       .setFpr($(fpr))
+      .setFdr($(fdr))
+      .setFwe($(fwe))
     val model = selector.fit(input)
     copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
   }
@@ -215,13 +261,6 @@ final class ChiSqSelectorModel private[ml] (
   /** @group setParam */
   @Since("1.6.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
-
-  /**
-   * @group setParam
-   */
-  @Since("1.6.0")
-  @deprecated("labelCol is not used by ChiSqSelectorModel.", "2.0.0")
-  def setLabelCol(value: String): this.type = set(labelCol, value)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
