@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.logical.estimation
+package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import scala.collection.immutable.{HashSet, Map}
 import scala.collection.mutable
@@ -59,16 +59,17 @@ class FilterEstimation extends Logging {
       stats.attributeStats.map(kv => (kv._1.exprId, kv._2))
     mutableColStats = mutable.Map.empty ++= statsExprIdMap
 
-    // save a copy of ExprId-to-Attribute map for later conversion use
-    val expridToAttrMap: Map[ExprId, Attribute] =
-      stats.attributeStats.map(kv => (kv._1.exprId, kv._1))
-
-    // estimate selectivity for this filter predicate
+    // estimate selectivity of this filter predicate
     val percent: Double = calculateConditions(plan, plan.condition)
 
-    // copy mutableColStats contents to an immutable AttributeMap
+    // attributeStats has mapping Attribute-to-ColumnStat.
+    // mutableColStats has mapping ExprId-to-ColumnStat.
+    // We use an ExprId-to-Attribute map to facilitate the mapping Attribute-to-ColumnStat
+    val expridToAttrMap: Map[ExprId, Attribute] =
+      stats.attributeStats.map(kv => (kv._1.exprId, kv._1))
+    // copy mutableColStats contents to an immutable AttributeMap.
     val mutableAttributeStats: mutable.Map[Attribute, ColumnStat] =
-      mutableColStats.map(kv => (expridToAttrMap(kv._1) -> kv._2))
+      mutableColStats.map(kv => expridToAttrMap(kv._1) -> kv._2)
     val newColStats = AttributeMap(mutableAttributeStats.toSeq)
 
     val filteredRowCountValue: BigInt =
