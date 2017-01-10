@@ -73,8 +73,10 @@ object AnalysisContext {
   def get: AnalysisContext = value.get()
   private def set(context: AnalysisContext): Unit = value.set(context)
 
-  def withAnalysisContext[A](context: AnalysisContext)(f: => A): A = {
+  def withAnalysisContext[A](database: Option[String])(f: => A): A = {
     val originContext = value.get()
+    val context = AnalysisContext(defaultDatabase = database,
+      nestedViewLevel = originContext.nestedViewLevel + 1)
     set(context)
     try f finally { set(originContext) }
   }
@@ -579,11 +581,8 @@ class Analyzer(
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
       case view @ View(desc, _, child) if !child.resolved =>
-        val nestedViewLevel = AnalysisContext.get.nestedViewLevel + 1
-        val context = AnalysisContext(defaultDatabase = desc.viewDefaultDatabase,
-          nestedViewLevel = nestedViewLevel)
         // Resolve all the UnresolvedRelations and Views in the child.
-        val newChild = AnalysisContext.withAnalysisContext(context) {
+        val newChild = AnalysisContext.withAnalysisContext(desc.viewDefaultDatabase) {
           execute(child)
         }
         view.copy(child = newChild)
