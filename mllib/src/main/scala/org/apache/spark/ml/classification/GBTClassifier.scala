@@ -158,7 +158,7 @@ class GBTClassifier @Since("1.4.0") (
     val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
 
-    val numClasses: Int = getNumClasses(dataset)
+    val numClasses: Int = 2
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
         ".train() called with non-matching numClasses and thresholds.length." +
@@ -229,8 +229,9 @@ class GBTClassificationModel private[ml](
    * @param numFeatures  The number of features.
    */
   private[ml] def this(uid: String, _trees: Array[DecisionTreeRegressionModel],
-    _treeWeights: Array[Double], numFeatures: Int) =
-  this(uid, _trees, _treeWeights, numFeatures, 2)
+      _treeWeights: Array[Double],
+      numFeatures: Int) =
+    this(uid, _trees, _treeWeights, numFeatures, 2)
 
   /**
    * Construct a GBTClassificationModel
@@ -240,7 +241,7 @@ class GBTClassificationModel private[ml](
    */
   @Since("1.6.0")
   def this(uid: String, _trees: Array[DecisionTreeRegressionModel], _treeWeights: Array[Double]) =
-  this(uid, _trees, _treeWeights, -1, 2)
+    this(uid, _trees, _treeWeights, -1, 2)
 
   @Since("1.4.0")
   override def trees: Array[DecisionTreeRegressionModel] = _trees
@@ -267,8 +268,7 @@ class GBTClassificationModel private[ml](
     if (isDefined(thresholds)) {
       super.predict(features)
     } else {
-      val prediction: Double = margin(features)
-      if (prediction > 0.0) 1.0 else 0.0
+      if (margin(features) > 0.0) 1.0 else 0.0
     }
   }
 
@@ -279,12 +279,8 @@ class GBTClassificationModel private[ml](
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {
-      // The probability can be calculated for positive result:
-      // p+(x) = 1 / (1 + e^(-2 * F(x)))
-      // and negative result:
-      // p-(x) = 1 / (1 + e^(2 * F(x)))
       case dv: DenseVector =>
-        dv.values(0) = getOldLossType.computeProbability(dv.values(0))
+        dv.values(0) = loss.computeProbability(dv.values(0))
         dv.values(1) = 1.0 - dv.values(0)
         dv
       case sv: SparseVector =>
@@ -329,6 +325,12 @@ class GBTClassificationModel private[ml](
   private[ml] def toOld: OldGBTModel = {
     new OldGBTModel(OldAlgo.Classification, _trees.map(_.toOld), _treeWeights)
   }
+
+  /**
+   * Note: this is currently an optimization that should be removed when we have more loss
+   * functions available than only logistic.
+   */
+  private lazy val loss = getOldLossType
 
   @Since("2.0.0")
   override def write: MLWriter = new GBTClassificationModel.GBTClassificationModelWriter(this)

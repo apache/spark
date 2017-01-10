@@ -21,12 +21,9 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.util.MLUtils
 
 /**
- * :: DeveloperApi ::
- * Trait for adding "pluggable" probability function for the gradient boosting algorithm.
+ * Trait for adding probability function for the gradient boosting algorithm.
  */
-@Since("1.2.0")
-@DeveloperApi
-trait ClassificationLoss extends Loss {
+private[spark] trait ClassificationLoss extends Loss {
   private[spark] def computeProbability(prediction: Double): Double
 }
 
@@ -63,6 +60,8 @@ object LogLoss extends ClassificationLoss {
   }
 
   override private[spark] def computeProbability(prediction: Double): Double = {
-    1 / (1 + math.exp(-2 * prediction))
+    // The probability can be calculated as:
+    // p+(x) = 1 / (1 + e^(-2 * F(x)))
+    1.0 / (1.0 + math.exp(-2.0 * prediction))
   }
 }
