@@ -57,7 +57,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   final val family: Param[String] = new Param(this, "family",
     "The name of family which is a description of the error distribution to be used in the " +
       s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
-    ParamValidators.inArray[String](supportedFamilyNames.toArray))
+    ParamValidators.inArray[String](supportedFamilyNames))
 
   /** @group getParam */
   @Since("2.0.0")
@@ -90,6 +90,8 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * Param for the name of link function which provides the relationship
    * between the linear predictor and the mean of the distribution function.
    * Supported options: "identity", "log", "inverse", "logit", "probit", "cloglog" and "sqrt".
+   * This is used only when family is not "tweedie". The link function for the "tweedie" family
+   * must be specified through [[linkPower]].
    *
    * @group param
    */
@@ -97,11 +99,29 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   final val link: Param[String] = new Param(this, "link", "The name of link function " +
     "which provides the relationship between the linear predictor and the mean of the " +
     s"distribution function. Supported options: ${supportedLinkNames.mkString(", ")}",
-    ParamValidators.inArray[String](supportedLinkNames.toArray))
+    ParamValidators.inArray[String](supportedLinkNames))
 
   /** @group getParam */
   @Since("2.0.0")
   def getLink: String = $(link)
+
+  /**
+   * Param for the index in the power link function. This is used to specify the link function
+   * in the Tweedie family. Supported values: [-10.0, 10.0].
+   * Note that link power 0, 1, or -1 corresponds to the Log, Identity or Inverse
+   * link, respectively.
+   *
+   * @group param
+   */
+  @Since("2.2.0")
+  final val linkPower: Param[Double] = new Param(this, "linkPower",
+    "The index in the power link function. This is used to specify the link function in the " +
+    "Tweedie family. Supported values: [-10, 10].",
+    ParamValidators.inRange[Double](-10.0, 10.0))
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getLinkPower: Double = $(linkPower)
 
   /**
    * Param for link prediction (linear predictor) column name.
@@ -129,12 +149,20 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    if (isDefined(link)) {
-      require(supportedFamilyAndLinkPairs.contains(
-        $(family) -> Link.fromName($(link))),
-        s"Generalized Linear Regression with ${$(family)} family " +
-        s"does not support ${$(link)} link function.")
+    if ($(family) == "tweedie") {
+      require(!isDefined(link), "The link function for the tweedie family must be " +
+        "specified using linkPower, not link.")
+    } else {
+      require(!isDefined(linkPower), s"The link function for the ${$(family)} family " +
+      "must be specified using link, not linkPower.")
+      if (isDefined(link)) {
+        require(supportedFamilyAndLinkPairs.contains(
+          $(family) -> Link.fromParams(this)),
+          s"Generalized Linear Regression with ${$(family)} family " +
+            s"does not support ${$(link)} link function.")
+      }
     }
+
     val newSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if (hasLinkPredictionCol) {
       SchemaUtils.appendColumn(newSchema, $(linkPredictionCol), DoubleType)
@@ -159,7 +187,8 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
  *  - "binomial" : "logit", "probit", "cloglog"
  *  - "poisson"  : "log", "identity", "sqrt"
  *  - "gamma"    : "inverse", "identity", "log"
- *  - "tweedie"  : "log", "identity", "inverse", "sqrt"
+ *  - "tweedie"  : power link function specified through "linkPower". The default link power in
+ *  the tweedie family is 1 - variancePower.
  */
 @Experimental
 @Since("2.0.0")
@@ -183,17 +212,28 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   setDefault(family -> Gaussian.name)
 
   /**
-    * Sets the value of param [[variancePower]].
-    * Used only when family is "tweedie".
-    *
-    * @group setParam
-    */
+   * Sets the value of param [[variancePower]].
+   * Used only when family is "tweedie".
+   * Default is 0.0, which corresponds to the "gaussian" family.
+   *
+   * @group setParam
+   */
   @Since("2.2.0")
   def setVariancePower(value: Double): this.type = set(variancePower, value)
   setDefault(variancePower -> 0.0)
 
   /**
+   * Sets the value of param [[linkPower]].
+   * Used only when family is "tweedie".
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setLinkPower(value: Double): this.type = set(linkPower, value)
+
+  /**
    * Sets the value of param [[link]].
+   * Used only when family is not "tweedie".
    *
    * @group setParam
    */
@@ -278,8 +318,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
   override protected def train(dataset: Dataset[_]): GeneralizedLinearRegressionModel = {
     val familyObj = Family.fromParams(this)
-    val linkObj = if (isDefined(link)) {
-      Link.fromName($(link))
+    val linkObj = if (isDefined(link) || isDefined(linkPower)) {
+      Link.fromParams(this)
     } else {
       familyObj.defaultLink
     }
@@ -336,20 +376,24 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
   @Since("2.0.0")
   override def load(path: String): GeneralizedLinearRegression = super.load(path)
 
-  /** Set of family and link pairs that GeneralizedLinearRegression supports. */
+  /**
+   * Set of family and link pairs that GeneralizedLinearRegression supports.
+   * Tweedie family is specified through linkPower.
+   */
   private[regression] lazy val supportedFamilyAndLinkPairs = Set(
     "gaussian" -> Identity, "gaussian" -> Log, "gaussian" -> Inverse,
     "binomial" -> Logit, "binomial" -> Probit, "binomial" -> CLogLog,
     "poisson" -> Log, "poisson" -> Identity, "poisson" -> Sqrt,
-    "gamma" -> Inverse, "gamma" -> Identity, "gamma" -> Log,
-    "tweedie" -> Identity, "tweedie" -> Log, "tweedie" -> Inverse, "tweedie" -> Sqrt
+    "gamma" -> Inverse, "gamma" -> Identity, "gamma" -> Log
   )
 
   /** Set of family names that GeneralizedLinearRegression supports. */
-  private[regression] lazy val supportedFamilyNames = supportedFamilyAndLinkPairs.map(_._1)
+  private[regression] lazy val supportedFamilyNames =
+    supportedFamilyAndLinkPairs.map(_._1).toArray :+ "tweedie"
 
   /** Set of link names that GeneralizedLinearRegression supports. */
-  private[regression] lazy val supportedLinkNames = supportedFamilyAndLinkPairs.map(_._2.name)
+  private[regression] lazy val supportedLinkNames =
+    supportedFamilyAndLinkPairs.map(_._2.name).toArray
 
   private[regression] val epsilon: Double = 1E-16
 
@@ -463,21 +507,13 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
   }
 
   /**
-    * Tweedie exponential family distribution.
-    * This includes the special cases of Gaussian, Poisson and Gamma.
-    */
-  private[regression] class Tweedie(private val variancePower: Double)
+   * Tweedie exponential family distribution.
+   * This includes the special cases of Gaussian, Poisson and Gamma.
+   */
+  private[regression] class Tweedie(val variancePower: Double)
     extends Family("tweedie") {
 
-    /*
-      The canonical link is 1 - variancePower, which becomes Identity for Gaussian,
-      Log for Poisson, and Inverse for Gamma. Except for these special cases,
-      the canonical link is rarely used. For example, the canonical link is 1/Sqrt
-      when variancePower = 1.5. We set Log as the default link, which is used
-      for distributions in the Tweedie family other than Gaussian, Poisson or Gamma.
-      The default link is overridden in the subclass Gaussian, Poisson or Gamma.
-    */
-    override val defaultLink: Link = Log
+    override val defaultLink: Link = new PowerLink(1.0 - variancePower)
 
     override def initialize(y: Double, weight: Double): Double = {
       if (variancePower >= 1.0 && variancePower < 2.0) {
@@ -723,25 +759,67 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
   private[regression] object Link {
 
     /**
-     * Gets the [[Link]] object from its name.
+     * Gets the [[Link]] object based on link and linkPower.
+     * 1) if family is "tweedie", retrieve object using linkPower
+     * 2) otherwise, retrieve object based on link name
      *
-     * @param name link name: "identity", "logit", "log",
-     *             "inverse", "probit", "cloglog" or "sqrt".
+     * @param params the parameter map containing link and link power
      */
-    def fromName(name: String): Link = {
-      name match {
-        case Identity.name => Identity
-        case Logit.name => Logit
-        case Log.name => Log
-        case Inverse.name => Inverse
-        case Probit.name => Probit
-        case CLogLog.name => CLogLog
-        case Sqrt.name => Sqrt
+    def fromParams(params: GeneralizedLinearRegressionBase): Link = {
+      if (params.getFamily == "tweedie") {
+        params.getLinkPower match {
+          case 0.0 => Log
+          case 1.0 => Identity
+          case -1.0 => Inverse
+          case 0.5 => Sqrt
+          case others => new PowerLink(others)
+        }
+      } else {
+        params.getLink match {
+          case Identity.name => Identity
+          case Logit.name => Logit
+          case Log.name => Log
+          case Inverse.name => Inverse
+          case Probit.name => Probit
+          case CLogLog.name => CLogLog
+          case Sqrt.name => Sqrt
+        }
       }
     }
   }
 
-  private[regression] object Identity extends Link("identity") {
+  /** Power link function class */
+  private[regression] class PowerLink(val linkPower: Double)
+    extends Link("powerLink") {
+
+    override def link(mu: Double): Double = {
+      if (linkPower == 0.0) {
+        math.log(mu)
+      } else {
+        math.pow(mu, linkPower)
+      }
+    }
+
+    override def deriv(mu: Double): Double = {
+      if (linkPower == 0.0) {
+        1.0 / mu
+      } else {
+        linkPower * math.pow(mu, linkPower - 1.0)
+      }
+    }
+
+    override def unlink(eta: Double): Double = {
+      if (linkPower == 0.0) {
+        math.exp(eta)
+      } else {
+        math.pow(eta, 1.0 / linkPower)
+      }
+    }
+  }
+
+  private[regression] object Identity extends PowerLink(1.0) {
+
+    override val name: String = "identity"
 
     override def link(mu: Double): Double = mu
 
@@ -759,7 +837,9 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     override def unlink(eta: Double): Double = 1.0 / (1.0 + math.exp(-1.0 * eta))
   }
 
-  private[regression] object Log extends Link("log") {
+  private[regression] object Log extends PowerLink(0.0) {
+
+    override val name: String = "log"
 
     override def link(mu: Double): Double = math.log(mu)
 
@@ -768,7 +848,9 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     override def unlink(eta: Double): Double = math.exp(eta)
   }
 
-  private[regression] object Inverse extends Link("inverse") {
+  private[regression] object Inverse extends PowerLink(-1.0) {
+
+    override val name: String = "inverse"
 
     override def link(mu: Double): Double = 1.0 / mu
 
@@ -797,7 +879,9 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     override def unlink(eta: Double): Double = 1.0 - math.exp(-1.0 * math.exp(eta))
   }
 
-  private[regression] object Sqrt extends Link("sqrt") {
+  private[regression] object Sqrt extends PowerLink(0.5) {
+
+    override val name: String = "sqrt"
 
     override def link(mu: Double): Double = math.sqrt(mu)
 
@@ -832,11 +916,12 @@ class GeneralizedLinearRegressionModel private[ml] (
 
   private lazy val familyObj = Family.fromParams(this)
 
-  private lazy val linkObj = if (isDefined(link)) {
-    Link.fromName($(link))
+  private lazy val linkObj = if (isDefined(link) || isDefined(linkPower)) {
+    Link.fromParams(this)
   } else {
     familyObj.defaultLink
   }
+
   private lazy val familyAndLink = new FamilyAndLink(familyObj, linkObj)
 
   override protected def predict(features: Vector): Double = {
@@ -1018,11 +1103,12 @@ class GeneralizedLinearRegressionSummary private[regression] (
 
   private[regression] lazy val family: Family = Family.fromParams(model)
 
-  private[regression] lazy val link: Link = if (model.isDefined(model.link)) {
-    Link.fromName(model.getLink)
-  } else {
-    family.defaultLink
-  }
+  private[regression] lazy val link: Link =
+    if (model.isDefined(model.link) || model.isDefined(model.linkPower)) {
+      Link.fromParams(model)
+    } else {
+      family.defaultLink
+    }
 
   /** Number of instances in DataFrame predictions. */
   private[regression] lazy val numInstances: Long = predictions.count()
