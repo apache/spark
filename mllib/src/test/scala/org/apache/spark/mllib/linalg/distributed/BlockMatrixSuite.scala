@@ -267,6 +267,15 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(sparseBM.subtract(sparseBM).toBreeze() === sparseBM.subtract(denseBM).toBreeze())
   }
 
+  def testMultiply(A: BlockMatrix, B: BlockMatrix, expectedResult: Matrix,
+      numMidDimSplits: Int): Unit = {
+    val C = A.multiply(B, numMidDimSplits)
+    val localC = C.toLocalMatrix()
+    assert(C.numRows() === A.numRows())
+    assert(C.numCols() === B.numCols())
+    assert(localC ~== expectedResult absTol 1e-8)
+  }
+
   test("multiply") {
     // identity matrix
     val blocks: Seq[((Int, Int), Matrix)] = Seq(
@@ -302,27 +311,13 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     // Try it with increased number of partitions
     val largeA = new BlockMatrix(sc.parallelize(largerAblocks, 10), 6, 4)
     val largeB = new BlockMatrix(sc.parallelize(largerBblocks, 8), 4, 4)
-    val largeC = largeA.multiply(largeB)
-    val localC = largeC.toLocalMatrix()
-    val largeC2 = largeA.multiply(largeB, 2)
-    val localC2 = largeC2.toLocalMatrix()
-    val largeC3 = largeA.multiply(largeB, 3)
-    val localC3 = largeC3.toLocalMatrix()
-    val largeC4 = largeA.multiply(largeB, 4)
-    val localC4 = largeC4.toLocalMatrix()
+
     val result = largeA.toLocalMatrix().multiply(largeB.toLocalMatrix().asInstanceOf[DenseMatrix])
-    assert(largeC.numRows() === largeA.numRows())
-    assert(largeC.numCols() === largeB.numCols())
-    assert(largeC2.numRows() === largeA.numRows())
-    assert(largeC2.numCols() === largeB.numCols())
-    assert(largeC3.numRows() === largeA.numRows())
-    assert(largeC3.numCols() === largeB.numCols())
-    assert(largeC4.numRows() === largeA.numRows())
-    assert(largeC4.numCols() === largeB.numCols())
-    assert(localC ~== result absTol 1e-8)
-    assert(localC2 ~== result absTol 1e-8)
-    assert(localC3 ~== result absTol 1e-8)
-    assert(localC4 ~== result absTol 1e-8)
+
+    testMultiply(largeA, largeB, result, 1)
+    testMultiply(largeA, largeB, result, 2)
+    testMultiply(largeA, largeB, result, 3)
+    testMultiply(largeA, largeB, result, 4)
   }
 
   test("simulate multiply") {

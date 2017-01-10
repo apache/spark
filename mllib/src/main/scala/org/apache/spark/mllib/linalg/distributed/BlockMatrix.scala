@@ -467,7 +467,140 @@ class BlockMatrix @Since("1.3.0") (
     multiply(other, 1)
   }
 
-  @Since("2.1.0")
+  /**
+   * Left multiplies this [[BlockMatrix]] to `other`, another [[BlockMatrix]]. This method add
+   * `numMidDimSplits` parameter, which represent how many splits it will cut on the middle
+   * dimension when doing matrix multiplication. The intention for this
+   * parameter is to solve two problems in old implementation, suppose we have M*N dimensions
+   * matrix A multiply N*P dimensions matrix B, when N is much larger than M and P, then,
+   *
+   *   * When the middle dimension N is too large, it will cause reducer OOM.
+   *   * Even if OOM do not occur, it will still cause parallism too low.
+   *
+   * And through setting proper `numMidDimSplits`, we can also reduce shuffled data size when
+   * do matrix multiply. The mechanism of parameter `numMidDimSplits` is shown below:
+   *
+   * suppose we have block matrix A, contains 200 blocks (`2 numRowBlocks * 100 numColBlocks`),
+   * blocks arranged in 2 rows, 100 cols:
+   * ```
+   * A00 A01 A02 ... A0,99
+   * A10 A11 A12 ... A1,99
+   * ```
+   * and we have block matrix B, also contains 200 blocks (`100 numRowBlocks * 2 numColBlocks`),
+   * blocks arranged in 100 rows, 2 cols:
+   * ```
+   * B00    B01
+   * B10    B11
+   * B20    B21
+   * ...
+   * B99,0  B99,1
+   * ```
+   * Suppose all blocks in the two matrices are dense for now.
+   * Now we call `A.multiply(B, numMidDimSplit)`, and suppose the generated `resultPartitioner`
+   * contains 2 rowPartitions and 2 colPartitions.
+   *
+   * When `numMidDimSplit == 1`, it is equivalent to old implementation, it will works as
+   * following, containing 2 shuffling step:
+   *
+   * step-1
+   * Step-1 will generate 4 reducer, I tag them as reducer-00, reducer-01, reducer-10, reducer-11,
+   * and shuffle data as following:
+   * ```
+   * A00 A01 A02 ... A0,99
+   * B00 B10 B20 ... B99,0    shuffled into reducer-00
+   *
+   * A00 A01 A02 ... A0,99
+   * B01 B11 B21 ... B99,1    shuffled into reducer-01
+   *
+   * A10 A11 A12 ... A1,99
+   * B00 B10 B20 ... B99,0    shuffled into reducer-10
+   *
+   * A10 A11 A12 ... A1,99
+   * B01 B11 B21 ... B99,1    shuffled into reducer-11
+   * ```
+   *
+   * and the shuffling above is a `cogroup` transform, note that each reducer contains only one
+   * group.
+   *
+   * step-2
+   * Step-2 will do an `aggregateByKey` transform on the result of step-1, will also generate
+   * 4 reducers, and generate the final result RDD, contains 4 partitions, each partition contains
+   * one block.
+   *
+   * The main problems are in step-1. Now we have only 4 reducers, but matrix A and B have 400
+   * blocks in total, obviously the reducer number is too small.
+   * and, we can see that, each reducer contains only one group(the group concept in `coGroup`
+   * transform), each group contains 200 blocks. This is terrible because we know that `coGroup`
+   * transformer will load each group into memory when computing. It is un-extensable in the
+   * algorithm level.
+   * Suppose matrix A has 10000 cols blocks or more instead of 100? Than each reducer will load
+   * 20000 blocks into memory. It will easily cause reducer OOM.
+   *
+   * now we set `numMidDimSplits = 10`, now we can generate 40 reducers in step-1:
+   *
+   * the reducer-ij above now will be splited into 10 reducers:
+   *  reducer-ij0, reducer-ij1, ... reducer-ij9, each reducer will receive 20 blocks.
+   * now the shuffle works as following:
+   *
+   * reducer-000 to reducer-009
+   * ```
+   * A0,0 A0,10 A0,20 ... A0,90
+   * B0,0 B10,0 B20,0 ... B90,0    shuffled into reducer-000
+   *
+   * A0,1 A0,11 A0,21 ... A0,91
+   * B1,0 B11,0 B21,0 ... B91,0    shuffled into reducer-001
+   *
+   * A0,2 A0,12 A0,22 ... A0,92
+   * B2,0 B12,0 B22,0 ... B92,0    shuffled into reducer-002
+   *
+   * ...
+   *
+   * A0,9 A0,19 A0,29 ... A0,99
+   * B9,0 B19,0 B29,0 ... B99,0    shuffled into reducer-009
+   * ```
+   *
+   * reducer-010 to reducer-019
+   * ```
+   * A0,0 A0,10 A0,20 ... A0,90
+   * B0,1 B10,1 B20,1 ... B90,1    shuffled into reducer-010
+   *
+   * A0,1 A0,11 A0,21 ... A0,91
+   * B1,1 B11,1 B21,1 ... B91,1    shuffled into reducer-011
+   *
+   * A0,2 A0,12 A0,22 ... A0,92
+   * B2,1 B12,1 B22,1 ... B92,1    shuffled into reducer-012
+   *
+   * ...
+   *
+   * A0,9 A0,19 A0,29 ... A0,99
+   * B9,1 B19,1 B29,1 ... B99,1    shuffled into reducer-019
+   * ```
+   *
+   * reducer-100 to reducer-109 and reducer-110 to reducer-119 is similar to the
+   *  above, I omit to write them out.
+   *
+   * Shuffled data size analysis
+   *
+   * The optimization has some subtle influence on the total shuffled data size.
+   * Appropriate `numMidDimSplits` will significantly reduce the shuffled data size,
+   * but too large `numMidDimSplits` may increase the shuffled data in reverse. Use a simple
+   * case to represent it here:
+   *
+   * Suppose we have two same size square matrices X and Y, both have
+   * `16 numRowBlocks * 16 numColBlocks`. X and Y are both dense matrix. Now let me analysis
+   *  the shuffling data size in the following case:
+   *
+   * case 1: X and Y both partitioned in 16 rowPartitions and 16 colPartitions, numMidDimSplits = 1
+   * ShufflingDataSize = (16 * 16 * (16 + 16) + 16 * 16) blocks = 8448 blocks
+   *
+   * case 2: X and Y both partitioned in 8 rowPartitions and 8 colPartitions, numMidDimSplits = 4
+   * ShufflingDataSize = (8 * 8 * (32 + 32) + 16 * 16 * 4) blocks = 5120 blocks
+   *
+   * The two cases above all have parallism = 256, case 1 `numMidDimSplits = 1` is equivalent
+   * with current implementation in mllib, but case 2 shuffling data is 60.6% of case 1, it shows
+   * that proper `numMidDimSplits` will significantly reduce the shuffling data size.
+   */
+  @Since("2.2.0")
   def multiply(
       other: BlockMatrix,
       numMidDimSplits: Int): BlockMatrix = {
