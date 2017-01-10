@@ -223,7 +223,7 @@ case class Hour(child: Expression, timeZoneId: String = null)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val tz = ctx.addReferenceMinorObj(timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getHours($c, $tz)")
   }
@@ -253,7 +253,7 @@ case class Minute(child: Expression, timeZoneId: String = null)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val tz = ctx.addReferenceMinorObj(timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getMinutes($c, $tz)")
   }
@@ -283,7 +283,7 @@ case class Second(child: Expression, timeZoneId: String = null)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val tz = ctx.addReferenceMinorObj(timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getSeconds($c, $tz)")
   }
@@ -477,7 +477,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Stri
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val sdf = classOf[SimpleDateFormat].getName
     nullSafeCodeGen(ctx, ev, (timestamp, format) => {
-      val tz = ctx.addReferenceObj("timeZone", timeZone)
+      val tz = ctx.addReferenceMinorObj(timeZone)
       val s = ctx.freshName("sdf")
       s"""
         $sdf $s = new $sdf($format.toString(), java.util.Locale.US);
@@ -640,7 +640,7 @@ abstract class UnixTime
             }""")
         }
       case StringType =>
-        val tz = ctx.addReferenceObj("timeZone", timeZone)
+        val tz = ctx.addReferenceMinorObj(timeZone)
         val sdf = classOf[SimpleDateFormat].getName
         val formatterName = ctx.freshName("formatter")
         nullSafeCodeGen(ctx, ev, (string, format) => {
@@ -666,7 +666,7 @@ abstract class UnixTime
             ${ev.value} = ${eval1.value} / 1000000L;
           }""")
       case DateType =>
-        val tz = ctx.addReferenceObj("timeZone", timeZone)
+        val tz = ctx.addReferenceMinorObj(timeZone)
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val eval1 = left.genCode(ctx)
         ev.copy(code = s"""
@@ -772,7 +772,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: String 
           }""")
       }
     } else {
-      val tz = ctx.addReferenceObj("timeZone", timeZone)
+      val tz = ctx.addReferenceMinorObj(timeZone)
       val formatterName = ctx.freshName("formatter")
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
         s"""

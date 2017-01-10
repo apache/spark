@@ -550,7 +550,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: String = null
         (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($c));"""
       case TimestampType =>
-        val tz = ctx.addReferenceObj("timeZone", timeZone)
+        val tz = ctx.addReferenceMinorObj(timeZone)
         (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c, $tz));"""
       case _ =>
@@ -578,7 +578,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: String = null
         }
        """
     case TimestampType =>
-      val tz = ctx.addReferenceObj("timeZone", timeZone)
+      val tz = ctx.addReferenceMinorObj(timeZone)
       (c, evPrim, evNull) =>
         s"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToDays($c / 1000L, $tz);"
     case _ =>
@@ -658,7 +658,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: String = null
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val tz = ctx.addReferenceObj("timeZone", timeZone)
+      val tz = ctx.addReferenceMinorObj(timeZone)
       val longOpt = ctx.freshName("longOpt")
       (c, evPrim, evNull) =>
         s"""
@@ -675,7 +675,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: String = null
     case _: IntegralType =>
       (c, evPrim, evNull) => s"$evPrim = ${longToTimeStampCode(c)};"
     case DateType =>
-      val tz = ctx.addReferenceObj("timeZone", timeZone)
+      val tz = ctx.addReferenceMinorObj(timeZone)
       (c, evPrim, evNull) =>
         s"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis($c, $tz) * 1000;"
     case DecimalType() =>
