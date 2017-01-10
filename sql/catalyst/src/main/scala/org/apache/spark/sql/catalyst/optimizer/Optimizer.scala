@@ -26,7 +26,7 @@ import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -200,6 +200,8 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
         case plan: Project if plan eq proj => plan.child
         case plan => plan transformExpressions {
           case a: Attribute if attrMap.contains(a) => attrMap(a)
+          case b: Alias if attrMap.exists(_._1.exprId == b.exprId)
+            && b.child.isInstanceOf[NamedExpression] => b.child
         }
       }
     }.getOrElse(plan)
