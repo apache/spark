@@ -667,7 +667,7 @@ class DataStreamWriter(object):
            every time these is some updates
         * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
            written to the sink every time there are some updates. If the query doesn't contain
-           aggregations, it will be equivalent to the `append` mode.
+           aggregations, it will be equivalent to `append` mode.
 
        .. note:: Experimental.
 
@@ -792,7 +792,7 @@ class DataStreamWriter(object):
                every time these is some updates
             * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
               written to the sink every time there are some updates. If the query doesn't contain
-              aggregations, it will be equivalent to the `append` mode.
+              aggregations, it will be equivalent to `append` mode.
         :param partitionBy: names of partitioning columns
         :param queryName: unique name for the query
         :param options: All other string options. You may want to provide a `checkpointLocation`
