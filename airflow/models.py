@@ -3515,6 +3515,8 @@ class XCom(Base):
             cls.task_id == task_id,
             cls.dag_id == dag_id).delete()
 
+        session.commit()
+
         # insert new XCom
         session.add(XCom(
             key=key,
