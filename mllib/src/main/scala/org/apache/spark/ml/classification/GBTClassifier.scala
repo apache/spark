@@ -228,7 +228,8 @@ class GBTClassificationModel private[ml](
    * @param _treeWeights  Weights for the decision trees in the ensemble.
    * @param numFeatures  The number of features.
    */
-  private[ml] def this(uid: String, _trees: Array[DecisionTreeRegressionModel],
+  private[ml] def this(uid: String,
+      _trees: Array[DecisionTreeRegressionModel],
       _treeWeights: Array[Double],
       numFeatures: Int) =
     this(uid, _trees, _treeWeights, numFeatures, 2)
