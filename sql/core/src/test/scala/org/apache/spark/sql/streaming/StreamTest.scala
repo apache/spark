@@ -235,7 +235,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
    */
   def testStream(
       _stream: Dataset[_],
-      outputMode: OutputMode = OutputMode.Append)(actions: StreamAction*): Unit = {
+      outputMode: OutputMode = OutputMode.Append)(actions: StreamAction*): Unit = synchronized {
+    // `synchronized` is added to prevent the user from calling multiple `testStream`s concurrently
+    // because this method assumes there is only one active query in its `StreamingQueryListener`
+    // and it may not work correctly when multiple `testStream`s run concurrently.
 
     val stream = _stream.toDF()
     val sparkSession = stream.sparkSession  // use the session in DF, not the default session
@@ -248,6 +251,22 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
     @volatile
     var streamThreadDeathCause: Throwable = null
+    // Set UncaughtExceptionHandler in `onQueryStarted` so that we can ensure catching fatal errors
+    // during query initialization.
+    val listener = new StreamingQueryListener {
+      override def onQueryStarted(event: QueryStartedEvent): Unit = {
+        // Note: this assumes there is only one query active in the `testStream` method.
+        Thread.currentThread.setUncaughtExceptionHandler(new UncaughtExceptionHandler {
+          override def uncaughtException(t: Thread, e: Throwable): Unit = {
+            streamThreadDeathCause = e
+          }
+        })
+      }
+
+      override def onQueryProgress(event: QueryProgressEvent): Unit = {}
+      override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
+    }
+    sparkSession.streams.addListener(listener)
 
     // If the test doesn't manually start the stream, we do it automatically at the beginning.
     val startedManually =
@@ -364,12 +383,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                   triggerClock = triggerClock)
                 .asInstanceOf[StreamingQueryWrapper]
                 .streamingQuery
-            currentStream.microBatchThread.setUncaughtExceptionHandler(
-              new UncaughtExceptionHandler {
-                override def uncaughtException(t: Thread, e: Throwable): Unit = {
-                  streamThreadDeathCause = e
-                }
-              })
             // Wait until the initialization finishes, because some tests need to use `logicalPlan`
             // after starting the query.
             currentStream.awaitInitialization(streamingTimeout.toMillis)
@@ -545,6 +558,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
         case (key, Some(value)) => sparkSession.conf.set(key, value)
         case (key, None) => sparkSession.conf.unset(key)
       }
+      sparkSession.streams.removeListener(listener)
     }
   }
 
