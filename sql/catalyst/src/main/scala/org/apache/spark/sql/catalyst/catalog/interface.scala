@@ -153,8 +153,6 @@ case class BucketSpec(
  *
  * @param provider the name of the data source provider for this table, e.g. parquet, json, etc.
  *                 Can be None if this table is a View, should be "hive" for hive serde tables.
- * @param viewDefaultDatabase the name of the database we should use to resolve a view. Should be
- *                            None if this table is not a View.
  * @param unsupportedFeatures is a list of string descriptions of features that are used by the
  *        underlying table but not supported by Spark SQL yet.
  * @param tracksPartitionsInCatalog whether this table's partition metadata is stored in the
@@ -176,7 +174,6 @@ case class CatalogTable(
     stats: Option[CatalogStatistics] = None,
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None,
-    viewDefaultDatabase: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
     tracksPartitionsInCatalog: Boolean = false) {
@@ -198,6 +195,12 @@ case class CatalogTable(
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
   def qualifiedName: String = identifier.unquotedString
+
+  /**
+   * Return the default database name we use to resolve a view, should be None if the CatalogTable
+   * is not a View.
+   */
+  def viewDefaultDatabase: Option[String] = properties.get(CatalogTable.VIEW_DEFAULT_DATABASE)
 
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
@@ -239,7 +242,6 @@ case class CatalogTable(
       ) ++ bucketStrings ++ Seq(
         viewOriginalText.map("Original View: " + _).getOrElse(""),
         viewText.map("View: " + _).getOrElse(""),
-        viewDefaultDatabase.map("View Default Database: " + _).getOrElse(""),
         comment.map("Comment: " + _).getOrElse(""),
         if (properties.nonEmpty) s"Properties: $tableProperties" else "",
         if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",
@@ -250,6 +252,9 @@ case class CatalogTable(
   }
 }
 
+object CatalogTable {
+  val VIEW_DEFAULT_DATABASE = "view.default.database"
+}
 
 /**
  * This class of statistics is used in [[CatalogTable]] to interact with metastore.

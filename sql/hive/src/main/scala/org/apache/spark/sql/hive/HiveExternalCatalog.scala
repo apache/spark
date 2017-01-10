@@ -200,11 +200,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
 
     if (tableDefinition.tableType == VIEW) {
-      val tableWithViewProps = tableDefinition.copy(
-        // We store the view default database to the table properties, the variable is used during
-        // view resolution.
-        properties = tableDefinition.properties ++ viewParamToTableProps(tableDefinition))
-      client.createTable(tableWithViewProps, ignoreIfExists)
+      client.createTable(tableDefinition, ignoreIfExists)
     } else {
       // Ideally we should not create a managed table with location, but Hive serde table can
       // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
@@ -359,17 +355,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         logWarning(message)
         saveTableIntoHive(newSparkSQLSpecificMetastoreTable(), ignoreIfExists)
     }
-  }
-
-  /**
-   * This method puts view default database into a map, which can be used as table properties
-   * later. The view default database is used in view resolution, and that is not supported by
-   * Hive metastore.
-   */
-  private def viewParamToTableProps(table: CatalogTable): mutable.Map[String, String] = {
-    val properties = new mutable.HashMap[String, String]
-    table.viewDefaultDatabase.foreach(properties.put(VIEW_DEFAULT_DATABASE, _))
-    properties
   }
 
   /**
@@ -544,11 +529,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
 
     if (tableDefinition.tableType == VIEW) {
-      val tableWithViewProps = withStatsProps.copy(
-        // We store the view default database to the table properties, the variable is used during
-        // view resolution.
-        properties = withStatsProps.properties ++ viewParamToTableProps(withStatsProps))
-      client.alterTable(tableWithViewProps)
+      client.alterTable(withStatsProps)
     } else {
       val oldTableDef = getRawTable(db, withStatsProps.identifier.table)
 
@@ -628,12 +609,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * Restores table metadata from the table properties. This method is kind of a opposite version
    * of [[createTable]].
    *
-   * For a table, it reads table schema, provider, partition column names and bucket
-   * specification from table properties, and filter out these special entries from table
-   * properties.
-   *
-   * For a view, it reads view default database from table properties, the variable is later used
-   * during view resolution.
+   * It reads table schema, provider, partition column names and bucket specification from table
+   * properties, and filter out these special entries from table properties.
    */
   private def restoreTableMetadata(inputTable: CatalogTable): CatalogTable = {
     if (conf.get(DEBUG_MODE)) {
@@ -642,11 +619,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     var table = inputTable
 
-    if (table.tableType == VIEW) {
-      // Read view default database from table properties.
-      val viewDefaultDatabase = table.properties.get(VIEW_DEFAULT_DATABASE)
-      table = table.copy(viewDefaultDatabase = viewDefaultDatabase)
-    } else {
+    if (table.tableType != VIEW) {
       table.properties.get(DATASOURCE_PROVIDER) match {
         // No provider in table properties, which means this is a Hive serde table.
         case None =>
@@ -1108,9 +1081,6 @@ object HiveExternalCatalog {
   val TABLE_PARTITION_PROVIDER = SPARK_SQL_PREFIX + "partitionProvider"
   val TABLE_PARTITION_PROVIDER_CATALOG = "catalog"
   val TABLE_PARTITION_PROVIDER_FILESYSTEM = "filesystem"
-
-  val VIEW_PREFIX = SPARK_SQL_PREFIX + "view."
-  val VIEW_DEFAULT_DATABASE = VIEW_PREFIX + "defaultDatabase"
 
   /**
    * Returns the fully qualified name used in table properties for a particular column stat.

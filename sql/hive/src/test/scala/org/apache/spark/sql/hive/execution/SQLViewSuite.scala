@@ -556,7 +556,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           schema = new StructType().add("id", "int").add("id1", "int"),
           viewOriginalText = Some("SELECT * FROM jt"),
           viewText = Some("SELECT * FROM jt"),
-          viewDefaultDatabase = Some("default"))
+          properties = Map[String, String] {CatalogTable.VIEW_DEFAULT_DATABASE -> "default"})
         val view2 = CatalogTable(
           identifier = TableIdentifier("view2", Some(db)),
           tableType = CatalogTableType.VIEW,
@@ -564,7 +564,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           schema = new StructType().add("id", "int").add("id1", "int"),
           viewOriginalText = Some("SELECT * FROM view1"),
           viewText = Some("SELECT * FROM view1"),
-          viewDefaultDatabase = Some(db))
+          properties = Map[String, String] {CatalogTable.VIEW_DEFAULT_DATABASE -> db})
         activateDatabase(db) {
           hiveContext.sessionState.catalog.createTable(view1, ignoreIfExists = false)
           hiveContext.sessionState.catalog.createTable(view2, ignoreIfExists = false)
@@ -583,7 +583,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         schema = new StructType().add("n", "int"),
         viewOriginalText = Some("WITH w AS (SELECT 1 AS n) SELECT n FROM w"),
         viewText = Some("WITH w AS (SELECT 1 AS n) SELECT n FROM w"),
-        viewDefaultDatabase = Some("default"))
+        properties = Map[String, String] {CatalogTable.VIEW_DEFAULT_DATABASE -> "default"})
       hiveContext.sessionState.catalog.createTable(cte_view, ignoreIfExists = false)
       checkAnswer(sql("SELECT * FROM cte_view"), Row(1))
     }
@@ -598,7 +598,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         schema = new StructType().add("id", "int").add("id1", "int"),
         viewOriginalText = Some("SELECT * FROM jt"),
         viewText = Some("SELECT * FROM jt"),
-        viewDefaultDatabase = Some("default"))
+        properties = Map[String, String] {CatalogTable.VIEW_DEFAULT_DATABASE -> "default"})
       hiveContext.sessionState.catalog.createTable(join_view, ignoreIfExists = false)
       checkAnswer(
         sql("SELECT * FROM join_view t1 JOIN join_view t2 ON t1.id = t2.id ORDER BY t1.id"),
@@ -623,8 +623,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         schema = new StructType().add("id", "int").add("id1", "int"),
         viewOriginalText = Some("SELECT * FROM invalid_db.jt"),
         viewText = Some("SELECT * FROM invalid_db.jt"),
-        viewDefaultDatabase = Some("default")
-      )
+        properties = Map[String, String] {CatalogTable.VIEW_DEFAULT_DATABASE -> "default"})
       hiveContext.sessionState.catalog.createTable(view1, ignoreIfExists = false)
       assertInvalidReference("SELECT * FROM view1")
 
@@ -636,8 +635,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         schema = new StructType().add("id", "int").add("id1", "int"),
         viewOriginalText = Some("SELECT * FROM invalid_table"),
         viewText = Some("SELECT * FROM invalid_table"),
-        viewDefaultDatabase = Some("default")
-      )
+        properties = Map[String, String] {CatalogTable.VIEW_DEFAULT_DATABASE -> "default"})
       hiveContext.sessionState.catalog.createTable(view2, ignoreIfExists = false)
       assertInvalidReference("SELECT * FROM view2")
 
@@ -649,8 +647,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         schema = new StructType().add("id", "int").add("id1", "int"),
         viewOriginalText = Some("SELECT * FROM view2"),
         viewText = Some("SELECT * FROM view2"),
-        viewDefaultDatabase = Some("default")
-      )
+        properties = Map[String, String] {CatalogTable.VIEW_DEFAULT_DATABASE -> "default"})
       hiveContext.sessionState.catalog.createTable(view3, ignoreIfExists = false)
       assertInvalidReference("SELECT * FROM view3")
     }

@@ -907,6 +907,7 @@ abstract class CatalogTestUtils {
   def newView(
       name: String,
       database: Option[String] = None): CatalogTable = {
+    val viewDefaultDatabase = database.getOrElse("default")
     CatalogTable(
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.VIEW,
@@ -917,7 +918,8 @@ abstract class CatalogTestUtils {
         .add("a", "int")
         .add("b", "string"),
       viewOriginalText = Some("SELECT * FROM tbl1"),
-      viewText = Some("SELECT * FROM tbl1"))
+      viewText = Some("SELECT * FROM tbl1"),
+      properties = Map[String, String] {CatalogTable.VIEW_DEFAULT_DATABASE -> viewDefaultDatabase})
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {
