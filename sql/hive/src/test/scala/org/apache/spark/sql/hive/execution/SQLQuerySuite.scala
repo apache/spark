@@ -2011,6 +2011,42 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("Insert overwrite with partition: dynamic partition") {
+    withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
+      withTable("tableWithPartition") {
+        sql(
+          """
+            |CREATE TABLE tableWithPartition (key int, value STRING)
+            |PARTITIONED BY (part1 STRING, part2 INT, part3 LONG)
+          """.stripMargin)
+        sql(
+          """
+            |INSERT OVERWRITE TABLE tableWithPartition PARTITION (part1 = '1', part2 = 2, part3)
+            |SELECT key, value, 3 AS part3 FROM default.src
+          """.stripMargin)
+         checkAnswer(
+           sql("SELECT part1, part2, part3, key, value FROM tableWithPartition"),
+           sql("SELECT '1' AS part1, 2 AS part2, 3 AS part3, key, value FROM default.src")
+         )
+
+        sql(
+          """
+            |INSERT OVERWRITE TABLE tableWithPartition PARTITION (part1 = '1', part2 = 2, part3)
+            |SELECT key, value, part3 FROM
+            |VALUES (1, "one", 3), (2, "two", 3), (3, null, 3) AS data(key, value, part3)
+          """.stripMargin)
+        checkAnswer(
+          sql("SELECT part1, part2, part3, key, value FROM tableWithPartition"),
+          sql(
+            """
+              |SELECT '1' AS part1, 2 AS part2, 3 AS part3, key, value FROM VALUES
+              |(1, "one"), (2, "two"), (3, null) AS data(key, value)
+            """.stripMargin)
+        )
+      }
+    }
+  }
+
   def testCommandAvailable(command: String): Boolean = {
     val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
     attempt.isSuccess && attempt.get == 0

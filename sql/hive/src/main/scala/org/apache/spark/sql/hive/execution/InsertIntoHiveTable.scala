@@ -25,7 +25,7 @@ import java.util.{Date, Locale, Random}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hive.common.FileUtils
+import org.apache.hadoop.hive.common.{FileUtils, HiveStatsUtils}
 import org.apache.hadoop.hive.ql.exec.TaskRunner
 import org.apache.hadoop.hive.ql.ErrorMsg
 import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
@@ -36,6 +36,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.command.{AlterTableAddPartitionCommand, AlterTableDropPartitionCommand}
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.SparkException
@@ -316,12 +318,53 @@ case class InsertIntoHiveTable(
     val holdDDLTime = false
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {
+        // SPARK-18107: Insert overwrite runs much slower than hive-client.
+        // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
+        // version and we may not want to catch up new Hive version every time. We delete the
+        // Hive partition first and then load data file into the Hive partition.
+        var doHiveOverwrite = overwrite
+        if (overwrite) {
+          val fs = outputPath.getFileSystem(hadoopConf)
+          // Extracts the partition paths from output path.
+          // E.g., if the dynamic partition columns are "a" and "b", we would get the paths like
+          // "/output/a=1/b=2", "/output/a=2/b=3".
+          val partitionPaths =
+            HiveStatsUtils.getFileStatusRecurse(outputPath, numDynamicPartitions, fs)
+              .map(_.getPath())
+          val partitionSpecInOutputPath =
+            PartitioningUtils.parsePartitions(
+              partitionPaths,
+              PartitioningUtils.DEFAULT_PARTITION_NAME,
+              true,
+              Set(outputPath))
+
+          val schema = partitionSpecInOutputPath.partitionColumns
+          val columnNames = schema.fieldNames
+
+          partitionSpecInOutputPath.partitions.flatMap { partition =>
+            // Construct partition spec from parsed dynamic partition column names and values.
+            val spec = columnNames.zip(partition.values.toSeq(schema).map(_.toString)).toMap
+            // Using static partition spec and dynamic partition spec to get partition metadata.
+            externalCatalog.getPartitionOption(
+              table.catalogTable.database,
+              table.catalogTable.identifier.table,
+              partitionSpec ++ spec)
+          }.foreach { part =>
+            part.storage.locationUri.map { uri =>
+              if (removePartitionPath(new Path(uri), hadoopConf)) {
+                // Don't let Hive do overwrite operation since it is slower.
+                doHiveOverwrite = false
+              }
+            }
+          }
+        }
+
         externalCatalog.loadDynamicPartitions(
           db = table.catalogTable.database,
           table = table.catalogTable.identifier.table,
           outputPath.toString,
           partitionSpec,
-          overwrite,
+          doHiveOverwrite,
           numDynamicPartitions,
           holdDDLTime = holdDDLTime)
       } else {
@@ -343,14 +386,8 @@ case class InsertIntoHiveTable(
           // version and we may not want to catch up new Hive version every time. We delete the
           // Hive partition first and then load data file into the Hive partition.
           if (oldPart.nonEmpty && overwrite) {
-            oldPart.get.storage.locationUri.foreach { uri =>
-              val partitionPath = new Path(uri)
-              val fs = partitionPath.getFileSystem(hadoopConf)
-              if (fs.exists(partitionPath)) {
-                if (!fs.delete(partitionPath, true)) {
-                  throw new RuntimeException(
-                    "Cannot remove partition directory '" + partitionPath.toString)
-                }
+            oldPart.get.storage.locationUri.map { uri =>
+              if (removePartitionPath(new Path(uri), hadoopConf)) {
                 // Don't let Hive do overwrite operation since it is slower.
                 doHiveOverwrite = false
               }
@@ -399,6 +436,22 @@ case class InsertIntoHiveTable(
     // does not return anything for insert operations.
     // TODO: implement hive compatibility as rules.
     Seq.empty[InternalRow]
+  }
+
+  // Deletes a partition path. Returns true if the path exists and is successfully deleted.
+  // Returns false if the path doesn't exist. Throws RuntimeException if error happens when
+  // deleting the path.
+  private def removePartitionPath(partitionPath: Path, hadoopConf: Configuration): Boolean = {
+    val fs = partitionPath.getFileSystem(hadoopConf)
+    if (fs.exists(partitionPath)) {
+      if (!fs.delete(partitionPath, true)) {
+        throw new RuntimeException(
+          "Cannot remove partition directory '" + partitionPath.toString)
+      }
+      true
+    } else {
+      false
+    }
   }
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
