@@ -466,7 +466,7 @@ case class DataSource(
         // SPARK-17230: Resolve the partition columns so InsertIntoHadoopFsRelationCommand does
         // not need to have the query as child, to avoid to analyze an optimized query,
         // because InsertIntoHadoopFsRelationCommand will be optimized first.
-        val columns = partitionColumns.map { name =>
+        val partitionAttributes = partitionColumns.map { name =>
           val plan = data.logicalPlan
           plan.resolve(name :: Nil, data.sparkSession.sessionState.analyzer.resolver).getOrElse {
             throw new AnalysisException(
@@ -485,7 +485,7 @@ case class DataSource(
           InsertIntoHadoopFsRelationCommand(
             outputPath = outputPath,
             staticPartitions = Map.empty,
-            partitionColumns = columns,
+            partitionColumns = partitionAttributes,
             bucketSpec = bucketSpec,
             fileFormat = format,
             options = options,

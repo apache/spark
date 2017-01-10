@@ -64,7 +64,7 @@ public class JavaSparkHiveExample {
       .enableHiveSupport()
       .getOrCreate();
 
-    spark.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
+    spark.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING) USING hive");
     spark.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
 
     // Queries are expressed in HiveQL
