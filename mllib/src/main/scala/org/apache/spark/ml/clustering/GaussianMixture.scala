@@ -135,18 +135,14 @@ class GaussianMixtureModel private[ml] (
   @Since("2.2.0")
   def computeLogLikelihood(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
-
     val spark = dataset.sparkSession
     import spark.implicits._
 
-    val bcWeightAndDists =
-      spark.sparkContext.broadcast(weights.zip(gaussians))
-
+    val bcWeightAndDists = spark.sparkContext.broadcast(weights.zip(gaussians))
     dataset.select(col($(featuresCol))).map {
-      case Row(point: Vector) =>
+      case Row(feature: Vector) =>
         val likelihood = bcWeightAndDists.value.map {
-          case (weight, dist) =>
-            EPSILON + weight * dist.pdf(point)
+          case (weight, dist) => EPSILON + weight * dist.pdf(feature)
         }.sum
         math.log(likelihood)
     }.reduce(_ + _)
