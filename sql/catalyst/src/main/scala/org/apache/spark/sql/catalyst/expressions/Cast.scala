@@ -149,7 +149,7 @@ object Cast {
       > SELECT _FUNC_('10' as int);
        10
   """)
-case class Cast(child: Expression, dataType: DataType, timeZoneId: String = null)
+case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with NullIntolerant {
 
   def this(child: Expression, dataType: DataType) = this(child, dataType, null)
@@ -171,7 +171,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: String = null
     (!(childrenResolved && Cast.needTimeZone(child.dataType, dataType))) || super.timeZoneResolved
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = timeZoneId)
+    copy(timeZoneId = Option(timeZoneId))
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])

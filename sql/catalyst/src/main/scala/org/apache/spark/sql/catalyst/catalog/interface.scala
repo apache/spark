@@ -113,7 +113,7 @@ case class CatalogTablePartition(
   def toRow(partitionSchema: StructType): InternalRow = {
     InternalRow.fromSeq(partitionSchema.map { field =>
       Cast(Literal(spec(field.name)), field.dataType,
-        DateTimeUtils.defaultTimeZone().getID).eval()
+        Option(DateTimeUtils.defaultTimeZone().getID)).eval()
     })
   }
 }

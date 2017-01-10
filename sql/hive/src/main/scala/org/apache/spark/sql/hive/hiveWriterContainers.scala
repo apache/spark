@@ -265,7 +265,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     val partitionStringExpression = partitionOutput.zipWithIndex.flatMap { case (c, i) =>
       val escaped =
         ScalaUDF(fun, StringType,
-          Seq(Cast(c, StringType, DateTimeUtils.defaultTimeZone().getID)),
+          Seq(Cast(c, StringType, Option(DateTimeUtils.defaultTimeZone().getID))),
           Seq(StringType))
       val str = If(IsNull(c), Literal(defaultPartName), escaped)
       val partitionName = Literal(dynamicPartColNames(i) + "=") :: str :: Nil

@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  private def cast(v: Any, targetType: DataType, timeZoneId: String = null): Cast = {
+  private def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
     v match {
       case lit: Expression => Cast(lit, targetType, timeZoneId)
       case _ => Cast(Literal(v), targetType, timeZoneId)
@@ -42,13 +42,13 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   // expected cannot be null
-  private def checkCast(v: Any, expected: Any, timeZoneId: String = null): Unit = {
+  private def checkCast(v: Any, expected: Any, timeZoneId: Option[String] = None): Unit = {
     checkEvaluation(cast(v, Literal(expected).dataType, timeZoneId), expected)
   }
 
   private def checkNullCast(from: DataType, to: DataType): Unit = {
     if (Cast.needTimeZone(from, to)) {
-      checkEvaluation(cast(Literal.create(null, from), to, "GMT"), null)
+      checkEvaluation(cast(Literal.create(null, from), to, Option("GMT")), null)
     } else {
       checkEvaluation(cast(Literal.create(null, from), to), null)
     }
@@ -114,112 +114,117 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("cast string to timestamp") {
     for (tz <- ALL_TIMEZONES) {
-      checkEvaluation(cast(Literal("123"), TimestampType, tz.getID), null)
+      val timeZoneId = Option(tz.getID)
+      checkEvaluation(cast(Literal("123"), TimestampType, timeZoneId), null)
 
       var c = Calendar.getInstance(tz)
       c.set(2015, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015"), TimestampType, tz.getID),
+      checkEvaluation(cast(Literal("2015"), TimestampType, timeZoneId),
         new Timestamp(c.getTimeInMillis))
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015-03"), TimestampType, tz.getID),
+      checkEvaluation(cast(Literal("2015-03"), TimestampType, timeZoneId),
         new Timestamp(c.getTimeInMillis))
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015-03-18"), TimestampType, tz.getID),
+      checkEvaluation(cast(Literal("2015-03-18"), TimestampType, timeZoneId),
         new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18 "), TimestampType, tz.getID),
+      checkEvaluation(cast(Literal("2015-03-18 "), TimestampType, timeZoneId),
         new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18T"), TimestampType, tz.getID),
+      checkEvaluation(cast(Literal("2015-03-18T"), TimestampType, timeZoneId),
         new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015-03-18 12:03:17"), TimestampType, tz.getID),
+      checkEvaluation(cast(Literal("2015-03-18 12:03:17"), TimestampType, timeZoneId),
         new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17"), TimestampType, tz.getID),
+      checkEvaluation(cast(Literal("2015-03-18T12:03:17"), TimestampType, timeZoneId),
         new Timestamp(c.getTimeInMillis))
 
       val utc = TimeZone.getTimeZone("UTC")
+      val utcId = Option(utc.getID)
       c = Calendar.getInstance(utc)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17Z"), TimestampType, utc.getID),
+      checkEvaluation(cast(Literal("2015-03-18T12:03:17Z"), TimestampType, utcId),
         new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18 12:03:17Z"), TimestampType, utc.getID),
+      checkEvaluation(cast(Literal("2015-03-18 12:03:17Z"), TimestampType, utcId),
         new Timestamp(c.getTimeInMillis))
 
       val gmtm0100 = TimeZone.getTimeZone("GMT-01:00")
+      val gmtm0100Id = Option(gmtm0100.getID)
       c = Calendar.getInstance(gmtm0100)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17-1:0"), TimestampType, gmtm0100.getID),
+      checkEvaluation(cast(Literal("2015-03-18T12:03:17-1:0"), TimestampType, gmtm0100Id),
         new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17-01:00"), TimestampType, gmtm0100.getID),
+      checkEvaluation(cast(Literal("2015-03-18T12:03:17-01:00"), TimestampType, gmtm0100Id),
         new Timestamp(c.getTimeInMillis))
 
       val gmt0730 = TimeZone.getTimeZone("GMT+07:30")
+      val gmt0730Id = Option(gmt0730.getID)
       c = Calendar.getInstance(gmt0730)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17+07:30"), TimestampType, gmt0730.getID),
+      checkEvaluation(cast(Literal("2015-03-18T12:03:17+07:30"), TimestampType, gmt0730Id),
         new Timestamp(c.getTimeInMillis))
 
       val gmt0703 = TimeZone.getTimeZone("GMT+07:03")
+      val gmt0703Id = Option(gmt0703.getID)
       c = Calendar.getInstance(gmt0703)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17+7:3"), TimestampType, gmt0703.getID),
+      checkEvaluation(cast(Literal("2015-03-18T12:03:17+7:3"), TimestampType, gmt0703Id),
         new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 123)
-      checkEvaluation(cast(Literal("2015-03-18 12:03:17.123"), TimestampType, tz.getID),
+      checkEvaluation(cast(Literal("2015-03-18 12:03:17.123"), TimestampType, timeZoneId),
         new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123"), TimestampType, tz.getID),
+      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123"), TimestampType, timeZoneId),
         new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(utc)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 456)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17.456Z"), TimestampType, utc.getID),
+      checkEvaluation(cast(Literal("2015-03-18T12:03:17.456Z"), TimestampType, utcId),
         new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18 12:03:17.456Z"), TimestampType, utc.getID),
+      checkEvaluation(cast(Literal("2015-03-18 12:03:17.456Z"), TimestampType, utcId),
         new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(gmtm0100)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 123)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123-1:0"), TimestampType, gmtm0100.getID),
+      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123-1:0"), TimestampType, gmtm0100Id),
         new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123-01:00"), TimestampType, gmtm0100.getID),
+      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123-01:00"), TimestampType, gmtm0100Id),
         new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(gmt0730)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 123)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123+07:30"), TimestampType, gmt0730.getID),
+      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123+07:30"), TimestampType, gmt0730Id),
         new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(gmt0703)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 123)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123+7:3"), TimestampType, gmt0703.getID),
+      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123+7:3"), TimestampType, gmt0703Id),
         new Timestamp(c.getTimeInMillis))
 
-      checkEvaluation(cast(Literal("2015-03-18 123142"), TimestampType, tz.getID), null)
-      checkEvaluation(cast(Literal("2015-03-18T123123"), TimestampType, tz.getID), null)
-      checkEvaluation(cast(Literal("2015-03-18X"), TimestampType, tz.getID), null)
-      checkEvaluation(cast(Literal("2015/03/18"), TimestampType, tz.getID), null)
-      checkEvaluation(cast(Literal("2015.03.18"), TimestampType, tz.getID), null)
-      checkEvaluation(cast(Literal("20150318"), TimestampType, tz.getID), null)
-      checkEvaluation(cast(Literal("2015-031-8"), TimestampType, tz.getID), null)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17-0:70"), TimestampType, tz.getID), null)
+      checkEvaluation(cast(Literal("2015-03-18 123142"), TimestampType, timeZoneId), null)
+      checkEvaluation(cast(Literal("2015-03-18T123123"), TimestampType, timeZoneId), null)
+      checkEvaluation(cast(Literal("2015-03-18X"), TimestampType, timeZoneId), null)
+      checkEvaluation(cast(Literal("2015/03/18"), TimestampType, timeZoneId), null)
+      checkEvaluation(cast(Literal("2015.03.18"), TimestampType, timeZoneId), null)
+      checkEvaluation(cast(Literal("20150318"), TimestampType, timeZoneId), null)
+      checkEvaluation(cast(Literal("2015-031-8"), TimestampType, timeZoneId), null)
+      checkEvaluation(cast(Literal("2015-03-18T12:03:17-0:70"), TimestampType, timeZoneId), null)
     }
   }
 
@@ -331,34 +336,39 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     val ts = withDefaultTimeZone(TimeZoneGMT)(Timestamp.valueOf(nts))
 
     for (tz <- ALL_TIMEZONES) {
+      val timeZoneId = Option(tz.getID)
       var c = Calendar.getInstance(TimeZoneGMT)
       c.set(2015, 2, 8, 2, 30, 0)
       checkEvaluation(
-        cast(cast(new Timestamp(c.getTimeInMillis), StringType, tz.getID), TimestampType, tz.getID),
+        cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
+          TimestampType, timeZoneId),
         c.getTimeInMillis * 1000)
       c = Calendar.getInstance(TimeZoneGMT)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
-        cast(cast(new Timestamp(c.getTimeInMillis), StringType, tz.getID), TimestampType, tz.getID),
+        cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
+          TimestampType, timeZoneId),
         c.getTimeInMillis * 1000)
     }
 
+    val gmtId = Option("GMT")
+
     checkEvaluation(cast("abdef", StringType), "abdef")
     checkEvaluation(cast("abdef", DecimalType.USER_DEFAULT), null)
-    checkEvaluation(cast("abdef", TimestampType, "GMT"), null)
+    checkEvaluation(cast("abdef", TimestampType, gmtId), null)
     checkEvaluation(cast("12.65", DecimalType.SYSTEM_DEFAULT), Decimal(12.65))
 
     checkEvaluation(cast(cast(sd, DateType), StringType), sd)
     checkEvaluation(cast(cast(d, StringType), DateType), 0)
-    checkEvaluation(cast(cast(nts, TimestampType, "GMT"), StringType, "GMT"), nts)
+    checkEvaluation(cast(cast(nts, TimestampType, gmtId), StringType, gmtId), nts)
     checkEvaluation(
-      cast(cast(ts, StringType, "GMT"), TimestampType, "GMT"),
+      cast(cast(ts, StringType, gmtId), TimestampType, gmtId),
       DateTimeUtils.fromJavaTimestamp(ts))
 
     // all convert to string type to check
-    checkEvaluation(cast(cast(cast(nts, TimestampType, "GMT"), DateType, "GMT"), StringType), sd)
+    checkEvaluation(cast(cast(cast(nts, TimestampType, gmtId), DateType, gmtId), StringType), sd)
     checkEvaluation(
-      cast(cast(cast(ts, DateType, "GMT"), TimestampType, "GMT"), StringType, "GMT"),
+      cast(cast(cast(ts, DateType, gmtId), TimestampType, gmtId), StringType, gmtId),
       zts)
 
     checkEvaluation(cast(cast("abdef", BinaryType), StringType), "abdef")
@@ -371,7 +381,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
       5.toShort)
     checkEvaluation(
-      cast(cast(cast(cast(cast(cast("5", TimestampType, "GMT"), ByteType),
+      cast(cast(cast(cast(cast(cast("5", TimestampType, gmtId), ByteType),
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
       null)
     checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
@@ -486,7 +496,9 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), null)
     checkEvaluation(cast(d, DecimalType(10, 2)), null)
     checkEvaluation(cast(d, StringType), "1970-01-01")
-    checkEvaluation(cast(cast(d, TimestampType, "GMT"), StringType, "GMT"), "1970-01-01 00:00:00")
+
+    val gmtId = Option("GMT")
+    checkEvaluation(cast(cast(d, TimestampType, gmtId), StringType, gmtId), "1970-01-01 00:00:00")
   }
 
   test("cast from timestamp") {
