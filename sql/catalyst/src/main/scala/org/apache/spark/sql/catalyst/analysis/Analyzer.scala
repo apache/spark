@@ -59,6 +59,7 @@ object SimpleAnalyzer extends Analyzer(
  *                        current catalog database.
  * @param nestedViewLevel The nested level in the view resolution, this enables us to limit the
  *                        depth of nested views.
+ *                        TODO Limit the depth of nested views.
  */
 case class AnalysisContext(
     defaultDatabase: Option[String] = None,
@@ -70,7 +71,7 @@ object AnalysisContext {
   }
 
   def get: AnalysisContext = value.get()
-  def set(context: AnalysisContext): Unit = value.set(context)
+  private def set(context: AnalysisContext): Unit = value.set(context)
 
   def withAnalysisContext[A](context: AnalysisContext)(f: => A): A = {
     val originContext = value.get()
@@ -545,15 +546,16 @@ class Analyzer(
 
     // If the unresolved relation is running directly on files, we just return the original
     // UnresolvedRelation, the plan will get resolved later. Else we look up the table from catalog
-    // and change the default database name if it is a view.
+    // and change the default database name(in AnalysisContext) if it is a view.
     // We usually look up a table from the default database if the table identifier has an empty
     // database part, for a view the default database should be the currentDb when the view was
     // created. When the case comes to resolving a nested view, the view may have different default
-    // database with that the referenced view has, so we need to use the variable `defaultDatabase`
-    // to track the current default database.
+    // database with that the referenced view has, so we need to use
+    // `AnalysisContext.defaultDatabase` to track the current default database.
     // When the relation we resolve is a view, we fetch the view.desc(which is a CatalogTable), and
-    // then set the value of `CatalogTable.viewDefaultDatabase` to the variable `defaultDatabase`,
-    // we look up the relations that the view references using the default database.
+    // then set the value of `CatalogTable.viewDefaultDatabase` to
+    // `AnalysisContext.defaultDatabase`, we look up the relations that the view references using
+    // the default database.
     // For example:
     // |- view1 (defaultDatabase = db1)
     //   |- operator
@@ -568,13 +570,11 @@ class Analyzer(
     //
     // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
     // have empty defaultDatabase and all the relations in viewText have database part defined.
-    def resolveRelation(
-        plan: LogicalPlan,
-        defaultDatabase: Option[String] = None): LogicalPlan = plan match {
+    def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
       case u: UnresolvedRelation if !isRunningDirectlyOnFiles(u.tableIdentifier) =>
         val defaultDatabase = AnalysisContext.get.defaultDatabase
         val relation = lookupTableFromCatalog(u, defaultDatabase)
-        resolveRelation(relation, defaultDatabase)
+        resolveRelation(relation)
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
@@ -588,7 +588,7 @@ class Analyzer(
         }
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View, _) =>
-        val newChild = resolveRelation(view, defaultDatabase)
+        val newChild = resolveRelation(view)
         p.copy(child = newChild)
       case _ => plan
     }
@@ -599,16 +599,18 @@ class Analyzer(
       case u: UnresolvedRelation => resolveRelation(u)
     }
 
-    // Look up the table with the given name from catalog. The database we look up the table from
-    // is decided follow the steps:
-    // 1. If the database part is defined in the table identifier, use that database name;
-    // 2. Else If the defaultDatabase is defined, use the default database name(In this case, no
-    //    temporary objects can be used, and the default database is only used to look up a view);
-    // 3. Else use the currentDb of the SessionCatalog.
+    // Look up the table with the given name from catalog. The database we used is decided by the
+    // precedence:
+    // 1. Use the database part of the table identifier, if it is defined;
+    // 2. Use defaultDatabase, if it is defined(In this case, no temporary objects can be used,
+    //    and the default database is only used to look up a view);
+    // 3. Use the currentDb of the SessionCatalog.
     private def lookupTableFromCatalog(
         u: UnresolvedRelation,
         defaultDatabase: Option[String] = None): LogicalPlan = {
       try {
+        // If `u.tableIdentifier` has a empty database part, copy the identifier with
+        // `defaultDatabase` as the database part.
         val tableIdentWithDb = u.tableIdentifier.withDatabase(defaultDatabase)
         catalog.lookupRelation(tableIdentWithDb, u.alias)
       } catch {

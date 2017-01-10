@@ -682,4 +682,23 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
+  test("correctly handle type casting between view output and child output") {
+    withTable("testTable") {
+      withView("testView") {
+        spark.range(1, 10).toDF("id1").write.format("json").saveAsTable("testTable")
+        sql("CREATE VIEW testView AS SELECT * FROM testTable")
+
+        // Allow casting from IntegerType to LongType
+        val df = (1 until 10).map(i => i).toDF("id1")
+        df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("testTable")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i)))
+
+        // Cann't cast from ArrayType to LongType, throw an AnalysisException.
+        val df2 = (1 until 10).map(i => Seq(i)).toDF("id1")
+        df2.write.format("json").mode(SaveMode.Overwrite).saveAsTable("testTable")
+        intercept[AnalysisException](sql("SELECT * FROM testView ORDER BY id1"))
+      }
+    }
+  }
 }

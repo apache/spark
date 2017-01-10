@@ -112,7 +112,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   }
 
   /**
-   * Return a [[LogicalPlan]] that represents the given table or view from Hive metastore.
+   * Returns a [[LogicalPlan]] that represents the given table or view from Hive metastore.
    *
    * @param tableIdent The name of the table/view that we look up.
    * @param alias The alias name of the table/view that we look up.

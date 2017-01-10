@@ -30,20 +30,20 @@ import org.apache.spark.sql.catalyst.rules.Rule
 /**
  * Make sure that a view's child plan produces the view's output attributes. We wrap the child
  * with a Project and add an alias for each output attribute. The attributes are resolved by
- * name. This should be only done after the resolution batch, because the view attributes are
- * not stable during resolution.
+ * name. This should be only done after the batch of Resolution, because the view attributes are
+ * not completely resolved during the batch of Resolution.
  */
 case class AliasViewChild(conf: CatalystConf) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case v @ View(_, output, child) if child.resolved =>
       val resolver = conf.resolver
-      val newOutput = child.output.map { attr =>
-        val newAttr = findAttributeByName(attr.name, output, resolver)
-        // Check the dataType of the output attributes, throw an AnalysisException if they don't
-        // match up.
-        checkDataType(attr, newAttr)
-        Alias(attr, attr.name)(exprId = newAttr.exprId, qualifier = newAttr.qualifier,
-          explicitMetadata = Some(newAttr.metadata))
+      val newOutput = output.map { attr =>
+        val originAttr = findAttributeByName(attr.name, child.output, resolver)
+        // The dataType of the output attributes may be not the same with that of the view output,
+        // so we should cast the attribute to the dataType of the view output attribute. If the
+        // cast cann't perform, will throw an AnalysisException.
+        Alias(Cast(originAttr, attr.dataType), attr.name)(exprId = attr.exprId,
+          qualifier = attr.qualifier, explicitMetadata = Some(attr.metadata))
       }
       v.copy(child = Project(newOutput, child))
   }
@@ -63,28 +63,18 @@ case class AliasViewChild(conf: CatalystConf) extends Rule[LogicalPlan] {
       s"Attribute with name '$name' is not found in " +
         s"'${attrs.map(_.name).mkString("(", ",", ")")}'"))
   }
-
-  /**
-   * Check whether the dataType of `attr` could be casted to that of `other`, throw an
-   * AnalysisException if the both attributes don't match up.
-   */
-  private def checkDataType(attr: Attribute, other: Attribute): Unit = {
-    if (!Cast.canCast(attr.dataType, other.dataType)) {
-      throw new AnalysisException(
-        s"The dataType of attribute '$other' is '${other.dataType}', which can't be casted to " +
-          s"that of '$attr', expected '${attr.dataType}'.")
-    }
-  }
 }
 
 /**
  * Removes [[View]] operators from the plan. The operator is respected till the end of analysis
- * stage because we want to see which part of a analyzed logical plan is generated from a view.
+ * stage because we want to see which part of an analyzed logical plan is generated from a view.
  */
 object EliminateView extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // The child should have the same output attributes with the View operator, so we simply
     // remove the View operator.
-    case View(_, output, child) => child
+    case View(_, output, child) =>
+      assert(output == child.output, "The output of the child is different from the view output")
+      child
   }
 }

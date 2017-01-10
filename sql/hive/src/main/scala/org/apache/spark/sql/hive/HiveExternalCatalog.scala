@@ -368,7 +368,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    */
   private def viewParamToTableProps(table: CatalogTable): mutable.Map[String, String] = {
     val properties = new mutable.HashMap[String, String]
-    table.viewDefaultDatabase.foreach {t => properties.put(VIEW_DEFAULT_DATABASE, t)}
+    table.viewDefaultDatabase.foreach(properties.put(VIEW_DEFAULT_DATABASE, _))
     properties
   }
 
@@ -625,10 +625,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Restores table metadata from the table properties if it's a datasource table or a view. This
-   * method is kind of a opposite version of [[createTable]].
+   * Restores table metadata from the table properties. This method is kind of a opposite version
+   * of [[createTable]].
    *
-   * For a datasource table, it reads table schema, provider, partition column names and bucket
+   * For a table, it reads table schema, provider, partition column names and bucket
    * specification from table properties, and filter out these special entries from table
    * properties.
    *
