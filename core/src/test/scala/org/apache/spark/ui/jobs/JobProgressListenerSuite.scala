@@ -426,8 +426,8 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
         SparkListenerTaskEnd(task.stageId, 0, taskType, Success, taskInfo, taskMetrics))
     }
 
-    // 101 - (101 - 100 + 100 * 0.01) = 99
-    assert(listener.stageIdToData((task.stageId, task.stageAttemptId)).taskData.size === 99)
+    // 101 - (101 - 100 * 0.9) = 90
+    assert(listener.stageIdToData((task.stageId, task.stageAttemptId)).taskData.size === 90)
   }
 
 }
