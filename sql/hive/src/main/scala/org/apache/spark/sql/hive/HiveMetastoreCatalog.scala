@@ -126,7 +126,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             val cachedLocation = relation.location.rootPaths
             val isSamePath = location.isDefined && cachedLocation.size == 1 &&
               // Ignore the scheme difference when comparing the paths
-              cachedLocation.head.toUri.toString == new Path(location.get).toUri.toString
+              cachedLocation.head.toUri.getPath == new Path(location.get).toUri.getPath
             // If we have the same paths, same schema, and same partition spec,
             // we will use the cached relation.
             val useCached =
