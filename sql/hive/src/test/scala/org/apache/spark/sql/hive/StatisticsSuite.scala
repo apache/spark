@@ -69,7 +69,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         assert(properties.get("totalSize").toLong <= 0, "external table totalSize must be <= 0")
         assert(properties.get("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
 
-        val sizeInBytes = relation.statistics.sizeInBytes
+        val sizeInBytes = relation.stats(conf).sizeInBytes
         assert(sizeInBytes === BigInt(file1.length() + file2.length()))
       }
     } finally {
@@ -80,7 +80,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
   test("analyze MetastoreRelations") {
     def queryTotalSize(tableName: String): BigInt =
-      spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName)).statistics.sizeInBytes
+      spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName)).stats(conf).sizeInBytes
 
     // Non-partitioned table
     sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
@@ -481,7 +481,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("estimates the size of a test MetastoreRelation") {
     val df = sql("""SELECT * FROM src""")
     val sizes = df.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
-      mr.statistics.sizeInBytes
+      mr.stats(conf).sizeInBytes
     }
     assert(sizes.size === 1, s"Size wrong for:\n ${df.queryExecution}")
     assert(sizes(0).equals(BigInt(5812)),
@@ -501,7 +501,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       // Assert src has a size smaller than the threshold.
       val sizes = df.queryExecution.analyzed.collect {
-        case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
+        case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.stats(conf).sizeInBytes
       }
       assert(sizes.size === 2 && sizes(0) <= spark.sessionState.conf.autoBroadcastJoinThreshold
         && sizes(1) <= spark.sessionState.conf.autoBroadcastJoinThreshold,
@@ -557,7 +557,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val sizes = df.queryExecution.analyzed.collect {
       case r if implicitly[ClassTag[MetastoreRelation]].runtimeClass
         .isAssignableFrom(r.getClass) =>
-        r.statistics.sizeInBytes
+        r.stats(conf).sizeInBytes
     }
     assert(sizes.size === 2 && sizes(1) <= spark.sessionState.conf.autoBroadcastJoinThreshold
       && sizes(0) <= spark.sessionState.conf.autoBroadcastJoinThreshold,

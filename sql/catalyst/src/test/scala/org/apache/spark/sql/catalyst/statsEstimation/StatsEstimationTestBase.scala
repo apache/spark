@@ -18,12 +18,16 @@
 package org.apache.spark.sql.catalyst.statsEstimation
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.types.IntegerType
 
 
 class StatsEstimationTestBase extends SparkFunSuite {
+
+  /** Enable stats estimation based on CBO. */
+  protected val conf = SimpleCatalystConf(caseSensitiveAnalysis = true, cboEnabled = true)
 
   def attr(colName: String): AttributeReference = AttributeReference(colName, IntegerType)()
 
@@ -40,5 +44,5 @@ class StatsEstimationTestBase extends SparkFunSuite {
  */
 protected case class StatsTestPlan(outputList: Seq[Attribute], stats: Statistics) extends LeafNode {
   override def output: Seq[Attribute] = outputList
-  override lazy val statistics = stats
+  override def computeStats(conf: CatalystConf): Statistics = stats
 }
