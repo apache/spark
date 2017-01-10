@@ -122,15 +122,16 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       val dataSourceTable =
         cachedDataSourceTables(qualifiedTableName) match {
           case l @ LogicalRelation(relation: HadoopFsRelation, _, _) =>
-            // Ignore the scheme difference when comparing the paths
-            val isSamePath =
-              table.storage.locationUri.isDefined && relation.location.rootPaths.size == 1 &&
-                table.storage.locationUri.get == relation.location.rootPaths.head.toUri.getPath
+            val location = table.storage.locationUri
+            val cachedLocation = relation.location.rootPaths
+            val isSamePath = location.isDefined && cachedLocation.size == 1 &&
+              // Ignore the scheme difference when comparing the paths
+              cachedLocation.head.toUri.toString == new Path(location.get).toUri.toString
             // If we have the same paths, same schema, and same partition spec,
             // we will use the cached relation.
             val useCached =
               isSamePath &&
-              l.schema == table.schema &&
+              l.schema.sameType(table.schema) &&
               relation.bucketSpec == table.bucketSpec &&
               relation.partitionSchema == table.partitionSchema
             if (useCached) {
