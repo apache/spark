@@ -345,8 +345,8 @@ case class Field(children: Seq[Expression]) extends Expression {
 
   private lazy val ordering = TypeUtils.getInterpretedOrdering(children(0).dataType)
 
-  private val dataTypeMatchIndex: Seq[Int] = children.tail.zip(Stream from 1).filter(
-    _._1.dataType == children.head.dataType).map(_._2)
+  private val dataTypeMatchIndex: Array[Int] = children.zipWithIndex.tail.filter(
+    _._1.dataType.sameType(children.head.dataType)).map(_._2).toArray
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
@@ -361,16 +361,16 @@ case class Field(children: Seq[Expression]) extends Expression {
   override def dataType: DataType = IntegerType
   override def eval(input: InternalRow): Any = {
     val target = children.head.eval(input)
-    val targetDataType = children.head.dataType
     @tailrec def findEqual(index: Int): Int = {
       if (index == dataTypeMatchIndex.size) {
         0
       } else {
         val value = children(dataTypeMatchIndex(index)).eval(input)
-        if (value != null && ordering.equiv(target, value))
+        if (value != null && ordering.equiv(target, value)) {
           dataTypeMatchIndex(index)
-        else
+        } else {
           findEqual(index + 1)
+        }
       }
     }
     if (target == null) 0 else findEqual(index = 0)
@@ -380,11 +380,10 @@ case class Field(children: Seq[Expression]) extends Expression {
     val evalChildren = children.map(_.genCode(ctx))
     val target = evalChildren(0)
     val targetDataType = children(0).dataType
-    val rest = evalChildren.drop(1)
-    val restDataType = children.drop(1).map(_.dataType)
+    val dataTypes = children.map(_.dataType)
 
     def updateEval(evalWithIndex: ((ExprCode, DataType), Int)): String = {
-      val ((eval, dataType), index) = evalWithIndex
+      val ((eval, _), index) = evalWithIndex
       s"""
         ${eval.code}
         if (${ctx.genEqual(targetDataType, eval.value, target.value)}) {
@@ -402,17 +401,12 @@ case class Field(children: Seq[Expression]) extends Expression {
        """
     }
 
-    def dataTypeEqualsTarget(evalWithIndex: ((ExprCode, DataType), Int)): Boolean = {
-      val ((eval, dataType), index) = evalWithIndex
-      dataType.equals(targetDataType)
-    }
-
     ev.copy(code =
       code"""
          |${target.code}
          |boolean ${ev.isNull} = false;
          |int ${ev.value} = 0;
-         |${rest.zip(restDataType).zip(Stream from 1).filter(
+         |${evalChildren.zip(dataTypes).zipWithIndex.tail.filter(
         x => dataTypeMatchIndex.contains(x._2)).map(updateEval).reduceRight(genIfElseStructure)}
        """.stripMargin)
   }
