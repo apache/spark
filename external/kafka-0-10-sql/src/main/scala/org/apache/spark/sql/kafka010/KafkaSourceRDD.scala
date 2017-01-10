@@ -167,13 +167,15 @@ private[kafka010] class KafkaSourceRDD(
           }
         }
 
-        override protected def close(): Unit = {}
+        override protected def close(): Unit = {
+          consumer.close()
+        }
       }
       if (!reuseCachedConsumers) {
         // Don't forget to close consumers! You may take down your Kafka cluster.
         CompletionIterator[ConsumerRecord[Array[Byte], Array[Byte]],
           NextIterator[ConsumerRecord[Array[Byte], Array[Byte]]]](underlying,
-          underlying.consumer.close())
+          underlying.closeIfNeeded())
       } else {
         underlying
       }
