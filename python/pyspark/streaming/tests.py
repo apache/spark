@@ -1006,17 +1006,19 @@ class KafkaStreamTests(PySparkStreamingTestCase):
     timeout = 20  # seconds
     duration = 1
 
-    def setUp(self):
-        super(KafkaStreamTests, self).setUp()
-        self._kafkaTestUtils = self.ssc._jvm.org.apache.spark.streaming.kafka.KafkaTestUtils()
-        self._kafkaTestUtils.setup()
+    @classmethod
+    def setUpClass(cls):
+        super(KafkaStreamTests, cls).setUpClass()
+        cls._kafkaTestUtils = cls.sc._jvm.org.apache.spark.streaming.kafka.KafkaTestUtils()
+        cls._kafkaTestUtils.setup()
 
-    def tearDown(self):
-        super(KafkaStreamTests, self).tearDown()
+    @classmethod
+    def tearDownClass(cls):
+        super(KafkaStreamTests, cls).tearDownClass()
 
-        if self._kafkaTestUtils is not None:
-            self._kafkaTestUtils.teardown()
-            self._kafkaTestUtils = None
+        if cls._kafkaTestUtils is not None:
+            cls._kafkaTestUtils.teardown()
+            cls._kafkaTestUtils = None
 
     def _randomTopic(self):
         return "topic-%d" % random.randint(0, 10000)

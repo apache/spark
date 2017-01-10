@@ -383,6 +383,7 @@ pyspark_streaming = Module(
     python_test_goals=[
         "pyspark.streaming.util",
         "pyspark.streaming.tests",
+        "pyspark.streaming.kafka010_tests",
     ]
 )
 

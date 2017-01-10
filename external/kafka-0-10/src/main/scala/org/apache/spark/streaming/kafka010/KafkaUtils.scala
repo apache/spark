@@ -17,19 +17,27 @@
 
 package org.apache.spark.streaming.kafka010
 
-import java.{ util => ju }
+import java.{util => ju}
+import java.io.OutputStream
+import java.lang.{Integer => JInt, Long => JLong}
+import java.nio.charset.StandardCharsets
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+
+import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.serialization.ByteArrayDeserializer
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.api.java.{ JavaRDD, JavaSparkContext }
-import org.apache.spark.api.java.function.{ Function0 => JFunction0 }
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.api.java.{ JavaInputDStream, JavaStreamingContext }
+import org.apache.spark.streaming.api.java.{JavaDStream, JavaInputDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream._
 
 /**
@@ -43,6 +51,7 @@ object KafkaUtils extends Logging {
    * Scala constructor for a batch-oriented interface for consuming from Kafka.
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
+   *
    * @param kafkaParams Kafka
    * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
@@ -80,8 +89,7 @@ object KafkaUtils extends Logging {
    * Java constructor for a batch-oriented interface for consuming from Kafka.
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
-   * @param keyClass Class of the keys in the Kafka records
-   * @param valueClass Class of the values in the Kafka records
+   *
    * @param kafkaParams Kafka
    * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
@@ -154,8 +162,6 @@ object KafkaUtils extends Logging {
    * :: Experimental ::
    * Java constructor for a DStream where
    * each given Kafka topic/partition corresponds to an RDD partition.
-   * @param keyClass Class of the keys in the Kafka records
-   * @param valueClass Class of the values in the Kafka records
    * @param locationStrategy In most cases, pass in LocationStrategies.preferConsistent,
    *   see [[LocationStrategies]] for more details.
    * @param consumerStrategy In most cases, pass in ConsumerStrategies.subscribe,
@@ -225,6 +231,197 @@ object KafkaUtils extends Logging {
     if (null == rbb || rbb.asInstanceOf[java.lang.Integer] < 65536) {
       logWarning(s"overriding ${ConsumerConfig.RECEIVE_BUFFER_CONFIG} to 65536 see KAFKA-3135")
       kafkaParams.put(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
+    }
+  }
+}
+
+private[kafka010] class KafkaUtilsPythonHelper extends Logging {
+  import KafkaUtilsPythonHelper._
+
+  def createDirectStream(
+      jssc: JavaStreamingContext,
+      locationStrategy: LocationStrategy,
+      consumerStrategy: ConsumerStrategy[Array[Byte], Array[Byte]]
+    ): JavaDStream[Array[Byte]] = {
+    validateKafkaParams(consumerStrategy.executorKafkaParams)
+    val stream = KafkaUtils.createDirectStream(jssc.ssc, locationStrategy, consumerStrategy)
+      .map { r =>
+        PythonConsumerRecord(r.topic(), r.partition(), r.offset(), r.timestamp(),
+          r.timestampType().toString, r.checksum(), r.serializedKeySize(), r.serializedValueSize(),
+            r.key(), r.value())
+      }.mapPartitions(picklerIterator)
+    new JavaDStream(stream)
+  }
+
+  def createRDD(
+      jsc: JavaSparkContext,
+      kafkaParams: ju.Map[String, Object],
+      offsetRanges: ju.List[OffsetRange],
+      locationStrategy: LocationStrategy
+    ): JavaRDD[Array[Byte]] = {
+    validateKafkaParams(kafkaParams)
+    val rdd = KafkaUtils.createRDD[Array[Byte], Array[Byte]](
+      jsc.sc,
+      kafkaParams,
+      offsetRanges.toArray(new Array[OffsetRange](offsetRanges.size())),
+      locationStrategy)
+        .map { r =>
+          PythonConsumerRecord(r.topic(), r.partition(), r.offset(), r.timestamp(),
+            r.timestampType().toString, r.checksum(), r.serializedKeySize(),
+              r.serializedValueSize(), r.key(), r.value())
+        }.mapPartitions(picklerIterator)
+    new JavaRDD(rdd)
+  }
+
+  private def validateKafkaParams(kafkaParams: ju.Map[String, Object]): Unit = {
+    val decoder = classOf[ByteArrayDeserializer].getCanonicalName
+
+    val keyDecoder = kafkaParams.get(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG)
+    if (keyDecoder == null || keyDecoder != decoder) {
+      throw new SparkException(s"${ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG} $keyDecoder " +
+        s"is not supported for python Kafka API, please configured with $decoder")
+    }
+
+    val valueDecoder = kafkaParams.get(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG)
+    if (valueDecoder == null || valueDecoder != decoder) {
+      throw new SparkException(s"${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG} $valueDecoder " +
+        s"is not supported for python Kafka API, please configured with $decoder")
+    }
+  }
+
+  // Helper functions to convert Python object to Java object
+  def createOffsetRange(topic: String, partition: JInt, fromOffset: JLong, untilOffset: JLong
+      ): OffsetRange = OffsetRange.create(topic, partition, fromOffset, untilOffset)
+
+  def createPreferBrokers(): LocationStrategy = LocationStrategies.PreferBrokers
+
+  def createPreferConsistent(): LocationStrategy = LocationStrategies.PreferConsistent
+
+  def createPreferFixed(hostMap: ju.Map[TopicPartition, String]): LocationStrategy = {
+    LocationStrategies.PreferFixed(hostMap)
+  }
+
+  def createTopicPartition(topic: String, partition: JInt): TopicPartition =
+    new TopicPartition(topic, partition)
+
+  def createSubscribe(
+      topics: ju.Set[String],
+      kafkaParams: ju.Map[String, Object],
+      offsets: ju.Map[TopicPartition, JLong]): ConsumerStrategy[Array[Byte], Array[Byte]] =
+    ConsumerStrategies.Subscribe(topics, kafkaParams, offsets)
+
+  def createSubscribePattern(
+      pattern: String,
+      kafkaParams: ju.Map[String, Object],
+      offsets: ju.Map[TopicPartition, JLong]): ConsumerStrategy[Array[Byte], Array[Byte]] = {
+    ConsumerStrategies.SubscribePattern(ju.regex.Pattern.compile(pattern), kafkaParams, offsets)
+  }
+
+  def createAssign(
+      topicPartitions: ju.Set[TopicPartition],
+      kafkaParams: ju.Map[String, Object],
+      offsets: ju.Map[TopicPartition, JLong]): ConsumerStrategy[Array[Byte], Array[Byte]] = {
+    ConsumerStrategies.Assign(topicPartitions, kafkaParams, offsets)
+  }
+
+  def offsetRangesOfKafkaRDD(rdd: RDD[_]): ju.List[OffsetRange] = {
+    val parentRDDs = rdd.getNarrowAncestors
+    val kafkaRDDs = parentRDDs.filter(rdd => rdd.isInstanceOf[KafkaRDD[_, _]])
+
+    require(
+      kafkaRDDs.length == 1,
+      "Cannot get offset ranges, as there may be multiple Kafka RDDs or no Kafka RDD associated" +
+        "with this RDD, please call this method only on a Kafka RDD.")
+
+    val kafkaRDD = kafkaRDDs.head.asInstanceOf[KafkaRDD[_, _]]
+    kafkaRDD.offsetRanges.toSeq.asJava
+  }
+
+  def commitAsyncForKafkaDStream(dstream: DStream[_], offsetRanges: ju.List[OffsetRange]): Unit = {
+    val dstreams = new mutable.HashSet[DStream[_]]()
+
+    def visit(parent: DStream[_]): Unit = {
+      val parents = parent.dependencies
+      parents.filterNot(dstreams.contains).foreach { p =>
+        dstreams.add(p)
+        visit(p)
+      }
+    }
+    visit(dstream)
+
+    val kafkaDStreams = dstreams.filter(s => s.isInstanceOf[DirectKafkaInputDStream[_, _]])
+    require(
+      kafkaDStreams.size == 1,
+      "Cannot commit offset ranges to DirectKafkaInputDStream, as there may be multiple Kafka " +
+        "DStreams or no Kafka DStream associated with this DStream, please call this method only " +
+        "on a Kafka DStream."
+    )
+
+    val kafkaDStream = kafkaDStreams.head.asInstanceOf[DirectKafkaInputDStream[_, _]]
+    kafkaDStream.commitAsync(offsetRanges.asScala.toArray)
+  }
+}
+
+private object KafkaUtilsPythonHelper {
+  private var initialized = false
+
+  def initialize(): Unit = {
+    SerDeUtil.initialize()
+    synchronized {
+      if (!initialized) {
+        new PythonConsumerRecordPickler().register()
+        initialized = true
+      }
+    }
+  }
+
+  initialize()
+
+  def picklerIterator(iter: Iterator[Any]): Iterator[Array[Byte]] = {
+    new SerDeUtil.AutoBatchedPickler(iter)
+  }
+
+  case class PythonConsumerRecord(
+      topic: String,
+      partition: JInt,
+      offset: JLong,
+      timestamp: JLong,
+      timestampType: String,
+      checksum: JLong,
+      serializedKeySize: JInt,
+      serializedValueSize: JInt,
+      key: Array[Byte],
+      value: Array[Byte])
+
+  class PythonConsumerRecordPickler extends IObjectPickler {
+    private val module = "pyspark.streaming.kafka010"
+
+    def register(): Unit = {
+      Pickler.registerCustomPickler(classOf[PythonConsumerRecord], this)
+      Pickler.registerCustomPickler(this.getClass, this)
+    }
+
+    def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
+      if (obj == this) {
+        out.write(Opcodes.GLOBAL)
+        out.write(s"$module\nKafkaConsumerRecord\n".getBytes(StandardCharsets.UTF_8))
+      } else {
+        pickler.save(this)
+        val consumerRecord = obj.asInstanceOf[PythonConsumerRecord]
+        out.write(Opcodes.MARK)
+        pickler.save(consumerRecord.topic)
+        pickler.save(consumerRecord.partition)
+        pickler.save(consumerRecord.offset)
+        pickler.save(consumerRecord.timestamp)
+        pickler.save(consumerRecord.timestampType)
+        pickler.save(consumerRecord.checksum)
+        pickler.save(consumerRecord.serializedKeySize)
+        pickler.save(consumerRecord.serializedValueSize)
+        pickler.save(consumerRecord.key)
+        pickler.save(consumerRecord.value)
+        out.write(Opcodes.TUPLE)
+        out.write(Opcodes.REDUCE)
+      }
     }
   }
 }

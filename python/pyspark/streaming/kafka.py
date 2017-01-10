@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from py4j.protocol import Py4JJavaError
-
 from pyspark.rdd import RDD
 from pyspark.storagelevel import StorageLevel
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer, PairDeserializer, \
@@ -25,8 +23,8 @@ from pyspark.streaming import DStream
 from pyspark.streaming.dstream import TransformedDStream
 from pyspark.streaming.util import TransformFunction
 
-__all__ = ['Broker', 'KafkaMessageAndMetadata', 'KafkaUtils', 'OffsetRange',
-           'TopicAndPartition', 'utf8_decoder']
+__all__ = ['Broker', 'KafkaMessageAndMetadata', 'KafkaUtils', 'KafkaDStream', 'KafkaRDD',
+           'OffsetRange', 'TopicAndPartition', 'utf8_decoder']
 
 
 def utf8_decoder(s):
@@ -192,7 +190,9 @@ class KafkaUtils(object):
     @staticmethod
     def _get_helper(sc):
         try:
-            return sc._jvm.org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper()
+            helper = sc._jvm.org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper()
+            KafkaRDD.set_helper(helper)
+            return helper
         except TypeError as e:
             if str(e) == "'JavaPackage' object is not callable":
                 KafkaUtils._printErrorMsg(sc)
@@ -252,8 +252,11 @@ class OffsetRange(object):
         return not self.__eq__(other)
 
     def __str__(self):
-        return "OffsetRange(topic: %s, partition: %d, range: [%d -> %d]" \
+        return "OffsetRange(topic: %s, partition: %d, range: [%d -> %d])" \
                % (self.topic, self.partition, self.fromOffset, self.untilOffset)
+
+    def __repr__(self):
+        return self.__str__()
 
     def _jOffsetRange(self, helper):
         return helper.createOffsetRange(self.topic, self.partition, self.fromOffset,
@@ -262,7 +265,7 @@ class OffsetRange(object):
 
 class TopicAndPartition(object):
     """
-    Represents a specific top and partition for Kafka.
+    Represents a specific topic and partition for Kafka.
     """
 
     def __init__(self, topic, partition):
@@ -317,13 +320,16 @@ class KafkaRDD(RDD):
     def __init__(self, jrdd, ctx, jrdd_deserializer):
         RDD.__init__(self, jrdd, ctx, jrdd_deserializer)
 
+    @classmethod
+    def set_helper(cls, helper):
+        cls.helper = helper
+
     def offsetRanges(self):
         """
         Get the OffsetRange of specific KafkaRDD.
         :return: A list of OffsetRange
         """
-        helper = KafkaUtils._get_helper(self.ctx)
-        joffsetRanges = helper.offsetRangesOfKafkaRDD(self._jrdd.rdd())
+        joffsetRanges = self.helper.offsetRangesOfKafkaRDD(self._jrdd.rdd())
         ranges = [OffsetRange(o.topic(), o.partition(), o.fromOffset(), o.untilOffset())
                   for o in joffsetRanges]
         return ranges
