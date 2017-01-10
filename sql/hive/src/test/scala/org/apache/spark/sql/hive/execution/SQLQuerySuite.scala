@@ -126,7 +126,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         s"""
           |CREATE FUNCTION udtf_count_temp
           |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-          |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}'
+          |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").toURI}'
         """.stripMargin)
 
       checkAnswer(
@@ -321,7 +321,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         s"""
            |CREATE FUNCTION udtf_count
            |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-           |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}'
+           |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").toURI}'
         """.stripMargin)
 
       checkKeywordsExist(sql("describe function udtf_count"),
@@ -644,7 +644,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       withTempDir { dir =>
         val defaultDataSource = sessionState.conf.defaultDataSourceName
 
-        val tempLocation = dir.getCanonicalPath
+        val tempLocation = dir.toURI.getPath.stripSuffix("/")
         sql(s"CREATE TABLE ctas1 LOCATION 'file:$tempLocation/c1'" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
         checkRelation("ctas1", true, defaultDataSource, Some(s"file:$tempLocation/c1"))
@@ -1953,16 +1953,18 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-17796 Support wildcard character in filename for LOAD DATA LOCAL INPATH") {
     withTempDir { dir =>
+      val path = dir.toURI.toString.stripSuffix("/")
+      val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.write(s"$i", new File(s"$dir/part-r-0000$i"), StandardCharsets.UTF_8)
+        Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
       for (i <- 5 to 7) {
-        Files.write(s"$i", new File(s"$dir/part-s-0000$i"), StandardCharsets.UTF_8)
+        Files.write(s"$i", new File(dirPath, s"part-s-0000$i"), StandardCharsets.UTF_8)
       }
 
       withTable("load_t") {
         sql("CREATE TABLE load_t (a STRING)")
-        sql(s"LOAD DATA LOCAL INPATH '$dir/*part-r*' INTO TABLE load_t")
+        sql(s"LOAD DATA LOCAL INPATH '$path/*part-r*' INTO TABLE load_t")
         checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1"), Row("2"), Row("3")))
 
         val m = intercept[AnalysisException] {
@@ -1971,7 +1973,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         assert(m.contains("LOAD DATA input path does not exist"))
 
         val m2 = intercept[AnalysisException] {
-          sql(s"LOAD DATA LOCAL INPATH '$dir*/*part*' INTO TABLE load_t")
+          sql(s"LOAD DATA LOCAL INPATH '$path*/*part*' INTO TABLE load_t")
         }.getMessage
         assert(m2.contains("LOAD DATA input path allows only filename wildcard"))
       }
