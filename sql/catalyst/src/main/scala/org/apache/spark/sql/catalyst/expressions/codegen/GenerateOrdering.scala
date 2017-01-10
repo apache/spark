@@ -117,8 +117,31 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
             }
           }
       """
-    }.mkString("\n")
-    comparisons
+    }
+
+    ctx.splitExpressions(
+      expressions = comparisons,
+      funcName = "compare",
+      arguments = Seq(("InternalRow", "a"), ("InternalRow", "b")),
+      returnType = "int",
+      makeSplitFunction = { body =>
+        s"""
+          InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
+          $body
+          return 0;
+        """
+      },
+      foldFunctions = { funCalls =>
+        funCalls.zipWithIndex.map { case (funCall, i) =>
+          val comp = ctx.freshName("comp")
+          s"""
+            int $comp = $funCall;
+            if ($comp != 0) {
+              return $comp;
+            }
+          """
+        }.mkString
+      })
   }
 
   protected def create(ordering: Seq[SortOrder]): BaseOrdering = {
