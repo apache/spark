@@ -178,15 +178,10 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> weights = model.weights
     >>> len(weights)
     3
-    >>> model.gaussiansDF.show()
-    +--------------------+--------------------+
-    |                mean|                 cov|
-    +--------------------+--------------------+
-    |[0.82500000140229...|0.005625000000006...|
-    |[-0.4777098016092...|0.167969502720916...|
-    |[-0.4472625243352...|0.167304119758233...|
-    +--------------------+--------------------+
-    ...
+    >>> model.gaussiansDF.select("mean").head()
+    Row(mean=DenseVector([0.825, 0.8675]))
+    >>> model.gaussiansDF.select("cov").head()
+    Row(cov=DenseMatrix(2, 2, [0.0056, -0.0051, -0.0051, 0.0046], False))
     >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
     >>> rows[4].prediction == rows[5].prediction
@@ -205,15 +200,10 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     False
     >>> model2.weights == model.weights
     True
-    >>> model2.gaussiansDF.show()
-    +--------------------+--------------------+
-    |                mean|                 cov|
-    +--------------------+--------------------+
-    |[0.82500000140229...|0.005625000000006...|
-    |[-0.4777098016092...|0.167969502720916...|
-    |[-0.4472625243352...|0.167304119758233...|
-    +--------------------+--------------------+
-    ...
+    >>> model2.gaussiansDF.select("mean").head()
+    Row(mean=DenseVector([0.825, 0.8675]))
+    >>> model2.gaussiansDF.select("cov").head()
+    Row(cov=DenseMatrix(2, 2, [0.0056, -0.0051, -0.0051, 0.0046], False))
 
     .. versionadded:: 2.0.0
     """
