@@ -81,7 +81,7 @@ test_that("spark.glm and predict", {
   model <- glm(y ~ x, family = Gamma, df)
   out <- capture.output(print(summary(model)))
   expect_true(any(grepl("Dispersion parameter for gamma family", out)))
-  
+
   # Test stats::predict is working
   x <- rnorm(15)
   y <- x + rnorm(15)
