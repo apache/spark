@@ -1810,7 +1810,18 @@ def sort_array(col, asc=True):
 
 # ---------------------------- User Defined Function ----------------------------------
 
-def _wrap_function(sc, func, returnType):
+def _wrap_function(sc, func, returnType, nullable=True):
+    if not nullable:
+        original_func = func
+        def func(*args):
+            res = original_func(*args)
+            assert res is not None, 'None returned from {}:{} {!r}{!r} -> {!r}'.format(
+                inspect.getsourcefile(old_func),
+                inspect.getsourcelines(old_func)[1],
+                old_func,
+                tuple(args),
+                returnType,
+            )
     command = (func, returnType)
     pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
     return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
@@ -1833,7 +1844,7 @@ class UserDefinedFunction(object):
     def _create_judf(self, name):
         from pyspark.sql import SparkSession
         sc = SparkContext.getOrCreate()
-        wrapped_func = _wrap_function(sc, self.func, self.returnType)
+        wrapped_func = _wrap_function(sc, self.func, self.returnType, self.nullable)
         spark = SparkSession.builder.getOrCreate()
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         if name is None:
