@@ -132,7 +132,7 @@ class GaussianMixtureModel private[ml] (
   /**
    * Return the total log-likelihood for this model on the given data.
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def computeLogLikelihood(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
 
