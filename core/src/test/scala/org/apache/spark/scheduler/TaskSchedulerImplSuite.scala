@@ -887,11 +887,18 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       override def executorAdded(execId: String, host: String) {}
     }
     taskScheduler.initialize(new FakeSchedulerBackend)
+    // make an offer on the preferred host so the scheduler knows its alive.  This is necessary
+    // so that the taskset knows that it *could* take advantage of locality.
+    taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
 
     // Submit a taskset with locality preferences.
     val taskSet = FakeTask.createTaskSet(
       1, stageId = 1, stageAttemptId = 0, Seq(TaskLocation("host1", "exec1")))
     taskScheduler.submitTasks(taskSet)
+    val tsm = taskScheduler.taskSetManagerForAttempt(1, 0).get
+    // make sure we've setup our test correctly, so that the taskset knows it *could* use local
+    // offers.
+    assert(tsm.myLocalityLevels.contains(TaskLocality.NODE_LOCAL))
     // make an offer on a non-preferred location.  Since the delay is 0, we should still schedule
     // immediately.
     val taskDescs =
