@@ -87,7 +87,7 @@ class HiveDDLSuite
           s"""
              |create table $tabName
              |stored as parquet
-             |location '$tmpDir'
+             |location '${tmpDir.toURI}'
              |as select 1, '3'
           """.stripMargin)
 
@@ -269,7 +269,7 @@ class HiveDDLSuite
           s"""
              |CREATE EXTERNAL TABLE $externalTab (key INT, value STRING)
              |PARTITIONED BY (ds STRING, hr STRING)
-             |LOCATION '$basePath'
+             |LOCATION '${tmpDir.toURI}'
           """.stripMargin)
 
         // Before data insertion, all the directory are empty
@@ -678,14 +678,10 @@ class HiveDDLSuite
       } else {
         assert(!fs.exists(new Path(tmpDir.toString)))
       }
-      sql(s"CREATE DATABASE $dbName Location '$tmpDir'")
+      sql(s"CREATE DATABASE $dbName Location '${tmpDir.toURI.getPath.stripSuffix("/")}'")
       val db1 = catalog.getDatabaseMetadata(dbName)
-      val dbPath = "file:" + tmpDir
-      assert(db1 == CatalogDatabase(
-        dbName,
-        "",
-        if (dbPath.endsWith(File.separator)) dbPath.dropRight(1) else dbPath,
-        Map.empty))
+      val dbPath = tmpDir.toURI.toString.stripSuffix("/")
+      assert(db1 == CatalogDatabase(dbName, "", dbPath, Map.empty))
       sql("USE db1")
 
       sql(s"CREATE TABLE $tabName as SELECT 1")
@@ -713,10 +709,6 @@ class HiveDDLSuite
     }
   }
 
-  private def appendTrailingSlash(path: String): String = {
-    if (!path.endsWith(File.separator)) path + File.separator else path
-  }
-
   private def dropDatabase(cascade: Boolean, tableExists: Boolean): Unit = {
     val dbName = "db1"
     val dbPath = new Path(spark.sessionState.conf.warehousePath)
@@ -724,7 +716,7 @@ class HiveDDLSuite
 
     sql(s"CREATE DATABASE $dbName")
     val catalog = spark.sessionState.catalog
-    val expectedDBLocation = "file:" + appendTrailingSlash(dbPath.toString) + s"$dbName.db"
+    val expectedDBLocation = s"file:${dbPath.toUri.getPath.stripSuffix("/")}/$dbName.db"
     val db1 = catalog.getDatabaseMetadata(dbName)
     assert(db1 == CatalogDatabase(
       dbName,
@@ -857,7 +849,7 @@ class HiveDDLSuite
         val path = dir.getCanonicalPath
         spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
           .write.format("parquet").save(path)
-        sql(s"CREATE TABLE $sourceTabName USING parquet OPTIONS (PATH '$path')")
+        sql(s"CREATE TABLE $sourceTabName USING parquet OPTIONS (PATH '${dir.toURI}')")
         sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
 
         // The source table should be an external data source table
@@ -894,7 +886,7 @@ class HiveDDLSuite
   test("CREATE TABLE LIKE an external Hive serde table") {
     val catalog = spark.sessionState.catalog
     withTempDir { tmpDir =>
-      val basePath = tmpDir.getCanonicalPath
+      val basePath = tmpDir.toURI
       val sourceTabName = "tab1"
       val targetTabName = "tab2"
       withTable(sourceTabName, targetTabName) {
@@ -1112,7 +1104,7 @@ class HiveDDLSuite
     Seq("parquet", "json", "orc").foreach { fileFormat =>
       withTable("t1") {
         withTempPath { dir =>
-          val path = dir.getCanonicalPath
+          val path = dir.toURI.toString
           spark.range(1).write.format(fileFormat).save(path)
           sql(s"CREATE TABLE t1 USING $fileFormat OPTIONS (PATH '$path')")
 

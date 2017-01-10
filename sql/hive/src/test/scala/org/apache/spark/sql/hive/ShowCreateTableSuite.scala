@@ -146,7 +146,7 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
              |  c1 INT COMMENT 'bla',
              |  c2 STRING
              |)
-             |LOCATION '$dir'
+             |LOCATION '${dir.toURI}'
              |TBLPROPERTIES (
              |  'prop1' = 'value1',
              |  'prop2' = 'value2'

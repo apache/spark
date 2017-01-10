@@ -57,7 +57,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               \"separatorChar\" = \",\",
               \"quoteChar\"     = \"\\\"\",
               \"escapeChar\"    = \"\\\\\")
-            LOCATION '$tempDir'
+            LOCATION '${tempDir.toURI}'
           """)
 
         spark.conf.set(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key, true)
