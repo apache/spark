@@ -784,7 +784,7 @@ class DataStreamWriter(object):
         :param path: the path in a Hadoop supported file system
         :param format: the format used to save
         :param outputMode: specifies how data of a streaming DataFrame/Dataset is written to a
-        streaming sink. Options include:
+                           streaming sink.
 
             * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to the
               sink
