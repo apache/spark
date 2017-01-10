@@ -46,7 +46,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    *                              to the sink every time these is some updates
    *   - `OutputMode.Update()`: only the rows that were updated in the streaming DataFrame/Dataset
    *                            will be written to the sink every time there are some updates. If
-   *                            the query doesn't contain aggregations, it will be same as the
+   *                            the query doesn't contain aggregations, it will be equivalent to the
    *                            `OutputMode.Append()` mode.
    *
    * @since 2.0.0
@@ -64,7 +64,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    *                 every time these is some updates
    *   - `update`:   only the rows that were updated in the streaming DataFrame/Dataset will
    *                 be written to the sink every time there are some updates. If the query doesn't
-   *                 contain aggregations, it will be same as the `append` mode.
+   *                 contain aggregations, it will be equivalent to the `append` mode.
    * @since 2.0.0
    */
   def outputMode(outputMode: String): DataStreamWriter[T] = {
