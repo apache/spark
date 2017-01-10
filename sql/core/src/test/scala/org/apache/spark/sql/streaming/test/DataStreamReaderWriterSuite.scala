@@ -601,11 +601,9 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
         StructField("part", IntegerType), // inferred partitionColumn dataType
         StructField("id", StringType))) // used user provided partitionColumn dataType
 
-      val checkpointLoc = newMetadataDir
       val sq = sdf.writeStream
         .queryName("corruption_test")
         .format("memory")
-        .option("checkpointLocation", checkpointLoc)
         .start()
       sq.processAllAvailable()
       checkAnswer(
