@@ -107,8 +107,8 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
 
   /**
    * Param for the index in the power link function. This is used to specify the link function
-   * in the Tweedie family. Supported values: [-10.0, 10.0].
-   * Note that link power 0, 1, or -1 corresponds to the Log, Identity or Inverse
+   * in the Tweedie family.
+   * Note that link power 0, 1, -1 or 0.5 corresponds to the Log, Identity, Inverse or Sqrt
    * link, respectively.
    *
    * @group param
@@ -116,8 +116,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   @Since("2.2.0")
   final val linkPower: Param[Double] = new Param(this, "linkPower",
     "The index in the power link function. This is used to specify the link function in the " +
-    "Tweedie family. Supported values: [-10, 10].",
-    ParamValidators.inRange[Double](-10.0, 10.0))
+    "Tweedie family.", (x: Double) => true)
 
   /** @group getParam */
   @Since("2.2.0")
@@ -157,7 +156,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
       "must be specified using link, not linkPower.")
       if (isDefined(link)) {
         require(supportedFamilyAndLinkPairs.contains(
-          $(family) -> Link.fromParams(this)),
+          Family.fromParams(this) -> Link.fromParams(this)),
           s"Generalized Linear Regression with ${$(family)} family " +
             s"does not support ${$(link)} link function.")
       }
@@ -381,15 +380,15 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
    * Tweedie family is specified through linkPower.
    */
   private[regression] lazy val supportedFamilyAndLinkPairs = Set(
-    "gaussian" -> Identity, "gaussian" -> Log, "gaussian" -> Inverse,
-    "binomial" -> Logit, "binomial" -> Probit, "binomial" -> CLogLog,
-    "poisson" -> Log, "poisson" -> Identity, "poisson" -> Sqrt,
-    "gamma" -> Inverse, "gamma" -> Identity, "gamma" -> Log
+    Gaussian -> Identity, Gaussian -> Log, Gaussian -> Inverse,
+    Binomial -> Logit, Binomial -> Probit, Binomial -> CLogLog,
+    Poisson -> Log, Poisson -> Identity, Poisson -> Sqrt,
+    Gamma -> Inverse, Gamma -> Identity, Gamma -> Log
   )
 
   /** Set of family names that GeneralizedLinearRegression supports. */
   private[regression] lazy val supportedFamilyNames =
-    supportedFamilyAndLinkPairs.map(_._1).toArray :+ "tweedie"
+    supportedFamilyAndLinkPairs.map(_._1.name).toArray :+ "tweedie"
 
   /** Set of link names that GeneralizedLinearRegression supports. */
   private[regression] lazy val supportedLinkNames =
