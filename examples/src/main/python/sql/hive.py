@@ -18,7 +18,7 @@
 from __future__ import print_function
 
 # $example on:spark_hive$
-from os.path import expanduser, join
+from os.path import expanduser, join, abspath
 
 from pyspark.sql import SparkSession
 from pyspark.sql import Row
@@ -34,7 +34,7 @@ Run with:
 if __name__ == "__main__":
     # $example on:spark_hive$
     # warehouse_location points to the default location for managed databases and tables
-    warehouse_location = 'spark-warehouse'
+    warehouse_location = abspath('spark-warehouse')
 
     spark = SparkSession \
         .builder \
