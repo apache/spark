@@ -48,6 +48,17 @@ class RankingEvaluatorSuite
 
     // mpr, k = 5
     evaluator.setMetricName("mpr").setK(5)
-    assert(evaluator.evaluate(predictionAndLabels) ~== 0.25 absTol 0.01)
+    assert(evaluator.evaluate(predictionAndLabels) ~== 0.375 absTol 0.01)
+  }
+
+  test("Ranking Evaluator: no predictions") {
+    val predictionAndLabels =
+      Seq(
+        (1L, 2L, Float.NaN)
+      ).toDF(Seq("query", "label", "prediction"): _*)
+
+    // default = mpr, k = 1
+    val evaluator = new RankingEvaluator()
+    assert(evaluator.evaluate(predictionAndLabels) == 1.0)
   }
 }

@@ -22,7 +22,7 @@ import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.{col, collect_list, row_number}
+import org.apache.spark.sql.functions.{coalesce, col, collect_list, row_number, udf}
 import org.apache.spark.sql.types.LongType
 
 /**
@@ -99,14 +99,18 @@ final class RankingEvaluator @Since("2.2.0")(@Since("2.2.0") override val uid: S
     val w = Window.partitionBy(col($(queryCol))).orderBy(col($(predictionCol)).desc)
 
     val topAtk: DataFrame = dataset
+      .na.drop("all", Seq($(predictionCol)))
       .select(col($(predictionCol)), col($(labelCol)).cast(LongType), col($(queryCol)))
       .withColumn("rn", row_number().over(w)).where(col("rn") <= $(k))
       .drop("rn")
       .groupBy(col($(queryCol)))
       .agg(collect_list($(labelCol)).as("topAtk"))
 
+    val mapToEmptyArray_ = udf(() => Array.empty[Long])
+
     val predictionAndLabels: DataFrame = dataset
-      .join(topAtk, $(queryCol))
+      .join(topAtk, Seq($(queryCol)), "outer")
+      .withColumn("topAtk", coalesce(col("topAtk"), mapToEmptyArray_()))
       .select($(labelCol), "topAtk")
 
     val metrics = new MeanPercentileRankMetrics(predictionAndLabels, "topAtk", $(labelCol))
