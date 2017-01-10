@@ -33,6 +33,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.StructType
 
 class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
@@ -1287,6 +1288,82 @@ class HiveDDLSuite
         sql("INSERT INTO t3 PARTITION(p=1) SELECT 0")
         checkAnswer(spark.table("t3"), Row(0, 1))
       }
+    }
+  }
+
+  test("create hive serde table with Catalog") {
+    withTable("t") {
+      withTempDir { dir =>
+        val df = spark.catalog.createExternalTable(
+          "t",
+          "hive",
+          new StructType().add("i", "int"),
+          Map("path" -> dir.getCanonicalPath, "fileFormat" -> "parquet"))
+        assert(df.collect().isEmpty)
+
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(DDLUtils.isHiveTable(table))
+        assert(table.storage.inputFormat ==
+          Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
+        assert(table.storage.outputFormat ==
+          Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+        assert(table.storage.serde ==
+          Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+
+        sql("INSERT INTO t SELECT 1")
+        checkAnswer(spark.table("t"), Row(1))
+      }
+    }
+  }
+
+  test("create hive serde table with DataFrameWriter.saveAsTable") {
+    withTable("t", "t2") {
+      Seq(1 -> "a").toDF("i", "j")
+        .write.format("hive").option("fileFormat", "avro").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row(1, "a"))
+
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      assert(DDLUtils.isHiveTable(table))
+      assert(table.storage.inputFormat ==
+        Some("org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat"))
+      assert(table.storage.outputFormat ==
+        Some("org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat"))
+      assert(table.storage.serde ==
+        Some("org.apache.hadoop.hive.serde2.avro.AvroSerDe"))
+
+      sql("INSERT INTO t SELECT 2, 'b'")
+      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Nil)
+
+      val e = intercept[AnalysisException] {
+        Seq(1 -> "a").toDF("i", "j").write.format("hive").partitionBy("i").saveAsTable("t2")
+      }
+      assert(e.message.contains("A Create Table As Select (CTAS) statement is not allowed " +
+        "to create a partitioned table using Hive"))
+
+      val e2 = intercept[AnalysisException] {
+        Seq(1 -> "a").toDF("i", "j").write.format("hive").bucketBy(4, "i").saveAsTable("t2")
+      }
+      assert(e2.message.contains("Creating bucketed Hive serde table is not supported yet"))
+
+      val e3 = intercept[AnalysisException] {
+        spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
+      }
+      assert(e3.message.contains(
+        "CTAS for hive serde tables does not support append or overwrite semantics"))
+    }
+  }
+
+  test("read/write files with hive data source is not allowed") {
+    withTempDir { dir =>
+      val e = intercept[AnalysisException] {
+        spark.read.format("hive").load(dir.getAbsolutePath)
+      }
+      assert(e.message.contains("Hive data source can only be used with tables"))
+
+      val e2 = intercept[AnalysisException] {
+        Seq(1 -> "a").toDF("i", "j").write.format("hive").save(dir.getAbsolutePath)
+      }
+      assert(e2.message.contains("Hive data source can only be used with tables"))
     }
   }
 }
