@@ -24,7 +24,7 @@ import breeze.linalg.{DenseVector => BDV}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LinearSVCSuite._
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -39,6 +39,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   private val nPoints = 50
   @transient var smallBinaryDataset: Dataset[_] = _
   @transient var smallValidationDataset: Dataset[_] = _
+  @transient var binaryDataset: Dataset[_] = _
   private val eps: Double = 1e-5
 
   override def beforeAll(): Unit = {
@@ -50,6 +51,17 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val C = 1.0
     smallBinaryDataset = generateSVMInput(A, Array[Double](B, C), nPoints, 42).toDF()
     smallValidationDataset = generateSVMInput(A, Array[Double](B, C), nPoints, 17).toDF()
+    binaryDataset = generateSVMInput(1.0, Array[Double](1.0, 2.0, 3.0, 4.0), 10000, 42).toDF()
+  }
+
+  /**
+   * Enable the ignored test to export the dataset into CSV format,
+   * so we can validate the training accuracy compared with R's e1071 package.
+   */
+  ignore("export test data into CSV format") {
+    binaryDataset.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("target/tmp/LinearSVC/binaryDataset")
   }
 
   test("Linear SVC binary classification") {
@@ -74,13 +86,18 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
   test("linear svc: default params") {
     val lsvc = new LinearSVC()
+    assert(lsvc.getRegParam === 0.0)
+    assert(lsvc.getMaxIter === 100)
+    assert(lsvc.getFitIntercept)
+    assert(lsvc.getTol === 1E-6)
+    assert(lsvc.getStandardization)
+    assert(!lsvc.isDefined(lsvc.weightCol))
+    assert(lsvc.getThreshold === 0.0)
+    assert(lsvc.getAggregationDepth === 2)
     assert(lsvc.getLabelCol === "label")
     assert(lsvc.getFeaturesCol === "features")
     assert(lsvc.getPredictionCol === "prediction")
     assert(lsvc.getRawPredictionCol === "rawPrediction")
-    assert(!lsvc.isDefined(lsvc.weightCol))
-    assert(lsvc.getFitIntercept)
-    assert(lsvc.getStandardization)
     val model = lsvc.setMaxIter(2).fit(smallBinaryDataset)
     model.transform(smallBinaryDataset)
       .select("label", "prediction", "rawPrediction")
@@ -98,9 +115,13 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("linear svc doesn't fit intercept when fitIntercept is off") {
-    val lsvc = new LinearSVC().setFitIntercept(false)
+    val lsvc = new LinearSVC().setFitIntercept(false).setMaxIter(2)
     val model = lsvc.fit(smallBinaryDataset)
     assert(model.intercept === 0.0)
+
+    val lsvc2 = new LinearSVC().setFitIntercept(true).setMaxIter(2)
+    val model2 = lsvc2.fit(smallBinaryDataset)
+    assert(model2.intercept !== 0.0)
   }
 
   test("linearSVC with sample weights") {
@@ -117,6 +138,35 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       dataset.as[LabeledPoint], estimator, 2, modelEquals)
     MLTestingUtils.testOversamplingVsWeighting[LinearSVCModel, LinearSVC](
       dataset.as[LabeledPoint], estimator, modelEquals, 42L)
+  }
+
+  test("linearSVC comparison with R e1071") {
+    val trainer1 = (new LinearSVC).setFitIntercept(true).setMaxIter(100)
+    val model1 = trainer1.fit(binaryDataset)
+
+    /*
+      Use the following R code to load the data and train the model using glmnet package.
+
+      library(e1071)
+      data <- read.csv("/home/yuhao/workspace/github/hhbyyh/Test/SVM/svm/part-00000", header=FALSE)
+      label <- factor(data$V1)
+      features <- as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
+      svm_model <- svm(features, label, type='C', kernel='linear', cost=10, scale=F)
+      w <- t(svm_model$coefs) %*% svm_model$SV
+      w
+      -svm_model$rho
+
+      > w
+             data.V2   data.V3   data.V4   data.V5
+      [1,] -7.310475 -14.89742 -22.21019 -29.83495
+      > -svm_model$rho
+      [1] -7.440296
+
+     */
+    val coefficientsR = Vectors.dense(-7.310475, -14.89742, -22.21019, -29.83495)
+    val interceptR = -7.440296
+    assert(model1.intercept / interceptR ~== -0.9 relTol 2E-2)
+    assert((model1.coefficients.asBreeze :/ coefficientsR.asBreeze).forall(_ ~== -0.9 relTol 1E-2))
   }
 
   test("read/write: SVM") {
@@ -147,17 +197,17 @@ object LinearSVCSuite {
 
     // Generate noisy input of the form Y = signum(x.dot(weights) + intercept + noise)
   def generateSVMInput(
-    intercept: Double,
-    weights: Array[Double],
-    nPoints: Int,
-    seed: Int): Seq[LabeledPoint] = {
+      intercept: Double,
+      weights: Array[Double],
+      nPoints: Int,
+      seed: Int): Seq[LabeledPoint] = {
     val rnd = new Random(seed)
     val weightsMat = new BDV(weights)
     val x = Array.fill[Array[Double]](nPoints)(
         Array.fill[Double](weights.length)(rnd.nextDouble() * 2.0 - 1.0))
     val y = x.map { xi =>
       val yD = new BDV(xi).dot(weightsMat) + intercept + 0.01 * rnd.nextGaussian()
-      if (yD < 0) 0.0 else 1.0
+      if (yD > 0) 1.0 else 0.0
     }
     y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
   }

@@ -495,13 +495,14 @@ private class LinearSVCAggregator(
       }
 
       if (1.0 > labelScaled * dotProduct) {
+        val gradientScale = -labelScaled * weight
         features.foreachActive { (index, value) =>
           if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-            localGradientSumArray(index) -= value * labelScaled * weight / localFeaturesStd(index)
+            localGradientSumArray(index) += value * gradientScale / localFeaturesStd(index)
           }
         }
         if (fitIntercept) {
-          localGradientSumArray(localGradientSumArray.length - 1) -= labelScaled * weight
+          localGradientSumArray(localGradientSumArray.length - 1) += gradientScale
         }
       }
 
