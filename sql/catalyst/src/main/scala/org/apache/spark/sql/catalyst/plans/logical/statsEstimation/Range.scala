@@ -113,4 +113,5 @@ object Range {
           DateTimeUtils.toJavaTimestamp(n.max.longValue()))
     }
   }
+
 }
