@@ -167,9 +167,9 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rdd = sc.parallelize(data)
 
     val strategy = new OldStrategy(OldAlgo.Regression, Gini, maxDepth = 2,
-      maxBins = 100)
+      maxBins = 5)
     intercept[IllegalArgumentException] {
-      DecisionTreeMetadata.buildMetadata(rdd, strategy)
+      RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
     }
   }
 
@@ -181,7 +181,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       Gini,
       maxDepth = 2,
       numClasses = 2,
-      maxBins = 100)
+      maxBins = 5)
     val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
     assert(tree.rootNode.impurity === -1.0)
     assert(tree.depth === 0)
@@ -197,8 +197,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
           Gini,
           maxDepth = 2,
           numClasses = 2,
-          maxBins = 100,
-          categoricalFeaturesInfo = Map(0 -> 1, 1 -> 5))
+          maxBins = 5,
+          categoricalFeaturesInfo = Map(0 -> 1))
     val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
     assert(tree.rootNode.impurity === -1.0)
     assert(tree.depth === 0)
@@ -210,7 +210,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       Gini,
       maxDepth = 2,
       numClasses = 2,
-      maxBins = 100)
+      maxBins = 5)
     val Array(tree2) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
     assert(tree2.rootNode.impurity === -1.0)
     assert(tree2.depth === 0)

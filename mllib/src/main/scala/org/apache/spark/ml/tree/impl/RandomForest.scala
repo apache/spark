@@ -842,7 +842,7 @@ private[spark] object RandomForest extends Logging {
           (new ContinuousSplit(dummyFeatureIndex, 0),
             ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator))
         } else {
-          val numCategories = binAggregates.metadata.numBins(dummyFeatureIndex)
+          val numCategories = binAggregates.metadata.featureArity(dummyFeatureIndex)
           (new CategoricalSplit(dummyFeatureIndex, Array(), numCategories),
             ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator))
         }
