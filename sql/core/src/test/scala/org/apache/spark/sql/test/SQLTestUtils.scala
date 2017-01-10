@@ -96,7 +96,7 @@ private[sql] trait SQLTestUtils
     val (keys, values) = pairs.unzip
     val currentValues = keys.map { key =>
       if (spark.conf.contains(key)) {
-        Try(spark.conf.get(key)).toOption
+        Some(spark.conf.get(key))
       } else {
         None
       }
