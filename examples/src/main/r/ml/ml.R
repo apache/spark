@@ -48,7 +48,9 @@ unlink(modelPath)
 # $example off:read_write$
 
 ############################ fit models with spark.lapply #####################################
-# Perform distributed training of multiple models with spark.lapply
+# $example on:lapply$
+# Perform distributed training of multiple models with spark.lapply. Here we pass a read-only
+# list of arguments which specifies cost values of the svm algorithm should be.
 costs <- exp(seq(from = log(1), to = log(1000), length.out = 5))
 train <- function(cost) {
   stopifnot(requireNamespace("e1071", quietly = TRUE))
@@ -56,10 +58,12 @@ train <- function(cost) {
   summary(model)
 }
 
+# Return a list of model's summaries
 model.summaries <- spark.lapply(costs, train)
 
 # Print the summary of each model
 print(model.summaries)
+# $example off:lapply$
 
 # Stop the SparkSession now
 sparkR.session.stop()
