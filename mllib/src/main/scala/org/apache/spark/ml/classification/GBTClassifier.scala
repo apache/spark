@@ -279,7 +279,7 @@ class GBTClassificationModel private[ml](
       // and negative result:
       // p-(x) = 1 / (1 + e^(2 * F(x)))
       case dv: DenseVector =>
-        dv.values(0) = classProbability(getLossType, dv.values(0))
+        dv.values(0) = getOldLossType.computeProbability(dv.values(0))
         dv.values(1) = 1.0 - dv.values(0)
         dv
       case sv: SparseVector =>
@@ -314,13 +314,6 @@ class GBTClassificationModel private[ml](
    */
   @Since("2.0.0")
   lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)
-
-  private def classProbability(loss: String, rawPrediction: Double): Double = {
-    loss match {
-      case "logistic" => LogLoss.computeProbability(rawPrediction)
-      case _ => throw new Exception("Only logistic loss is supported ...")
-    }
-  }
 
   private def margin(features: Vector): Double = {
     val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
