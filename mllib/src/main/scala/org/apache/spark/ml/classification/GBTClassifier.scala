@@ -20,7 +20,6 @@ package org.apache.spark.ml.classification
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.LabeledPoint
@@ -32,6 +31,7 @@ import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.loss.{ClassificationLoss, LogLoss}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
@@ -227,7 +227,6 @@ class GBTClassificationModel private[ml](
    * @param _treeWeights  Weights for the decision trees in the ensemble.
    * @param numFeatures  The number of features.
    */
-  @Since("1.6.0")
   private[ml] def this(uid: String, _trees: Array[DecisionTreeRegressionModel],
     _treeWeights: Array[Double], numFeatures: Int) =
   this(uid, _trees, _treeWeights, numFeatures, 2)
@@ -263,16 +262,12 @@ class GBTClassificationModel private[ml](
   }
 
   override protected def predict(features: Vector): Double = {
-    // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
-    // Classifies by thresholding sum of weighted tree predictions
-    val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    val prediction = blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
+    val prediction: Double = margin(features)
     if (prediction > 0.0) 1.0 else 0.0
   }
 
   override protected def predictRaw(features: Vector): Vector = {
-    val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    val prediction = blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
+    val prediction: Double = margin(features)
     Vectors.dense(Array(-prediction, prediction))
   }
 
@@ -283,12 +278,8 @@ class GBTClassificationModel private[ml](
       // and negative result:
       // p-(x) = 1 / (1 + e^(2 * F(x)))
       case dv: DenseVector =>
-        var i = 0
-        val size = dv.size
-        while (i < size) {
-          dv.values(i) = classProbability(getLossType, dv.values(i))
-          i += 1
-        }
+        dv.values(0) = classProbability(getLossType, dv.values(0))
+        dv.values(1) = 1.0 - dv.values(0)
         dv
       case sv: SparseVector =>
         throw new RuntimeException("Unexpected error in GBTClassificationModel:" +
@@ -325,9 +316,14 @@ class GBTClassificationModel private[ml](
 
   private def classProbability(loss: String, rawPrediction: Double): Double = {
     loss match {
-      case "logistic" => 1 / (1 + math.exp(-2 * rawPrediction))
+      case "logistic" => LogLoss.computeProbability(rawPrediction)
       case _ => throw new Exception("Only logistic loss is supported ...")
     }
+  }
+
+  private def margin(features: Vector): Double = {
+    val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
+    blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
   }
 
   /** (private[ml]) Convert to a model in the old API */

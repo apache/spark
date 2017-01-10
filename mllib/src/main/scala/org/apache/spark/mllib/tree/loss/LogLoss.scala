@@ -20,6 +20,15 @@ package org.apache.spark.mllib.tree.loss
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.util.MLUtils
 
+/**
+ * :: DeveloperApi ::
+ * Trait for adding "pluggable" probability function for the gradient boosting algorithm.
+ */
+@Since("1.2.0")
+@DeveloperApi
+trait ClassificationLoss extends Loss {
+  private[spark] def computeProbability(prediction: Double): Double
+}
 
 /**
  * :: DeveloperApi ::
@@ -32,7 +41,7 @@ import org.apache.spark.mllib.util.MLUtils
  */
 @Since("1.2.0")
 @DeveloperApi
-object LogLoss extends Loss {
+object LogLoss extends ClassificationLoss {
 
   /**
    * Method to calculate the loss gradients for the gradient boosting calculation for binary
@@ -51,5 +60,9 @@ object LogLoss extends Loss {
     val margin = 2.0 * label * prediction
     // The following is equivalent to 2.0 * log(1 + exp(-margin)) but more numerically stable.
     2.0 * MLUtils.log1pExp(-margin)
+  }
+
+  override private[spark] def computeProbability(prediction: Double): Double = {
+    1 / (1 + math.exp(-2 * prediction))
   }
 }
