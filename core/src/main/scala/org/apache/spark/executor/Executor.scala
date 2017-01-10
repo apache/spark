@@ -19,15 +19,11 @@ package org.apache.spark.executor
 
 import java.io.{File, NotSerializableException}
 import java.lang.management.ManagementFactory
-import java.net.{URI, URL}
+import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
-
-import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashMap}
-import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -40,15 +36,17 @@ import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
-
+import scala.collection.JavaConverters._
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.util.control.NonFatal
 
 /**
- * Spark executor, backed by a threadpool to run tasks.
- *
- * This can be used with Mesos, YARN, and the standalone scheduler.
- * An internal RPC interface is used for communication with the driver,
- * except in the case of Mesos fine-grained mode.
- */
+  * Spark executor, backed by a threadpool to run tasks.
+  *
+  * This can be used with Mesos, YARN, and the standalone scheduler.
+  * An internal RPC interface is used for communication with the driver,
+  * except in the case of Mesos fine-grained mode.
+  */
 private[spark] class Executor(
     executorId: String,
     executorHostname: String,
@@ -651,7 +649,7 @@ private[spark] class Executor(
         currentFiles(name) = timestamp
       }
       for ((name, timestamp) <- newJars) {
-        val localName = new URI(name).getPath.split("/").last
+        val localName = name.split("/").last
         val currentTimeStamp = currentJars.get(name)
           .orElse(currentJars.get(localName))
           .getOrElse(-1L)
