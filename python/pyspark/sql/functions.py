@@ -1826,7 +1826,6 @@ class UserDefinedFunction(object):
     def __init__(self, func, returnType, name=None):
         self.func = func
         self.returnType = returnType
-        self._broadcast = None
         self._judf = self._create_judf(name)
 
     def _create_judf(self, name):
@@ -1841,11 +1840,6 @@ class UserDefinedFunction(object):
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
             name, wrapped_func, jdt)
         return judf
-
-    def __del__(self):
-        if self._broadcast is not None:
-            self._broadcast.unpersist()
-            self._broadcast = None
 
     def __call__(self, *cols):
         sc = SparkContext._active_spark_context
