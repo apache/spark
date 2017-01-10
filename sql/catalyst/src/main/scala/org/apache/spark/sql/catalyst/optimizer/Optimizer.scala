@@ -186,9 +186,58 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
     }
   }
 
+  // Project [1 AS cste#13, col#12]
+  // +- Union
+  //   :- Project [col#14 AS col#12]
+  //   :  +- Join LeftOuter
+  //   :     :- MetastoreRelation default, p1
+  //   :     +- MetastoreRelation default, p2
+  //   +- Project [col#16 AS col#12]
+  //      +- MetastoreRelation default, p3
+  //
+  // if we replace col#12 with col#16, Project [1 AS cste#13, col#12]
+  // change to Project [1 AS cste#13, col#16],
+  // Project [1 AS cste#13, col#16]
+  // +- Union
+  //   :- Project [col#14 AS col#12]
+  //   :  +- Join LeftOuter
+  //   :     :- MetastoreRelation default, p1
+  //   :     +- MetastoreRelation default, p2
+  //      +- MetastoreRelation default, p3
+  //
+  // after then apply PushProjectionThroughUnion, because the output attributes
+  // of a union are always equal to the left child's output,
+  // while col#16 does not exist in left child, it will throw a exception.
+  //
+  // if we replace col#12 with col#14, Project [1 AS cste#13, col#12]
+  // change to Project [1 AS cste#13, col#14],
+  // Project [1 AS cste#13, col#14]
+  // +- Union
+  //   :  +- Join LeftOuter
+  //   :     :- MetastoreRelation default, p1
+  //   :     +- MetastoreRelation default, p2
+  //   +- Project [col#16 AS col#12]
+  //      +- MetastoreRelation default, p3
+  //
+  // and then apply PushProjectionThroughUnion,
+  // the attribute(col#14) of union exists in left child, it will be ok.
+  //
+  // so here we should not do RemoveAliasOnlyProject
+  // when the project is the right child of the Union,
+  // this function is to check it.
+  def isUnionRightProj(p: Project, plan: LogicalPlan): Boolean = {
+    plan.collectFirst {
+      case u @ Union(children) if children.tail.exists(_ eq p)
+        && children.head.isInstanceOf[Project]
+        && p.projectList.exists(proj =>
+        children.head.asInstanceOf[Project].projectList.exists(_.exprId == proj.exprId)) => p
+    }.nonEmpty
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = {
     val aliasOnlyProject = plan.collectFirst {
-      case p @ Project(pList, child) if isAliasOnly(pList, child.output) => p
+      case p @ Project(pList, child) if isAliasOnly(pList, child.output)
+        && !isUnionRightProj(p, plan) => p
     }
 
     aliasOnlyProject.map { case proj =>
