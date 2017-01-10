@@ -142,11 +142,14 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(!model.hasSummary)
 
     // Check validity of LogLikelihood
-    val llk = transformed.select(probabilityColName).map(_.getAs[Vector](0)).map { probs =>
-        val likelihood = probs.toArray.zip(model.weights).map { case (a, b) => a * b }.sum
+    transformed.select(probabilityColName).rdd.map(_.getAs[Vector](0))
+    val llk = transformed.select(probabilityColName).rdd.map(_.getAs[Vector](0))
+      .map { probs =>
+        val likelihood = probs.toArray.zip(model.weights).map {
+          case (a, b) => a * b }.sum
         math.log(likelihood)
-    }.rdd.sum()
-    assert(model.computeLogLikelihood(dataset) === llk)
+    }.sum()
+    assert(model.computeLogLikelihood(dataset) ~== llk relTol 1E-8)
   }
 
   test("check LogLikelihood") {
