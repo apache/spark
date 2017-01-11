@@ -385,7 +385,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           case LogicalRelation(src: BaseRelation, _, _) => src
           case relation: CatalogRelation if DDLUtils.isHiveTable(relation.catalogTable) => relation
         }
-
         EliminateSubqueryAliases(catalog.lookupRelation(tableIdentWithDB)) match {
           // Only do the check if the table is a data source table (the relation is a BaseRelation).
           // for creating hive tables.

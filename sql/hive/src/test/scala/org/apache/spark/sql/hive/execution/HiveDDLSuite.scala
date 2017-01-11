@@ -1314,6 +1314,10 @@ class HiveDDLSuite
         .write.format("hive").option("fileFormat", "avro").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a"))
 
+      Seq("c" -> 1).toDF("i", "j")
+        .write.format("hive").mode(SaveMode.Overwrite).option("fileFormat", "avro").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row("c", 1))
+
       Seq(9 -> "x").toDF("i", "j")
         .write.format("hive").mode(SaveMode.Overwrite).option("fileFormat", "avro").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(9, "x"))
