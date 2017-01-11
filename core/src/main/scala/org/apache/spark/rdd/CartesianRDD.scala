@@ -20,12 +20,13 @@ package org.apache.spark.rdd
 import java.io.{IOException, ObjectOutputStream}
 
 import scala.reflect.ClassTag
-import org.apache.spark._
+
+import org.apache.spark.{Dependency, Partition, Partitioner, ShuffleDependency, SparkContext,
+    SparkEnv, TaskContext}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
 
-private[spark]
-class CartesianPartition(
+private[spark] class CartesianPartition(
     idx: Int,
     @transient private val rdd1: RDD[_],
     @transient private val rdd2: RDD[_],
