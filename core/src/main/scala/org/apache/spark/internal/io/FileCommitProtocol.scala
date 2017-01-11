@@ -112,6 +112,15 @@ abstract class FileCommitProtocol {
    * just crashes (or killed) before it can call abort.
    */
   def abortTask(taskContext: TaskAttemptContext): Unit
+
+  /**
+   * Specifies that a file should be deleted with the commit of this job. The default
+   * implementation deletes the file immediately, but this may be overriden to delay the physical
+   * deletion of the file until commit time.
+   */
+  def deleteFile(fs: FileSystem, path: Path, recursive: Boolean): Boolean = {
+    fs.delete(path, recursive)
+  }
 }
 
 
