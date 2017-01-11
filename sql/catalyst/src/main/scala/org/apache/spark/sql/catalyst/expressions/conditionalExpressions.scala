@@ -362,7 +362,7 @@ case class Field(children: Seq[Expression]) extends Expression {
   override def eval(input: InternalRow): Any = {
     val target = children.head.eval(input)
     @tailrec def findEqual(index: Int): Int = {
-      if (index == dataTypeMatchIndex.size) {
+      if (index == dataTypeMatchIndex.length) {
         0
       } else {
         val value = children(dataTypeMatchIndex(index)).eval(input)
