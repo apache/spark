@@ -184,10 +184,10 @@ getDefaultSqlSource <- function() {
 #'
 #' Converts R data.frame or list into SparkDataFrame.
 #'
-#' @param data an RDD or list or data.frame.
+#' @param data a list or data.frame.
 #' @param schema a list of column names or named list (StructType), optional.
 #' @param samplingRatio Currently not used.
-#' @param numPartitions the number of partitions of the SparkDataFrame.
+#' @param numPartitions the number of partitions of the SparkDataFrame. Defaults to 1.
 #' @return A SparkDataFrame.
 #' @rdname createDataFrame
 #' @export
@@ -240,7 +240,7 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0,
     if (!is.null(numPartitions)) {
       rdd <- parallelize(sc, data, numSlices = numToInt(numPartitions))
     } else {
-      rdd <- parallelize(sc, data)
+      rdd <- parallelize(sc, data, numSlices = 1)
     }
   } else if (inherits(data, "RDD")) {
     rdd <- data
