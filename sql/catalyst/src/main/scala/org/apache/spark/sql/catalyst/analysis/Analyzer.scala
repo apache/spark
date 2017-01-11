@@ -608,9 +608,8 @@ class Analyzer(
         u: UnresolvedRelation,
         defaultDatabase: Option[String] = None): LogicalPlan = {
       try {
-        // If `u.tableIdentifier` has a empty database part, copy the identifier with
-        // `defaultDatabase` as the database part.
-        val tableIdentWithDb = u.tableIdentifier.withDatabase(defaultDatabase)
+        val tableIdentWithDb = u.tableIdentifier.copy(
+          database = u.tableIdentifier.database.orElse(defaultDatabase))
         catalog.lookupRelation(tableIdentWithDb, u.alias)
       } catch {
         case _: NoSuchTableException =>
