@@ -158,7 +158,7 @@ class GBTClassifier @Since("1.4.0") (
     val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
 
-    val numClasses: Int = 2
+    val numClasses = 2
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
         ".train() called with non-matching numClasses and thresholds.length." +
@@ -201,8 +201,6 @@ object GBTClassifier extends DefaultParamsReadable[GBTClassifier] {
  *
  * @param _trees  Decision trees in the ensemble.
  * @param _treeWeights  Weights for the decision trees in the ensemble.
- * @param numFeatures  The number of features.
- * @param numClasses  The number of classes.
  *
  * @note Multiclass labels are not currently supported.
  */
@@ -329,6 +327,7 @@ class GBTClassificationModel private[ml](
     new OldGBTModel(OldAlgo.Classification, _trees.map(_.toOld), _treeWeights)
   }
 
+  // hard coded loss, which is not meant to be changed in the model
   private val loss = getOldLossType
 
   @Since("2.0.0")
