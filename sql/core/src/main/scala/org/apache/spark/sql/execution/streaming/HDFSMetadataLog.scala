@@ -140,7 +140,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
 
   def writeTempBatch(metadata: T, writer: (T, OutputStream) => Unit = serialize): Option[Path] = {
     var nextId = 0
-    while (true) {
+    while(true) {
       val tempPath = new Path(metadataPath, s".${UUID.randomUUID.toString}.tmp")
       try {
         val output = fileManager.create(tempPath)
