@@ -55,6 +55,7 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """
         return self.call("getFreqItemsets").map(lambda x: (FPGrowth.FreqItemset(x[0], x[1])))
 
+    @ignore_unicode_prefix
     @since("2.2.0")
     def generateAssociationRules(self, confidence):
         """
