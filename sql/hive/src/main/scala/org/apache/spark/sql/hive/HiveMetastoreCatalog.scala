@@ -111,6 +111,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     new Path(new Path(dbLocation), tblName).toString
   }
 
+  /**
+   * Returns a [[LogicalPlan]] that represents the given table or view from Hive metastore.
+   *
+   * @param tableIdent The name of the table/view that we look up.
+   * @param alias The alias name of the table/view that we look up.
+   * @return a [[LogicalPlan]] that represents the given table or view from Hive metastore.
+   */
   def lookupRelation(
       tableIdent: TableIdentifier,
       alias: Option[String]): LogicalPlan = {
@@ -125,11 +132,16 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       // Otherwise, wrap the table with a Subquery using the table name.
       alias.map(a => SubqueryAlias(a, qualifiedTable, None)).getOrElse(qualifiedTable)
     } else if (table.tableType == CatalogTableType.VIEW) {
+      val tableIdentifier = table.identifier
       val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
-      SubqueryAlias(
-        alias.getOrElse(table.identifier.table),
-        sparkSession.sessionState.sqlParser.parsePlan(viewText),
-        Option(table.identifier))
+      // The relation is a view, so we wrap the relation by:
+      // 1. Add a [[View]] operator over the relation to keep track of the view desc;
+      // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
+      val child = View(
+        desc = table,
+        output = table.schema.toAttributes,
+        child = sparkSession.sessionState.sqlParser.parsePlan(viewText))
+      SubqueryAlias(alias.getOrElse(tableIdentifier.table), child, Option(tableIdentifier))
     } else {
       val qualifiedTable =
         MetastoreRelation(
