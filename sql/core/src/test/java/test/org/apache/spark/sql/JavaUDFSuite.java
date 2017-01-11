@@ -108,4 +108,19 @@ public class JavaUDFSuite implements Serializable {
     result = spark.sql("SELECT stringLengthTest('test', 'test2')").head();
     Assert.assertEquals(9, result.getInt(0));
   }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void udf4Test() {
+    spark.udf().register("inc", new UDF1<Long, Long>() {
+      @Override
+      public Long call(Long i) {
+        return i + 1;
+      }
+    }, DataTypes.LongType);
+
+    spark.range(10).toDF("x").createOrReplaceTempView("tmp");
+    Row result = spark.sql("SELECT inc(x) FROM tmp GROUP BY inc(x)").head();
+    Assert.assertEquals(7, result.getLong(0));
+  }
 }
