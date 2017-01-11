@@ -82,17 +82,22 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   }
 
   /** A cache for the estimated statistics, such that it will only be computed once. */
-  private val statsCache = new ThreadLocal[Option[Statistics]] {
-    override protected def initialValue: Option[Statistics] = None
+  private var statsCache: Option[Statistics] = None
+
+  /**
+   * Returns the estimated statistics for the current logical plan node. Under the hood, this
+   * method caches the return value, which is computed based on the configuration passed in the
+   * first time. If the configuration changes, the cache can be invalidated by calling
+   * [[invalidateStatsCache()]].
+   */
+  final def stats(conf: CatalystConf): Statistics = statsCache.getOrElse {
+    statsCache = Some(computeStats(conf))
+    statsCache.get
   }
 
-  def stats(conf: CatalystConf): Statistics = statsCache.get.getOrElse {
-    statsCache.set(Some(computeStats(conf)))
-    statsCache.get.get
-  }
-
-  def invalidateStatsCache(): Unit = {
-    statsCache.set(None)
+  /** Invalidates the stats cache. See [[stats]] for more information. */
+  final def invalidateStatsCache(): Unit = {
+    statsCache = None
     children.foreach(_.invalidateStatsCache())
   }
 
