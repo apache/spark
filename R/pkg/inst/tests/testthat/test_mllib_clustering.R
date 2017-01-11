@@ -134,10 +134,10 @@ test_that("spark.kmeans", {
   unlink(modelPath)
 
   # Test Kmeans on dataset that is sensitive to seed value
-  col1 <- c(1,2,3,4,0,1,2,3,4,0)
-  col2 <- c(1,2,3,4,0,1,2,3,4,0)
-  col3 <- c(1,2,3,4,0,1,2,3,4,0)
-  cols <- as.data.frame(cbind(col1, col2 , col3))
+  col1 <- c(1, 2, 3, 4, 0, 1, 2, 3, 4, 0)
+  col2 <- c(1, 2, 3, 4, 0, 1, 2, 3, 4, 0)
+  col3 <- c(1, 2, 3, 4, 0, 1, 2, 3, 4, 0)
+  cols <- as.data.frame(cbind(col1, col2, col3))
   df <- createDataFrame(cols)
 
   model1 <- spark.kmeans(data = df, ~ ., k = 5, maxIter = 10,
