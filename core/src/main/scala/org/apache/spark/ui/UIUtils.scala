@@ -422,7 +422,7 @@ private[spark] object UIUtils extends Logging {
    * the whole string will rendered as a simple escaped text.
    *
    * Note: In terms of security, only anchor tags with root relative links are supported. So any
-   * attempts to embed links outside Spark UI, or other tags like &lt;script&gt; will cause in
+   * attempts to embed links outside Spark UI, or other tags like {@code <script>} will cause in
    * the whole description to be treated as plain text.
    *
    * @param desc        the original job or stage description string, which may contain html tags.

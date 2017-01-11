@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 import scala.util.Try
 
+import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -203,7 +204,7 @@ case class LoadDataCommand(
         throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
           s"but number of columns in provided partition spec (${partition.get.size}) " +
           s"do not match number of partitioned columns in table " +
-          s"(s${targetTable.partitionColumnNames.size})")
+          s"(${targetTable.partitionColumnNames.size})")
       }
       partition.get.keys.foreach { colName =>
         if (!targetTable.partitionColumnNames.contains(colName)) {
@@ -222,25 +223,34 @@ case class LoadDataCommand(
     val loadPath =
       if (isLocal) {
         val uri = Utils.resolveURI(path)
-        val filePath = uri.getPath()
-        val exists = if (filePath.contains("*")) {
+        val file = new File(uri.getPath)
+        val exists = if (file.getAbsolutePath.contains("*")) {
           val fileSystem = FileSystems.getDefault
-          val pathPattern = fileSystem.getPath(filePath)
-          val dir = pathPattern.getParent.toString
+          val dir = file.getParentFile.getAbsolutePath
           if (dir.contains("*")) {
             throw new AnalysisException(
               s"LOAD DATA input path allows only filename wildcard: $path")
           }
 
+          // Note that special characters such as "*" on Windows are not allowed as a path.
+          // Calling `WindowsFileSystem.getPath` throws an exception if there are in the path.
+          val dirPath = fileSystem.getPath(dir)
+          val pathPattern = new File(dirPath.toAbsolutePath.toString, file.getName).toURI.getPath
+          val safePathPattern = if (Utils.isWindows) {
+            // On Windows, the pattern should not start with slashes for absolute file paths.
+            pathPattern.stripPrefix("/")
+          } else {
+            pathPattern
+          }
           val files = new File(dir).listFiles()
           if (files == null) {
             false
           } else {
-            val matcher = fileSystem.getPathMatcher("glob:" + pathPattern.toAbsolutePath)
+            val matcher = fileSystem.getPathMatcher("glob:" + safePathPattern)
             files.exists(f => matcher.matches(fileSystem.getPath(f.getAbsolutePath)))
           }
         } else {
-          new File(filePath).exists()
+          new File(file.getAbsolutePath).exists()
         }
         if (!exists) {
           throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
@@ -297,13 +307,15 @@ case class LoadDataCommand(
         partition.get,
         isOverwrite,
         holdDDLTime = false,
-        inheritTableSpecs = true)
+        inheritTableSpecs = true,
+        isSrcLocal = isLocal)
     } else {
       catalog.loadTable(
         targetTable.identifier,
         loadPath.toString,
         isOverwrite,
-        holdDDLTime = false)
+        holdDDLTime = false,
+        isSrcLocal = isLocal)
     }
     Seq.empty[Row]
   }
@@ -489,7 +501,7 @@ case class DescribeTableCommand(
     if (table.tableType == CatalogTableType.VIEW) describeViewInfo(table, buffer)
 
     if (DDLUtils.isDatasourceTable(table) && table.tracksPartitionsInCatalog) {
-      append(buffer, "Partition Provider:", "Hive", "")
+      append(buffer, "Partition Provider:", "Catalog", "")
     }
   }
 
@@ -503,7 +515,8 @@ case class DescribeTableCommand(
     describeBucketingInfo(metadata, buffer)
 
     append(buffer, "Storage Desc Parameters:", "", "")
-    metadata.storage.properties.foreach { case (key, value) =>
+    val maskedProperties = CatalogUtils.maskCredentials(metadata.storage.properties)
+    maskedProperties.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
     }
   }
@@ -590,17 +603,25 @@ case class DescribeTableCommand(
  * The syntax of using this command in SQL is:
  * {{{
  *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
+ *   SHOW TABLE EXTENDED [(IN|FROM) database_name] LIKE 'identifier_with_wildcards';
  * }}}
  */
 case class ShowTablesCommand(
     databaseName: Option[String],
-    tableIdentifierPattern: Option[String]) extends RunnableCommand {
+    tableIdentifierPattern: Option[String],
+    isExtended: Boolean = false) extends RunnableCommand {
 
-  // The result of SHOW TABLES has three columns: database, tableName and isTemporary.
+  // The result of SHOW TABLES/SHOW TABLE has three basic columns: database, tableName and
+  // isTemporary. If `isExtended` is true, append column `information` to the output columns.
   override val output: Seq[Attribute] = {
+    val tableExtendedInfo = if (isExtended) {
+      AttributeReference("information", StringType, nullable = false)() :: Nil
+    } else {
+      Nil
+    }
     AttributeReference("database", StringType, nullable = false)() ::
       AttributeReference("tableName", StringType, nullable = false)() ::
-      AttributeReference("isTemporary", BooleanType, nullable = false)() :: Nil
+      AttributeReference("isTemporary", BooleanType, nullable = false)() :: tableExtendedInfo
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -611,8 +632,15 @@ case class ShowTablesCommand(
     val tables =
       tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
     tables.map { tableIdent =>
+      val database = tableIdent.database.getOrElse("")
+      val tableName = tableIdent.table
       val isTemp = catalog.isTemporaryTable(tableIdent)
-      Row(tableIdent.database.getOrElse(""), tableIdent.table, isTemp)
+      if (isExtended) {
+        val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).toString
+        Row(database, tableName, isTemp, s"${information}\n")
+      } else {
+        Row(database, tableName, isTemp)
+      }
     }
   }
 }
@@ -714,13 +742,6 @@ case class ShowPartitionsCommand(
     AttributeReference("partition", StringType, nullable = false)() :: Nil
   }
 
-  private def getPartName(spec: TablePartitionSpec, partColNames: Seq[String]): String = {
-    partColNames.map { name =>
-      ExternalCatalogUtils.escapePathName(name) + "=" +
-        ExternalCatalogUtils.escapePathName(spec(name))
-    }.mkString(File.separator)
-  }
-
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
@@ -757,10 +778,7 @@ case class ShowPartitionsCommand(
       }
     }
 
-    val partNames = catalog.listPartitions(tableName, spec).map { p =>
-      getPartName(p.spec, table.partitionColumnNames)
-    }
-
+    val partNames = catalog.listPartitionNames(tableName, spec)
     partNames.map(Row(_))
   }
 }

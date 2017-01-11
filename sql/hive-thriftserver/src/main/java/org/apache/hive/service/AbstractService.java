@@ -151,7 +151,7 @@ public abstract class AbstractService implements Service {
   }
 
   /**
-   * Verify that that a service is in a given state.
+   * Verify that a service is in a given state.
    *
    * @param currentState
    *          the desired state

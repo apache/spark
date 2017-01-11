@@ -45,7 +45,8 @@ class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: Str
   def this() = this(Identifiable.randomUID("poly"))
 
   /**
-   * The polynomial degree to expand, which should be >= 1.  A value of 1 means no expansion.
+   * The polynomial degree to expand, which should be greater than equal to 1. A value of 1 means
+   * no expansion.
    * Default: 2
    * @group param
    */

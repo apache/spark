@@ -61,7 +61,12 @@ private[hive] case class MetastoreRelation(
   override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
 
   private def toHiveColumn(c: StructField): FieldSchema = {
-    new FieldSchema(c.name, c.dataType.catalogString, c.getComment.orNull)
+    val typeString = if (c.metadata.contains(HiveUtils.hiveTypeString)) {
+      c.metadata.getString(HiveUtils.hiveTypeString)
+    } else {
+      c.dataType.catalogString
+    }
+    new FieldSchema(c.name, typeString, c.getComment.orNull)
   }
 
   // TODO: merge this with HiveClientImpl#toHiveTable
@@ -108,7 +113,7 @@ private[hive] case class MetastoreRelation(
   }
 
   @transient override lazy val statistics: Statistics = {
-    catalogTable.stats.getOrElse(Statistics(
+    catalogTable.stats.map(_.toPlanStats(output)).getOrElse(Statistics(
       sizeInBytes = {
         val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
         val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)

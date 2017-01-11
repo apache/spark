@@ -737,26 +737,32 @@ setMethod("repartition",
 
 #' toJSON
 #'
-#' Convert the rows of a SparkDataFrame into JSON objects and return an RDD where
-#' each element contains a JSON string.
+#' Converts a SparkDataFrame into a SparkDataFrame of JSON string.
 #'
-#' @param x A SparkDataFrame
-#' @return A StringRRDD of JSON objects
+#' Each row is turned into a JSON document with columns as different fields.
+#' The returned SparkDataFrame has a single character column with the name \code{value}
+#'
+#' @param x a SparkDataFrame
+#' @return a SparkDataFrame
+#' @family SparkDataFrame functions
+#' @rdname toJSON
+#' @name toJSON
 #' @aliases toJSON,SparkDataFrame-method
-#' @noRd
+#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' newRDD <- toJSON(df)
+#' path <- "path/to/file.parquet"
+#' df <- read.parquet(path)
+#' df_json <- toJSON(df)
 #'}
+#' @note toJSON since 2.2.0
 setMethod("toJSON",
           signature(x = "SparkDataFrame"),
           function(x) {
-            rdd <- callJMethod(x@sdf, "toJSON")
-            jrdd <- callJMethod(rdd, "toJavaRDD")
-            RDD(jrdd, serializedMode = "string")
+            jsonDS <- callJMethod(x@sdf, "toJSON")
+            df <- callJMethod(jsonDS, "toDF")
+            dataFrame(df)
           })
 
 #' Save the contents of SparkDataFrame as a JSON file
@@ -936,7 +942,7 @@ setMethod("unique",
 
 #' Sample
 #'
-#' Return a sampled subset of this SparkDataFrame using a random seed. 
+#' Return a sampled subset of this SparkDataFrame using a random seed.
 #' Note: this is not guaranteed to provide exactly the fraction specified
 #' of the total count of of the given SparkDataFrame.
 #'
@@ -2307,9 +2313,9 @@ setMethod("dropDuplicates",
 #' @param joinExpr (Optional) The expression used to perform the join. joinExpr must be a
 #' Column expression. If joinExpr is omitted, the default, inner join is attempted and an error is
 #' thrown if it would be a Cartesian Product. For Cartesian join, use crossJoin instead.
-#' @param joinType The type of join to perform. The following join types are available:
-#' 'inner', 'outer', 'full', 'fullouter', leftouter', 'left_outer', 'left',
-#' 'right_outer', 'rightouter', 'right', and 'leftsemi'. The default joinType is "inner".
+#' @param joinType The type of join to perform, default 'inner'.
+#' Must be one of: 'inner', 'cross', 'outer', 'full', 'full_outer',
+#' 'left', 'left_outer', 'right', 'right_outer', 'left_semi', or 'left_anti'.
 #' @return A SparkDataFrame containing the result of the join operation.
 #' @family SparkDataFrame functions
 #' @aliases join,SparkDataFrame,SparkDataFrame-method
@@ -2338,15 +2344,18 @@ setMethod("join",
               if (is.null(joinType)) {
                 sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc)
               } else {
-                if (joinType %in% c("inner", "outer", "full", "fullouter",
-                    "leftouter", "left_outer", "left",
-                    "rightouter", "right_outer", "right", "leftsemi")) {
+                if (joinType %in% c("inner", "cross",
+                    "outer", "full", "fullouter", "full_outer",
+                    "left", "leftouter", "left_outer",
+                    "right", "rightouter", "right_outer",
+                    "left_semi", "leftsemi", "left_anti", "leftanti")) {
                   joinType <- gsub("_", "", joinType)
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
                 } else {
                   stop("joinType must be one of the following types: ",
-                      "'inner', 'outer', 'full', 'fullouter', 'leftouter', 'left_outer', 'left',
-                      'rightouter', 'right_outer', 'right', 'leftsemi'")
+                       "'inner', 'cross', 'outer', 'full', 'full_outer',",
+                       "'left', 'left_outer', 'right', 'right_outer',",
+                       "'left_semi', or 'left_anti'.")
                 }
               }
             }

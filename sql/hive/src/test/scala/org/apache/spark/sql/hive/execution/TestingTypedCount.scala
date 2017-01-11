@@ -42,18 +42,18 @@ case class TestingTypedCount(
 
   override def nullable: Boolean = false
 
-  override val supportsPartial: Boolean = true
-
   override def createAggregationBuffer(): State = TestingTypedCount.State(0L)
 
-  override def update(buffer: State, input: InternalRow): Unit = {
+  override def update(buffer: State, input: InternalRow): State = {
     if (child.eval(input) != null) {
       buffer.count += 1
     }
+    buffer
   }
 
-  override def merge(buffer: State, input: State): Unit = {
+  override def merge(buffer: State, input: State): State = {
     buffer.count += input.count
+    buffer
   }
 
   override def eval(buffer: State): Any = buffer.count
@@ -70,8 +70,6 @@ case class TestingTypedCount(
     val dataStream = new DataInputStream(byteStream)
     TestingTypedCount.State(dataStream.readLong())
   }
-
-  override def inputTypes: Seq[AbstractDataType] = AnyDataType :: Nil
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)

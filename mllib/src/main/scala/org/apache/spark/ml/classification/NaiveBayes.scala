@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.DoubleType
 /**
  * Params for Naive Bayes Classifiers.
  */
-private[ml] trait NaiveBayesParams extends PredictorParams with HasWeightCol {
+private[classification] trait NaiveBayesParams extends PredictorParams with HasWeightCol {
 
   /**
    * The smoothing parameter.
@@ -127,13 +127,11 @@ class NaiveBayes @Since("1.5.0") (
   private[spark] def trainWithLabelCheck(
       dataset: Dataset[_],
       positiveLabel: Boolean): NaiveBayesModel = {
-    if (positiveLabel) {
+    if (positiveLabel && isDefined(thresholds)) {
       val numClasses = getNumClasses(dataset)
-      if (isDefined(thresholds)) {
-        require($(thresholds).length == numClasses, this.getClass.getSimpleName +
-          ".train() called with non-matching numClasses and thresholds.length." +
-          s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
-      }
+      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
+        ".train() called with non-matching numClasses and thresholds.length." +
+        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
     val modelTypeValue = $(modelType)
