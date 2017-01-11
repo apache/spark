@@ -114,7 +114,7 @@ private[hive] trait HiveStrategies {
         // tables yet.
         if (mode == SaveMode.Append) {
           throw new AnalysisException(
-            "CTAS for hive serde tables does not support overwrite semantics.")
+            "CTAS for hive serde tables does not support append semantics.")
         }
 
         val dbName = tableDesc.identifier.database.getOrElse(sparkSession.catalog.currentDatabase)
