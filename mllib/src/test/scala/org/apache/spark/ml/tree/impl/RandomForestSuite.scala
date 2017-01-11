@@ -18,14 +18,15 @@
 package org.apache.spark.ml.tree.impl
 
 import scala.collection.mutable
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.tree.{EnsembleTestHelper, DecisionTreeSuite => OldDTSuite}
-import org.apache.spark.mllib.tree.configuration.{QuantileStrategy, Algo => OldAlgo, Strategy => OldStrategy}
+import org.apache.spark.mllib.tree.{DecisionTreeSuite => OldDTSuite, EnsembleTestHelper}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, QuantileStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, GiniCalculator, Variance}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.collection.OpenHashMap
