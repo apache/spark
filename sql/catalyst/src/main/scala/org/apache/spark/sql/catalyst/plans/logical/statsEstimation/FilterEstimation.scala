@@ -140,6 +140,13 @@ class FilterEstimation extends Logging {
     val percent: Double = condition match {
       // For evaluateBinary method, we assume the literal on the right side of an operator.
       // So we will change the order if not.
+
+      // EqualTo does not care about the order
+      case op@EqualTo(ExtractAttr(ar), l: Literal) =>
+        evaluateBinary(op, ar, l, update)
+      case op@EqualTo(l: Literal, ExtractAttr(ar)) =>
+        evaluateBinary(op, ar, l, update)
+
       case op@LessThan(ExtractAttr(ar), l: Literal) =>
         evaluateBinary(op, ar, l, update)
       case op@LessThan(l: Literal, ExtractAttr(ar)) =>
@@ -159,12 +166,6 @@ class FilterEstimation extends Logging {
         evaluateBinary(op, ar, l, update)
       case op@GreaterThanOrEqual(l: Literal, ExtractAttr(ar)) =>
         evaluateBinary(LessThanOrEqual(ar, l), ar, l, update)
-
-      // EqualTo does not care about the order
-      case op@EqualTo(ExtractAttr(ar), l: Literal) =>
-        evaluateBinary(op, ar, l, update)
-      case op@EqualTo(l: Literal, ExtractAttr(ar)) =>
-        evaluateBinary(op, ar, l, update)
 
       case In(ExtractAttr(ar), expList) if !expList.exists(!_.isInstanceOf[Literal]) =>
         // Expression [In (value, seq[Literal])] will be replaced with optimized version
@@ -317,11 +318,15 @@ class FilterEstimation extends Logging {
     : BigDecimal = {
     dataType match {
       case _: IntegralType =>
-        if (isNumeric) BigDecimal(literal.asInstanceOf[Long])
-        else BigDecimal(literal.asInstanceOf[Literal].value.asInstanceOf[Long])
+        val stringValue: String =
+          if (isNumeric) literal.toString
+          else literal.asInstanceOf[Literal].value.toString
+        BigDecimal(java.lang.Long.valueOf(stringValue))
+
       case _: FractionalType =>
         if (isNumeric) BigDecimal(literal.asInstanceOf[Double])
         else BigDecimal(literal.asInstanceOf[Literal].value.asInstanceOf[Double])
+
       case DateType =>
         if (isNumeric) BigDecimal(literal.asInstanceOf[BigInt])
         else {
@@ -329,6 +334,7 @@ class FilterEstimation extends Logging {
             literal.asInstanceOf[Literal].value.asInstanceOf[UTF8String])
           BigDecimal(dateLiteral.asInstanceOf[BigInt])
         }
+
       case TimestampType =>
         if (isNumeric) BigDecimal(literal.asInstanceOf[BigInt])
         else {
