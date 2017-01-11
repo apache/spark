@@ -53,7 +53,7 @@ private[scheduler] class BlacklistTracker (
     clock: Clock = new SystemClock()) extends Logging {
 
   def this(sc: SparkContext) = {
-    this(sc.listenerBus, sc.getConf)
+    this(sc.listenerBus, sc.conf)
   }
 
   BlacklistTracker.validateBlacklistConfs(conf)
@@ -120,7 +120,6 @@ private[scheduler] class BlacklistTracker (
         // Un-blacklist any nodes that have been blacklisted longer than the blacklist timeout.
         logInfo(s"Removing nodes $nodesToUnblacklist from blacklist because the blacklist " +
           s"has timed out")
-        nodeIdToBlacklistExpiryTime --= nodesToUnblacklist
         nodesToUnblacklist.foreach { node =>
           nodeIdToBlacklistExpiryTime.remove(node)
           listenerBus.post(SparkListenerNodeUnblacklisted(now, node))
@@ -171,8 +170,7 @@ private[scheduler] class BlacklistTracker (
           s" task failures in successful task sets")
         val node = failuresInTaskSet.node
         executorIdToBlacklistStatus.put(exec, BlacklistedExecutor(node, expiryTimeForNewBlacklists))
-        listenerBus.post(
-            SparkListenerExecutorBlacklisted(now, exec, newTotal))
+        listenerBus.post(SparkListenerExecutorBlacklisted(now, exec, newTotal))
         executorIdToFailureList.remove(exec)
         updateNextExpiryTime()
 

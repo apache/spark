@@ -178,8 +178,8 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     /*
     Implicitly blacklist every executor associated with this node, and show this in the UI.
     */
-    activeStorageStatusList.foreach{status =>
-      if (status.blockManagerId.host == nodeBlacklisted.nodeId) {
+    activeStorageStatusList.foreach { status =>
+      if (status.blockManagerId.host == nodeBlacklisted.hostId) {
         updateExecutorBlacklist(status.blockManagerId.executorId, true)
       }
     }
@@ -187,13 +187,11 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
 
   override def onNodeUnblacklisted(nodeUnblacklisted: SparkListenerNodeUnblacklisted)
   : Unit = synchronized {
-    /*
-    Implicitly unblacklist every executor associated with this node, regardless of how
-    they may have been blacklisted initially (either explicitly through executor blacklisting
-    or implicitly through node blacklisting). Show this in the UI.
-    */
-    activeStorageStatusList.foreach{status =>
-      if (status.blockManagerId.host == nodeUnblacklisted.nodeId) {
+    // Implicitly unblacklist every executor associated with this node, regardless of how
+    // they may have been blacklisted initially (either explicitly through executor blacklisting
+    // or implicitly through node blacklisting). Show this in the UI.
+    activeStorageStatusList.foreach { status =>
+      if (status.blockManagerId.host == nodeUnblacklisted.hostId) {
         updateExecutorBlacklist(status.blockManagerId.executorId, false)
       }
     }

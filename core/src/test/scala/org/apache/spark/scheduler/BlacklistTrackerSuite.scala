@@ -41,7 +41,6 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     scheduler = mockTaskSchedWithConf(conf)
 
     clock.setTime(0)
-    blacklist = new BlacklistTracker(null, conf, clock)
   }
 
   override def afterEach(): Unit = {
@@ -201,6 +200,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   // If an executor has many task failures, but the task set ends up failing, it shouldn't be
   // counted against the executor.
   test("executors aren't blacklisted as a result of tasks in failed task sets") {
+    configureBlacklistAndScheduler()
     val failuresUntilBlacklisted = conf.get(config.MAX_FAILURES_PER_EXEC)
     // for many different stages, executor 1 fails a task, and then the taskSet fails.
     (0 until failuresUntilBlacklisted * 10).foreach { stage =>
@@ -400,6 +400,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   }
 
   test("task failure timeout works as expected for long-running tasksets") {
+    configureBlacklistAndScheduler()
     // This ensures that we don't trigger spurious blacklisting for long tasksets, when the taskset
     // finishes long after the task failures.  We create two tasksets, each with one failure.
     // Individually they shouldn't cause any blacklisting since there is only one failure.
