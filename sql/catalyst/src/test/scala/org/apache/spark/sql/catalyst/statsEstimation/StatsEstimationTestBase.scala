@@ -42,7 +42,14 @@ class StatsEstimationTestBase extends SparkFunSuite {
 /**
  * This class is used for unit-testing. It's a logical plan whose output and stats are passed in.
  */
-protected case class StatsTestPlan(outputList: Seq[Attribute], stats: Statistics) extends LeafNode {
+protected case class StatsTestPlan(
+    outputList: Seq[Attribute],
+    rowCount: BigInt,
+    attributeStats: AttributeMap[ColumnStat]) extends LeafNode {
   override def output: Seq[Attribute] = outputList
-  override def computeStats(conf: CatalystConf): Statistics = stats
+  override def computeStats(conf: CatalystConf): Statistics = Statistics(
+    // sizeInBytes in stats of StatsTestPlan is useless in cbo estimation, we just use a fake value
+    sizeInBytes = Int.MaxValue,
+    rowCount = Some(rowCount),
+    attributeStats = attributeStats)
 }

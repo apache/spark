@@ -35,10 +35,13 @@ object EstimationUtils {
     AttributeMap(output.flatMap(a => inputMap.get(a).map(a -> _)))
   }
 
-  def getRowSize(attributes: Seq[Attribute], attrStats: AttributeMap[ColumnStat]): Long = {
+  def getOutputSize(
+      attributes: Seq[Attribute],
+      attrStats: AttributeMap[ColumnStat],
+      outputRowCount: BigInt): BigInt = {
     // We assign a generic overhead for a Row object, the actual overhead is different for different
     // Row format.
-    8 + attributes.map { attr =>
+    val sizePerRow = 8 + attributes.map { attr =>
       if (attrStats.contains(attr)) {
         attr.dataType match {
           case StringType =>
@@ -51,5 +54,9 @@ object EstimationUtils {
         attr.dataType.defaultSize
       }
     }.sum
+
+    // Output size can't be zero, or sizeInBytes of BinaryNode will also be zero
+    // (simple computation of statistics returns product of children).
+    if (outputRowCount > 0) outputRowCount * sizePerRow else 1
   }
 }
