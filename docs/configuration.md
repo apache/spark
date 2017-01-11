@@ -433,11 +433,11 @@ Apart from these, the following properties are also available, and may be useful
   <td></td>
   <td>
     Comma-separated list of maven coordinates of jars to include on the driver and executor
-    classpaths. If <code>spark.jars.ivySettings</code> is given artifacts will be resolved according
-    to the configuration in the file, otherwise artifacts will be searched for in the local maven repo,
-    then maven central and finally any additional remote repositories given by the command-line option
-    <code>--repositories</code> see <a href="submitting-applications.html#advanced-dependency-management">Advanced Dependency Management</a>.
-    The format for the coordinates should be groupId:artifactId:version.
+    classpaths. The coordinates should be groupId:artifactId:version. If <code>spark.jars.ivySettings</code>
+    is given artifacts will be resolved according to the configuration in the file, otherwise artifacts
+    will be searched for in the local maven repo, then maven central and finally any additional remote
+    repositories given by the command-line option <code>--repositories</code>. For more details, see
+    <a href="submitting-applications.html#advanced-dependency-management">Advanced Dependency Management</a>.
   </td>
 </tr>
 <tr>
@@ -453,7 +453,7 @@ Apart from these, the following properties are also available, and may be useful
   <td></td>
   <td>
     Path to specify the Ivy user directory, used for the local Ivy cache and package files from
-    <code>spark.jars.packages</code>.  This will override the Ivy property <code>ivy.default.ivy.user.dir</code>
+    <code>spark.jars.packages</code>. This will override the Ivy property <code>ivy.default.ivy.user.dir</code>
     which defaults to ~/.ivy2.
   </td>
 </tr>
@@ -463,8 +463,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Path to an Ivy settings file to customize resolution of jars specified using <code>spark.jars.packages</code>
     instead of the built-in defaults, such as maven central. Additional repositories given by the command-line
-    option <code>--repositories</code> will also be included.  Useful for allowing Spark to resolve artifacts from behind
-    a firewall e.g. via an in-house artifact server like Artifactory.  Details on the settings file format can be
+    option <code>--repositories</code> will also be included. Useful for allowing Spark to resolve artifacts from behind
+    a firewall e.g. via an in-house artifact server like Artifactory. Details on the settings file format can be
     found at http://ant.apache.org/ivy/history/latest-milestone/settings.html
   </td>
 </tr>
@@ -1444,7 +1444,7 @@ Apart from these, the following properties are also available, and may be useful
     Enables monitoring of killed / interrupted tasks. When set to true, any task which is killed
     will be monitored by the executor until that task actually finishes executing. See the other
     <code>spark.task.reaper.*</code> configurations for details on how to control the exact behavior
-    of this monitoring</code>. When set to false (the default), task killing will use an older code
+    of this monitoring. When set to false (the default), task killing will use an older code
     path which lacks such monitoring.
   </td>
 </tr>
