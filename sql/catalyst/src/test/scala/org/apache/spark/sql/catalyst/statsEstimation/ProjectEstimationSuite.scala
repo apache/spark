@@ -46,6 +46,6 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
       sizeInBytes = 2 * getRowSize(project.output, expectedAttrStats),
       rowCount = Some(2),
       attributeStats = expectedAttrStats)
-    assert(project.statistics == expectedStats)
+    assert(project.stats(conf) == expectedStats)
   }
 }

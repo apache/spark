@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRela
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class RewriteDistinctAggregatesSuite extends PlanTest {
-  val conf = SimpleCatalystConf(caseSensitiveAnalysis = false, groupByOrdinal = false)
+  override val conf = SimpleCatalystConf(caseSensitiveAnalysis = false, groupByOrdinal = false)
   val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
   val analyzer = new Analyzer(catalog, conf)
 
