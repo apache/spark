@@ -253,7 +253,7 @@ case class LimitPushDown(conf: CatalystConf) extends Rule[LogicalPlan] {
         case FullOuter =>
           (left.maxRows, right.maxRows) match {
             case (None, None) =>
-              if (left.planStats(conf).sizeInBytes >= right.planStats(conf).sizeInBytes) {
+              if (left.stats(conf).sizeInBytes >= right.stats(conf).sizeInBytes) {
                 join.copy(left = maybePushLimit(exp, left))
               } else {
                 join.copy(right = maybePushLimit(exp, right))

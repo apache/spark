@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.statsEstimation
+package org.apache.spark.sql.catalyst.statsEstimation
 
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.IntegerType
 
 
-class StatsEstimationSuite extends SharedSQLContext {
-  test("statistics for a plan based on the cbo switch") {
+class StatsConfSuite extends StatsEstimationTestBase {
+  test("estimate statistics when the conf changes") {
     val expectedDefaultStats =
       Statistics(
         sizeInBytes = 40,
@@ -42,26 +41,24 @@ class StatsEstimationSuite extends SharedSQLContext {
         isBroadcastable = false)
 
     val plan = DummyLogicalPlan(defaultStats = expectedDefaultStats, cboStats = expectedCboStats)
-    withSQLConf("spark.sql.cbo.enabled" -> "true") {
-      // Use the statistics estimated by cbo
-      assert(plan.planStats(spark.sessionState.conf) == expectedCboStats)
-    }
-    withSQLConf("spark.sql.cbo.enabled" -> "false") {
-      // Use the default statistics
-      assert(plan.planStats(spark.sessionState.conf) == expectedDefaultStats)
-    }
+    // Return the statistics estimated by cbo
+    assert(plan.stats(conf.copy(cboEnabled = true)) == expectedCboStats)
+    // Invalidate statistics
+    plan.invalidateStatsCache()
+    // Return the simple statistics
+    assert(plan.stats(conf.copy(cboEnabled = false)) == expectedDefaultStats)
   }
 }
 
 /**
- * This class is used for unit-testing the cbo switch, it mimics a logical plan which has both
- * default statistics and cbo estimated statistics.
+ * This class is used for unit-testing the cbo switch, it mimics a logical plan which computes
+ * a simple statistics or a cbo estimated statistics based on the conf.
  */
 private case class DummyLogicalPlan(
     defaultStats: Statistics,
     cboStats: Statistics) extends LogicalPlan {
-  override lazy val statistics = defaultStats
-  override def cboStatistics(conf: CatalystConf): Statistics = cboStats
   override def output: Seq[Attribute] = Nil
   override def children: Seq[LogicalPlan] = Nil
+  override def computeStats(conf: CatalystConf): Statistics =
+    if (conf.cboEnabled) cboStats else defaultStats
 }
