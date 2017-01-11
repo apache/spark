@@ -987,11 +987,11 @@ case class ScalaUDF(
 
     val converterTerm = ctx.freshName("converter")
     val expressionIdx = ctx.references.size - 1
-    ctx.addMutableState(converterClassName, converterTerm,
-      s"this.$converterTerm = ($converterClassName)$typeConvertersClassName" +
+    val converterTermAccessor = ctx.addMutableState(converterClassName, converterTerm,
+      s"$converterTerm = ($converterClassName)$typeConvertersClassName" +
         s".createToScalaConverter(((${expressionClassName})((($scalaUDFClassName)" +
           s"references[$expressionIdx]).getChildren().apply($index))).dataType());")
-    converterTerm
+    converterTermAccessor
   }
 
   override def doGenCode(
@@ -1004,8 +1004,9 @@ case class ScalaUDF(
 
     // Generate codes used to convert the returned value of user-defined functions to Catalyst type
     val catalystConverterTerm = ctx.freshName("catalystConverter")
-    ctx.addMutableState(converterClassName, catalystConverterTerm,
-      s"this.$catalystConverterTerm = ($converterClassName)$typeConvertersClassName" +
+    val catalystTermAccessor =
+      ctx.addMutableState(converterClassName, catalystConverterTerm,
+        s"$catalystConverterTerm = ($converterClassName)$typeConvertersClassName" +
         s".createToCatalystConverter($scalaUDF.dataType());")
 
     val resultTerm = ctx.freshName("result")
@@ -1018,8 +1019,8 @@ case class ScalaUDF(
     val funcClassName = s"scala.Function${children.size}"
 
     val funcTerm = ctx.freshName("udf")
-    ctx.addMutableState(funcClassName, funcTerm,
-      s"this.$funcTerm = ($funcClassName)$scalaUDF.userDefinedFunc();")
+    val funcTermAccessor = ctx.addMutableState(funcClassName, funcTerm,
+      s"$funcTerm = ($funcClassName)$scalaUDF.userDefinedFunc();")
 
     // codegen for children expressions
     val evals = children.map(_.genCode(ctx))
@@ -1036,12 +1037,12 @@ case class ScalaUDF(
       (convert, argTerm)
     }.unzip
 
-    val getFuncResult = s"$funcTerm.apply(${funcArguments.mkString(", ")})"
+    val getFuncResult = s"$funcTermAccessor.apply(${funcArguments.mkString(", ")})"
     val callFunc =
       s"""
          ${ctx.boxedType(dataType)} $resultTerm = null;
          try {
-           $resultTerm = (${ctx.boxedType(dataType)})$catalystConverterTerm.apply($getFuncResult);
+           $resultTerm = (${ctx.boxedType(dataType)})$catalystTermAccessor.apply($getFuncResult);
          } catch (Exception e) {
            throw new org.apache.spark.SparkException($scalaUDF.udfErrorMessage(), e);
          }

@@ -71,25 +71,29 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
   override protected def doProduce(ctx: CodegenContext): String = {
     val input = ctx.freshName("input")
     // PhysicalRDD always just has one input
-    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+    val inputAccessor = ctx.addMutableState(
+      "scala.collection.Iterator", input, s"$input = inputs[0];")
 
     // metrics
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     val scanTimeMetric = metricTerm(ctx, "scanTime")
     val scanTimeTotalNs = ctx.freshName("scanTime")
-    ctx.addMutableState("long", scanTimeTotalNs, s"$scanTimeTotalNs = 0;")
+    val scanTimeTotalNsAccessor =
+      ctx.addMutableState("long", scanTimeTotalNs, s"$scanTimeTotalNs = 0;")
 
     val columnarBatchClz = "org.apache.spark.sql.execution.vectorized.ColumnarBatch"
     val batch = ctx.freshName("batch")
-    ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
+    val batchAccessor = ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
 
     val columnVectorClz = "org.apache.spark.sql.execution.vectorized.ColumnVector"
     val idx = ctx.freshName("batchIdx")
-    ctx.addMutableState("int", idx, s"$idx = 0;")
-    val colVars = output.indices.map(i => ctx.freshName("colInstance" + i))
-    val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
+    val idxAccessor = ctx.addMutableState("int", idx, s"$idx = 0;")
+    val colVars = output.indices.map(i => {
+      val name = ctx.freshName("colInstance" + i)
       ctx.addMutableState(columnVectorClz, name, s"$name = null;")
-      s"$name = $batch.column($i);"
+    })
+    val columnAssigns = colVars.zipWithIndex.map { case (nameAccessor, i) =>
+      s"$nameAccessor = $batchAccessor.column($i);"
     }
 
     val nextBatch = ctx.freshName("nextBatch")
@@ -97,13 +101,13 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
       s"""
          |private void $nextBatch() throws java.io.IOException {
          |  long getBatchStart = System.nanoTime();
-         |  if ($input.hasNext()) {
-         |    $batch = ($columnarBatchClz)$input.next();
-         |    $numOutputRows.add($batch.numRows());
-         |    $idx = 0;
+         |  if ($inputAccessor.hasNext()) {
+         |    $batchAccessor = ($columnarBatchClz)$inputAccessor.next();
+         |    $numOutputRows.add($batchAccessor.numRows());
+         |    $idxAccessor = 0;
          |    ${columnAssigns.mkString("", "\n", "\n")}
          |  }
-         |  $scanTimeTotalNs += System.nanoTime() - getBatchStart;
+         |  $scanTimeTotalNsAccessor += System.nanoTime() - getBatchStart;
          |}""".stripMargin)
 
     ctx.currentVars = null
@@ -120,23 +124,23 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
       "// shouldStop check is eliminated"
     }
     s"""
-       |if ($batch == null) {
+       |if ($batchAccessor == null) {
        |  $nextBatch();
        |}
-       |while ($batch != null) {
-       |  int $numRows = $batch.numRows();
+       |while ($batchAccessor != null) {
+       |  int $numRows = $batchAccessor.numRows();
        |  int $localEnd = $numRows - $idx;
        |  for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
-       |    int $rowidx = $idx + $localIdx;
+       |    int $rowidx = $idxAccessor + $localIdx;
        |    ${consume(ctx, columnsBatchInput).trim}
        |    $shouldStop
        |  }
-       |  $idx = $numRows;
-       |  $batch = null;
+       |  $idxAccessor = $numRows;
+       |  $batchAccessor = null;
        |  $nextBatch();
        |}
-       |$scanTimeMetric.add($scanTimeTotalNs / (1000 * 1000));
-       |$scanTimeTotalNs = 0;
+       |$scanTimeMetric.add($scanTimeTotalNsAccessor / (1000 * 1000));
+       |$scanTimeTotalNsAccessor = 0;
      """.stripMargin
   }
 

@@ -90,19 +90,22 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         case array: ArrayType => classOf[ArrayColumnAccessor].getName
         case t: MapType => classOf[MapColumnAccessor].getName
       }
-      ctx.addMutableState(accessorCls, accessorName, "")
+      val accessorNameAccessor = ctx.addMutableState(accessorCls, accessorName, "")
 
       val createCode = dt match {
         case t if ctx.isPrimitiveType(dt) =>
-          s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
+          s"$accessorNameAccessor = " +
+            s"new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case NullType | StringType | BinaryType =>
-          s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
+          s"$accessorNameAccessor = " +
+            s"new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case other =>
-          s"""$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder),
-             (${dt.getClass.getName}) columnTypes[$index]);"""
+          s"$accessorNameAccessor = " +
+            s"new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder)," +
+            s"(${dt.getClass.getName}) columnTypes[$index]);"
       }
 
-      val extract = s"$accessorName.extractTo(mutableRow, $index);"
+      val extract = s"$accessorNameAccessor.extractTo(mutableRow, $index);"
       val patch = dt match {
         case DecimalType.Fixed(p, s) if p > Decimal.MAX_LONG_DIGITS =>
           // For large Decimal, it should have 16 bytes for future update even it's null now.
@@ -128,9 +131,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       } else {
         val groupedAccessorsItr = initializeAccessors.grouped(numberOfStatementsThreshold)
         val groupedExtractorsItr = extractors.grouped(numberOfStatementsThreshold)
-        var groupedAccessorsLength = 0
-        groupedAccessorsItr.zipWithIndex.foreach { case (body, i) =>
-          groupedAccessorsLength += 1
+        val accessorNames = groupedAccessorsItr.zipWithIndex.map { case (body, i) =>
           val funcName = s"accessors$i"
           val funcCode = s"""
              |private void $funcName() {
@@ -139,7 +140,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
            """.stripMargin
           ctx.addNewFunction(funcName, funcCode)
         }
-        groupedExtractorsItr.zipWithIndex.foreach { case (body, i) =>
+        val extractorNames = groupedExtractorsItr.zipWithIndex.map { case (body, i) =>
           val funcName = s"extractors$i"
           val funcCode = s"""
              |private void $funcName() {
@@ -148,8 +149,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
            """.stripMargin
           ctx.addNewFunction(funcName, funcCode)
         }
-        ((0 to groupedAccessorsLength - 1).map { i => s"accessors$i();" }.mkString("\n"),
-         (0 to groupedAccessorsLength - 1).map { i => s"extractors$i();" }.mkString("\n"))
+        (accessorNames.map { accessorName => s"$accessorName();" }.mkString("\n"),
+         extractorNames.map { extractorName => s"$extractorName();" }.mkString("\n"))
       }
 
     val codeBody = s"""

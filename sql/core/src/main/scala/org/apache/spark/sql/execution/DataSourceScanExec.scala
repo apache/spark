@@ -118,7 +118,8 @@ case class RowDataSourceScanExec(
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     // PhysicalRDD always just has one input
     val input = ctx.freshName("input")
-    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+    val inputAccessor =
+      ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
     val exprRows = output.zipWithIndex.map{ case (a, i) =>
       BoundReference(i, a.dataType, a.nullable)
     }
@@ -128,8 +129,8 @@ case class RowDataSourceScanExec(
     val columnsRowInput = exprRows.map(_.genCode(ctx))
     val inputRow = if (outputUnsafeRows) row else null
     s"""
-       |while ($input.hasNext()) {
-       |  InternalRow $row = (InternalRow) $input.next();
+       |while ($inputAccessor.hasNext()) {
+       |  InternalRow $row = (InternalRow) $inputAccessor.next();
        |  $numOutputRows.add(1);
        |  ${consume(ctx, columnsRowInput, inputRow).trim}
        |  if (shouldStop()) return;
@@ -345,7 +346,8 @@ case class FileSourceScanExec(
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     // PhysicalRDD always just has one input
     val input = ctx.freshName("input")
-    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+    val inputAccessor =
+      ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
     val exprRows = output.zipWithIndex.map{ case (a, i) =>
       BoundReference(i, a.dataType, a.nullable)
     }
@@ -355,8 +357,8 @@ case class FileSourceScanExec(
     val columnsRowInput = exprRows.map(_.genCode(ctx))
     val inputRow = if (needsUnsafeRowConversion) null else row
     s"""
-       |while ($input.hasNext()) {
-       |  InternalRow $row = (InternalRow) $input.next();
+       |while ($inputAccessor.hasNext()) {
+       |  InternalRow $row = (InternalRow) $inputAccessor.next();
        |  $numOutputRows.add(1);
        |  ${consume(ctx, columnsRowInput, inputRow).trim}
        |  if (shouldStop()) return;

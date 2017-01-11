@@ -126,22 +126,24 @@ case class SortExec(
 
   override protected def doProduce(ctx: CodegenContext): String = {
     val needToSort = ctx.freshName("needToSort")
-    ctx.addMutableState("boolean", needToSort, s"$needToSort = true;")
+    val needToSortAccessor = ctx.addMutableState("boolean", needToSort, s"$needToSort = true;")
 
     // Initialize the class member variables. This includes the instance of the Sorter and
     // the iterator to return sorted rows.
     val thisPlan = ctx.addReferenceObj("plan", this)
     sorterVariable = ctx.freshName("sorter")
-    ctx.addMutableState(classOf[UnsafeExternalRowSorter].getName, sorterVariable,
+    // Reset sorterVariable value to potentially class-qualified form
+    sorterVariable = ctx.addMutableState(classOf[UnsafeExternalRowSorter].getName, sorterVariable,
       s"$sorterVariable = $thisPlan.createSorter();")
     val metrics = ctx.freshName("metrics")
-    ctx.addMutableState(classOf[TaskMetrics].getName, metrics,
+    val metricsAccessor = ctx.addMutableState(classOf[TaskMetrics].getName, metrics,
       s"$metrics = org.apache.spark.TaskContext.get().taskMetrics();")
     val sortedIterator = ctx.freshName("sortedIter")
-    ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", sortedIterator, "")
+    val sortedIteratorAccessor =
+      ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", sortedIterator, "")
 
     val addToSorter = ctx.freshName("addToSorter")
-    ctx.addNewFunction(addToSorter,
+    val addToSorterFunc = ctx.addNewFunction(addToSorter,
       s"""
         | private void $addToSorter() throws java.io.IOException {
         |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
@@ -158,19 +160,19 @@ case class SortExec(
     val spillSizeBefore = ctx.freshName("spillSizeBefore")
     val sortTime = metricTerm(ctx, "sortTime")
     s"""
-       | if ($needToSort) {
-       |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
-       |   $addToSorter();
-       |   $sortedIterator = $sorterVariable.sort();
+       | if ($needToSortAccessor) {
+       |   long $spillSizeBefore = $metricsAccessor.memoryBytesSpilled();
+       |   $addToSorterFunc();
+       |   $sortedIteratorAccessor = $sorterVariable.sort();
        |   $sortTime.add($sorterVariable.getSortTimeNanos() / 1000000);
        |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());
-       |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
-       |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());
-       |   $needToSort = false;
+       |   $spillSize.add($metricsAccessor.memoryBytesSpilled() - $spillSizeBefore);
+       |   $metricsAccessor.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());
+       |   $needToSortAccessor = false;
        | }
        |
-       | while ($sortedIterator.hasNext()) {
-       |   UnsafeRow $outputRow = (UnsafeRow)$sortedIterator.next();
+       | while ($sortedIteratorAccessor.hasNext()) {
+       |   UnsafeRow $outputRow = (UnsafeRow)$sortedIteratorAccessor.next();
        |   ${consume(ctx, null, outputRow)}
        |   if (shouldStop()) return;
        | }

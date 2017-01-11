@@ -79,11 +79,12 @@ case class Rand(child: Expression) extends RDG {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
-    ctx.addMutableState(className, rngTerm, "")
+    val rngTermAccessor = ctx.addMutableState(className, rngTerm, "")
     ctx.addPartitionInitializationStatement(
-      s"$rngTerm = new $className(${seed}L + partitionIndex);")
+      s"$rngTermAccessor = new $className(${seed}L + partitionIndex);")
     ev.copy(code = s"""
-      final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextDouble();""", isNull = "false")
+      final ${ctx.javaType(dataType)} ${ev.value} = $rngTermAccessor.nextDouble();""",
+      isNull = "false")
   }
 }
 
@@ -114,11 +115,12 @@ case class Randn(child: Expression) extends RDG {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
-    ctx.addMutableState(className, rngTerm, "")
+    val rngTermAccessor = ctx.addMutableState(className, rngTerm, "")
     ctx.addPartitionInitializationStatement(
-      s"$rngTerm = new $className(${seed}L + partitionIndex);")
+      s"$rngTermAccessor = new $className(${seed}L + partitionIndex);")
     ev.copy(code = s"""
-      final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextGaussian();""", isNull = "false")
+      final ${ctx.javaType(dataType)} ${ev.value} = $rngTermAccessor.nextGaussian();""",
+      isNull = "false")
   }
 }
 

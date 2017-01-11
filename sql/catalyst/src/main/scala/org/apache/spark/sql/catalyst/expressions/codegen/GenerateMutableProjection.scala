@@ -63,21 +63,21 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
         if (e.nullable) {
           val isNull = s"isNull_$i"
           val value = s"value_$i"
-          ctx.addMutableState("boolean", isNull, s"this.$isNull = true;")
-          ctx.addMutableState(ctx.javaType(e.dataType), value,
-            s"this.$value = ${ctx.defaultValue(e.dataType)};")
+          val isNullAccessor = ctx.addMutableState("boolean", isNull, s"$isNull = true;")
+          val valueAccessor = ctx.addMutableState(ctx.javaType(e.dataType), value,
+            s"$value = ${ctx.defaultValue(e.dataType)};")
           s"""
             ${ev.code}
-            this.$isNull = ${ev.isNull};
-            this.$value = ${ev.value};
+            $isNullAccessor = ${ev.isNull};
+            $valueAccessor = ${ev.value};
            """
         } else {
           val value = s"value_$i"
-          ctx.addMutableState(ctx.javaType(e.dataType), value,
-            s"this.$value = ${ctx.defaultValue(e.dataType)};")
+          val valueAccessor = ctx.addMutableState(ctx.javaType(e.dataType), value,
+            s"$value = ${ctx.defaultValue(e.dataType)};")
           s"""
             ${ev.code}
-            this.$value = ${ev.value};
+            $valueAccessor = ${ev.value};
            """
         }
     }
@@ -135,6 +135,9 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
           $allUpdates
           return mutableRow;
         }
+
+        ${ctx.initNestedClasses()}
+        ${ctx.declareNestedClasses()}
       }
     """
 
