@@ -18,9 +18,10 @@
 package org.apache.spark.executor
 
 import java.nio.ByteBuffer
+import java.util.Properties
 import java.util.concurrent.CountDownLatch
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.Map
 
 import org.mockito.Matchers._
 import org.mockito.Mockito.{mock, when}
@@ -32,7 +33,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.memory.MemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.scheduler.{FakeTask, Task}
+import org.apache.spark.scheduler.{FakeTask, TaskDescription}
 import org.apache.spark.serializer.JavaSerializer
 
 class ExecutorSuite extends SparkFunSuite {
@@ -52,13 +53,18 @@ class ExecutorSuite extends SparkFunSuite {
     when(mockEnv.memoryManager).thenReturn(mockMemoryManager)
     when(mockEnv.closureSerializer).thenReturn(serializer)
     val fakeTaskMetrics = serializer.newInstance().serialize(TaskMetrics.registered).array()
-
-    val serializedTask =
-      Task.serializeWithDependencies(
-        new FakeTask(0, 0, Nil, fakeTaskMetrics),
-        HashMap[String, Long](),
-        HashMap[String, Long](),
-        serializer.newInstance())
+    val serializedTask = serializer.newInstance().serialize(
+      new FakeTask(0, 0, Nil, fakeTaskMetrics))
+    val taskDescription = new TaskDescription(
+      taskId = 0,
+      attemptNumber = 0,
+      executorId = "",
+      name = "",
+      index = 0,
+      addedFiles = Map[String, Long](),
+      addedJars = Map[String, Long](),
+      properties = new Properties,
+      serializedTask)
 
     // we use latches to force the program to run in this order:
     // +-----------------------------+---------------------------------------+
@@ -108,7 +114,7 @@ class ExecutorSuite extends SparkFunSuite {
     try {
       executor = new Executor("id", "localhost", mockEnv, userClassPath = Nil, isLocal = true)
       // the task will be launched in a dedicated worker thread
-      executor.launchTask(mockExecutorBackend, 0, 0, "", serializedTask)
+      executor.launchTask(mockExecutorBackend, taskDescription)
 
       executorSuiteHelper.latch1.await()
       // we know the task will be started, but not yet deserialized, because of the latches we
