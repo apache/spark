@@ -109,11 +109,6 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
         throw new AnalysisException("Saving data into a view is not allowed.")
       }
 
-      if (DDLUtils.isHiveTable(existingTable)) {
-        throw new AnalysisException(s"Saving data in the Hive serde table $tableName is " +
-          "not supported yet. Please use the insertInto() API as an alternative.")
-      }
-
       // Check if the specified data source match the data source of the existing table.
       val existingProvider = DataSource.lookupDataSource(existingTable.provider.get)
       val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get)

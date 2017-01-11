@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogRelation, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
@@ -400,6 +400,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // Refresh the cache of the table in the catalog.
         catalog.refreshTable(tableIdentWithDB)
 
+      case (true, SaveMode.Append)
+        if DDLUtils.isHiveTable(
+          catalog.lookupRelation(tableIdentWithDB).asInstanceOf[CatalogRelation].catalogTable) =>
+         insertInto(tableIdentWithDB)
       case _ => createTable(tableIdent)
     }
   }
