@@ -217,30 +217,11 @@ private[spark] class KubernetesSparkRestServer(
   }
 
   private def writeBase64ContentsToFiles(
-        filesBase64Contents: Array[(String, String)],
+        maybeCompressedFiles: Option[TarGzippedData],
         rootDir: File): Seq[String] = {
-    val resolvedFileNames = new scala.collection.mutable.HashSet[String]
-    val resolvedFilePaths = new ArrayBuffer[String]
-    for (file <- filesBase64Contents)  {
-      var currentFileName = file._1
-      var deduplicationCounter = 1
-      while (resolvedFileNames.contains(currentFileName)) {
-        // Prepend the deduplication counter so as to not mess with the extension
-        currentFileName = s"$deduplicationCounter-$currentFileName"
-        deduplicationCounter += 1
-      }
-      val resolvedFile = new File(rootDir, currentFileName)
-      val resolvedFilePath = resolvedFile.getAbsolutePath
-      if (resolvedFile.createNewFile()) {
-        val fileContents = Base64.decodeBase64(file._2)
-        Files.write(fileContents, resolvedFile)
-      } else {
-        throw new IllegalStateException(s"Could not write jar file to $resolvedFilePath")
-      }
-      resolvedFileNames += currentFileName
-      resolvedFilePaths += resolvedFilePath
-    }
-    resolvedFilePaths.toSeq
+    maybeCompressedFiles.map { compressedFiles =>
+      CompressionUtils.unpackAndWriteCompressedFiles(compressedFiles, rootDir)
+    }.getOrElse(Seq.empty[String])
   }
 }
 

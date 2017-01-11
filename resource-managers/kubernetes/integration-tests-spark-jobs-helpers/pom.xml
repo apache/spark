@@ -24,28 +24,10 @@
     <relativePath>../../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-kubernetes-integration-tests-spark-jobs_2.11</artifactId>
+  <artifactId>spark-kubernetes-integration-tests-spark-jobs-helpers_2.11</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Kubernetes Integration Tests Spark Jobs</name>
+  <name>Spark Project Kubernetes Integration Tests Spark Jobs Helpers</name>
 
   <dependencies>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-kubernetes-integration-tests-spark-jobs-helpers_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-sql_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <scope>provided</scope>
-    </dependency>
   </dependencies>
 </project>

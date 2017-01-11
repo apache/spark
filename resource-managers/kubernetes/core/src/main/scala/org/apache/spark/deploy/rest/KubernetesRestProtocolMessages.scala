@@ -27,13 +27,18 @@ case class KubernetesCreateSubmissionRequest(
   val appArgs: Array[String],
   val sparkProperties: Map[String, String],
   val secret: String,
-  val uploadedDriverExtraClasspathBase64Contents: Array[(String, String)]
-      = Array.empty[(String, String)],
-  val uploadedJarsBase64Contents: Array[(String, String)]
-      = Array.empty[(String, String)]) extends SubmitRestProtocolRequest {
+  val uploadedDriverExtraClasspathBase64Contents: Option[TarGzippedData],
+  val uploadedJarsBase64Contents: Option[TarGzippedData]) extends SubmitRestProtocolRequest {
   message = "create"
   clientSparkVersion = SPARK_VERSION
 }
+
+case class TarGzippedData(
+  val dataBase64: String,
+  val blockSize: Int = 10240,
+  val recordSize: Int = 512,
+  val encoding: String
+)
 
 @JsonTypeInfo(
   use = JsonTypeInfo.Id.NAME,
