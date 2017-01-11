@@ -115,8 +115,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     val gbt2 = new GBTClassifier
     val threshold = Array(0.3, 0.7)
     gbt2.setThresholds(threshold)
-    assert(gbt2.getThresholds.zipWithIndex.forall(valueWithIndex =>
-      threshold(valueWithIndex._2) == valueWithIndex._1))
+    assert(gbt2.getThresholds.zip(threshold).forall { case(t1, t2) => t1 === t2 })
   }
 
   test("thresholds prediction") {

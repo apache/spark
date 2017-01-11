@@ -318,6 +318,7 @@ class GBTClassificationModel private[ml](
   @Since("2.0.0")
   lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)
 
+  /** Raw prediction for the positive class. */
   private def margin(features: Vector): Double = {
     val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
     blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
@@ -328,11 +329,7 @@ class GBTClassificationModel private[ml](
     new OldGBTModel(OldAlgo.Classification, _trees.map(_.toOld), _treeWeights)
   }
 
-  /**
-   * Note: this is currently an optimization that should be removed when we have more loss
-   * functions available than only logistic.
-   */
-  private lazy val loss = getOldLossType
+  private val loss = getOldLossType
 
   @Since("2.0.0")
   override def write: MLWriter = new GBTClassificationModel.GBTClassificationModelWriter(this)

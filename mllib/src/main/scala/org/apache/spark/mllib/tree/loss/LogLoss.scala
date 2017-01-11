@@ -21,13 +21,6 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.util.MLUtils
 
 /**
- * Trait for adding probability function for the gradient boosting algorithm.
- */
-private[spark] trait ClassificationLoss extends Loss {
-  private[spark] def computeProbability(prediction: Double): Double
-}
-
-/**
  * :: DeveloperApi ::
  * Class for log loss calculation (for classification).
  * This uses twice the binomial negative log likelihood, called "deviance" in Friedman (1999).
