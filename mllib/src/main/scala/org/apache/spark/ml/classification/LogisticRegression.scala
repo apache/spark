@@ -40,7 +40,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit}
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils
 
@@ -56,8 +56,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   /**
    * Set threshold in binary classification, in range [0, 1].
    *
-   * If the estimated probability of class label 1 is &gt; threshold, then predict 1, else 0.
-   * A high threshold encourages the model to predict 0 more often;
+   * If the estimated probability of class label 1 is greater than threshold, then predict 1,
+   * else 0. A high threshold encourages the model to predict 0 more often;
    * a low threshold encourages the model to predict 1 more often.
    *
    * Note: Calling this with threshold p is equivalent to calling `setThresholds(Array(1-p, p))`.
@@ -123,7 +123,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   /**
    * Set thresholds in multiclass (or binary) classification to adjust the probability of
    * predicting each class. Array must have length equal to the number of classes,
-   * with values &gt; 0, excepting that at most one value may be 0.
+   * with values greater than 0, excepting that at most one value may be 0.
    * The class with largest value p/t is predicted, where p is the original probability of that
    * class and t is the class's threshold.
    *
@@ -176,8 +176,12 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
     }
   }
 
-  override def validateParams(): Unit = {
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
     checkThresholdConsistency()
+    super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
 }
 
@@ -206,8 +210,9 @@ class LogisticRegression @Since("1.2.0") (
 
   /**
    * Set the ElasticNet mixing parameter.
-   * For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
-   * For 0 &lt; alpha &lt; 1, the penalty is a combination of L1 and L2.
+   * For alpha = 0, the penalty is an L2 penalty.
+   * For alpha = 1, it is an L1 penalty.
+   * For alpha in (0,1), the penalty is a combination of L1 and L2.
    * Default is 0.0 which is an L2 penalty.
    *
    * @group setParam
@@ -294,7 +299,7 @@ class LogisticRegression @Since("1.2.0") (
   override def getThresholds: Array[Double] = super.getThresholds
 
   /**
-   * Suggested depth for treeAggregate (&gt;= 2).
+   * Suggested depth for treeAggregate (greater than or equal to 2).
    * If the dimensions of features or the number of partitions are large,
    * this param could be adjusted to a larger size.
    * Default is 2.
@@ -307,7 +312,6 @@ class LogisticRegression @Since("1.2.0") (
 
   private var optInitialModel: Option[LogisticRegressionModel] = None
 
-  /** @group setParam */
   private[spark] def setInitialModel(model: LogisticRegressionModel): this.type = {
     this.optInitialModel = Some(model)
     this
@@ -318,8 +322,9 @@ class LogisticRegression @Since("1.2.0") (
     train(dataset, handlePersistence)
   }
 
-  protected[spark] def train(dataset: Dataset[_], handlePersistence: Boolean):
-      LogisticRegressionModel = {
+  protected[spark] def train(
+      dataset: Dataset[_],
+      handlePersistence: Boolean): LogisticRegressionModel = {
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
@@ -1100,7 +1105,9 @@ sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary
  */
 sealed trait LogisticRegressionSummary extends Serializable {
 
-  /** Dataframe output by the model's `transform` method. */
+  /**
+   * Dataframe output by the model's `transform` method.
+   */
   def predictions: DataFrame
 
   /** Field in "predictions" which gives the probability of each class as a vector. */
@@ -1513,7 +1520,7 @@ private class LogisticAggregator(
     }
 
     /**
-     * When maxMargin &gt; 0, the original formula could cause overflow.
+     * When maxMargin is greater than 0, the original formula could cause overflow.
      * We address this by subtracting maxMargin from all the margins, so it's guaranteed
      * that all of the new margins will be smaller than zero to prevent arithmetic overflow.
      */

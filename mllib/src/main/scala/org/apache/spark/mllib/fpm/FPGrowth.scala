@@ -44,7 +44,7 @@ import org.apache.spark.storage.StorageLevel
 
 /**
  * Model trained by [[FPGrowth]], which holds frequent itemsets.
- * @param freqItemsets frequent itemset, which is an RDD of [[FreqItemset]]
+ * @param freqItemsets frequent itemset, which is an RDD of `FreqItemset`
  * @tparam Item item type
  */
 @Since("1.3.0")
@@ -69,7 +69,7 @@ class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
    *  - human-readable (JSON) model metadata to path/metadata/
    *  - Parquet formatted data to path/data/
    *
-   * The model may be loaded using [[FPGrowthModel.load]].
+   * The model may be loaded using `FPGrowthModel.load`.
    *
    * @param sc  Spark context used to save model data.
    * @param path  Path specifying the directory in which to save this model.
@@ -309,7 +309,7 @@ object FPGrowth {
 
   /**
    * Frequent itemset.
-   * @param items items in this itemset. Java users should call [[FreqItemset#javaItems]] instead.
+   * @param items items in this itemset. Java users should call `FreqItemset.javaItems` instead.
    * @param freq frequency
    * @tparam Item item type
    *

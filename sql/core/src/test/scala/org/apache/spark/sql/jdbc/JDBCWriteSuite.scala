@@ -24,9 +24,9 @@ import scala.collection.JavaConverters.propertiesAsScalaMapConverter
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -44,9 +44,6 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
   val testH2Dialect = new JdbcDialect {
     override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
-    override def getCatalystType(
-        sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
-      Some(StringType)
     override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
   }
 
@@ -98,6 +95,10 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       StructField("name", StringType) ::
       StructField("id", IntegerType) ::
       StructField("seq", IntegerType) :: Nil)
+
+  private lazy val schema4 = StructType(
+      StructField("NAME", StringType) ::
+      StructField("ID", IntegerType) :: Nil)
 
   test("Basic CREATE") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
@@ -168,6 +169,26 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(2 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).collect()(0).length)
   }
 
+  test("SPARK-18123 Append with column names with different cases") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema4)
+
+    df.write.jdbc(url, "TEST.APPENDTEST", new Properties())
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val m = intercept[AnalysisException] {
+        df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
+      }.getMessage
+      assert(m.contains("Column \"NAME\" not found"))
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
+      assert(3 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).count())
+      assert(2 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).collect()(0).length)
+    }
+  }
+
   test("Truncate") {
     JdbcDialects.registerDialect(testH2Dialect)
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
@@ -180,7 +201,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
     assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
 
-    val m = intercept[SparkException] {
+    val m = intercept[AnalysisException] {
       df3.write.mode(SaveMode.Overwrite).option("truncate", true)
         .jdbc(url1, "TEST.TRUNCATETEST", properties)
     }.getMessage
@@ -206,9 +227,10 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
 
     df.write.jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
-    intercept[org.apache.spark.SparkException] {
+    val m = intercept[AnalysisException] {
       df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
-    }
+    }.getMessage
+    assert(m.contains("Column \"seq\" not found"))
   }
 
   test("INSERT to JDBC Datasource") {
@@ -319,9 +341,12 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       df.write.format("jdbc")
         .option("dbtable", "TEST.SAVETEST")
         .option("url", url1)
+        .option("user", "testUser")
+        .option("password", "testPass")
         .option(s"${JDBCOptions.JDBC_NUM_PARTITIONS}", "0")
         .save()
     }.getMessage
-    assert(e.contains("Invalid value `0` for parameter `numPartitions`. The minimum value is 1"))
+    assert(e.contains("Invalid value `0` for parameter `numPartitions` in table writing " +
+      "via JDBC. The minimum value is 1."))
   }
 }

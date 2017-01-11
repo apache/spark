@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRela
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class RewriteDistinctAggregatesSuite extends PlanTest {
-  val conf = SimpleCatalystConf(caseSensitiveAnalysis = false, groupByOrdinal = false)
+  override val conf = SimpleCatalystConf(caseSensitiveAnalysis = false, groupByOrdinal = false)
   val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
   val analyzer = new Analyzer(catalog, conf)
 
@@ -57,15 +57,6 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
       .analyze
     val rewrite = RewriteDistinctAggregates(input)
     comparePlans(input, rewrite)
-  }
-
-  test("single distinct group with non-partial aggregates") {
-    val input = testRelation
-      .groupBy('a, 'd)(
-        countDistinct('e, 'c).as('agg1),
-        CollectSet('b).toAggregateExpression().as('agg2))
-      .analyze
-    checkRewrite(RewriteDistinctAggregates(input))
   }
 
   test("multiple distinct groups") {

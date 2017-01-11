@@ -84,7 +84,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Returns a [[SQLContext]] as new session, with separated SQL configurations, temporary
-   * tables, registered functions, but sharing the same [[SparkContext]], cached data and
+   * tables, registered functions, but sharing the same `SparkContext`, cached data and
    * other things.
    *
    * @since 1.6.0
@@ -747,7 +747,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   def tableNames(): Array[String] = {
-    sparkSession.catalog.listTables().collect().map(_.name)
+    tableNames(sparkSession.catalog.currentDatabase)
   }
 
   /**
@@ -757,7 +757,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   def tableNames(databaseName: String): Array[String] = {
-    sparkSession.catalog.listTables(databaseName).collect().map(_.name)
+    sessionState.catalog.listTables(databaseName).map(_.table).toArray
   }
 
   ////////////////////////////////////////////////////////////////////////////
@@ -883,7 +883,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Loads an JavaRDD<String> storing JSON objects (one object per record) and applies the given
+   * Loads an JavaRDD[String] storing JSON objects (one object per record) and applies the given
    * schema, returning the result as a `DataFrame`.
    *
    * @group specificdata

@@ -43,9 +43,9 @@ import org.apache.spark.storage.StorageLevel
  * @param k the desired number of leaf clusters (default: 4). The actual number could be smaller if
  *          there are no divisible leaf clusters.
  * @param maxIterations the max number of k-means iterations to split clusters (default: 20)
- * @param minDivisibleClusterSize the minimum number of points (if &gt;= 1.0) or the minimum
- *                                proportion of points (if &lt; 1.0) of a divisible cluster
- *                                (default: 1)
+ * @param minDivisibleClusterSize the minimum number of points (if greater than or equal 1.0) or
+ *                                the minimum proportion of points (if less than 1.0) of a divisible
+ *                                cluster (default: 1)
  * @param seed a random seed (default: hash value of the class name)
  *
  * @see <a href="http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf">
@@ -101,8 +101,8 @@ class BisectingKMeans private (
   def getMaxIterations: Int = this.maxIterations
 
   /**
-   * Sets the minimum number of points (if &gt;= `1.0`) or the minimum proportion of points
-   * (if &lt; `1.0`) of a divisible cluster (default: 1).
+   * Sets the minimum number of points (if greater than or equal to `1.0`) or the minimum proportion
+   * of points (if less than `1.0`) of a divisible cluster (default: 1).
    */
   @Since("1.6.0")
   def setMinDivisibleClusterSize(minDivisibleClusterSize: Double): this.type = {
@@ -113,8 +113,8 @@ class BisectingKMeans private (
   }
 
   /**
-   * Gets the minimum number of points (if &gt;= `1.0`) or the minimum proportion of points
-   * (if &lt; `1.0`) of a divisible cluster.
+   * Gets the minimum number of points (if greater than or equal to `1.0`) or the minimum proportion
+   * of points (if less than `1.0`) of a divisible cluster.
    */
   @Since("1.6.0")
   def getMinDivisibleClusterSize: Double = minDivisibleClusterSize

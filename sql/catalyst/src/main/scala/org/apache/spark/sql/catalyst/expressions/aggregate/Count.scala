@@ -38,9 +38,6 @@ case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
   // Return data type.
   override def dataType: DataType = LongType
 
-  // Expected input data type.
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(AnyDataType)
-
   private lazy val count = AttributeReference("count", LongType, nullable = false)()
 
   override lazy val aggBufferAttributes = count :: Nil

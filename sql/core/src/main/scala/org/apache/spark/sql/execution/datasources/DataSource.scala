@@ -84,7 +84,7 @@ case class DataSource(
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
   lazy val providingClass: Class[_] = DataSource.lookupDataSource(className)
-  lazy val sourceInfo = sourceSchema()
+  lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = new CaseInsensitiveMap(options)
 
   /**
@@ -132,7 +132,7 @@ case class DataSource(
       }.toArray
       new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
     }
-    val partitionSchema = if (partitionColumns.isEmpty && catalogTable.isEmpty) {
+    val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
       // columns properly unless it is a Hive DataSource
       val resolved = tempFileIndex.partitionSchema.map { partitionField =>
@@ -278,7 +278,7 @@ case class DataSource(
           throw new IllegalArgumentException("'path' is not specified")
         })
         if (outputMode != OutputMode.Append) {
-          throw new IllegalArgumentException(
+          throw new AnalysisException(
             s"Data source $className does not support $outputMode output mode")
         }
         new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, caseInsensitiveOptions)
@@ -388,10 +388,11 @@ case class DataSource(
 
         val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
             catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog) {
+          val defaultTableSize = sparkSession.sessionState.conf.defaultSizeInBytes
           new CatalogFileIndex(
             sparkSession,
             catalogTable.get,
-            catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(0L))
+            catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
         } else {
           new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(partitionSchema))
         }
@@ -465,12 +466,17 @@ case class DataSource(
         // SPARK-17230: Resolve the partition columns so InsertIntoHadoopFsRelationCommand does
         // not need to have the query as child, to avoid to analyze an optimized query,
         // because InsertIntoHadoopFsRelationCommand will be optimized first.
-        val columns = partitionColumns.map { name =>
+        val partitionAttributes = partitionColumns.map { name =>
           val plan = data.logicalPlan
           plan.resolve(name :: Nil, data.sparkSession.sessionState.analyzer.resolver).getOrElse {
             throw new AnalysisException(
               s"Unable to resolve $name given [${plan.output.map(_.name).mkString(", ")}]")
           }.asInstanceOf[Attribute]
+        }
+        val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
+          sparkSession.table(tableIdent).queryExecution.analyzed.collect {
+            case LogicalRelation(t: HadoopFsRelation, _, _) => t.location
+          }.head
         }
         // For partitioned relation r, r.schema's column ordering can be different from the column
         // ordering of data.logicalPlan (partition columns are all moved after data column).  This
@@ -478,16 +484,15 @@ case class DataSource(
         val plan =
           InsertIntoHadoopFsRelationCommand(
             outputPath = outputPath,
-            staticPartitionKeys = Map.empty,
-            customPartitionLocations = Map.empty,
-            partitionColumns = columns,
+            staticPartitions = Map.empty,
+            partitionColumns = partitionAttributes,
             bucketSpec = bucketSpec,
             fileFormat = format,
-            refreshFunction = _ => Unit, // No existing table needs to be refreshed.
             options = options,
             query = data.logicalPlan,
             mode = mode,
-            catalogTable = catalogTable)
+            catalogTable = catalogTable,
+            fileIndex = fileIndex)
         sparkSession.sessionState.executePlan(plan).toRdd
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring it.
         copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()

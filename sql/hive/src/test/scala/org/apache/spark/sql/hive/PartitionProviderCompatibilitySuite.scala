@@ -28,6 +28,7 @@ import org.apache.spark.util.Utils
 
 class PartitionProviderCompatibilitySuite
   extends QueryTest with TestHiveSingleton with SQLTestUtils {
+  import testImplicits._
 
   private def setupPartitionedDatasourceTable(tableName: String, dir: File): Unit = {
     spark.range(5).selectExpr("id as fieldOne", "id as partCol").write
@@ -38,7 +39,7 @@ class PartitionProviderCompatibilitySuite
     spark.sql(s"""
       |create table $tableName (fieldOne long, partCol int)
       |using parquet
-      |options (path "${dir.getAbsolutePath}")
+      |options (path "${dir.toURI}")
       |partitioned by (partCol)""".stripMargin)
   }
 
@@ -70,7 +71,7 @@ class PartitionProviderCompatibilitySuite
         }
         withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
           verifyIsLegacyTable("test")
-          spark.sql("msck repair table test")
+          spark.catalog.recoverPartitions("test")
           spark.sql("show partitions test").count()  // check we are a new table
 
           // sanity check table performance
@@ -90,7 +91,7 @@ class PartitionProviderCompatibilitySuite
           setupPartitionedDatasourceTable("test", dir)
           spark.sql("show partitions test").count()  // check we are a new table
           assert(spark.sql("select * from test").count() == 0)  // needs repair
-          spark.sql("msck repair table test")
+          spark.catalog.recoverPartitions("test")
           assert(spark.sql("select * from test").count() == 5)
         }
       }
@@ -160,7 +161,7 @@ class PartitionProviderCompatibilitySuite
       withTable("test") {
         withTempDir { dir =>
           setupPartitionedDatasourceTable("test", dir)
-          sql("msck repair table test")
+          spark.catalog.recoverPartitions("test")
           spark.sql(
             """insert overwrite table test
               |partition (partCol=1)
@@ -171,7 +172,7 @@ class PartitionProviderCompatibilitySuite
           withTempDir { dir2 =>
             sql(
               s"""alter table test partition (partCol=1)
-                |set location '${dir2.getAbsolutePath}'""".stripMargin)
+                |set location '${dir2.toURI}'""".stripMargin)
             assert(sql("select * from test").count() == 4)
             sql(
               """insert overwrite table test
@@ -183,6 +184,132 @@ class PartitionProviderCompatibilitySuite
                 |select * from range(20)""".stripMargin)
             assert(sql("select * from test").count() == 24)
           }
+        }
+      }
+    }
+  }
+
+  for (enabled <- Seq(true, false)) {
+    test(s"SPARK-18544 append with saveAsTable - partition management $enabled") {
+      withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> enabled.toString) {
+        withTable("test") {
+          withTempDir { dir =>
+            setupPartitionedDatasourceTable("test", dir)
+            if (enabled) {
+              assert(spark.table("test").count() == 0)
+            } else {
+              assert(spark.table("test").count() == 5)
+            }
+            // Table `test` has 5 partitions, from `partCol=0` to `partCol=4`, which are invisible
+            // because we have not run `REPAIR TABLE` yet. Here we add 10 more partitions from
+            // `partCol=3` to `partCol=12`, to test the following behaviors:
+            //   1. invisible partitions are still invisible if they are not overwritten.
+            //   2. invisible partitions become visible if they are overwritten.
+            //   3. newly added partitions should be visible.
+            spark.range(3, 13).selectExpr("id as fieldOne", "id as partCol")
+              .write.partitionBy("partCol").mode("append").saveAsTable("test")
+
+            if (enabled) {
+              // Only the newly written partitions are visible, which means the partitions
+              // `partCol=0`, `partCol=1` and `partCol=2` are still invisible, so we can only see
+              // 5 + 10 - 3 = 12 records.
+              assert(spark.table("test").count() == 12)
+              // Repair the table to make all partitions visible.
+              sql("msck repair table test")
+              assert(spark.table("test").count() == 15)
+            } else {
+              assert(spark.table("test").count() == 15)
+            }
+          }
+        }
+      }
+    }
+
+    test(s"SPARK-18635 special chars in partition values - partition management $enabled") {
+      withTable("test") {
+        spark.range(10)
+          .selectExpr("id", "id as A", "'%' as B")
+          .write.partitionBy("A", "B").mode("overwrite")
+          .saveAsTable("test")
+        assert(spark.sql("select * from test").count() == 10)
+        assert(spark.sql("select * from test where B = '%'").count() == 10)
+        assert(spark.sql("select * from test where B = '$'").count() == 0)
+        spark.range(10)
+          .selectExpr("id", "id as A", "'=' as B")
+          .write.mode("append").insertInto("test")
+        spark.sql("insert into test partition (A, B) select id, id, '%=' from range(10)")
+        assert(spark.sql("select * from test").count() == 30)
+        assert(spark.sql("select * from test where B = '%'").count() == 10)
+        assert(spark.sql("select * from test where B = '='").count() == 10)
+        assert(spark.sql("select * from test where B = '%='").count() == 10)
+
+        // show partitions sanity check
+        val parts = spark.sql("show partitions test").collect().map(_.get(0)).toSeq
+        assert(parts.length == 30)
+        assert(parts.contains("A=0/B=%25"))
+        assert(parts.contains("A=0/B=%3D"))
+        assert(parts.contains("A=0/B=%25%3D"))
+
+        // drop partition sanity check
+        spark.sql("alter table test drop partition (A=1, B='%')")
+        assert(spark.sql("select * from test").count() == 29)  // 1 file in dropped partition
+
+        withTempDir { dir =>
+          // custom locations sanity check
+          spark.sql(s"""
+            |alter table test partition (A=0, B='%')
+            |set location '${dir.toURI}'""".stripMargin)
+          assert(spark.sql("select * from test").count() == 28)  // moved to empty dir
+
+          // rename partition sanity check
+          spark.sql(s"""
+            |alter table test partition (A=5, B='%')
+            |rename to partition (A=100, B='%')""".stripMargin)
+          assert(spark.sql("select * from test where a = 5 and b = '%'").count() == 0)
+          assert(spark.sql("select * from test where a = 100 and b = '%'").count() == 1)
+
+          // try with A=0 which has a custom location
+          spark.sql("insert into test partition (A=0, B='%') select 1")
+          spark.sql(s"""
+            |alter table test partition (A=0, B='%')
+            |rename to partition (A=101, B='%')""".stripMargin)
+          assert(spark.sql("select * from test where a = 0 and b = '%'").count() == 0)
+          assert(spark.sql("select * from test where a = 101 and b = '%'").count() == 1)
+        }
+      }
+    }
+
+    test(s"SPARK-18659 insert overwrite table files - partition management $enabled") {
+      withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> enabled.toString) {
+        withTable("test") {
+          spark.range(10)
+            .selectExpr("id", "id as A", "'x' as B")
+            .write.partitionBy("A", "B").mode("overwrite")
+            .saveAsTable("test")
+          spark.sql("insert overwrite table test select id, id, 'x' from range(1)")
+          assert(spark.sql("select * from test").count() == 1)
+
+          spark.range(10)
+            .selectExpr("id", "id as A", "'x' as B")
+            .write.partitionBy("A", "B").mode("overwrite")
+            .saveAsTable("test")
+          spark.sql(
+            "insert overwrite table test partition (A, B) select id, id, 'x' from range(1)")
+          assert(spark.sql("select * from test").count() == 1)
+        }
+      }
+    }
+
+    test(s"SPARK-18659 insert overwrite table with lowercase - partition management $enabled") {
+      withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> enabled.toString) {
+        withTable("test") {
+          spark.range(10)
+            .selectExpr("id", "id as A", "'x' as B")
+            .write.partitionBy("A", "B").mode("overwrite")
+            .saveAsTable("test")
+          // note that 'A', 'B' are lowercase instead of their original case here
+          spark.sql("insert overwrite table test partition (a=1, b) select id, 'x' from range(1)")
+          assert(spark.sql("select * from test").count() == 10)
         }
       }
     }
@@ -207,11 +334,11 @@ class PartitionProviderCompatibilitySuite
       spark.sql(s"""
         |create table test (id long, P1 int, P2 int)
         |using parquet
-        |options (path "${base.getAbsolutePath}")
+        |options (path "${base.toURI}")
         |partitioned by (P1, P2)""".stripMargin)
-      spark.sql(s"alter table test add partition (P1=0, P2=0) location '${a.getAbsolutePath}'")
-      spark.sql(s"alter table test add partition (P1=0, P2=1) location '${b.getAbsolutePath}'")
-      spark.sql(s"alter table test add partition (P1=1, P2=0) location '${c.getAbsolutePath}'")
+      spark.sql(s"alter table test add partition (P1=0, P2=0) location '${a.toURI}'")
+      spark.sql(s"alter table test add partition (P1=0, P2=1) location '${b.toURI}'")
+      spark.sql(s"alter table test add partition (P1=1, P2=0) location '${c.toURI}'")
       spark.sql(s"alter table test add partition (P1=1, P2=1)")
 
       testFn
@@ -338,6 +465,19 @@ class PartitionProviderCompatibilitySuite
       assert(spark.sql("show partitions test").count() == 4)
       spark.sql("insert overwrite table test partition (P1=1, P2=2) select id from range(5)")
       assert(spark.sql("select * from test").count() == 15)
+      assert(spark.sql("show partitions test").count() == 5)
+    }
+  }
+
+  test("append data with DataFrameWriter") {
+    testCustomLocations {
+      val df = Seq((1L, 0, 0), (2L, 0, 0)).toDF("id", "P1", "P2")
+      df.write.partitionBy("P1", "P2").mode("append").saveAsTable("test")
+      assert(spark.sql("select * from test").count() == 2)
+      assert(spark.sql("show partitions test").count() == 4)
+      val df2 = Seq((3L, 2, 2)).toDF("id", "P1", "P2")
+      df2.write.partitionBy("P1", "P2").mode("append").saveAsTable("test")
+      assert(spark.sql("select * from test").count() == 3)
       assert(spark.sql("show partitions test").count() == 5)
     }
   }

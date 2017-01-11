@@ -18,14 +18,73 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.ExecutedCommandExec
+import org.apache.spark.sql.execution.command.{DDLUtils, ExecutedCommandExec}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+
+
+/**
+ * Determine the serde/format of the Hive serde table, according to the storage properties.
+ */
+class DetermineHiveSerde(conf: SQLConf) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case c @ CreateTable(t, _, query) if DDLUtils.isHiveTable(t) && t.storage.serde.isEmpty =>
+      if (t.bucketSpec.isDefined) {
+        throw new AnalysisException("Creating bucketed Hive serde table is not supported yet.")
+      }
+      if (t.partitionColumnNames.nonEmpty && query.isDefined) {
+        val errorMessage = "A Create Table As Select (CTAS) statement is not allowed to " +
+          "create a partitioned table using Hive's file formats. " +
+          "Please use the syntax of \"CREATE TABLE tableName USING dataSource " +
+          "OPTIONS (...) PARTITIONED BY ...\" to create a partitioned table through a " +
+          "CTAS statement."
+        throw new AnalysisException(errorMessage)
+      }
+
+      val defaultStorage = HiveSerDe.getDefaultStorage(conf)
+      val options = new HiveOptions(t.storage.properties)
+
+      val fileStorage = if (options.fileFormat.isDefined) {
+        HiveSerDe.sourceToSerDe(options.fileFormat.get) match {
+          case Some(s) =>
+            CatalogStorageFormat.empty.copy(
+              inputFormat = s.inputFormat,
+              outputFormat = s.outputFormat,
+              serde = s.serde)
+          case None =>
+            throw new IllegalArgumentException(s"invalid fileFormat: '${options.fileFormat.get}'")
+        }
+      } else if (options.hasInputOutputFormat) {
+        CatalogStorageFormat.empty.copy(
+          inputFormat = options.inputFormat,
+          outputFormat = options.outputFormat)
+      } else {
+        CatalogStorageFormat.empty
+      }
+
+      val rowStorage = if (options.serde.isDefined) {
+        CatalogStorageFormat.empty.copy(serde = options.serde)
+      } else {
+        CatalogStorageFormat.empty
+      }
+
+      val storage = t.storage.copy(
+        inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
+        outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
+        serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
+        properties = options.serdeProperties)
+
+      c.copy(tableDesc = t.copy(storage = storage))
+  }
+}
 
 private[hive] trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
@@ -47,17 +106,9 @@ private[hive] trait HiveStrategies {
       case logical.InsertIntoTable(
           table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
         InsertIntoHiveTable(
-          table, partition, planLater(child), overwrite.enabled, ifNotExists) :: Nil
+          table, partition, planLater(child), overwrite, ifNotExists) :: Nil
 
-      case CreateTable(tableDesc, mode, Some(query)) if tableDesc.provider.get == "hive" =>
-        val newTableDesc = if (tableDesc.storage.serde.isEmpty) {
-          // add default serde
-          tableDesc.withNewStorage(
-            serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-        } else {
-          tableDesc
-        }
-
+      case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
         // Currently we will never hit this branch, as SQL string API can only use `Ignore` or
         // `ErrorIfExists` mode, and `DataFrameWriter.saveAsTable` doesn't support hive serde
         // tables yet.
@@ -68,7 +119,7 @@ private[hive] trait HiveStrategies {
 
         val dbName = tableDesc.identifier.database.getOrElse(sparkSession.catalog.currentDatabase)
         val cmd = CreateHiveTableAsSelectCommand(
-          newTableDesc.copy(identifier = tableDesc.identifier.copy(database = Some(dbName))),
+          tableDesc.copy(identifier = tableDesc.identifier.copy(database = Some(dbName))),
           query,
           mode == SaveMode.Ignore)
         ExecutedCommandExec(cmd) :: Nil

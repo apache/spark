@@ -44,10 +44,8 @@ The spark jobs themselves must be configured to log events, and to log them to t
 writable directory. For example, if the server was configured with a log directory of
 `hdfs://namenode/shared/spark-logs`, then the client-side options would be:
 
-```
-spark.eventLog.enabled true
-spark.eventLog.dir hdfs://namenode/shared/spark-logs
-```
+    spark.eventLog.enabled true
+    spark.eventLog.dir hdfs://namenode/shared/spark-logs
 
 The history server can be configured as follows:
 
@@ -172,6 +170,28 @@ The history server can be configured as follows:
     </td>
   </tr>
   <tr>
+    <td>spark.history.ui.admin.acls</td>
+    <td>empty</td>
+    <td>
+      Comma separated list of users/administrators that have view access to all the Spark applications in
+      history server. By default only the users permitted to view the application at run-time could
+      access the related application history, with this, configured users/administrators could also
+      have the permission to access it.
+      Putting a "*" in the list means any user can have the privilege of admin.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.ui.admin.acls.groups</td>
+    <td>empty</td>
+    <td>
+      Comma separated list of groups that have view access to all the Spark applications in
+      history server. By default only the groups permitted to view the application at run-time could
+      access the related application history, with this, configured groups could also
+      have the permission to access it.
+      Putting a "*" in the list means any group can have the privilege of admin.
+    </td>
+  </tr>
+  <tr>
     <td>spark.history.fs.cleaner.enabled</td>
     <td>false</td>
     <td>
@@ -278,7 +298,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]</code></td>
-    <td>Details for the given stage attempt</td>
+    <td>Details for the given stage attempt.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskSummary</code></td>
@@ -323,6 +343,34 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td><code>/applications/[base-app-id]/[attempt-id]/logs</code></td>
     <td>Download the event logs for a specific application attempt as a zip file.</td>
   </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/statistics</code></td>
+    <td>Statistics for the streaming context.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/receivers</code></td>
+    <td>A list of all streaming receivers.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/receivers/[stream-id]</code></td>
+    <td>Details of the given receiver.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches</code></td>
+    <td>A list of all retained batches.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches/[batch-id]</code></td>
+    <td>Details of the given batch.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations</code></td>
+    <td>A list of all output operations of the given batch.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations/[outputOp-id]</code></td>
+    <td>Details of the given operation and given batch.</td>
+  </tr>       
 </table>
 
 The number of jobs and stages which can retrieved is constrained by the same retention

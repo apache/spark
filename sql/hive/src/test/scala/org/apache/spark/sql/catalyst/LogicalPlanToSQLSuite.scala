@@ -23,6 +23,7 @@ import java.nio.file.{Files, NoSuchFileException, Paths}
 import scala.io.Source
 import scala.util.control.NonFatal
 
+import org.apache.spark.TestUtils
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -576,6 +577,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("script transformation - schemaless") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     checkSQL("SELECT TRANSFORM (a, b, c, d) USING 'cat' FROM parquet_t2",
       "script_transformation_1")
     checkSQL("SELECT TRANSFORM (*) USING 'cat' FROM parquet_t2",
@@ -583,11 +586,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("script transformation - alias list") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     checkSQL("SELECT TRANSFORM (a, b, c, d) USING 'cat' AS (d1, d2, d3, d4) FROM parquet_t2",
       "script_transformation_alias_list")
   }
 
   test("script transformation - alias list with type") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     checkSQL(
       """FROM
         |(FROM parquet_t1 SELECT TRANSFORM(key, value) USING 'cat' AS (thing1 int, thing2 string)) t
@@ -597,6 +604,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("script transformation - row format delimited clause with only one format property") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     checkSQL(
       """SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
         |USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
@@ -606,6 +615,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("script transformation - row format delimited clause with multiple format properties") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     checkSQL(
       """SELECT TRANSFORM (key)
         |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\t'
@@ -617,6 +628,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("script transformation - row format serde clauses with SERDEPROPERTIES") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     checkSQL(
       """SELECT TRANSFORM (key, value)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
@@ -630,6 +643,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("script transformation - row format serde clauses without SERDEPROPERTIES") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     checkSQL(
       """SELECT TRANSFORM (key, value)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'

@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
+import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
@@ -57,7 +57,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               \"separatorChar\" = \",\",
               \"quoteChar\"     = \"\\\"\",
               \"escapeChar\"    = \"\\\\\")
-            LOCATION '$tempDir'
+            LOCATION '${tempDir.toURI}'
           """)
 
         spark.conf.set(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key, true)
@@ -69,7 +69,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         assert(properties.get("totalSize").toLong <= 0, "external table totalSize must be <= 0")
         assert(properties.get("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
 
-        val sizeInBytes = relation.statistics.sizeInBytes
+        val sizeInBytes = relation.stats(conf).sizeInBytes
         assert(sizeInBytes === BigInt(file1.length() + file2.length()))
       }
     } finally {
@@ -80,7 +80,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
   test("analyze MetastoreRelations") {
     def queryTotalSize(tableName: String): BigInt =
-      spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName)).statistics.sizeInBytes
+      spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName)).stats(conf).sizeInBytes
 
     // Non-partitioned table
     sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
@@ -152,7 +152,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   private def checkTableStats(
-      stats: Option[Statistics],
+      stats: Option[CatalogStatistics],
       hasSizeInBytes: Boolean,
       expectedRowCounts: Option[Int]): Unit = {
     if (hasSizeInBytes || expectedRowCounts.nonEmpty) {
@@ -168,7 +168,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       tableName: String,
       isDataSourceTable: Boolean,
       hasSizeInBytes: Boolean,
-      expectedRowCounts: Option[Int]): Option[Statistics] = {
+      expectedRowCounts: Option[Int]): Option[CatalogStatistics] = {
     val df = sql(s"SELECT * FROM $tableName")
     val stats = df.queryExecution.analyzed.collect {
       case rel: MetastoreRelation =>
@@ -435,10 +435,11 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   /** Used to test refreshing cached metadata once table stats are updated. */
-  private def getStatsBeforeAfterUpdate(isAnalyzeColumns: Boolean): (Statistics, Statistics) = {
+  private def getStatsBeforeAfterUpdate(isAnalyzeColumns: Boolean)
+    : (CatalogStatistics, CatalogStatistics) = {
     val tableName = "tbl"
-    var statsBeforeUpdate: Statistics = null
-    var statsAfterUpdate: Statistics = null
+    var statsBeforeUpdate: CatalogStatistics = null
+    var statsAfterUpdate: CatalogStatistics = null
     withTable(tableName) {
       val tableIndent = TableIdentifier(tableName, Some("default"))
       val catalog = spark.sessionState.catalog.asInstanceOf[HiveSessionCatalog]
@@ -480,7 +481,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("estimates the size of a test MetastoreRelation") {
     val df = sql("""SELECT * FROM src""")
     val sizes = df.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
-      mr.statistics.sizeInBytes
+      mr.stats(conf).sizeInBytes
     }
     assert(sizes.size === 1, s"Size wrong for:\n ${df.queryExecution}")
     assert(sizes(0).equals(BigInt(5812)),
@@ -500,7 +501,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       // Assert src has a size smaller than the threshold.
       val sizes = df.queryExecution.analyzed.collect {
-        case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
+        case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.stats(conf).sizeInBytes
       }
       assert(sizes.size === 2 && sizes(0) <= spark.sessionState.conf.autoBroadcastJoinThreshold
         && sizes(1) <= spark.sessionState.conf.autoBroadcastJoinThreshold,
@@ -556,7 +557,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val sizes = df.queryExecution.analyzed.collect {
       case r if implicitly[ClassTag[MetastoreRelation]].runtimeClass
         .isAssignableFrom(r.getClass) =>
-        r.statistics.sizeInBytes
+        r.stats(conf).sizeInBytes
     }
     assert(sizes.size === 2 && sizes(1) <= spark.sessionState.conf.autoBroadcastJoinThreshold
       && sizes(0) <= spark.sessionState.conf.autoBroadcastJoinThreshold,

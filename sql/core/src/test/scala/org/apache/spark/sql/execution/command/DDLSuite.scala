@@ -84,12 +84,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         serde = None,
         compressed = false,
         properties = Map())
+    val metadata = new MetadataBuilder()
+      .putString("key", "value")
+      .build()
     CatalogTable(
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
       schema = new StructType()
-        .add("col1", "int")
+        .add("col1", "int", nullable = true, metadata = metadata)
         .add("col2", "string")
         .add("a", "int")
         .add("b", "int"),
@@ -312,7 +315,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           pathToNonPartitionedTable,
           userSpecifiedSchema = Option("num int, str string"),
           userSpecifiedPartitionCols = partitionCols,
-          expectedSchema = new StructType().add("num", IntegerType).add("str", StringType),
+          expectedSchema = if (partitionCols.isDefined) {
+            // we skipped inference, so the partition col is ordered at the end
+            new StructType().add("str", StringType).add("num", IntegerType)
+          } else {
+            // no inferred partitioning, so schema is in original order
+            new StructType().add("num", IntegerType).add("str", StringType)
+          },
           expectedPartitionCols = partitionCols.map(Seq(_)).getOrElse(Seq.empty[String]))
       }
     }
@@ -336,7 +345,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
     }
-    assert(e.message == "partition column c is not defined in table `tbl`, " +
+    assert(e.message == "partition column c is not defined in table tbl, " +
       "defined table columns are: a, b")
   }
 
@@ -344,7 +353,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
     }
-    assert(e.message == "bucket column c is not defined in table `tbl`, " +
+    assert(e.message == "bucket column c is not defined in table tbl, " +
       "defined table columns are: a, b")
   }
 
@@ -565,7 +574,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val table = catalog.getTableMetadata(TableIdentifier("tbl"))
       assert(table.tableType == CatalogTableType.MANAGED)
       assert(table.provider == Some("parquet"))
-      assert(table.schema == new StructType().add("a", IntegerType).add("b", IntegerType))
+      // a is ordered last since it is a user-specified partitioning column
+      assert(table.schema == new StructType().add("b", IntegerType).add("a", IntegerType))
       assert(table.partitionColumnNames == Seq("a"))
     }
   }
@@ -764,6 +774,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     testSetSerdePartition(isDatasourceTable = true)
   }
 
+  test("alter table: change column") {
+    testChangeColumn(isDatasourceTable = false)
+  }
+
+  test("alter table: change column (datasource table)") {
+    testChangeColumn(isDatasourceTable = true)
+  }
+
   test("alter table: bucketing is not supported") {
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
@@ -878,7 +896,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     testRenamePartitions(isDatasourceTable = true)
   }
 
-  test("show tables") {
+  test("show table extended") {
     withTempView("show1a", "show2b") {
       sql(
         """
@@ -901,24 +919,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           |  Table 'test1'
           |)
         """.stripMargin)
-      checkAnswer(
-        sql("SHOW TABLES IN default 'show1*'"),
-        Row("", "show1a", true) :: Nil)
-
-      checkAnswer(
-        sql("SHOW TABLES IN default 'show1*|show2*'"),
-        Row("", "show1a", true) ::
-          Row("", "show2b", true) :: Nil)
-
-      checkAnswer(
-        sql("SHOW TABLES 'show1*|show2*'"),
-        Row("", "show1a", true) ::
-          Row("", "show2b", true) :: Nil)
-
       assert(
-        sql("SHOW TABLES").count() >= 2)
+        sql("SHOW TABLE EXTENDED LIKE 'show*'").count() >= 2)
       assert(
-        sql("SHOW TABLES IN default").count() >= 2)
+        sql("SHOW TABLE EXTENDED LIKE 'show*'").schema ==
+          StructType(StructField("database", StringType, false) ::
+            StructField("tableName", StringType, false) ::
+            StructField("isTemporary", BooleanType, false) ::
+            StructField("information", StringType, false) :: Nil))
     }
   }
 
@@ -1281,26 +1289,28 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val part2 = Map("a" -> "2", "b" -> "6")
     val part3 = Map("a" -> "3", "b" -> "7")
     val part4 = Map("a" -> "4", "b" -> "8")
+    val part5 = Map("a" -> "9", "b" -> "9")
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
     createTablePartition(catalog, part1, tableIdent)
     createTablePartition(catalog, part2, tableIdent)
     createTablePartition(catalog, part3, tableIdent)
     createTablePartition(catalog, part4, tableIdent)
+    createTablePartition(catalog, part5, tableIdent)
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(part1, part2, part3, part4))
+      Set(part1, part2, part3, part4, part5))
     if (isDatasourceTable) {
       convertToDatasourceTable(catalog, tableIdent)
     }
 
     // basic drop partition
     sql("ALTER TABLE dbx.tab1 DROP IF EXISTS PARTITION (a='4', b='8'), PARTITION (a='3', b='7')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2))
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part5))
 
     // drop partitions without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (a='2', b ='6')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part5))
 
     // table to alter does not exist
     intercept[AnalysisException] {
@@ -1314,10 +1324,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
     // partition to drop does not exist when using IF EXISTS
     sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (a='300')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part5))
 
     // partition spec in DROP PARTITION should be case insensitive by default
     sql("ALTER TABLE tab1 DROP PARTITION (A='1', B='5')")
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part5))
+
+    // use int literal as partition value for int type partition column
+    sql("ALTER TABLE tab1 DROP PARTITION (a=9, b=9)")
     assert(catalog.listPartitions(tableIdent).isEmpty)
   }
 
@@ -1363,6 +1377,26 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("ALTER TABLE tab1 PARTITION (A='10', B='p') RENAME TO PARTITION (A='1', B='p')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
       Set(Map("a" -> "1", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
+  }
+
+  private def testChangeColumn(isDatasourceTable: Boolean): Unit = {
+    val catalog = spark.sessionState.catalog
+    val resolver = spark.sessionState.conf.resolver
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    def getMetadata(colName: String): Metadata = {
+      val column = catalog.getTableMetadata(tableIdent).schema.fields.find { field =>
+        resolver(field.name, colName)
+      }
+      column.map(_.metadata).getOrElse(Metadata.empty)
+    }
+    // Ensure that change column will preserve other metadata fields.
+    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 INT COMMENT 'this is col1'")
+    assert(getMetadata("col1").getString("key") == "value")
   }
 
   test("drop build-in function") {

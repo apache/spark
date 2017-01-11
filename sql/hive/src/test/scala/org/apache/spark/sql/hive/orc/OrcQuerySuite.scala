@@ -350,7 +350,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           spark.sql(
             s"""CREATE TABLE empty_orc(key INT, value STRING)
                |STORED AS ORC
-               |LOCATION '$path'
+               |LOCATION '${dir.toURI}'
              """.stripMargin)
 
           val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
@@ -451,7 +451,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
                 s"""
                    |CREATE TABLE dummy_orc(key INT, value STRING)
                    |STORED AS ORC
-                   |LOCATION '$path'
+                   |LOCATION '${dir.toURI}'
                  """.stripMargin)
 
               spark.sql(
@@ -500,7 +500,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
             |create external table dummy_orc (id long, valueField long)
             |partitioned by (partitionValue int)
             |stored as orc
-            |location "${dir.getAbsolutePath}"""".stripMargin)
+            |location "${dir.toURI}"""".stripMargin)
           spark.sql(s"msck repair table dummy_orc")
           checkAnswer(spark.sql("select * from dummy_orc"), df)
         }

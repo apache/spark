@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.io.File
+import java.io.{File, IOException}
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
 import java.util.{Map => JMap, Properties}
@@ -138,10 +138,21 @@ class KafkaTestUtils extends Logging {
 
     if (server != null) {
       server.shutdown()
+      server.awaitShutdown()
       server = null
     }
 
-    brokerConf.logDirs.foreach { f => Utils.deleteRecursively(new File(f)) }
+    // On Windows, `logDirs` is left open even after Kafka server above is completely shut down
+    // in some cases. It leads to test failures on Windows if the directory deletion failure
+    // throws an exception.
+    brokerConf.logDirs.foreach { f =>
+      try {
+        Utils.deleteRecursively(new File(f))
+      } catch {
+        case e: IOException if Utils.isWindows =>
+          logWarning(e.getMessage)
+      }
+    }
 
     if (zkUtils != null) {
       zkUtils.close()
@@ -184,7 +195,7 @@ class KafkaTestUtils extends Logging {
   def deleteTopic(topic: String): Unit = {
     val partitions = zkUtils.getPartitionsForTopics(Seq(topic))(topic).size
     AdminUtils.deleteTopic(zkUtils, topic)
-    verifyTopicDeletion(zkUtils, topic, partitions, List(this.server))
+    verifyTopicDeletionWithRetries(zkUtils, topic, partitions, List(this.server))
   }
 
   /** Add new paritions to a Kafka topic */
@@ -286,36 +297,57 @@ class KafkaTestUtils extends Logging {
     props
   }
 
+  /** Verify topic is deleted in all places, e.g, brokers, zookeeper. */
   private def verifyTopicDeletion(
+      topic: String,
+      numPartitions: Int,
+      servers: Seq[KafkaServer]): Unit = {
+    val topicAndPartitions = (0 until numPartitions).map(TopicAndPartition(topic, _))
+
+    import ZkUtils._
+    // wait until admin path for delete topic is deleted, signaling completion of topic deletion
+    assert(
+      !zkUtils.pathExists(getDeleteTopicPath(topic)),
+      s"${getDeleteTopicPath(topic)} still exists")
+    assert(!zkUtils.pathExists(getTopicPath(topic)), s"${getTopicPath(topic)} still exists")
+    // ensure that the topic-partition has been deleted from all brokers' replica managers
+    assert(servers.forall(server => topicAndPartitions.forall(tp =>
+      server.replicaManager.getPartition(tp.topic, tp.partition) == None)),
+      s"topic $topic still exists in the replica manager")
+    // ensure that logs from all replicas are deleted if delete topic is marked successful
+    assert(servers.forall(server => topicAndPartitions.forall(tp =>
+      server.getLogManager().getLog(tp).isEmpty)),
+      s"topic $topic still exists in log mananger")
+    // ensure that topic is removed from all cleaner offsets
+    assert(servers.forall(server => topicAndPartitions.forall { tp =>
+      val checkpoints = server.getLogManager().logDirs.map { logDir =>
+        new OffsetCheckpoint(new File(logDir, "cleaner-offset-checkpoint")).read()
+      }
+      checkpoints.forall(checkpointsPerLogDir => !checkpointsPerLogDir.contains(tp))
+    }), s"checkpoint for topic $topic still exists")
+    // ensure the topic is gone
+    assert(
+      !zkUtils.getAllTopics().contains(topic),
+      s"topic $topic still exists on zookeeper")
+  }
+
+  /** Verify topic is deleted. Retry to delete the topic if not. */
+  private def verifyTopicDeletionWithRetries(
       zkUtils: ZkUtils,
       topic: String,
       numPartitions: Int,
       servers: Seq[KafkaServer]) {
-    import ZkUtils._
-    val topicAndPartitions = (0 until numPartitions).map(TopicAndPartition(topic, _))
-    def isDeleted(): Boolean = {
-      // wait until admin path for delete topic is deleted, signaling completion of topic deletion
-      val deletePath = !zkUtils.pathExists(getDeleteTopicPath(topic))
-      val topicPath = !zkUtils.pathExists(getTopicPath(topic))
-      // ensure that the topic-partition has been deleted from all brokers' replica managers
-      val replicaManager = servers.forall(server => topicAndPartitions.forall(tp =>
-        server.replicaManager.getPartition(tp.topic, tp.partition) == None))
-      // ensure that logs from all replicas are deleted if delete topic is marked successful
-      val logManager = servers.forall(server => topicAndPartitions.forall(tp =>
-        server.getLogManager().getLog(tp).isEmpty))
-      // ensure that topic is removed from all cleaner offsets
-      val cleaner = servers.forall(server => topicAndPartitions.forall { tp =>
-        val checkpoints = server.getLogManager().logDirs.map { logDir =>
-          new OffsetCheckpoint(new File(logDir, "cleaner-offset-checkpoint")).read()
-        }
-        checkpoints.forall(checkpointsPerLogDir => !checkpointsPerLogDir.contains(tp))
-      })
-      // ensure the topic is gone
-      val deleted = !zkUtils.getAllTopics().contains(topic)
-      deletePath && topicPath && replicaManager && logManager && cleaner && deleted
-    }
-    eventually(timeout(60.seconds)) {
-      assert(isDeleted, s"$topic not deleted after timeout")
+    eventually(timeout(60.seconds), interval(200.millis)) {
+      try {
+        verifyTopicDeletion(topic, numPartitions, servers)
+      } catch {
+        case e: Throwable =>
+          // As pushing messages into Kafka updates Zookeeper asynchronously, there is a small
+          // chance that a topic will be recreated after deletion due to the asynchronous update.
+          // Hence, delete the topic and retry.
+          AdminUtils.deleteTopic(zkUtils, topic)
+          throw e
+      }
     }
   }
 
@@ -331,7 +363,7 @@ class KafkaTestUtils extends Logging {
       case _ =>
         false
     }
-    eventually(timeout(10.seconds)) {
+    eventually(timeout(60.seconds)) {
       assert(isPropagated, s"Partition [$topic, $partition] metadata not propagated after timeout")
     }
   }
@@ -353,8 +385,21 @@ class KafkaTestUtils extends Logging {
 
     def shutdown() {
       factory.shutdown()
-      Utils.deleteRecursively(snapshotDir)
-      Utils.deleteRecursively(logDir)
+      // The directories are not closed even if the ZooKeeper server is shut down.
+      // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures
+      // on Windows if the directory deletion failure throws an exception.
+      try {
+        Utils.deleteRecursively(snapshotDir)
+      } catch {
+        case e: IOException if Utils.isWindows =>
+          logWarning(e.getMessage)
+      }
+      try {
+        Utils.deleteRecursively(logDir)
+      } catch {
+        case e: IOException if Utils.isWindows =>
+          logWarning(e.getMessage)
+      }
     }
   }
 }

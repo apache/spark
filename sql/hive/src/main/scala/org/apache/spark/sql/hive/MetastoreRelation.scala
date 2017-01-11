@@ -30,6 +30,7 @@ import org.apache.hadoop.hive.ql.metadata.{Partition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, Expression}
@@ -61,7 +62,12 @@ private[hive] case class MetastoreRelation(
   override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
 
   private def toHiveColumn(c: StructField): FieldSchema = {
-    new FieldSchema(c.name, c.dataType.catalogString, c.getComment.orNull)
+    val typeString = if (c.metadata.contains(HiveUtils.hiveTypeString)) {
+      c.metadata.getString(HiveUtils.hiveTypeString)
+    } else {
+      c.dataType.catalogString
+    }
+    new FieldSchema(c.name, typeString, c.getComment.orNull)
   }
 
   // TODO: merge this with HiveClientImpl#toHiveTable
@@ -107,8 +113,8 @@ private[hive] case class MetastoreRelation(
     new HiveTable(tTable)
   }
 
-  @transient override lazy val statistics: Statistics = {
-    catalogTable.stats.getOrElse(Statistics(
+  @transient override def computeStats(conf: CatalystConf): Statistics = {
+    catalogTable.stats.map(_.toPlanStats(output)).getOrElse(Statistics(
       sizeInBytes = {
         val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
         val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)

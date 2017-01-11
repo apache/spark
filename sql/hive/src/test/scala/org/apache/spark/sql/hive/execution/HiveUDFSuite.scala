@@ -21,15 +21,17 @@ import java.io.{DataInput, DataOutput, File, PrintWriter}
 import java.util.{ArrayList, Arrays, Properties}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.ql.udf.UDAFPercentile
+import org.apache.hadoop.hive.ql.exec.UDF
+import org.apache.hadoop.hive.ql.udf.{UDAFPercentile, UDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.io.Writable
+import org.apache.hadoop.io.{LongWritable, Writable}
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.functions.max
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
@@ -426,7 +428,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           \"separatorChar\" = \",\",
           \"quoteChar\"     = \"\\\"\",
           \"escapeChar\"    = \"\\\\\")
-        LOCATION '$tempDir'
+        LOCATION '${tempDir.toURI}'
       """)
 
       val answer1 =
@@ -442,7 +444,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql(
         s"""CREATE EXTERNAL TABLE external_t5 (c1 int, c2 int)
         ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-        LOCATION '$tempDir'
+        LOCATION '${tempDir.toURI}'
       """)
 
       val answer2 =
@@ -458,7 +460,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
       // External parquet pointing to LOCATION
 
-      val parquetLocation = tempDir + "/external_parquet"
+      val parquetLocation = s"${tempDir.toURI}/external_parquet"
       sql("SELECT 1, 2").write.parquet(parquetLocation)
 
       sql(
@@ -486,6 +488,26 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     val count4 = sql("SELECT input_file_name() as file FROM parquet_tmp").distinct().count
     assert(count4 == 1)
     sql("DROP TABLE parquet_tmp")
+  }
+
+  test("Hive Stateful UDF") {
+    withUserDefinedFunction("statefulUDF" -> true, "statelessUDF" -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION statefulUDF AS '${classOf[StatefulUDF].getName}'")
+      sql(s"CREATE TEMPORARY FUNCTION statelessUDF AS '${classOf[StatelessUDF].getName}'")
+      val testData = spark.range(10).repartition(1)
+
+      // Expected Max(s) is 10 as statefulUDF returns the sequence number starting from 1.
+      checkAnswer(testData.selectExpr("statefulUDF() as s").agg(max($"s")), Row(10))
+
+      // Expected Max(s) is 5 as statefulUDF returns the sequence number starting from 1,
+      // and the data is evenly distributed into 2 partitions.
+      checkAnswer(testData.repartition(2)
+        .selectExpr("statefulUDF() as s").agg(max($"s")), Row(5))
+
+      // Expected Max(s) is 1, as stateless UDF is deterministic and foldable and replaced
+      // by constant 1 by ConstantFolding optimizer.
+      checkAnswer(testData.selectExpr("statelessUDF() as s").agg(max($"s")), Row(1))
+    }
   }
 }
 
@@ -550,4 +572,23 @@ class PairUDF extends GenericUDF {
   }
 
   override def getDisplayString(p1: Array[String]): String = ""
+}
+
+@UDFType(stateful = true)
+class StatefulUDF extends UDF {
+  private val result = new LongWritable(0)
+
+  def evaluate(): LongWritable = {
+    result.set(result.get() + 1)
+    result
+  }
+}
+
+class StatelessUDF extends UDF {
+  private val result = new LongWritable(0)
+
+  def evaluate(): LongWritable = {
+    result.set(result.get() + 1)
+    result
+  }
 }

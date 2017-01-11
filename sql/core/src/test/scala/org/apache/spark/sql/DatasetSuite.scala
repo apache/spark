@@ -26,9 +26,11 @@ import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SortExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
+
+case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
+case class TestDataPoint2(x: Int, s: String)
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -867,10 +869,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(Seq("a", null).toDS(), "a", null)
   }
 
-  test("Dataset should throw RuntimeException if non-flat input object is null") {
+  test("Dataset should throw RuntimeException if top-level product input object is null") {
     val e = intercept[RuntimeException](Seq(ClassData("a", 1), null).toDS())
     assert(e.getMessage.contains("Null value appeared in non-nullable field"))
-    assert(e.getMessage.contains("top level non-flat input object"))
+    assert(e.getMessage.contains("top level Product input object"))
   }
 
   test("dropDuplicates") {
@@ -969,6 +971,53 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(dataset.collect() sameElements Array(resultValue, resultValue))
   }
 
+  test("SPARK-18284: Serializer should have correct nullable value") {
+    val df1 = Seq(1, 2, 3, 4).toDF
+    assert(df1.schema(0).nullable == false)
+    val df2 = Seq(Integer.valueOf(1), Integer.valueOf(2)).toDF
+    assert(df2.schema(0).nullable == true)
+
+    val df3 = Seq(Seq(1, 2), Seq(3, 4)).toDF
+    assert(df3.schema(0).nullable == true)
+    assert(df3.schema(0).dataType.asInstanceOf[ArrayType].containsNull == false)
+    val df4 = Seq(Seq("a", "b"), Seq("c", "d")).toDF
+    assert(df4.schema(0).nullable == true)
+    assert(df4.schema(0).dataType.asInstanceOf[ArrayType].containsNull == true)
+
+    val df5 = Seq((0, 1.0), (2, 2.0)).toDF("id", "v")
+    assert(df5.schema(0).nullable == false)
+    assert(df5.schema(1).nullable == false)
+    val df6 = Seq((0, 1.0, "a"), (2, 2.0, "b")).toDF("id", "v1", "v2")
+    assert(df6.schema(0).nullable == false)
+    assert(df6.schema(1).nullable == false)
+    assert(df6.schema(2).nullable == true)
+
+    val df7 = (Tuple1(Array(1, 2, 3)) :: Nil).toDF("a")
+    assert(df7.schema(0).nullable == true)
+    assert(df7.schema(0).dataType.asInstanceOf[ArrayType].containsNull == false)
+
+    val df8 = (Tuple1(Array((null: Integer), (null: Integer))) :: Nil).toDF("a")
+    assert(df8.schema(0).nullable == true)
+    assert(df8.schema(0).dataType.asInstanceOf[ArrayType].containsNull == true)
+
+    val df9 = (Tuple1(Map(2 -> 3)) :: Nil).toDF("m")
+    assert(df9.schema(0).nullable == true)
+    assert(df9.schema(0).dataType.asInstanceOf[MapType].valueContainsNull == false)
+
+    val df10 = (Tuple1(Map(1 -> (null: Integer))) :: Nil).toDF("m")
+    assert(df10.schema(0).nullable == true)
+    assert(df10.schema(0).dataType.asInstanceOf[MapType].valueContainsNull == true)
+
+    val df11 = Seq(TestDataPoint(1, 2.2, "a", null),
+                   TestDataPoint(3, 4.4, "null", (TestDataPoint2(33, "b")))).toDF
+    assert(df11.schema(0).nullable == false)
+    assert(df11.schema(1).nullable == false)
+    assert(df11.schema(2).nullable == true)
+    assert(df11.schema(3).nullable == true)
+    assert(df11.schema(3).dataType.asInstanceOf[StructType].fields(0).nullable == false)
+    assert(df11.schema(3).dataType.asInstanceOf[StructType].fields(1).nullable == true)
+  }
+
   Seq(true, false).foreach { eager =>
     def testCheckpointing(testName: String)(f: => Unit): Unit = {
       test(s"Dataset.checkpoint() - $testName (eager = $eager)") {
@@ -1051,7 +1100,53 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(dsDouble, arrayDouble)
     checkDataset(dsString, arrayString)
   }
+
+  test("SPARK-18251: the type of Dataset can't be Option of Product type") {
+    checkDataset(Seq(Some(1), None).toDS(), Some(1), None)
+
+    val e = intercept[UnsupportedOperationException] {
+      Seq(Some(1 -> "a"), None).toDS()
+    }
+    assert(e.getMessage.contains("Cannot create encoder for Option of Product type"))
+  }
+
+  test ("SPARK-17460: the sizeInBytes in Statistics shouldn't overflow to a negative number") {
+    // Since the sizeInBytes in Statistics could exceed the limit of an Int, we should use BigInt
+    // instead of Int for avoiding possible overflow.
+    val ds = (0 to 10000).map( i =>
+      (i, Seq((i, Seq((i, "This is really not that long of a string")))))).toDS()
+    val sizeInBytes = ds.logicalPlan.stats(sqlConf).sizeInBytes
+    // sizeInBytes is 2404280404, before the fix, it overflows to a negative number
+    assert(sizeInBytes > 0)
+  }
+
+  test("SPARK-18717: code generation works for both scala.collection.Map" +
+    " and scala.collection.imutable.Map") {
+    val ds = Seq(WithImmutableMap("hi", Map(42L -> "foo"))).toDS
+    checkDataset(ds.map(t => t), WithImmutableMap("hi", Map(42L -> "foo")))
+
+    val ds2 = Seq(WithMap("hi", Map(42L -> "foo"))).toDS
+    checkDataset(ds2.map(t => t), WithMap("hi", Map(42L -> "foo")))
+  }
+
+  test("SPARK-18746: add implicit encoder for BigDecimal, date, timestamp") {
+    // For this implicit encoder, 18 is the default scale
+    assert(spark.range(1).map { x => new java.math.BigDecimal(1) }.head ==
+      new java.math.BigDecimal(1).setScale(18))
+
+    assert(spark.range(1).map { x => scala.math.BigDecimal(1, 18) }.head ==
+      scala.math.BigDecimal(1, 18))
+
+    assert(spark.range(1).map { x => new java.sql.Date(2016, 12, 12) }.head ==
+      new java.sql.Date(2016, 12, 12))
+
+    assert(spark.range(1).map { x => new java.sql.Timestamp(100000) }.head ==
+      new java.sql.Timestamp(100000))
+  }
 }
+
+case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map[Long, String])
+case class WithMap(id: String, map_test: scala.collection.Map[Long, String])
 
 case class Generic[T](id: T, value: Double)
 

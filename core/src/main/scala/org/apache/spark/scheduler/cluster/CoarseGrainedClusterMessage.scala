@@ -28,7 +28,12 @@ private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
 private[spark] object CoarseGrainedClusterMessages {
 
-  case object RetrieveSparkProps extends CoarseGrainedClusterMessage
+  case object RetrieveSparkAppConfig extends CoarseGrainedClusterMessage
+
+  case class SparkAppConfig(
+      sparkProperties: Seq[(String, String)],
+      ioEncryptionKey: Option[Array[Byte]])
+    extends CoarseGrainedClusterMessage
 
   case object RetrieveLastAllocatedExecutorId extends CoarseGrainedClusterMessage
 
@@ -94,7 +99,8 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RequestExecutors(
       requestedTotal: Int,
       localityAwareTasks: Int,
-      hostToLocalTaskCount: Map[String, Int])
+      hostToLocalTaskCount: Map[String, Int],
+      nodeBlacklist: Set[String])
     extends CoarseGrainedClusterMessage
 
   // Check if an executor was force-killed but for a reason unrelated to the running tasks.
