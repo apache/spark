@@ -46,10 +46,11 @@ private[security] class HadoopFSCredentialProvider
       creds: Credentials): Option[Long] = {
     // NameNode to access, used to get tokens from different FileSystems
     val tmpCreds = new Credentials()
+    val tokenRenewer = getTokenRenewer(hadoopConf)
     nnsToAccess(hadoopConf, sparkConf).foreach { dst =>
       val dstFs = dst.getFileSystem(hadoopConf)
       logInfo("getting token for: " + dst)
-      dstFs.addDelegationTokens(getTokenRenewer(hadoopConf), tmpCreds)
+      dstFs.addDelegationTokens(tokenRenewer, tmpCreds)
     }
 
     // Get the token renewal interval if it is not set. It will only be called once.
