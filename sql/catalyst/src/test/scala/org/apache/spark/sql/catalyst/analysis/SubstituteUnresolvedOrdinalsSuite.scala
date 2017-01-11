@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.SimpleCatalystConf
 
 class SubstituteUnresolvedOrdinalsSuite extends AnalysisTest {
-  private lazy val conf = SimpleCatalystConf(caseSensitiveAnalysis = true)
   private lazy val a = testRelation2.output(0)
   private lazy val b = testRelation2.output(1)
 

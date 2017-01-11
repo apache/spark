@@ -32,7 +32,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   setupTestData()
 
   def statisticSizeInByte(df: DataFrame): BigInt = {
-    df.queryExecution.optimizedPlan.statistics.sizeInBytes
+    df.queryExecution.optimizedPlan.stats(sqlConf).sizeInBytes
   }
 
   test("equi-join is hash-join") {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.types.StringType
@@ -25,8 +26,8 @@ import org.apache.spark.sql.types.StringType
 object EstimationUtils {
 
   /** Check if each plan has rowCount in its statistics. */
-  def rowCountsExist(plans: LogicalPlan*): Boolean =
-    plans.forall(_.statistics.rowCount.isDefined)
+  def rowCountsExist(conf: CatalystConf, plans: LogicalPlan*): Boolean =
+    plans.forall(_.stats(conf).rowCount.isDefined)
 
   /** Get column stats for output attributes. */
   def getOutputMap(inputMap: AttributeMap[ColumnStat], output: Seq[Attribute])

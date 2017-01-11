@@ -130,6 +130,6 @@ class AggEstimationSuite extends StatsEstimationTestBase {
       rowCount = Some(expectedRowCount),
       attributeStats = expectedAttrStats)
 
-    assert(testAgg.statistics == expectedStats)
+    assert(testAgg.stats(conf) == expectedStats)
   }
 }

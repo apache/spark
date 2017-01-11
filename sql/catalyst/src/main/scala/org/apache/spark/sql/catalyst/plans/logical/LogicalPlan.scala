@@ -81,6 +81,21 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     }
   }
 
+  /** A cache for the estimated statistics, such that it will only be computed once. */
+  private val statsCache = new ThreadLocal[Option[Statistics]] {
+    override protected def initialValue: Option[Statistics] = None
+  }
+
+  def stats(conf: CatalystConf): Statistics = statsCache.get.getOrElse {
+    statsCache.set(Some(computeStats(conf)))
+    statsCache.get.get
+  }
+
+  def invalidateStatsCache(): Unit = {
+    statsCache.set(None)
+    children.foreach(_.invalidateStatsCache())
+  }
+
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
    * cardinality is the product of all child plan's cardinality, i.e. applies in the case
@@ -88,35 +103,12 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    *
    * [[LeafNode]]s must override this.
    */
-  def statistics: Statistics = {
+  protected def computeStats(conf: CatalystConf): Statistics = {
     if (children.isEmpty) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
     }
-    Statistics(sizeInBytes = children.map(_.statistics.sizeInBytes).product)
+    Statistics(sizeInBytes = children.map(_.stats(conf).sizeInBytes).product)
   }
-
-  /**
-   * Returns the default statistics or statistics estimated by cbo based on configuration.
-   */
-  final def planStats(conf: CatalystConf): Statistics = {
-    if (conf.cboEnabled) {
-      if (estimatedStats.isEmpty) {
-        estimatedStats = Some(cboStatistics(conf))
-      }
-      estimatedStats.get
-    } else {
-      statistics
-    }
-  }
-
-  /**
-   * Returns statistics estimated by cbo. If the plan doesn't override this, it returns the
-   * default statistics.
-   */
-  protected def cboStatistics(conf: CatalystConf): Statistics = statistics
-
-  /** A cache for the estimated statistics, such that it will only be computed once. */
-  private var estimatedStats: Option[Statistics] = None
 
   /**
    * Returns the maximum number of rows that this plan may compute.
@@ -334,20 +326,20 @@ abstract class UnaryNode extends LogicalPlan {
 
   override protected def validConstraints: Set[Expression] = child.constraints
 
-  override def statistics: Statistics = {
+  override def computeStats(conf: CatalystConf): Statistics = {
     // There should be some overhead in Row object, the size should not be zero when there is
     // no columns, this help to prevent divide-by-zero error.
     val childRowSize = child.output.map(_.dataType.defaultSize).sum + 8
     val outputRowSize = output.map(_.dataType.defaultSize).sum + 8
     // Assume there will be the same number of rows as child has.
-    var sizeInBytes = (child.statistics.sizeInBytes * outputRowSize) / childRowSize
+    var sizeInBytes = (child.stats(conf).sizeInBytes * outputRowSize) / childRowSize
     if (sizeInBytes == 0) {
       // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
       // (product of children).
       sizeInBytes = 1
     }
 
-    child.statistics.copy(sizeInBytes = sizeInBytes)
+    child.stats(conf).copy(sizeInBytes = sizeInBytes)
   }
 }
 
