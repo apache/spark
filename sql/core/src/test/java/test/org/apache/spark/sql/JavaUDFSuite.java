@@ -18,6 +18,7 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -120,7 +121,12 @@ public class JavaUDFSuite implements Serializable {
     }, DataTypes.LongType);
 
     spark.range(10).toDF("x").createOrReplaceTempView("tmp");
-    Row result = spark.sql("SELECT inc(x) FROM tmp GROUP BY inc(x)").head();
-    Assert.assertEquals(7, result.getLong(0));
+    List<Row> results = spark.sql("SELECT inc(x) FROM tmp GROUP BY inc(x)").collectAsList();
+    Assert.assertEquals(10, results.size());
+    long sum = 0;
+    for (Row result : results) {
+      sum += result.getLong(0);
+    }
+    Assert.assertEquals(55, sum);
   }
 }
