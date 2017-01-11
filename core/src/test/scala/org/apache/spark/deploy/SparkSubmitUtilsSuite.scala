@@ -17,10 +17,12 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, FileWriter, OutputStream, PrintStream}
+import java.io.{File, OutputStream, PrintStream}
+import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable.ArrayBuffer
 
+import com.google.common.io.Files
 import org.apache.ivy.core.module.descriptor.MDArtifact
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
@@ -242,9 +244,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
          |""".stripMargin
 
     val settingsFile = new File(tempIvyPath, "ivysettings.xml")
-    val settingsWriter = new FileWriter(settingsFile)
-    settingsWriter.write(settingsText)
-    settingsWriter.close()
+    Files.write(settingsText, settingsFile, StandardCharsets.UTF_8)
     val settings = SparkSubmitUtils.loadIvySettings(settingsFile.toString, None, None)
     settings.setDefaultIvyUserDir(new File(tempIvyPath))  // NOTE - can't set this through file
 
