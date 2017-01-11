@@ -47,11 +47,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   private def checkNullCast(from: DataType, to: DataType): Unit = {
-    if (Cast.needTimeZone(from, to)) {
-      checkEvaluation(cast(Literal.create(null, from), to, Option("GMT")), null)
-    } else {
-      checkEvaluation(cast(Literal.create(null, from), to), null)
-    }
+    checkEvaluation(cast(Literal.create(null, from), to, Option("GMT")), null)
   }
 
   test("null cast") {

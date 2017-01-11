@@ -37,12 +37,6 @@ trait TimeZoneAwareExpression extends Expression {
   /** the timezone ID to be used to evaluate value. */
   def timeZoneId: Option[String]
 
-  /**
-   * Returns true if the timezone ID is resolved.
-   * If not resolved, the analyzer [[ResolveTimeZone]] will resolve with session local timezone.
-   */
-  def timeZoneResolved: Boolean = timeZoneId.isDefined
-
   /** Returns a copy of this expression with the specified timeZoneId. */
   def withTimeZone(timeZoneId: String): TimeZoneAwareExpression
 
@@ -114,8 +108,6 @@ case class CurrentBatchTimestamp(
   def this(timestampMs: Long, dataType: DataType) = this(timestampMs, dataType, None)
 
   override def nullable: Boolean = false
-
-  override def timeZoneResolved: Boolean = dataType != DateType || super.timeZoneResolved
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -574,14 +566,6 @@ abstract class UnixTime
 
   override def dataType: DataType = LongType
   override def nullable: Boolean = true
-
-  private def needTimeZone: Boolean = left.dataType match {
-    case TimestampType => false
-    case _ => true
-  }
-
-  override def timeZoneResolved: Boolean =
-    (!(childrenResolved && needTimeZone)) || super.timeZoneResolved
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: SimpleDateFormat =

@@ -93,7 +93,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       CombineLimits,
       CombineUnions,
       // Constant folding and strength reduction
-      NullPropagation,
+      NullPropagation(conf),
       FoldablePropagation,
       OptimizeIn(conf),
       ConstantFolding,
@@ -113,7 +113,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts(conf)) ::
     Batch("Decimal Optimizations", fixedPoint,
-      DecimalAggregates) ::
+      DecimalAggregates(conf)) ::
     Batch("Typed Filter Optimization", fixedPoint,
       CombineTypedFilters) ::
     Batch("LocalRelation", fixedPoint,
@@ -1025,7 +1025,7 @@ case class CheckCartesianProducts(conf: CatalystConf)
  * This uses the same rules for increasing the precision and scale of the output as
  * [[org.apache.spark.sql.catalyst.analysis.DecimalPrecision]].
  */
-object DecimalAggregates extends Rule[LogicalPlan] {
+case class DecimalAggregates(conf: CatalystConf) extends Rule[LogicalPlan] {
   import Decimal.MAX_LONG_DIGITS
 
   /** Maximum number of decimal digits representable precisely in a Double */
@@ -1043,7 +1043,8 @@ object DecimalAggregates extends Rule[LogicalPlan] {
             we.copy(windowFunction = ae.copy(aggregateFunction = Average(UnscaledValue(e))))
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
-            DecimalType(prec + 4, scale + 4))
+            DecimalType(prec + 4, scale + 4),
+            Option(conf.sessionLocalTimeZone))
 
         case _ => we
       }
@@ -1055,7 +1056,8 @@ object DecimalAggregates extends Rule[LogicalPlan] {
           val newAggExpr = ae.copy(aggregateFunction = Average(UnscaledValue(e)))
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
-            DecimalType(prec + 4, scale + 4))
+            DecimalType(prec + 4, scale + 4),
+            Option(conf.sessionLocalTimeZone))
 
         case _ => ae
       }

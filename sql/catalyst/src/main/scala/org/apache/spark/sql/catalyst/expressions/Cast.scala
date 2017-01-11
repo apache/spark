@@ -110,30 +110,6 @@ object Cast {
   }
 
   private def resolvableNullability(from: Boolean, to: Boolean) = !from || to
-
-  /**
-   * Returns true iff we need timeZoneId to cast `from` type to `to` type.
-   */
-  def needTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
-    case (StringType, TimestampType) => true
-    case (TimestampType, StringType) => true
-    case (DateType, TimestampType) => true
-    case (TimestampType, DateType) => true
-
-    case (ArrayType(fromType, _), ArrayType(toType, _)) =>
-      needTimeZone(fromType, toType)
-
-    case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
-      needTimeZone(fromKey, toKey) || needTimeZone(fromValue, toValue)
-
-    case (StructType(fromFields), StructType(toFields)) =>
-      fromFields.zip(toFields).exists {
-        case (fromField, toField) =>
-          needTimeZone(fromField.dataType, toField.dataType)
-      }
-
-    case _ => false
-  }
 }
 
 /**
@@ -166,9 +142,6 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   override def nullable: Boolean = Cast.forceNullable(child.dataType, dataType) || child.nullable
-
-  override def timeZoneResolved: Boolean =
-    (!(childrenResolved && Cast.needTimeZone(child.dataType, dataType))) || super.timeZoneResolved
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))

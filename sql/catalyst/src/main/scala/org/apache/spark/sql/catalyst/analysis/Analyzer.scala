@@ -2221,7 +2221,7 @@ class Analyzer(
   object ResolveTimeZone extends Rule[LogicalPlan] {
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
-      case e: TimeZoneAwareExpression if !e.timeZoneResolved =>
+      case e: TimeZoneAwareExpression if e.timeZoneId.isEmpty =>
         e.withTimeZone(conf.sessionLocalTimeZone)
     }
   }
