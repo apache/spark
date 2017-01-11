@@ -598,6 +598,19 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("execB", "host2", RACK_LOCAL).get.index === 1)
   }
 
+  test("do not emit warning when serialized task is small") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    assert(!manager.emittedTaskSizeWarning)
+
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
+
+    assert(!manager.emittedTaskSizeWarning)
+  }
+
   test("abort the job if total size of results is too large") {
     val conf = new SparkConf().set("spark.driver.maxResultSize", "2m")
     sc = new SparkContext("local", "test", conf)

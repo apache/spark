@@ -55,8 +55,7 @@ private[spark] class TaskDescription(
     val addedFiles: Map[String, Long],
     val addedJars: Map[String, Long],
     val properties: Properties,
-    private var serializedTask_ : ByteBuffer,
-    private var task_ : Task[_] = null) extends  Logging {
+    private var serializedTask_ : ByteBuffer) extends  Logging {
 
   def this(
       taskId: Long,
@@ -68,12 +67,20 @@ private[spark] class TaskDescription(
       addedJars: Map[String, Long],
       properties: Properties,
       task: Task[_]) {
-    this(taskId, attemptNumber, executorId, name, index,
-      addedFiles, addedJars, properties, null, task)
+      this(taskId, attemptNumber, executorId, name, index,
+        addedFiles, addedJars, properties, null.asInstanceOf[ByteBuffer])
+      task_ = task
   }
 
-  lazy val serializedTask: ByteBuffer = {
+  private var task_ : Task[_] = null
+
+  def serializedTask: ByteBuffer = {
     if (serializedTask_ == null) {
+      // This is where we serialize the task on the driver before sending it to the executor.
+      // This is not done when creating the TaskDescription so we can postpone this serialization
+      // to later in the scheduling process -- particularly,
+      // so it can happen in another thread by the CoarseGrainedSchedulerBackend.
+      // On the executors, this will already be populated by decode
       serializedTask_ = try {
         ByteBuffer.wrap(Utils.serialize(task_))
       } catch {
