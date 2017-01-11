@@ -348,31 +348,38 @@ object ScalaReflection extends ScalaReflection {
           "make",
           array :: Nil)
 
-        if (localTypeOf[scala.collection.mutable.WrappedArray[_]] <:< t.erasure) {
+        val cls = mirror.runtimeClass(t.typeSymbol.asClass)
+        import scala.collection.generic.CanBuildFrom
+        import scala.reflect.ClassTag
+
+        val cbfParams = try {
+          // Some canBuildFrom methods take an implicit ClassTag parameter
+          cls.getDeclaredMethod("canBuildFrom", classOf[ClassTag[_]])
+          Some(StaticInvoke(
+            ClassTag.getClass,
+            ObjectType(classOf[ClassTag[_]]),
+            "apply",
+            StaticInvoke(
+              cls,
+              ObjectType(classOf[Class[_]]),
+              "getClass"
+            ) :: Nil
+          ) :: Nil)
+        } catch {
+            case _: NoSuchMethodException =>
+              try {
+                cls.getDeclaredMethod("canBuildFrom")
+                Some(Nil)
+              } catch {
+                case _: NoSuchMethodException => None
+              }
+        }
+
+        if (localTypeOf[scala.collection.mutable.WrappedArray[_]] <:< t.erasure ||
+            cbfParams.isEmpty) {
           wrappedArray
         } else {
           // Convert to another type using `to`
-          val cls = mirror.runtimeClass(t.typeSymbol.asClass)
-          import scala.collection.generic.CanBuildFrom
-          import scala.reflect.ClassTag
-
-          // Some canBuildFrom methods take an implicit ClassTag parameter
-          val cbfParams = try {
-            cls.getDeclaredMethod("canBuildFrom", classOf[ClassTag[_]])
-            StaticInvoke(
-              ClassTag.getClass,
-              ObjectType(classOf[ClassTag[_]]),
-              "apply",
-              StaticInvoke(
-                cls,
-                ObjectType(classOf[Class[_]]),
-                "getClass"
-              ) :: Nil
-            ) :: Nil
-          } catch {
-            case _: NoSuchMethodException => Nil
-          }
-
           Invoke(
             wrappedArray,
             "to",
@@ -381,7 +388,7 @@ object ScalaReflection extends ScalaReflection {
               cls,
               ObjectType(classOf[CanBuildFrom[_, _, _]]),
               "canBuildFrom",
-              cbfParams
+              cbfParams.get
             ) :: Nil
           )
         }
