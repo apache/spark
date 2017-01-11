@@ -120,6 +120,32 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
+   * Returns the element type for Seq[_] and its subclass.
+   */
+  def getElementTypeForSeq(t: `Type`): Option[`Type`] = {
+    if (!(t <:< localTypeOf[Seq[_]])) {
+      return None
+    }
+    val TypeRef(_, _, elementTypeList) = t
+    val elementType = if (elementTypeList.size == 0) {
+      val seqType = t.baseClasses.find { c =>
+        val cType = c.asClass.toType
+        val TypeRef(_, _, elementTypeList) = cType
+        cType <:< localTypeOf[Seq[_]] && elementTypeList.size > 0
+      }
+      if (seqType.isDefined) {
+        val TypeRef(_, _, Seq(elementType)) = t.baseType(seqType.get)
+        elementType
+      } else {
+        null
+      }
+    } else {
+      elementTypeList(0)
+    }
+    Option(elementType)
+  }
+
+  /**
    * Returns an expression that can be used to deserialize an input row to an object of type `T`
    * with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
    * of the same name as the constructor arguments.  Nested classes will have their fields accessed
@@ -293,7 +319,11 @@ object ScalaReflection extends ScalaReflection {
         }
 
       case t if t <:< localTypeOf[Seq[_]] =>
-        val TypeRef(_, _, Seq(elementType)) = t
+        val elementType = getElementTypeForSeq(t).getOrElse {
+          throw new UnsupportedOperationException(
+            s"No Decoder found for $tpe\n" + walkedTypePath.mkString("\n"))
+        }
+
         val Schema(dataType, nullable) = schemaFor(elementType)
         val className = getClassNameFromType(elementType)
         val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
@@ -441,8 +471,8 @@ object ScalaReflection extends ScalaReflection {
           val newPath = s"""- array element class: "$clsName"""" +: walkedTypePath
           MapObjects(serializerFor(_, elementType, newPath), input, dt)
 
-         case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
-                    FloatType | DoubleType) =>
+        case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
+                   FloatType | DoubleType) =>
           val cls = input.dataType.asInstanceOf[ObjectType].cls
           if (cls.isArray && cls.getComponentType.isPrimitive) {
             StaticInvoke(
@@ -479,7 +509,10 @@ object ScalaReflection extends ScalaReflection {
       // "case t if definedByConstructorParams(t)" to make sure it will match to the
       // case "localTypeOf[Seq[_]]"
       case t if t <:< localTypeOf[Seq[_]] =>
-        val TypeRef(_, _, Seq(elementType)) = t
+        val elementType = getElementTypeForSeq(t).getOrElse {
+          throw new UnsupportedOperationException(
+            s"No Encoder found for $tpe\n" + walkedTypePath.mkString("\n"))
+        }
         toCatalystArray(inputObject, elementType)
 
       case t if t <:< localTypeOf[Array[_]] =>
@@ -692,7 +725,9 @@ object ScalaReflection extends ScalaReflection {
         val Schema(dataType, nullable) = schemaFor(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
       case t if t <:< localTypeOf[Seq[_]] =>
-        val TypeRef(_, _, Seq(elementType)) = t
+        val elementType = getElementTypeForSeq(t).getOrElse {
+          throw new UnsupportedOperationException(s"Schema for type $tpe is not supported")
+        }
         val Schema(dataType, nullable) = schemaFor(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
       case t if t <:< localTypeOf[Map[_, _]] =>

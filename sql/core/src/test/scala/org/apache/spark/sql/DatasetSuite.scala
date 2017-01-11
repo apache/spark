@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SortExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
@@ -1142,6 +1142,21 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     assert(spark.range(1).map { x => new java.sql.Timestamp(100000) }.head ==
       new java.sql.Timestamp(100000))
+  }
+
+  test("Create dataset for subclass of Seq[_] which has no type parameter") {
+    implicit def rangeEncoder: Encoder[Range.Inclusive] = ExpressionEncoder()
+    val data = Seq(0 to 2, 2 to 5)
+    val ds = data.toDS()
+
+    val e = intercept[AssertionError] {
+      ds.collect()
+    }
+    assert(e.getMessage().contains("ExpressionEncoder.fromRow can't successfully deserialize type"))
+
+    checkAnswer(
+      ds.toDF(),
+      Seq(Row(Seq(0, 1, 2)), Row(Seq(2, 3, 4, 5))))
   }
 }
 

@@ -297,7 +297,24 @@ case class ExpressionEncoder[T](
    * function.
    */
   def fromRow(row: InternalRow): T = try {
-    constructProjection(row).get(0, ObjectType(clsTag.runtimeClass)).asInstanceOf[T]
+    assert(deserializer.resolved, "This encoder must `resolveAndBind` to a specific schema " +
+      "before calling `fromRow`.")
+    val value = constructProjection(row).get(0, ObjectType(clsTag.runtimeClass))
+
+    // Sometimes, we can serialize a type to internal row, but we can't deserialize the row back to
+    // the type. For example, a `Range` is a `Seq[Int]`, so we can serialize it as `Seq[Int]`. But
+    // because we deserialize any types <:< `Seq[_]` to `WrappedArray[_]` and `WrappedArray` is not
+    // a `Range`, there will be conversion error when converting the deserialized `WrappedArray` to
+    // `Range`.
+    // In this cases, we can still deserilize the internal row to external row with `RowEncoder` by
+    // converting the `Dataset` to `DataFrame`.
+    assert(value == null || clsTag.runtimeClass.isPrimitive ||
+        clsTag.runtimeClass.isAssignableFrom(value.getClass),
+        s"ExpressionEncoder.fromRow can't successfully deserialize type ${clsTag.runtimeClass} " +
+        "from the given internal row. You can try to use `RowEncoder` to deserialize the " +
+        "internal row to external row, or convert this strongly typed collection " +
+        "of data to generic DataFrame by using `Dataset.toDF()` API.")
+    value.asInstanceOf[T]
   } catch {
     case e: Exception =>
       throw new RuntimeException(s"Error while decoding: $e\n${deserializer.treeString}", e)
