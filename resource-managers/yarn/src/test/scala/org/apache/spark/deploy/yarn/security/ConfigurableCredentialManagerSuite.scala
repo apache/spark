@@ -48,7 +48,7 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
   test("Correctly load default credential providers") {
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
 
-    credentialManager.getServiceCredentialProvider("hdfs") should not be (None)
+    credentialManager.getServiceCredentialProvider("hadoopfs") should not be (None)
     credentialManager.getServiceCredentialProvider("hbase") should not be (None)
     credentialManager.getServiceCredentialProvider("hive") should not be (None)
   }
@@ -57,17 +57,17 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
     sparkConf.set("spark.yarn.security.credentials.hive.enabled", "false")
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
 
-    credentialManager.getServiceCredentialProvider("hdfs") should not be (None)
+    credentialManager.getServiceCredentialProvider("hadoopfs") should not be (None)
     credentialManager.getServiceCredentialProvider("hbase") should not be (None)
     credentialManager.getServiceCredentialProvider("hive") should be (None)
   }
 
   test("using deprecated configurations") {
-    sparkConf.set("spark.yarn.security.tokens.hdfs.enabled", "false")
+    sparkConf.set("spark.yarn.security.tokens.hadoopfs.enabled", "false")
     sparkConf.set("spark.yarn.security.tokens.hive.enabled", "false")
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
 
-    credentialManager.getServiceCredentialProvider("hdfs") should be (None)
+    credentialManager.getServiceCredentialProvider("hadoopfs") should be (None)
     credentialManager.getServiceCredentialProvider("hive") should be (None)
     credentialManager.getServiceCredentialProvider("test") should not be (None)
     credentialManager.getServiceCredentialProvider("hbase") should not be (None)
