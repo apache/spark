@@ -18,17 +18,15 @@
 package org.apache.spark.ml.tree.impl
 
 import scala.collection.mutable
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.tree.{DecisionTreeSuite => OldDTSuite, EnsembleTestHelper}
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, QuantileStrategy,
-  Strategy => OldStrategy}
-import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, GiniCalculator}
+import org.apache.spark.mllib.tree.{EnsembleTestHelper, DecisionTreeSuite => OldDTSuite}
+import org.apache.spark.mllib.tree.configuration.{QuantileStrategy, Algo => OldAlgo, Strategy => OldStrategy}
+import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, GiniCalculator, Variance}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -173,21 +171,6 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("train with single point") {
-    val lp = LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0))
-    val rdd = sc.parallelize(Seq(lp))
-    val strategy = new OldStrategy(
-      OldAlgo.Classification,
-      Gini,
-      maxDepth = 2,
-      numClasses = 2,
-      maxBins = 5)
-    val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
-    assert(tree.rootNode.impurity === -1.0)
-    assert(tree.depth === 0)
-    assert(tree.rootNode.prediction === lp.label)
-  }
-
   test("train with constant features") {
     val lp = LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0))
     val data = Array.fill(5)(lp)
@@ -198,7 +181,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
           maxDepth = 2,
           numClasses = 2,
           maxBins = 5,
-          categoricalFeaturesInfo = Map(0 -> 1))
+          categoricalFeaturesInfo = Map(0 -> 1, 1 -> 5))
     val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
     assert(tree.rootNode.impurity === -1.0)
     assert(tree.depth === 0)
@@ -206,12 +189,11 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Test with no categorical features
     val strategy2 = new OldStrategy(
-      OldAlgo.Classification,
-      Gini,
+      OldAlgo.Regression,
+      Variance,
       maxDepth = 2,
-      numClasses = 2,
       maxBins = 5)
-    val Array(tree2) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
+    val Array(tree2) = RandomForest.run(rdd, strategy2, 1, "all", 42L, instr = None)
     assert(tree2.rootNode.impurity === -1.0)
     assert(tree2.depth === 0)
     assert(tree2.rootNode.prediction === lp.label)
