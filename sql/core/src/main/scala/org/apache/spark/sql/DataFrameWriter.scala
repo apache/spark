@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogRelation, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
@@ -383,12 +383,23 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // Get all input data source relations of the query.
         val srcRelations = df.logicalPlan.collect {
           case LogicalRelation(src: BaseRelation, _, _) => src
+          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.catalogTable) => relation
         }
+
         EliminateSubqueryAliases(catalog.lookupRelation(tableIdentWithDB)) match {
           // Only do the check if the table is a data source table (the relation is a BaseRelation).
-          // TODO(cloud-fan): also check hive table relation here when we support overwrite mode
           // for creating hive tables.
           case LogicalRelation(dest: BaseRelation, _, _) if srcRelations.contains(dest) =>
+            throw new AnalysisException(
+              s"Cannot overwrite table $tableName that is also being read from")
+          // check hive table relation when overwrite mode
+          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.catalogTable)
+            && srcRelations.filter(_.isInstanceOf[CatalogRelation]).exists {
+                case r: CatalogRelation =>
+                  // here src/dest MetaStoreRelation equal according to database&qualifiedName
+                  r.catalogTable.database == relation.catalogTable.database &&
+                    r.catalogTable.qualifiedName == relation.catalogTable.qualifiedName
+              } =>
             throw new AnalysisException(
               s"Cannot overwrite table $tableName that is also being read from")
           case _ => // OK

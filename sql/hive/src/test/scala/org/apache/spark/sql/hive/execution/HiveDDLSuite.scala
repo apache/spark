@@ -1342,12 +1342,10 @@ class HiveDDLSuite
       assert(e2.message.contains("Creating bucketed Hive serde table is not supported yet"))
 
       val e3 = intercept[AnalysisException] {
-        spark.table("t").write.format("hive").mode("append").saveAsTable("t")
+        spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
       }
-      assert(e3.message.contains(
-        "Saving data in the Hive serde table")
-        && e3.message.contains(
-        "is not supported yet. Please use the insertInto() API as an alternative."))
+      assert(e3.message.contains("Cannot overwrite table")
+        && e3.message.contains("that is also being read from"))
     }
   }
 
