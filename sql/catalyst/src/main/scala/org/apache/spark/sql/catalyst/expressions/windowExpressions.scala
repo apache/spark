@@ -436,14 +436,12 @@ abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowF
   override val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
-  override def supportsPartial: Boolean = false
   override lazy val mergeExpressions =
     throw new UnsupportedOperationException("Window Functions do not support merging.")
 }
 
 abstract class RowNumberLike extends AggregateWindowFunction {
   override def children: Seq[Expression] = Nil
-  override def inputTypes: Seq[AbstractDataType] = Nil
   protected val zero = Literal(0)
   protected val one = Literal(1)
   protected val rowNumber = AttributeReference("rowNumber", IntegerType, nullable = false)()
@@ -518,7 +516,7 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
  * into the number of buckets); both variables are based on the size of the current partition.
  * During the calculation process the function keeps track of the current row number, the current
  * bucket number, and the row number at which the bucket will change (bucketThreshold). When the
- * current row number reaches bucket threshold, the bucket value is increased by one and the the
+ * current row number reaches bucket threshold, the bucket value is increased by one and the
  * threshold is increased by the bucket size (plus one extra if the current bucket is padded).
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
@@ -600,7 +598,6 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
  */
 abstract class RankLike extends AggregateWindowFunction {
-  override def inputTypes: Seq[AbstractDataType] = children.map(_ => AnyDataType)
 
   /** Store the values of the window 'order' expressions. */
   protected val orderAttrs = children.map { expr =>

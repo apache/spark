@@ -1819,7 +1819,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
       HashSet(makeBlockManagerId("hostA")))
 
-    // Reducer should run where RDD 2 has preferences, even though though it also has a shuffle dep
+    // Reducer should run where RDD 2 has preferences, even though it also has a shuffle dep
     val reduceTaskSet = taskSets(1)
     assertLocations(reduceTaskSet, Seq(Seq("hostB")))
     complete(reduceTaskSet, Seq((Success, 42)))
@@ -2058,7 +2058,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
     // Now complete tasks in the second task set
     val newTaskSet = taskSets(1)
-    assert(newTaskSet.tasks.size === 2)     // Both tasks 0 and 1 were on on hostA
+    assert(newTaskSet.tasks.size === 2)     // Both tasks 0 and 1 were on hostA
     runEvent(makeCompletionEvent(newTaskSet.tasks(0), Success, makeMapStatus("hostB", 2)))
     assert(results.size === 0)    // Map stage job should not be complete yet
     runEvent(makeCompletionEvent(newTaskSet.tasks(1), Success, makeMapStatus("hostB", 2)))
@@ -2076,7 +2076,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   /**
-   * Checks the DAGScheduler's internal logic for traversing a RDD DAG by making sure that
+   * Checks the DAGScheduler's internal logic for traversing an RDD DAG by making sure that
    * getShuffleDependencies correctly returns the direct shuffle dependencies of a particular
    * RDD. The test creates the following RDD graph (where n denotes a narrow dependency and s
    * denotes a shuffle dependency):

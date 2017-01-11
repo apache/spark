@@ -75,6 +75,30 @@ private[history] case class LoadedAppUI(
 private[history] abstract class ApplicationHistoryProvider {
 
   /**
+   * Returns the count of application event logs that the provider is currently still processing.
+   * History Server UI can use this to indicate to a user that the application listing on the UI
+   * can be expected to list additional known applications once the processing of these
+   * application event logs completes.
+   *
+   * A History Provider that does not have a notion of count of event logs that may be pending
+   * for processing need not override this method.
+   *
+   * @return Count of application event logs that are currently under process
+   */
+  def getEventLogsUnderProcess(): Int = {
+    return 0;
+  }
+
+  /**
+   * Returns the time the history provider last updated the application history information
+   *
+   * @return 0 if this is undefined or unsupported, otherwise the last updated time in millis
+   */
+  def getLastUpdatedTime(): Long = {
+    return 0;
+  }
+
+  /**
    * Returns a list of applications available for the history server to show.
    *
    * @return List of all know applications.

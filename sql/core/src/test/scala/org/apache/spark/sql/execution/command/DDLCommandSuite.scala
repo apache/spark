@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 
 // TODO: merge this with DDLSuite (SPARK-14441)
@@ -236,7 +236,7 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed4, expected4)
   }
 
-  test("create table - table file format") {
+  test("create hive table - table file format") {
     val allSources = Seq("parquet", "parquetfile", "orc", "orcfile", "avro", "avrofile",
       "sequencefile", "rcfile", "textfile")
 
@@ -245,13 +245,14 @@ class DDLCommandSuite extends PlanTest {
       val ct = parseAs[CreateTable](query)
       val hiveSerde = HiveSerDe.sourceToSerDe(s)
       assert(hiveSerde.isDefined)
-      assert(ct.tableDesc.storage.serde == hiveSerde.get.serde)
+      assert(ct.tableDesc.storage.serde ==
+        hiveSerde.get.serde.orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")))
       assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
       assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
     }
   }
 
-  test("create table - row format and table file format") {
+  test("create hive table - row format and table file format") {
     val createTableStart = "CREATE TABLE my_tab ROW FORMAT"
     val fileFormat = s"STORED AS INPUTFORMAT 'inputfmt' OUTPUTFORMAT 'outputfmt'"
     val query1 = s"$createTableStart SERDE 'anything' $fileFormat"
@@ -262,13 +263,15 @@ class DDLCommandSuite extends PlanTest {
     assert(parsed1.tableDesc.storage.serde == Some("anything"))
     assert(parsed1.tableDesc.storage.inputFormat == Some("inputfmt"))
     assert(parsed1.tableDesc.storage.outputFormat == Some("outputfmt"))
+
     val parsed2 = parseAs[CreateTable](query2)
-    assert(parsed2.tableDesc.storage.serde.isEmpty)
+    assert(parsed2.tableDesc.storage.serde ==
+      Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     assert(parsed2.tableDesc.storage.inputFormat == Some("inputfmt"))
     assert(parsed2.tableDesc.storage.outputFormat == Some("outputfmt"))
   }
 
-  test("create table - row format serde and generic file format") {
+  test("create hive table - row format serde and generic file format") {
     val allSources = Seq("parquet", "orc", "avro", "sequencefile", "rcfile", "textfile")
     val supportedSources = Set("sequencefile", "rcfile", "textfile")
 
@@ -287,7 +290,7 @@ class DDLCommandSuite extends PlanTest {
     }
   }
 
-  test("create table - row format delimited and generic file format") {
+  test("create hive table - row format delimited and generic file format") {
     val allSources = Seq("parquet", "orc", "avro", "sequencefile", "rcfile", "textfile")
     val supportedSources = Set("textfile")
 
@@ -297,7 +300,8 @@ class DDLCommandSuite extends PlanTest {
         val ct = parseAs[CreateTable](query)
         val hiveSerde = HiveSerDe.sourceToSerDe(s)
         assert(hiveSerde.isDefined)
-        assert(ct.tableDesc.storage.serde == hiveSerde.get.serde)
+        assert(ct.tableDesc.storage.serde ==
+          hiveSerde.get.serde.orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")))
         assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
         assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
       } else {
@@ -306,7 +310,7 @@ class DDLCommandSuite extends PlanTest {
     }
   }
 
-  test("create external table - location must be specified") {
+  test("create hive external table - location must be specified") {
     assertUnsupported(
       sql = "CREATE EXTERNAL TABLE my_tab",
       containsThesePhrases = Seq("create external table", "location"))
@@ -316,7 +320,7 @@ class DDLCommandSuite extends PlanTest {
     assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
   }
 
-  test("create table - property values must be set") {
+  test("create hive table - property values must be set") {
     assertUnsupported(
       sql = "CREATE TABLE my_tab TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
       containsThesePhrases = Seq("key_without_value"))
@@ -326,14 +330,14 @@ class DDLCommandSuite extends PlanTest {
       containsThesePhrases = Seq("key_without_value"))
   }
 
-  test("create table - location implies external") {
+  test("create hive table - location implies external") {
     val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
     assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
   }
 
-  test("create table using - with partitioned by") {
+  test("create table - with partitioned by") {
     val query = "CREATE TABLE my_tab(a INT comment 'test', b STRING) " +
       "USING parquet PARTITIONED BY (a)"
 
@@ -357,7 +361,7 @@ class DDLCommandSuite extends PlanTest {
     }
   }
 
-  test("create table using - with bucket") {
+  test("create table - with bucket") {
     val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
       "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
 
@@ -377,6 +381,57 @@ class DDLCommandSuite extends PlanTest {
         fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
           s"got ${other.getClass.getName}: $query")
     }
+  }
+
+  test("create table - with comment") {
+    val sql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet COMMENT 'abc'"
+
+    val expectedTableDesc = CatalogTable(
+      identifier = TableIdentifier("my_tab"),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType().add("a", IntegerType).add("b", StringType),
+      provider = Some("parquet"),
+      comment = Some("abc"))
+
+    parser.parsePlan(sql) match {
+      case CreateTable(tableDesc, _, None) =>
+        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $sql")
+    }
+  }
+
+  test("create table - with location") {
+    val v1 = "CREATE TABLE my_tab(a INT, b STRING) USING parquet LOCATION '/tmp/file'"
+
+    val expectedTableDesc = CatalogTable(
+      identifier = TableIdentifier("my_tab"),
+      tableType = CatalogTableType.EXTERNAL,
+      storage = CatalogStorageFormat.empty.copy(locationUri = Some("/tmp/file")),
+      schema = new StructType().add("a", IntegerType).add("b", StringType),
+      provider = Some("parquet"))
+
+    parser.parsePlan(v1) match {
+      case CreateTable(tableDesc, _, None) =>
+        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $v1")
+    }
+
+    val v2 =
+      """
+        |CREATE TABLE my_tab(a INT, b STRING)
+        |USING parquet
+        |OPTIONS (path '/tmp/file')
+        |LOCATION '/tmp/file'
+      """.stripMargin
+    val e = intercept[ParseException] {
+      parser.parsePlan(v2)
+    }
+    assert(e.message.contains("you can only specify one of them."))
   }
 
   // ALTER TABLE table_name RENAME TO new_table_name;
@@ -615,7 +670,8 @@ class DDLCommandSuite extends PlanTest {
         Map("dt" -> "2008-08-08", "country" -> "us"),
         Map("dt" -> "2009-09-09", "country" -> "uk")),
       ifExists = true,
-      purge = false)
+      purge = false,
+      retainData = false)
     val expected2_table = expected1_table.copy(ifExists = false)
     val expected1_purge = expected1_table.copy(purge = true)
 
@@ -659,6 +715,34 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
+  test("alter table: change column name/type/comment") {
+    val sql1 = "ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT"
+    val sql2 = "ALTER TABLE table_name CHANGE COLUMN col_name col_name INT COMMENT 'new_comment'"
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+    val tableIdent = TableIdentifier("table_name", None)
+    val expected1 = AlterTableChangeColumnCommand(
+      tableIdent,
+      "col_old_name",
+      StructField("col_new_name", IntegerType))
+    val expected2 = AlterTableChangeColumnCommand(
+      tableIdent,
+      "col_name",
+      StructField("col_name", IntegerType).withComment("new_comment"))
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("alter table: change column position (not supported)") {
+    assertUnsupported("ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT FIRST")
+    assertUnsupported(
+      "ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT AFTER other_col")
+  }
+
+  test("alter table: change column in partition spec") {
+    assertUnsupported("ALTER TABLE table_name PARTITION (a='1', a='2') CHANGE COLUMN a new_a INT")
+  }
+
   test("alter table: touch (not supported)") {
     assertUnsupported("ALTER TABLE table_name TOUCH")
     assertUnsupported("ALTER TABLE table_name TOUCH PARTITION (dt='2008-08-08', country='us')")
@@ -692,19 +776,6 @@ class DDLCommandSuite extends PlanTest {
     assertUnsupported("ALTER TABLE table_name NOT STORED AS DIRECTORIES")
     assertUnsupported("ALTER TABLE table_name SET SKEWED LOCATION (col_name1=\"location1\"")
     assertUnsupported("ALTER TABLE table_name SKEWED BY (key) ON (1,5,6) STORED AS DIRECTORIES")
-  }
-
-  test("alter table: change column name/type/position/comment (not allowed)") {
-    assertUnsupported("ALTER TABLE table_name CHANGE col_old_name col_new_name INT")
-    assertUnsupported(
-      """
-       |ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT
-       |COMMENT 'col_comment' FIRST CASCADE
-      """.stripMargin)
-    assertUnsupported("""
-       |ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT
-       |COMMENT 'col_comment' AFTER column_name RESTRICT
-      """.stripMargin)
   }
 
   test("alter table: add/replace columns (not allowed)") {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
@@ -37,14 +38,15 @@ class CatalogFileIndex(
     val table: CatalogTable,
     override val sizeInBytes: Long) extends FileIndex {
 
-  protected val hadoopConf = sparkSession.sessionState.newHadoopConf
+  protected val hadoopConf: Configuration = sparkSession.sessionState.newHadoopConf()
 
-  private val fileStatusCache = FileStatusCache.newCache(sparkSession)
+  /** Globally shared (not exclusive to this table) cache for file statuses to speed up listing. */
+  private val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
 
   assert(table.identifier.database.isDefined,
     "The table identifier must be qualified in CatalogFileIndex")
 
-  private val baseLocation = table.storage.locationUri
+  private val baseLocation: Option[String] = table.storage.locationUri
 
   override def partitionSchema: StructType = table.partitionSchema
 
@@ -67,7 +69,7 @@ class CatalogFileIndex(
       val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
         table.identifier, filters)
       val partitions = selectedPartitions.map { p =>
-        val path = new Path(p.storage.locationUri.get)
+        val path = new Path(p.location)
         val fs = path.getFileSystem(hadoopConf)
         PartitionPath(
           p.toRow(partitionSchema), path.makeQualified(fs.getUri, fs.getWorkingDirectory))
@@ -76,7 +78,8 @@ class CatalogFileIndex(
       new PrunedInMemoryFileIndex(
         sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec)
     } else {
-      new InMemoryFileIndex(sparkSession, rootPaths, table.storage.properties, None)
+      new InMemoryFileIndex(
+        sparkSession, rootPaths, table.storage.properties, partitionSchema = None)
     }
   }
 

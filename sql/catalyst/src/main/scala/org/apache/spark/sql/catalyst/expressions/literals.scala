@@ -220,7 +220,7 @@ object DecimalLiteral {
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
-case class Literal (value: Any, dataType: DataType) extends LeafExpression with CodegenFallback {
+case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
@@ -266,49 +266,40 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression with 
   override def eval(input: InternalRow): Any = value
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = ctx.javaType(dataType)
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
       ev.isNull = "true"
-      ev.copy(s"final ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};")
+      ev.copy(s"final $javaType ${ev.value} = ${ctx.defaultValue(dataType)};")
     } else {
+      ev.isNull = "false"
       dataType match {
-        case BooleanType =>
-          ev.isNull = "false"
-          ev.value = value.toString
-          ev.copy("")
+        case BooleanType | IntegerType | DateType =>
+          ev.copy(code = "", value = value.toString)
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
-            super[CodegenFallback].doGenCode(ctx, ev)
+            val boxedValue = ctx.addReferenceMinorObj(v)
+            val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
+            ev.copy(code = code)
           } else {
-            ev.isNull = "false"
-            ev.value = s"${value}f"
-            ev.copy("")
+            ev.copy(code = "", value = s"${value}f")
           }
         case DoubleType =>
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
-            super[CodegenFallback].doGenCode(ctx, ev)
+            val boxedValue = ctx.addReferenceMinorObj(v)
+            val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
+            ev.copy(code = code)
           } else {
-            ev.isNull = "false"
-            ev.value = s"${value}D"
-            ev.copy("")
+            ev.copy(code = "", value = s"${value}D")
           }
         case ByteType | ShortType =>
-          ev.isNull = "false"
-          ev.value = s"(${ctx.javaType(dataType)})$value"
-          ev.copy("")
-        case IntegerType | DateType =>
-          ev.isNull = "false"
-          ev.value = value.toString
-          ev.copy("")
+          ev.copy(code = "", value = s"($javaType)$value")
         case TimestampType | LongType =>
-          ev.isNull = "false"
-          ev.value = s"${value}L"
-          ev.copy("")
-        // eval() version may be faster for non-primitive types
+          ev.copy(code = "", value = s"${value}L")
         case other =>
-          super[CodegenFallback].doGenCode(ctx, ev)
+          ev.copy(code = "", value = ctx.addReferenceMinorObj(value, ctx.javaType(dataType)))
       }
     }
   }

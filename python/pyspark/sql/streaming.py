@@ -16,6 +16,8 @@
 #
 
 import sys
+import json
+
 if sys.version >= '3':
     intlike = int
     basestring = unicode = str
@@ -26,8 +28,10 @@ from abc import ABCMeta, abstractmethod
 
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
+from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.types import *
+from pyspark.sql.utils import StreamingQueryException
 
 __all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
 
@@ -48,15 +52,29 @@ class StreamingQuery(object):
     @property
     @since(2.0)
     def id(self):
-        """The id of the streaming query. This id is unique across all queries that have been
-        started in the current process.
+        """Returns the unique id of this query that persists across restarts from checkpoint data.
+        That is, this id is generated when a query is started for the first time, and
+        will be the same every time it is restarted from checkpoint data.
+        There can only be one query with the same id active in a Spark cluster.
+        Also see, `runId`.
         """
-        return self._jsq.id()
+        return self._jsq.id().toString()
+
+    @property
+    @since(2.1)
+    def runId(self):
+        """Returns the unique id of this query that does not persist across restarts. That is, every
+        query that is started (or restarted from checkpoint) will have a different runId.
+        """
+        return self._jsq.runId().toString()
 
     @property
     @since(2.0)
     def name(self):
-        """The name of the streaming query. This name is unique across all active queries.
+        """Returns the user-specified name of the query, or null if not specified.
+        This name can be specified in the `org.apache.spark.sql.streaming.DataStreamWriter`
+        as `dataframe.writeStream.queryName("query").start()`.
+        This name, if set, must be unique across all active queries.
         """
         return self._jsq.name()
 
@@ -87,13 +105,46 @@ class StreamingQuery(object):
         else:
             return self._jsq.awaitTermination()
 
+    @property
+    @since(2.1)
+    def status(self):
+        """
+        Returns the current status of the query.
+        """
+        return json.loads(self._jsq.status().json())
+
+    @property
+    @since(2.1)
+    def recentProgress(self):
+        """Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
+        The number of progress updates retained for each stream is configured by Spark session
+        configuration `spark.sql.streaming.numRecentProgressUpdates`.
+        """
+        return [json.loads(p.json()) for p in self._jsq.recentProgress()]
+
+    @property
+    @since(2.1)
+    def lastProgress(self):
+        """
+        Returns the most recent :class:`StreamingQueryProgress` update of this streaming query or
+        None if there were no progress updates
+        :return: a map
+        """
+        lastProgress = self._jsq.lastProgress()
+        if lastProgress:
+            return json.loads(lastProgress.json())
+        else:
+            return None
+
     @since(2.0)
     def processAllAvailable(self):
         """Blocks until all available data in the source has been processed and committed to the
-        sink. This method is intended for testing. Note that in the case of continually arriving
-        data, this method may block forever. Additionally, this method is only guaranteed to block
-        until data that has been synchronously appended data to a stream source prior to invocation.
-        (i.e. `getOffset` must immediately reflect the addition).
+        sink. This method is intended for testing.
+
+        .. note:: In the case of continually arriving data, this method may block forever.
+            Additionally, this method is only guaranteed to block until data that has been
+            synchronously appended data to a stream source prior to invocation.
+            (i.e. `getOffset` must immediately reflect the addition).
         """
         return self._jsq.processAllAvailable()
 
@@ -102,6 +153,45 @@ class StreamingQuery(object):
         """Stop this streaming query.
         """
         self._jsq.stop()
+
+    @since(2.1)
+    def explain(self, extended=False):
+        """Prints the (logical and physical) plans to the console for debugging purpose.
+
+        :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
+
+        >>> sq = sdf.writeStream.format('memory').queryName('query_explain').start()
+        >>> sq.processAllAvailable() # Wait a bit to generate the runtime plans.
+        >>> sq.explain()
+        == Physical Plan ==
+        ...
+        >>> sq.explain(True)
+        == Parsed Logical Plan ==
+        ...
+        == Analyzed Logical Plan ==
+        ...
+        == Optimized Logical Plan ==
+        ...
+        == Physical Plan ==
+        ...
+        >>> sq.stop()
+        """
+        # Cannot call `_jsq.explain(...)` because it will print in the JVM process.
+        # We should print it in the Python process.
+        print(self._jsq.explainInternal(extended))
+
+    @since(2.1)
+    def exception(self):
+        """
+        :return: the StreamingQueryException if the query was terminated by an exception, or None.
+        """
+        if self._jsq.exception().isDefined():
+            je = self._jsq.exception().get()
+            msg = je.toString().split(': ', 1)[1]  # Drop the Java StreamingQueryException type info
+            stackTrace = '\n\t at '.join(map(lambda x: x.toString(), je.getStackTrace()))
+            return StreamingQueryException(msg, stackTrace)
+        else:
+            return None
 
 
 class StreamingQueryManager(object):
@@ -147,8 +237,6 @@ class StreamingQueryManager(object):
         True
         >>> sq.stop()
         """
-        if not isinstance(id, intlike):
-            raise ValueError("The id for the query must be an integer. Got: %s" % id)
         return StreamingQuery(self._jsqm.get(id))
 
     @since(2.0)
@@ -187,303 +275,6 @@ class StreamingQueryManager(object):
         >>> spark.streams.resetTerminated()
         """
         self._jsqm.resetTerminated()
-
-
-class StreamingQueryStatus(object):
-    """A class used to report information about the progress of a StreamingQuery.
-
-    .. note:: Experimental
-
-    .. versionadded:: 2.1
-    """
-
-    def __init__(self, jsqs):
-        self._jsqs = jsqs
-
-    def __str__(self):
-        """
-        Pretty string of this query status.
-
-        >>> print(sqs)
-        Status of query 'query'
-            Query id: 1
-            Status timestamp: 123
-            Input rate: 15.5 rows/sec
-            Processing rate 23.5 rows/sec
-            Latency: 345.0 ms
-            Trigger details:
-                isDataPresentInTrigger: true
-                isTriggerActive: true
-                latency.getBatch.total: 20
-                latency.getOffset.total: 10
-                numRows.input.total: 100
-                triggerId: 5
-            Source statuses [1 source]:
-                Source 1 - MySource1
-                    Available offset: #0
-                    Input rate: 15.5 rows/sec
-                    Processing rate: 23.5 rows/sec
-                    Trigger details:
-                        numRows.input.source: 100
-                        latency.getOffset.source: 10
-                        latency.getBatch.source: 20
-            Sink status - MySink
-                Committed offsets: [#1, -]
-        """
-        return self._jsqs.toString()
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def name(self):
-        """
-        Name of the query. This name is unique across all active queries.
-
-        >>> sqs.name
-        u'query'
-        """
-        return self._jsqs.name()
-
-    @property
-    @since(2.1)
-    def id(self):
-        """
-        Id of the query. This id is unique across all queries that have been started in
-        the current process.
-
-        >>> int(sqs.id)
-        1
-        """
-        return self._jsqs.id()
-
-    @property
-    @since(2.1)
-    def timestamp(self):
-        """
-        Timestamp (ms) of when this query was generated.
-
-        >>> int(sqs.timestamp)
-        123
-        """
-        return self._jsqs.timestamp()
-
-    @property
-    @since(2.1)
-    def inputRate(self):
-        """
-        Current total rate (rows/sec) at which data is being generated by all the sources.
-
-        >>> sqs.inputRate
-        15.5
-        """
-        return self._jsqs.inputRate()
-
-    @property
-    @since(2.1)
-    def processingRate(self):
-        """
-        Current rate (rows/sec) at which the query is processing data from all the sources.
-
-        >>> sqs.processingRate
-        23.5
-        """
-        return self._jsqs.processingRate()
-
-    @property
-    @since(2.1)
-    def latency(self):
-        """
-        Current average latency between the data being available in source and the sink
-        writing the corresponding output.
-
-        >>> sqs.latency
-        345.0
-        """
-        if (self._jsqs.latency().nonEmpty()):
-            return self._jsqs.latency().get()
-        else:
-            return None
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def sourceStatuses(self):
-        """
-        Current statuses of the sources as a list.
-
-        >>> len(sqs.sourceStatuses)
-        1
-        >>> sqs.sourceStatuses[0].description
-        u'MySource1'
-        """
-        return [SourceStatus(ss) for ss in self._jsqs.sourceStatuses()]
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def sinkStatus(self):
-        """
-        Current status of the sink.
-
-        >>> sqs.sinkStatus.description
-        u'MySink'
-        """
-        return SinkStatus(self._jsqs.sinkStatus())
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def triggerDetails(self):
-        """
-        Low-level details of the currently active trigger (e.g. number of rows processed
-        in trigger, latency of intermediate steps, etc.).
-
-        If no trigger is currently active, then it will have details of the last completed trigger.
-
-        >>> sqs.triggerDetails
-        {u'triggerId': u'5', u'latency.getBatch.total': u'20', u'numRows.input.total': u'100',
-        u'isTriggerActive': u'true', u'latency.getOffset.total': u'10',
-        u'isDataPresentInTrigger': u'true'}
-        """
-        return self._jsqs.triggerDetails()
-
-
-class SourceStatus(object):
-    """
-    Status and metrics of a streaming Source.
-
-    .. note:: Experimental
-
-    .. versionadded:: 2.1
-    """
-
-    def __init__(self, jss):
-        self._jss = jss
-
-    def __str__(self):
-        """
-        Pretty string of this source status.
-
-        >>> print(sqs.sourceStatuses[0])
-        Status of source MySource1
-            Available offset: #0
-            Input rate: 15.5 rows/sec
-            Processing rate: 23.5 rows/sec
-            Trigger details:
-                numRows.input.source: 100
-                latency.getOffset.source: 10
-                latency.getBatch.source: 20
-        """
-        return self._jss.toString()
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def description(self):
-        """
-        Description of the source corresponding to this status.
-
-        >>> sqs.sourceStatuses[0].description
-        u'MySource1'
-        """
-        return self._jss.description()
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def offsetDesc(self):
-        """
-        Description of the current offset if known.
-
-        >>> sqs.sourceStatuses[0].offsetDesc
-        u'#0'
-        """
-        return self._jss.offsetDesc()
-
-    @property
-    @since(2.1)
-    def inputRate(self):
-        """
-        Current rate (rows/sec) at which data is being generated by the source.
-
-        >>> sqs.sourceStatuses[0].inputRate
-        15.5
-        """
-        return self._jss.inputRate()
-
-    @property
-    @since(2.1)
-    def processingRate(self):
-        """
-        Current rate (rows/sec) at which the query is processing data from the source.
-
-        >>> sqs.sourceStatuses[0].processingRate
-        23.5
-        """
-        return self._jss.processingRate()
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def triggerDetails(self):
-        """
-        Low-level details of the currently active trigger (e.g. number of rows processed
-        in trigger, latency of intermediate steps, etc.).
-
-        If no trigger is currently active, then it will have details of the last completed trigger.
-
-        >>> sqs.sourceStatuses[0].triggerDetails
-        {u'numRows.input.source': u'100', u'latency.getOffset.source': u'10',
-        u'latency.getBatch.source': u'20'}
-       """
-        return self._jss.triggerDetails()
-
-
-class SinkStatus(object):
-    """
-    Status and metrics of a streaming Sink.
-
-    .. note:: Experimental
-
-    .. versionadded:: 2.1
-    """
-
-    def __init__(self, jss):
-        self._jss = jss
-
-    def __str__(self):
-        """
-        Pretty string of this source status.
-
-        >>> print(sqs.sinkStatus)
-        Status of sink MySink
-            Committed offsets: [#1, -]
-        """
-        return self._jss.toString()
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def description(self):
-        """
-        Description of the source corresponding to this status.
-
-        >>> sqs.sinkStatus.description
-        u'MySink'
-        """
-        return self._jss.description()
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def offsetDesc(self):
-        """
-        Description of the current offsets up to which data has been written by the sink.
-
-        >>> sqs.sinkStatus.offsetDesc
-        u'[#1, -]'
-        """
-        return self._jss.offsetDesc()
 
 
 class Trigger(object):
@@ -1051,8 +842,6 @@ def _test():
     globs['sdf_schema'] = StructType([StructField("data", StringType(), False)])
     globs['df'] = \
         globs['spark'].readStream.format('text').load('python/test_support/sql/streaming')
-    globs['sqs'] = StreamingQueryStatus(
-        spark.sparkContext._jvm.org.apache.spark.sql.streaming.StreamingQueryStatus.testStatus())
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.streaming, globs=globs,

@@ -16,9 +16,10 @@
  */
 package org.apache.spark.ml.optim
 
+import scala.collection.mutable
+
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
-import scala.collection.mutable
 
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vectors}
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
@@ -33,7 +34,7 @@ import org.apache.spark.mllib.linalg.CholeskyDecomposition
  * @param objectiveHistory Option containing the objective history when an optimization program is
  *                         used to solve the normal equations. None when an analytic solver is used.
  */
-private[ml] class NormalEquationSolution(
+private[optim] class NormalEquationSolution(
     val coefficients: Array[Double],
     val aaInv: Option[Array[Double]],
     val objectiveHistory: Option[Array[Double]])
@@ -41,7 +42,7 @@ private[ml] class NormalEquationSolution(
 /**
  * Interface for classes that solve the normal equations locally.
  */
-private[ml] sealed trait NormalEquationSolver {
+private[optim] sealed trait NormalEquationSolver {
 
   /** Solve the normal equations from summary statistics. */
   def solve(
@@ -55,9 +56,9 @@ private[ml] sealed trait NormalEquationSolver {
 /**
  * A class that solves the normal equations directly, using Cholesky decomposition.
  */
-private[ml] class CholeskySolver extends NormalEquationSolver {
+private[optim] class CholeskySolver extends NormalEquationSolver {
 
-  def solve(
+  override def solve(
       bBar: Double,
       bbBar: Double,
       abBar: DenseVector,
@@ -74,13 +75,13 @@ private[ml] class CholeskySolver extends NormalEquationSolver {
 /**
  * A class for solving the normal equations using Quasi-Newton optimization methods.
  */
-private[ml] class QuasiNewtonSolver(
+private[optim] class QuasiNewtonSolver(
     fitIntercept: Boolean,
     maxIter: Int,
     tol: Double,
     l1RegFunc: Option[(Int) => Double]) extends NormalEquationSolver {
 
-  def solve(
+  override def solve(
       bBar: Double,
       bbBar: Double,
       abBar: DenseVector,
@@ -156,7 +157,7 @@ private[ml] class QuasiNewtonSolver(
  * Exception thrown when solving a linear system Ax = b for which the matrix A is non-invertible
  * (singular).
  */
-class SingularMatrixException(message: String, cause: Throwable)
+private[spark] class SingularMatrixException(message: String, cause: Throwable)
   extends IllegalArgumentException(message, cause) {
 
   def this(message: String) = this(message, null)
