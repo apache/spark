@@ -172,6 +172,8 @@ private[spark] class TaskSetManager(
 
   override def schedulingMode: SchedulingMode = SchedulingMode.NONE
 
+  var emittedTaskSizeWarning = false
+
   /** Add a task to all the pending-task lists that it should be on. */
   private def addPendingTask(index: Int) {
     for (loc <- tasks(index).preferredLocations) {

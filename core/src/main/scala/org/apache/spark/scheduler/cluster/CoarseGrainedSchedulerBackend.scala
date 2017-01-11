@@ -245,6 +245,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
         val serializedTask = TaskDescription.encode(task)
+        if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024) {
+          scheduler.taskIdToTaskSetManager.get(task.taskId).filterNot(_.emittedTaskSizeWarning).
+            foreach { taskSetMgr =>
+              taskSetMgr.emittedTaskSizeWarning = true
+              val stageId = taskSetMgr.taskSet.stageId
+              logWarning(s"Stage $stageId contains a task of very large size " +
+                s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
+                s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
+            }
+        }
         if (serializedTask.limit >= maxRpcMessageSize) {
           scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
             try {
