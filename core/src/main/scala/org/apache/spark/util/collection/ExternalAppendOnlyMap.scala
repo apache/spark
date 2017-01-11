@@ -199,7 +199,9 @@ class ExternalAppendOnlyMap[K, V, C](
       }
       isSpilled
     } else {
-      false
+      spill(currentMap)
+      currentMap = new SizeTrackingAppendOnlyMap[K, C]
+      true
     }
   }
 
