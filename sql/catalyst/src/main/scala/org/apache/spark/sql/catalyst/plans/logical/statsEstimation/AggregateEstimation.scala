@@ -41,13 +41,19 @@ object AggregateEstimation {
       var outputRows: BigInt = agg.groupingExpressions.foldLeft(BigInt(1))(
         (res, expr) => res * childStats.attributeStats(expr.asInstanceOf[Attribute]).distinctCount)
 
-      // Here we set another upper bound for the number of output rows: it must not be larger than
-      // child's number of rows.
-      outputRows = outputRows.min(childStats.rowCount.get)
+      outputRows = if (agg.groupingExpressions.isEmpty) {
+        // If there's no group-by columns, the output is a single row containing values of aggregate
+        // functions: aggregated results for non-empty input or initial values for empty input.
+        1
+      } else {
+        // Here we set another upper bound for the number of output rows: it must not be larger than
+        // child's number of rows.
+        outputRows.min(childStats.rowCount.get)
+      }
 
       val outputAttrStats = getOutputMap(childStats.attributeStats, agg.output)
       Some(Statistics(
-        sizeInBytes = outputRows * getRowSize(agg.output, outputAttrStats),
+        sizeInBytes = getOutputSize(agg.output, outputAttrStats, outputRows),
         rowCount = Some(outputRows),
         attributeStats = outputAttrStats,
         isBroadcastable = childStats.isBroadcastable))
