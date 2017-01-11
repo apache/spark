@@ -919,7 +919,7 @@ abstract class CatalogTestUtils {
         .add("b", "string"),
       viewOriginalText = Some("SELECT * FROM tbl1"),
       viewText = Some("SELECT * FROM tbl1"),
-      properties = Map[String, String] {CatalogTable.VIEW_DEFAULT_DATABASE -> viewDefaultDatabase})
+      properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> viewDefaultDatabase))
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {

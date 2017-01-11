@@ -620,7 +620,7 @@ class Analyzer(
     // If the database part is specified, and we support running SQL directly on files, and
     // it's not a temporary view, and the table does not exist, then let's just return the
     // original UnresolvedRelation. It is possible we are matching a query like "select *
-    // from parquet.`/path/to/query`". The plan will get resolved later.
+    // from parquet.`/path/to/query`". The plan will get resolved in the rule `ResolveDataSource`.
     // Note that we are testing (!db_exists || !table_exists) because the catalog throws
     // an exception from tableExists if the database does not exist.
     private def isRunningDirectlyOnFiles(table: TableIdentifier): Boolean = {

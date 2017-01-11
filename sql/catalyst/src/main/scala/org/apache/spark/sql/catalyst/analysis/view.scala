@@ -41,7 +41,7 @@ case class AliasViewChild(conf: CatalystConf) extends Rule[LogicalPlan] {
         val originAttr = findAttributeByName(attr.name, child.output, resolver)
         // The dataType of the output attributes may be not the same with that of the view output,
         // so we should cast the attribute to the dataType of the view output attribute. If the
-        // cast cann't perform, will throw an AnalysisException.
+        // cast can't perform, will throw an AnalysisException.
         Alias(Cast(originAttr, attr.dataType), attr.name)(exprId = attr.exprId,
           qualifier = attr.qualifier, explicitMetadata = Some(attr.metadata))
       }
@@ -57,8 +57,8 @@ case class AliasViewChild(conf: CatalystConf) extends Rule[LogicalPlan] {
       name: String,
       attrs: Seq[Attribute],
       resolver: Resolver): Attribute = {
-    attrs.collectFirst {
-      case attr if resolver(attr.name, name) => attr
+    attrs.find { attr =>
+      resolver(attr.name, name)
     }.getOrElse(throw new AnalysisException(
       s"Attribute with name '$name' is not found in " +
         s"'${attrs.map(_.name).mkString("(", ",", ")")}'"))
