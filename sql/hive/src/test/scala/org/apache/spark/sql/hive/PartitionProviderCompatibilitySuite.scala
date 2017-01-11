@@ -166,6 +166,9 @@ class PartitionProviderCompatibilitySuite
             """insert overwrite table test
               |partition (partCol=1)
               |select * from range(100)""".stripMargin)
+          println(dir.listFiles().toSeq)
+          println(new File(dir, "partCol=0").listFiles().toSeq)
+          println(new File(dir, "partCol=1").listFiles().toSeq)
           assert(spark.sql("select * from test").count() == 104)
 
           // Test overwriting a partition that has a custom location

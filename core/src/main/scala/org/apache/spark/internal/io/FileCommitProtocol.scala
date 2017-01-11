@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.io
 
+import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
 
 import org.apache.spark.util.Utils
@@ -118,7 +119,7 @@ abstract class FileCommitProtocol {
    * implementation deletes the file immediately, but this may be overriden to delay the physical
    * deletion of the file until commit time.
    */
-  def deleteFile(fs: FileSystem, path: Path, recursive: Boolean): Boolean = {
+  def deleteWithJob(fs: FileSystem, path: Path, recursive: Boolean): Boolean = {
     fs.delete(path, recursive)
   }
 }
