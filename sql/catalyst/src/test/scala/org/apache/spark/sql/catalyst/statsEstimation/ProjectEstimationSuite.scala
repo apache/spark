@@ -68,7 +68,7 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
     val d2 = Date.valueOf("2016-05-09")
     val t1 = Timestamp.valueOf("2016-05-08 00:00:01")
     val t2 = Timestamp.valueOf("2016-05-09 00:00:02")
-    
+
     val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
       AttributeReference("cbool", BooleanType)() -> ColumnStat(distinctCount = 2,
         min = Some(false), max = Some(true), nullCount = 0, avgLen = 1, maxLen = 1),
