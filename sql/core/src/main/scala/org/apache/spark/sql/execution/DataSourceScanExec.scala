@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.concurrent.{Callable, TimeUnit}
+
 import scala.collection.mutable.ArrayBuffer
 
+import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
@@ -147,23 +150,26 @@ case class FileSourceScanExec(
     override val metastoreTableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with ColumnarBatchScan  {
 
-  val supportsBatch: Boolean = relation.fileFormat.supportBatch(
-    relation.sparkSession, StructType.fromAttributes(output))
+  def supportsBatch: Boolean = relation.fileFormat.supportBatch(
+    sparkSession, StructType.fromAttributes(output))
 
-  val needsUnsafeRowConversion: Boolean = if (relation.fileFormat.isInstanceOf[ParquetSource]) {
-    SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
+  def needsUnsafeRowConversion: Boolean = if (relation.fileFormat.isInstanceOf[ParquetSource]) {
+    sparkSession.sessionState.conf.parquetVectorizedReaderEnabled
   } else {
     false
   }
 
+  def sparkSession: SparkSession = SparkSession.getActiveSession.get
+
+  private val readerCache: Cache[SparkSession, RDD[InternalRow]] =
+    CacheBuilder.newBuilder()
+      .expireAfterAccess(4, TimeUnit.HOURS)
+      .build()
+
   @transient private lazy val selectedPartitions = relation.location.listFiles(partitionFilters)
 
-  override val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
-    val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
-      relation.bucketSpec
-    } else {
-      None
-    }
+  private def partitioningAndOrder(
+      bucketSpec: Option[BucketSpec]): (Partitioning, Seq[SortOrder]) = {
     bucketSpec match {
       case Some(spec) =>
         // For bucketed columns:
@@ -225,6 +231,17 @@ case class FileSourceScanExec(
     }
   }
 
+  private def bucketSpec: Option[BucketSpec] =
+    if (sparkSession.sessionState.conf.bucketingEnabled) {
+      relation.bucketSpec
+    } else {
+      None
+    }
+
+  override def outputPartitioning: Partitioning = partitioningAndOrder(bucketSpec)._1
+
+  override def outputOrdering: Seq[SortOrder] = partitioningAndOrder(bucketSpec)._2
+
   // These metadata values make scan plans uniquely identifiable for equality checking.
   override val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
@@ -248,23 +265,29 @@ case class FileSourceScanExec(
     withOptPartitionCount
   }
 
-  private lazy val inputRDD: RDD[InternalRow] = {
-    val readFile: (PartitionedFile) => Iterator[InternalRow] =
-      relation.fileFormat.buildReaderWithPartitionValues(
-        sparkSession = relation.sparkSession,
-        dataSchema = relation.dataSchema,
-        partitionSchema = relation.partitionSchema,
-        requiredSchema = outputSchema,
-        filters = dataFilters,
-        options = relation.options,
-        hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
+  private def inputRDDInternal(sparkSession: SparkSession): RDD[InternalRow] = {
+    val readFile = relation.fileFormat.buildReaderWithPartitionValues(
+      sparkSession = sparkSession,
+      dataSchema = relation.dataSchema,
+      partitionSchema = relation.partitionSchema,
+      requiredSchema = outputSchema,
+      filters = dataFilters,
+      options = relation.options,
+      hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
 
     relation.bucketSpec match {
-      case Some(bucketing) if relation.sparkSession.sessionState.conf.bucketingEnabled =>
+      case Some(bucketing) if sparkSession.sessionState.conf.bucketingEnabled =>
         createBucketedReadRDD(bucketing, readFile, selectedPartitions, relation)
       case _ =>
         createNonBucketedReadRDD(readFile, selectedPartitions, relation)
     }
+  }
+
+  private def inputRDD: RDD[InternalRow] = {
+    val sparkSession = sparkSession
+    readerCache.get(sparkSession, new Callable[RDD[InternalRow]] {
+      override def call(): RDD[InternalRow] = inputRDDInternal(sparkSession)
+    })
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -370,7 +393,7 @@ case class FileSourceScanExec(
       FilePartition(bucketId, bucketed.getOrElse(bucketId, Nil))
     }
 
-    new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
+    new FileScanRDD(sparkSession, readFile, filePartitions)
   }
 
   /**
@@ -385,10 +408,10 @@ case class FileSourceScanExec(
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Seq[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
-    val defaultMaxSplitBytes =
-      fsRelation.sparkSession.sessionState.conf.filesMaxPartitionBytes
-    val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
-    val defaultParallelism = fsRelation.sparkSession.sparkContext.defaultParallelism
+    val session = sparkSession
+    val defaultMaxSplitBytes = session.sessionState.conf.filesMaxPartitionBytes
+    val openCostInBytes = session.sessionState.conf.filesOpenCostInBytes
+    val defaultParallelism = session.sparkContext.defaultParallelism
     val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
     val bytesPerCore = totalBytes / defaultParallelism
 

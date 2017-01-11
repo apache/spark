@@ -28,7 +28,7 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.DataSourceScanExec
+import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -895,6 +895,33 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       }
       val readBack = reader.load(childDir)
       checkAnswer(df, readBack)
+    }
+  }
+
+  test("DataSourceScanExec uses active session upon execution") {
+    withTempPath { dir =>
+      val path = "file://" + dir.getCanonicalPath
+      spark.range(4).coalesce(1).write.format(dataSourceName).save(path)
+      val df = spark.read.format(dataSourceName).load(path)
+      val Some(scan1) = df.queryExecution.executedPlan.collectFirst {
+        case scan: FileSourceScanExec => scan
+      }
+
+      val newSession = spark.newSession()
+
+      val session1 = scan1.sparkSession
+      SparkSession.setActiveSession(newSession)
+      val Some(scan2) = df.queryExecution.executedPlan.collectFirst {
+        case scan: FileSourceScanExec => scan
+      }
+
+      val session2 = scan2.sparkSession
+
+      assert(scan1 == scan2)
+      assert(session1 == spark)
+      assert(session2 == newSession)
+
+      SparkSession.setActiveSession(spark)
     }
   }
 }

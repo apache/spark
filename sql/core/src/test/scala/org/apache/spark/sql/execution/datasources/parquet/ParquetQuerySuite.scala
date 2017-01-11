@@ -27,7 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
+import org.apache.spark.sql.execution.datasources.{FileScanRDD, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -735,6 +735,37 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
         val withShortField = new StructType().add("f", ShortType)
         checkAnswer(spark.read.schema(withShortField).parquet(path), Row(1: Short))
+      }
+    }
+  }
+
+  test("DataSourceScanExec uses active spark session") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        dir.getAbsoluteFile
+        val path = "file://" + dir.getCanonicalPath
+        spark.range(4).coalesce(1).write.parquet(path)
+        val df = spark.read.parquet(path)
+
+        val Some((scan1, fileScanRDD1)) = df.queryExecution.executedPlan.collectFirst {
+          case scan: FileSourceScanExec if scan.inputRDDs().head.isInstanceOf[FileScanRDD] =>
+            (scan, scan.inputRDDs().head.asInstanceOf[FileScanRDD])
+        }
+
+        val supportsBatchInitially = scan1.supportsBatch
+
+        val newSession = spark.newSession()
+        newSession.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "false")
+        SparkSession.setActiveSession(newSession)
+        val Some((scan2, fileScanRDD2)) = df.queryExecution.executedPlan.collectFirst {
+          case scan: FileSourceScanExec if scan.inputRDDs().head.isInstanceOf[FileScanRDD] =>
+            (scan, scan.inputRDDs().head.asInstanceOf[FileScanRDD])
+        }
+
+        assert(scan1 == scan2)
+        assert(supportsBatchInitially)
+        assert(supportsBatchInitially != scan2.supportsBatch)
+        assert(fileScanRDD1 != fileScanRDD2)
       }
     }
   }
