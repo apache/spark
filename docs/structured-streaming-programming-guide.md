@@ -374,7 +374,7 @@ The "Output" is defined as what gets written out to the external storage. The ou
 
   - *Append Mode* - Only the new rows appended in the Result Table since the last trigger will be written to the external storage. This is applicable only on the queries where existing rows in the Result Table are not expected to change.
   
-  - *Update Mode* - Only the rows that were updated in the Result Table since the last trigger will be written to the external storage (available since Spark 2.1.1). Note that this is different from the Complete Mode in that this mode only outputs the rows that have changed since the last trigger.
+  - *Update Mode* - Only the rows that were updated in the Result Table since the last trigger will be written to the external storage (available since Spark 2.1.1). Note that this is different from the Complete Mode in that this mode only outputs the rows that have changed since the last trigger. If the query doesn't contain aggregations, it will be equivalent to Append mode.
 
 Note that each mode is applicable on certain types of queries. This is discussed in detail [later](#output-modes).
 
@@ -977,7 +977,7 @@ Here is the compatibility matrix.
   </tr>
   <tr>
     <td colspan="2" style="vertical-align: middle;">Queries without aggregation</td>
-    <td style="vertical-align: middle;">Append</td>
+    <td style="vertical-align: middle;">Append, Update</td>
     <td style="vertical-align: middle;">
         Complete mode not supported as it is infeasible to keep all data in the Result Table.
     </td>

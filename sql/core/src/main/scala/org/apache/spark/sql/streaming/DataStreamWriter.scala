@@ -44,6 +44,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    *                            written to the sink
    *   - `OutputMode.Complete()`: all the rows in the streaming DataFrame/Dataset will be written
    *                              to the sink every time these is some updates
+   *   - `OutputMode.Update()`: only the rows that were updated in the streaming DataFrame/Dataset
+   *                            will be written to the sink every time there are some updates. If
+   *                            the query doesn't contain aggregations, it will be equivalent to
+   *                            `OutputMode.Append()` mode.
    *
    * @since 2.0.0
    */
@@ -58,7 +62,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    *                 the sink
    *   - `complete`: all the rows in the streaming DataFrame/Dataset will be written to the sink
    *                 every time these is some updates
-   *
+   *   - `update`:   only the rows that were updated in the streaming DataFrame/Dataset will
+   *                 be written to the sink every time there are some updates. If the query doesn't
+   *                 contain aggregations, it will be equivalent to `append` mode.
    * @since 2.0.0
    */
   def outputMode(outputMode: String): DataStreamWriter[T] = {
@@ -219,16 +225,6 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       assertNotPartitioned("memory")
       if (extraOptions.get("queryName").isEmpty) {
         throw new AnalysisException("queryName must be specified for memory sink")
-      }
-      val supportedModes = "Output modes supported by the memory sink are 'append' and 'complete'."
-      outputMode match {
-        case Append | Complete => // allowed
-        case Update =>
-          throw new AnalysisException(
-            s"Update output mode is not supported for memory sink. $supportedModes")
-        case _ =>
-          throw new AnalysisException(
-            s"$outputMode is not supported for memory sink. $supportedModes")
       }
       val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
