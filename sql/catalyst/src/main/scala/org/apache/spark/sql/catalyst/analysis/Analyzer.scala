@@ -21,8 +21,8 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -48,6 +48,39 @@ object SimpleAnalyzer extends Analyzer(
       override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
     },
     new SimpleCatalystConf(caseSensitiveAnalysis = true))
+
+/**
+ * Provides a way to keep state during the analysis, this enables us to decouple the concerns
+ * of analysis environment from the catalog.
+ *
+ * Note this is thread local.
+ *
+ * @param defaultDatabase The default database used in the view resolution, this overrules the
+ *                        current catalog database.
+ * @param nestedViewLevel The nested level in the view resolution, this enables us to limit the
+ *                        depth of nested views.
+ *                        TODO Limit the depth of nested views.
+ */
+case class AnalysisContext(
+    defaultDatabase: Option[String] = None,
+    nestedViewLevel: Int = 0)
+
+object AnalysisContext {
+  private val value = new ThreadLocal[AnalysisContext]() {
+    override def initialValue: AnalysisContext = AnalysisContext()
+  }
+
+  def get: AnalysisContext = value.get()
+  private def set(context: AnalysisContext): Unit = value.set(context)
+
+  def withAnalysisContext[A](database: Option[String])(f: => A): A = {
+    val originContext = value.get()
+    val context = AnalysisContext(defaultDatabase = database,
+      nestedViewLevel = originContext.nestedViewLevel + 1)
+    set(context)
+    try f finally { set(originContext) }
+  }
+}
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
@@ -106,6 +139,8 @@ class Analyzer(
       ResolveInlineTables ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
+    Batch("View", Once,
+      AliasViewChild(conf)),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
@@ -510,32 +545,87 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    private def lookupTableFromCatalog(u: UnresolvedRelation): LogicalPlan = {
+
+    // If the unresolved relation is running directly on files, we just return the original
+    // UnresolvedRelation, the plan will get resolved later. Else we look up the table from catalog
+    // and change the default database name(in AnalysisContext) if it is a view.
+    // We usually look up a table from the default database if the table identifier has an empty
+    // database part, for a view the default database should be the currentDb when the view was
+    // created. When the case comes to resolving a nested view, the view may have different default
+    // database with that the referenced view has, so we need to use
+    // `AnalysisContext.defaultDatabase` to track the current default database.
+    // When the relation we resolve is a view, we fetch the view.desc(which is a CatalogTable), and
+    // then set the value of `CatalogTable.viewDefaultDatabase` to
+    // `AnalysisContext.defaultDatabase`, we look up the relations that the view references using
+    // the default database.
+    // For example:
+    // |- view1 (defaultDatabase = db1)
+    //   |- operator
+    //     |- table2 (defaultDatabase = db1)
+    //     |- view2 (defaultDatabase = db2)
+    //        |- view3 (defaultDatabase = db3)
+    //   |- view4 (defaultDatabase = db4)
+    // In this case, the view `view1` is a nested view, it directly references `table2`、`view2`
+    // and `view4`, the view `view2` references `view3`. On resolving the table, we look up the
+    // relations `table2`、`view2`、`view4` using the default database `db1`, and look up the
+    // relation `view3` using the default database `db2`.
+    //
+    // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
+    // have empty defaultDatabase and all the relations in viewText have database part defined.
+    def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
+      case u: UnresolvedRelation if !isRunningDirectlyOnFiles(u.tableIdentifier) =>
+        val defaultDatabase = AnalysisContext.get.defaultDatabase
+        val relation = lookupTableFromCatalog(u, defaultDatabase)
+        resolveRelation(relation)
+      // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
+      // `viewText` should be defined, or else we throw an error on the generation of the View
+      // operator.
+      case view @ View(desc, _, child) if !child.resolved =>
+        // Resolve all the UnresolvedRelations and Views in the child.
+        val newChild = AnalysisContext.withAnalysisContext(desc.viewDefaultDatabase) {
+          execute(child)
+        }
+        view.copy(child = newChild)
+      case p @ SubqueryAlias(_, view: View, _) =>
+        val newChild = resolveRelation(view)
+        p.copy(child = newChild)
+      case _ => plan
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
+        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
+      case u: UnresolvedRelation => resolveRelation(u)
+    }
+
+    // Look up the table with the given name from catalog. The database we used is decided by the
+    // precedence:
+    // 1. Use the database part of the table identifier, if it is defined;
+    // 2. Use defaultDatabase, if it is defined(In this case, no temporary objects can be used,
+    //    and the default database is only used to look up a view);
+    // 3. Use the currentDb of the SessionCatalog.
+    private def lookupTableFromCatalog(
+        u: UnresolvedRelation,
+        defaultDatabase: Option[String] = None): LogicalPlan = {
       try {
-        catalog.lookupRelation(u.tableIdentifier, u.alias)
+        val tableIdentWithDb = u.tableIdentifier.copy(
+          database = u.tableIdentifier.database.orElse(defaultDatabase))
+        catalog.lookupRelation(tableIdentWithDb, u.alias)
       } catch {
         case _: NoSuchTableException =>
           u.failAnalysis(s"Table or view not found: ${u.tableName}")
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
-      case u: UnresolvedRelation =>
-        val table = u.tableIdentifier
-        if (table.database.isDefined && conf.runSQLonFile && !catalog.isTemporaryTable(table) &&
-            (!catalog.databaseExists(table.database.get) || !catalog.tableExists(table))) {
-          // If the database part is specified, and we support running SQL directly on files, and
-          // it's not a temporary view, and the table does not exist, then let's just return the
-          // original UnresolvedRelation. It is possible we are matching a query like "select *
-          // from parquet.`/path/to/query`". The plan will get resolved later.
-          // Note that we are testing (!db_exists || !table_exists) because the catalog throws
-          // an exception from tableExists if the database does not exist.
-          u
-        } else {
-          lookupTableFromCatalog(u)
-        }
+    // If the database part is specified, and we support running SQL directly on files, and
+    // it's not a temporary view, and the table does not exist, then let's just return the
+    // original UnresolvedRelation. It is possible we are matching a query like "select *
+    // from parquet.`/path/to/query`". The plan will get resolved in the rule `ResolveDataSource`.
+    // Note that we are testing (!db_exists || !table_exists) because the catalog throws
+    // an exception from tableExists if the database does not exist.
+    private def isRunningDirectlyOnFiles(table: TableIdentifier): Boolean = {
+      table.database.isDefined && conf.runSQLonFile && !catalog.isTemporaryTable(table) &&
+        (!catalog.databaseExists(table.database.get) || !catalog.tableExists(table))
     }
   }
 
@@ -767,19 +857,19 @@ class Analyzer(
     }
   }
 
- /**
-  * In many dialects of SQL it is valid to use ordinal positions in order/sort by and group by
-  * clauses. This rule is to convert ordinal positions to the corresponding expressions in the
-  * select list. This support is introduced in Spark 2.0.
-  *
-  * - When the sort references or group by expressions are not integer but foldable expressions,
-  * just ignore them.
-  * - When spark.sql.orderByOrdinal/spark.sql.groupByOrdinal is set to false, ignore the position
-  * numbers too.
-  *
-  * Before the release of Spark 2.0, the literals in order/sort by and group by clauses
-  * have no effect on the results.
-  */
+  /**
+   * In many dialects of SQL it is valid to use ordinal positions in order/sort by and group by
+   * clauses. This rule is to convert ordinal positions to the corresponding expressions in the
+   * select list. This support is introduced in Spark 2.0.
+   *
+   * - When the sort references or group by expressions are not integer but foldable expressions,
+   * just ignore them.
+   * - When spark.sql.orderByOrdinal/spark.sql.groupByOrdinal is set to false, ignore the position
+   * numbers too.
+   *
+   * Before the release of Spark 2.0, the literals in order/sort by and group by clauses
+   * have no effect on the results.
+   */
   object ResolveOrdinalInOrderByAndGroupBy extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p if !p.childrenResolved => p
