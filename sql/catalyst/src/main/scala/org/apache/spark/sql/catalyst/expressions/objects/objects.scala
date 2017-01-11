@@ -728,7 +728,6 @@ case class CollectObjects private(
 
       if (!${genInputData.isNull}) {
         $determineCollectionType
-        $convertedType[] $convertedArray = null;
         int $dataLength = $getLength;
         ${classOf[Builder[_, _]].getName} $builderValue = $getBuilderVar;
         $builderValue.sizeHint($dataLength);
