@@ -35,7 +35,7 @@ import scala.concurrent.duration.DurationInt
 import scala.util.Success
 
 import org.apache.spark.{SPARK_VERSION, SparkConf}
-import org.apache.spark.deploy.rest.{AppResource, KubernetesCreateSubmissionRequest, RemoteAppResource, UploadedAppResource}
+import org.apache.spark.deploy.rest.{AppResource, KubernetesCreateSubmissionRequest, RemoteAppResource, TarGzippedData, UploadedAppResource}
 import org.apache.spark.deploy.rest.kubernetes._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
@@ -284,8 +284,8 @@ private[spark] class Client(
       case other => RemoteAppResource(other)
     }
 
-    val uploadDriverExtraClasspathBase64Contents = getFileContents(uploadedDriverExtraClasspath)
-    val uploadJarsBase64Contents = getFileContents(uploadedJars)
+    val uploadDriverExtraClasspathBase64Contents = compressJars(uploadedDriverExtraClasspath)
+    val uploadJarsBase64Contents = compressJars(uploadedJars)
     KubernetesCreateSubmissionRequest(
       appResource = resolvedAppResource,
       mainClass = mainClass,
@@ -296,19 +296,10 @@ private[spark] class Client(
       uploadedJarsBase64Contents = uploadJarsBase64Contents)
   }
 
-  def getFileContents(maybeFilePaths: Option[String]): Array[(String, String)] = {
+  def compressJars(maybeFilePaths: Option[String]): Option[TarGzippedData] = {
     maybeFilePaths
-      .map(_.split(",").map(filePath => {
-        val fileToUpload = new File(filePath)
-        if (!fileToUpload.isFile) {
-          throw new IllegalStateException("Provided file to upload for driver extra classpath" +
-            s" does not exist or is not a file: $filePath")
-        } else {
-          val fileBytes = Files.toByteArray(fileToUpload)
-          val fileBase64 = Base64.encodeBase64String(fileBytes)
-          (fileToUpload.getName, fileBase64)
-        }
-      })).getOrElse(Array.empty[(String, String)])
+      .map(_.split(","))
+      .map(CompressionUtils.createTarGzip(_))
   }
 
   private def getDriverLauncherService(

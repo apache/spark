@@ -50,6 +50,12 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
+      <artifactId>spark-kubernetes-integration-tests-spark-jobs-helpers_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-docker-minimal-bundle_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <type>tar.gz</type>
@@ -122,6 +128,13 @@
                   <version>${project.version}</version>
                   <type>jar</type>
                   <outputDirectory>${project.build.directory}/integration-tests-spark-jobs</outputDirectory>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>org.apache.spark</groupId>
+                  <artifactId>spark-kubernetes-integration-tests-spark-jobs-helpers_${scala.binary.version}</artifactId>
+                  <version>${project.version}</version>
+                  <type>jar</type>
+                  <outputDirectory>${project.build.directory}/integration-tests-spark-jobs-helpers</outputDirectory>
                 </artifactItem>
               </artifactItems>
             </configuration>

@@ -16,8 +16,7 @@
  */
 package org.apache.spark.deploy.kubernetes.integrationtest.jobs
 
-import scala.math.random
-
+import org.apache.spark.deploy.kubernetes.integrationtest.PiHelper
 import org.apache.spark.sql.SparkSession
 
 // Equivalent to SparkPi except does not stop the Spark Context
@@ -32,10 +31,8 @@ private[spark] object SparkPiWithInfiniteWait {
       .getOrCreate()
     val slices = if (args.length > 0) args(0).toInt else 10
     val n = math.min(100000L * slices, Int.MaxValue).toInt // avoid overflow
-    val count = spark.sparkContext.parallelize(1 until n, slices).map { i =>
-        val x = random * 2 - 1
-        val y = random * 2 - 1
-        if (x*x + y*y < 1) 1 else 0
+    val count = spark.sparkContext.parallelize(1 until n, slices).map { _ =>
+        PiHelper.helpPi()
       }.reduce(_ + _)
     // scalastyle:off println
     println("Pi is roughly " + 4.0 * count / (n - 1))

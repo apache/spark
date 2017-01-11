@@ -41,6 +41,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
     .listFiles()(0)
     .getAbsolutePath
 
+  private val HELPER_JAR = Paths.get("target", "integration-tests-spark-jobs-helpers")
+      .toFile
+      .listFiles()(0)
+      .getAbsolutePath
+
   private val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))
   private val INTERVAL = PatienceConfiguration.Interval(Span(2, Seconds))
   private val MAIN_CLASS = "org.apache.spark.deploy.kubernetes" +
@@ -117,6 +122,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       .set("spark.kubernetes.namespace", NAMESPACE)
       .set("spark.kubernetes.driver.docker.image", "spark-driver:latest")
       .set("spark.kubernetes.executor.docker.image", "spark-executor:latest")
+      .set("spark.kubernetes.driver.uploads.jars", HELPER_JAR)
       .set("spark.executor.memory", "500m")
       .set("spark.executor.cores", "1")
       .set("spark.executors.instances", "1")
@@ -142,6 +148,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--executor-memory", "512m",
       "--executor-cores", "1",
       "--num-executors", "1",
+      "--upload-jars", HELPER_JAR,
       "--class", MAIN_CLASS,
       "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
       "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
