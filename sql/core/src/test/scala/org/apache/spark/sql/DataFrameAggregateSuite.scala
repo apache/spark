@@ -97,6 +97,15 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-18952: regexes fail codegen when used as keys due to bad forward-slash escapes") {
+    val df = Seq(("some[thing]", "random-string")).toDF("key", "val")
+
+    checkAnswer(
+      df.groupBy(regexp_extract('key, "([a-z]+)\\[", 1)).count(),
+      Row("some", 1) :: Nil
+    )
+  }
+
   test("rollup") {
     checkAnswer(
       courseSales.rollup("course", "year").sum("earnings"),
@@ -512,5 +521,13 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.groupBy($"x").agg(countDistinct($"y"), sort_array(collect_list($"z"))),
       Seq(Row(1, 2, Seq("a", "b")), Row(3, 2, Seq("c", "c", "d"))))
+  }
+
+  test("SPARK-18004 limit + aggregates") {
+    val df = Seq(("a", 1), ("b", 2), ("c", 1), ("d", 5)).toDF("id", "value")
+    val limit2Df = df.limit(2)
+    checkAnswer(
+      limit2Df.groupBy("id").count().select($"id"),
+      limit2Df.select($"id"))
   }
 }

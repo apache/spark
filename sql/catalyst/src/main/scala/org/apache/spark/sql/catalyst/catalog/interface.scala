@@ -21,8 +21,8 @@ import java.util.Date
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Cast, Literal}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -133,6 +133,16 @@ case class BucketSpec(
   if (numBuckets <= 0) {
     throw new AnalysisException(s"Expected positive number of buckets, but got `$numBuckets`.")
   }
+
+  override def toString: String = {
+    val bucketString = s"bucket columns: [${bucketColumnNames.mkString(", ")}]"
+    val sortString = if (sortColumnNames.nonEmpty) {
+      s", sort columns: [${sortColumnNames.mkString(", ")}]"
+    } else {
+      ""
+    }
+    s"$numBuckets buckets, $bucketString$sortString"
+  }
 }
 
 /**
@@ -161,7 +171,7 @@ case class CatalogTable(
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
     properties: Map[String, String] = Map.empty,
-    stats: Option[Statistics] = None,
+    stats: Option[CatalogStatistics] = None,
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None,
     comment: Option[String] = None,
@@ -237,6 +247,34 @@ case class CatalogTable(
 }
 
 
+/**
+ * This class of statistics is used in [[CatalogTable]] to interact with metastore.
+ * We define this new class instead of directly using [[Statistics]] here because there are no
+ * concepts of attributes or broadcast hint in catalog.
+ */
+case class CatalogStatistics(
+    sizeInBytes: BigInt,
+    rowCount: Option[BigInt] = None,
+    colStats: Map[String, ColumnStat] = Map.empty) {
+
+  /**
+   * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
+   * on column names.
+   */
+  def toPlanStats(planOutput: Seq[Attribute]): Statistics = {
+    val matched = planOutput.flatMap(a => colStats.get(a.name).map(a -> _))
+    Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
+      attributeStats = AttributeMap(matched))
+  }
+
+  /** Readable string representation for the CatalogStatistics. */
+  def simpleString: String = {
+    val rowCountString = if (rowCount.isDefined) s", ${rowCount.get} rows" else ""
+    s"$sizeInBytes bytes$rowCountString"
+  }
+}
+
+
 case class CatalogTableType private(name: String)
 object CatalogTableType {
   val EXTERNAL = new CatalogTableType("EXTERNAL")
@@ -280,7 +318,6 @@ trait CatalogRelation {
  * Note that in the future we should consolidate this and HiveCatalogRelation.
  */
 case class SimpleCatalogRelation(
-    databaseName: String,
     metadata: CatalogTable)
   extends LeafNode with CatalogRelation {
 
@@ -297,8 +334,4 @@ case class SimpleCatalogRelation(
       }
     dataCols ++ partCols
   }
-
-  require(
-    metadata.identifier.database == Some(databaseName),
-    "provided database does not match the one specified in the table definition")
 }

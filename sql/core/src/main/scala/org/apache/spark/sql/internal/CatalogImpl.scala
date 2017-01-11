@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
 
@@ -346,10 +347,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    if (source.toLowerCase == "hive") {
-      throw new AnalysisException("Cannot create hive serde table with createExternalTable API.")
-    }
-
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     val tableDesc = CatalogTable(
       identifier = tableIdent,
@@ -391,6 +388,19 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       sparkSession.sharedState.cacheManager.uncacheQuery(Dataset.ofRows(sparkSession, viewDef))
       sessionCatalog.dropGlobalTempView(viewName)
     }
+  }
+
+  /**
+   * Recover all the partitions in the directory of a table and update the catalog.
+   *
+   * @param tableName the name of the table to be repaired.
+   * @group ddl_ops
+   * @since 2.1.1
+   */
+  override def recoverPartitions(tableName: String): Unit = {
+    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    sparkSession.sessionState.executePlan(
+      AlterTableRecoverPartitionsCommand(tableIdent)).toRdd
   }
 
   /**

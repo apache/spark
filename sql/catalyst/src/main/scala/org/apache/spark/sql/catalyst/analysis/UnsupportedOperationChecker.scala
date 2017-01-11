@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.{AnalysisException, InternalOutputModes}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -72,7 +73,7 @@ object UnsupportedOperationChecker {
                 s"streaming DataFrames/DataSets")(plan)
         }
 
-      case InternalOutputModes.Complete | InternalOutputModes.Update if aggregates.isEmpty =>
+      case InternalOutputModes.Complete if aggregates.isEmpty =>
         throwError(
           s"$outputMode output mode not supported when there are no streaming aggregations on " +
             s"streaming DataFrames/Datasets")(plan)
@@ -165,7 +166,7 @@ object UnsupportedOperationChecker {
         case GlobalLimit(_, _) | LocalLimit(_, _) if subPlan.children.forall(_.isStreaming) =>
           throwError("Limits are not supported on streaming DataFrames/Datasets")
 
-        case Sort(_, _, _) | SortPartitions(_, _) if !containsCompleteData(subPlan) =>
+        case Sort(_, _, _) if !containsCompleteData(subPlan) =>
           throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on" +
             "aggregated DataFrame/Dataset in Complete output mode")
 

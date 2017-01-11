@@ -97,6 +97,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     .map { d => Utils.resolveURI(d).toString }
     .getOrElse(DEFAULT_LOG_DIR)
 
+  private val HISTORY_UI_ACLS_ENABLE = conf.getBoolean("spark.history.ui.acls.enable", false)
+  private val HISTORY_UI_ADMIN_ACLS = conf.get("spark.history.ui.admin.acls", "")
+  private val HISTORY_UI_ADMIN_ACLS_GROUPS = conf.get("spark.history.ui.admin.acls.groups", "")
+  logInfo(s"History server ui acls " + (if (HISTORY_UI_ACLS_ENABLE) "enabled" else "disabled") +
+    "; users with admin permissions: " + HISTORY_UI_ADMIN_ACLS.toString +
+    "; groups with admin permissions" + HISTORY_UI_ADMIN_ACLS_GROUPS.toString)
+
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
   private val fs = Utils.getHadoopFileSystem(logDir, hadoopConf)
 
@@ -250,13 +257,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val appListener = replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
 
           if (appListener.appId.isDefined) {
-            val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
-            ui.getSecurityManager.setAcls(uiAclsEnabled)
+            ui.getSecurityManager.setAcls(HISTORY_UI_ACLS_ENABLE)
             // make sure to set admin acls before view acls so they are properly picked up
-            ui.getSecurityManager.setAdminAcls(appListener.adminAcls.getOrElse(""))
-            ui.getSecurityManager.setViewAcls(attempt.sparkUser,
-              appListener.viewAcls.getOrElse(""))
-            ui.getSecurityManager.setAdminAclsGroups(appListener.adminAclsGroups.getOrElse(""))
+            val adminAcls = HISTORY_UI_ADMIN_ACLS + "," + appListener.adminAcls.getOrElse("")
+            ui.getSecurityManager.setAdminAcls(adminAcls)
+            ui.getSecurityManager.setViewAcls(attempt.sparkUser, appListener.viewAcls.getOrElse(""))
+            val adminAclsGroups = HISTORY_UI_ADMIN_ACLS_GROUPS + "," +
+              appListener.adminAclsGroups.getOrElse("")
+            ui.getSecurityManager.setAdminAclsGroups(adminAclsGroups)
             ui.getSecurityManager.setViewAclsGroups(appListener.viewAclsGroups.getOrElse(""))
             Some(LoadedAppUI(ui, updateProbe(appId, attemptId, attempt.fileSize)))
           } else {

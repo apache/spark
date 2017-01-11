@@ -31,6 +31,7 @@ import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
 
+import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.util.Utils
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
@@ -450,5 +451,18 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       assert(org.apache.log4j.Logger.getRootLogger().getLevel === originalLevel)
       sc.stop()
     }
+  }
+
+  test("register and deregister Spark listener from SparkContext") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    val sparkListener1 = new SparkListener { }
+    val sparkListener2 = new SparkListener { }
+    sc.addSparkListener(sparkListener1)
+    sc.addSparkListener(sparkListener2)
+    assert(sc.listenerBus.listeners.contains(sparkListener1))
+    assert(sc.listenerBus.listeners.contains(sparkListener2))
+    sc.removeSparkListener(sparkListener1)
+    assert(!sc.listenerBus.listeners.contains(sparkListener1))
+    assert(sc.listenerBus.listeners.contains(sparkListener2))
   }
 }

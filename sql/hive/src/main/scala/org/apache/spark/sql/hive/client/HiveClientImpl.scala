@@ -300,7 +300,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
-    if (getDatabaseOption(databaseName).isDefined) {
+    if (databaseExists(databaseName)) {
       state.setCurrentDatabase(databaseName)
     } else {
       throw new NoSuchDatabaseException(databaseName)
@@ -336,14 +336,18 @@ private[hive] class HiveClientImpl(
         Option(database.properties).map(_.asJava).orNull))
   }
 
-  override def getDatabaseOption(name: String): Option[CatalogDatabase] = withHiveState {
-    Option(client.getDatabase(name)).map { d =>
+  override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
+    Option(client.getDatabase(dbName)).map { d =>
       CatalogDatabase(
         name = d.getName,
         description = d.getDescription,
         locationUri = d.getLocationUri,
         properties = Option(d.getParameters).map(_.asScala.toMap).orNull)
-    }
+    }.getOrElse(throw new NoSuchDatabaseException(dbName))
+  }
+
+  override def databaseExists(dbName: String): Boolean = withHiveState {
+    client.databaseExists(dbName)
   }
 
   override def listDatabases(pattern: String): Seq[String] = withHiveState {
@@ -404,8 +408,15 @@ private[hive] class HiveClientImpl(
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
         storage = CatalogStorageFormat(
           locationUri = shim.getDataLocation(h),
-          inputFormat = Option(h.getInputFormatClass).map(_.getName),
-          outputFormat = Option(h.getOutputFormatClass).map(_.getName),
+          // To avoid ClassNotFound exception, we try our best to not get the format class, but get
+          // the class name directly. However, for non-native tables, there is no interface to get
+          // the format class name, so we may still throw ClassNotFound in this case.
+          inputFormat = Option(h.getTTable.getSd.getInputFormat).orElse {
+            Option(h.getStorageHandler).map(_.getInputFormatClass.getName)
+          },
+          outputFormat = Option(h.getTTable.getSd.getOutputFormat).orElse {
+            Option(h.getStorageHandler).map(_.getOutputFormatClass.getName)
+          },
           serde = Option(h.getSerializationLib),
           compressed = h.getTTable.getSd.isCompressed,
           properties = Option(h.getTTable.getSd.getSerdeInfo.getParameters)

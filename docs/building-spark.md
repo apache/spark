@@ -42,13 +42,13 @@ You can fix these problems by setting the `MAVEN_OPTS` variable as discussed bef
 * If using `build/mvn` with no `MAVEN_OPTS` set, the script will automatically add the above options to the `MAVEN_OPTS` environment variable.
 * The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.
 * You may see warnings like "ignoring option MaxPermSize=1g; support was removed in 8.0" when building or running tests with Java 8 and `build/mvn`. These warnings are harmless.
-    
+
 
 ### build/mvn
 
 Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](http://www.scala-lang.org/), and [Zinc](https://github.com/typesafehub/zinc)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala and Zinc regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
 
-    ./build/mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
+    ./build/mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.0 -DskipTests clean package
 
 Other build examples can be found below.
 
@@ -59,9 +59,9 @@ To create a Spark distribution like those distributed by the
 to be runnable, use `./dev/make-distribution.sh` in the project root directory. It can be configured
 with Maven profile settings and so on like the direct Maven build. Example:
 
-    ./dev/make-distribution.sh --name custom-spark --tgz -Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pmesos -Pyarn
+    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phadoop-2.7 -Phive -Phive-thriftserver -Pmesos -Pyarn
 
-For more information on usage, run `./dev/make-distribution.sh --help`
+This will build Spark distribution along with Python pip and R packages. For more information on usage, run `./dev/make-distribution.sh --help`
 
 ## Specifying the Hadoop Version
 
@@ -80,7 +80,7 @@ Because HDFS is not protocol-compatible across versions, if you want to read fro
   </tbody>
 </table>
 
-Note that support for versions of Hadoop before 2.6 are deprecated as of Spark 2.1.0 and may be 
+Note that support for versions of Hadoop before 2.6 are deprecated as of Spark 2.1.0 and may be
 removed in Spark 2.2.0.
 
 
@@ -133,7 +133,7 @@ To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` prop
 
     ./dev/change-scala-version.sh 2.10
     ./build/mvn -Pyarn -Phadoop-2.4 -Dscala-2.10 -DskipTests clean package
-    
+
 Note that support for Scala 2.10 is deprecated as of Spark 2.1.0 and may be removed in Spark 2.2.0.
 
 ## Building submodules individually
@@ -272,6 +272,8 @@ If you are building Spark for use in a Python environment and you wish to pip in
     cd python; python setup.py sdist
 
 **Note:** Due to packaging requirements you can not directly pip install from the Python directory, rather you must first build the sdist package as described above.
+
+Alternatively, you can also run make-distribution with the --pip option.
 
 ## PySpark Tests with Maven
 

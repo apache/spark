@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
@@ -167,7 +167,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   override def databaseExists(db: String): Boolean = withClient {
-    client.getDatabaseOption(db).isDefined
+    client.databaseExists(db)
   }
 
   override def listDatabases(): Seq[String] = withClient {
@@ -215,7 +215,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         tableDefinition.storage.locationUri
       }
 
-      if (tableDefinition.provider.get == DDLUtils.HIVE_PROVIDER) {
+      if (DDLUtils.isHiveTable(tableDefinition)) {
         val tableWithDataSourceProps = tableDefinition.copy(
           // We can't leave `locationUri` empty and count on Hive metastore to set a default table
           // location, because Hive metastore uses hive.metastore.warehouse.dir to generate default
@@ -533,7 +533,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     } else {
       val oldTableDef = getRawTable(db, withStatsProps.identifier.table)
 
-      val newStorage = if (tableDefinition.provider.get == DDLUtils.HIVE_PROVIDER) {
+      val newStorage = if (DDLUtils.isHiveTable(tableDefinition)) {
         tableDefinition.storage
       } else {
         // We can't alter the table storage of data source table directly for 2 reasons:
@@ -656,7 +656,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       }
 
       table = table.copy(
-        stats = Some(Statistics(
+        stats = Some(CatalogStatistics(
           sizeInBytes = BigInt(table.properties(STATISTICS_TOTAL_SIZE)),
           rowCount = table.properties.get(STATISTICS_NUM_ROWS).map(BigInt(_)),
           colStats = colStats.toMap)))

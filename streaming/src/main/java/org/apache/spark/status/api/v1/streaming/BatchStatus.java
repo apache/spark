@@ -15,22 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster.mesos
+package org.apache.spark.status.api.v1.streaming;
 
-import java.nio.ByteBuffer
+import org.apache.spark.util.EnumUtil;
 
-import org.apache.spark.SparkFunSuite
+public enum BatchStatus {
+  COMPLETED,
+  QUEUED,
+  PROCESSING;
 
-class MesosTaskLaunchDataSuite extends SparkFunSuite {
-  test("serialize and deserialize data must be same") {
-    val serializedTask = ByteBuffer.allocate(40)
-    (Range(100, 110).map(serializedTask.putInt(_)))
-    serializedTask.rewind
-    val attemptNumber = 100
-    val byteString = MesosTaskLaunchData(serializedTask, attemptNumber).toByteString
-    serializedTask.rewind
-    val mesosTaskLaunchData = MesosTaskLaunchData.fromByteString(byteString)
-    assert(mesosTaskLaunchData.attemptNumber == attemptNumber)
-    assert(mesosTaskLaunchData.serializedTask.equals(serializedTask))
+  public static BatchStatus fromString(String str) {
+    return EnumUtil.parseIgnoreCase(BatchStatus.class, str);
   }
 }
