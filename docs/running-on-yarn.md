@@ -479,12 +479,12 @@ Hadoop services issue *hadoop tokens* to grant access to the services and data.
 Clients must first acquire tokens for the services they will access and pass them along with their
 application as it is launched in the YARN cluster.
 
-For a Spark application to interact with HDFS, HBase and Hive, it must acquire the relevant tokens
+For a Spark application to interact with any of the Hadoop filesystem (for example hdfs, webhdfs, etc), HBase and Hive, it must acquire the relevant tokens
 using the Kerberos credentials of the user launching the application
 —that is, the principal whose identity will become that of the launched Spark application.
 
 This is normally done at launch time: in a secure cluster Spark will automatically obtain a
-token for the cluster's HDFS filesystem, and potentially for HBase and Hive.
+token for the cluster's default Hadoop filesystem, and potentially for HBase and Hive.
 
 An HBase token will be obtained if HBase is in on classpath, the HBase configuration declares
 the application is secure (i.e. `hbase-site.xml` sets `hbase.security.authentication` to `kerberos`),
@@ -494,12 +494,12 @@ Similarly, a Hive token will be obtained if Hive is on the classpath, its config
 includes a URI of the metadata store in `"hive.metastore.uris`, and
 `spark.yarn.security.credentials.hive.enabled` is not set to `false`.
 
-If an application needs to interact with other secure HDFS clusters, then
+If an application needs to interact with other secure Hadoop filesystems, then
 the tokens needed to access these clusters must be explicitly requested at
 launch time. This is done by listing them in the `spark.yarn.access.namenodes` property.
 
 ```
-spark.yarn.access.namenodes hdfs://ireland.example.org:8020/,hdfs://frankfurt.example.org:8020/
+spark.yarn.access.namenodes hdfs://ireland.example.org:8020/,webhdfs://frankfurt.example.org:50070/
 ```
 
 Spark supports integrating with other security-aware services through Java Services mechanism (see
@@ -558,8 +558,8 @@ For Spark applications, the Oozie workflow must be set up for Oozie to request a
 the application needs, including:
 
 - The YARN resource manager.
-- The local HDFS filesystem.
-- Any remote HDFS filesystems used as a source or destination of I/O.
+- The local Hadoop filesystem.
+- Any remote Hadoop filesystems used as a source or destination of I/O.
 - Hive —if used.
 - HBase —if used.
 - The YARN timeline server, if the application interacts with this.
