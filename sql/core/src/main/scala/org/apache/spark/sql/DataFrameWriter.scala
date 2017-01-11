@@ -393,12 +393,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               s"Cannot overwrite table $tableName that is also being read from")
           // check hive table relation when overwrite mode
           case relation: CatalogRelation if DDLUtils.isHiveTable(relation.catalogTable)
-            && srcRelations.filter(_.isInstanceOf[CatalogRelation]).exists {
-                case r: CatalogRelation =>
-                  // here src/dest MetaStoreRelation equal according to database&qualifiedName
-                  r.catalogTable.database == relation.catalogTable.database &&
-                    r.catalogTable.qualifiedName == relation.catalogTable.qualifiedName
-              } =>
+            && srcRelations.contains(relation) =>
             throw new AnalysisException(
               s"Cannot overwrite table $tableName that is also being read from")
           case _ => // OK
