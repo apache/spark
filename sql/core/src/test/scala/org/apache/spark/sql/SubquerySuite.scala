@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, GreaterThan, Literal}
+import org.apache.spark.sql.execution.{FilterExec, LocalTableScanExec}
+import org.apache.spark.sql.execution.subquery.CommonSubqueryExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{DoubleType, IntegerType}
 
 class SubquerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -45,6 +50,22 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     row(null, 5.0),
     row(6, null)).toDF("c", "d")
 
+  lazy val tab1 = Seq(
+    row(1, 2),
+    row(2, 3),
+    row(5, 6),
+    row(6, 7),
+    row(10, 11),
+    row(11, 12)).toDF("c1", "c2")
+
+  lazy val tab2 = Seq(
+    row(1, 2),
+    row(2, 3),
+    row(5, 6),
+    row(6, 7),
+    row(10, 11),
+    row(11, 12)).toDF("c1", "c2")
+
   lazy val t = r.filter($"c".isNotNull && $"d".isNotNull)
 
   protected override def beforeAll(): Unit = {
@@ -52,6 +73,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     l.createOrReplaceTempView("l")
     r.createOrReplaceTempView("r")
     t.createOrReplaceTempView("t")
+    tab1.createOrReplaceTempView("tab1")
+    tab2.createOrReplaceTempView("tab2")
   }
 
   test("SPARK-18854 numberedTreeString for subquery") {
@@ -625,6 +648,158 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       sql("select l.b, (select (r.c + count(*)) is null from r where l.a = r.c) from l"),
       Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
         Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
+  }
+
+  test("Dedup subqueries") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      withTempView("dedup") {
+        spark.range(10).createOrReplaceTempView("dedup")
+        val df = sql("WITH s AS (SELECT 1 FROM dedup) SELECT * FROM s s1 join s s2")
+
+        val commonSubqueries = df.queryExecution.sparkPlan.collect {
+          case c: CommonSubqueryExec => c.subquery.child
+        }.distinct
+        assert(commonSubqueries.length == 1)
+
+        val df2 = sql("WITH s1 AS (SELECT 1 FROM dedup), s2 AS (SELECT 1 FROM dedup) " +
+          "SELECT * FROM s1 JOIN (SELECT * FROM s1, s2)")
+
+        val commonSubqueries2 = df2.queryExecution.sparkPlan.collect {
+          case c: CommonSubqueryExec => c.subquery.child
+        }.distinct
+        assert(commonSubqueries2.length == 1)
+
+        val df3 = sql("WITH t1 AS (SELECT 1 AS id FROM dedup) SELECT * FROM t1 a, t1 b " +
+          "WHERE a.id = 1 AND b.id > 0")
+
+        val commonSubqueries3 = df3.queryExecution.sparkPlan.collect {
+          case c: CommonSubqueryExec => c.subquery.child
+        }.distinct
+        assert(commonSubqueries3.length == 1)
+      }
+
+      // Using a self-join as CTE to test if de-duplicated attributes work for this.
+      val df4 = sql("WITH j AS (SELECT * FROM (SELECT * FROM l JOIN l)) SELECT * FROM j j1, j j2")
+      val commonSubqueries4 = df4.queryExecution.sparkPlan.collect {
+        case c: CommonSubqueryExec => c.subquery.child
+      }.distinct
+      assert(commonSubqueries4.length == 1)
+
+      val df4WithoutCTE = sql("SELECT * FROM (SELECT * FROM (SELECT * FROM l JOIN l)) j1, " +
+        "(SELECT * FROM (SELECT * FROM l JOIN l)) j2")
+      assert(df4.collect() === df4WithoutCTE.collect())
+
+      // CTE subquery refers to previous CTE subquery.
+      val df5 = sql("WITH cte AS (SELECT * FROM l a, l b), cte2 AS (SELECT * FROM cte j1, cte) " +
+        "SELECT * FROM cte2 j3, cte j4")
+      val commonSubqueries5 = df5.queryExecution.sparkPlan.collect {
+        case c: CommonSubqueryExec => c.subquery.child
+      }.distinct
+      assert(commonSubqueries5.length == 1)
+    }
+  }
+
+  test("Dedup subqueries with optimization: Filter pushdown") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val df = sql("WITH cte AS (SELECT a.a AS a, a.b AS b, b.a AS c, b.b AS d FROM l a, l b) " +
+        "SELECT * FROM (SELECT * FROM cte WHERE a = 1) x JOIN (SELECT * FROM cte WHERE b = 1.0) y")
+      val commonSubqueries = df.queryExecution.sparkPlan.collect {
+        case c: CommonSubqueryExec => c.subquery.child
+      }.distinct
+      assert(commonSubqueries.length == 1)
+      val pushdownFilter = commonSubqueries(0).collect {
+        case f: FilterExec => f
+      }
+      assert(pushdownFilter.length == 1)
+      val intConditions = pushdownFilter(0).asInstanceOf[FilterExec].condition.collect {
+        case EqualTo(a: AttributeReference, Literal(i, IntegerType)) => (a.name, i)
+      }.distinct
+      assert(intConditions.length == 1 && intConditions(0)._1 == "a" && intConditions(0)._2 == 1)
+      val doubleConditions = pushdownFilter(0).asInstanceOf[FilterExec].condition.collect {
+        case EqualTo(a: AttributeReference, Literal(d, DoubleType)) => (a.name, d)
+      }.distinct
+      assert(doubleConditions.length == 1 &&
+        doubleConditions(0)._1 == "b" && doubleConditions(0)._2 == 1.0)
+
+      // There are two Filters:
+      // 1. x.a = 1 && x.b = 2.0
+      // 2. x.b = 2.0
+      // The conditions (x.a = 1 && x.b = 2.0) should be pushed down.
+      val df2 = sql("WITH cte AS (SELECT a.a AS a, a.b AS b, b.a AS c, b.b AS d FROM l a, l b) " +
+        "SELECT * FROM cte x, cte y WHERE x.b = y.b AND x.a = 1 AND x.b = 1 + 1")
+      val commonSubqueries2 = df2.queryExecution.sparkPlan.collect {
+        case c: CommonSubqueryExec => c.subquery.child
+      }.distinct
+      assert(commonSubqueries2.length == 1)
+      val pushdownFilter2 = commonSubqueries2(0).collect {
+        case f: FilterExec => f
+      }
+      assert(pushdownFilter2.length == 1)
+      val intConditions2 = pushdownFilter2(0).asInstanceOf[FilterExec].condition.collect {
+        case EqualTo(a: AttributeReference, Literal(i, IntegerType)) => (a.name, i)
+      }.distinct
+      assert(intConditions2.length == 1 &&
+        intConditions2(0)._1 == "a" && intConditions2(0)._2 == 1)
+      val doubleConditions2 = pushdownFilter2(0).asInstanceOf[FilterExec].condition.collect {
+        case EqualTo(a: AttributeReference, Literal(d, DoubleType)) => (a.name, d)
+      }.distinct
+      assert(doubleConditions2.length == 1 &&
+        doubleConditions2(0)._1 == "b" && doubleConditions2(0)._2 == 2.0)
+
+      val df3 = sql("with cte as (select c1, case mycount when 0 then null else 1 end cov " +
+        "from (select tab1.c1, count(tab1.c2) as mycount from tab1, tab2 " +
+        "where tab1.c1 = tab2.c1 group by tab1.c1) foo " +
+        "where case mycount when 0 then null else 1 end > 1.0) " +
+        "select * from cte a, cte b where a.c1 > 5 and b.c1 > 10 and a.cov > 2")
+      val commonSubqueries3 = df3.queryExecution.sparkPlan.collect {
+        case c: CommonSubqueryExec => c.subquery.child
+      }.distinct
+      assert(commonSubqueries3.length == 1)
+      val pushdownFilter3 = commonSubqueries3(0).collect {
+        case f: FilterExec => f
+      }
+      // Besides the original Filter, two Filters are pushed down:
+      // One is tab1.c1 > 5 or tab1.c1 > 10, another one is tab2.c1 > 5 or tab2.c1 > 10.
+      assert(pushdownFilter3.length == 3)
+      val intConditions3 = pushdownFilter3(1).asInstanceOf[FilterExec].condition.collect {
+        case GreaterThan(a: AttributeReference, Literal(i, IntegerType)) => (a.name, i)
+      }.distinct
+      assert(intConditions3.length == 2)
+      assert(intConditions3(0)._2 == 5 && intConditions3(1)._2 == 10)
+    }
+  }
+
+  test("Dedup subqueries with uncorrelated scalar subquery in CTE") {
+    val df = sql("WITH t1 AS (SELECT 1 AS b, 2 AS c), " +
+      "t2 AS (SELECT a FROM (SELECT 1 AS a UNION ALL SELECT 2 AS a) t " +
+      "WHERE a = (SELECT max(b) FROM t1)) SELECT * FROM t2 x UNION ALL SELECT * FROM t2 y")
+    checkAnswer(df, Array(Row(1), Row(1)))
+    val commonSubqueries = df.queryExecution.sparkPlan.collect {
+      case c: CommonSubqueryExec => c.subquery.child
+    }.distinct
+    assert(commonSubqueries.length == 1)
+  }
+
+  test("Dedup subqueries with optimization: Project pushdown") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val df = sql("WITH cte AS (SELECT a.a AS a, a.b AS b, b.a AS c, b.b AS d FROM l a, l b) " +
+        "SELECT * FROM (SELECT a FROM cte) x JOIN (SELECT b FROM cte) y")
+
+      val commonSubqueries = df.queryExecution.sparkPlan.collect {
+        case c: CommonSubqueryExec => c.subquery.child
+      }.distinct
+      assert(commonSubqueries.length == 1)
+
+      val localTableScan = commonSubqueries(0).collect {
+        case l: LocalTableScanExec => l
+      }
+
+      // As we project `a` and `b` which both are located at only one side at the inner join,
+      // one [[LocalTableScanExec]] will have empty output after column pruning.
+      assert(localTableScan.length == 2)
+      assert(localTableScan(0).asInstanceOf[LocalTableScanExec].output.isEmpty ||
+        localTableScan(1).asInstanceOf[LocalTableScanExec].output.isEmpty)
+    }
   }
 
   test("SPARK-16804: Correlated subqueries containing LIMIT - 1") {

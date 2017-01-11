@@ -719,13 +719,37 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   }
 }
 
+/**
+ * Represents a subquery in query plan.
+ * @param alias The name of this subquery.
+ * @param child The logical plan of the subquery.
+ * @param commonSubquery Whether this subquery is a common subquery, i.e., the logical plan
+ *                       referred more than once in the query plan. Default: false.
+ */
 case class SubqueryAlias(
     alias: String,
     child: LogicalPlan,
-    view: Option[TableIdentifier])
+    view: Option[TableIdentifier],
+    commonSubquery: Boolean = false)
   extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
+
+  override def sameResult(plan: LogicalPlan): Boolean = plan match {
+    case c: SubqueryAlias =>
+      val thisChild = child.collectFirst {
+        case p: LogicalPlan if !p.isInstanceOf[SubqueryAlias] => p
+      }
+      val otherChild = c.child.collectFirst {
+        case p: LogicalPlan if !p.isInstanceOf[SubqueryAlias] => p
+      }
+      if (thisChild.isDefined && otherChild.isDefined) {
+        thisChild.get.sameResult(otherChild.get)
+      } else {
+        false
+      }
+    case o => child.sameResult(o)
+  }
 }
 
 /**

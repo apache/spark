@@ -24,7 +24,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExprId, InSet, Literal, PlanExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.subquery.SubqueryDedup
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
 
@@ -174,6 +176,19 @@ case class ReuseSubquery(conf: SQLConf) extends Rule[SparkPlan] {
           sameSchema += sub.plan
           sub
         }
+    }
+  }
+}
+
+/**
+ * Dedup common subqueries which are used more than once in the given [[LogicalPlan]].
+ */
+case class DedupCommonSubqueries(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val dedup = new SubqueryDedup()
+    plan.transformDown {
+      case s @ SubqueryAlias(_, child, _, true) =>
+        dedup.createCommonSubquery(sparkSession, child)
     }
   }
 }
