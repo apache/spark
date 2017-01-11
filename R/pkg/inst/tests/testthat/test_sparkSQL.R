@@ -1001,6 +1001,17 @@ test_that("select operators", {
   expect_equal(columns(df), c("name", "age", "age2"))
   expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
 
+  df$age2 <- 21
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 21)), 3)
+
+  df$age2 <- c(22)
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 22)), 3)
+
+  expect_error(df$age3 <- c(22, NA),
+              "value must be a Column, literal value as atomic in length of 1, or NULL")
+
   # Test parameter drop
   expect_equal(class(df[, 1]) == "SparkDataFrame", T)
   expect_equal(class(df[, 1, drop = T]) == "Column", T)
@@ -1777,6 +1788,13 @@ test_that("withColumn() and withColumnRenamed()", {
   newDF <- withColumn(df, "age", df$age + 2)
   expect_equal(length(columns(newDF)), 2)
   expect_equal(first(filter(newDF, df$name != "Michael"))$age, 32)
+
+  newDF <- withColumn(df, "age", 18)
+  expect_equal(length(columns(newDF)), 2)
+  expect_equal(first(newDF)$age, 18)
+
+  expect_error(withColumn(df, "age", list("a")),
+              "Literal value must be atomic in length of 1")
 
   newDF2 <- withColumnRenamed(df, "age", "newerAge")
   expect_equal(length(columns(newDF2)), 2)
