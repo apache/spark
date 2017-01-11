@@ -1314,6 +1314,10 @@ class HiveDDLSuite
         .write.format("hive").option("fileFormat", "avro").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a"))
 
+      Seq(9 -> "x").toDF("i", "j")
+        .write.format("hive").mode(SaveMode.Overwrite).option("fileFormat", "avro").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row(9, "x"))
+
       val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
       assert(DDLUtils.isHiveTable(table))
       assert(table.storage.inputFormat ==
@@ -1324,7 +1328,7 @@ class HiveDDLSuite
         Some("org.apache.hadoop.hive.serde2.avro.AvroSerDe"))
 
       sql("INSERT INTO t SELECT 2, 'b'")
-      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Nil)
+      checkAnswer(spark.table("t"), Row(9, "x") :: Row(2, "b") :: Nil)
 
       val e = intercept[AnalysisException] {
         Seq(1 -> "a").toDF("i", "j").write.format("hive").partitionBy("i").saveAsTable("t2")
@@ -1338,10 +1342,12 @@ class HiveDDLSuite
       assert(e2.message.contains("Creating bucketed Hive serde table is not supported yet"))
 
       val e3 = intercept[AnalysisException] {
-        spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
+        spark.table("t").write.format("hive").mode("append").saveAsTable("t")
       }
       assert(e3.message.contains(
-        "CTAS for hive serde tables does not support append or overwrite semantics"))
+        "Saving data in the Hive serde table")
+        && e3.message.contains(
+        "is not supported yet. Please use the insertInto() API as an alternative."))
     }
   }
 
