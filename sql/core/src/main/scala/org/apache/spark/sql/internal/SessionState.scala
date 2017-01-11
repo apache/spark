@@ -99,7 +99,8 @@ private[sql] class SessionState(sparkSession: SparkSession) {
     functionResourceLoader,
     functionRegistry,
     conf,
-    newHadoopConf())
+    newHadoopConf(),
+    sqlParser)
 
   /**
    * Interface exposed to the user for registering user-defined functions.

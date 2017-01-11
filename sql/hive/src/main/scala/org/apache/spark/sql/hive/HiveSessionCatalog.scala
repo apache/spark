@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchTableExce
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
@@ -46,16 +47,18 @@ private[sql] class HiveSessionCatalog(
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
-    hadoopConf: Configuration)
+    hadoopConf: Configuration,
+    parser: ParserInterface)
   extends SessionCatalog(
     externalCatalog,
     globalTempViewManager,
     functionResourceLoader,
     functionRegistry,
     conf,
-    hadoopConf) {
+    hadoopConf,
+    parser) {
 
-  override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
+  override def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
     synchronized {
       val table = formatTableName(name.table)
       val db = formatDatabaseName(name.database.getOrElse(currentDb))
@@ -65,8 +68,7 @@ private[sql] class HiveSessionCatalog(
           SubqueryAlias(relationAlias, viewDef, Some(name))
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempTables.contains(table)) {
-        val database = name.database.map(formatDatabaseName)
-        val newName = name.copy(database = database, table = table)
+        val newName = name.copy(database = Some(db), table = table)
         metastoreCatalog.lookupRelation(newName, alias)
       } else {
         val relation = tempTables(table)

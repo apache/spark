@@ -2499,4 +2499,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("should be able to resolve a persistent view") {
+    withTable("t1") {
+      withView("v1") {
+        sql("CREATE TABLE `t1` USING parquet AS SELECT * FROM VALUES(1, 1) AS t1(a, b)")
+        sql("CREATE VIEW `v1` AS SELECT * FROM t1")
+        checkAnswer(spark.table("v1"), Row(1, 1))
+      }
+    }
+  }
 }

@@ -31,7 +31,8 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
 
 object SessionCatalog {
@@ -51,7 +52,8 @@ class SessionCatalog(
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
     conf: CatalystConf,
-    hadoopConf: Configuration) extends Logging {
+    hadoopConf: Configuration,
+    parser: ParserInterface) extends Logging {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
@@ -66,7 +68,8 @@ class SessionCatalog(
       DummyFunctionResourceLoader,
       functionRegistry,
       conf,
-      new Configuration())
+      new Configuration(),
+      CatalystSqlParser)
   }
 
   // For testing only.
@@ -556,8 +559,11 @@ class SessionCatalog(
    * Note that, the global temp view database is also valid here, this will return the global temp
    * view matching the given name.
    *
-   * If the relation is a view, the relation will be wrapped in a [[SubqueryAlias]] which will
-   * track the name of the view.
+   * If the relation is a view, we generate a [[View]] operator from the view description, and
+   * wrap the logical plan in a [[SubqueryAlias]] which will track the name of the view.
+   *
+   * @param name The name of the table/view that we look up.
+   * @param alias The alias name of the table/view that we look up.
    */
   def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
     synchronized {
@@ -570,10 +576,19 @@ class SessionCatalog(
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempTables.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
-        val view = Option(metadata.tableType).collect {
-          case CatalogTableType.VIEW => name
+        if (metadata.tableType == CatalogTableType.VIEW) {
+          val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
+          // The relation is a view, so we wrap the relation by:
+          // 1. Add a [[View]] operator over the relation to keep track of the view desc;
+          // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
+          val child = View(
+            desc = metadata,
+            output = metadata.schema.toAttributes,
+            child = parser.parsePlan(viewText))
+          SubqueryAlias(relationAlias, child, Option(name))
+        } else {
+          SubqueryAlias(relationAlias, SimpleCatalogRelation(metadata), None)
         }
-        SubqueryAlias(relationAlias, SimpleCatalogRelation(metadata), view)
       } else {
         SubqueryAlias(relationAlias, tempTables(table), Option(name))
       }
