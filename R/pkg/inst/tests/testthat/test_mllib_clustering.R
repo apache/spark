@@ -147,7 +147,7 @@ test_that("spark.kmeans", {
 
   fitted.model1 <- fitted(model1)
   fitted.model2 <- fitted(model2)
-  # number of predicted clusters is different
+  # The predicted clusters are different
   expect_equal(sort(collect(distinct(select(fitted.model1, "prediction")))$prediction),
              c(0, 1, 2, 3))
   expect_equal(sort(collect(distinct(select(fitted.model2, "prediction")))$prediction),
