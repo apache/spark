@@ -863,3 +863,7 @@ basenameSansExtFromUrl <- function(url) {
   # then, strip extension by the last '.'
   sub("([^.]+)\\.[[:alnum:]]+$", "\\1", filename)
 }
+
+isAtomicLengthOne <- function(x) {
+  is.atomic(x) && length(x) == 1
+}
