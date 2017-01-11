@@ -1739,7 +1739,7 @@ setMethod("$<-", signature(x = "SparkDataFrame"),
               if (isAtomicLengthOne(value)) {
                 value <- lit(value)
               } else {
-                stop("value must be a Column, Literal value as atomic in length of 1, or NULL")
+                stop("value must be a Column, literal value as atomic in length of 1, or NULL")
               }
             }
 

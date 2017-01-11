@@ -1010,7 +1010,7 @@ test_that("select operators", {
   expect_equal(count(where(df, df$age2 == 22)), 3)
 
   expect_error(df$age3 <- c(22, NA),
-              "value must be a Column, Literal value as atomic in length of 1, or NULL")
+              "value must be a Column, literal value as atomic in length of 1, or NULL")
 
   # Test parameter drop
   expect_equal(class(df[, 1]) == "SparkDataFrame", T)
