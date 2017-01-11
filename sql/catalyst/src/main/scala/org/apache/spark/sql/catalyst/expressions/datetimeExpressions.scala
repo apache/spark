@@ -60,7 +60,7 @@ trait TimeZoneAwareExpression extends Expression {
 case class CurrentDate(timeZoneId: Option[String] = None)
   extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
 
-  def this() = this(null)
+  def this() = this(None)
 
   override def foldable: Boolean = true
   override def nullable: Boolean = false
@@ -111,7 +111,7 @@ case class CurrentBatchTimestamp(
     timeZoneId: Option[String] = None)
   extends LeafExpression with TimeZoneAwareExpression with Nondeterministic with CodegenFallback {
 
-  def this(timestampMs: Long, dataType: DataType) = this(timestampMs, dataType, null)
+  def this(timestampMs: Long, dataType: DataType) = this(timestampMs, dataType, None)
 
   override def nullable: Boolean = false
 
@@ -212,7 +212,7 @@ case class DateSub(startDate: Expression, days: Expression)
 case class Hour(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
-  def this(child: Expression) = this(child, null)
+  def this(child: Expression) = this(child, None)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
 
@@ -242,7 +242,7 @@ case class Hour(child: Expression, timeZoneId: Option[String] = None)
 case class Minute(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
-  def this(child: Expression) = this(child, null)
+  def this(child: Expression) = this(child, None)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
 
@@ -272,7 +272,7 @@ case class Minute(child: Expression, timeZoneId: Option[String] = None)
 case class Second(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
-  def this(child: Expression) = this(child, null)
+  def this(child: Expression) = this(child, None)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
 
@@ -462,7 +462,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
 case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Option[String] = None)
   extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
-  def this(left: Expression, right: Expression) = this(left, right, null)
+  def this(left: Expression, right: Expression) = this(left, right, None)
 
   override def dataType: DataType = StringType
 
@@ -510,7 +510,7 @@ case class ToUnixTimestamp(
     timeZoneId: Option[String] = None)
   extends UnixTime {
 
-  def this(timeExp: Expression, format: Expression) = this(timeExp, format, null)
+  def this(timeExp: Expression, format: Expression) = this(timeExp, format, None)
 
   override def left: Expression = timeExp
   override def right: Expression = format
@@ -547,7 +547,7 @@ case class ToUnixTimestamp(
 case class UnixTimestamp(timeExp: Expression, format: Expression, timeZoneId: Option[String] = None)
   extends UnixTime {
 
-  def this(timeExp: Expression, format: Expression) = this(timeExp, format, null)
+  def this(timeExp: Expression, format: Expression) = this(timeExp, format, None)
 
   override def left: Expression = timeExp
   override def right: Expression = format
@@ -702,7 +702,7 @@ abstract class UnixTime
 case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[String] = None)
   extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
-  def this(sec: Expression, format: Expression) = this(sec, format, null)
+  def this(sec: Expression, format: Expression) = this(sec, format, None)
 
   override def left: Expression = sec
   override def right: Expression = format

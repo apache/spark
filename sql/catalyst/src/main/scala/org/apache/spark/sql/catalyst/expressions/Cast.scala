@@ -152,7 +152,7 @@ object Cast {
 case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with NullIntolerant {
 
-  def this(child: Expression, dataType: DataType) = this(child, dataType, null)
+  def this(child: Expression, dataType: DataType) = this(child, dataType, None)
 
   override def toString: String = s"cast($child as ${dataType.simpleString})"
 
