@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
-import java.util.{Calendar, TimeZone}
+import java.util.{Calendar, Locale, TimeZone}
 import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
@@ -79,14 +79,14 @@ object DateTimeUtils {
   // `SimpleDateFormat` is not thread-safe.
   val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
     override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
     }
   }
 
   // `SimpleDateFormat` is not thread-safe.
   private val threadLocalDateFormat = new ThreadLocal[DateFormat] {
     override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd")
+      new SimpleDateFormat("yyyy-MM-dd", Locale.US)
     }
   }
 
@@ -142,7 +142,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the number of days since epoch from from java.sql.Date.
+   * Returns the number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
     millisToDays(date.getTime)
@@ -503,7 +503,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Calculates the year and and the number of the day in the year for the given
+   * Calculates the year and the number of the day in the year for the given
    * number of days. The given days is the number of days since 1.1.1970.
    *
    * The calculation uses the fact that the period 1.1.2001 until 31.12.2400 is
@@ -852,8 +852,10 @@ object DateTimeUtils {
 
   /**
    * Lookup the offset for given millis seconds since 1970-01-01 00:00:00 in given timezone.
+   * TODO: Improve handling of normalization differences.
+   * TODO: Replace with JSR-310 or similar system - see SPARK-16788
    */
-  private def getOffsetFromLocalMillis(millisLocal: Long, tz: TimeZone): Long = {
+  private[sql] def getOffsetFromLocalMillis(millisLocal: Long, tz: TimeZone): Long = {
     var guess = tz.getRawOffset
     // the actual offset should be calculated based on milliseconds in UTC
     val offset = tz.getOffset(millisLocal - guess)
@@ -875,11 +877,11 @@ object DateTimeUtils {
         val hh = seconds / 3600
         val mm = seconds / 60 % 60
         val ss = seconds % 60
-        val nano = millisOfDay % 1000 * 1000000
-
-        // create a Timestamp to get the unix timestamp (in UTC)
-        val timestamp = new Timestamp(year - 1900, month - 1, day, hh, mm, ss, nano)
-        guess = (millisLocal - timestamp.getTime).toInt
+        val ms = millisOfDay % 1000
+        val calendar = Calendar.getInstance(tz)
+        calendar.set(year, month - 1, day, hh, mm, ss)
+        calendar.set(Calendar.MILLISECOND, ms)
+        guess = (millisLocal - calendar.getTimeInMillis()).toInt
       }
     }
     guess

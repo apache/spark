@@ -41,3 +41,23 @@ function addBadges(allAnnotations, name, tag, html) {
     .add(annotations.closest("div.fullcomment").prevAll("h4.signature"))
     .prepend(html);
 }
+
+$(document).ready(function() {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.async = true;
+  script.onload = function(){
+    MathJax.Hub.Config({
+      displayAlign: "left",
+      tex2jax: {
+        inlineMath: [ ["$", "$"], ["\\\\(","\\\\)"] ],
+        displayMath: [ ["$$","$$"], ["\\[", "\\]"] ],
+        processEscapes: true,
+        skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'a']
+      }
+    });
+  };
+  script.src = ('https:' == document.location.protocol ? 'https://' : 'http://') +
+                'cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML';
+  document.getElementsByTagName('head')[0].appendChild(script);
+});

@@ -727,6 +727,16 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("cast struct with a timestamp field") {
+    val originalSchema = new StructType().add("tsField", TimestampType, nullable = false)
+    // nine out of ten times I'm casting a struct, it's to normalize its fields nullability
+    val targetSchema = new StructType().add("tsField", TimestampType, nullable = true)
+
+    val inp = Literal.create(InternalRow(0L), originalSchema)
+    val expected = InternalRow(0L)
+    checkEvaluation(cast(inp, targetSchema), expected)
+  }
+
   test("complex casting") {
     val complex = Literal.create(
       Row(
@@ -757,6 +767,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("cast between string and interval") {
     import org.apache.spark.unsafe.types.CalendarInterval
 
+    checkEvaluation(Cast(Literal(""), CalendarIntervalType), null)
     checkEvaluation(Cast(Literal("interval -3 month 7 hours"), CalendarIntervalType),
       new CalendarInterval(-3, 7 * CalendarInterval.MICROS_PER_HOUR))
     checkEvaluation(Cast(Literal.create(

@@ -237,7 +237,7 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
       absTol 1E-10, "mean mismatch")
     assert(summarizer.variance ~== Vectors.dense(Array(0.17657142857, 1.645115714, 2.42057142857))
       absTol 1E-8, "variance mismatch")
-    assert(summarizer.numNonzeros ~== Vectors.dense(Array(0.3, 0.5, 0.4))
+    assert(summarizer.numNonzeros ~== Vectors.dense(Array(3.0, 4.0, 3.0))
       absTol 1E-10, "numNonzeros mismatch")
     assert(summarizer.max ~== Vectors.dense(Array(0.0, 1.7, 1.3)) absTol 1E-10, "max mismatch")
     assert(summarizer.min ~== Vectors.dense(Array(-0.8, -1.2, -1.7)) absTol 1E-10, "min mismatch")

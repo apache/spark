@@ -52,7 +52,6 @@ class DirectKafkaStreamSuite
     .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
 
-  private var sc: SparkContext = _
   private var ssc: StreamingContext = _
   private var testDir: File = _
 
@@ -72,11 +71,7 @@ class DirectKafkaStreamSuite
 
   after {
     if (ssc != null) {
-      ssc.stop()
-      sc = null
-    }
-    if (sc != null) {
-      sc.stop()
+      ssc.stop(stopSparkContext = true)
     }
     if (testDir != null) {
       Utils.deleteRecursively(testDir)
@@ -184,6 +179,7 @@ class DirectKafkaStreamSuite
       collectedData.contains("b")
     }
     assert(!collectedData.contains("a"))
+    ssc.stop()
   }
 
 
@@ -230,6 +226,7 @@ class DirectKafkaStreamSuite
       collectedData.contains("b")
     }
     assert(!collectedData.contains("a"))
+    ssc.stop()
   }
 
   // Test to verify the offset ranges can be recovered from the checkpoints
@@ -274,7 +271,7 @@ class DirectKafkaStreamSuite
       sendData(i)
     }
 
-    eventually(timeout(10 seconds), interval(50 milliseconds)) {
+    eventually(timeout(20 seconds), interval(50 milliseconds)) {
       assert(DirectKafkaStreamSuite.total.get === (1 to 10).sum)
     }
 
@@ -317,7 +314,7 @@ class DirectKafkaStreamSuite
       sendData(i)
     }
 
-    eventually(timeout(10 seconds), interval(50 milliseconds)) {
+    eventually(timeout(20 seconds), interval(50 milliseconds)) {
       assert(DirectKafkaStreamSuite.total.get === (1 to 20).sum)
     }
     ssc.stop()

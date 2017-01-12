@@ -19,23 +19,24 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SimpleCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition, SimpleCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.DataSourceScanExec.PUSHED_FILTERS
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.{CreateDataSourceTableUtils, DDLUtils, ExecutedCommandExec}
+import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -44,18 +45,12 @@ import org.apache.spark.unsafe.types.UTF8String
  * Replaces generic operations with specific variants that are designed to work with Spark
  * SQL Data Sources.
  */
-private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
+case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
-  def resolver: Resolver = {
-    if (conf.caseSensitiveAnalysis) {
-      caseSensitiveResolution
-    } else {
-      caseInsensitiveResolution
-    }
-  }
+  def resolver: Resolver = conf.resolver
 
-  // The access modifier is used to expose this method to tests.
-  private[sql] def convertStaticPartitions(
+  // Visible for testing.
+  def convertStaticPartitions(
       sourceAttributes: Seq[Attribute],
       providedPartitions: Map[String, Option[String]],
       targetAttributes: Seq[Attribute],
@@ -104,7 +99,7 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
         None
       } else if (potentialSpecs.size == 1) {
         val partValue = potentialSpecs.head._2
-        Some(Alias(Cast(Literal(partValue), field.dataType), "_staticPart")())
+        Some(Alias(Cast(Literal(partValue), field.dataType), field.name)())
       } else {
         throw new AnalysisException(
           s"Partition column ${field.name} have multiple values specified, " +
@@ -132,52 +127,66 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
     projectList
   }
 
+  /**
+   * Returns true if the [[InsertIntoTable]] plan has already been preprocessed by analyzer rule
+   * [[PreprocessTableInsertion]]. It is important that this rule([[DataSourceAnalysis]]) has to
+   * be run after [[PreprocessTableInsertion]], to normalize the column names in partition spec and
+   * fix the schema mismatch by adding Cast.
+   */
+  private def hasBeenPreprocessed(
+      tableOutput: Seq[Attribute],
+      partSchema: StructType,
+      partSpec: Map[String, Option[String]],
+      query: LogicalPlan): Boolean = {
+    val partColNames = partSchema.map(_.name).toSet
+    query.resolved && partSpec.keys.forall(partColNames.contains) && {
+      val staticPartCols = partSpec.filter(_._2.isDefined).keySet
+      val expectedColumns = tableOutput.filterNot(a => staticPartCols.contains(a.name))
+      expectedColumns.toStructType.sameType(query.schema)
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
-    // the user has specified static partitions, we add a Project operator on top of the query
-    // to include those constant column values in the query result.
-    //
-    // Example:
-    // Let's say that we have a table "t", which is created by
-    // CREATE TABLE t (a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)
-    // The statement of "INSERT INTO TABLE t PARTITION (b=2, c) SELECT 1, 3"
-    // will be converted to "INSERT INTO TABLE t PARTITION (b, c) SELECT 1, 2, 3".
-    //
-    // Basically, we will put those partition columns having a assigned value back
-    // to the SELECT clause. The output of the SELECT clause is organized as
-    // normal_columns static_partitioning_columns dynamic_partitioning_columns.
-    // static_partitioning_columns are partitioning columns having assigned
-    // values in the PARTITION clause (e.g. b in the above example).
-    // dynamic_partitioning_columns are partitioning columns that do not assigned
-    // values in the PARTITION clause (e.g. c in the above example).
-    case insert @ logical.InsertIntoTable(
-      relation @ LogicalRelation(t: HadoopFsRelation, _, _), parts, query, overwrite, false)
-      if query.resolved && parts.exists(_._2.isDefined) =>
+    case InsertIntoTable(
+        l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, false)
+        if hasBeenPreprocessed(l.output, t.partitionSchema, parts, query) =>
 
-      val projectList = convertStaticPartitions(
-        sourceAttributes = query.output,
-        providedPartitions = parts,
-        targetAttributes = relation.output,
-        targetPartitionSchema = t.partitionSchema)
-
-      // We will remove all assigned values to static partitions because they have been
-      // moved to the projectList.
-      insert.copy(partition = parts.map(p => (p._1, None)), child = Project(projectList, query))
-
-
-    case i @ logical.InsertIntoTable(
-           l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false)
-        if query.resolved && t.schema.asNullable == query.schema.asNullable =>
-
-      // Sanity checks
-      if (t.location.paths.size != 1) {
-        throw new AnalysisException(
-          "Can only write data to relations with a single path.")
+      // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
+      // the user has specified static partitions, we add a Project operator on top of the query
+      // to include those constant column values in the query result.
+      //
+      // Example:
+      // Let's say that we have a table "t", which is created by
+      // CREATE TABLE t (a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)
+      // The statement of "INSERT INTO TABLE t PARTITION (b=2, c) SELECT 1, 3"
+      // will be converted to "INSERT INTO TABLE t PARTITION (b, c) SELECT 1, 2, 3".
+      //
+      // Basically, we will put those partition columns having a assigned value back
+      // to the SELECT clause. The output of the SELECT clause is organized as
+      // normal_columns static_partitioning_columns dynamic_partitioning_columns.
+      // static_partitioning_columns are partitioning columns having assigned
+      // values in the PARTITION clause (e.g. b in the above example).
+      // dynamic_partitioning_columns are partitioning columns that do not assigned
+      // values in the PARTITION clause (e.g. c in the above example).
+      val actualQuery = if (parts.exists(_._2.isDefined)) {
+        val projectList = convertStaticPartitions(
+          sourceAttributes = query.output,
+          providedPartitions = parts,
+          targetAttributes = l.output,
+          targetPartitionSchema = t.partitionSchema)
+        Project(projectList, query)
+      } else {
+        query
       }
 
-      val outputPath = t.location.paths.head
-      val inputPaths = query.collect {
-        case LogicalRelation(r: HadoopFsRelation, _, _) => r.location.paths
+      // Sanity check
+      if (t.location.rootPaths.size != 1) {
+        throw new AnalysisException("Can only write data to relations with a single path.")
+      }
+
+      val outputPath = t.location.rootPaths.head
+      val inputPaths = actualQuery.collect {
+        case LogicalRelation(r: HadoopFsRelation, _, _) => r.location.rootPaths
       }.flatten
 
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
@@ -186,15 +195,21 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
           "Cannot overwrite a path that is also being read from.")
       }
 
+      val partitionSchema = actualQuery.resolve(
+        t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
+      val staticPartitions = parts.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
+
       InsertIntoHadoopFsRelationCommand(
         outputPath,
-        t.partitionSchema.fields.map(_.name).map(UnresolvedAttribute(_)),
+        staticPartitions,
+        partitionSchema,
         t.bucketSpec,
         t.fileFormat,
-        () => t.refresh(),
         t.options,
-        query,
-        mode)
+        actualQuery,
+        mode,
+        table,
+        Some(t.location))
   }
 }
 
@@ -203,39 +218,34 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
  * Replaces [[SimpleCatalogRelation]] with data source table if its table property contains data
  * source information.
  */
-private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private def readDataSourceTable(sparkSession: SparkSession, table: CatalogTable): LogicalPlan = {
-    val schema = DDLUtils.getSchemaFromTableProperties(table)
-
-    // We only need names at here since userSpecifiedSchema we loaded from the metastore
-    // contains partition columns. We can always get datatypes of partitioning columns
-    // from userSpecifiedSchema.
-    val partitionColumns = DDLUtils.getPartitionColumnsFromTableProperties(table)
-
-    val bucketSpec = DDLUtils.getBucketSpecFromTableProperties(table)
-
-    val options = table.storage.properties
+class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  private def readDataSourceTable(
+      sparkSession: SparkSession,
+      simpleCatalogRelation: SimpleCatalogRelation): LogicalPlan = {
+    val table = simpleCatalogRelation.catalogTable
+    val pathOption = table.storage.locationUri.map("path" -> _)
     val dataSource =
       DataSource(
         sparkSession,
-        userSpecifiedSchema = Some(schema),
-        partitionColumns = partitionColumns,
-        bucketSpec = bucketSpec,
-        className = table.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER),
-        options = options)
+        userSpecifiedSchema = Some(table.schema),
+        partitionColumns = table.partitionColumnNames,
+        bucketSpec = table.bucketSpec,
+        className = table.provider.get,
+        options = table.storage.properties ++ pathOption)
 
     LogicalRelation(
       dataSource.resolveRelation(),
-      metastoreTableIdentifier = Some(table.identifier))
+      expectedOutputAttributes = Some(simpleCatalogRelation.output),
+      catalogTable = Some(table))
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ logical.InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _)
+    case i @ InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _)
         if DDLUtils.isDatasourceTable(s.metadata) =>
-      i.copy(table = readDataSourceTable(sparkSession, s.metadata))
+      i.copy(table = readDataSourceTable(sparkSession, s))
 
     case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
-      readDataSourceTable(sparkSession, s.metadata)
+      readDataSourceTable(sparkSession, s)
   }
 }
 
@@ -243,7 +253,7 @@ private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
-private[sql] object DataSourceStrategy extends Strategy with Logging {
+object DataSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _)) =>
       pruneFilterProjectRaw(
@@ -268,10 +278,15 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         (a, _) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray))) :: Nil
 
     case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
-      execution.DataSourceScanExec.create(
-        l.output, toCatalystRDD(l, baseRelation.buildScan()), baseRelation) :: Nil
+      RowDataSourceScanExec(
+        l.output,
+        toCatalystRDD(l, baseRelation.buildScan()),
+        baseRelation,
+        UnknownPartitioning(0),
+        Map.empty,
+        None) :: Nil
 
-    case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
+    case InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
       part, query, overwrite, false) if part.isEmpty =>
       ExecutedCommandExec(InsertIntoDataSourceCommand(l, query, overwrite)) :: Nil
 
@@ -281,7 +296,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
   // Get the bucket ID based on the bucketing values.
   // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
   def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
-    val mutableRow = new SpecificMutableRow(Seq(bucketColumn.dataType))
+    val mutableRow = new SpecificInternalRow(Seq(bucketColumn.dataType))
     mutableRow(0) = Cast(Literal(value), bucketColumn.dataType).eval(null)
     val bucketIdGeneration = UnsafeProjection.create(
       HashPartitioning(bucketColumn :: Nil, numBuckets).partitionIdExpression :: Nil,
@@ -348,6 +363,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // `Filter`s or cannot be handled by `relation`.
     val filterCondition = unhandledPredicates.reduceLeftOption(expressions.And)
 
+    // These metadata values make scan plans uniquely identifiable for equality checking.
+    // TODO(SPARK-17701) using strings for equality checking is brittle
     val metadata: Map[String, String] = {
       val pairs = ArrayBuffer.empty[(String, String)]
 
@@ -356,8 +373,10 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         val markedFilters = for (filter <- pushedFilters) yield {
             if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
         }
-        pairs += (PUSHED_FILTERS -> markedFilters.mkString("[", ", ", "]"))
+        pairs += ("PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
       }
+      pairs += ("ReadSchema" ->
+        StructType.fromAttributes(projects.map(_.toAttribute)).catalogString)
       pairs.toMap
     }
 
@@ -375,20 +394,22 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         // Don't request columns that are only referenced by pushed filters.
         .filterNot(handledSet.contains)
 
-      val scan = execution.DataSourceScanExec.create(
+      val scan = RowDataSourceScanExec(
         projects.map(_.toAttribute),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, metadata, relation.metastoreTableIdentifier)
+        relation.relation, UnknownPartitioning(0), metadata,
+        relation.catalogTable.map(_.identifier))
       filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan)
     } else {
       // Don't request columns that are only referenced by pushed filters.
       val requestedColumns =
         (projectSet ++ filterSet -- handledSet).map(relation.attributeMap).toSeq
 
-      val scan = execution.DataSourceScanExec.create(
+      val scan = RowDataSourceScanExec(
         requestedColumns,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, metadata, relation.metastoreTableIdentifier)
+        relation.relation, UnknownPartitioning(0), metadata,
+        relation.catalogTable.map(_.identifier))
       execution.ProjectExec(
         projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))
     }

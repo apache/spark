@@ -110,7 +110,7 @@ def determine_modules_to_test(changed_modules):
     ['graphx', 'examples']
     >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
     >>> x # doctest: +NORMALIZE_WHITESPACE
-    ['sql', 'hive', 'mllib', 'examples', 'hive-thriftserver',
+    ['sql', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver',
      'pyspark-sql', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
     """
     modules_to_test = set()
@@ -305,11 +305,11 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
-        "hadoop2.3": ["-Pyarn", "-Phadoop-2.3"],
-        "hadoop2.4": ["-Pyarn", "-Phadoop-2.4"],
-        "hadoop2.6": ["-Pyarn", "-Phadoop-2.6"],
-        "hadoop2.7": ["-Pyarn", "-Phadoop-2.7"],
+        "hadoop2.2": ["-Phadoop-2.2"],
+        "hadoop2.3": ["-Phadoop-2.3"],
+        "hadoop2.4": ["-Phadoop-2.4"],
+        "hadoop2.6": ["-Phadoop-2.6"],
+        "hadoop2.7": ["-Phadoop-2.7"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
@@ -429,6 +429,12 @@ def run_python_tests(test_modules, parallelism):
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
+    run_cmd(command)
+
+
+def run_python_packaging_tests():
+    set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
+    command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
     run_cmd(command)
 
 
@@ -583,6 +589,7 @@ def main():
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
         run_python_tests(modules_with_python_tests, opts.parallelism)
+        run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()
 

@@ -41,13 +41,11 @@ directory must be supplied in the `spark.history.fs.logDirectory` configuration 
 and should contain sub-directories that each represents an application's event logs.
 
 The spark jobs themselves must be configured to log events, and to log them to the same shared,
-writeable directory. For example, if the server was configured with a log directory of
+writable directory. For example, if the server was configured with a log directory of
 `hdfs://namenode/shared/spark-logs`, then the client-side options would be:
 
-```
-spark.eventLog.enabled true
-spark.eventLog.dir hdfs://namenode/shared/spark-logs
-```
+    spark.eventLog.enabled true
+    spark.eventLog.dir hdfs://namenode/shared/spark-logs
 
 The history server can be configured as follows:
 
@@ -114,8 +112,17 @@ The history server can be configured as follows:
     <td>spark.history.retainedApplications</td>
     <td>50</td>
     <td>
-      The number of application UIs to retain. If this cap is exceeded, then the oldest
-      applications will be removed.
+      The number of applications to retain UI data for in the cache. If this cap is exceeded, then
+      the oldest applications will be removed from the cache. If an application is not in the cache,
+      it will have to be loaded from disk if its accessed from the UI.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.ui.maxApplications</td>
+    <td>Int.MaxValue</td>
+    <td>
+      The number of applications to display on the history summary page. Application UIs are still
+      available by accessing their URLs directly even if they are not displayed on the history summary page.
     </td>
   </tr>
   <tr>
@@ -160,6 +167,28 @@ The history server can be configured as follows:
       <code>spark.ui.view.acls</code> and groups specified via <code>spark.ui.view.acls.groups</code>
       when the application was run will also have authorization to view that application.
       If disabled, no access control checks are made.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.ui.admin.acls</td>
+    <td>empty</td>
+    <td>
+      Comma separated list of users/administrators that have view access to all the Spark applications in
+      history server. By default only the users permitted to view the application at run-time could
+      access the related application history, with this, configured users/administrators could also
+      have the permission to access it.
+      Putting a "*" in the list means any user can have the privilege of admin.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.ui.admin.acls.groups</td>
+    <td>empty</td>
+    <td>
+      Comma separated list of groups that have view access to all the Spark applications in
+      history server. By default only the groups permitted to view the application at run-time could
+      access the related application history, with this, configured groups could also
+      have the permission to access it.
+      Putting a "*" in the list means any group can have the privilege of admin.
     </td>
   </tr>
   <tr>
@@ -242,7 +271,8 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <br>Examples:
     <br><code>?minDate=2015-02-10</code>
     <br><code>?minDate=2015-02-03T16:42:40.000GMT</code>
-    <br><code>?maxDate=[date]</code> latest date/time to list; uses same format as <code>minDate</code>.</td>
+    <br><code>?maxDate=[date]</code> latest date/time to list; uses same format as <code>minDate</code>.
+    <br><code>?limit=[limit]</code> limits the number of applications listed.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/jobs</code></td>
@@ -268,7 +298,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]</code></td>
-    <td>Details for the given stage attempt</td>
+    <td>Details for the given stage attempt.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskSummary</code></td>
@@ -313,6 +343,34 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td><code>/applications/[base-app-id]/[attempt-id]/logs</code></td>
     <td>Download the event logs for a specific application attempt as a zip file.</td>
   </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/statistics</code></td>
+    <td>Statistics for the streaming context.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/receivers</code></td>
+    <td>A list of all streaming receivers.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/receivers/[stream-id]</code></td>
+    <td>Details of the given receiver.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches</code></td>
+    <td>A list of all retained batches.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches/[batch-id]</code></td>
+    <td>Details of the given batch.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations</code></td>
+    <td>A list of all output operations of the given batch.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations/[outputOp-id]</code></td>
+    <td>Details of the given operation and given batch.</td>
+  </tr>       
 </table>
 
 The number of jobs and stages which can retrieved is constrained by the same retention
@@ -367,6 +425,7 @@ set of sinks to which metrics are reported. The following instances are currentl
 * `worker`: A Spark standalone worker process.
 * `executor`: A Spark executor.
 * `driver`: The Spark driver process (the process in which your SparkContext is created).
+* `shuffleService`: The Spark shuffle service.
 
 Each instance can report to zero or more _sinks_. Sinks are contained in the
 `org.apache.spark.metrics.sink` package:

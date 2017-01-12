@@ -45,7 +45,7 @@ class MapDataSuite extends SparkFunSuite {
 
     // UnsafeMapData
     val unsafeConverter = UnsafeProjection.create(Array[DataType](MapType(StringType, IntegerType)))
-    val row = new GenericMutableRow(1)
+    val row = new GenericInternalRow(1)
     def toUnsafeMap(map: ArrayBasedMapData): UnsafeMapData = {
       row.update(0, map)
       val unsafeRow = unsafeConverter.apply(row)

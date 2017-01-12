@@ -34,9 +34,15 @@ import org.apache.spark.sql.types._
  *   coalesce(null, null, null) => null
  * }}}
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(a1, a2, ...) - Returns the first non-null argument if exists. Otherwise, NULL.",
-  extended = "> SELECT _FUNC_(NULL, 1, NULL);\n 1")
+  usage = "_FUNC_(expr1, expr2, ...) - Returns the first non-null argument if exists. Otherwise, null.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(NULL, 1, NULL);
+       1
+  """)
+// scalastyle:on line.size.limit
 case class Coalesce(children: Seq[Expression]) extends Expression {
 
   /** Coalesce is nullable if all of its children are nullable, or if it has no children. */
@@ -88,79 +94,80 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 }
 
 
-@ExpressionDescription(usage = "_FUNC_(a,b) - Returns b if a is null, or a otherwise.")
-case class IfNull(left: Expression, right: Expression) extends RuntimeReplaceable {
-  override def children: Seq[Expression] = Seq(left, right)
-
-  override def replaceForEvaluation(): Expression = Coalesce(Seq(left, right))
-
-  override def replaceForTypeCoercion(): Expression = {
-    if (left.dataType != right.dataType) {
-      TypeCoercion.findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { dtype =>
-        copy(left = Cast(left, dtype), right = Cast(right, dtype))
-      }.getOrElse(this)
-    } else {
-      this
-    }
-  }
-}
-
-
-@ExpressionDescription(usage = "_FUNC_(a,b) - Returns null if a equals to b, or a otherwise.")
-case class NullIf(left: Expression, right: Expression) extends RuntimeReplaceable {
-  override def children: Seq[Expression] = Seq(left, right)
-
-  override def replaceForEvaluation(): Expression = {
-    If(EqualTo(left, right), Literal.create(null, left.dataType), left)
-  }
-
-  override def replaceForTypeCoercion(): Expression = {
-    if (left.dataType != right.dataType) {
-      TypeCoercion.findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { dtype =>
-        copy(left = Cast(left, dtype), right = Cast(right, dtype))
-      }.getOrElse(this)
-    } else {
-      this
-    }
-  }
-}
-
-
-@ExpressionDescription(usage = "_FUNC_(a,b) - Returns b if a is null, or a otherwise.")
-case class Nvl(left: Expression, right: Expression) extends RuntimeReplaceable {
-  override def children: Seq[Expression] = Seq(left, right)
-
-  override def replaceForEvaluation(): Expression = Coalesce(Seq(left, right))
-
-  override def replaceForTypeCoercion(): Expression = {
-    if (left.dataType != right.dataType) {
-      TypeCoercion.findTightestCommonTypeToString(left.dataType, right.dataType).map { dtype =>
-        copy(left = Cast(left, dtype), right = Cast(right, dtype))
-      }.getOrElse(this)
-    } else {
-      this
-    }
-  }
-}
-
-
-@ExpressionDescription(usage = "_FUNC_(a,b,c) - Returns b if a is not null, or c otherwise.")
-case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression)
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2) - Returns `expr2` if `expr1` is null, or `expr1` otherwise.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(NULL, array('2'));
+       ["2"]
+  """)
+case class IfNull(left: Expression, right: Expression, child: Expression)
   extends RuntimeReplaceable {
 
-  override def replaceForEvaluation(): Expression = If(IsNotNull(expr1), expr2, expr3)
-
-  override def children: Seq[Expression] = Seq(expr1, expr2, expr3)
-
-  override def replaceForTypeCoercion(): Expression = {
-    if (expr2.dataType != expr3.dataType) {
-      TypeCoercion.findTightestCommonTypeOfTwo(expr2.dataType, expr3.dataType).map { dtype =>
-        copy(expr2 = Cast(expr2, dtype), expr3 = Cast(expr3, dtype))
-      }.getOrElse(this)
-    } else {
-      this
-    }
+  def this(left: Expression, right: Expression) = {
+    this(left, right, Coalesce(Seq(left, right)))
   }
+
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+}
+
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2) - Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.",
+  extended = """
+   Examples:
+     > SELECT _FUNC_(2, 2);
+      NULL
+  """)
+case class NullIf(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(left: Expression, right: Expression) = {
+    this(left, right, If(EqualTo(left, right), Literal.create(null, left.dataType), left))
+  }
+
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+}
+
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2) - Returns `expr2` if `expr1` is null, or `expr1` otherwise.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(NULL, array('2'));
+       ["2"]
+  """)
+case class Nvl(left: Expression, right: Expression, child: Expression) extends RuntimeReplaceable {
+
+  def this(left: Expression, right: Expression) = {
+    this(left, right, Coalesce(Seq(left, right)))
+  }
+
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+}
+
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2, expr3) - Returns `expr2` if `expr1` is not null, or `expr3` otherwise.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(NULL, 2, 1);
+       1
+  """)
+// scalastyle:on line.size.limit
+case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(expr1: Expression, expr2: Expression, expr3: Expression) = {
+    this(expr1, expr2, expr3, If(IsNotNull(expr1), expr2, expr3))
+  }
+
+  override def flatArguments: Iterator[Any] = Iterator(expr1, expr2, expr3)
+  override def sql: String = s"$prettyName(${expr1.sql}, ${expr2.sql}, ${expr3.sql})"
 }
 
 
@@ -168,7 +175,12 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression)
  * Evaluates to `true` iff it's NaN.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Returns true if a is NaN and false otherwise.")
+  usage = "_FUNC_(expr) - Returns true if `expr` is NaN, or false otherwise.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(cast('NaN' as double));
+       true
+  """)
 case class IsNaN(child: Expression) extends UnaryExpression
   with Predicate with ImplicitCastInputTypes {
 
@@ -194,9 +206,8 @@ case class IsNaN(child: Expression) extends UnaryExpression
       case DoubleType | FloatType =>
         ev.copy(code = s"""
           ${eval.code}
-          boolean ${ev.isNull} = false;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""")
+          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""", isNull = "false")
     }
   }
 }
@@ -206,7 +217,12 @@ case class IsNaN(child: Expression) extends UnaryExpression
  * This Expression is useful for mapping NaN values to null.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(a,b) - Returns a iff it's not NaN, or b otherwise.")
+  usage = "_FUNC_(expr1, expr2) - Returns `expr1` if it's not NaN, or `expr2` otherwise.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(cast('NaN' as double), 123);
+       123.0
+  """)
 case class NaNvl(left: Expression, right: Expression)
     extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -261,7 +277,12 @@ case class NaNvl(left: Expression, right: Expression)
  * An expression that is evaluated to true if the input is null.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Returns true if a is NULL and false otherwise.")
+  usage = "_FUNC_(expr) - Returns true if `expr` is null, or false otherwise.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(1);
+       false
+  """)
 case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
 
@@ -282,7 +303,12 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
  * An expression that is evaluated to true if the input is not null.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Returns true if a is not NULL and false otherwise.")
+  usage = "_FUNC_(expr) - Returns true if `expr` is not null, or false otherwise.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(1);
+       true
+  """)
 case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
 
@@ -356,7 +382,6 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     ev.copy(code = s"""
       int $nonnull = 0;
       $code
-      boolean ${ev.isNull} = false;
-      boolean ${ev.value} = $nonnull >= $n;""")
+      boolean ${ev.value} = $nonnull >= $n;""", isNull = "false")
   }
 }

@@ -61,7 +61,7 @@ class DataFrame(object):
         people = sqlContext.read.parquet("...")
         department = sqlContext.read.parquet("...")
 
-        people.filter(people.age > 30).join(department, people.deptId == department.id)\
+        people.filter(people.age > 30).join(department, people.deptId == department.id) \\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
 
     .. versionadded:: 1.3
@@ -131,7 +131,7 @@ class DataFrame(object):
 
     @since(2.0)
     def createTempView(self, name):
-        """Creates a temporary view with this DataFrame.
+        """Creates a local temporary view with this DataFrame.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -153,7 +153,7 @@ class DataFrame(object):
 
     @since(2.0)
     def createOrReplaceTempView(self, name):
-        """Creates or replaces a temporary view with this DataFrame.
+        """Creates or replaces a local temporary view with this DataFrame.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -168,6 +168,27 @@ class DataFrame(object):
 
         """
         self._jdf.createOrReplaceTempView(name)
+
+    @since(2.1)
+    def createGlobalTempView(self, name):
+        """Creates a global temporary view with this DataFrame.
+
+        The lifetime of this temporary view is tied to this Spark application.
+        throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
+        catalog.
+
+        >>> df.createGlobalTempView("people")
+        >>> df2 = spark.sql("select * from global_temp.people")
+        >>> sorted(df.collect()) == sorted(df2.collect())
+        True
+        >>> df.createGlobalTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+        ...
+        AnalysisException: u"Temporary table 'people' already exists;"
+        >>> spark.catalog.dropGlobalTempView("people")
+
+        """
+        self._jdf.createGlobalTempView(name)
 
     @property
     @since(1.4)
@@ -196,7 +217,7 @@ class DataFrame(object):
     @property
     @since(1.3)
     def schema(self):
-        """Returns the schema of this :class:`DataFrame` as a :class:`types.StructType`.
+        """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
 
         >>> df.schema
         StructType(List(StructField(age,IntegerType,true),StructField(name,StringType,true)))
@@ -301,6 +322,54 @@ class DataFrame(object):
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
+    @since(2.1)
+    def checkpoint(self, eager=True):
+        """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
+        logical plan of this DataFrame, which is especially useful in iterative algorithms where the
+        plan may grow exponentially. It will be saved to files inside the checkpoint
+        directory set with L{SparkContext.setCheckpointDir()}.
+
+        :param eager: Whether to checkpoint this DataFrame immediately
+
+        .. note:: Experimental
+        """
+        jdf = self._jdf.checkpoint(eager)
+        return DataFrame(jdf, self.sql_ctx)
+
+    @since(2.1)
+    def withWatermark(self, eventTime, delayThreshold):
+        """Defines an event time watermark for this :class:`DataFrame`. A watermark tracks a point
+        in time before which we assume no more late data is going to arrive.
+
+        Spark will use this watermark for several purposes:
+          - To know when a given time window aggregation can be finalized and thus can be emitted
+            when using output modes that do not allow updates.
+
+          - To minimize the amount of state that we need to keep for on-going aggregations.
+
+        The current watermark is computed by looking at the `MAX(eventTime)` seen across
+        all of the partitions in the query minus a user specified `delayThreshold`.  Due to the cost
+        of coordinating this value across partitions, the actual watermark used is only guaranteed
+        to be at least `delayThreshold` behind the actual event time.  In some cases we may still
+        process records that arrive more than `delayThreshold` late.
+
+        :param eventTime: the name of the column that contains the event time of the row.
+        :param delayThreshold: the minimum delay to wait to data to arrive late, relative to the
+            latest record that has been processed in the form of an interval
+            (e.g. "1 minute" or "5 hours").
+
+        .. note:: Experimental
+
+        >>> sdf.select('name', sdf.time.cast('timestamp')).withWatermark('time', '10 minutes')
+        DataFrame[name: string, time: timestamp]
+        """
+        if not eventTime or type(eventTime) is not str:
+            raise TypeError("eventTime should be provided as a string")
+        if not delayThreshold or type(delayThreshold) is not str:
+            raise TypeError("delayThreshold should be provided as a string interval")
+        jdf = self._jdf.withWatermark(eventTime, delayThreshold)
+        return DataFrame(jdf, self.sql_ctx)
+
     @since(1.3)
     def count(self):
         """Returns the number of rows in this :class:`DataFrame`.
@@ -357,10 +426,7 @@ class DataFrame(object):
         >>> df.take(2)
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
-        with SCCallSiteSync(self._sc) as css:
-            port = self._sc._jvm.org.apache.spark.sql.execution.python.EvaluatePython.takeAndServe(
-                self._jdf, num)
-        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+        return self.limit(num).collect()
 
     @since(1.3)
     def foreach(self, f):
@@ -389,23 +455,47 @@ class DataFrame(object):
 
     @since(1.3)
     def cache(self):
-        """ Persists with the default storage level (C{MEMORY_ONLY}).
+        """Persists the :class:`DataFrame` with the default storage level (C{MEMORY_AND_DISK}).
+
+        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
         """
         self.is_cached = True
         self._jdf.cache()
         return self
 
     @since(1.3)
-    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY):
-        """Sets the storage level to persist its values across operations
-        after the first time it is computed. This can only be used to assign
-        a new storage level if the RDD does not have a storage level set yet.
-        If no storage level is specified defaults to (C{MEMORY_ONLY}).
+    def persist(self, storageLevel=StorageLevel.MEMORY_AND_DISK):
+        """Sets the storage level to persist the contents of the :class:`DataFrame` across
+        operations after the first time it is computed. This can only be used to assign
+        a new storage level if the :class:`DataFrame` does not have a storage level set yet.
+        If no storage level is specified defaults to (C{MEMORY_AND_DISK}).
+
+        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
         self._jdf.persist(javaStorageLevel)
         return self
+
+    @property
+    @since(2.1)
+    def storageLevel(self):
+        """Get the :class:`DataFrame`'s current storage level.
+
+        >>> df.storageLevel
+        StorageLevel(False, False, False, False, 1)
+        >>> df.cache().storageLevel
+        StorageLevel(True, True, False, True, 1)
+        >>> df2.persist(StorageLevel.DISK_ONLY_2).storageLevel
+        StorageLevel(True, False, False, False, 2)
+        """
+        java_storage_level = self._jdf.storageLevel()
+        storage_level = StorageLevel(java_storage_level.useDisk(),
+                                     java_storage_level.useMemory(),
+                                     java_storage_level.useOffHeap(),
+                                     java_storage_level.deserialized(),
+                                     java_storage_level.replication())
+        return storage_level
 
     @since(1.3)
     def unpersist(self, blocking=False):
@@ -506,6 +596,9 @@ class DataFrame(object):
     @since(1.3)
     def sample(self, withReplacement, fraction, seed=None):
         """Returns a sampled subset of this :class:`DataFrame`.
+
+        .. note:: This is not guaranteed to provide exactly the fraction specified of the total
+            count of the given :class:`DataFrame`.
 
         >>> df.sample(False, 0.5, 42).count()
         2
@@ -609,6 +702,25 @@ class DataFrame(object):
         return DataFrame(getattr(self._jdf, "as")(alias), self.sql_ctx)
 
     @ignore_unicode_prefix
+    @since(2.1)
+    def crossJoin(self, other):
+        """Returns the cartesian product with another :class:`DataFrame`.
+
+        :param other: Right side of the cartesian product.
+
+        >>> df.select("age", "name").collect()
+        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        >>> df2.select("name", "height").collect()
+        [Row(name=u'Tom', height=80), Row(name=u'Bob', height=85)]
+        >>> df.crossJoin(df2.select("height")).select("age", "name", "height").collect()
+        [Row(age=2, name=u'Alice', height=80), Row(age=2, name=u'Alice', height=85),
+         Row(age=5, name=u'Bob', height=80), Row(age=5, name=u'Bob', height=85)]
+        """
+
+        jdf = self._jdf.crossJoin(other._jdf)
+        return DataFrame(jdf, self.sql_ctx)
+
+    @ignore_unicode_prefix
     @since(1.3)
     def join(self, other, on=None, how=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
@@ -618,8 +730,9 @@ class DataFrame(object):
             a join expression (Column), or a list of Columns.
             If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
-        :param how: str, default 'inner'.
-            One of `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+        :param how: str, default ``inner``. Must be one of: ``inner``, ``cross``, ``outer``,
+            ``full``, ``full_outer``, ``left``, ``left_outer``, ``right``, ``right_outer``,
+            ``left_semi``, and ``left_anti``.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 
@@ -643,25 +756,21 @@ class DataFrame(object):
         if on is not None and not isinstance(on, list):
             on = [on]
 
-        if on is None or len(on) == 0:
-            jdf = self._jdf.join(other._jdf)
-        elif isinstance(on[0], basestring):
-            if how is None:
-                jdf = self._jdf.join(other._jdf, self._jseq(on), "inner")
+        if on is not None:
+            if isinstance(on[0], basestring):
+                on = self._jseq(on)
             else:
-                assert isinstance(how, basestring), "how should be basestring"
-                jdf = self._jdf.join(other._jdf, self._jseq(on), how)
-        else:
-            assert isinstance(on[0], Column), "on should be Column or list of Column"
-            if len(on) > 1:
+                assert isinstance(on[0], Column), "on should be Column or list of Column"
                 on = reduce(lambda x, y: x.__and__(y), on)
-            else:
-                on = on[0]
+                on = on._jc
+
+        if on is None and how is None:
+            jdf = self._jdf.join(other._jdf)
+        else:
             if how is None:
-                jdf = self._jdf.join(other._jdf, on._jc, "inner")
-            else:
-                assert isinstance(how, basestring), "how should be basestring"
-                jdf = self._jdf.join(other._jdf, on._jc, how)
+                how = "inner"
+            assert isinstance(how, basestring), "how should be basestring"
+            jdf = self._jdf.join(other._jdf, on, how)
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.6)
@@ -756,8 +865,8 @@ class DataFrame(object):
         This include count, mean, stddev, min, and max. If no columns are
         given, this function computes statistics for all numerical or string columns.
 
-        .. note:: This function is meant for exploratory data analysis, as we make no \
-        guarantee about the backward compatibility of the schema of the resulting DataFrame.
+        .. note:: This function is meant for exploratory data analysis, as we make no
+            guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
         >>> df.describe(['age']).show()
         +-------+------------------+
@@ -790,8 +899,8 @@ class DataFrame(object):
     def head(self, n=None):
         """Returns the first ``n`` rows.
 
-        Note that this method should only be used if the resulting array is expected
-        to be small, as all the data is loaded into the driver's memory.
+        .. note:: This method should only be used if the resulting array is expected
+            to be small, as all the data is loaded into the driver's memory.
 
         :param n: int, default 1. Number of rows to return.
         :return: If n is greater than 1, return a list of :class:`Row`.
@@ -1352,8 +1461,8 @@ class DataFrame(object):
         "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
-        .. note::  This function is meant for exploratory data analysis, as we make no \
-        guarantee about the backward compatibility of the schema of the resulting DataFrame.
+        .. note:: This function is meant for exploratory data analysis, as we make no
+            guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
         :param cols: Names of the columns to calculate frequent items for as a list or tuple of
             strings.
@@ -1454,10 +1563,10 @@ class DataFrame(object):
     def toPandas(self):
         """Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
-        Note that this method should only be used if the resulting Pandas's DataFrame is expected
-        to be small, as all the data is loaded into the driver's memory.
-
         This is only available if Pandas is installed and available.
+
+        .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
+            to be small, as all the data is loaded into the driver's memory.
 
         >>> df.toPandas()  # doctest: +SKIP
            age   name
@@ -1564,6 +1673,7 @@ def _test():
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext, SparkSession
     import pyspark.sql.dataframe
+    from pyspark.sql.functions import from_unixtime
     globs = pyspark.sql.dataframe.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
@@ -1576,9 +1686,11 @@ def _test():
     globs['df3'] = sc.parallelize([Row(name='Alice', age=2),
                                    Row(name='Bob', age=5)]).toDF()
     globs['df4'] = sc.parallelize([Row(name='Alice', age=10, height=80),
-                                  Row(name='Bob', age=5, height=None),
-                                  Row(name='Tom', age=None, height=None),
-                                  Row(name=None, age=None, height=None)]).toDF()
+                                   Row(name='Bob', age=5, height=None),
+                                   Row(name='Tom', age=None, height=None),
+                                   Row(name=None, age=None, height=None)]).toDF()
+    globs['sdf'] = sc.parallelize([Row(name='Tom', time=1479441846),
+                                   Row(name='Bob', time=1479442946)]).toDF()
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,

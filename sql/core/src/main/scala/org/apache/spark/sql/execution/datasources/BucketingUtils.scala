@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-private[sql] object BucketingUtils {
+object BucketingUtils {
   // The file name of bucketed data should have 3 parts:
   //   1. some other information in the head of file name
   //   2. bucket id part, some numbers, starts with "_"

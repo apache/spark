@@ -128,6 +128,7 @@ class StageData private[spark](
     val numFailedTasks: Int,
 
     val executorRunTime: Long,
+    val executorCpuTime: Long,
     val submissionTime: Option[Date],
     val firstTaskLaunchedTime: Option[Date],
     val completionTime: Option[Date],
@@ -166,7 +167,9 @@ class TaskData private[spark](
 
 class TaskMetrics private[spark](
     val executorDeserializeTime: Long,
+    val executorDeserializeCpuTime: Long,
     val executorRunTime: Long,
+    val executorCpuTime: Long,
     val resultSize: Long,
     val jvmGcTime: Long,
     val resultSerializationTime: Long,
@@ -202,7 +205,9 @@ class TaskMetricDistributions private[spark](
     val quantiles: IndexedSeq[Double],
 
     val executorDeserializeTime: IndexedSeq[Double],
+    val executorDeserializeCpuTime: IndexedSeq[Double],
     val executorRunTime: IndexedSeq[Double],
+    val executorCpuTime: IndexedSeq[Double],
     val resultSize: IndexedSeq[Double],
     val jvmGcTime: IndexedSeq[Double],
     val resultSerializationTime: IndexedSeq[Double],

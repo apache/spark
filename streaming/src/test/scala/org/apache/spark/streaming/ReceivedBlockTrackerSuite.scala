@@ -134,6 +134,7 @@ class ReceivedBlockTrackerSuite
     val expectedWrittenData1 = blockInfos1.map(BlockAdditionEvent)
     getWrittenLogData() shouldEqual expectedWrittenData1
     getWriteAheadLogFiles() should have size 1
+    tracker1.stop()
 
     incrementTime()
 
@@ -141,6 +142,7 @@ class ReceivedBlockTrackerSuite
     val tracker1_ = createTracker(clock = manualClock, recoverFromWriteAheadLog = false)
     tracker1_.getUnallocatedBlocks(streamId) shouldBe empty
     tracker1_.hasUnallocatedReceivedBlocks should be (false)
+    tracker1_.stop()
 
     // Restart tracker and verify recovered list of unallocated blocks
     val tracker2 = createTracker(clock = manualClock, recoverFromWriteAheadLog = true)
@@ -163,6 +165,7 @@ class ReceivedBlockTrackerSuite
     val blockInfos2 = addBlockInfos(tracker2)
     tracker2.allocateBlocksToBatch(batchTime2)
     tracker2.getBlocksOfBatchAndStream(batchTime2, streamId) shouldEqual blockInfos2
+    tracker2.stop()
 
     // Verify whether log has correct contents
     val expectedWrittenData2 = expectedWrittenData1 ++
@@ -192,6 +195,7 @@ class ReceivedBlockTrackerSuite
       getWriteAheadLogFiles() should not contain oldestLogFile
     }
     printLogFiles("After clean")
+    tracker3.stop()
 
     // Restart tracker and verify recovered state, specifically whether info about the first
     // batch has been removed, but not the second batch
@@ -200,6 +204,7 @@ class ReceivedBlockTrackerSuite
     tracker4.getUnallocatedBlocks(streamId) shouldBe empty
     tracker4.getBlocksOfBatchAndStream(batchTime1, streamId) shouldBe empty  // should be cleaned
     tracker4.getBlocksOfBatchAndStream(batchTime2, streamId) shouldEqual blockInfos2
+    tracker4.stop()
   }
 
   test("disable write ahead log when checkpoint directory is not set") {

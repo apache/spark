@@ -317,12 +317,12 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
     pool
   }
 
-  // Make sure that that we aren't going to exceed the max RPC message size by making sure
+  // Make sure that we aren't going to exceed the max RPC message size by making sure
   // we use broadcast to send large map output statuses.
   if (minSizeForBroadcast > maxRpcMessageSize) {
     val msg = s"spark.shuffle.mapOutput.minSizeForBroadcast ($minSizeForBroadcast bytes) must " +
       s"be <= spark.rpc.message.maxSize ($maxRpcMessageSize bytes) to prevent sending an rpc " +
-      "message that is to large."
+      "message that is too large."
     logError(msg)
     throw new IllegalArgumentException(msg)
   }
@@ -383,7 +383,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
 
   /** Register multiple map output information for the given shuffle */
   def registerMapOutputs(shuffleId: Int, statuses: Array[MapStatus], changeEpoch: Boolean = false) {
-    mapStatuses.put(shuffleId, Array[MapStatus]() ++ statuses)
+    mapStatuses.put(shuffleId, statuses.clone())
     if (changeEpoch) {
       incrementEpoch()
     }
@@ -535,7 +535,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
             true
           case None =>
             logDebug("cached status not found for : " + shuffleId)
-            statuses = mapStatuses.getOrElse(shuffleId, Array[MapStatus]())
+            statuses = mapStatuses.getOrElse(shuffleId, Array.empty[MapStatus])
             epochGotten = epoch
             false
         }

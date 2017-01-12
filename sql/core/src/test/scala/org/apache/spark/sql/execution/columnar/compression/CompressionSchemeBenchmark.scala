@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets
 import org.apache.commons.lang3.RandomStringUtils
 import org.apache.commons.math3.distribution.LogNormalDistribution
 
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, GenericMutableRow}
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.columnar.{BOOLEAN, INT, LONG, NativeColumnType, SHORT, STRING}
 import org.apache.spark.sql.types.AtomicType
 import org.apache.spark.util.Benchmark
@@ -79,7 +79,7 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
       input: ByteBuffer): Unit = {
     val benchmark = new Benchmark(name, iters * count)
 
-    schemes.filter(_.supports(tpe)).map { scheme =>
+    schemes.filter(_.supports(tpe)).foreach { scheme =>
       val (compressFunc, compressionRatio, buf) = prepareEncodeInternal(count, tpe, scheme, input)
       val label = s"${getFormattedClassName(scheme)}(${compressionRatio.formatted("%.3f")})"
 
@@ -103,7 +103,7 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
       input: ByteBuffer): Unit = {
     val benchmark = new Benchmark(name, iters * count)
 
-    schemes.filter(_.supports(tpe)).map { scheme =>
+    schemes.filter(_.supports(tpe)).foreach { scheme =>
       val (compressFunc, _, buf) = prepareEncodeInternal(count, tpe, scheme, input)
       val compressedBuf = compressFunc(input, buf)
       val label = s"${getFormattedClassName(scheme)}"
@@ -111,7 +111,7 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
       input.rewind()
 
       benchmark.addCase(label)({ i: Int =>
-        val rowBuf = new GenericMutableRow(1)
+        val rowBuf = new GenericInternalRow(1)
 
         for (n <- 0L until iters) {
           compressedBuf.rewind.position(4)

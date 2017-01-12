@@ -43,13 +43,14 @@ import org.apache.spark.storage.StorageLevel
  * @param k the desired number of leaf clusters (default: 4). The actual number could be smaller if
  *          there are no divisible leaf clusters.
  * @param maxIterations the max number of k-means iterations to split clusters (default: 20)
- * @param minDivisibleClusterSize the minimum number of points (if >= 1.0) or the minimum proportion
- *                                of points (if < 1.0) of a divisible cluster (default: 1)
+ * @param minDivisibleClusterSize the minimum number of points (if greater than or equal 1.0) or
+ *                                the minimum proportion of points (if less than 1.0) of a divisible
+ *                                cluster (default: 1)
  * @param seed a random seed (default: hash value of the class name)
  *
- * @see [[http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf
- *     Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
- *     KDD Workshop on Text Mining, 2000.]]
+ * @see <a href="http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf">
+ * Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
+ * KDD Workshop on Text Mining, 2000.</a>
  */
 @Since("1.6.0")
 class BisectingKMeans private (
@@ -100,8 +101,8 @@ class BisectingKMeans private (
   def getMaxIterations: Int = this.maxIterations
 
   /**
-   * Sets the minimum number of points (if >= `1.0`) or the minimum proportion of points
-   * (if < `1.0`) of a divisible cluster (default: 1).
+   * Sets the minimum number of points (if greater than or equal to `1.0`) or the minimum proportion
+   * of points (if less than `1.0`) of a divisible cluster (default: 1).
    */
   @Since("1.6.0")
   def setMinDivisibleClusterSize(minDivisibleClusterSize: Double): this.type = {
@@ -112,8 +113,8 @@ class BisectingKMeans private (
   }
 
   /**
-   * Gets the minimum number of points (if >= `1.0`) or the minimum proportion of points
-   * (if < `1.0`) of a divisible cluster.
+   * Gets the minimum number of points (if greater than or equal to `1.0`) or the minimum proportion
+   * of points (if less than `1.0`) of a divisible cluster.
    */
   @Since("1.6.0")
   def getMinDivisibleClusterSize: Double = minDivisibleClusterSize
@@ -165,6 +166,8 @@ class BisectingKMeans private (
     val random = new Random(seed)
     var numLeafClustersNeeded = k - 1
     var level = 1
+    var preIndices: RDD[Long] = null
+    var indices: RDD[Long] = null
     while (activeClusters.nonEmpty && numLeafClustersNeeded > 0 && level < LEVEL_LIMIT) {
       // Divisible clusters are sufficiently large and have non-trivial cost.
       var divisibleClusters = activeClusters.filter { case (_, summary) =>
@@ -194,8 +197,9 @@ class BisectingKMeans private (
           newClusters = summarize(d, newAssignments)
           newClusterCenters = newClusters.mapValues(_.center).map(identity)
         }
-        // TODO: Unpersist old indices.
-        val indices = updateAssignments(assignments, divisibleIndices, newClusterCenters).keys
+        if (preIndices != null) preIndices.unpersist()
+        preIndices = indices
+        indices = updateAssignments(assignments, divisibleIndices, newClusterCenters).keys
           .persist(StorageLevel.MEMORY_AND_DISK)
         assignments = indices.zip(vectors)
         inactiveClusters ++= activeClusters
@@ -208,13 +212,14 @@ class BisectingKMeans private (
       }
       level += 1
     }
+    if(indices != null) indices.unpersist()
     val clusters = activeClusters ++ inactiveClusters
     val root = buildTree(clusters)
     new BisectingKMeansModel(root)
   }
 
   /**
-   * Java-friendly version of [[run()]].
+   * Java-friendly version of `run()`.
    */
   def run(data: JavaRDD[Vector]): BisectingKMeansModel = run(data.rdd)
 }

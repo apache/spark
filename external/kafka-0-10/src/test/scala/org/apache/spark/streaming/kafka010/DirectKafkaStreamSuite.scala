@@ -53,7 +53,6 @@ class DirectKafkaStreamSuite
     .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
 
-  private var sc: SparkContext = _
   private var ssc: StreamingContext = _
   private var testDir: File = _
 
@@ -73,11 +72,7 @@ class DirectKafkaStreamSuite
 
   after {
     if (ssc != null) {
-      ssc.stop()
-      sc = null
-    }
-    if (sc != null) {
-      sc.stop()
+      ssc.stop(stopSparkContext = true)
     }
     if (testDir != null) {
       Utils.deleteRecursively(testDir)
@@ -108,7 +103,7 @@ class DirectKafkaStreamSuite
     val expectedTotal = (data.values.sum * topics.size) - 2
     val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
 
-    ssc = new StreamingContext(sparkConf, Milliseconds(200))
+    ssc = new StreamingContext(sparkConf, Milliseconds(1000))
     val stream = withClue("Error creating direct stream") {
       KafkaUtils.createDirectStream[String, String](
         ssc,
@@ -150,7 +145,7 @@ class DirectKafkaStreamSuite
       allReceived.addAll(Arrays.asList(rdd.map(r => (r.key, r.value)).collect(): _*))
     }
     ssc.start()
-    eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
+    eventually(timeout(100000.milliseconds), interval(1000.milliseconds)) {
       assert(allReceived.size === expectedTotal,
         "didn't get expected number of messages, messages:\n" +
           allReceived.asScala.mkString("\n"))
@@ -159,20 +154,22 @@ class DirectKafkaStreamSuite
   }
 
   test("pattern based subscription") {
-    val topics = List("pat1", "pat2", "advanced3")
-    // Should match 2 out of 3 topics
+    val topics = List("pat1", "pat2", "pat3", "advanced3")
+    // Should match 3 out of 4 topics
     val pat = """pat\d""".r.pattern
     val data = Map("a" -> 7, "b" -> 9)
     topics.foreach { t =>
       kafkaTestUtils.createTopic(t)
       kafkaTestUtils.sendMessages(t, data)
     }
-    val offsets = Map(new TopicPartition("pat2", 0) -> 3L)
-    // 2 matching topics, one of which starts 3 messages later
-    val expectedTotal = (data.values.sum * 2) - 3
+    val offsets = Map(
+      new TopicPartition("pat2", 0) -> 3L,
+      new TopicPartition("pat3", 0) -> 4L)
+    // 3 matching topics, two of which start a total of 7 messages later
+    val expectedTotal = (data.values.sum * 3) - 7
     val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
 
-    ssc = new StreamingContext(sparkConf, Milliseconds(200))
+    ssc = new StreamingContext(sparkConf, Milliseconds(1000))
     val stream = withClue("Error creating direct stream") {
       KafkaUtils.createDirectStream[String, String](
         ssc,
@@ -214,7 +211,7 @@ class DirectKafkaStreamSuite
       allReceived.addAll(Arrays.asList(rdd.map(r => (r.key, r.value)).collect(): _*))
     }
     ssc.start()
-    eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
+    eventually(timeout(100000.milliseconds), interval(1000.milliseconds)) {
       assert(allReceived.size === expectedTotal,
         "didn't get expected number of messages, messages:\n" +
           allReceived.asScala.mkString("\n"))
@@ -250,7 +247,8 @@ class DirectKafkaStreamSuite
       val s = new DirectKafkaInputDStream[String, String](
         ssc,
         preferredHosts,
-        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala))
+        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
+        new DefaultPerPartitionConfig(sparkConf))
       s.consumer.poll(0)
       assert(
         s.consumer.position(topicPartition) >= offsetBeforeStart,
@@ -270,6 +268,7 @@ class DirectKafkaStreamSuite
       collectedData.contains("b")
     }
     assert(!collectedData.contains("a"))
+    ssc.stop()
   }
 
 
@@ -304,7 +303,8 @@ class DirectKafkaStreamSuite
         ConsumerStrategies.Assign[String, String](
           List(topicPartition),
           kafkaParams.asScala,
-          Map(topicPartition -> 11L)))
+          Map(topicPartition -> 11L)),
+        new DefaultPerPartitionConfig(sparkConf))
       s.consumer.poll(0)
       assert(
         s.consumer.position(topicPartition) >= offsetBeforeStart,
@@ -322,6 +322,7 @@ class DirectKafkaStreamSuite
       collectedData.contains("b")
     }
     assert(!collectedData.contains("a"))
+    ssc.stop()
   }
 
   // Test to verify the offset ranges can be recovered from the checkpoints
@@ -366,7 +367,7 @@ class DirectKafkaStreamSuite
       sendData(i)
     }
 
-    eventually(timeout(10 seconds), interval(50 milliseconds)) {
+    eventually(timeout(20 seconds), interval(50 milliseconds)) {
       assert(DirectKafkaStreamSuite.total.get === (1 to 10).sum)
     }
 
@@ -405,7 +406,7 @@ class DirectKafkaStreamSuite
       sendData(i)
     }
 
-    eventually(timeout(10 seconds), interval(50 milliseconds)) {
+    eventually(timeout(20 seconds), interval(50 milliseconds)) {
       assert(DirectKafkaStreamSuite.total.get === (1 to 20).sum)
     }
     ssc.stop()
@@ -516,7 +517,7 @@ class DirectKafkaStreamSuite
 
   test("maxMessagesPerPartition with backpressure disabled") {
     val topic = "maxMessagesPerPartition"
-    val kafkaStream = getDirectKafkaStream(topic, None)
+    val kafkaStream = getDirectKafkaStream(topic, None, None)
 
     val input = Map(new TopicPartition(topic, 0) -> 50L, new TopicPartition(topic, 1) -> 50L)
     assert(kafkaStream.maxMessagesPerPartition(input).get ==
@@ -526,7 +527,7 @@ class DirectKafkaStreamSuite
   test("maxMessagesPerPartition with no lag") {
     val topic = "maxMessagesPerPartition"
     val rateController = Some(new ConstantRateController(0, new ConstantEstimator(100), 100))
-    val kafkaStream = getDirectKafkaStream(topic, rateController)
+    val kafkaStream = getDirectKafkaStream(topic, rateController, None)
 
     val input = Map(new TopicPartition(topic, 0) -> 0L, new TopicPartition(topic, 1) -> 0L)
     assert(kafkaStream.maxMessagesPerPartition(input).isEmpty)
@@ -535,11 +536,19 @@ class DirectKafkaStreamSuite
   test("maxMessagesPerPartition respects max rate") {
     val topic = "maxMessagesPerPartition"
     val rateController = Some(new ConstantRateController(0, new ConstantEstimator(100), 1000))
-    val kafkaStream = getDirectKafkaStream(topic, rateController)
+    val ppc = Some(new PerPartitionConfig {
+      def maxRatePerPartition(tp: TopicPartition) =
+        if (tp.topic == topic && tp.partition == 0) {
+          50
+        } else {
+          100
+        }
+    })
+    val kafkaStream = getDirectKafkaStream(topic, rateController, ppc)
 
     val input = Map(new TopicPartition(topic, 0) -> 1000L, new TopicPartition(topic, 1) -> 1000L)
     assert(kafkaStream.maxMessagesPerPartition(input).get ==
-      Map(new TopicPartition(topic, 0) -> 10L, new TopicPartition(topic, 1) -> 10L))
+      Map(new TopicPartition(topic, 0) -> 5L, new TopicPartition(topic, 1) -> 10L))
   }
 
   test("using rate controller") {
@@ -568,7 +577,9 @@ class DirectKafkaStreamSuite
       new DirectKafkaInputDStream[String, String](
         ssc,
         preferredHosts,
-        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala)) {
+        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
+        new DefaultPerPartitionConfig(sparkConf)
+      ) {
         override protected[streaming] val rateController =
           Some(new DirectKafkaRateController(id, estimator))
       }.map(r => (r.key, r.value))
@@ -614,7 +625,10 @@ class DirectKafkaStreamSuite
     }.toSeq.sortBy { _._1 }
   }
 
-  private def getDirectKafkaStream(topic: String, mockRateController: Option[RateController]) = {
+  private def getDirectKafkaStream(
+      topic: String,
+      mockRateController: Option[RateController],
+      ppc: Option[PerPartitionConfig]) = {
     val batchIntervalMilliseconds = 100
 
     val sparkConf = new SparkConf()
@@ -641,7 +655,8 @@ class DirectKafkaStreamSuite
           tps.foreach(tp => consumer.seek(tp, 0))
           consumer
         }
-      }
+      },
+      ppc.getOrElse(new DefaultPerPartitionConfig(sparkConf))
     ) {
         override protected[streaming] val rateController = mockRateController
     }

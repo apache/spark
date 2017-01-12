@@ -17,19 +17,19 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
-import scala.sys.process.Process
-import scala.util.Try
-
+import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.TestUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
@@ -66,18 +66,34 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
 
+  test("query global temp view") {
+    val df = Seq(1).toDF("i1")
+    df.createGlobalTempView("tbl1")
+    val global_temp_db = spark.conf.get("spark.sql.globalTempDatabase")
+    checkAnswer(spark.sql(s"select * from ${global_temp_db}.tbl1"), Row(1))
+    spark.sql(s"drop view ${global_temp_db}.tbl1")
+  }
+
+  test("non-existent global temp view") {
+    val global_temp_db = spark.conf.get("spark.sql.globalTempDatabase")
+    val message = intercept[AnalysisException] {
+      spark.sql(s"select * from ${global_temp_db}.nonexistentview")
+    }.getMessage
+    assert(message.contains("Table or view not found"))
+  }
+
   test("script") {
-    if (testCommandAvailable("bash") && testCommandAvailable("echo | sed")) {
-      val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
-      df.createOrReplaceTempView("script_table")
-      val query1 = sql(
-        """
-          |SELECT col1 FROM (from(SELECT c1, c2, c3 FROM script_table) tempt_table
-          |REDUCE c1, c2, c3 USING 'bash src/test/resources/test_script.sh' AS
-          |(col1 STRING, col2 STRING)) script_test_table""".stripMargin)
-      checkAnswer(query1, Row("x1_y1") :: Row("x2_y2") :: Nil)
-    }
-    // else skip this test
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    assume(TestUtils.testCommandAvailable("echo | sed"))
+    val scriptFilePath = getTestResourcePath("test_script.sh")
+    val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
+    df.createOrReplaceTempView("script_table")
+    val query1 = sql(
+      s"""
+        |SELECT col1 FROM (from(SELECT c1, c2, c3 FROM script_table) tempt_table
+        |REDUCE c1, c2, c3 USING 'bash $scriptFilePath' AS
+        |(col1 STRING, col2 STRING)) script_test_table""".stripMargin)
+    checkAnswer(query1, Row("x1_y1") :: Row("x2_y2") :: Nil)
   }
 
   test("UDTF") {
@@ -107,7 +123,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         s"""
           |CREATE FUNCTION udtf_count_temp
           |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-          |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}'
+          |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").toURI}'
         """.stripMargin)
 
       checkAnswer(
@@ -252,15 +268,16 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkKeywordsExist(sql("describe function extended upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
-      "Usage: upper(str) - Returns str with all characters changed to uppercase",
+      "Usage: upper(str) - Returns `str` with all characters changed to uppercase",
       "Extended Usage:",
-      "> SELECT upper('SparkSql')",
-      "'SPARKSQL'")
+      "Examples:",
+      "> SELECT upper('SparkSql');",
+      "SPARKSQL")
 
     checkKeywordsExist(sql("describe functioN Upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
-      "Usage: upper(str) - Returns str with all characters changed to uppercase")
+      "Usage: upper(str) - Returns `str` with all characters changed to uppercase")
 
     checkKeywordsNotExist(sql("describe functioN Upper"),
       "Extended Usage")
@@ -271,25 +288,28 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkKeywordsExist(sql("describe functioN  `~`"),
       "Function: ~",
       "Class: org.apache.spark.sql.catalyst.expressions.BitwiseNot",
-      "Usage: ~ b - Bitwise NOT.")
+      "Usage: ~ expr - Returns the result of bitwise NOT of `expr`.")
 
     // Hard coded describe functions
     checkKeywordsExist(sql("describe function  `<>`"),
       "Function: <>",
-      "Usage: a <> b - Returns TRUE if a is not equal to b")
+      "Usage: expr1 <> expr2 - Returns true if `expr1` is not equal to `expr2`")
 
     checkKeywordsExist(sql("describe function  `!=`"),
       "Function: !=",
-      "Usage: a != b - Returns TRUE if a is not equal to b")
+      "Usage: expr1 != expr2 - Returns true if `expr1` is not equal to `expr2`")
 
     checkKeywordsExist(sql("describe function  `between`"),
       "Function: between",
-      "Usage: a [NOT] BETWEEN b AND c - evaluate if a is [not] in between b and c")
+      "Usage: expr1 [NOT] BETWEEN expr2 AND expr3 - " +
+        "evaluate if `expr1` is [not] in between `expr2` and `expr3`")
 
     checkKeywordsExist(sql("describe function  `case`"),
       "Function: case",
-      "Usage: CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END - " +
-        "When a = b, returns c; when a = d, return e; else return f")
+      "Usage: CASE expr1 WHEN expr2 THEN expr3 " +
+        "[WHEN expr4 THEN expr5]* [ELSE expr6] END - " +
+        "When `expr1` = `expr2`, returns `expr3`; " +
+        "when `expr1` = `expr4`, return `expr5`; else return `expr6`")
   }
 
   test("describe functions - user defined functions") {
@@ -298,7 +318,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         s"""
            |CREATE FUNCTION udtf_count
            |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-           |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}'
+           |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").toURI}'
         """.stripMargin)
 
       checkKeywordsExist(sql("describe function udtf_count"),
@@ -323,7 +343,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         s"""
            |CREATE TEMPORARY FUNCTION udtf_count_temp
            |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-           |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}'
+           |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").toURI}'
         """.stripMargin)
 
       checkKeywordsExist(sql("describe function udtf_count_temp"),
@@ -339,6 +359,79 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         "Function: udtf_count_temp",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
         "Usage: N/A")
+    }
+  }
+
+  test("describe partition") {
+    withTable("partitioned_table") {
+      sql("CREATE TABLE partitioned_table (a STRING, b INT) PARTITIONED BY (c STRING, d STRING)")
+      sql("ALTER TABLE partitioned_table ADD PARTITION (c='Us', d=1)")
+
+      checkKeywordsExist(sql("DESC partitioned_table PARTITION (c='Us', d=1)"),
+        "# Partition Information",
+        "# col_name")
+
+      checkKeywordsExist(sql("DESC EXTENDED partitioned_table PARTITION (c='Us', d=1)"),
+        "# Partition Information",
+        "# col_name",
+        "Detailed Partition Information CatalogPartition(",
+        "Partition Values: [c=Us, d=1]",
+        "Storage(Location:",
+        "Partition Parameters")
+
+      checkKeywordsExist(sql("DESC FORMATTED partitioned_table PARTITION (c='Us', d=1)"),
+        "# Partition Information",
+        "# col_name",
+        "# Detailed Partition Information",
+        "Partition Value:",
+        "Database:",
+        "Table:",
+        "Location:",
+        "Partition Parameters:",
+        "# Storage Information")
+    }
+  }
+
+  test("describe partition - error handling") {
+    withTable("partitioned_table", "datasource_table") {
+      sql("CREATE TABLE partitioned_table (a STRING, b INT) PARTITIONED BY (c STRING, d STRING)")
+      sql("ALTER TABLE partitioned_table ADD PARTITION (c='Us', d=1)")
+
+      val m = intercept[NoSuchPartitionException] {
+        sql("DESC partitioned_table PARTITION (c='Us', d=2)")
+      }.getMessage()
+      assert(m.contains("Partition not found in table"))
+
+      val m2 = intercept[AnalysisException] {
+        sql("DESC partitioned_table PARTITION (c='Us')")
+      }.getMessage()
+      assert(m2.contains("Partition spec is invalid"))
+
+      val m3 = intercept[ParseException] {
+        sql("DESC partitioned_table PARTITION (c='Us', d)")
+      }.getMessage()
+      assert(m3.contains("PARTITION specification is incomplete: `d`"))
+
+      spark
+        .range(1).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write
+        .partitionBy("d")
+        .saveAsTable("datasource_table")
+
+      sql("DESC datasource_table PARTITION (d=0)")
+
+      val m5 = intercept[AnalysisException] {
+        spark.range(10).select('id as 'a, 'id as 'b).createTempView("view1")
+        sql("DESC view1 PARTITION (c='Us', d=1)")
+      }.getMessage()
+      assert(m5.contains("DESC PARTITION is not allowed on a temporary view"))
+
+      withView("permanent_view") {
+        val m = intercept[AnalysisException] {
+          sql("CREATE VIEW permanent_view AS SELECT * FROM partitioned_table")
+          sql("DESC permanent_view PARTITION (c='Us', d=1)")
+        }.getMessage()
+        assert(m.contains("DESC PARTITION is not allowed on a view"))
+      }
     }
   }
 
@@ -417,7 +510,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   def checkRelation(
       tableName: String,
-      isDataSourceParquet: Boolean,
+      isDataSourceTable: Boolean,
       format: String,
       userSpecifiedLocation: Option[String] = None): Unit = {
     val relation = EliminateSubqueryAliases(
@@ -426,7 +519,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
     relation match {
       case LogicalRelation(r: HadoopFsRelation, _, _) =>
-        if (!isDataSourceParquet) {
+        if (!isDataSourceTable) {
           fail(
             s"${classOf[MetastoreRelation].getCanonicalName} is expected, but found " +
               s"${HadoopFsRelation.getClass.getCanonicalName}.")
@@ -436,22 +529,28 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             assert(r.options("path") === location)
           case None => // OK.
         }
-        assert(
-          catalogTable.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER) === format)
+        assert(catalogTable.provider.get === format)
 
       case r: MetastoreRelation =>
-        if (isDataSourceParquet) {
+        if (isDataSourceTable) {
           fail(
             s"${HadoopFsRelation.getClass.getCanonicalName} is expected, but found " +
               s"${classOf[MetastoreRelation].getCanonicalName}.")
         }
         userSpecifiedLocation match {
           case Some(location) =>
-            assert(r.catalogTable.storage.locationUri.get === location)
+            assert(r.catalogTable.location === location)
           case None => // OK.
         }
-        // Also make sure that the format is the desired format.
+        // Also make sure that the format and serde are as desired.
         assert(catalogTable.storage.inputFormat.get.toLowerCase.contains(format))
+        assert(catalogTable.storage.outputFormat.get.toLowerCase.contains(format))
+        val serde = catalogTable.storage.serde.get
+        format match {
+          case "sequence" | "text" => assert(serde.contains("LazySimpleSerDe"))
+          case "rcfile" => assert(serde.contains("LazyBinaryColumnarSerDe"))
+          case _ => assert(serde.toLowerCase.contains(format))
+        }
     }
 
     // When a user-specified location is defined, the table type needs to be EXTERNAL.
@@ -513,12 +612,36 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("CTAS with default fileformat") {
+    val table = "ctas1"
+    val ctas = s"CREATE TABLE IF NOT EXISTS $table SELECT key k, value FROM src"
+    withSQLConf(SQLConf.CONVERT_CTAS.key -> "true") {
+      withSQLConf("hive.default.fileformat" -> "textfile") {
+        withTable(table) {
+          sql(ctas)
+          // We should use parquet here as that is the default datasource fileformat. The default
+          // datasource file format is controlled by `spark.sql.sources.default` configuration.
+          // This testcase verifies that setting `hive.default.fileformat` has no impact on
+          // the target table's fileformat in case of CTAS.
+          assert(sessionState.conf.defaultDataSourceName === "parquet")
+          checkRelation(tableName = table, isDataSourceTable = true, format = "parquet")
+        }
+      }
+      withSQLConf("spark.sql.sources.default" -> "orc") {
+        withTable(table) {
+          sql(ctas)
+          checkRelation(tableName = table, isDataSourceTable = true, format = "orc")
+         }
+      }
+    }
+  }
+
   test("CTAS without serde with location") {
     withSQLConf(SQLConf.CONVERT_CTAS.key -> "true") {
       withTempDir { dir =>
         val defaultDataSource = sessionState.conf.defaultDataSourceName
 
-        val tempLocation = dir.getCanonicalPath
+        val tempLocation = dir.toURI.getPath.stripSuffix("/")
         sql(s"CREATE TABLE ctas1 LOCATION 'file:$tempLocation/c1'" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
         checkRelation("ctas1", true, defaultDataSource, Some(s"file:$tempLocation/c1"))
@@ -642,19 +765,35 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("specifying the column list for CTAS") {
-    Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
+    withTempView("mytable1") {
+      Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
+      withTable("gen__tmp") {
+        sql("create table gen__tmp as select key as a, value as b from mytable1")
+        checkAnswer(
+          sql("SELECT a, b from gen__tmp"),
+          sql("select key, value from mytable1").collect())
+      }
 
-    sql("create table gen__tmp as select key as a, value as b from mytable1")
-    checkAnswer(
-      sql("SELECT a, b from gen__tmp"),
-      sql("select key, value from mytable1").collect())
-    sql("DROP TABLE gen__tmp")
+      withTable("gen__tmp") {
+        val e = intercept[AnalysisException] {
+          sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+        }.getMessage
+        assert(e.contains("Schema may not be specified in a Create Table As Select (CTAS)"))
+      }
 
-    intercept[AnalysisException] {
-      sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+      withTable("gen__tmp") {
+        val e = intercept[AnalysisException] {
+          sql(
+            """
+              |CREATE TABLE gen__tmp
+              |PARTITIONED BY (key string)
+              |AS SELECT key, value FROM mytable1
+            """.stripMargin)
+        }.getMessage
+        assert(e.contains("A Create Table As Select (CTAS) statement is not allowed to " +
+          "create a partitioned table using Hive's file formats"))
+      }
     }
-
-    sql("drop table mytable1")
   }
 
   test("command substitution") {
@@ -928,12 +1067,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("Star Expansion - script transform") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").createOrReplaceTempView("script_trans")
     assert(100000 === sql("SELECT TRANSFORM (*) USING 'cat' FROM script_trans").count())
   }
 
   test("test script transform for stdout") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").createOrReplaceTempView("script_trans")
     assert(100000 ===
@@ -941,6 +1082,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("test script transform for stderr") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").createOrReplaceTempView("script_trans")
     assert(0 ===
@@ -948,6 +1090,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("test script transform data type") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
     val data = (1 to 5).map { i => (i, i) }
     data.toDF("key", "value").createOrReplaceTempView("test")
     checkAnswer(
@@ -1148,7 +1291,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("specifying database name for a temporary table is not allowed") {
     withTempPath { dir =>
-      val path = dir.getCanonicalPath
+      val path = dir.toURI.toString
       val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
       df
         .write
@@ -1156,7 +1299,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         .save(path)
 
       // We don't support creating a temporary table while specifying a database
-      val message = intercept[AnalysisException] {
+      intercept[AnalysisException] {
         spark.sql(
           s"""
           |CREATE TEMPORARY TABLE db.t
@@ -1165,7 +1308,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           |  path '$path'
           |)
         """.stripMargin)
-      }.getMessage
+      }
 
       // If you use backticks to quote the name then it's OK.
       spark.sql(
@@ -1201,11 +1344,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       .selectExpr("id AS a", "id AS b")
       .createOrReplaceTempView("test")
 
+    val scriptFilePath = getTestResourcePath("data")
     checkAnswer(
       sql(
-        """FROM(
+        s"""FROM(
           |  FROM test SELECT TRANSFORM(a, b)
-          |  USING 'python src/test/resources/data/scripts/test_transform.py "\t"'
+          |  USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
           |  AS (c STRING, d STRING)
           |) t
           |SELECT c
@@ -1219,12 +1363,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       .selectExpr("id AS a", "id AS b")
       .createOrReplaceTempView("test")
 
+    val scriptFilePath = getTestResourcePath("data")
     val df = sql(
-      """FROM test
+      s"""FROM test
         |SELECT TRANSFORM(a, b)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
         |WITH SERDEPROPERTIES('field.delim' = '|')
-        |USING 'python src/test/resources/data/scripts/test_transform.py "|"'
+        |USING 'python $scriptFilePath/scripts/test_transform.py "|"'
         |AS (c STRING, d STRING)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
         |WITH SERDEPROPERTIES('field.delim' = '|')
@@ -1425,14 +1570,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     ).map(i => Row(i._1, i._2, i._3, i._4)))
   }
 
-  test("SPARK-10562: partition by column with mixed case name") {
+  ignore("SPARK-10562: partition by column with mixed case name") {
     withTable("tbl10562") {
       val df = Seq(2012 -> "a").toDF("Year", "val")
       df.write.partitionBy("Year").saveAsTable("tbl10562")
       checkAnswer(sql("SELECT year FROM tbl10562"), Row(2012))
       checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
       checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
-      checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
+// TODO(ekl) this is causing test flakes [SPARK-18167], but we think the issue is derby specific
+//      checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
       checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
     }
   }
@@ -1773,7 +1919,98 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  def testCommandAvailable(command: String): Boolean = {
-    Try(Process(command) !!).isSuccess
+  test("SPARK-17354: Partitioning by dates/timestamps works with Parquet vectorized reader") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      sql(
+        """CREATE TABLE order(id INT)
+          |PARTITIONED BY (pd DATE, pt TIMESTAMP)
+          |STORED AS PARQUET
+        """.stripMargin)
+
+      sql("set hive.exec.dynamic.partition.mode=nonstrict")
+      sql(
+        """INSERT INTO TABLE order PARTITION(pd, pt)
+          |SELECT 1 AS id, CAST('1990-02-24' AS DATE) AS pd, CAST('1990-02-24' AS TIMESTAMP) AS pt
+        """.stripMargin)
+      val actual = sql("SELECT * FROM order")
+      val expected = sql(
+        "SELECT 1 AS id, CAST('1990-02-24' AS DATE) AS pd, CAST('1990-02-24' AS TIMESTAMP) AS pt")
+      checkAnswer(actual, expected)
+      sql("DROP TABLE order")
+    }
+  }
+
+
+  test("SPARK-17108: Fix BIGINT and INT comparison failure in spark sql") {
+    sql("create table t1(a map<bigint, array<string>>)")
+    sql("select * from t1 where a[1] is not null")
+
+    sql("create table t2(a map<int, array<string>>)")
+    sql("select * from t2 where a[1] is not null")
+
+    sql("create table t3(a map<bigint, array<string>>)")
+    sql("select * from t3 where a[1L] is not null")
+  }
+
+  test("SPARK-17796 Support wildcard character in filename for LOAD DATA LOCAL INPATH") {
+    withTempDir { dir =>
+      val path = dir.toURI.toString.stripSuffix("/")
+      val dirPath = dir.getAbsoluteFile
+      for (i <- 1 to 3) {
+        Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
+      }
+      for (i <- 5 to 7) {
+        Files.write(s"$i", new File(dirPath, s"part-s-0000$i"), StandardCharsets.UTF_8)
+      }
+
+      withTable("load_t") {
+        sql("CREATE TABLE load_t (a STRING)")
+        sql(s"LOAD DATA LOCAL INPATH '$path/*part-r*' INTO TABLE load_t")
+        checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1"), Row("2"), Row("3")))
+
+        val m = intercept[AnalysisException] {
+          sql("LOAD DATA LOCAL INPATH '/non-exist-folder/*part*' INTO TABLE load_t")
+        }.getMessage
+        assert(m.contains("LOAD DATA input path does not exist"))
+
+        val m2 = intercept[AnalysisException] {
+          sql(s"LOAD DATA LOCAL INPATH '$path*/*part*' INTO TABLE load_t")
+        }.getMessage
+        assert(m2.contains("LOAD DATA input path allows only filename wildcard"))
+      }
+    }
+  }
+
+  test("Insert overwrite with partition") {
+    withTable("tableWithPartition") {
+      sql(
+        """
+          |CREATE TABLE tableWithPartition (key int, value STRING)
+          |PARTITIONED BY (part STRING)
+        """.stripMargin)
+      sql(
+        """
+          |INSERT OVERWRITE TABLE tableWithPartition PARTITION (part = '1')
+          |SELECT * FROM default.src
+        """.stripMargin)
+       checkAnswer(
+         sql("SELECT part, key, value FROM tableWithPartition"),
+         sql("SELECT '1' AS part, key, value FROM default.src")
+       )
+
+      sql(
+        """
+          |INSERT OVERWRITE TABLE tableWithPartition PARTITION (part = '1')
+          |SELECT * FROM VALUES (1, "one"), (2, "two"), (3, null) AS data(key, value)
+        """.stripMargin)
+      checkAnswer(
+        sql("SELECT part, key, value FROM tableWithPartition"),
+        sql(
+          """
+            |SELECT '1' AS part, key, value FROM VALUES
+            |(1, "one"), (2, "two"), (3, null) AS data(key, value)
+          """.stripMargin)
+      )
+    }
   }
 }

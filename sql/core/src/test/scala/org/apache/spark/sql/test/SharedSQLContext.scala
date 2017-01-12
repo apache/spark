@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.test
 
-import org.apache.spark.SparkConf
+import org.scalatest.BeforeAndAfterEach
+
+import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
  * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
-trait SharedSQLContext extends SQLTestUtils {
+trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach {
 
   protected val sparkConf = new SparkConf()
 
@@ -46,13 +49,18 @@ trait SharedSQLContext extends SQLTestUtils {
    */
   protected implicit def sqlContext: SQLContext = _spark.sqlContext
 
+  protected def createSparkSession: TestSparkSession = {
+    new TestSparkSession(
+      sparkConf.set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName))
+  }
+
   /**
    * Initialize the [[TestSparkSession]].
    */
   protected override def beforeAll(): Unit = {
     SparkSession.sqlListener.set(null)
     if (_spark == null) {
-      _spark = new TestSparkSession(sparkConf)
+      _spark = createSparkSession
     }
     // Ensure we have initialized the context before calling parent code
     super.beforeAll()
@@ -70,5 +78,15 @@ trait SharedSQLContext extends SQLTestUtils {
     } finally {
       super.afterAll()
     }
+  }
+
+  protected override def beforeEach(): Unit = {
+    super.beforeEach()
+    DebugFilesystem.clearOpenStreams()
+  }
+
+  protected override def afterEach(): Unit = {
+    super.afterEach()
+    DebugFilesystem.assertNoOpenStreams()
   }
 }

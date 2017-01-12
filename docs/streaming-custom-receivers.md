@@ -59,8 +59,8 @@ class CustomReceiver(host: String, port: Int)
   }
 
   def onStop() {
-   // There is nothing much to do as the thread calling receive()
-   // is designed to stop by itself if isStopped() returns false
+    // There is nothing much to do as the thread calling receive()
+    // is designed to stop by itself if isStopped() returns false
   }
 
   /** Create a socket connection and receive data until receiver is stopped */
@@ -68,29 +68,29 @@ class CustomReceiver(host: String, port: Int)
     var socket: Socket = null
     var userInput: String = null
     try {
-     // Connect to host:port
-     socket = new Socket(host, port)
+      // Connect to host:port
+      socket = new Socket(host, port)
 
-     // Until stopped or connection broken continue reading
-     val reader = new BufferedReader(
-       new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
-     userInput = reader.readLine()
-     while(!isStopped && userInput != null) {
-       store(userInput)
-       userInput = reader.readLine()
-     }
-     reader.close()
-     socket.close()
+      // Until stopped or connection broken continue reading
+      val reader = new BufferedReader(
+        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
+      userInput = reader.readLine()
+      while(!isStopped && userInput != null) {
+        store(userInput)
+        userInput = reader.readLine()
+      }
+      reader.close()
+      socket.close()
 
-     // Restart in an attempt to connect again when server is active again
-     restart("Trying to connect again")
+      // Restart in an attempt to connect again when server is active again
+      restart("Trying to connect again")
     } catch {
-     case e: java.net.ConnectException =>
-       // restart if could not connect to server
-       restart("Error connecting to " + host + ":" + port, e)
-     case t: Throwable =>
-       // restart if there is any other error
-       restart("Error receiving data", t)
+      case e: java.net.ConnectException =>
+        // restart if could not connect to server
+        restart("Error connecting to " + host + ":" + port, e)
+      case t: Throwable =>
+        // restart if there is any other error
+        restart("Error receiving data", t)
     }
   }
 }
@@ -181,7 +181,7 @@ val words = lines.flatMap(_.split(" "))
 ...
 {% endhighlight %}
 
-The full source code is in the example [CustomReceiver.scala](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/CustomReceiver.scala).
+The full source code is in the example [CustomReceiver.scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/CustomReceiver.scala).
 
 </div>
 <div data-lang="java" markdown="1">
@@ -193,7 +193,7 @@ JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() 
 ...
 {% endhighlight %}
 
-The full source code is in the example [JavaCustomReceiver.java](https://github.com/apache/spark/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaCustomReceiver.java).
+The full source code is in the example [JavaCustomReceiver.java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaCustomReceiver.java).
 
 </div>
 </div>

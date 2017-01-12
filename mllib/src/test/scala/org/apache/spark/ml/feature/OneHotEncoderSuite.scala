@@ -30,9 +30,11 @@ import org.apache.spark.sql.types._
 class OneHotEncoderSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  import testImplicits._
+
   def stringIndexed(): DataFrame = {
-    val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
-    val df = spark.createDataFrame(data).toDF("id", "label")
+    val data = Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c"))
+    val df = data.toDF("id", "label")
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
@@ -83,7 +85,7 @@ class OneHotEncoderSuite
 
   test("input column with ML attribute") {
     val attr = NominalAttribute.defaultAttr.withValues("small", "medium", "large")
-    val df = spark.createDataFrame(Seq(0.0, 1.0, 2.0, 1.0).map(Tuple1.apply)).toDF("size")
+    val df = Seq(0.0, 1.0, 2.0, 1.0).map(Tuple1.apply).toDF("size")
       .select(col("size").as("size", attr.toMetadata()))
     val encoder = new OneHotEncoder()
       .setInputCol("size")
@@ -96,7 +98,7 @@ class OneHotEncoderSuite
   }
 
   test("input column without ML attribute") {
-    val df = spark.createDataFrame(Seq(0.0, 1.0, 2.0, 1.0).map(Tuple1.apply)).toDF("index")
+    val df = Seq(0.0, 1.0, 2.0, 1.0).map(Tuple1.apply).toDF("index")
     val encoder = new OneHotEncoder()
       .setInputCol("index")
       .setOutputCol("encoded")

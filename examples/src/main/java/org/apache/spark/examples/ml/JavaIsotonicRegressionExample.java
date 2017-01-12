@@ -50,8 +50,8 @@ public class JavaIsotonicRegressionExample {
     IsotonicRegression ir = new IsotonicRegression();
     IsotonicRegressionModel model = ir.fit(dataset);
 
-    System.out.println("Boundaries in increasing order: " + model.boundaries());
-    System.out.println("Predictions associated with the boundaries: " + model.predictions());
+    System.out.println("Boundaries in increasing order: " + model.boundaries() + "\n");
+    System.out.println("Predictions associated with the boundaries: " + model.predictions() + "\n");
 
     // Makes predictions.
     model.transform(dataset).show();

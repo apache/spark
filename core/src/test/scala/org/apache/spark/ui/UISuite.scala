@@ -18,10 +18,13 @@
 package org.apache.spark.ui
 
 import java.net.{BindException, ServerSocket}
+import java.net.URI
+import javax.servlet.http.HttpServletRequest
 
 import scala.io.Source
 
 import org.eclipse.jetty.servlet.ServletContextHandler
+import org.mockito.Mockito.{mock, when}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
@@ -50,9 +53,10 @@ class UISuite extends SparkFunSuite {
   }
 
   private def sslEnabledConf(): (SparkConf, SSLOptions) = {
+    val keyStoreFilePath = getTestResourcePath("spark.keystore")
     val conf = new SparkConf()
       .set("spark.ssl.ui.enabled", "true")
-      .set("spark.ssl.ui.keyStore", "./src/test/resources/spark.keystore")
+      .set("spark.ssl.ui.keyStore", keyStoreFilePath)
       .set("spark.ssl.ui.keyStorePassword", "123456")
       .set("spark.ssl.ui.keyPassword", "123456")
     (conf, new SecurityManager(conf).getSSLOptions("ui"))
@@ -62,7 +66,7 @@ class UISuite extends SparkFunSuite {
     withSpark(newSparkContext()) { sc =>
       // test if the ui is visible, and all the expected tabs are visible
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        val html = Source.fromURL(sc.ui.get.appUIAddress).mkString
+        val html = Source.fromURL(sc.ui.get.webUrl).mkString
         assert(!html.contains("random data that should not be present"))
         assert(html.toLowerCase.contains("stages"))
         assert(html.toLowerCase.contains("storage"))
@@ -172,22 +176,55 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  test("verify appUIAddress contains the scheme") {
+  test("verify webUrl contains the scheme") {
     withSpark(newSparkContext()) { sc =>
       val ui = sc.ui.get
-      val uiAddress = ui.appUIAddress
-      val uiHostPort = ui.appUIHostPort
-      assert(uiAddress.equals("http://" + uiHostPort))
+      val uiAddress = ui.webUrl
+      assert(uiAddress.startsWith("http://") || uiAddress.startsWith("https://"))
     }
   }
 
-  test("verify appUIAddress contains the port") {
+  test("verify webUrl contains the port") {
     withSpark(newSparkContext()) { sc =>
       val ui = sc.ui.get
-      val splitUIAddress = ui.appUIAddress.split(':')
+      val splitUIAddress = ui.webUrl.split(':')
       val boundPort = ui.boundPort
       assert(splitUIAddress(2).toInt == boundPort)
     }
+  }
+
+  test("verify proxy rewrittenURI") {
+    val prefix = "/proxy/worker-id"
+    val target = "http://localhost:8081"
+    val path = "/proxy/worker-id/json"
+    var rewrittenURI = JettyUtils.createProxyURI(prefix, target, path, null)
+    assert(rewrittenURI.toString() === "http://localhost:8081/json")
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, path, "test=done")
+    assert(rewrittenURI.toString() === "http://localhost:8081/json?test=done")
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/proxy/worker-id", null)
+    assert(rewrittenURI.toString() === "http://localhost:8081")
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/proxy/worker-id/test%2F", null)
+    assert(rewrittenURI.toString() === "http://localhost:8081/test%2F")
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/proxy/worker-id/%F0%9F%98%84", null)
+    assert(rewrittenURI.toString() === "http://localhost:8081/%F0%9F%98%84")
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/proxy/worker-noid/json", null)
+    assert(rewrittenURI === null)
+  }
+
+  test("verify rewriting location header for reverse proxy") {
+    val clientRequest = mock(classOf[HttpServletRequest])
+    var headerValue = "http://localhost:4040/jobs"
+    val prefix = "/proxy/worker-id"
+    val targetUri = URI.create("http://localhost:4040")
+    when(clientRequest.getScheme()).thenReturn("http")
+    when(clientRequest.getHeader("host")).thenReturn("localhost:8080")
+    var newHeader = JettyUtils.createProxyLocationHeader(
+      prefix, headerValue, clientRequest, targetUri)
+    assert(newHeader.toString() === "http://localhost:8080/proxy/worker-id/jobs")
+    headerValue = "http://localhost:4041/jobs"
+    newHeader = JettyUtils.createProxyLocationHeader(
+      prefix, headerValue, clientRequest, targetUri)
+    assert(newHeader === null)
   }
 
   def stopServer(info: ServerInfo): Unit = {

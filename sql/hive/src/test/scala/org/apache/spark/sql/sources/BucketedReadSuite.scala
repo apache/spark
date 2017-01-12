@@ -18,12 +18,13 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.net.URI
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.DataSourceScanExec
+import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -235,9 +236,12 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   private def testBucketing(
       bucketSpecLeft: Option[BucketSpec],
       bucketSpecRight: Option[BucketSpec],
-      joinColumns: Seq[String],
+      joinType: String = "inner",
+      joinCondition: (DataFrame, DataFrame) => Column,
       shuffleLeft: Boolean,
-      shuffleRight: Boolean): Unit = {
+      shuffleRight: Boolean,
+      sortLeft: Boolean = true,
+      sortRight: Boolean = true): Unit = {
     withTable("bucketed_table1", "bucketed_table2") {
       def withBucket(
           writer: DataFrameWriter[Row],
@@ -247,6 +251,15 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
             spec.numBuckets,
             spec.bucketColumnNames.head,
             spec.bucketColumnNames.tail: _*)
+
+          if (spec.sortColumnNames.nonEmpty) {
+            writer.sortBy(
+              spec.sortColumnNames.head,
+              spec.sortColumnNames.tail: _*
+            )
+          } else {
+            writer
+          }
         }.getOrElse(writer)
       }
 
@@ -257,68 +270,174 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
         val t1 = spark.table("bucketed_table1")
         val t2 = spark.table("bucketed_table2")
-        val joined = t1.join(t2, joinCondition(t1, t2, joinColumns))
+        val joined = t1.join(t2, joinCondition(t1, t2), joinType)
 
         // First check the result is corrected.
         checkAnswer(
           joined.sort("bucketed_table1.k", "bucketed_table2.k"),
-          df1.join(df2, joinCondition(df1, df2, joinColumns)).sort("df1.k", "df2.k"))
+          df1.join(df2, joinCondition(df1, df2), joinType).sort("df1.k", "df2.k"))
 
         assert(joined.queryExecution.executedPlan.isInstanceOf[SortMergeJoinExec])
         val joinOperator = joined.queryExecution.executedPlan.asInstanceOf[SortMergeJoinExec]
 
+        // check existence of shuffle
         assert(
           joinOperator.left.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleLeft,
           s"expected shuffle in plan to be $shuffleLeft but found\n${joinOperator.left}")
         assert(
           joinOperator.right.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleRight,
           s"expected shuffle in plan to be $shuffleRight but found\n${joinOperator.right}")
+
+        // check existence of sort
+        assert(
+          joinOperator.left.find(_.isInstanceOf[SortExec]).isDefined == sortLeft,
+          s"expected sort in plan to be $shuffleLeft but found\n${joinOperator.left}")
+        assert(
+          joinOperator.right.find(_.isInstanceOf[SortExec]).isDefined == sortRight,
+          s"expected sort in plan to be $shuffleRight but found\n${joinOperator.right}")
       }
     }
   }
 
-  private def joinCondition(left: DataFrame, right: DataFrame, joinCols: Seq[String]): Column = {
+  private def joinCondition(joinCols: Seq[String]) (left: DataFrame, right: DataFrame): Column = {
     joinCols.map(col => left(col) === right(col)).reduce(_ && _)
   }
 
   test("avoid shuffle when join 2 bucketed tables") {
     val bucketSpec = Some(BucketSpec(8, Seq("i", "j"), Nil))
-    testBucketing(bucketSpec, bucketSpec, Seq("i", "j"), shuffleLeft = false, shuffleRight = false)
+    testBucketing(
+      bucketSpecLeft = bucketSpec,
+      bucketSpecRight = bucketSpec,
+      joinCondition = joinCondition(Seq("i", "j")),
+      shuffleLeft = false,
+      shuffleRight = false
+    )
   }
 
   // Enable it after fix https://issues.apache.org/jira/browse/SPARK-12704
   ignore("avoid shuffle when join keys are a super-set of bucket keys") {
     val bucketSpec = Some(BucketSpec(8, Seq("i"), Nil))
-    testBucketing(bucketSpec, bucketSpec, Seq("i", "j"), shuffleLeft = false, shuffleRight = false)
+    testBucketing(
+      bucketSpecLeft = bucketSpec,
+      bucketSpecRight = bucketSpec,
+      joinCondition = joinCondition(Seq("i", "j")),
+      shuffleLeft = false,
+      shuffleRight = false
+    )
   }
 
   test("only shuffle one side when join bucketed table and non-bucketed table") {
     val bucketSpec = Some(BucketSpec(8, Seq("i", "j"), Nil))
-    testBucketing(bucketSpec, None, Seq("i", "j"), shuffleLeft = false, shuffleRight = true)
+    testBucketing(
+      bucketSpecLeft = bucketSpec,
+      bucketSpecRight = None,
+      joinCondition = joinCondition(Seq("i", "j")),
+      shuffleLeft = false,
+      shuffleRight = true
+    )
   }
 
   test("only shuffle one side when 2 bucketed tables have different bucket number") {
     val bucketSpec1 = Some(BucketSpec(8, Seq("i", "j"), Nil))
     val bucketSpec2 = Some(BucketSpec(5, Seq("i", "j"), Nil))
-    testBucketing(bucketSpec1, bucketSpec2, Seq("i", "j"), shuffleLeft = false, shuffleRight = true)
+    testBucketing(
+      bucketSpecLeft = bucketSpec1,
+      bucketSpecRight = bucketSpec2,
+      joinCondition = joinCondition(Seq("i", "j")),
+      shuffleLeft = false,
+      shuffleRight = true
+    )
   }
 
   test("only shuffle one side when 2 bucketed tables have different bucket keys") {
     val bucketSpec1 = Some(BucketSpec(8, Seq("i"), Nil))
     val bucketSpec2 = Some(BucketSpec(8, Seq("j"), Nil))
-    testBucketing(bucketSpec1, bucketSpec2, Seq("i"), shuffleLeft = false, shuffleRight = true)
+    testBucketing(
+      bucketSpecLeft = bucketSpec1,
+      bucketSpecRight = bucketSpec2,
+      joinCondition = joinCondition(Seq("i")),
+      shuffleLeft = false,
+      shuffleRight = true
+    )
   }
 
   test("shuffle when join keys are not equal to bucket keys") {
     val bucketSpec = Some(BucketSpec(8, Seq("i"), Nil))
-    testBucketing(bucketSpec, bucketSpec, Seq("j"), shuffleLeft = true, shuffleRight = true)
+    testBucketing(
+      bucketSpecLeft = bucketSpec,
+      bucketSpecRight = bucketSpec,
+      joinCondition = joinCondition(Seq("j")),
+      shuffleLeft = true,
+      shuffleRight = true
+    )
   }
 
   test("shuffle when join 2 bucketed tables with bucketing disabled") {
     val bucketSpec = Some(BucketSpec(8, Seq("i", "j"), Nil))
     withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
-      testBucketing(bucketSpec, bucketSpec, Seq("i", "j"), shuffleLeft = true, shuffleRight = true)
+      testBucketing(
+        bucketSpecLeft = bucketSpec,
+        bucketSpecRight = bucketSpec,
+        joinCondition = joinCondition(Seq("i", "j")),
+        shuffleLeft = true,
+        shuffleRight = true
+      )
     }
+  }
+
+  test("avoid shuffle and sort when bucket and sort columns are join keys") {
+    val bucketSpec = Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j")))
+    testBucketing(
+      bucketSpecLeft = bucketSpec,
+      bucketSpecRight = bucketSpec,
+      joinCondition = joinCondition(Seq("i", "j")),
+      shuffleLeft = false,
+      shuffleRight = false,
+      sortLeft = false,
+      sortRight = false
+    )
+  }
+
+  test("avoid shuffle and sort when sort columns are a super set of join keys") {
+    val bucketSpec1 = Some(BucketSpec(8, Seq("i"), Seq("i", "j")))
+    val bucketSpec2 = Some(BucketSpec(8, Seq("i"), Seq("i", "k")))
+    testBucketing(
+      bucketSpecLeft = bucketSpec1,
+      bucketSpecRight = bucketSpec2,
+      joinCondition = joinCondition(Seq("i")),
+      shuffleLeft = false,
+      shuffleRight = false,
+      sortLeft = false,
+      sortRight = false
+    )
+  }
+
+  test("only sort one side when sort columns are different") {
+    val bucketSpec1 = Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j")))
+    val bucketSpec2 = Some(BucketSpec(8, Seq("i", "j"), Seq("k")))
+    testBucketing(
+      bucketSpecLeft = bucketSpec1,
+      bucketSpecRight = bucketSpec2,
+      joinCondition = joinCondition(Seq("i", "j")),
+      shuffleLeft = false,
+      shuffleRight = false,
+      sortLeft = false,
+      sortRight = true
+    )
+  }
+
+  test("only sort one side when sort columns are same but their ordering is different") {
+    val bucketSpec1 = Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j")))
+    val bucketSpec2 = Some(BucketSpec(8, Seq("i", "j"), Seq("j", "i")))
+    testBucketing(
+      bucketSpecLeft = bucketSpec1,
+      bucketSpecRight = bucketSpec2,
+      joinCondition = joinCondition(Seq("i", "j")),
+      shuffleLeft = false,
+      shuffleRight = false,
+      sortLeft = false,
+      sortRight = true
+    )
   }
 
   test("avoid shuffle when grouping keys are equal to bucket keys") {
@@ -349,20 +468,39 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     }
   }
 
+  test("SPARK-17698 Join predicates should not contain filter clauses") {
+    val bucketSpec = Some(BucketSpec(8, Seq("i"), Seq("i")))
+    testBucketing(
+      bucketSpecLeft = bucketSpec,
+      bucketSpecRight = bucketSpec,
+      joinType = "fullouter",
+      joinCondition = (left: DataFrame, right: DataFrame) => {
+        val joinPredicates = Seq("i").map(col => left(col) === right(col)).reduce(_ && _)
+        val filterLeft = left("i") === Literal("1")
+        val filterRight = right("i") === Literal("1")
+        joinPredicates && filterLeft && filterRight
+      },
+      shuffleLeft = false,
+      shuffleRight = false,
+      sortLeft = false,
+      sortRight = false
+    )
+  }
+
   test("error if there exists any malformed bucket files") {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
-      val tableDir = new File(hiveContext
-        .sparkSession.warehousePath, "bucketed_table")
+      val warehouseFilePath = new URI(hiveContext.sparkSession.getWarehousePath).getPath
+      val tableDir = new File(warehouseFilePath, "bucketed_table")
       Utils.deleteRecursively(tableDir)
       df1.write.parquet(tableDir.getAbsolutePath)
 
       val agged = spark.table("bucketed_table").groupBy("i").count()
-      val error = intercept[RuntimeException] {
+      val error = intercept[Exception] {
         agged.count()
       }
 
-      assert(error.toString contains "Invalid bucket file")
+      assert(error.getCause().toString contains "Invalid bucket file")
     }
   }
 
