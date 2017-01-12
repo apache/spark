@@ -46,6 +46,7 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
+from pyspark import SparkContext
 from pyspark.sql import SparkSession, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type
@@ -1875,6 +1876,28 @@ class HiveSparkSubmitTests(SparkSubmitTests):
         self.assertEqual(0, proc.returncode)
         self.assertIn("default", out.decode('utf-8'))
         self.assertTrue(os.path.exists(metastore_path))
+
+
+class SQLTests2(ReusedPySparkTestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+        cls.spark = SparkSession(cls.sc)
+
+    @classmethod
+    def tearDownClass(cls):
+        ReusedPySparkTestCase.tearDownClass()
+        cls.spark.stop()
+
+    # We can't include this test into SQLTests because we will stop class's SparkContext and cause
+    # other tests failed.
+    def test_sparksession_with_stopped_sparkcontext(self):
+        self.sc.stop()
+        sc = SparkContext('local[4]', self.sc.appName)
+        spark = SparkSession.builder.getOrCreate()
+        df = spark.createDataFrame([(1, 2)], ["c", "c"])
+        df.collect()
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
