@@ -28,6 +28,7 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.InferSchema
@@ -143,6 +144,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
+    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+      throw new AnalysisException("Hive data source can only be used with tables, you can not " +
+        "read files of Hive data source directly.")
+    }
+
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
@@ -159,8 +165,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, properties: Properties): DataFrame = {
+    assertNoSpecifiedSchema("jdbc")
     // properties should override settings in extraOptions.
-    this.extraOptions = this.extraOptions ++ properties.asScala
+    this.extraOptions ++= properties.asScala
     // explicit url and dbtable should override all
     this.extraOptions += (JDBCOptions.JDBC_URL -> url, JDBCOptions.JDBC_TABLE_NAME -> table)
     format("jdbc").load()
@@ -229,6 +236,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       table: String,
       predicates: Array[String],
       connectionProperties: Properties): DataFrame = {
+    assertNoSpecifiedSchema("jdbc")
     // connectionProperties should override settings in extraOptions.
     val params = extraOptions.toMap ++ connectionProperties.asScala.toMap
     val options = new JDBCOptions(url, table, params)
@@ -469,9 +477,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
-    Dataset.ofRows(sparkSession,
-      sparkSession.sessionState.catalog.lookupRelation(
-        sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)))
+    assertNoSpecifiedSchema("table")
+    sparkSession.table(tableName)
   }
 
   /**
@@ -536,10 +543,17 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def textFile(paths: String*): Dataset[String] = {
-    if (userSpecifiedSchema.nonEmpty) {
-      throw new AnalysisException("User specified schema not supported with `textFile`")
-    }
+    assertNoSpecifiedSchema("textFile")
     text(paths : _*).select("value").as[String](sparkSession.implicits.newStringEncoder)
+  }
+
+  /**
+   * A convenient function for schema validation in APIs.
+   */
+  private def assertNoSpecifiedSchema(operation: String): Unit = {
+    if (userSpecifiedSchema.nonEmpty) {
+      throw new AnalysisException(s"User specified schema not supported with `$operation`")
+    }
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////
@@ -550,6 +564,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   private var userSpecifiedSchema: Option[StructType] = None
 
-  private var extraOptions = new scala.collection.mutable.HashMap[String, String]
+  private val extraOptions = new scala.collection.mutable.HashMap[String, String]
 
 }
