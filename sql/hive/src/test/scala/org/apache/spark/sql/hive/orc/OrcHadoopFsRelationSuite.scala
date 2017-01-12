@@ -93,8 +93,6 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         .orc(path)
 
       // Check if this is compressed as ZLIB.
-      val conf = spark.sessionState.newHadoopConf()
-      val fs = FileSystem.getLocal(conf)
       val maybeOrcFile = new File(path).listFiles().find { f =>
         !f.getName.startsWith("_") && f.getName.endsWith(".zlib.orc")
       }
