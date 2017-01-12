@@ -18,7 +18,7 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
@@ -142,32 +142,6 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(!model.hasSummary)
   }
 
-  test("check LogLikelihood") {
-    val rdd = sc.parallelize(1 to 5).map(i => TestRow(Vectors.dense(i, i + 1)))
-    val dataset = spark.createDataFrame(rdd)
-
-    val gaussian1 = new MultivariateGaussian(Vectors.dense(Array(-1.0, -1.0)),
-      Matrices.dense(2, 2, Array(1.0, 0.0, 0.0, 1.0)))
-    val gaussian2 = new MultivariateGaussian(Vectors.dense(Array(1.0, 1.0)),
-      Matrices.dense(2, 2, Array(1.0, 0.0, 0.0, 1.0)))
-    val model = new GaussianMixtureModel("gmm", Array(0.2, 0.8), Array(gaussian1, gaussian2))
-
-    val llk = model.computeLogLikelihood(dataset)
-    assert(llk ~== -52.804472030823533 relTol 1E-6)
-    /*
-       Using the following Python code to compute the log-likelihood:
-
-       import numpy as np
-       from scipy.stats import multivariate_normal
-       data = np.array([[1, 2], [2, 3], [3, 4], [4, 5], [5, 6]])
-       pdf1 = multivariate_normal.pdf(data, mean=[-1, -1], cov=np.array([[1, 0], [0, 1]]))
-       pdf2 = multivariate_normal.pdf(data, mean=[1, 1], cov=np.array([[1, 0], [0, 1]]))
-       pdf = pdf1 * 0.2 + pdf2 * 0.8
-       > sum(np.log(pdf))
-        -52.804472030823533
-     */
-  }
-
   test("read/write") {
     def checkModelData(model: GaussianMixtureModel, model2: GaussianMixtureModel): Unit = {
       assert(model.weights === model2.weights)
@@ -233,6 +207,10 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
                 [,1]     [,2]
       [1,] 0.2961543 0.160783
       [2,] 0.1607830 1.008878
+
+      model$loglik
+
+      [1] -46.89499
      */
     val weights = Array(0.5333333, 0.4666667)
     val means = Array(Vectors.dense(10.363673, 9.897081), Vectors.dense(0.11731091, -0.06192351))
@@ -245,6 +223,9 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val expected = new GaussianMixtureModel("dummy", weights, gaussians)
     val actual = new GaussianMixture().setK(2).setSeed(seed).fit(rDataset)
     modelEquals(expected, actual)
+
+    val llk = expected.computeLogLikelihood(rDataset)
+    assert(llk ~== -46.89499 absTol 1E-6)
   }
 
   test("upper triangular matrix unpacking") {
