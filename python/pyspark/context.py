@@ -296,6 +296,13 @@ class SparkContext(object):
         self.stop()
 
     @classmethod
+    def get(cls):
+        with SparkContext._lock:
+            if SparkContext._active_spark_context.isStopped():
+                SparkContext._active_spark_context = None
+            return SparkContext._active_spark_context
+
+    @classmethod
     def getOrCreate(cls, conf=None):
         """
         Get or instantiate a SparkContext and register it as a singleton object.
@@ -305,7 +312,7 @@ class SparkContext(object):
         with SparkContext._lock:
             if SparkContext._active_spark_context is None:
                 SparkContext(conf=conf or SparkConf())
-            return SparkContext._active_spark_context
+            return SparkContext.get()
 
     def setLogLevel(self, logLevel):
         """
@@ -369,6 +376,15 @@ class SparkContext(object):
         Default min number of partitions for Hadoop RDDs when not given by user
         """
         return self._jsc.sc().defaultMinPartitions()
+
+    def isStopped(self):
+        if getattr(self, "_jsc", None):
+            if self._jsc.isStopped():
+                self._jsc = None
+                return True
+            else:
+                return False
+        return True
 
     def stop(self):
         """
