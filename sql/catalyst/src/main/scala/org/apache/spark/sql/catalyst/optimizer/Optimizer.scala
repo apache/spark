@@ -1300,7 +1300,9 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
  */
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Cast(e, dataType) if e.dataType == dataType => e
+    case Cast(e, dataType) if e.dataType == dataType ||
+        (e.dataType.getClass == dataType.getClass &&
+            e.dataType.asNullable == dataType) => e
   }
 }
 
