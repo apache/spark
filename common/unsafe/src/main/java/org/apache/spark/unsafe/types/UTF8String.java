@@ -868,7 +868,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     final byte separator = '.';
-    final long stopValue = Long.MIN_VALUE / 10;
+    final int radix = 10;
+    final long stopValue = Long.MIN_VALUE / radix;
     long result = 0;
 
     while (offset < numBytes) {
@@ -889,7 +890,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         throw new NumberFormatException(toString());
       }
 
-      result = result * 10 - digit;
+      result = result * radix - digit;
       // Since the previous result is less than or equal to stopValue(Long.MIN_VALUE / 10), we can
       // just use `result > 0` to check overflow. If result overflows, we should stop and throw
       // exception.
@@ -944,7 +945,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     final byte separator = '.';
-    final int stopValue = Integer.MIN_VALUE / 10;
+    final int radix = 10;
+    final int stopValue = Integer.MIN_VALUE / radix;
     int result = 0;
 
     while (offset < numBytes) {
@@ -965,7 +967,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         throw new NumberFormatException(toString());
       }
 
-      result = result * 10 - digit;
+      result = result * radix - digit;
       // Since the previous result is less than or equal to stopValue(Long.MIN_VALUE / 10), we can
       // just use `result > 0` to check overflow. If result overflows, we should stop and throw
       // exception.
