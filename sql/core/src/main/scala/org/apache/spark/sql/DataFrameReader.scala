@@ -61,7 +61,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def schema(schema: StructType): DataFrameReader = {
-    this.userSpecifiedSchema = Option(schema)
+    this.userSpecifiedSchema = Option(schema.asNullable)
     this
   }
 

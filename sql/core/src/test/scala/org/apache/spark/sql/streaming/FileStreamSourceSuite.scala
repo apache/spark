@@ -1191,6 +1191,18 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       newSource.getBatch(None, FileStreamSourceOffset(1))
     }
   }
+
+  test("Force user specified schema to the nullable") {
+    withTempDir { src =>
+      stringToFile(new File(src, "1"), "a\nb\nc")
+      val userSchema =
+        StructType(StructField("a", StringType, nullable = false) :: Nil)
+      val schema = createFileStreamSourceAndGetSchema(
+        format = Some("parquet"), path = Some(src.getCanonicalPath), schema = Some(userSchema))
+      assert(schema != userSchema)
+      assert(schema === userSchema.asNullable)
+    }
+  }
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
