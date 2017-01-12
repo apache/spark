@@ -2296,7 +2296,7 @@ setMethod("n", signature(x = "Column"),
 #' A pattern could be for instance \preformatted{dd.MM.yyyy} and could return a string like '18.03.1993'. All
 #' pattern letters of \code{java.text.SimpleDateFormat} can be used.
 #'
-#' NOTE: Use when ever possible specialized functions like \code{year}. These benefit from a
+#' Note: Use when ever possible specialized functions like \code{year}. These benefit from a
 #' specialized implementation.
 #'
 #' @param y Column to compute on.
@@ -2341,7 +2341,7 @@ setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
 #' Locate the position of the first occurrence of substr column in the given string.
 #' Returns null if either of the arguments are null.
 #'
-#' NOTE: The position is not zero based, but 1 based index. Returns 0 if substr
+#' Note: The position is not zero based, but 1 based index. Returns 0 if substr
 #' could not be found in str.
 #'
 #' @param y column to check
@@ -2779,7 +2779,8 @@ setMethod("window", signature(x = "Column"),
 #' locate
 #'
 #' Locate the position of the first occurrence of substr.
-#' NOTE: The position is not zero based, but 1 based index. Returns 0 if substr
+#'
+#' Note: The position is not zero based, but 1 based index. Returns 0 if substr
 #' could not be found in str.
 #'
 #' @param substr a character string to be matched.
@@ -3149,7 +3150,8 @@ setMethod("cume_dist",
 #' The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
 #' sequence when there are ties. That is, if you were ranking a competition using dense_rank
 #' and had three people tie for second place, you would say that all three were in second
-#' place and that the next person came in third.
+#' place and that the next person came in third. Rank would give me sequential numbers, making
+#' the person that came in third place (after the ties) would register as coming in fifth.
 #'
 #' This is equivalent to the \code{DENSE_RANK} function in SQL.
 #'
@@ -3320,10 +3322,11 @@ setMethod("percent_rank",
 #'
 #' Window function: returns the rank of rows within a window partition.
 #'
-#' The difference between rank and denseRank is that denseRank leaves no gaps in ranking
-#' sequence when there are ties. That is, if you were ranking a competition using denseRank
+#' The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
+#' sequence when there are ties. That is, if you were ranking a competition using dense_rank
 #' and had three people tie for second place, you would say that all three were in second
-#' place and that the next person came in third.
+#' place and that the next person came in third. Rank would give me sequential numbers, making
+#' the person that came in third place (after the ties) would register as coming in fifth.
 #'
 #' This is equivalent to the RANK function in SQL.
 #'

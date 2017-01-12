@@ -39,11 +39,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.json.JacksonGenerator
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
-import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand, GlobalTempView, LocalTempView}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.python.EvaluatePython
@@ -68,7 +69,7 @@ private[sql] object Dataset {
 /**
  * A Dataset is a strongly typed collection of domain-specific objects that can be transformed
  * in parallel using functional or relational operations. Each Dataset also has an untyped view
- * called a [[DataFrame]], which is a Dataset of [[Row]].
+ * called a `DataFrame`, which is a Dataset of [[Row]].
  *
  * Operations available on Datasets are divided into transformations and actions. Transformations
  * are the ones that produce new Datasets, and actions are the ones that trigger computation and
@@ -360,10 +361,10 @@ class Dataset[T] private[sql](
    * method used to map columns depend on the type of `U`:
    *  - When `U` is a class, fields for the class will be mapped to columns of the same name
    *    (case sensitivity is determined by `spark.sql.caseSensitive`).
-   *  - When `U` is a tuple, the columns will be be mapped by ordinal (i.e. the first column will
+   *  - When `U` is a tuple, the columns will be mapped by ordinal (i.e. the first column will
    *    be assigned to `_1`).
    *  - When `U` is a primitive type (i.e. String, Int, etc), then the first column of the
-   *    [[DataFrame]] will be used.
+   *    `DataFrame` will be used.
    *
    * If the schema of the Dataset does not match the desired `U` type, you can use `select`
    * along with `alias` or `as` to rearrange or rename as required.
@@ -377,7 +378,7 @@ class Dataset[T] private[sql](
 
   /**
    * Converts this strongly typed collection of data to generic `DataFrame` with columns renamed.
-   * This can be quite convenient in conversion from an RDD of tuples into a [[DataFrame]] with
+   * This can be quite convenient in conversion from an RDD of tuples into a `DataFrame` with
    * meaningful names. For example:
    * {{{
    *   val rdd: RDD[(Int, String)] = ...
@@ -472,8 +473,8 @@ class Dataset[T] private[sql](
   /**
    * Returns true if this Dataset contains one or more sources that continuously
    * return data as it arrives. A Dataset that reads data from a streaming source
-   * must be executed as a [[StreamingQuery]] using the `start()` method in
-   * [[DataStreamWriter]]. Methods that return a single answer, e.g. `count()` or
+   * must be executed as a `StreamingQuery` using the `start()` method in
+   * `DataStreamWriter`. Methods that return a single answer, e.g. `count()` or
    * `collect()`, will throw an [[AnalysisException]] when there is a streaming
    * source present.
    *
@@ -485,7 +486,10 @@ class Dataset[T] private[sql](
   def isStreaming: Boolean = logicalPlan.isStreaming
 
   /**
-   * Returns a checkpointed version of this Dataset.
+   * Eagerly checkpoint a Dataset and return the new Dataset. Checkpointing can be used to truncate
+   * the logical plan of this Dataset, which is especially useful in iterative algorithms where the
+   * plan may grow exponentially. It will be saved to files inside the checkpoint
+   * directory set with `SparkContext#setCheckpointDir`.
    *
    * @group basic
    * @since 2.1.0
@@ -495,7 +499,10 @@ class Dataset[T] private[sql](
   def checkpoint(): Dataset[T] = checkpoint(eager = true)
 
   /**
-   * Returns a checkpointed version of this Dataset.
+   * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
+   * logical plan of this Dataset, which is especially useful in iterative algorithms where the
+   * plan may grow exponentially. It will be saved to files inside the checkpoint
+   * directory set with `SparkContext#setCheckpointDir`.
    *
    * @group basic
    * @since 2.1.0
@@ -679,7 +686,7 @@ class Dataset[T] private[sql](
   def stat: DataFrameStatFunctions = new DataFrameStatFunctions(toDF())
 
   /**
-   * Join with another [[DataFrame]].
+   * Join with another `DataFrame`.
    *
    * Behaves as an INNER JOIN and requires a subsequent join predicate.
    *
@@ -693,7 +700,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Inner equi-join with another [[DataFrame]] using the given column.
+   * Inner equi-join with another `DataFrame` using the given column.
    *
    * Different from other join functions, the join column will only appear once in the output,
    * i.e. similar to SQL's `JOIN USING` syntax.
@@ -707,7 +714,7 @@ class Dataset[T] private[sql](
    * @param usingColumn Name of the column to join on. This column must exist on both sides.
    *
    * @note If you perform a self-join using this function without aliasing the input
-   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   * `DataFrame`s, you will NOT be able to reference any columns after the join, since
    * there is no way to disambiguate which side of the join you would like to reference.
    *
    * @group untypedrel
@@ -718,7 +725,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Inner equi-join with another [[DataFrame]] using the given columns.
+   * Inner equi-join with another `DataFrame` using the given columns.
    *
    * Different from other join functions, the join columns will only appear once in the output,
    * i.e. similar to SQL's `JOIN USING` syntax.
@@ -732,7 +739,7 @@ class Dataset[T] private[sql](
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
    *
    * @note If you perform a self-join using this function without aliasing the input
-   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   * `DataFrame`s, you will NOT be able to reference any columns after the join, since
    * there is no way to disambiguate which side of the join you would like to reference.
    *
    * @group untypedrel
@@ -743,17 +750,21 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Equi-join with another [[DataFrame]] using the given columns.
+   * Equi-join with another `DataFrame` using the given columns. A cross join with a predicate
+   * is specified as an inner join. If you would explicitly like to perform a cross join use the
+   * `crossJoin` method.
    *
    * Different from other join functions, the join columns will only appear once in the output,
    * i.e. similar to SQL's `JOIN USING` syntax.
    *
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
-   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+   * @param joinType Type of join to perform. Default `inner`. Must be one of:
+   *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
+   *                 `right`, `right_outer`, `left_semi`, `left_anti`.
    *
    * @note If you perform a self-join using this function without aliasing the input
-   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   * `DataFrame`s, you will NOT be able to reference any columns after the join, since
    * there is no way to disambiguate which side of the join you would like to reference.
    *
    * @group untypedrel
@@ -770,13 +781,13 @@ class Dataset[T] private[sql](
       Join(
         joined.left,
         joined.right,
-        UsingJoin(JoinType(joinType), usingColumns.map(UnresolvedAttribute(_))),
+        UsingJoin(JoinType(joinType), usingColumns),
         None)
     }
   }
 
   /**
-   * Inner join with another [[DataFrame]], using the given join expression.
+   * Inner join with another `DataFrame`, using the given join expression.
    *
    * {{{
    *   // The following two are equivalent:
@@ -790,7 +801,7 @@ class Dataset[T] private[sql](
   def join(right: Dataset[_], joinExprs: Column): DataFrame = join(right, joinExprs, "inner")
 
   /**
-   * Join with another [[DataFrame]], using the given join expression. The following performs
+   * Join with another `DataFrame`, using the given join expression. The following performs
    * a full outer join between `df1` and `df2`.
    *
    * {{{
@@ -805,7 +816,9 @@ class Dataset[T] private[sql](
    *
    * @param right Right side of the join.
    * @param joinExprs Join expression.
-   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+   * @param joinType Type of join to perform. Default `inner`. Must be one of:
+   *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
+   *                 `right`, `right_outer`, `left_semi`, `left_anti`.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -854,7 +867,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Explicit cartesian join with another [[DataFrame]].
+   * Explicit cartesian join with another `DataFrame`.
    *
    * @param right Right side of the join operation.
    *
@@ -869,7 +882,7 @@ class Dataset[T] private[sql](
 
   /**
    * :: Experimental ::
-   * Joins this Dataset returning a [[Tuple2]] for each pair where `condition` evaluates to
+   * Joins this Dataset returning a `Tuple2` for each pair where `condition` evaluates to
    * true.
    *
    * This is similar to the relation `join` function with one important difference in the
@@ -882,7 +895,9 @@ class Dataset[T] private[sql](
    *
    * @param other Right side of the join.
    * @param condition Join expression.
-   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+   * @param joinType Type of join to perform. Default `inner`. Must be one of:
+   *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
+   *                 `right`, `right_outer`, `left_semi`, `left_anti`.
    *
    * @group typedrel
    * @since 1.6.0
@@ -950,7 +965,7 @@ class Dataset[T] private[sql](
 
   /**
    * :: Experimental ::
-   * Using inner equi-join to join this Dataset returning a [[Tuple2]] for each pair
+   * Using inner equi-join to join this Dataset returning a `Tuple2` for each pair
    * where `condition` evaluates to true.
    *
    * @param other Right side of the join.
@@ -1865,21 +1880,7 @@ class Dataset[T] private[sql](
    * Returns a new Dataset by adding a column with metadata.
    */
   private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val output = queryExecution.analyzed.output
-    val shouldReplace = output.exists(f => resolver(f.name, colName))
-    if (shouldReplace) {
-      val columns = output.map { field =>
-        if (resolver(field.name, colName)) {
-          col.as(colName, metadata)
-        } else {
-          Column(field)
-        }
-      }
-      select(columns : _*)
-    } else {
-      select(Column("*"), col.as(colName, metadata))
-    }
+    withColumn(colName, col.as(colName, metadata))
   }
 
   /**
@@ -2103,9 +2104,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def head(n: Int): Array[T] = withTypedCallback("head", limit(n)) { df =>
-    df.collect(needCallback = false)
-  }
+  def head(n: Int): Array[T] = withAction("head", limit(n).queryExecution)(collectFromPlan)
 
   /**
    * Returns the first row.
@@ -2226,7 +2225,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[DataFrame]] that contains the result of applying a serialized R function
+   * Returns a new `DataFrame` that contains the result of applying a serialized R function
    * `func` to each partition.
    */
   private[sql] def mapPartitionsInR(
@@ -2332,7 +2331,7 @@ class Dataset[T] private[sql](
   def takeAsList(n: Int): java.util.List[T] = java.util.Arrays.asList(take(n) : _*)
 
   /**
-   * Returns an array that contains all of [[Row]]s in this Dataset.
+   * Returns an array that contains all rows in this Dataset.
    *
    * Running collect requires moving all the data into the application's driver process, and
    * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
@@ -2342,10 +2341,10 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def collect(): Array[T] = collect(needCallback = true)
+  def collect(): Array[T] = withAction("collect", queryExecution)(collectFromPlan)
 
   /**
-   * Returns a Java list that contains all of [[Row]]s in this Dataset.
+   * Returns a Java list that contains all rows in this Dataset.
    *
    * Running collect requires moving all the data into the application's driver process, and
    * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
@@ -2353,27 +2352,13 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def collectAsList(): java.util.List[T] = withCallback("collectAsList", toDF()) { _ =>
-    withNewExecutionId {
-      val values = queryExecution.executedPlan.executeCollect().map(boundEnc.fromRow)
-      java.util.Arrays.asList(values : _*)
-    }
-  }
-
-  private def collect(needCallback: Boolean): Array[T] = {
-    def execute(): Array[T] = withNewExecutionId {
-      queryExecution.executedPlan.executeCollect().map(boundEnc.fromRow)
-    }
-
-    if (needCallback) {
-      withCallback("collect", toDF())(_ => execute())
-    } else {
-      execute()
-    }
+  def collectAsList(): java.util.List[T] = withAction("collectAsList", queryExecution) { plan =>
+    val values = collectFromPlan(plan)
+    java.util.Arrays.asList(values : _*)
   }
 
   /**
-   * Return an iterator that contains all of [[Row]]s in this Dataset.
+   * Return an iterator that contains all rows in this Dataset.
    *
    * The iterator will consume as much memory as the largest partition in this Dataset.
    *
@@ -2384,9 +2369,9 @@ class Dataset[T] private[sql](
    * @group action
    * @since 2.0.0
    */
-  def toLocalIterator(): java.util.Iterator[T] = withCallback("toLocalIterator", toDF()) { _ =>
-    withNewExecutionId {
-      queryExecution.executedPlan.executeToIterator().map(boundEnc.fromRow).asJava
+  def toLocalIterator(): java.util.Iterator[T] = {
+    withAction("toLocalIterator", queryExecution) { plan =>
+      plan.executeToIterator().map(boundEnc.fromRow).asJava
     }
   }
 
@@ -2395,8 +2380,8 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def count(): Long = withCallback("count", groupBy().count()) { df =>
-    df.collect(needCallback = false).head.getLong(0)
+  def count(): Long = withAction("count", groupBy().count().queryExecution) { plan =>
+    plan.executeCollect().head.getLong(0)
   }
 
   /**
@@ -2440,7 +2425,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new Dataset that has exactly `numPartitions` partitions.
-   * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
+   * Similar to coalesce defined on an `RDD`, this operation results in a narrow dependency, e.g.
    * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
    * the 100 new partitions will claim 10 of the current partitions.
    *
@@ -2530,7 +2515,7 @@ class Dataset[T] private[sql](
   def unpersist(): this.type = unpersist(blocking = false)
 
   /**
-   * Represents the content of the Dataset as an [[RDD]] of [[T]].
+   * Represents the content of the Dataset as an `RDD` of [[T]].
    *
    * @group basic
    * @since 1.6.0
@@ -2544,14 +2529,14 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns the content of the Dataset as a [[JavaRDD]] of [[T]]s.
+   * Returns the content of the Dataset as a `JavaRDD` of [[T]]s.
    * @group basic
    * @since 1.6.0
    */
   def toJavaRDD: JavaRDD[T] = rdd.toJavaRDD()
 
   /**
-   * Returns the content of the Dataset as a [[JavaRDD]] of [[T]]s.
+   * Returns the content of the Dataset as a `JavaRDD` of [[T]]s.
    * @group basic
    * @since 1.6.0
    */
@@ -2577,7 +2562,7 @@ class Dataset[T] private[sql](
    * created it, i.e. it will be automatically dropped when the session terminates. It's not
    * tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
    *
-   * @throws AnalysisException if the view name already exists
+   * @throws AnalysisException if the view name is invalid or already exists
    *
    * @group basic
    * @since 2.0.0
@@ -2609,7 +2594,7 @@ class Dataset[T] private[sql](
    * preserved database `_global_temp`, and we must use the qualified name to refer a global temp
    * view, e.g. `SELECT * FROM _global_temp.view1`.
    *
-   * @throws AnalysisException if the view name already exists
+   * @throws AnalysisException if the view name is invalid or already exists
    *
    * @group basic
    * @since 2.1.0
@@ -2624,8 +2609,14 @@ class Dataset[T] private[sql](
       replace: Boolean,
       global: Boolean): CreateViewCommand = {
     val viewType = if (global) GlobalTempView else LocalTempView
+
+    val tableIdentifier = try {
+      sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName)
+    } catch {
+      case _: ParseException => throw new AnalysisException(s"Invalid view name: $viewName")
+    }
     CreateViewCommand(
-      name = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
+      name = tableIdentifier,
       userSpecifiedColumns = Nil,
       comment = None,
       properties = Map.empty,
@@ -2763,38 +2754,30 @@ class Dataset[T] private[sql](
    * Wrap a Dataset action to track the QueryExecution and time cost, then report to the
    * user-registered callback functions.
    */
-  private def withCallback[U](name: String, df: DataFrame)(action: DataFrame => U) = {
+  private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     try {
-      df.queryExecution.executedPlan.foreach { plan =>
+      qe.executedPlan.foreach { plan =>
         plan.resetMetrics()
       }
       val start = System.nanoTime()
-      val result = action(df)
+      val result = SQLExecution.withNewExecutionId(sparkSession, qe) {
+        action(qe.executedPlan)
+      }
       val end = System.nanoTime()
-      sparkSession.listenerManager.onSuccess(name, df.queryExecution, end - start)
+      sparkSession.listenerManager.onSuccess(name, qe, end - start)
       result
     } catch {
       case e: Exception =>
-        sparkSession.listenerManager.onFailure(name, df.queryExecution, e)
+        sparkSession.listenerManager.onFailure(name, qe, e)
         throw e
     }
   }
 
-  private def withTypedCallback[A, B](name: String, ds: Dataset[A])(action: Dataset[A] => B) = {
-    try {
-      ds.queryExecution.executedPlan.foreach { plan =>
-        plan.resetMetrics()
-      }
-      val start = System.nanoTime()
-      val result = action(ds)
-      val end = System.nanoTime()
-      sparkSession.listenerManager.onSuccess(name, ds.queryExecution, end - start)
-      result
-    } catch {
-      case e: Exception =>
-        sparkSession.listenerManager.onFailure(name, ds.queryExecution, e)
-        throw e
-    }
+  /**
+   * Collect all elements from a spark plan.
+   */
+  private def collectFromPlan(plan: SparkPlan): Array[T] = {
+    plan.executeCollect().map(boundEnc.fromRow)
   }
 
   private def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {

@@ -80,7 +80,7 @@ class GaussianMixtureModel @Since("1.3.0") (
   }
 
   /**
-   * Java-friendly version of [[predict()]]
+   * Java-friendly version of `predict()`
    */
   @Since("1.4.0")
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =

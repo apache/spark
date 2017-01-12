@@ -42,8 +42,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 /**
- * [[FileFormat]] for reading ORC files. If this is moved or renamed, please update
- * [[DataSource]]'s backwardCompatibilityMap.
+ * `FileFormat` for reading ORC files. If this is moved or renamed, please update
+ * `DataSource`'s backwardCompatibilityMap.
  */
 class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable {
 
@@ -239,10 +239,7 @@ private[orc] class OrcOutputWriter(
     ).asInstanceOf[RecordWriter[NullWritable, Writable]]
   }
 
-  override def write(row: Row): Unit =
-    throw new UnsupportedOperationException("call writeInternal")
-
-  override protected[sql] def writeInternal(row: InternalRow): Unit = {
+  override def write(row: InternalRow): Unit = {
     recordWriter.write(NullWritable.get(), serializer.serialize(row))
   }
 

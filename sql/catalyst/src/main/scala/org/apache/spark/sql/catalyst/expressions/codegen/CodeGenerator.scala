@@ -93,10 +93,10 @@ class CodegenContext {
    * This is for minor objects not to store the object into field but refer it from the references
    * field at the time of use because number of fields in class is limited so we should reduce it.
    */
-  def addReferenceObj(obj: Any): String = {
+  def addReferenceMinorObj(obj: Any, className: String = null): String = {
     val idx = references.length
     references += obj
-    val clsName = obj.getClass.getName
+    val clsName = Option(className).getOrElse(obj.getClass.getName)
     s"(($clsName) references[$idx])"
   }
 
@@ -482,8 +482,13 @@ class CodegenContext {
     case FloatType => s"(java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2"
     case DoubleType => s"(java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
+    case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
+    case array: ArrayType => genComp(array, c1, c2) + " == 0"
+    case struct: StructType => genComp(struct, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
-    case other => s"$c1.equals($c2)"
+    case _ =>
+      throw new IllegalArgumentException(
+        "cannot generate equality code for un-comparable type: " + dataType.simpleString)
   }
 
   /**
@@ -513,6 +518,11 @@ class CodegenContext {
       val funcCode: String =
         s"""
           public int $compareFunc(ArrayData a, ArrayData b) {
+            // when comparing unsafe arrays, try equals first as it compares the binary directly
+            // which is very fast.
+            if (a instanceof UnsafeArrayData && b instanceof UnsafeArrayData && a.equals(b)) {
+              return 0;
+            }
             int lengthA = a.numElements();
             int lengthB = b.numElements();
             int $minLength = (lengthA > lengthB) ? lengthB : lengthA;
@@ -552,6 +562,11 @@ class CodegenContext {
       val funcCode: String =
         s"""
           public int $compareFunc(InternalRow a, InternalRow b) {
+            // when comparing unsafe rows, try equals first as it compares the binary directly
+            // which is very fast.
+            if (a instanceof UnsafeRow && b instanceof UnsafeRow && a.equals(b)) {
+              return 0;
+            }
             InternalRow i = null;
             $comparisons
             return 0;
@@ -562,7 +577,8 @@ class CodegenContext {
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
-      throw new IllegalArgumentException("cannot generate compare code for un-comparable type")
+      throw new IllegalArgumentException(
+        "cannot generate compare code for un-comparable type: " + dataType.simpleString)
   }
 
   /**
@@ -625,8 +641,24 @@ class CodegenContext {
     splitExpressions(expressions, "apply", ("InternalRow", row) :: Nil)
   }
 
-  private def splitExpressions(
-      expressions: Seq[String], funcName: String, arguments: Seq[(String, String)]): String = {
+  /**
+   * Splits the generated code of expressions into multiple functions, because function has
+   * 64kb code size limit in JVM
+   *
+   * @param expressions the codes to evaluate expressions.
+   * @param funcName the split function name base.
+   * @param arguments the list of (type, name) of the arguments of the split function.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
+   */
+  def splitExpressions(
+      expressions: Seq[String],
+      funcName: String,
+      arguments: Seq[(String, String)],
+      returnType: String = "void",
+      makeSplitFunction: String => String = identity,
+      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
@@ -647,18 +679,19 @@ class CodegenContext {
       blocks.head
     } else {
       val func = freshName(funcName)
+      val argString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
       val functions = blocks.zipWithIndex.map { case (body, i) =>
         val name = s"${func}_$i"
         val code = s"""
-           |private void $name(${arguments.map { case (t, name) => s"$t $name" }.mkString(", ")}) {
-           |  $body
+           |private $returnType $name($argString) {
+           |  ${makeSplitFunction(body)}
            |}
          """.stripMargin
         addNewFunction(name, code)
         name
       }
 
-      functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")});").mkString("\n")
+      foldFunctions(functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")})"))
     }
   }
 

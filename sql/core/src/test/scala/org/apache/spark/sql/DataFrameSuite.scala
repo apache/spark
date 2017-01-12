@@ -1518,14 +1518,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-12982: Add table name validation in temp table registration") {
     val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
-    // invalid table name test as below
-    intercept[AnalysisException](df.createOrReplaceTempView("t~"))
-    // valid table name test as below
-    df.createOrReplaceTempView("table1")
-    // another invalid table name test as below
-    intercept[AnalysisException](df.createOrReplaceTempView("#$@sum"))
-    // another invalid table name test as below
-    intercept[AnalysisException](df.createOrReplaceTempView("table!#"))
+    // invalid table names
+    Seq("11111", "t~", "#$@sum", "table!#").foreach { name =>
+      val m = intercept[AnalysisException](df.createOrReplaceTempView(name)).getMessage
+      assert(m.contains(s"Invalid view name: $name"))
+    }
+
+    // valid table names
+    Seq("table1", "`11111`", "`t~`", "`#$@sum`", "`table!#`").foreach { name =>
+      df.createOrReplaceTempView(name)
+    }
   }
 
   test("assertAnalyzed shouldn't replace original stack trace") {
@@ -1695,6 +1697,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       expr = "_2 * 3 + coalesce(_1, 0)", expectedNonNullableColumns = Seq("_2"))
     verifyNullabilityInFilterExec(df,
       expr = "cast((_1 + _2) as boolean)", expectedNonNullableColumns = Seq("_1", "_2"))
+  }
+
+  test("SPARK-17897: Fixed IsNotNull Constraint Inference Rule") {
+    val data = Seq[java.lang.Integer](1, null).toDF("key")
+    checkAnswer(data.filter(!$"key".isNotNull), Row(null))
+    checkAnswer(data.filter(!(- $"key").isNotNull), Row(null))
   }
 
   test("SPARK-17957: outer join + na.fill") {

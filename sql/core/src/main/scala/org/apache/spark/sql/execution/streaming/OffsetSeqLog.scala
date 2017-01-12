@@ -74,7 +74,7 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
 
     // write metadata
     out.write('\n')
-    out.write(offsetSeq.metadata.getOrElse("").getBytes(UTF_8))
+    out.write(offsetSeq.metadata.map(_.json).getOrElse("").getBytes(UTF_8))
 
     // write offsets, one per line
     offsetSeq.offsets.map(_.map(_.json)).foreach { offset =>

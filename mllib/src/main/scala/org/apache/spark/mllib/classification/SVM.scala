@@ -124,7 +124,7 @@ object SVMModel extends Loader[SVMModel] {
 
 /**
  * Train a Support Vector Machine (SVM) using Stochastic Gradient Descent. By default L2
- * regularization is used, which can be changed via [[SVMWithSGD.optimizer]].
+ * regularization is used, which can be changed via `SVMWithSGD.optimizer`.
  *
  * @note Labels used in SVM should be {0, 1}.
  */

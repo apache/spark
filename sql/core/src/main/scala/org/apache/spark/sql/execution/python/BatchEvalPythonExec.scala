@@ -119,26 +119,23 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       val pickle = new Pickler(needConversion)
       // Input iterator to Python: input rows are grouped so we send them in batches to Python.
       // For each row, add it to the queue.
-      val inputIterator = iter.grouped(100).map { inputRows =>
-        val toBePickled = inputRows.map { inputRow =>
-          queue.add(inputRow.asInstanceOf[UnsafeRow])
-          val row = projection(inputRow)
-          if (needConversion) {
-            EvaluatePython.toJava(row, schema)
-          } else {
-            // fast path for these types that does not need conversion in Python
-            val fields = new Array[Any](row.numFields)
-            var i = 0
-            while (i < row.numFields) {
-              val dt = dataTypes(i)
-              fields(i) = EvaluatePython.toJava(row.get(i, dt), dt)
-              i += 1
-            }
-            fields
+      val inputIterator = iter.map { inputRow =>
+        queue.add(inputRow.asInstanceOf[UnsafeRow])
+        val row = projection(inputRow)
+        if (needConversion) {
+          EvaluatePython.toJava(row, schema)
+        } else {
+          // fast path for these types that does not need conversion in Python
+          val fields = new Array[Any](row.numFields)
+          var i = 0
+          while (i < row.numFields) {
+            val dt = dataTypes(i)
+            fields(i) = EvaluatePython.toJava(row.get(i, dt), dt)
+            i += 1
           }
-        }.toArray
-        pickle.dumps(toBePickled)
-      }
+          fields
+        }
+      }.grouped(100).map(x => pickle.dumps(x.toArray))
 
       val context = TaskContext.get()
 
