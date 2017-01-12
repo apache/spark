@@ -538,6 +538,48 @@ class RowMatrix @Since("1.0.0") (
    */
   @Since("1.5.0")
   def tallSkinnyQR(computeQ: Boolean = false): QRDecomposition[RowMatrix, Matrix] = {
+    /**
+     * Solve Q*R = A for Q using forward substitution where A = [[RowMatrix]]
+     * and R is upper-triangular. If the (i,i)th entry of R is close to 0, then
+     * we set the ith column of Q to 0, as well.
+     *
+     * @param R upper-triangular matrix.
+     * @return Q [[RowMatrix]] such that Q*R = A.
+     */
+    def forwardSolve(R: breeze.linalg.DenseMatrix[Double]):
+    RowMatrix = {
+      val m = numRows()
+      val n = R.cols
+      val dim = math.min(R.rows, n)
+      val Bb = rows.context.broadcast(R(0 until dim, 0 until dim).toArray)
+
+      val AB = rows.mapPartitions { iter =>
+        val LHS = Bb.value
+        val LHSMat = Matrices.dense(dim, dim, LHS).asBreeze
+        val FNorm = Vectors.norm(Vectors.dense(LHS), 2.0)
+        iter.map { row =>
+          val RHS = row.asBreeze.toArray
+          val v = BDV.zeros[Double] (dim)
+          // We don't use LAPACK here since it will be numerically unstable if
+          // R is singular. If R is singular, we set the corresponding
+          // column of Q to 0.
+          for ( i <- 0 until dim) {
+            if (math.abs(LHSMat(i, i)) > 1.0e-15 * FNorm) {
+              var sum = 0.0
+              for ( j <- 0 until i) {
+                sum += LHSMat(j, i) * v(j)
+              }
+              v(i) = (RHS(i) - sum) / LHSMat(i, i)
+            } else {
+              v(i) = 0.0
+            }
+          }
+          Vectors.fromBreeze(v)
+        }
+      }
+      new RowMatrix(AB, m, dim)
+    }
+
     val col = numCols().toInt
     // split rows horizontally into smaller matrices, and compute QR for each of them
     val blockQRs = rows.retag(classOf[Vector]).glom().filter(_.length != 0).map { partRows =>
@@ -559,8 +601,7 @@ class RowMatrix @Since("1.0.0") (
     val finalR = Matrices.fromBreeze(combinedR.toDenseMatrix)
     val finalQ = if (computeQ) {
       try {
-        val invR = inv(combinedR)
-        this.multiply(Matrices.fromBreeze(invR))
+        forwardSolve(combinedR)
       } catch {
         case err: MatrixSingularException =>
           logWarning("R is not invertible and return Q as null")
