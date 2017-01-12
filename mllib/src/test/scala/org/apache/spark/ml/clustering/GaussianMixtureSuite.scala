@@ -225,7 +225,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     modelEquals(expected, actual)
 
     val llk = expected.computeLogLikelihood(rDataset)
-    assert(llk ~== -46.89499 absTol 1E-6)
+    assert(llk ~== -46.89499 absTol 1E-5)
   }
 
   test("upper triangular matrix unpacking") {
