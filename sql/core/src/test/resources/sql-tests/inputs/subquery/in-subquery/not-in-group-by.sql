@@ -51,3 +51,61 @@ create temporary view t3 as select * from values
 -- correlated IN subquery
 -- GROUP BY in parent side
 -- TC 01.01
+SELECT t1a,
+       Avg(t1b)
+FROM   t1
+WHERE  t1a NOT IN (SELECT t2a
+                   FROM   t2)
+GROUP  BY t1a;
+
+-- TC 01.02
+SELECT t1a,
+       Sum(DISTINCT( t1b ))
+FROM   t1
+WHERE  t1d NOT IN (SELECT t2d
+                   FROM   t2
+                   WHERE  t1h < t2h)
+GROUP  BY t1a;
+
+-- TC 01.03
+SELECT *
+FROM   t1
+WHERE  t1b NOT IN (SELECT Max(t2b)
+                   FROM   t2
+                   WHERE  t2h NOT IN (SELECT t1i
+                                      FROM   t1
+                                      WHERE  t1d > t2d)
+                   GROUP  BY t2a);
+
+-- TC 01.04
+SELECT Count(*)
+FROM   (SELECT *
+        FROM   t2
+        WHERE  t2a NOT IN (SELECT t3a
+                           FROM   t3
+                           WHERE  t3h != t2h)) t2
+WHERE  t2b NOT IN (SELECT Min(t2b)
+                   FROM   t2
+                   WHERE  t2b = t2b
+                   GROUP  BY t2c);
+
+-- TC 01.05
+SELECT t1a,
+       max(t1b)
+FROM   t1
+WHERE  t1c NOT IN (SELECT Max(t2b)
+                   FROM   t2
+                   WHERE  t1a = t2a
+                   GROUP  BY t2a)
+GROUP BY t1a;
+
+-- TC 01.06
+SELECT t1a,
+       t1b
+FROM   t1
+WHERE  t1c IN (SELECT t2b
+               FROM   t2
+               WHERE  t2a NOT IN (SELECT Min(t3a)
+                                  FROM   t3
+                                  WHERE  t3a = t2a
+                                  GROUP  BY t3b) order by t2a);
