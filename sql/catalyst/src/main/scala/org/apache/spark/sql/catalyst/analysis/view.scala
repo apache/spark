@@ -29,39 +29,30 @@ import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
  * Make sure that a view's child plan produces the view's output attributes. We wrap the child
- * with a Project and add an alias for each output attribute. The attributes are resolved by
- * name. This should be only done after the batch of Resolution, because the view attributes are
- * not completely resolved during the batch of Resolution.
+ * with a Project and add an alias for each output attribute by mapping the child output by index,
+ * if the view output doesn't have the same number of columns with the child output, throw an
+ * AnalysisException.
+ * This should be only done after the batch of Resolution, because the view attributes are not
+ * completely resolved during the batch of Resolution.
  */
 case class AliasViewChild(conf: CatalystConf) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case v @ View(_, output, child) if child.resolved =>
-      val resolver = conf.resolver
-      val newOutput = output.map { attr =>
-        val originAttr = findAttributeByName(attr.name, child.output, resolver)
-        // The dataType of the output attributes may be not the same with that of the view output,
-        // so we should cast the attribute to the dataType of the view output attribute. If the
-        // cast can't perform, will throw an AnalysisException.
-        Alias(Cast(originAttr, attr.dataType), attr.name)(exprId = attr.exprId,
-          qualifier = attr.qualifier, explicitMetadata = Some(attr.metadata))
+      if (output.length != child.output.length) {
+        throw new AnalysisException(
+          s"The view output ${output.mkString("[", ",", "]")} doesn't have the same number of " +
+            s"columns with the child output ${child.output.mkString("[", ",", "]")}")
+      }
+      val newOutput = output.zip(child.output).map {
+        case (attr, originAttr) =>
+          if (attr.dataType != originAttr.dataType) {
+            throw new AnalysisException(s"The dataType of $originAttr doesn't match up with " +
+              s"that of $attr, expected ${attr.dataType}, but got ${originAttr.dataType}.")
+          }
+          Alias(originAttr, attr.name)(exprId = attr.exprId, qualifier = attr.qualifier,
+            explicitMetadata = Some(attr.metadata))
       }
       v.copy(child = Project(newOutput, child))
-  }
-
-  /**
-   * Find the attribute that has the expected attribute name from an attribute list, the names
-   * are compared using conf.resolver.
-   * If the expected attribute is not found, throw an AnalysisException.
-   */
-  private def findAttributeByName(
-      name: String,
-      attrs: Seq[Attribute],
-      resolver: Resolver): Attribute = {
-    attrs.find { attr =>
-      resolver(attr.name, name)
-    }.getOrElse(throw new AnalysisException(
-      s"Attribute with name '$name' is not found in " +
-        s"'${attrs.map(_.name).mkString("(", ",", ")")}'"))
   }
 }
 
@@ -74,7 +65,9 @@ object EliminateView extends Rule[LogicalPlan] {
     // The child should have the same output attributes with the View operator, so we simply
     // remove the View operator.
     case View(_, output, child) =>
-      assert(output == child.output, "The output of the child is different from the view output")
+      assert(output == child.output,
+        s"The output of the child ${child.output.mkString("[", ",", "]")} is different from the " +
+          s"view output ${output.mkString("[", ",", "]")}")
       child
   }
 }

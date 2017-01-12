@@ -458,7 +458,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("CREATE VIEW testView AS SELECT * FROM jt1 JOIN jt2 ON id1 == id2")
       checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
 
-      val df = (1 until 10).map(i => i -> i).toDF("id1", "newCol")
+      val df = (1L until 10L).map(i => i -> i).toDF("id1", "newCol")
       df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("jt1")
       checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
 
@@ -553,7 +553,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           identifier = TableIdentifier("view1", Some(db)),
           tableType = CatalogTableType.VIEW,
           storage = CatalogStorageFormat.empty,
-          schema = new StructType().add("id", "int").add("id1", "int"),
+          schema = new StructType().add("id", "long").add("id1", "long"),
           viewOriginalText = Some("SELECT * FROM jt"),
           viewText = Some("SELECT * FROM jt"),
           properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default"))
@@ -561,7 +561,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           identifier = TableIdentifier("view2", Some(db)),
           tableType = CatalogTableType.VIEW,
           storage = CatalogStorageFormat.empty,
-          schema = new StructType().add("id", "int").add("id1", "int"),
+          schema = new StructType().add("id", "long").add("id1", "long"),
           viewOriginalText = Some("SELECT * FROM view1"),
           viewText = Some("SELECT * FROM view1"),
           properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> db))
@@ -595,7 +595,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         identifier = TableIdentifier("join_view"),
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
-        schema = new StructType().add("id", "int").add("id1", "int"),
+        schema = new StructType().add("id", "long").add("id1", "long"),
         viewOriginalText = Some("SELECT * FROM jt"),
         viewText = Some("SELECT * FROM jt"),
         properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default"))
@@ -620,7 +620,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         identifier = TableIdentifier("view1"),
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
-        schema = new StructType().add("id", "int").add("id1", "int"),
+        schema = new StructType().add("id", "long").add("id1", "long"),
         viewOriginalText = Some("SELECT * FROM invalid_db.jt"),
         viewText = Some("SELECT * FROM invalid_db.jt"),
         properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default"))
@@ -632,7 +632,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         identifier = TableIdentifier("view2"),
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
-        schema = new StructType().add("id", "int").add("id1", "int"),
+        schema = new StructType().add("id", "long").add("id1", "long"),
         viewOriginalText = Some("SELECT * FROM invalid_table"),
         viewText = Some("SELECT * FROM invalid_table"),
         properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default"))
@@ -644,7 +644,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         identifier = TableIdentifier("view3"),
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
-        schema = new StructType().add("id", "int").add("id1", "int"),
+        schema = new StructType().add("id", "long").add("id1", "long"),
         viewOriginalText = Some("SELECT * FROM view2"),
         viewText = Some("SELECT * FROM view2"),
         properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default"))
@@ -680,21 +680,23 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("correctly handle type casting between view output and child output") {
+  test("correctly alias the child plan to the view output") {
     withTable("testTable") {
-      withView("testView") {
-        spark.range(1, 10).toDF("id1").write.format("json").saveAsTable("testTable")
-        sql("CREATE VIEW testView AS SELECT * FROM testTable")
+      withView("testView1", "testView2") {
+        spark.range(1, 10).selectExpr("id", "id + 1 id1").write.saveAsTable("testTable")
 
-        // Allow casting from IntegerType to LongType
-        val df = (1 until 10).map(i => i).toDF("id1")
+        // The view is created by a query with star.
+        sql("CREATE VIEW testView1 AS SELECT * FROM testTable")
+        checkAnswer(sql("SELECT * FROM testView1 ORDER BY id1"), (1 to 9).map(i => Row(i, i + 1)))
+
+        // The view is created with custom column names.
+        sql("CREATE VIEW testView2(x, y) AS SELECT id1, id FROM testTable")
+        checkAnswer(sql("SELECT * FROM testView2 ORDER BY x"), (1 to 9).map(i => Row(i + 1, i)))
+
+        // The view output has different dataType from that of child.
+        val df = (1 until 10).map(i => (i, i)).toDF("id", "id1")
         df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("testTable")
-        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i)))
-
-        // Can't cast from ArrayType to LongType, throw an AnalysisException.
-        val df2 = (1 until 10).map(i => Seq(i)).toDF("id1")
-        df2.write.format("json").mode(SaveMode.Overwrite).saveAsTable("testTable")
-        intercept[AnalysisException](sql("SELECT * FROM testView ORDER BY id1"))
+        intercept[AnalysisException](sql("SELECT * FROM testView1"))
       }
     }
   }
