@@ -1085,9 +1085,9 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
   protected override def nullSafeEval(string: Any): Any = {
-    val bytes = string.asInstanceOf[UTF8String].getBytes
-    if (bytes.length > 0) {
-      bytes(0).asInstanceOf[Int]
+    val str = string.asInstanceOf[UTF8String]
+    if (str.numBytes() > 0) {
+      str.getByte(0).asInstanceOf[Int]
     } else {
       0
     }
@@ -1095,11 +1095,9 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
-      val bytes = ctx.freshName("bytes")
       s"""
-        byte[] $bytes = $child.getBytes();
-        if ($bytes.length > 0) {
-          ${ev.value} = (int) $bytes[0];
+        if ($child.numBytes() > 0) {
+          ${ev.value} = (int)$child.getByte(0);
         } else {
           ${ev.value} = 0;
         }
