@@ -142,7 +142,7 @@ test_that("spark.kmeans", {
 
   model1 <- spark.kmeans(data = df, ~ ., k = 5, maxIter = 10,
                          initMode = "random", seed = 1, tol = 1E-5)
-  model2 <- model <- spark.kmeans(data = df, ~ ., k = 5, maxIter = 10,
+  model2 <- spark.kmeans(data = df, ~ ., k = 5, maxIter = 10,
                          initMode = "random", seed = 22222, tol = 1E-5)
 
   fitted.model1 <- fitted(model1)
