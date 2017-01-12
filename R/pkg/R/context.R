@@ -91,6 +91,13 @@ objectFile <- function(sc, path, minPartitions = NULL) {
 #' will write it to disk and send the file name to JVM. Also to make sure each slice is not
 #' larger than that limit, number of slices may be increased.
 #'
+#' In 2.2.0 we are changing how the numSlices are used/computed to handle
+#' 1 < (length(coll) / numSlices) << length(coll) better. This is safe because
+#' parallelize() is not exposed publically. In the specific one case that it is used to convert
+#' R native object into SparkDataFrame, it has always been keeping it at the default of 1.
+#' In the case the object is large, we are explicitly setting the parallism to numSlices (which is
+#' still 1).
+#'
 #' @param sc SparkContext to use
 #' @param coll collection to parallelize
 #' @param numSlices number of partitions to create in the RDD
@@ -128,12 +135,15 @@ parallelize <- function(sc, coll, numSlices = 1) {
   objectSize <- object.size(coll)
 
   # For large objects we make sure the size of each slice is also smaller than sizeLimit
-  numSlices <- max(numSlices, ceiling(objectSize / sizeLimit))
-  if (numSlices > length(coll))
-    numSlices <- length(coll)
+  numSerializedSlices <- max(numSlices, ceiling(objectSize / sizeLimit))
+  if (numSerializedSlices > length(coll))
+    numSerializedSlices <- length(coll)
 
-  sliceLen <- ceiling(length(coll) / numSlices)
-  slices <- split(coll, rep(1: (numSlices + 1), each = sliceLen)[1:length(coll)])
+  splits <- sort(rep(1: numSerializedSlices, each = 1, length.out = length(coll)))
+  if (length(splits) < 1)
+    splits <- 1
+
+  slices <- split(coll, splits)
 
   # Serialize each slice: obtain a list of raws, or a list of lists (slices) of
   # 2-tuples of raws

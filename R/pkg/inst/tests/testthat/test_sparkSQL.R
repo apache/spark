@@ -202,6 +202,9 @@ test_that("create DataFrame from RDD", {
   expect_equal(getNumPartitions(toRDD(df)), 2)
   df <- createDataFrame(cars, numPartitions = 3)
   expect_equal(getNumPartitions(toRDD(df)), 3)
+  # validate when 1 < (length(coll) / numSlices) << length(coll)
+  df <- createDataFrame(cars, numPartitions = 20)
+  expect_equal(getNumPartitions(toRDD(df)), 20)
 
   setHiveContext(sc)
   sql("CREATE TABLE people (name string, age double, height float)")
@@ -219,7 +222,8 @@ test_that("createDataFrame uses files for large objects", {
   # To simulate a large file scenario, we set spark.r.maxAllocationLimit to a smaller value
   conf <- callJMethod(sparkSession, "conf")
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
-  df <- suppressWarnings(createDataFrame(iris))
+  df <- suppressWarnings(createDataFrame(iris, numPartitions = 3))
+  expect_equal(getNumPartitions(toRDD(df)), 3)
 
   # Resetting the conf back to default value
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", toString(.Machine$integer.max / 10))
