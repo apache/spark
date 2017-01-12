@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.types._
 
 class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -104,5 +106,24 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkEvaluation(ArrayContains(a3, Literal("")), null)
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
+  }
+
+  test("index") {
+    val m0 = Literal.create(Map("a" -> 1, "b" -> 2), MapType(StringType, IntegerType))
+    val m1 = Literal.create(Map(), MapType(StringType, StringType))
+    val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq(), ArrayType(IntegerType))
+
+    checkEvaluation(Index(m0, Literal("a")), 1)
+    checkEvaluation(Index(m0, Literal("c")), null)
+    checkEvaluation(Index(m1, Literal("c")), null)
+    checkEvaluation(Index(m0, Literal(1)), null)
+    checkEvaluation(Index(m0, Literal.create(null, NullType)), null)
+
+    checkEvaluation(Index(a0, Literal(0)), 1)
+    checkEvaluation(Index(a0, Literal(3)), null)
+    checkEvaluation(Index(a1, Literal("c")), null)
+    checkEvaluation(Index(a0, Literal("3")), null)
+    checkEvaluation(Index(a0, Literal.create(null, NullType)), null)
   }
 }
