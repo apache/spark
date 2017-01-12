@@ -177,7 +177,10 @@ case class DataSource(
     if (justPartitioning) {
       return (null, partitionSchema)
     }
-    val dataSchema = userSpecifiedSchema.orElse {
+    val dataSchema = userSpecifiedSchema.map { schema =>
+      val equality = sparkSession.sessionState.conf.resolver
+      StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
+    }.orElse {
       format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,

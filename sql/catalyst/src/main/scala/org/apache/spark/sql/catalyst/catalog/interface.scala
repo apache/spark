@@ -179,8 +179,8 @@ case class CatalogTable(
     tracksPartitionsInCatalog: Boolean = false) {
 
   /** schema of this table's partition columns */
-  def partitionSchema: StructType = StructType(partitionColumnNames.flatMap {
-    partCol => schema.find(_.name == partCol)
+  def partitionSchema: StructType = StructType(schema.filter {
+    c => partitionColumnNames.contains(c.name)
   })
 
   /** Return the database this table was specified to belong to, assuming it exists. */

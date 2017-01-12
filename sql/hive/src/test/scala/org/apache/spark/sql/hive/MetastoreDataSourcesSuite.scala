@@ -1063,7 +1063,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         assert(!metastoreTable.properties.contains(DATASOURCE_SCHEMA_NUMBUCKETCOLS))
         assert(!metastoreTable.properties.contains(DATASOURCE_SCHEMA_NUMSORTCOLS))
 
-        checkAnswer(table("t"), Row(1, 2))
+        checkAnswer(table("t"), Row(2, 1))
       }
     }
   }
@@ -1128,7 +1128,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETCOLS).toInt === 1)
         assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMSORTCOLS).toInt === 1)
 
-        checkAnswer(table("t"), Row(1, 2, 3))
+        checkAnswer(table("t"), Row(2, 3, 1))
       }
     }
   }

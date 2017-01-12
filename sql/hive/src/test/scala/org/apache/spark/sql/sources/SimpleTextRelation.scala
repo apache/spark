@@ -69,11 +69,8 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
     SimpleTextRelation.requiredColumns = requiredSchema.fieldNames
     SimpleTextRelation.pushedFilters = filters.toSet
 
-    val inputSchema = StructType(dataSchema.filterNot { f =>
-      partitionSchema.exists(_.name == f.name)
-    })
-    val fieldTypes = inputSchema.map(_.dataType)
-    val inputAttributes = inputSchema.toAttributes
+    val fieldTypes = dataSchema.map(_.dataType)
+    val inputAttributes = dataSchema.toAttributes
     val outputAttributes = requiredSchema.flatMap { field =>
       inputAttributes.find(_.name == field.name)
     }
