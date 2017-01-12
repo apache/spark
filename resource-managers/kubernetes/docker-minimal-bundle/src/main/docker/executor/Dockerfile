@@ -1,7 +1,10 @@
 FROM anapsix/alpine-java:8
 
+# If this docker file is being used in the context of building your images from a Spark distribution, the docker build
+# command should be invoked from the top level directory of the Spark distribution. E.g.:
+# docker build -t spark-executor:latest -f dockerfiles/executor/Dockerfile .
+
 RUN mkdir -p /opt/spark
-RUN mkdir -p /opt/spark/ui-resources/org/apache/spark/ui/static
 RUN touch /opt/spark/RELEASE
 
 ADD jars /opt/spark/jars
