@@ -241,14 +241,14 @@ package object config {
       .intConf
       .createWithDefault(5)
 
-  val NAMENODES_TO_ACCESS = ConfigBuilder("spark.yarn.access.namenodes")
+  private[spark] val NAMENODES_TO_ACCESS = ConfigBuilder("spark.yarn.access.namenodes")
     .doc("Extra NameNode URLs for which to request delegation tokens. The NameNode that hosts " +
       "fs.defaultFS does not need to be listed here.")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
-  val FILESYSTEMS_TO_ACCESS = ConfigBuilder("spark.yarn.access.hadoopFileSystems")
+  private[spark] val FILESYSTEMS_TO_ACCESS = ConfigBuilder("spark.yarn.access.hadoopFileSystems")
     .doc("Extra Hadoop filesystem URLs for which to request delegation tokens. The filesystem " +
       "that hosts fs.defaultFS does not need to be listed here.")
     .fallbackConf(NAMENODES_TO_ACCESS)
