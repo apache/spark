@@ -17,20 +17,51 @@
 
 from __future__ import print_function
 
-from pyspark.sql import SparkSession
+import os
 import sys
 
+from pyspark.sql import SparkSession
+
+if sys.version >= "3":
+    from io import StringIO
+else:
+    from StringIO import StringIO
+
 if __name__ == "__main__":
+    gateway_already_started = "PYSPARK_GATEWAY_PORT" in os.environ
+    if not gateway_already_started:
+        _old_stdout = sys.stdout
+        _old_stderr = sys.stderr
+        # Verify stdout/stderr overwrite support for jupyter
+        sys.stdout = new_stdout = StringIO()
+        sys.stderr = new_stderr = StringIO()
+
     spark = SparkSession\
         .builder\
         .appName("PipSanityCheck")\
         .getOrCreate()
+    print("Spark context created")
     sc = spark.sparkContext
     rdd = sc.parallelize(range(100), 10)
     value = rdd.reduce(lambda x, y: x + y)
+
     if (value != 4950):
         print("Value {0} did not match expected value.".format(value), file=sys.stderr)
         sys.exit(-1)
+
+    if not gateway_already_started:
+        try:
+            rdd2 = rdd.map(lambda x: str(x).startsWith("expected error"))
+            rdd2.collect()
+        except:
+            pass
+        sys.stdout = _old_stdout
+        sys.stderr = _old_stderr
+        logs = new_stderr.getvalue() + new_stdout.getvalue()
+
+        if logs.find("'str' object has no attribute 'startsWith'") == -1:
+            print("Failed to find helpful error message, redirect failed?")
+            sys.exit(-1)
     print("Successfully ran pip sanity check")
 
     spark.stop()
