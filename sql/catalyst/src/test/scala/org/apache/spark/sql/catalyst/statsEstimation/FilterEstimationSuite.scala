@@ -23,17 +23,18 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUti
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * In this test suite, we test the proedicates containing the following operators:
+ * In this test suite, we test predicates containing the following operators:
  * =, <, <=, >, >=, AND, OR, IS NULL, IS NOT NULL, IN, NOT IN
  */
 
 class FilterEstimationSuite extends StatsEstimationTestBase {
 
-  // Suppose our test table has one column called "key1".
+  // Suppose our test table has one column called "key".
   // It has 10 rows with values: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
   // Hence, distinctCount:10, min:1, max:10, nullCount:0, avgLen:4, maxLen:4
-  val ar = AttributeReference("key1", IntegerType)()
-  val childColStat = ColumnStat(10, Some(1), Some(10), 0, 4, 4)
+  val ar = AttributeReference("key", IntegerType)()
+  val childColStat = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+    nullCount = 0, avgLen = 4, maxLen = 4)
   val child = StatsTestPlan(
     outputList = Seq(ar),
     stats = Statistics(
@@ -43,125 +44,160 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     )
   )
 
-  test("filter estimation with equality comparison") {
-    // the predicate is "WHERE key1 = 2"
-    val intValue = Literal(2, IntegerType)
-    val condition = EqualTo(ar, intValue)
-    val filterNode = Filter(condition, child)
-    val filteredColStats = ColumnStat(1, Some(2), Some(2), 0, 4, 4)
-
-    validateEstimatedStats(filterNode, filteredColStats, Some(1L))
+  test("key = 2") {
+    // the predicate is "WHERE key = 2"
+    validateEstimatedStats(
+      Filter(EqualTo(ar, Literal(2)), child),
+      ColumnStat(distinctCount = 1, min = Some(2), max = Some(2),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(1L)
+    )
   }
 
-  test("filter estimation with less than comparison") {
-    // the predicate is "WHERE key1 < 3"
-    val intValue = Literal(3, IntegerType)
-    val condition = LessThan(ar, intValue)
-    val filterNode = Filter(condition, child)
-    val filteredColStats = ColumnStat(2, Some(1), Some(3), 0, 4, 4)
-
-    validateEstimatedStats(filterNode, filteredColStats, Some(3L))
+  test("key = 0") {
+    // the predicate is "WHERE key = 0"
+    // This is an out-of-range case since 0 is outside the range [min, max]
+    validateEstimatedStats(
+      Filter(EqualTo(ar, Literal(0)), child),
+      ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(0L)
+    )
   }
 
-  test("filter estimation with less than or equal to comparison") {
-    // the predicate is "WHERE key1 <= 3"
-    val intValue = Literal(3, IntegerType)
-    val condition = LessThanOrEqual(ar, intValue)
-    val filterNode = Filter(condition, child)
-    val filteredColStats = ColumnStat(2, Some(1), Some(3), 0, 4, 4)
+  test("key < 3") {
+    // the predicate is "WHERE key < 3"
+    validateEstimatedStats(
+      Filter(LessThan(ar, Literal(3)), child),
+      ColumnStat(distinctCount = 2, min = Some(1), max = Some(3),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(3L)
+    )
+  }
 
-    validateEstimatedStats(filterNode, filteredColStats, Some(3L))
+  test("key < 0") {
+    // the predicate is "WHERE key < 0"
+    // This is a corner case since literal 0 is smaller than min.
+    validateEstimatedStats(
+      Filter(LessThan(ar, Literal(0)), child),
+      ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(0L)
+    )
+  }
+
+  test("key <= 3") {
+    // the predicate is "WHERE key <= 3"
+    validateEstimatedStats(
+      Filter(LessThanOrEqual(ar, Literal(3)), child),
+      ColumnStat(distinctCount = 2, min = Some(1), max = Some(3),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(3L)
+    )
 
   }
 
-  test("filter estimation with greater than comparison") {
-    // the predicate is "WHERE key1 > 6"
-    val intValue = Literal(6, IntegerType)
-    val condition = GreaterThan(ar, intValue)
-    val filterNode = Filter(condition, child)
-    val filteredColStats = ColumnStat(4, Some(6), Some(10), 0, 4, 4)
-
-    validateEstimatedStats(filterNode, filteredColStats, Some(5L))
+  test("key > 6") {
+    // the predicate is "WHERE key > 6"
+    validateEstimatedStats(
+      Filter(GreaterThan(ar, Literal(6)), child),
+      ColumnStat(distinctCount = 4, min = Some(6), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(5L)
+    )
   }
 
-  test("filter estimation with greater than or equal to comparison") {
-    // the predicate is "WHERE key1 >= 6"
-    val intValue = Literal(6, IntegerType)
-    val condition = GreaterThanOrEqual(ar, intValue)
-    val filterNode = Filter(condition, child)
-    val filteredColStats = ColumnStat(4, Some(6), Some(10), 0, 4, 4)
-
-    validateEstimatedStats(filterNode, filteredColStats, Some(5L))
-
+  test("key > 10") {
+    // the predicate is "WHERE key > 10"
+    // This is a corner case since max value is 10.
+    validateEstimatedStats(
+      Filter(GreaterThan(ar, Literal(10)), child),
+      ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(0L)
+    )
   }
 
-  test("filter estimation with IS NULL comparison") {
-    // the predicate is "WHERE key1 IS NULL"
-    val condition = IsNull(ar)
-    val filterNode = Filter(condition, child)
-    val filteredColStats = ColumnStat(0, None, None, 0, 4, 4)
-
-    validateEstimatedStats(filterNode, filteredColStats, Some(0L))
+  test("key >= 6") {
+    // the predicate is "WHERE key >= 6"
+    validateEstimatedStats(
+      Filter(GreaterThanOrEqual(ar, Literal(6)), child),
+      ColumnStat(distinctCount = 4, min = Some(6), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(5L)
+    )
   }
 
-  test("filter estimation with IS NOT NULL comparison") {
-    // the predicate is "WHERE key1 IS NOT NULL"
-    val condition = IsNotNull(ar)
-    val filterNode = Filter(condition, child)
-    val filteredColStats = ColumnStat(10, Some(1), Some(10), 0, 4, 4)
-
-    validateEstimatedStats(filterNode, filteredColStats, Some(10L))
+  test("key IS NULL") {
+    // the predicate is "WHERE key IS NULL"
+    validateEstimatedStats(
+      Filter(IsNull(ar), child),
+      ColumnStat(distinctCount = 0, min = None, max = None,
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(0L)
+    )
   }
 
-  test("filter estimation with logical AND operator") {
-    // the predicate is "WHERE key1 > 3 AND key1 <= 6"
-    val condition1 = GreaterThan(ar, Literal(3, IntegerType))
-    val condition2 = LessThanOrEqual(ar, Literal(6, IntegerType))
-    val condition = And(condition1, condition2)
-    val filterNode = Filter(condition, child)
-    val filteredColStats = ColumnStat(3, Some(3), Some(6), 0, 4, 4)
-
-    validateEstimatedStats(filterNode, filteredColStats, Some(4L))
+  test("key IS NOT NULL") {
+    // the predicate is "WHERE key IS NOT NULL"
+    validateEstimatedStats(
+      Filter(IsNotNull(ar), child),
+      ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(10L)
+    )
   }
 
-  test("filter estimation with logical OR operator") {
-    // the predicate is "WHERE key1 = 3 OR key1 = 6"
-    val condition1 = EqualTo(ar, Literal(3, IntegerType))
-    val condition2 = EqualTo(ar, Literal(6, IntegerType))
-    val condition = Or(condition1, condition2)
-    val filterNode = Filter(condition, child)
-    val filteredColStats = ColumnStat(10, Some(1), Some(10), 0, 4, 4)
-
-    validateEstimatedStats(filterNode, filteredColStats, Some(2L))
+  test("key > 3 AND key <= 6") {
+    // the predicate is "WHERE key > 3 AND key <= 6"
+    val condition = And(GreaterThan(ar, Literal(3)), LessThanOrEqual(ar, Literal(6)))
+    validateEstimatedStats(
+      Filter(condition, child),
+      ColumnStat(distinctCount = 3, min = Some(3), max = Some(6),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(4L)
+    )
   }
 
-  test("filter estimation with logical IN operator") {
-    // the predicate is "WHERE key1 IN (3, 4, 5)"
-    val condition = InSet(ar, Set(3, 4, 5))
-    val filterNode = Filter(condition, child)
-    val filteredColStats = ColumnStat(3, Some(3), Some(5), 0, 4, 4)
-
-    validateEstimatedStats(filterNode, filteredColStats, Some(3L))
+  test("key = 3 OR key = 6") {
+    // the predicate is "WHERE key = 3 OR key = 6"
+    val condition = Or(EqualTo(ar, Literal(3)), EqualTo(ar, Literal(6)))
+    validateEstimatedStats(
+      Filter(condition, child),
+      ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(2L)
+    )
   }
 
-  test("filter estimation with logical NOT operator") {
-    // the predicate is "WHERE key1 NOT IN (3, 4, 5)"
-    val condition = InSet(ar, Set(3, 4, 5))
-    val notCondition = Not(condition)
-    val filterNode = Filter(notCondition, child)
-    val filteredColStats = ColumnStat(10, Some(1), Some(10), 0, 4, 4)
+  test("key IN (3, 4, 5)") {
+    // the predicate is "WHERE key IN (3, 4, 5)"
+    validateEstimatedStats(
+      Filter(InSet(ar, Set(3, 4, 5)), child),
+      ColumnStat(distinctCount = 3, min = Some(3), max = Some(5),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(3L)
+    )
+  }
 
-    validateEstimatedStats(filterNode, filteredColStats, Some(7L))
+  test("key NOT IN (3, 4, 5)") {
+    // the predicate is "WHERE key NOT IN (3, 4, 5)"
+    validateEstimatedStats(
+      Filter(Not(InSet(ar, Set(3, 4, 5))), child),
+      ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(7L)
+    )
   }
 
   private def validateEstimatedStats(
       filterNode: Filter,
-      filteredColStats: ColumnStat,
+      expectedColStats: ColumnStat,
       rowCount: Option[Long] = None)
   : Unit = {
 
     val expectedRowCount = rowCount.getOrElse(0L)
-    val expectedAttrStats = toAttributeMap(Seq("key1" -> filteredColStats), filterNode)
+    val expectedAttrStats = toAttributeMap(Seq("key" -> expectedColStats), filterNode)
     val expectedStats = Statistics(
       sizeInBytes = expectedRowCount * getRowSize(filterNode.output, expectedAttrStats),
       rowCount = Some(expectedRowCount),

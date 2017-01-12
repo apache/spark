@@ -84,7 +84,7 @@ class FilterEstimation extends Logging {
 
   /**
    * Returns a percentage of rows meeting a compound condition in Filter node.
-   * A compound condition is depomposed into multiple single conditions linked with AND, OR, NOT.
+   * A compound condition is decomposed into multiple single conditions linked with AND, OR, NOT.
    * For logical AND conditions, we need to update stats after a condition estimation
    * so that the stats will be more accurate for subsequent estimation.  This is needed for
    * range condition such as (c > 40 AND c <= 50)
@@ -125,7 +125,7 @@ class FilterEstimation extends Logging {
    *
    * @param plan the Filter LogicalPlan node
    * @param condition a single logical expression
-   * @param isNot set to true for "IS NULL" condition.  set to false for "IS NOT NULL" condition
+   * @param isNot set to true for Not logical operator.  Otherwise it is set to false.
    * @param update a boolean flag to specify if we need to update ColumnStat of a column
    *               for subsequent conditions
    * @return a doube value to show the percentage of rows meeting a given condition
@@ -142,54 +142,56 @@ class FilterEstimation extends Logging {
       // So we will change the order if not.
 
       // EqualTo does not care about the order
-      case op@EqualTo(ExtractAttr(ar), l: Literal) =>
+      case op @ EqualTo(ar: AttributeReference, l: Literal) =>
         evaluateBinary(op, ar, l, update)
-      case op@EqualTo(l: Literal, ExtractAttr(ar)) =>
+      case op @ EqualTo(l: Literal, ar: AttributeReference) =>
         evaluateBinary(op, ar, l, update)
 
-      case op@LessThan(ExtractAttr(ar), l: Literal) =>
+      case op @ LessThan(ar: AttributeReference, l: Literal) =>
         evaluateBinary(op, ar, l, update)
-      case op@LessThan(l: Literal, ExtractAttr(ar)) =>
+      case op @ LessThan(l: Literal, ar: AttributeReference) =>
         evaluateBinary(GreaterThan(ar, l), ar, l, update)
 
-      case op@LessThanOrEqual(ExtractAttr(ar), l: Literal) =>
+      case op @ LessThanOrEqual(ar: AttributeReference, l: Literal) =>
         evaluateBinary(op, ar, l, update)
-      case op@LessThanOrEqual(l: Literal, ExtractAttr(ar)) =>
+      case op @ LessThanOrEqual(l: Literal, ar: AttributeReference) =>
         evaluateBinary(GreaterThanOrEqual(ar, l), ar, l, update)
 
-      case op@GreaterThan(ExtractAttr(ar), l: Literal) =>
+      case op @ GreaterThan(ar: AttributeReference, l: Literal) =>
         evaluateBinary(op, ar, l, update)
-      case op@GreaterThan(l: Literal, ExtractAttr(ar)) =>
+      case op @ GreaterThan(l: Literal, ar: AttributeReference) =>
         evaluateBinary(LessThan(ar, l), ar, l, update)
 
-      case op@GreaterThanOrEqual(ExtractAttr(ar), l: Literal) =>
+      case op @ GreaterThanOrEqual(ar: AttributeReference, l: Literal) =>
         evaluateBinary(op, ar, l, update)
-      case op@GreaterThanOrEqual(l: Literal, ExtractAttr(ar)) =>
+      case op @ GreaterThanOrEqual(l: Literal, ar: AttributeReference) =>
         evaluateBinary(LessThanOrEqual(ar, l), ar, l, update)
 
-      case In(ExtractAttr(ar), expList) if !expList.exists(!_.isInstanceOf[Literal]) =>
+      case In(ar: AttributeReference, expList) if !expList.exists(!_.isInstanceOf[Literal]) =>
         // Expression [In (value, seq[Literal])] will be replaced with optimized version
         // [InSet (value, HashSet[Literal])] in Optimizer, but only for list.size > 10.
         // Here we convert In into InSet anyway, because they share the same processing logic.
         val hSet = expList.map(e => e.eval())
         evaluateInSet(ar, HashSet() ++ hSet, update)
 
-      case InSet(ExtractAttr(ar), set) =>
+      case InSet(ar: AttributeReference, set) =>
         evaluateInSet(ar, set, update)
 
       // It's difficult to estimate IsNull after outer joins.  Hence,
       // we support IsNull and IsNotNull only when the child is a leaf node (table).
-      case IsNull(ExtractAttr(ar)) =>
+      case IsNull(ar: AttributeReference) =>
         if (plan.child.isInstanceOf[LeafNode ]) {
           evaluateIsNull(plan, ar, true, update)
+        } else {
+          1.0
         }
-        else 1.0
 
-      case IsNotNull(ExtractAttr(ar)) =>
+      case IsNotNull(ar: AttributeReference) =>
         if (plan.child.isInstanceOf[LeafNode ]) {
           evaluateIsNull(plan, ar, false, update)
+        } else {
+          1.0
         }
-        else 1.0
 
       case _ =>
         // TODO: it's difficult to support string operators without advanced statistics.
@@ -364,7 +366,6 @@ class FilterEstimation extends Logging {
     val aColStat = mutableColStats(attrRef.exprId)
     val ndv = aColStat.distinctCount
 
-
     // decide if the value is in [min, max] of the column.
     // We currently don't store min/max for binary/string type.
     // Hence, we assume it is in boundary for binary/string type.
@@ -379,28 +380,26 @@ class FilterEstimation extends Logging {
       case _ => true  /** for String/Binary type */
     }
 
-    val percent: Double =
-      if (inBoundary) {
+    if (inBoundary) {
 
-        if (update) {
-          // We update ColumnStat structure after apply this equality predicate.
-          // Set distinctCount to 1.  Set nullCount to 0.
-          val newStats = attrRef.dataType match {
-            case _: NumericType | DateType | TimestampType =>
-              val newValue = Some(literal.value)
-              aColStat.copy(distinctCount = 1, min = newValue,
-                max = newValue, nullCount = 0)
-            case _ => aColStat.copy(distinctCount = 1, nullCount = 0)
-          }
-          mutableColStats += (attrRef.exprId -> newStats)
+      if (update) {
+        // We update ColumnStat structure after apply this equality predicate.
+        // Set distinctCount to 1.  Set nullCount to 0.
+        val newStats = attrRef.dataType match {
+          case _: NumericType | DateType | TimestampType =>
+            val newValue = Some(literal.value)
+            aColStat.copy(distinctCount = 1, min = newValue,
+              max = newValue, nullCount = 0)
+          case _ => aColStat.copy(distinctCount = 1, nullCount = 0)
         }
-
-        1.0 / ndv.toDouble
-      } else {
-        0.0
+        mutableColStats += (attrRef.exprId -> newStats)
       }
 
-    percent
+      1.0 / ndv.toDouble
+    } else {
+      0.0
+    }
+
   }
 
   /**
