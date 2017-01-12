@@ -19,7 +19,7 @@ package org.apache.spark.ui.jobs
 
 import java.util.concurrent.TimeoutException
 
-import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap, ListBuffer}
+import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
