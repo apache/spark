@@ -445,21 +445,28 @@ case class DataSource(
 
         // If we are appending to a table that already exists, make sure the partitioning matches
         // up.  If we fail to load the table for whatever reason, ignore the check.
-        if (mode == SaveMode.Append) {
-          val existingPartitionColumns = Try {
-            getOrInferFileFormatSchema(format, justPartitioning = true)._2.fieldNames.toList
-          }.getOrElse(Seq.empty[String])
-          // TODO: Case sensitivity.
-          val sameColumns =
-            existingPartitionColumns.map(_.toLowerCase()) == partitionColumns.map(_.toLowerCase())
-          if (existingPartitionColumns.nonEmpty && !sameColumns) {
-            throw new AnalysisException(
-              s"""Requested partitioning does not match existing partitioning.
-                 |Existing partitioning columns:
-                 |  ${existingPartitionColumns.mkString(", ")}
-                 |Requested partitioning columns:
-                 |  ${partitionColumns.mkString(", ")}
-                 |""".stripMargin)
+
+        // SPARK-18917 Add Skip Partition Check Flag to avoid list all leaf files in append mode
+        val skipPartitionCheckOnAppend = sparkSession.sessionState.conf.skipPartitionCheckOnAppend
+        if (skipPartitionCheckOnAppend) {
+          logInfo("Skipping Partition Check on Append Mode")
+        } else {
+          if (mode == SaveMode.Append) {
+            val existingPartitionColumns = Try {
+              getOrInferFileFormatSchema(format, justPartitioning = true)._2.fieldNames.toList
+            }.getOrElse(Seq.empty[String])
+            // TODO: Case sensitivity.
+            val sameColumns =
+              existingPartitionColumns.map(_.toLowerCase()) == partitionColumns.map(_.toLowerCase())
+            if (existingPartitionColumns.nonEmpty && !sameColumns) {
+              throw new AnalysisException(
+                s"""Requested partitioning does not match existing partitioning.
+                   |Existing partitioning columns:
+                   |  ${existingPartitionColumns.mkString(", ")}
+                   |Requested partitioning columns:
+                   |  ${partitionColumns.mkString(", ")}
+                   |""".stripMargin)
+            }
           }
         }
 
