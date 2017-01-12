@@ -164,10 +164,7 @@ private[spark] class KubernetesSparkRestServer(
             command += s"-Xmx$driverMemory"
             command += mainClass
             command ++= appArgs
-            val pb = new ProcessBuilder(command: _*)
-            Paths.get(sparkHome, "logs").toFile.mkdirs
-            pb.redirectOutput(Paths.get(sparkHome, "logs", "stdout").toFile)
-            pb.redirectError(Paths.get(sparkHome, "logs", "stderr").toFile)
+            val pb = new ProcessBuilder(command: _*).inheritIO()
             val process = pb.start()
             ShutdownHookManager.addShutdownHook(() => {
               logInfo("Received stop command, shutting down the running Spark application...")
