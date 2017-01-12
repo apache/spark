@@ -383,7 +383,7 @@ class Analyzer(
           } else {
             val suffix = aggregate match {
               case n: NamedExpression => n.name
-              case _ => aggregate.sql
+              case _ => toPrettySQL(aggregate)
             }
             value + "_" + suffix
           }
