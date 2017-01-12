@@ -45,7 +45,8 @@ import org.apache.spark.sql.types.DataType
 case class UserDefinedFunction protected[sql] (
     f: AnyRef,
     dataType: DataType,
-    inputTypes: Option[Seq[DataType]]) {
+    inputTypes: Option[Seq[DataType]],
+    nullable: Boolean = true) {
 
   /**
    * Returns an expression that invokes the UDF, using the given arguments.
@@ -53,6 +54,6 @@ case class UserDefinedFunction protected[sql] (
    * @since 1.3.0
    */
   def apply(exprs: Column*): Column = {
-    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes.getOrElse(Nil)))
+    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes.getOrElse(Nil), nullable))
   }
 }

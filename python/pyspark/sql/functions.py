@@ -1810,7 +1810,18 @@ def sort_array(col, asc=True):
 
 # ---------------------------- User Defined Function ----------------------------------
 
-def _wrap_function(sc, func, returnType):
+def _wrap_function(sc, func, returnType, nullable=True):
+    if not nullable:
+        original_func = func
+        def func(*args):
+            res = original_func(*args)
+            assert res is not None, 'None returned from {}:{} {!r}{!r} -> {!r}'.format(
+                inspect.getsourcefile(old_func),
+                inspect.getsourcelines(old_func)[1],
+                old_func,
+                tuple(args),
+                returnType,
+            )
     command = (func, returnType)
     pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
     return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
@@ -1823,23 +1834,24 @@ class UserDefinedFunction(object):
 
     .. versionadded:: 1.3
     """
-    def __init__(self, func, returnType, name=None):
+    def __init__(self, func, returnType, name=None, nullable=True):
         self.func = func
         self.returnType = returnType
+        self._nullable = nullable
         self._broadcast = None
         self._judf = self._create_judf(name)
 
     def _create_judf(self, name):
         from pyspark.sql import SparkSession
         sc = SparkContext.getOrCreate()
-        wrapped_func = _wrap_function(sc, self.func, self.returnType)
+        wrapped_func = _wrap_function(sc, self.func, self.returnType, self.nullable)
         spark = SparkSession.builder.getOrCreate()
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         if name is None:
             f = self.func
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            name, wrapped_func, jdt)
+            name, wrapped_func, jdt, self._nullable)
         return judf
 
     def __del__(self):
@@ -1854,7 +1866,7 @@ class UserDefinedFunction(object):
 
 
 @since(1.3)
-def udf(f, returnType=StringType()):
+def udf(f, returnType=StringType(), nullable=True):
     """Creates a :class:`Column` expression representing a user defined function (UDF).
 
     .. note:: The user-defined functions must be deterministic. Due to optimization,
@@ -1869,7 +1881,7 @@ def udf(f, returnType=StringType()):
     >>> df.select(slen(df.name).alias('slen')).collect()
     [Row(slen=5), Row(slen=3)]
     """
-    return UserDefinedFunction(f, returnType)
+    return UserDefinedFunction(f, returnType, nullable)
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
 __all__ = [k for k, v in globals().items()

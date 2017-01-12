@@ -28,10 +28,11 @@ import org.apache.spark.sql.types.DataType
 case class UserDefinedPythonFunction(
     name: String,
     func: PythonFunction,
-    dataType: DataType) {
+    dataType: DataType,
+    nullable: Boolean = true) {
 
   def builder(e: Seq[Expression]): PythonUDF = {
-    PythonUDF(name, func, dataType, e)
+    PythonUDF(name, func, dataType, e, nullable)
   }
 
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
