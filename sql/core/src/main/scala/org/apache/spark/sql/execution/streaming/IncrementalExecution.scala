@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, Literal}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.execution.{PhysicalOptimizer, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -112,7 +112,10 @@ class IncrementalExecution(
     }
   }
 
-  override protected def batches: Seq[Batch] = Batch("AddState", Once, state) +: super.batches
+  override lazy val optimizer: RuleExecutor[SparkPlan] = new PhysicalOptimizer(sparkSession) {
+
+    override def batches: Seq[Batch] = Batch("AddState", Once, state) +: super.batches
+  }
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
