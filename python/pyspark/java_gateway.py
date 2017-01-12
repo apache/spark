@@ -17,6 +17,7 @@
 
 from __future__ import print_function
 
+
 import atexit
 import os
 import sys
@@ -44,8 +45,10 @@ def launch_gateway(conf=None):
     :return:
     """
     # If sys.stdout has been changed the child processes JVM will not respect that
-    # so grab the jvm output and copy it over. This happens with Jupyter and similar systems.
-    grab_jvm_output = sys.stdout != sys.__stdout__
+    # so grab the jvm output and copy it over if we are in a notebook.
+    redirect_shells = ["ZMQInteractiveShell", "StringIO"]
+    grab_jvm_output = (sys.stdout != sys.__stdout__ and
+                       sys.stdout.__class__.__name__ in redirect_shells)
 
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
