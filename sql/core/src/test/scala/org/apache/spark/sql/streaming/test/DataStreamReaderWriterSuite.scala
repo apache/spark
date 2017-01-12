@@ -586,6 +586,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
         .parquet(src.toString)
       // Specify a random ordering of the schema, partition column in the middle, etc.
       // Also let's say that the partition columns are Strings instead of Longs.
+      // partition columns should go to the end
       val schema = new StructType()
         .add("id", StringType)
         .add("ex", ArrayType(StringType))
@@ -596,9 +597,9 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
         .load(src.toString)
 
       assert(sdf.schema.toList === List(
-        StructField("id", StringType),
         StructField("ex", ArrayType(StringType)),
-        StructField("part", IntegerType)))
+        StructField("part", IntegerType), // inferred partitionColumn dataType
+        StructField("id", StringType))) // used user provided partitionColumn dataType
 
       val sq = sdf.writeStream
         .queryName("corruption_test")
@@ -607,8 +608,9 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
       sq.processAllAvailable()
       checkAnswer(
         spark.table("corruption_test"),
-        Row("0", Array("1"), 0) :: Row("1", Array("1", "2"), 1) ::
-          Row("2", Array("1", "2", "3"), 2) :: Row("3", Array("1", "2", "3", "4"), 3) :: Nil
+        // notice how `part` is ordered before `id`
+        Row(Array("1"), 0, "0") :: Row(Array("1", "2"), 1, "1") ::
+          Row(Array("1", "2", "3"), 2, "2") :: Row(Array("1", "2", "3", "4"), 3, "3") :: Nil
       )
       sq.stop()
     }

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources
 import java.util.{ServiceConfigurationError, ServiceLoader}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
@@ -40,7 +39,7 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{CalendarIntervalType, StructField, StructType}
+import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -227,10 +226,7 @@ case class DataSource(
         val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format)
         SourceInfo(
           s"FileSource[$path]",
-          DataSource.outputSchema(
-            dataSchema,
-            partitionSchema,
-            sparkSession.sessionState.conf.caseSensitiveAnalysis),
+          StructType(dataSchema ++ partitionSchema),
           partitionSchema.fieldNames)
 
       case _ =>
@@ -644,22 +640,5 @@ object DataSource {
     val path = new CaseInsensitiveMap(options).get("path")
     val optionsWithoutPath = options.filterKeys(_.toLowerCase != "path")
     CatalogStorageFormat.empty.copy(locationUri = path, properties = optionsWithoutPath)
-  }
-
-  /**
-   * Merges `dataSchema` and `partitionSchema` and returns an output schema. If these schemas are
-   * overlapped between each other, we respect the partition column positions in `dataSchema`.
-   */
-  def outputSchema(dataSchema: StructType, partitionSchema: StructType, caseSensitive: Boolean)
-    : StructType = {
-    val getColName: (StructField => String) = if (caseSensitive) _.name else _.name.toLowerCase
-    val overlappedPartCols = mutable.Map.empty[String, StructField]
-    partitionSchema.foreach { partitionField =>
-      if (dataSchema.exists(getColName(_) == getColName(partitionField))) {
-        overlappedPartCols += getColName(partitionField) -> partitionField
-      }
-    }
-    StructType(dataSchema.map(f => overlappedPartCols.getOrElse(getColName(f), f)) ++
-      partitionSchema.filterNot(f => overlappedPartCols.contains(getColName(f))))
   }
 }
