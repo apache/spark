@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -80,6 +81,26 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     }
   }
 
+  /** A cache for the estimated statistics, such that it will only be computed once. */
+  private var statsCache: Option[Statistics] = None
+
+  /**
+   * Returns the estimated statistics for the current logical plan node. Under the hood, this
+   * method caches the return value, which is computed based on the configuration passed in the
+   * first time. If the configuration changes, the cache can be invalidated by calling
+   * [[invalidateStatsCache()]].
+   */
+  final def stats(conf: CatalystConf): Statistics = statsCache.getOrElse {
+    statsCache = Some(computeStats(conf))
+    statsCache.get
+  }
+
+  /** Invalidates the stats cache. See [[stats]] for more information. */
+  final def invalidateStatsCache(): Unit = {
+    statsCache = None
+    children.foreach(_.invalidateStatsCache())
+  }
+
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
    * cardinality is the product of all child plan's cardinality, i.e. applies in the case
@@ -87,11 +108,11 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    *
    * [[LeafNode]]s must override this.
    */
-  def statistics: Statistics = {
+  protected def computeStats(conf: CatalystConf): Statistics = {
     if (children.isEmpty) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
     }
-    Statistics(sizeInBytes = children.map(_.statistics.sizeInBytes).product)
+    Statistics(sizeInBytes = children.map(_.stats(conf).sizeInBytes).product)
   }
 
   /**
@@ -310,20 +331,20 @@ abstract class UnaryNode extends LogicalPlan {
 
   override protected def validConstraints: Set[Expression] = child.constraints
 
-  override def statistics: Statistics = {
+  override def computeStats(conf: CatalystConf): Statistics = {
     // There should be some overhead in Row object, the size should not be zero when there is
     // no columns, this help to prevent divide-by-zero error.
     val childRowSize = child.output.map(_.dataType.defaultSize).sum + 8
     val outputRowSize = output.map(_.dataType.defaultSize).sum + 8
     // Assume there will be the same number of rows as child has.
-    var sizeInBytes = (child.statistics.sizeInBytes * outputRowSize) / childRowSize
+    var sizeInBytes = (child.stats(conf).sizeInBytes * outputRowSize) / childRowSize
     if (sizeInBytes == 0) {
       // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
       // (product of children).
       sizeInBytes = 1
     }
 
-    child.statistics.copy(sizeInBytes = sizeInBytes)
+    child.stats(conf).copy(sizeInBytes = sizeInBytes)
   }
 }
 

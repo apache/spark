@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 import scala.util.Try
 
+import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -222,25 +223,34 @@ case class LoadDataCommand(
     val loadPath =
       if (isLocal) {
         val uri = Utils.resolveURI(path)
-        val filePath = uri.getPath()
-        val exists = if (filePath.contains("*")) {
+        val file = new File(uri.getPath)
+        val exists = if (file.getAbsolutePath.contains("*")) {
           val fileSystem = FileSystems.getDefault
-          val pathPattern = fileSystem.getPath(filePath)
-          val dir = pathPattern.getParent.toString
+          val dir = file.getParentFile.getAbsolutePath
           if (dir.contains("*")) {
             throw new AnalysisException(
               s"LOAD DATA input path allows only filename wildcard: $path")
           }
 
+          // Note that special characters such as "*" on Windows are not allowed as a path.
+          // Calling `WindowsFileSystem.getPath` throws an exception if there are in the path.
+          val dirPath = fileSystem.getPath(dir)
+          val pathPattern = new File(dirPath.toAbsolutePath.toString, file.getName).toURI.getPath
+          val safePathPattern = if (Utils.isWindows) {
+            // On Windows, the pattern should not start with slashes for absolute file paths.
+            pathPattern.stripPrefix("/")
+          } else {
+            pathPattern
+          }
           val files = new File(dir).listFiles()
           if (files == null) {
             false
           } else {
-            val matcher = fileSystem.getPathMatcher("glob:" + pathPattern.toAbsolutePath)
+            val matcher = fileSystem.getPathMatcher("glob:" + safePathPattern)
             files.exists(f => matcher.matches(fileSystem.getPath(f.getAbsolutePath)))
           }
         } else {
-          new File(filePath).exists()
+          new File(file.getAbsolutePath).exists()
         }
         if (!exists) {
           throw new AnalysisException(s"LOAD DATA input path does not exist: $path")

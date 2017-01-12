@@ -309,6 +309,13 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val THRIFTSERVER_INCREMENTAL_COLLECT =
+    SQLConfigBuilder("spark.sql.thriftServer.incrementalCollect")
+      .internal()
+      .doc("When true, enable incremental collection for execution in Thrift Server.")
+      .booleanConf
+      .createWithDefault(false)
+
   val THRIFTSERVER_UI_STATEMENT_LIMIT =
     SQLConfigBuilder("spark.sql.thriftserver.ui.retainedStatements")
       .doc("The number of SQL statements kept in the JDBC/ODBC web UI history.")
@@ -642,6 +649,12 @@ object SQLConf {
       .doubleConf
       .createWithDefault(0.05)
 
+  val CBO_ENABLED =
+    SQLConfigBuilder("spark.sql.cbo.enabled")
+      .doc("Enables CBO for estimation of plan statistics when set true.")
+      .booleanConf
+      .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -841,6 +854,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   override def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
+
+  override def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

@@ -400,13 +400,12 @@ case class AlterTableSerDePropertiesCommand(
 /**
  * Add Partition in ALTER TABLE: add the table partitions.
  *
- * 'partitionSpecsAndLocs': the syntax of ALTER VIEW is identical to ALTER TABLE,
- * EXCEPT that it is ILLEGAL to specify a LOCATION clause.
  * An error message will be issued if the partition exists, unless 'ifNotExists' is true.
  *
  * The syntax of this command is:
  * {{{
- *   ALTER TABLE table ADD [IF NOT EXISTS] PARTITION spec [LOCATION 'loc1']
+ *   ALTER TABLE table ADD [IF NOT EXISTS] PARTITION spec1 [LOCATION 'loc1']
+ *                                         PARTITION spec2 [LOCATION 'loc2']
  * }}}
  */
 case class AlterTableAddPartitionCommand(
@@ -763,8 +762,12 @@ case class AlterTableSetLocationCommand(
 object DDLUtils {
   val HIVE_PROVIDER = "hive"
 
+  def isHiveTable(table: CatalogTable): Boolean = {
+    table.provider.isDefined && table.provider.get.toLowerCase == HIVE_PROVIDER
+  }
+
   def isDatasourceTable(table: CatalogTable): Boolean = {
-    table.provider.isDefined && table.provider.get != HIVE_PROVIDER
+    table.provider.isDefined && table.provider.get.toLowerCase != HIVE_PROVIDER
   }
 
   /**
