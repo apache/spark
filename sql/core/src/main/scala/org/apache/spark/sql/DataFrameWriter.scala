@@ -402,7 +402,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case (true, SaveMode.Append)
         if DDLUtils.isHiveTable(
-          catalog.lookupRelation(tableIdentWithDB).asInstanceOf[CatalogRelation].catalogTable) =>
+          EliminateSubqueryAliases(catalog.lookupRelation(tableIdentWithDB))
+            .asInstanceOf[CatalogRelation].catalogTable) =>
          insertInto(tableIdentWithDB)
       case _ => createTable(tableIdent)
     }
