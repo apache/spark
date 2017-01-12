@@ -2,14 +2,15 @@
     "schema": {
         "fields": [
             {
-                "name": "a",
-                "type": {"name": "int", "isSigned": true, "bitWidth": 32},
+                "name": "s",
+                "type": {"name": "utf8"},
                 "nullable": true,
                 "children": [],
                 "typeLayout": {
                     "vectors": [
                         {"type": "VALIDITY", "typeBitWidth": 1},
-                        {"type": "DATA", "typeBitWidth": 32}
+                        {"type": "OFFSET", "typeBitWidth": 32},
+                        {"type": "DATA", "typeBitWidth": 8}
                     ]
                 }
             }
@@ -18,13 +19,14 @@
 
     "batches": [
         {
-            "count": 4,
+            "count": 3,
             "columns": [
                 {
-                    "name": "a",
-                    "count": 4,
-                    "VALIDITY": [1, 1, 1, 0],
-                    "DATA": [1, 2, 3, 0]
+                    "name": "s",
+                    "count": 3,
+                    "VALIDITY": [1, 1, 0],
+                    "OFFSET": [0, 3, 6, 6],
+                    "DATA": ["abc", "ABC", ""]
                 }
             ]
         }
