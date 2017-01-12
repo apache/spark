@@ -119,7 +119,7 @@ class KinesisCheckpointerSuite extends TestSuiteBase
     when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
 
     kinesisCheckpointer.removeCheckpointer(shardId, checkpointerMock)
-    verify(checkpointerMock, times(1)).checkpoint(anyString())
+    verify(checkpointerMock, times(1)).checkpoint()
   }
 
   test("if checkpointing is going on, wait until finished before removing and checkpointing") {
@@ -146,7 +146,8 @@ class KinesisCheckpointerSuite extends TestSuiteBase
 
     clock.advance(checkpointInterval.milliseconds / 2)
     eventually(timeout(1 second)) {
-      verify(checkpointerMock, times(2)).checkpoint(anyString())
+      verify(checkpointerMock, times(1)).checkpoint(anyString)
+      verify(checkpointerMock, times(1)).checkpoint()
     }
   }
 }
