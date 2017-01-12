@@ -32,66 +32,70 @@ import org.apache.spark.sql.types._
 
 object Arrow {
 
-  /**
-   * Compute the number of bytes needed to build validity map. According to
-   * [Arrow Layout](https://github.com/apache/arrow/blob/master/format/Layout.md#null-bitmaps),
-   * the length of the validity bitmap should be multiples of 64 bytes.
-   */
-  private def numBytesOfBitmap(numOfRows: Int): Int = {
-    Math.ceil(numOfRows / 64.0).toInt * 8
-  }
+  private case class TypeFuncs(getType: () => ArrowType,
+                               fill: ArrowBuf => Unit,
+                               write: (InternalRow, Int, ArrowBuf) => Unit)
 
-  private def fillArrow(buf: ArrowBuf, dataType: DataType): Unit = {
+  private def getTypeFuncs(dataType: DataType): TypeFuncs = {
+    val err = s"Unsupported data type ${dataType.simpleString}"
+
     dataType match {
       case NullType =>
+        TypeFuncs(
+          () => ArrowType.Null.INSTANCE,
+          (buf: ArrowBuf) => (),
+          (row: InternalRow, ordinal: Int, buf: ArrowBuf) => ())
       case BooleanType =>
-        buf.writeBoolean(false)
+        TypeFuncs(
+          () => ArrowType.Bool.INSTANCE,
+          (buf: ArrowBuf) => buf.writeBoolean(false),
+          (row: InternalRow, ordinal: Int, buf: ArrowBuf) =>
+            buf.writeBoolean(row.getBoolean(ordinal)))
       case ShortType =>
-        buf.writeShort(0)
+        TypeFuncs(
+          () => new ArrowType.Int(4 * ShortType.defaultSize, true), // TODO - check on this
+          (buf: ArrowBuf) => buf.writeShort(0),
+          (row: InternalRow, ordinal: Int, buf: ArrowBuf) => buf.writeShort(row.getShort(ordinal)))
       case IntegerType =>
-        buf.writeInt(0)
+        TypeFuncs(
+          () => new ArrowType.Int(8 * IntegerType.defaultSize, true),
+          (buf: ArrowBuf) => buf.writeInt(0),
+          (row: InternalRow, ordinal: Int, buf: ArrowBuf) => buf.writeInt(row.getInt(ordinal)))
       case LongType =>
-        buf.writeLong(0L)
+        TypeFuncs(
+          () => new ArrowType.Int(8 * LongType.defaultSize, true),
+          (buf: ArrowBuf) => buf.writeLong(0L),
+          (row: InternalRow, ordinal: Int, buf: ArrowBuf) => buf.writeLong(row.getLong(ordinal)))
       case FloatType =>
-        buf.writeFloat(0f)
+        TypeFuncs(
+          () => new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE),
+          (buf: ArrowBuf) => buf.writeFloat(0f),
+          (row: InternalRow, ordinal: Int, buf: ArrowBuf) => buf.writeFloat(row.getFloat(ordinal)))
       case DoubleType =>
-        buf.writeDouble(0d)
+        TypeFuncs(
+          () => new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE),
+          (buf: ArrowBuf) => buf.writeDouble(0d),
+          (row: InternalRow, ordinal: Int, buf: ArrowBuf) =>
+            buf.writeDouble(row.getDouble(ordinal)))
       case ByteType =>
-        buf.writeByte(0)
+        TypeFuncs(
+          () => new ArrowType.Int(8, false),
+          (buf: ArrowBuf) => buf.writeByte(0),
+          (row: InternalRow, ordinal: Int, buf: ArrowBuf) => buf.writeByte(row.getByte(ordinal)))
+      case StringType =>
+        TypeFuncs(
+          () => ArrowType.Utf8.INSTANCE,
+          (buf: ArrowBuf) => throw new UnsupportedOperationException(err),  // TODO
+          (row: InternalRow, ordinal: Int, buf: ArrowBuf) =>
+            throw new UnsupportedOperationException(err))
+      case StructType(_) =>
+        TypeFuncs(
+          () => ArrowType.Struct.INSTANCE,
+          (buf: ArrowBuf) => throw new UnsupportedOperationException(err),  // TODO
+          (row: InternalRow, ordinal: Int, buf: ArrowBuf) =>
+            throw new UnsupportedOperationException(err))
       case _ =>
-        throw new UnsupportedOperationException(
-          s"Unsupported data type ${dataType.simpleString}")
-    }
-  }
-
-  /**
-   * Get an entry from the InternalRow, and then set to ArrowBuf.
-   * Note: No Null check for the entry.
-   */
-  private def getAndSetToArrow(
-      row: InternalRow,
-      buf: ArrowBuf,
-      dataType: DataType,
-      ordinal: Int): Unit = {
-    dataType match {
-      case NullType =>
-      case BooleanType =>
-        buf.writeBoolean(row.getBoolean(ordinal))
-      case ShortType =>
-        buf.writeShort(row.getShort(ordinal))
-      case IntegerType =>
-        buf.writeInt(row.getInt(ordinal))
-      case LongType =>
-        buf.writeLong(row.getLong(ordinal))
-      case FloatType =>
-        buf.writeFloat(row.getFloat(ordinal))
-      case DoubleType =>
-        buf.writeDouble(row.getDouble(ordinal))
-      case ByteType =>
-        buf.writeByte(row.getByte(ordinal))
-      case _ =>
-        throw new UnsupportedOperationException(
-          s"Unsupported data type ${dataType.simpleString}")
+        throw new IllegalArgumentException(err)
     }
   }
 
@@ -130,6 +134,7 @@ object Arrow {
         validityMutator.setValueCount(numOfRows)
 
         val buf = allocator.buffer(numOfRows * field.dataType.defaultSize)
+        val typeFunc = getTypeFuncs(field.dataType)
         var nullCount = 0
         var index = 0
         while (index < rows.length) {
@@ -137,10 +142,10 @@ object Arrow {
           if (row.isNullAt(ordinal)) {
             nullCount += 1
             validityMutator.set(index, 0)
-            fillArrow(buf, field.dataType)
+            typeFunc.fill(buf)
           } else {
             validityMutator.set(index, 1)
-            getAndSetToArrow(row, buf, field.dataType, ordinal)
+            typeFunc.write(row, ordinal, buf)
           }
           index += 1
         }
@@ -182,7 +187,7 @@ object Arrow {
   }
 
   private[sql] def schemaToArrowSchema(schema: StructType): Schema = {
-    val arrowFields = schema.fields.map(sparkFieldToArrowField(_))
+    val arrowFields = schema.fields.map(sparkFieldToArrowField)
     new Schema(arrowFields.toList.asJava)
   }
 
@@ -193,36 +198,10 @@ object Arrow {
 
     dataType match {
       case StructType(fields) =>
-        val childrenFields = fields.map(sparkFieldToArrowField(_)).toList.asJava
+        val childrenFields = fields.map(sparkFieldToArrowField).toList.asJava
         new Field(name, nullable, ArrowType.Struct.INSTANCE, childrenFields)
       case _ =>
-        new Field(name, nullable, dataTypeToArrowType(dataType), List.empty[Field].asJava)
-    }
-  }
-
-  /**
-   * Transform Spark DataType to Arrow ArrowType.
-   */
-  private[sql] def dataTypeToArrowType(dt: DataType): ArrowType = {
-    dt match {
-      case IntegerType =>
-        new ArrowType.Int(8 * IntegerType.defaultSize, true)
-      case LongType =>
-        new ArrowType.Int(8 * LongType.defaultSize, true)
-      case StringType =>
-        ArrowType.Utf8.INSTANCE
-      case DoubleType =>
-        new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)
-      case FloatType =>
-        new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE)
-      case BooleanType =>
-        ArrowType.Bool.INSTANCE
-      case ByteType =>
-        new ArrowType.Int(8, false)
-      case StructType(_) =>
-        ArrowType.Struct.INSTANCE
-      case _ =>
-        throw new IllegalArgumentException(s"Unsupported data type")
+        new Field(name, nullable, getTypeFuncs(dataType).getType(), List.empty[Field].asJava)
     }
   }
 }

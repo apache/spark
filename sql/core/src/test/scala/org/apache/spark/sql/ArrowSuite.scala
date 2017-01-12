@@ -32,14 +32,15 @@ class ArrowSuite extends SharedSQLContext {
   }
 
   test("convert int column with null to arrow") {
-    testCollect(nullInts, "test-data/arrowNullInts.json")
+    testCollect(nullInts, "test-data/arrow/null-ints.json")
   }
 
   test("convert string column with null to arrow") {
     val nullStringsColOnly = nullStrings.select(nullStrings.columns(1))
-    testCollect(nullStringsColOnly, "test-data/arrowNullStrings.json")
+    testCollect(nullStringsColOnly, "test-data/arrow/null-strings.json")
   }
 
+  /** Test that a converted DataFrame to Arrow record batch equals batch read from JSON file */
   private def testCollect(df: DataFrame, arrowFile: String) {
     val jsonFilePath = testFile(arrowFile)
 
