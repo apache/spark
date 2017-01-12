@@ -327,7 +327,8 @@ class IsotonicRegression private (private var isotonic: Boolean)
    * functions subject to simple chain constraints." SIAM Journal on Optimization 10.3 (2000):
    * 658-672.
    *
-   * @param input Input data of tuples (label, feature, weight).
+   * @param input Input data of tuples (label, feature, weight). Weights must
+                  be non-negative.
    * @return Result tuples (label, feature, weight) where labels were updated
    *         to form a monotone sequence as per isotonic regression definition.
    */
