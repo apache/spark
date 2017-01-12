@@ -109,9 +109,10 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
          | * @since 1.3.0
          | */
          |def register(name: String, f: UDF$i[$extTypeArgs, _], returnType: DataType): Unit = {
+         |  val func = f$anyCast.call($anyParams)
          |  functionRegistry.registerFunction(
          |    name,
-         |    (e: Seq[Expression]) => ScalaUDF(f$anyCast.call($anyParams), returnType, e))
+         |    (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
          |}""".stripMargin)
     }
     */
