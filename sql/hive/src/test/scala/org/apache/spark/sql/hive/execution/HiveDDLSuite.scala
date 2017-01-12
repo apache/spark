@@ -1315,14 +1315,23 @@ class HiveDDLSuite
       checkAnswer(spark.table("t"), Row(1, "a"))
 
       Seq("c" -> 1).toDF("i", "j")
-        .write.format("hive").mode(SaveMode.Overwrite).option("fileFormat", "avro").saveAsTable("t")
+        .write.format("hive").mode(SaveMode.Overwrite).option("fileFormat", "parquet").saveAsTable("t")
       checkAnswer(spark.table("t"), Row("c", 1))
+
+      var table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      assert(DDLUtils.isHiveTable(table))
+      assert(table.storage.inputFormat ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
+      assert(table.storage.outputFormat ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+      assert(table.storage.serde ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
 
       Seq(9 -> "x").toDF("i", "j")
         .write.format("hive").mode(SaveMode.Overwrite).option("fileFormat", "avro").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(9, "x"))
 
-      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
       assert(DDLUtils.isHiveTable(table))
       assert(table.storage.inputFormat ==
         Some("org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat"))
@@ -1348,8 +1357,7 @@ class HiveDDLSuite
       val e3 = intercept[AnalysisException] {
         spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
       }
-      assert(e3.message.contains("Cannot overwrite table")
-        && e3.message.contains("that is also being read from"))
+      assert(e3.message.contains("Cannot overwrite table default.t that is also being read from"))
     }
   }
 
