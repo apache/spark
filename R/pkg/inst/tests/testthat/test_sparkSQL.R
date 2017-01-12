@@ -206,6 +206,14 @@ test_that("create DataFrame from RDD", {
   df <- createDataFrame(cars, numPartitions = 20)
   expect_equal(getNumPartitions(toRDD(df)), 20)
 
+  df <- as.DataFrame(data.frame(0))
+  expect_is(df, "SparkDataFrame")
+  df <- createDataFrame(list(list(1)))
+  expect_is(df, "SparkDataFrame")
+  df <- as.DataFrame(data.frame(0), numPartitions = 2)
+  # no data to partition, goes to 1
+  expect_equal(getNumPartitions(toRDD(df)), 1)
+
   setHiveContext(sc)
   sql("CREATE TABLE people (name string, age double, height float)")
   df <- read.df(jsonPathNa, "json", schema)
