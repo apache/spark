@@ -2003,10 +2003,7 @@ class Dataset[T] private[sql](
       if (groupColExprIds.contains(attr.exprId)) {
         attr
       } else {
-        // Removing duplicate rows should not change output attributes. We should keep
-        // the original exprId of the attribute. Otherwise, to select a column in original
-        // dataset will cause analysis exception due to unresolved attribute.
-        Alias(new First(attr).toAggregateExpression(), attr.name)(exprId = attr.exprId)
+        Alias(new First(attr).toAggregateExpression(), attr.name)()
       }
     }
     Aggregate(groupCols, aggCols, logicalPlan)
