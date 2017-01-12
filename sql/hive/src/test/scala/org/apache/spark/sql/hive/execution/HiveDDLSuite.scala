@@ -1314,8 +1314,8 @@ class HiveDDLSuite
         .write.format("hive").option("fileFormat", "avro").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a"))
 
-      Seq("c" -> 1).toDF("i", "j")
-        .write.format("hive").mode(SaveMode.Overwrite).option("fileFormat", "parquet").saveAsTable("t")
+      Seq("c" -> 1).toDF("i", "j").write.format("hive")
+        .mode(SaveMode.Overwrite).option("fileFormat", "parquet").saveAsTable("t")
       checkAnswer(spark.table("t"), Row("c", 1))
 
       var table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
