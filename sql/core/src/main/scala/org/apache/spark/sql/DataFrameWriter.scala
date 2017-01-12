@@ -218,7 +218,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       bucketSpec = getBucketSpec,
       options = extraOptions.toMap)
 
-    dataSource.write(mode, df, isForWriteOnly = true)
+    dataSource.write(mode, df)
   }
 
   /**

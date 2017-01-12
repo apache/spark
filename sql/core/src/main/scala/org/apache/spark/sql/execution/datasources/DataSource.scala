@@ -414,98 +414,113 @@ case class DataSource(
   }
 
   /**
-   * Writes the given [[DataFrame]] out to this [[DataSource]].
-   *
-   * @param isForWriteOnly Whether to just write the data without returning a [[BaseRelation]].
+   * Writes the given [[DataFrame]] out in this [[FileFormat]].
    */
-  def write(
-      mode: SaveMode,
-      data: DataFrame,
-      isForWriteOnly: Boolean = false): Option[BaseRelation] = {
+  private def writeInFileFormat(format: FileFormat, mode: SaveMode, data: DataFrame): Unit = {
+    // Don't glob path for the write path.  The contracts here are:
+    //  1. Only one output path can be specified on the write path;
+    //  2. Output path must be a legal HDFS style file system path;
+    //  3. It's OK that the output path doesn't exist yet;
+    val allPaths = paths ++ caseInsensitiveOptions.get("path")
+    val outputPath = if (allPaths.length == 1) {
+      val path = new Path(allPaths.head)
+      val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+      path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    } else {
+      throw new IllegalArgumentException("Expected exactly one path to be specified, but " +
+        s"got: ${allPaths.mkString(", ")}")
+    }
+
+    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    PartitioningUtils.validatePartitionColumn(data.schema, partitionColumns, caseSensitive)
+
+    // If we are appending to a table that already exists, make sure the partitioning matches
+    // up.  If we fail to load the table for whatever reason, ignore the check.
+    if (mode == SaveMode.Append) {
+      val existingPartitionColumns = Try {
+        getOrInferFileFormatSchema(format, justPartitioning = true)._2.fieldNames.toList
+      }.getOrElse(Seq.empty[String])
+      // TODO: Case sensitivity.
+      val sameColumns =
+        existingPartitionColumns.map(_.toLowerCase()) == partitionColumns.map(_.toLowerCase())
+      if (existingPartitionColumns.nonEmpty && !sameColumns) {
+        throw new AnalysisException(
+          s"""Requested partitioning does not match existing partitioning.
+             |Existing partitioning columns:
+             |  ${existingPartitionColumns.mkString(", ")}
+             |Requested partitioning columns:
+             |  ${partitionColumns.mkString(", ")}
+             |""".stripMargin)
+      }
+    }
+
+    // SPARK-17230: Resolve the partition columns so InsertIntoHadoopFsRelationCommand does
+    // not need to have the query as child, to avoid to analyze an optimized query,
+    // because InsertIntoHadoopFsRelationCommand will be optimized first.
+    val partitionAttributes = partitionColumns.map { name =>
+      val plan = data.logicalPlan
+      plan.resolve(name :: Nil, data.sparkSession.sessionState.analyzer.resolver).getOrElse {
+        throw new AnalysisException(
+          s"Unable to resolve $name given [${plan.output.map(_.name).mkString(", ")}]")
+      }.asInstanceOf[Attribute]
+    }
+    val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
+      sparkSession.table(tableIdent).queryExecution.analyzed.collect {
+        case LogicalRelation(t: HadoopFsRelation, _, _) => t.location
+      }.head
+    }
+    // For partitioned relation r, r.schema's column ordering can be different from the column
+    // ordering of data.logicalPlan (partition columns are all moved after data column).  This
+    // will be adjusted within InsertIntoHadoopFsRelation.
+    val plan =
+      InsertIntoHadoopFsRelationCommand(
+        outputPath = outputPath,
+        staticPartitions = Map.empty,
+        partitionColumns = partitionAttributes,
+        bucketSpec = bucketSpec,
+        fileFormat = format,
+        options = options,
+        query = data.logicalPlan,
+        mode = mode,
+        catalogTable = catalogTable,
+        fileIndex = fileIndex)
+      sparkSession.sessionState.executePlan(plan).toRdd
+  }
+
+  /**
+   * Writes the given [[DataFrame]] out to this [[DataSource]] and returns a [[BaseRelation]] for
+   * the following reading.
+   */
+  def writeAndRead(mode: SaveMode, data: DataFrame): BaseRelation = {
     if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
 
     providingClass.newInstance() match {
       case dataSource: CreatableRelationProvider =>
-        Some(dataSource.createRelation(sparkSession.sqlContext, mode, caseInsensitiveOptions, data))
+        dataSource.createRelation(sparkSession.sqlContext, mode, caseInsensitiveOptions, data)
       case format: FileFormat =>
-        // Don't glob path for the write path.  The contracts here are:
-        //  1. Only one output path can be specified on the write path;
-        //  2. Output path must be a legal HDFS style file system path;
-        //  3. It's OK that the output path doesn't exist yet;
-        val allPaths = paths ++ caseInsensitiveOptions.get("path")
-        val outputPath = if (allPaths.length == 1) {
-          val path = new Path(allPaths.head)
-          val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
-          path.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        } else {
-          throw new IllegalArgumentException("Expected exactly one path to be specified, but " +
-            s"got: ${allPaths.mkString(", ")}")
-        }
+        writeInFileFormat(format, mode, data)
+        // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
+        copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
+      case _ =>
+        sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
+    }
+  }
 
-        val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-        PartitioningUtils.validatePartitionColumn(
-          data.schema, partitionColumns, caseSensitive)
+  /**
+   * Writes the given [[DataFrame]] out to this [[DataSource]].
+   */
+  def write(mode: SaveMode, data: DataFrame): Unit = {
+    if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
+      throw new AnalysisException("Cannot save interval data type into external storage.")
+    }
 
-        // If we are appending to a table that already exists, make sure the partitioning matches
-        // up.  If we fail to load the table for whatever reason, ignore the check.
-        if (mode == SaveMode.Append) {
-          val existingPartitionColumns = Try {
-            getOrInferFileFormatSchema(format, justPartitioning = true)._2.fieldNames.toList
-          }.getOrElse(Seq.empty[String])
-          // TODO: Case sensitivity.
-          val sameColumns =
-            existingPartitionColumns.map(_.toLowerCase()) == partitionColumns.map(_.toLowerCase())
-          if (existingPartitionColumns.nonEmpty && !sameColumns) {
-            throw new AnalysisException(
-              s"""Requested partitioning does not match existing partitioning.
-                 |Existing partitioning columns:
-                 |  ${existingPartitionColumns.mkString(", ")}
-                 |Requested partitioning columns:
-                 |  ${partitionColumns.mkString(", ")}
-                 |""".stripMargin)
-          }
-        }
-
-        // SPARK-17230: Resolve the partition columns so InsertIntoHadoopFsRelationCommand does
-        // not need to have the query as child, to avoid to analyze an optimized query,
-        // because InsertIntoHadoopFsRelationCommand will be optimized first.
-        val partitionAttributes = partitionColumns.map { name =>
-          val plan = data.logicalPlan
-          plan.resolve(name :: Nil, data.sparkSession.sessionState.analyzer.resolver).getOrElse {
-            throw new AnalysisException(
-              s"Unable to resolve $name given [${plan.output.map(_.name).mkString(", ")}]")
-          }.asInstanceOf[Attribute]
-        }
-        val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
-          sparkSession.table(tableIdent).queryExecution.analyzed.collect {
-            case LogicalRelation(t: HadoopFsRelation, _, _) => t.location
-          }.head
-        }
-        // For partitioned relation r, r.schema's column ordering can be different from the column
-        // ordering of data.logicalPlan (partition columns are all moved after data column).  This
-        // will be adjusted within InsertIntoHadoopFsRelation.
-        val plan =
-          InsertIntoHadoopFsRelationCommand(
-            outputPath = outputPath,
-            staticPartitions = Map.empty,
-            partitionColumns = partitionAttributes,
-            bucketSpec = bucketSpec,
-            fileFormat = format,
-            options = options,
-            query = data.logicalPlan,
-            mode = mode,
-            catalogTable = catalogTable,
-            fileIndex = fileIndex)
-        sparkSession.sessionState.executePlan(plan).toRdd
-        if (isForWriteOnly) {
-          None
-        } else {
-          // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
-          Some(copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation())
-        }
-
+    providingClass.newInstance() match {
+      case dataSource: CreatableRelationProvider =>
+        dataSource.createRelation(sparkSession.sqlContext, mode, caseInsensitiveOptions, data)
+      case format: FileFormat =>
+        writeInFileFormat(format, mode, data)
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
     }
