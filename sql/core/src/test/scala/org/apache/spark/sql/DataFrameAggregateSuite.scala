@@ -531,7 +531,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       limit2Df.select($"id"))
   }
 
-  test("handle missing data after pivoting") {
+  test("SPARK-17237 remove backticks in a pivot result schema") {
     val df = Seq((2, 3, 4), (3, 4, 5)).toDF("a", "x", "y")
     checkAnswer(
       df.groupBy("a").pivot("x").agg(count("y"), avg("y")).na.fill(0),
