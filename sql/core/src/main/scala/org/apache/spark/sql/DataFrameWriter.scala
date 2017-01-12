@@ -205,6 +205,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def save(): Unit = {
+    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+      throw new AnalysisException("Hive data source can only be used with tables, you can not " +
+        "write files of Hive data source directly.")
+    }
+
     assertNotBucketed("save")
     val dataSource = DataSource(
       df.sparkSession,
@@ -361,10 +366,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
-    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
-      throw new AnalysisException("Cannot create hive serde table with saveAsTable API")
-    }
-
     val catalog = df.sparkSession.sessionState.catalog
     val tableExists = catalog.tableExists(tableIdent)
     val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
@@ -385,6 +386,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         }
         EliminateSubqueryAliases(catalog.lookupRelation(tableIdentWithDB)) match {
           // Only do the check if the table is a data source table (the relation is a BaseRelation).
+          // TODO(cloud-fan): also check hive table relation here when we support overwrite mode
+          // for creating hive tables.
           case LogicalRelation(dest: BaseRelation, _, _) if srcRelations.contains(dest) =>
             throw new AnalysisException(
               s"Cannot overwrite table $tableName that is also being read from")

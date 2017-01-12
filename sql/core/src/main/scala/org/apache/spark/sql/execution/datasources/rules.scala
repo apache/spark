@@ -35,27 +35,30 @@ import org.apache.spark.sql.types.{AtomicType, StructType}
  * Try to replaces [[UnresolvedRelation]]s with [[ResolveDataSource]].
  */
 class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
+    sparkSession.sessionState.conf.runSQLonFile && u.tableIdentifier.database.isDefined
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case u: UnresolvedRelation if u.tableIdentifier.database.isDefined =>
+    case u: UnresolvedRelation if maybeSQLFile(u) =>
       try {
         val dataSource = DataSource(
           sparkSession,
           paths = u.tableIdentifier.table :: Nil,
           className = u.tableIdentifier.database.get)
 
-        val notSupportDirectQuery = try {
-          !classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
-        } catch {
-          case NonFatal(e) => false
-        }
-        if (notSupportDirectQuery) {
+        // `dataSource.providingClass` may throw ClassNotFoundException, then the outer try-catch
+        // will catch it and return the original plan, so that the analyzer can report table not
+        // found later.
+        val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
+        if (!isFileFormat) {
           throw new AnalysisException("Unsupported data source type for direct query on files: " +
             s"${u.tableIdentifier.database.get}")
         }
         val plan = LogicalRelation(dataSource.resolveRelation())
-        u.alias.map(a => SubqueryAlias(u.alias.get, plan, None)).getOrElse(plan)
+        u.alias.map(a => SubqueryAlias(a, plan, None)).getOrElse(plan)
       } catch {
-        case e: ClassNotFoundException => u
+        case _: ClassNotFoundException => u
         case e: Exception =>
           // the provider is valid, but failed to create a logical plan
           u.failAnalysis(e.getMessage)
@@ -109,7 +112,7 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
         throw new AnalysisException("Saving data into a view is not allowed.")
       }
 
-      if (existingTable.provider.get == DDLUtils.HIVE_PROVIDER) {
+      if (DDLUtils.isHiveTable(existingTable)) {
         throw new AnalysisException(s"Saving data in the Hive serde table $tableName is " +
           "not supported yet. Please use the insertInto() API as an alternative.")
       }
@@ -233,7 +236,7 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
     checkDuplication(normalizedPartitionCols, "partition")
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
-      if (table.provider.get == DDLUtils.HIVE_PROVIDER) {
+      if (DDLUtils.isHiveTable(table)) {
         // When we hit this branch, it means users didn't specify schema for the table to be
         // created, as we always include partition columns in table schema for hive serde tables.
         // The real schema will be inferred at hive metastore by hive serde, plus the given
@@ -380,8 +383,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
 object HiveOnlyCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case CreateTable(tableDesc, _, Some(_))
-          if tableDesc.provider.get == DDLUtils.HIVE_PROVIDER =>
+      case CreateTable(tableDesc, _, Some(_)) if DDLUtils.isHiveTable(tableDesc) =>
         throw new AnalysisException("Hive support is required to use CREATE Hive TABLE AS SELECT")
 
       case _ => // OK
