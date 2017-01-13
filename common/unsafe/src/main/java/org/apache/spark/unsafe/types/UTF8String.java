@@ -850,11 +850,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * is bigger than max value in digits, e.g. Integer.MAX_VALUE is '2147483647' and
    * Integer.MIN_VALUE is '-2147483648'.
    *
-   * These codes are mostly copied from LazyLong.parseLong in Hive.
+   * This code is mostly copied from LazyLong.parseLong in Hive.
    */
   public long toLong() {
     if (numBytes == 0) {
-      throw new NumberFormatException("Empty string!");
+      throw new NumberFormatException("Empty string");
     }
 
     byte b = getByte(0);
@@ -884,15 +884,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
       int digit = getDigit(b);
       // We are going to process the new digit and accumulate the result. However, before doing
-      // this, if the result is already smaller than the stopValue(Long.MIN_VALUE / 10), then
+      // this, if the result is already smaller than the stopValue(Long.MIN_VALUE / radix), then
       // result * 10 will definitely be smaller than minValue, and we can stop and throw exception.
       if (result < stopValue) {
         throw new NumberFormatException(toString());
       }
 
       result = result * radix - digit;
-      // Since the previous result is less than or equal to stopValue(Long.MIN_VALUE / 10), we can
-      // just use `result > 0` to check overflow. If result overflows, we should stop and throw
+      // Since the previous result is less than or equal to stopValue(Long.MIN_VALUE / radix), we
+      // can just use `result > 0` to check overflow. If result overflows, we should stop and throw
       // exception.
       if (result > 0) {
         throw new NumberFormatException(toString());
@@ -927,11 +927,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * is bigger than max value in digits, e.g. Integer.MAX_VALUE is '2147483647' and
    * Integer.MIN_VALUE is '-2147483648'.
    *
-   * These codes are mostly copied from LazyInt.parseInt in Hive.
+   * This code is mostly copied from LazyInt.parseInt in Hive.
+   *
+   * Note that, this method is almost same as `toLong`, but we leave it duplicated for performance
+   * reasons, like Hive does.
    */
   public int toInt() {
     if (numBytes == 0) {
-      throw new NumberFormatException("Empty string!");
+      throw new NumberFormatException("Empty string");
     }
 
     byte b = getByte(0);
@@ -961,16 +964,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
       int digit = getDigit(b);
       // We are going to process the new digit and accumulate the result. However, before doing
-      // this, if the result is already smaller than the stopValue(Long.MIN_VALUE / 10), then
+      // this, if the result is already smaller than the stopValue(Integer.MIN_VALUE / radix), then
       // result * 10 will definitely be smaller than minValue, and we can stop and throw exception.
       if (result < stopValue) {
         throw new NumberFormatException(toString());
       }
 
       result = result * radix - digit;
-      // Since the previous result is less than or equal to stopValue(Long.MIN_VALUE / 10), we can
-      // just use `result > 0` to check overflow. If result overflows, we should stop and throw
-      // exception.
+      // Since the previous result is less than or equal to stopValue(Integer.MIN_VALUE / radix),
+      // we can just use `result > 0` to check overflow. If result overflows, we should stop and
+      // throw exception.
       if (result > 0) {
         throw new NumberFormatException(toString());
       }
