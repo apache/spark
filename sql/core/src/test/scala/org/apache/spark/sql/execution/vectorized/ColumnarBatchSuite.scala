@@ -177,7 +177,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
           assert(v._1 == Platform.getShort(null, addr + 2 * v._2))
         }
       }
-      
+
       column.close
     }}
   }
