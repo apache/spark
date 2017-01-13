@@ -268,7 +268,7 @@ class GeneralizedLinearRegressionSuite
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with gaussian family, " +
           s"$link link and fitIntercept = $fitIntercept.")
 
-        val familyLink = new FamilyAndLink(Gaussian, Link.fromParams(trainer))
+        val familyLink = FamilyAndLink(trainer)
         model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
           .foreach {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
@@ -384,7 +384,7 @@ class GeneralizedLinearRegressionSuite
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with binomial family, " +
           s"$link link and fitIntercept = $fitIntercept.")
 
-        val familyLink = new FamilyAndLink(Binomial, Link.fromParams(trainer))
+        val familyLink = FamilyAndLink(trainer)
         model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
           .foreach {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
@@ -456,7 +456,7 @@ class GeneralizedLinearRegressionSuite
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with poisson family, " +
           s"$link link and fitIntercept = $fitIntercept.")
 
-        val familyLink = new FamilyAndLink(Poisson, Link.fromParams(trainer))
+        val familyLink = FamilyAndLink(trainer)
         model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
           .foreach {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
@@ -562,7 +562,7 @@ class GeneralizedLinearRegressionSuite
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with gamma family, " +
           s"$link link and fitIntercept = $fitIntercept.")
 
-        val familyLink = new FamilyAndLink(Gamma, Link.fromParams(trainer))
+        val familyLink = FamilyAndLink(trainer)
         model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
           .foreach {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
@@ -649,7 +649,7 @@ class GeneralizedLinearRegressionSuite
           s"linkPower = $linkPower, fitIntercept = $fitIntercept " +
           s"and variancePower = $variancePower.")
 
-        val familyLink = new FamilyAndLink(Family.fromParams(trainer), Link.fromParams(trainer))
+        val familyLink = FamilyAndLink(trainer)
         model.transform(datasetTweedie).select("features", "prediction", "linkPrediction").collect()
           .foreach {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
@@ -726,8 +726,7 @@ class GeneralizedLinearRegressionSuite
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with tweedie family, " +
           s"fitIntercept = $fitIntercept and variancePower = $variancePower.")
 
-        val familyObj = Family.fromParams(trainer)
-        val familyLink = new FamilyAndLink(familyObj, familyObj.defaultLink)
+        val familyLink = FamilyAndLink(trainer)
         model.transform(datasetTweedie).select("features", "prediction", "linkPrediction").collect()
           .foreach {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
@@ -1292,7 +1291,6 @@ class GeneralizedLinearRegressionSuite
     val residualDevianceR = 13.844
     val residualDegreeOfFreedomNullR = 4
     val residualDegreeOfFreedomR = 2
-    // val aicR = 0.0
 
     val summary = model.summary
 
@@ -1334,7 +1332,6 @@ class GeneralizedLinearRegressionSuite
     assert(summary.deviance ~== residualDevianceR absTol 1E-3)
     assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
     assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
-    // assert(summary.aic ~== aicR absTol 1E-3)
     assert(summary.solver === "irls")
   }
 
