@@ -92,9 +92,9 @@ private[spark] class CoarseGrainedExecutorBackend(
       if (executor == null) {
         exitExecutor(1, "Received LaunchTask command but executor was null")
       } else {
-        val taskDesc = TaskDescription.decode(data.value)
+        val (taskDesc, serializedTask) = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
-        executor.launchTask(this, taskDesc)
+        executor.launchTask(this, taskDesc, serializedTask)
       }
 
     case KillTask(taskId, _, interruptThread) =>

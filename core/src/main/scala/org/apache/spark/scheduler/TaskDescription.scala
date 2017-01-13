@@ -54,8 +54,7 @@ private[spark] class TaskDescription(
     val index: Int,    // Index within this task's TaskSet
     val addedFiles: Map[String, Long],
     val addedJars: Map[String, Long],
-    val properties: Properties,
-    private var serializedTask_ : ByteBuffer) extends  Logging {
+    val properties: Properties) extends Logging {
 
   def this(
       taskId: Long,
@@ -68,20 +67,16 @@ private[spark] class TaskDescription(
       properties: Properties,
       task: Task[_]) {
       this(taskId, attemptNumber, executorId, name, index,
-        addedFiles, addedJars, properties, null.asInstanceOf[ByteBuffer])
+        addedFiles, addedJars, properties)
       task_ = task
   }
 
-  private var task_ : Task[_] = null
-
-  def serializedTask: ByteBuffer = {
-    if (serializedTask_ == null) {
+   def serializedTask: ByteBuffer = {
       // This is where we serialize the task on the driver before sending it to the executor.
       // This is not done when creating the TaskDescription so we can postpone this serialization
       // to later in the scheduling process -- particularly,
       // so it can happen in another thread by the CoarseGrainedSchedulerBackend.
-      // On the executors, this will already be populated by decode
-      serializedTask_ = try {
+      try {
         ByteBuffer.wrap(Utils.serialize(task_))
       } catch {
         case NonFatal(e) =>
@@ -90,8 +85,8 @@ private[spark] class TaskDescription(
           throw new TaskNotSerializableException(e)
       }
     }
-    serializedTask_
-  }
+
+  private var task_ : Task[_] = null
 
   override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
 }
@@ -106,7 +101,7 @@ private[spark] object TaskDescription {
   }
 
   @throws[TaskNotSerializableException]
-  def encode(taskDescription: TaskDescription): ByteBuffer = {
+  def encode(taskDescription: TaskDescription, serializedTask: ByteBuffer): ByteBuffer = {
     val bytesOut = new ByteBufferOutputStream(4096)
     val dataOut = new DataOutputStream(bytesOut)
 
@@ -130,7 +125,7 @@ private[spark] object TaskDescription {
     }
 
     // Write the task. The task is already serialized, so write it directly to the byte buffer.
-    Utils.writeByteBuffer(taskDescription.serializedTask, bytesOut)
+    Utils.writeByteBuffer(serializedTask, bytesOut)
 
     dataOut.close()
     bytesOut.close()
@@ -146,7 +141,7 @@ private[spark] object TaskDescription {
     map
   }
 
-  def decode(byteBuffer: ByteBuffer): TaskDescription = {
+  def decode(byteBuffer: ByteBuffer): (TaskDescription, ByteBuffer) = {
     val dataIn = new DataInputStream(new ByteBufferInputStream(byteBuffer))
     val taskId = dataIn.readLong()
     val attemptNumber = dataIn.readInt()
@@ -170,7 +165,7 @@ private[spark] object TaskDescription {
     // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
     val serializedTask = byteBuffer.slice()
 
-    new TaskDescription(taskId, attemptNumber, executorId, name, index, taskFiles, taskJars,
-      properties, serializedTask)
+    (new TaskDescription(taskId, attemptNumber, executorId, name, index, taskFiles, taskJars,
+      properties), serializedTask)
   }
 }
