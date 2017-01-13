@@ -37,11 +37,8 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     nullCount = 0, avgLen = 4, maxLen = 4)
   val child = StatsTestPlan(
     outputList = Seq(ar),
-    stats = Statistics(
-      sizeInBytes = 10 * 4,
-      rowCount = Some(10),
-      attributeStats = AttributeMap(Seq(ar -> childColStat))
-    )
+    rowCount = 10L,
+    attributeStats = AttributeMap(Seq(ar -> childColStat))
   )
 
   test("key = 2") {
@@ -94,7 +91,6 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(3L)
     )
-
   }
 
   test("key > 6") {
@@ -199,11 +195,11 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     val expectedRowCount = rowCount.getOrElse(0L)
     val expectedAttrStats = toAttributeMap(Seq("key" -> expectedColStats), filterNode)
     val expectedStats = Statistics(
-      sizeInBytes = expectedRowCount * getRowSize(filterNode.output, expectedAttrStats),
+      sizeInBytes = getOutputSize(filterNode.output, expectedAttrStats, expectedRowCount),
       rowCount = Some(expectedRowCount),
       attributeStats = expectedAttrStats)
 
-    assert(filterNode.statistics == expectedStats)
+    assert(filterNode.stats(conf) == expectedStats)
   }
 
 }

@@ -130,9 +130,12 @@ case class Filter(condition: Expression, child: LogicalPlan)
     child.constraints.union(predicates.toSet)
   }
 
-  override lazy val statistics: Statistics = {
-    val filterEstimation = new FilterEstimation
-    filterEstimation.estimate(this).getOrElse(super.statistics)
+  override def computeStats(conf: CatalystConf): Statistics = {
+    if (conf.cboEnabled) {
+      FilterEstimation(conf).estimate(this).getOrElse(super.computeStats(conf))
+    } else {
+      super.computeStats(conf)
+    }
   }
 
 }

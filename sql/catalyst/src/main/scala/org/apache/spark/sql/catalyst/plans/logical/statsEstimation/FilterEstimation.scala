@@ -21,6 +21,7 @@ import scala.collection.immutable.{HashSet, Map}
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -28,7 +29,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 
-class FilterEstimation extends Logging {
+case class FilterEstimation(catalystConf: CatalystConf) extends Logging {
 
   /**
    * We use a mutable colStats because we need to update the corresponding ColumnStat
@@ -51,7 +52,7 @@ class FilterEstimation extends Logging {
    * @return Option[Statistics] When there is no statistics collected, it returns None.
    */
   def estimate(plan: Filter): Option[Statistics] = {
-    val stats: Statistics = plan.child.statistics
+    val stats: Statistics = plan.child.stats(catalystConf)
     if (stats.rowCount.isEmpty) return None
 
     // save a mutable copy of colStats so that we can later change it recursively
@@ -74,9 +75,9 @@ class FilterEstimation extends Logging {
 
     val filteredRowCountValue: BigInt =
       EstimationUtils.ceil(BigDecimal(stats.rowCount.get) * filterSelectivity)
-    val avgRowSize = BigDecimal(EstimationUtils.getRowSize(plan.output, newColStats))
-    val filteredSizeInBytes: BigInt =
-      EstimationUtils.ceil(BigDecimal(filteredRowCountValue) * avgRowSize)
+    val filteredSizeInBytes: BigInt = EstimationUtils.ceil(BigDecimal(
+        EstimationUtils.getOutputSize(plan.output, newColStats, filteredRowCountValue)
+    ))
 
     Some(stats.copy(sizeInBytes = filteredSizeInBytes, rowCount = Some(filteredRowCountValue),
       attributeStats = newColStats))
@@ -228,7 +229,7 @@ class FilterEstimation extends Logging {
       return None
     }
     val aColStat = mutableColStats(attrRef.exprId)
-    val rowCountValue = plan.child.statistics.rowCount.get
+    val rowCountValue = plan.child.stats(catalystConf).rowCount.get
     val nullPercent: BigDecimal =
       if (rowCountValue == 0) 0.0
       else BigDecimal(aColStat.nullCount)/BigDecimal(rowCountValue)
