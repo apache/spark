@@ -342,13 +342,12 @@ class SQLTests(ReusedPySparkTestCase):
         df = df.withColumn('b', udf(lambda x: 'x')(df.a))
         self.assertEqual(df.filter('b = "x"').collect(), [Row(a=1, b='x')])
 
-    def test_udf_in_filter_on_top_of_inner(self):
+    def test_udf_in_filter_on_top_of_join(self):
         from pyspark.sql.functions import udf
-        from pyspark.sql.types import BooleanType
         left = self.spark.createDataFrame([Row(a=1)])
         right = self.spark.createDataFrame([Row(b=1)])
         f = udf(lambda a, b: a == b, BooleanType())
-        df = left.crossJoin(right).filter(f("a","b"))
+        df = left.crossJoin(right).filter(f("a", "b"))
         self.assertEqual(df.collect(), [Row(a=1, b=1)])
 
     def test_udf_without_arguments(self):
