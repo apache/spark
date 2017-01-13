@@ -45,10 +45,12 @@ private[r] class LDAWrapper private (
   import LDAWrapper._
 
   private val lda: LDAModel = pipeline.stages.last.asInstanceOf[LDAModel]
-  private val distributedModel = lda.isDistributed match {
-    case true => pipeline.stages.last.asInstanceOf[DistributedLDAModel]
-    case _ => null
-  }
+
+  // Only applicable to distributed lda model
+  lazy private val distributedModel =
+    pipeline.stages.last.asInstanceOf[DistributedLDAModel]
+  lazy val trainingLogLikelihood: Double = distributedModel.trainingLogLikelihood
+  lazy val logPrior: Double = distributedModel.logPrior
 
   private val preprocessor: PipelineModel =
     new PipelineModel(s"${Identifiable.randomUID(pipeline.uid)}", pipeline.stages.dropRight(1))
@@ -82,11 +84,6 @@ private[r] class LDAWrapper private (
   lazy val vocabSize: Int = lda.vocabSize
   lazy val docConcentration: Array[Double] = lda.getEffectiveDocConcentration
   lazy val topicConcentration: Double = lda.getEffectiveTopicConcentration
-  // Only applicable to distributed lda model
-  lazy val trainingLogLikelihood: Double = distributedModel.trainingLogLikelihood
-
-  // Only applicable to distributed lda model
-  lazy val logPrior: Double = distributedModel.logPrior
 
   override def write: MLWriter = new LDAWrapper.LDAWrapperWriter(this)
 }

@@ -391,10 +391,10 @@ setMethod("spark.lda", signature(data = "SparkDataFrame"),
 #'         \item{\code{trainingLogLikelihood}}{Log likelihood of the observed tokens in the training set,
 #'               given the current parameter estimates:
 #'               log P(docs | topics, topic distributions for docs, Dirichlet hyperparameters)
-#'               It is only for \code{DistributedLDAModel} (i.e., optimizer = "em")}
+#'               It is only for distributed LDA model (i.e., optimizer = "em")}
 #'         \item{\code{logPrior}}{Log probability of the current parameter estimate:
 #'               log P(topics, topic distributions for docs | Dirichlet hyperparameters)
-#'               It is only for \code{DistributedLDAModel} (i.e., optimizer = "em")}
+#'               It is only for distributed LDA model (i.e., optimizer = "em")}
 #' @rdname spark.lda
 #' @aliases summary,LDAModel-method
 #' @export
