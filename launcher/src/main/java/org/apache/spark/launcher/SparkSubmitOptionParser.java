@@ -80,7 +80,8 @@ class SparkSubmitOptionParser {
   protected final String KUBERNETES_MASTER = "--kubernetes-master";
   protected final String KUBERNETES_NAMESPACE = "--kubernetes-namespace";
   protected final String KUBERNETES_UPLOAD_JARS = "--upload-jars";
-  protected final String KUBERNETES_UPLOAD_DRIVER_EXTRA_CLASSPATH = "--upload-driver-extra-classpath";
+  protected final String KUBERNETES_UPLOAD_DRIVER_EXTRA_CLASSPATH =
+          "--upload-driver-extra-classpath";
 
   /**
    * This is the canonical list of spark-submit options. Each entry in the array contains the
