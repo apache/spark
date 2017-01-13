@@ -49,7 +49,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     val serializedTask = serializer.newInstance().serialize(new FakeTask(0, 0))
-    val taskDescription = createFakeTaskDescription(serializedTask)
+    val taskDescription = createFakeTaskDescription()
 
     // we use latches to force the program to run in this order:
     // +-----------------------------+---------------------------------------+
@@ -99,7 +99,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     try {
       executor = new Executor("id", "localhost", env, userClassPath = Nil, isLocal = true)
       // the task will be launched in a dedicated worker thread
-      executor.launchTask(mockExecutorBackend, taskDescription)
+      executor.launchTask(mockExecutorBackend, taskDescription, serializedTask)
 
       if (!executorSuiteHelper.latch1.await(5, TimeUnit.SECONDS)) {
         fail("executor did not send first status update in time")
@@ -128,9 +128,9 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     val serializedTask = serializer.newInstance().serialize(new NonDeserializableTask)
-    val taskDescription = createFakeTaskDescription(serializedTask)
+    val taskDescription = createFakeTaskDescription()
 
-    val failReason = runTaskAndGetFailReason(taskDescription)
+    val failReason = runTaskAndGetFailReason(taskDescription, serializedTask)
     failReason match {
       case ef: ExceptionFailure =>
         assert(ef.exception.isDefined)
@@ -155,7 +155,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     mockEnv
   }
 
-  private def createFakeTaskDescription(serializedTask: ByteBuffer): TaskDescription = {
+  private def createFakeTaskDescription(): TaskDescription = {
     new TaskDescription(
       taskId = 0,
       attemptNumber = 0,
@@ -164,17 +164,18 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
       index = 0,
       addedFiles = Map[String, Long](),
       addedJars = Map[String, Long](),
-      properties = new Properties,
-      serializedTask)
+      properties = new Properties)
   }
 
-  private def runTaskAndGetFailReason(taskDescription: TaskDescription): TaskFailedReason = {
+  private def runTaskAndGetFailReason(
+    taskDescription: TaskDescription,
+    serializedTask: ByteBuffer): TaskFailedReason = {
     val mockBackend = mock[ExecutorBackend]
     var executor: Executor = null
     try {
       executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true)
       // the task will be launched in a dedicated worker thread
-      executor.launchTask(mockBackend, taskDescription)
+      executor.launchTask(mockBackend, taskDescription, serializedTask)
       eventually(timeout(5 seconds), interval(10 milliseconds)) {
         assert(executor.numRunningTasks === 0)
       }

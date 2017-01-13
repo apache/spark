@@ -259,7 +259,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
         val serializedTask = try {
-          TaskDescription.encode(task)
+          TaskDescription.encode(task, task.serializedTask)
         } catch {
           case NonFatal(e) =>
             abortTaskSetManager(scheduler, task.taskId,
