@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.logical.estimation
+package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import java.math.{BigDecimal => JDecimal}
 import java.sql.{Date, Timestamp}
@@ -115,8 +115,6 @@ object Range {
       case TimestampType =>
         (DateTimeUtils.toJavaTimestamp(n.min.longValue()),
           DateTimeUtils.toJavaTimestamp(n.max.longValue()))
-      case _ =>
-        throw new AnalysisException(s"Type $dataType is not castable from numeric in estimation.")
     }
   }
 }

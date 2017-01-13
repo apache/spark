@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
+import scala.math.BigDecimal.RoundingMode
+
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
 import org.apache.spark.sql.types.StringType
 
 
@@ -28,6 +30,15 @@ object EstimationUtils {
   /** Check if each plan has rowCount in its statistics. */
   def rowCountsExist(conf: CatalystConf, plans: LogicalPlan*): Boolean =
     plans.forall(_.stats(conf).rowCount.isDefined)
+
+  /** Check if each attribute has column stat in the corresponding statistics. */
+  def columnStatsExist(statsAndAttr: (Statistics, Attribute)*): Boolean = {
+    statsAndAttr.forall { case (stats, attr) =>
+      stats.attributeStats.contains(attr)
+    }
+  }
+
+  def ceil(bigDecimal: BigDecimal): BigInt = bigDecimal.setScale(0, RoundingMode.CEILING).toBigInt()
 
   /** Get column stats for output attributes. */
   def getOutputMap(inputMap: AttributeMap[ColumnStat], output: Seq[Attribute])
@@ -58,5 +69,13 @@ object EstimationUtils {
     // Output size can't be zero, or sizeInBytes of BinaryNode will also be zero
     // (simple computation of statistics returns product of children).
     if (outputRowCount > 0) outputRowCount * sizePerRow else 1
+  }
+}
+
+/** Attribute Reference extractor */
+object ExtractAttr {
+  def unapply(exp: Expression): Option[AttributeReference] = exp match {
+    case ar: AttributeReference => Some(ar)
+    case _ => None
   }
 }

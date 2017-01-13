@@ -23,9 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTypes}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{AggregateEstimation, EstimationUtils, ProjectEstimation}
-import org.apache.spark.sql.catalyst.plans.logical.estimation.JoinEstimation
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{AggregateEstimation, ProjectEstimation}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{AggregateEstimation, EstimationUtils, JoinEstimation, ProjectEstimation}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -342,27 +340,23 @@ case class Join(
     case _ => resolvedExceptNatural
   }
 
-  override def computeStats(conf: CatalystConf): Statistics = joinType match {
-    case LeftAnti | LeftSemi =>
-      // LeftSemi and LeftAnti won't ever be bigger than left
-      left.stats(conf).copy()
-    case _ =>
-      // make sure we don't propagate isBroadcastable in other joins, because
-      // they could explode the size.
-      super.computeStats(conf).copy(isBroadcastable = false)
-  }
-
-  override lazy val statistics: Statistics = JoinEstimation.estimate(this).getOrElse(
-    joinType match {
+  override def computeStats(conf: CatalystConf): Statistics = {
+    def simpleEstimation: Statistics = joinType match {
       case LeftAnti | LeftSemi =>
         // LeftSemi and LeftAnti won't ever be bigger than left
-        left.statistics
+        left.stats(conf)
       case _ =>
-        // make sure we don't propagate isBroadcastable in other joins, because
+        // Make sure we don't propagate isBroadcastable in other joins, because
         // they could explode the size.
-        super.statistics.copy(isBroadcastable = false)
+        super.computeStats(conf).copy(isBroadcastable = false)
     }
-  )
+
+    if (conf.cboEnabled) {
+      JoinEstimation.estimate(conf, this).getOrElse(simpleEstimation)
+    } else {
+      simpleEstimation
+    }
+  }
 }
 
 /**

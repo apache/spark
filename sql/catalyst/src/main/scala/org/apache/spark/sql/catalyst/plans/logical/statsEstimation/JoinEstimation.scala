@@ -15,16 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.logical.estimation
+package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Join, Statistics}
-import org.apache.spark.sql.catalyst.plans.logical.estimation.EstimationUtils._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.types.DataType
 
 
@@ -33,12 +34,12 @@ object JoinEstimation extends Logging {
    * Estimate statistics after join. Return `None` if the join type is not supported, or we don't
    * have enough statistics for estimation.
    */
-  def estimate(join: Join): Option[Statistics] = {
+  def estimate(conf: CatalystConf, join: Join): Option[Statistics] = {
     join.joinType match {
       case Inner | Cross | LeftOuter | RightOuter | FullOuter =>
-        InnerOuterEstimation(join).doEstimate()
+        InnerOuterEstimation(conf, join).doEstimate()
       case LeftSemi | LeftAnti =>
-        LeftSemiAntiEstimation(join).doEstimate()
+        LeftSemiAntiEstimation(conf, join).doEstimate()
       case _ =>
         logDebug(s"Unsupported join type: ${join.joinType}")
         None
@@ -46,19 +47,20 @@ object JoinEstimation extends Logging {
   }
 }
 
-case class InnerOuterEstimation(join: Join) extends Logging {
+case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging {
+
+  private val leftStats = join.left.stats(conf)
+  private val rightStats = join.right.stats(conf)
 
   /**
    * Estimate output size and number of rows after a join operator, and update output column stats.
    */
   def doEstimate(): Option[Statistics] = join match {
-    case _ if !rowCountsExist(join.left, join.right) =>
+    case _ if !rowCountsExist(conf, join.left, join.right) =>
       None
 
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right) =>
       // 1. Compute join selectivity
-      val leftStats = left.statistics
-      val rightStats = right.statistics
       val joinKeyPairs = extractJoinKeys(leftKeys, rightKeys)
       val selectivity = joinSelectivity(joinKeyPairs, leftStats, rightStats)
 
@@ -94,7 +96,7 @@ case class InnerOuterEstimation(join: Join) extends Logging {
         updateIntersectedStats(joinKeyPairs, leftStats, rightStats)
       }
       val inputAttrStats = AttributeMap(
-        join.left.statistics.attributeStats.toSeq ++ join.right.statistics.attributeStats.toSeq)
+        leftStats.attributeStats.toSeq ++ rightStats.attributeStats.toSeq)
       val attributesWithStat = join.output.filter(a => inputAttrStats.contains(a))
       val (fromLeft, fromRight) = attributesWithStat.partition(join.left.outputSet.contains(_))
       val outputStats: Map[Attribute, ColumnStat] = join.joinType match {
@@ -116,7 +118,7 @@ case class InnerOuterEstimation(join: Join) extends Logging {
       val outputAttrStats = AttributeMap(outputStats.toSeq)
 
       Some(Statistics(
-        sizeInBytes = outputRows * getRowSize(join.output, outputAttrStats),
+        sizeInBytes = getOutputSize(join.output, outputAttrStats, outputRows),
         rowCount = Some(outputRows),
         attributeStats = outputAttrStats,
         isBroadcastable = false))
@@ -124,12 +126,12 @@ case class InnerOuterEstimation(join: Join) extends Logging {
     case _ =>
       // When there is no equi-join condition, we do estimation like cartesian product.
       val inputAttrStats = AttributeMap(
-        join.left.statistics.attributeStats.toSeq ++ join.right.statistics.attributeStats.toSeq)
+        leftStats.attributeStats.toSeq ++ rightStats.attributeStats.toSeq)
       // Propagate the original column stats
       val outputAttrStats = getOutputMap(inputAttrStats, join.output)
-      val outputRows = join.left.statistics.rowCount.get * join.right.statistics.rowCount.get
+      val outputRows = leftStats.rowCount.get * rightStats.rowCount.get
       Some(Statistics(
-        sizeInBytes = outputRows * getRowSize(join.output, outputAttrStats),
+        sizeInBytes = getOutputSize(join.output, outputAttrStats, outputRows),
         rowCount = Some(outputRows),
         attributeStats = outputAttrStats,
         isBroadcastable = false))
@@ -195,8 +197,8 @@ case class InnerOuterEstimation(join: Join) extends Logging {
       oldAttrStats: AttributeMap[ColumnStat],
       joinKeyStats: AttributeMap[ColumnStat]): AttributeMap[ColumnStat] = {
     val outputAttrStats = new mutable.HashMap[Attribute, ColumnStat]()
-    val leftRows = join.left.statistics.rowCount.get
-    val rightRows = join.right.statistics.rowCount.get
+    val leftRows = leftStats.rowCount.get
+    val rightRows = rightStats.rowCount.get
     if (outputRows == 0) {
       // empty output
       attributes.foreach(a => outputAttrStats.put(a, emptyColumnStat(a.dataType)))
@@ -290,17 +292,18 @@ case class InnerOuterEstimation(join: Join) extends Logging {
   }
 }
 
-case class LeftSemiAntiEstimation(join: Join) {
+case class LeftSemiAntiEstimation(conf: CatalystConf, join: Join) {
   def doEstimate(): Option[Statistics] = {
     // TODO: It's error-prone to estimate cardinalities for LeftSemi and LeftAnti based on basic
     // column stats. Now we just propagate the statistics from left side. We should do more
     // accurate estimation when advanced stats (e.g. histograms) are available.
-    if (rowCountsExist(join.left)) {
+    if (rowCountsExist(conf, join.left)) {
+      val leftStats = join.left.stats(conf)
       // Propagate the original column stats for cartesian product
-      val outputAttrStats = getOutputMap(join.left.statistics.attributeStats, join.output)
-      val outputRows = join.left.statistics.rowCount.get
+      val outputAttrStats = getOutputMap(leftStats.attributeStats, join.output)
+      val outputRows = leftStats.rowCount.get
       Some(Statistics(
-        sizeInBytes = outputRows * getRowSize(join.output, outputAttrStats),
+        sizeInBytes = getOutputSize(join.output, outputAttrStats, outputRows),
         rowCount = Some(outputRows),
         attributeStats = outputAttrStats,
         isBroadcastable = false))
