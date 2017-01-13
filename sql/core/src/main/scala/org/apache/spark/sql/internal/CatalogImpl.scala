@@ -347,10 +347,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    if (source.toLowerCase == "hive") {
-      throw new AnalysisException("Cannot create hive serde table with createExternalTable API.")
-    }
-
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     val tableDesc = CatalogTable(
       identifier = tableIdent,

@@ -322,13 +322,6 @@ class CatalogSuite
     assert(e2.message == "Cannot create a file-based external data source table without path")
   }
 
-  test("createExternalTable should fail if provider is hive") {
-    val e = intercept[AnalysisException] {
-      spark.catalog.createExternalTable("tbl", "HiVe", Map.empty[String, String])
-    }
-    assert(e.message.contains("Cannot create hive serde table with createExternalTable API"))
-  }
-
   test("dropTempView should not un-cache and drop metastore table if a same-name table exists") {
     withTable("same_name") {
       spark.range(10).write.saveAsTable("same_name")

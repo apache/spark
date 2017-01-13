@@ -41,7 +41,7 @@ object PartitionPath {
 }
 
 /**
- * Holds a directory in a partitioned collection of files as well as as the partition values
+ * Holds a directory in a partitioned collection of files as well as the partition values
  * in the form of a Row.  Before scanning, the files at `path` need to be enumerated.
  */
 case class PartitionPath(values: InternalRow, path: Path)

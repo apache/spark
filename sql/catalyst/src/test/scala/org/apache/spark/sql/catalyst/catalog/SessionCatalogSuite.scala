@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias}
-
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
 
 /**
  * Tests for [[SessionCatalog]] that assume that [[InMemoryCatalog]] is correctly implemented.
@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias}
  * signatures but do not extend a common parent. This is largely by design but
  * unfortunately leads to very similar test code in two places.
  */
-class SessionCatalogSuite extends SparkFunSuite {
+class SessionCatalogSuite extends PlanTest {
   private val utils = new CatalogTestUtils {
     override val tableInputFormat: String = "com.fruit.eyephone.CameraInputFormat"
     override val tableOutputFormat: String = "com.fruit.eyephone.CameraOutputFormat"
@@ -93,13 +93,13 @@ class SessionCatalogSuite extends SparkFunSuite {
 
   test("list databases without pattern") {
     val catalog = new SessionCatalog(newBasicCatalog())
-    assert(catalog.listDatabases().toSet == Set("default", "db1", "db2"))
+    assert(catalog.listDatabases().toSet == Set("default", "db1", "db2", "db3"))
   }
 
   test("list databases with pattern") {
     val catalog = new SessionCatalog(newBasicCatalog())
     assert(catalog.listDatabases("db").toSet == Set.empty)
-    assert(catalog.listDatabases("db*").toSet == Set("db1", "db2"))
+    assert(catalog.listDatabases("db*").toSet == Set("db1", "db2", "db3"))
     assert(catalog.listDatabases("*1").toSet == Set("db1"))
     assert(catalog.listDatabases("db2").toSet == Set("db2"))
   }
@@ -107,7 +107,7 @@ class SessionCatalogSuite extends SparkFunSuite {
   test("drop database") {
     val catalog = new SessionCatalog(newBasicCatalog())
     catalog.dropDatabase("db1", ignoreIfNotExists = false, cascade = false)
-    assert(catalog.listDatabases().toSet == Set("default", "db2"))
+    assert(catalog.listDatabases().toSet == Set("default", "db2", "db3"))
   }
 
   test("drop database when the database is not empty") {
@@ -132,7 +132,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     val externalCatalog3 = newBasicCatalog()
     val sessionCatalog3 = new SessionCatalog(externalCatalog3)
     externalCatalog3.dropDatabase("db2", ignoreIfNotExists = false, cascade = true)
-    assert(sessionCatalog3.listDatabases().toSet == Set("default", "db1"))
+    assert(sessionCatalog3.listDatabases().toSet == Set("default", "db1", "db3"))
   }
 
   test("drop database when the database does not exist") {
@@ -463,6 +463,23 @@ class SessionCatalogSuite extends SparkFunSuite {
     catalog.createTempView("vw1", tmpView, overrideIfExists = false)
     val plan = catalog.lookupRelation(TableIdentifier("vw1"), Option("range"))
     assert(plan == SubqueryAlias("range", tmpView, Option(TableIdentifier("vw1"))))
+  }
+
+  test("look up view relation") {
+    val externalCatalog = newBasicCatalog()
+    val sessionCatalog = new SessionCatalog(externalCatalog)
+    val metadata = externalCatalog.getTable("db3", "view1")
+    sessionCatalog.setCurrentDatabase("default")
+    // Look up a view.
+    assert(metadata.viewText.isDefined)
+    val view = View(desc = metadata, output = metadata.schema.toAttributes,
+      child = CatalystSqlParser.parsePlan(metadata.viewText.get))
+    comparePlans(sessionCatalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
+      SubqueryAlias("view1", view, Some(TableIdentifier("view1", Some("db3")))))
+    // Look up a view using current database of the session catalog.
+    sessionCatalog.setCurrentDatabase("db3")
+    comparePlans(sessionCatalog.lookupRelation(TableIdentifier("view1")),
+      SubqueryAlias("view1", view, Some(TableIdentifier("view1"))))
   }
 
   test("table exists") {
@@ -1140,5 +1157,4 @@ class SessionCatalogSuite extends SparkFunSuite {
       catalog.listFunctions("unknown_db", "func*")
     }
   }
-
 }
