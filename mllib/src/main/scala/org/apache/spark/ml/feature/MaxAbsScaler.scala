@@ -21,13 +21,10 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
-import org.apache.spark.mllib.stat.Statistics
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -70,14 +67,27 @@ class MaxAbsScaler @Since("2.0.0") (@Since("2.0.0") override val uid: String)
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): MaxAbsScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
-      case Row(v: Vector) => OldVectors.fromML(v)
-    }
-    val summary = Statistics.colStats(input)
-    val minVals = summary.min.toArray
-    val maxVals = summary.max.toArray
-    val n = minVals.length
-    val maxAbs = Array.tabulate(n) { i => math.max(math.abs(minVals(i)), math.abs(maxVals(i))) }
+
+    val numFeatures = dataset.select($(inputCol)).first().getAs[Vector](0).size
+    val maxAbs = dataset.select($(inputCol)).rdd.map {
+      row => row.getAs[Vector](0)
+    }.treeAggregate[Array[Double]](Array.fill(numFeatures)(0.0))(
+      seqOp = {
+        case (max, vec) =>
+          vec.foreachActive {
+            case (i, v) =>
+              val abs = math.abs(v)
+              if (abs > max(i)) {
+                max(i) = abs
+              }
+          }
+          max
+      }, combOp = {
+        case (max1, max2) =>
+          max1.zip(max2).map {
+            case (m1, m2) => math.max(m1, m2)
+          }
+      })
 
     copyValues(new MaxAbsScalerModel(uid, Vectors.dense(maxAbs)).setParent(this))
   }

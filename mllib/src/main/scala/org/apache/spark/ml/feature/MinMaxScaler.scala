@@ -25,11 +25,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
-import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -117,11 +113,34 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): MinMaxScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
-      case Row(v: Vector) => OldVectors.fromML(v)
-    }
-    val summary = Statistics.colStats(input)
-    copyValues(new MinMaxScalerModel(uid, summary.min, summary.max).setParent(this))
+
+    val numFeatures = dataset.select($(inputCol)).first().getAs[Vector](0).size
+    val (mins, maxs) = dataset.select($(inputCol)).rdd.map {
+      row => row.getAs[Vector](0)
+    }.treeAggregate[(Array[Double], Array[Double])](
+      (Array.fill(numFeatures)(Double.MaxValue), Array.fill(numFeatures)(Double.MinValue)))(
+      seqOp = {
+        case ((min, max), vec) =>
+          vec.foreachActive {
+            case (i, v) =>
+              if (v < min(i)) {
+                min(i) = v
+              } else if (v > max(i)) {
+                max(i) = v
+              }
+          }
+          (min, max)
+      }, combOp = {
+        case ((min1, max1), (min2, max2)) =>
+          (min1.zip(min2).map {
+            case (m1, m2) => math.min(m1, m2)
+          }, max1.zip(max2).map {
+            case (m1, m2) => math.max(m1, m2)
+          })
+      })
+
+    copyValues(new MinMaxScalerModel(uid, Vectors.dense(mins), Vectors.dense(maxs))
+      .setParent(this))
   }
 
   @Since("1.5.0")
