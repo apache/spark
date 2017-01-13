@@ -423,7 +423,7 @@ sparkR.session <- function(
 #' sparkR.session()
 #' url <- sparkR.uiWebUrl()
 #' }
-#' @note sparkR.uiWebUrl since 2.2.0
+#' @note sparkR.uiWebUrl since 2.1.1
 sparkR.uiWebUrl <- function() {
   sc <- sparkR.callJMethod(getSparkContext(), "sc")
   u <- callJMethod(sc, "uiWebUrl")

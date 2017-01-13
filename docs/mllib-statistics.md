@@ -354,7 +354,7 @@ v = u.map(lambda x: 1.0 + 2.0 * x)
 useful for visualizing empirical probability distributions without requiring assumptions about the
 particular distribution that the observed samples are drawn from. It computes an estimate of the
 probability density function of a random variables, evaluated at a given set of points. It achieves
-this estimate by expressing the PDF of the empirical distribution at a particular point as the the
+this estimate by expressing the PDF of the empirical distribution at a particular point as the
 mean of PDFs of normal distributions centered around each of the samples.
 
 <div class="codetabs">
