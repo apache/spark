@@ -612,7 +612,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   test("Explicitly added partitions should be readable after load") {
     withTable("test_added_partitions") {
       withTempDir { src =>
-        val newPartitionDir = new File(src, "partition").getCanonicalPath
+        val newPartitionDir = src.getCanonicalPath
         spark.range(2).selectExpr("cast(id as string)").toDF("a").write
           .mode("overwrite")
           .parquet(newPartitionDir)
@@ -645,7 +645,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   test("Non-partitioned table readable after load") {
     withTable("tab") {
       withTempDir { src =>
-        val newPartitionDir = new File(src, "data").getCanonicalPath
+        val newPartitionDir = src.getCanonicalPath
         spark.range(2).selectExpr("cast(id as string)").toDF("a").write
           .mode("overwrite")
           .parquet(newPartitionDir)
@@ -663,41 +663,6 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
         checkAnswer(spark.table("tab"), Seq(Row("0"), Row("1")))
       }
-    }
-  }
-
-  test("Partitioned table readable after insert") {
-    withTable("partitionedTab") {
-      sql(
-        """
-          |CREATE TABLE partitionedTab (a STRING)
-          |PARTITIONED BY (b INT)
-          |STORED AS PARQUET
-        """.stripMargin)
-
-      // This table fetch is to fill the cache with zero leaf files
-      checkAnswer(spark.table("partitionedTab"), Seq.empty)
-
-      sql("INSERT INTO TABLE partitionedTab PARTITION (b=1) select 'baz' as a")
-
-      checkAnswer(spark.table("partitionedTab"), Seq(Row("baz", 1)))
-    }
-  }
-
-  test("Non-partitioned table readable after insert") {
-    withTable("tab") {
-      sql(
-        """
-          |CREATE TABLE tab (a STRING)
-          |STORED AS PARQUET
-        """.stripMargin)
-
-      // This table fetch is to fill the cache with zero leaf files
-      checkAnswer(spark.table("tab"), Seq.empty)
-
-      sql("INSERT INTO TABLE tab select 'baz' as a")
-
-      checkAnswer(spark.table("tab"), Seq(Row("baz")))
     }
   }
 

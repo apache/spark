@@ -392,9 +392,7 @@ case class InsertIntoHiveTable(
 
     // Invalidate the cache.
     sqlContext.sharedState.cacheManager.invalidateCache(table)
-    if (partition.nonEmpty) {
-      sqlContext.sessionState.catalog.refreshTable(table.catalogTable.identifier)
-    }
+    sqlContext.sessionState.catalog.refreshTable(table.catalogTable.identifier)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which
