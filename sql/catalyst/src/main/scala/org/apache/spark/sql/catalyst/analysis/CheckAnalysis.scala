@@ -117,7 +117,7 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis(s"Window specification $s is not valid because $m")
               case None => w
             }
-          // @nsyca
+
           case e @ PredicateSubquery(query, _, _, _) =>
             checkAnalysis(query)
             e
