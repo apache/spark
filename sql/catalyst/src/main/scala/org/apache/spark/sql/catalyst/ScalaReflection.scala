@@ -307,7 +307,10 @@ object ScalaReflection extends ScalaReflection {
           }
         }
 
-        val cls = mirror.runtimeClass(t.typeSymbol.asClass)
+        val cls = t.companion.decl(TermName("newBuilder")) match {
+          case NoSymbol => classOf[Seq[_]]
+          case _ => mirror.runtimeClass(t.typeSymbol.asClass)
+        }
         CollectObjects(mapFunction, getPath, dataType, cls)
 
       case t if t <:< localTypeOf[Map[_, _]] =>
