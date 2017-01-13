@@ -77,7 +77,7 @@ class PartitionedTablePerfStatsSuite
       |create external table $tableName (fieldOne long)
       |partitioned by (partCol1 int, partCol2 int)
       |stored as parquet
-      |location "${dir.getAbsolutePath}"""".stripMargin)
+      |location "${dir.toURI}"""".stripMargin)
     if (repair) {
       spark.sql(s"msck repair table $tableName")
     }
@@ -102,7 +102,7 @@ class PartitionedTablePerfStatsSuite
     spark.sql(s"""
       |create table $tableName (fieldOne long, partCol1 int, partCol2 int)
       |using parquet
-      |options (path "${dir.getAbsolutePath}")
+      |options (path "${dir.toURI}")
       |partitioned by (partCol1, partCol2)""".stripMargin)
     if (repair) {
       spark.sql(s"msck repair table $tableName")

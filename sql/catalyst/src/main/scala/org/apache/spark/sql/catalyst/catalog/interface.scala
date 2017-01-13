@@ -196,6 +196,12 @@ case class CatalogTable(
   /** Return the fully qualified name of this table, assuming the database was specified. */
   def qualifiedName: String = identifier.unquotedString
 
+  /**
+   * Return the default database name we use to resolve a view, should be None if the CatalogTable
+   * is not a View.
+   */
+  def viewDefaultDatabase: Option[String] = properties.get(CatalogTable.VIEW_DEFAULT_DATABASE)
+
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
       locationUri: Option[String] = storage.locationUri,
@@ -246,6 +252,9 @@ case class CatalogTable(
   }
 }
 
+object CatalogTable {
+  val VIEW_DEFAULT_DATABASE = "view.default.database"
+}
 
 /**
  * This class of statistics is used in [[CatalogTable]] to interact with metastore.
@@ -318,7 +327,6 @@ trait CatalogRelation {
  * Note that in the future we should consolidate this and HiveCatalogRelation.
  */
 case class SimpleCatalogRelation(
-    databaseName: String,
     metadata: CatalogTable)
   extends LeafNode with CatalogRelation {
 
@@ -335,8 +343,4 @@ case class SimpleCatalogRelation(
       }
     dataCols ++ partCols
   }
-
-  require(
-    metadata.identifier.database == Some(databaseName),
-    "provided database does not match the one specified in the table definition")
 }

@@ -31,13 +31,15 @@ import org.apache.spark.util.Utils
 /**
  * A ConfigurableCredentialManager to manage all the registered credential providers and offer
  * APIs for other modules to obtain credentials as well as renewal time. By default
- * [[HDFSCredentialProvider]], [[HiveCredentialProvider]] and [[HBaseCredentialProvider]] will
+ * [[HadoopFSCredentialProvider]], [[HiveCredentialProvider]] and [[HBaseCredentialProvider]] will
  * be loaded in if not explicitly disabled, any plugged-in credential provider wants to be
  * managed by ConfigurableCredentialManager needs to implement [[ServiceCredentialProvider]]
  * interface and put into resources/META-INF/services to be loaded by ServiceLoader.
  *
  * Also each credential provider is controlled by
  * spark.yarn.security.credentials.{service}.enabled, it will not be loaded in if set to false.
+ * For example, Hive's credential provider [[HiveCredentialProvider]] can be enabled/disabled by
+ * the configuration spark.yarn.security.credentials.hive.enabled.
  */
 private[yarn] final class ConfigurableCredentialManager(
     sparkConf: SparkConf, hadoopConf: Configuration) extends Logging {
