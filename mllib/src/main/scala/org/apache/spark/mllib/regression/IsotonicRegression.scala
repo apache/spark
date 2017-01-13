@@ -31,7 +31,6 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
-import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -250,8 +249,7 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
  * (Wikipedia)</a>
  */
 @Since("1.3.0")
-class IsotonicRegression private (private var isotonic: Boolean)
-  extends Serializable with Logging {
+class IsotonicRegression private (private var isotonic: Boolean) extends Serializable {
 
   /**
    * Constructs IsotonicRegression instance with default parameter isotonic = true.
@@ -335,14 +333,12 @@ class IsotonicRegression private (private var isotonic: Boolean)
   private def poolAdjacentViolators(
       input: Array[(Double, Double, Double)]): Array[(Double, Double, Double)] = {
 
-    val cleanInput = input.flatMap{ case (y, x, weight) =>
-      require(weight >= 0.0, "weights must be non-negative")
-      if (weight == 0.0) {
-        logWarning(s"Dropping zero-weight point ($y, $x, $weight)")
-        Array[(Double, Double, Double)]()
-      } else {
-        Array((y, x, weight))
-      }
+    val cleanInput = input.filter{ case (y, x, weight) =>
+      require(
+        weight >= 0.0,
+        s"Negative weight at point ($y, $x, $weight). Weights must be non-negative"
+      )
+      weight > 0
     }
 
     if (cleanInput.isEmpty) {
@@ -381,7 +377,7 @@ class IsotonicRegression private (private var isotonic: Boolean)
       assert(
         blockEnd(block1) + 1 == block2,
         s"Attempting to merge non-consecutive blocks [${block1}, ${blockEnd(block1)}]" +
-        s" and [${block2}, ${blockEnd(block2)}. This is likely a bug in the isotonic regression" +
+        s" and [${block2}, ${blockEnd(block2)}]. This is likely a bug in the isotonic regression" +
         " implementation. Please file a bug report."
       )
       blockBounds(block1) = blockEnd(block2)
