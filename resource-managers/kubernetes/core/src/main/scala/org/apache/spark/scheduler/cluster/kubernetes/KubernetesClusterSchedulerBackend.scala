@@ -155,7 +155,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private def allocateNewExecutorPod(): (String, Pod) = {
     val executorKubernetesId = UUID.randomUUID().toString.replaceAll("-", "")
     val executorId = EXECUTOR_ID_COUNTER.incrementAndGet().toString
-    val name = s"exec$executorKubernetesId"
+    val name = s"$kubernetesDriverServiceName-exec-$executorKubernetesId"
     val selectors = Map(SPARK_EXECUTOR_SELECTOR -> executorId,
       SPARK_APP_SELECTOR -> applicationId()).asJava
     val executorMemoryQuantity = new QuantityBuilder(false)
