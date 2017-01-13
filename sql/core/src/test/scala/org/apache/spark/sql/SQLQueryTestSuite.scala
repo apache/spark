@@ -47,9 +47,9 @@ import org.apache.spark.sql.types.StructType
  *
  * To re-generate golden files, run:
  * {{{
- *
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
  * }}}
- *SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ *
  * The format for input files is simple:
  *  1. A list of SQL queries separated by semicolon.
  *  2. Lines starting with -- are treated as comments and ignored.
