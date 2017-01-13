@@ -177,7 +177,7 @@ public final class OffHeapColumnVector extends ColumnVector {
   @Override
   public void putShorts(int rowId, int count, short value) {
     long offset = data + 2 * rowId;
-    for (int i = 0; i < count; ++i, offset += 4) {
+    for (int i = 0; i < count; ++i, offset += 2) {
       Platform.putShort(null, offset, value);
     }
   }
