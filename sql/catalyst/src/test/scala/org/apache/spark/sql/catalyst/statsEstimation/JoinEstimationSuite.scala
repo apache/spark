@@ -17,9 +17,14 @@
 
 package org.apache.spark.sql.catalyst.statsEstimation
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, EqualTo}
+import java.sql.{Date, Timestamp}
+
+import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, EqualTo}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Join, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Join, Project, Statistics}
+import org.apache.spark.sql.types.{DateType, TimestampType, _}
 
 
 class JoinEstimationSuite extends StatsEstimationTestBase {
@@ -198,5 +203,112 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
         attributeStats = AttributeMap(Seq(nameToColInfo("key21"), nameToColInfo("key22"))))
       assert(join.stats(conf) == expectedStats)
     }
+  }
+
+  test("test join keys of different types") {
+    val dec1 = new java.math.BigDecimal("1.000000000000000000")
+    val dec2 = new java.math.BigDecimal("8.000000000000000000")
+    val d1 = Date.valueOf("2016-05-08")
+    val d2 = Date.valueOf("2016-05-09")
+    val t1 = Timestamp.valueOf("2016-05-08 00:00:01")
+    val t2 = Timestamp.valueOf("2016-05-09 00:00:02")
+
+    /** Columns in a table with only one row */
+    val columnInfo1 = mutable.LinkedHashMap[Attribute, ColumnStat](
+      AttributeReference("cbool", BooleanType)() -> ColumnStat(distinctCount = 1,
+        min = Some(false), max = Some(false), nullCount = 0, avgLen = 1, maxLen = 1),
+      AttributeReference("cbyte", ByteType)() -> ColumnStat(distinctCount = 1,
+        min = Some(1L), max = Some(1L), nullCount = 0, avgLen = 1, maxLen = 1),
+      AttributeReference("cshort", ShortType)() -> ColumnStat(distinctCount = 1,
+        min = Some(1L), max = Some(1L), nullCount = 0, avgLen = 2, maxLen = 2),
+      AttributeReference("cint", IntegerType)() -> ColumnStat(distinctCount = 1,
+        min = Some(1L), max = Some(1L), nullCount = 0, avgLen = 4, maxLen = 4),
+      AttributeReference("clong", LongType)() -> ColumnStat(distinctCount = 1,
+        min = Some(1L), max = Some(1L), nullCount = 0, avgLen = 8, maxLen = 8),
+      AttributeReference("cdouble", DoubleType)() -> ColumnStat(distinctCount = 1,
+        min = Some(1.0), max = Some(1.0), nullCount = 0, avgLen = 8, maxLen = 8),
+      AttributeReference("cfloat", FloatType)() -> ColumnStat(distinctCount = 1,
+        min = Some(1.0), max = Some(1.0), nullCount = 0, avgLen = 4, maxLen = 4),
+      AttributeReference("cdecimal", DecimalType.SYSTEM_DEFAULT)() -> ColumnStat(distinctCount = 1,
+        min = Some(dec1), max = Some(dec1), nullCount = 0, avgLen = 16, maxLen = 16),
+      AttributeReference("cstring", StringType)() -> ColumnStat(distinctCount = 1,
+        min = None, max = None, nullCount = 0, avgLen = 3, maxLen = 3),
+      AttributeReference("cbinary", BinaryType)() -> ColumnStat(distinctCount = 1,
+        min = None, max = None, nullCount = 0, avgLen = 3, maxLen = 3),
+      AttributeReference("cdate", DateType)() -> ColumnStat(distinctCount = 1,
+        min = Some(d1), max = Some(d1), nullCount = 0, avgLen = 4, maxLen = 4),
+      AttributeReference("ctimestamp", TimestampType)() -> ColumnStat(distinctCount = 1,
+        min = Some(t1), max = Some(t1), nullCount = 0, avgLen = 8, maxLen = 8)
+    )
+
+    /** Columns in a table with two rows */
+    val columnInfo2 = mutable.LinkedHashMap[Attribute, ColumnStat](
+      AttributeReference("cbool", BooleanType)() -> ColumnStat(distinctCount = 2,
+        min = Some(false), max = Some(true), nullCount = 0, avgLen = 1, maxLen = 1),
+      AttributeReference("cbyte", ByteType)() -> ColumnStat(distinctCount = 2,
+        min = Some(1L), max = Some(2L), nullCount = 0, avgLen = 1, maxLen = 1),
+      AttributeReference("cshort", ShortType)() -> ColumnStat(distinctCount = 2,
+        min = Some(1L), max = Some(3L), nullCount = 0, avgLen = 2, maxLen = 2),
+      AttributeReference("cint", IntegerType)() -> ColumnStat(distinctCount = 2,
+        min = Some(1L), max = Some(4L), nullCount = 0, avgLen = 4, maxLen = 4),
+      AttributeReference("clong", LongType)() -> ColumnStat(distinctCount = 2,
+        min = Some(1L), max = Some(5L), nullCount = 0, avgLen = 8, maxLen = 8),
+      AttributeReference("cdouble", DoubleType)() -> ColumnStat(distinctCount = 2,
+        min = Some(1.0), max = Some(6.0), nullCount = 0, avgLen = 8, maxLen = 8),
+      AttributeReference("cfloat", FloatType)() -> ColumnStat(distinctCount = 2,
+        min = Some(1.0), max = Some(7.0), nullCount = 0, avgLen = 4, maxLen = 4),
+      AttributeReference("cdecimal", DecimalType.SYSTEM_DEFAULT)() -> ColumnStat(distinctCount = 2,
+        min = Some(dec1), max = Some(dec2), nullCount = 0, avgLen = 16, maxLen = 16),
+      AttributeReference("cstring", StringType)() -> ColumnStat(distinctCount = 2,
+        min = None, max = None, nullCount = 0, avgLen = 3, maxLen = 3),
+      AttributeReference("cbinary", BinaryType)() -> ColumnStat(distinctCount = 2,
+        min = None, max = None, nullCount = 0, avgLen = 3, maxLen = 3),
+      AttributeReference("cdate", DateType)() -> ColumnStat(distinctCount = 2,
+        min = Some(d1), max = Some(d2), nullCount = 0, avgLen = 4, maxLen = 4),
+      AttributeReference("ctimestamp", TimestampType)() -> ColumnStat(distinctCount = 2,
+        min = Some(t1), max = Some(t2), nullCount = 0, avgLen = 8, maxLen = 8)
+    )
+
+    val oneRowTable = StatsTestPlan(
+      outputList = columnInfo1.keys.toSeq,
+      rowCount = 1,
+      attributeStats = AttributeMap(columnInfo1.toSeq))
+    val twoRowTable = StatsTestPlan(
+      outputList = columnInfo2.keys.toSeq,
+      rowCount = 2,
+      attributeStats = AttributeMap(columnInfo2.toSeq))
+    val joinKeys = oneRowTable.output.zip(twoRowTable.output)
+    joinKeys.foreach { case (key1, key2) =>
+      withClue(s"For data type ${key1.dataType}") {
+        // All values in oneRowTable is contained in twoRowTable, so column stats after join is
+        // equal to that of oneRowTable.
+        val join = Join(Project(Seq(key1), oneRowTable), Project(Seq(key2), twoRowTable), Inner,
+          Some(EqualTo(key1, key2)))
+        val expectedStats = Statistics(
+          sizeInBytes = 1 * (8 + 2 * getColSize(key1, columnInfo1(key1))),
+          rowCount = Some(1),
+          attributeStats = AttributeMap(Seq(key1 -> columnInfo1(key1), key2 -> columnInfo1(key1))))
+        assert(join.stats(conf) == expectedStats)
+      }
+    }
+  }
+
+  test("join with null column") {
+    val (nullColumn, nullColStat) = (attr("cnull"),
+      ColumnStat(distinctCount = 0, min = None, max = None, nullCount = 1, avgLen = 4, maxLen = 4))
+    val nullTable = StatsTestPlan(
+      outputList = Seq(nullColumn),
+      rowCount = 1,
+      attributeStats = AttributeMap(Seq(nullColumn -> nullColStat)))
+    val join = Join(table1, nullTable, Inner,
+      Some(EqualTo(nameToAttr("key11"), nullColumn)))
+    val emptyColStat = ColumnStat(distinctCount = 0, min = None, max = None, nullCount = 0,
+      avgLen = 4, maxLen = 4)
+    val expectedStats = Statistics(
+      sizeInBytes = 1,
+      rowCount = Some(0),
+      attributeStats = AttributeMap(Seq(nameToAttr("key11") -> emptyColStat,
+        nameToAttr("key12") -> emptyColStat, nullColumn -> emptyColStat)))
+    assert(join.stats(conf) == expectedStats)
   }
 }
