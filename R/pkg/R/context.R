@@ -151,8 +151,10 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # Notice the slice group with 3 slices (ie. 6, 15, 22) are roughly evenly spaced.
   splits <- if (numSerializedSlices > 0) {
     unlist(lapply(0: (numSerializedSlices - 1), function(x) {
+      # nolint start
       start <- trunc((x * length(coll)) / numSerializedSlices)
       end <- trunc(((x + 1) * length(coll)) / numSerializedSlices)
+      # nolint end
       rep(start, end - start)
     }))
   } else {
