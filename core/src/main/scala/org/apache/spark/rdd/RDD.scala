@@ -1540,11 +1540,7 @@ abstract class RDD[T: ClassTag](
     // children RDD partitions point to the correct parent partitions. In the future
     // we should revisit this consideration.
     if (doCheckpointCalled) {
-      throw new SparkException("Because job has been executed on this RDD, checkpoint won't work")
-    }
-    if (storageLevel == StorageLevel.NONE) {
-      logWarning("Call checkpoint on unpersisted RDD, it will cause RDD recomputation" +
-        " when saving checkpoint files.")
+      logWarning(s"Because job has been executed on RDD ${id}, checkpoint won't work")
     }
     if (context.checkpointDir.isEmpty) {
       throw new SparkException("Checkpoint directory has not been set in the SparkContext")
@@ -1732,6 +1728,10 @@ abstract class RDD[T: ClassTag](
             // Checkpoint parents first because our lineage will be truncated after we
             // checkpoint ourselves
             dependencies.foreach(_.rdd.doCheckpoint())
+          }
+          if (storageLevel == StorageLevel.NONE) {
+            logInfo(s"do checkpoint on unpersisted RDD ${id}, it will cause RDD recomputation" +
+              " when saving checkpoint files.")
           }
           checkpointData.get.checkpoint()
         } else {
