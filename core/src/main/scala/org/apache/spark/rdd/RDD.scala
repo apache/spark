@@ -1539,6 +1539,13 @@ abstract class RDD[T: ClassTag](
     // NOTE: we use a global lock here due to complexities downstream with ensuring
     // children RDD partitions point to the correct parent partitions. In the future
     // we should revisit this consideration.
+    if (doCheckpointCalled) {
+      throw new SparkException("Because job has been executed on this RDD, checkpoint won't work")
+    }
+    if (storageLevel == StorageLevel.NONE) {
+      logWarning("Call checkpoint on unpersisted RDD, it will cause RDD recomputation" +
+        " when saving checkpoint files.")
+    }
     if (context.checkpointDir.isEmpty) {
       throw new SparkException("Checkpoint directory has not been set in the SparkContext")
     } else if (checkpointData.isEmpty) {
