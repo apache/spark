@@ -199,7 +199,7 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.write(mode, Dataset.ofRows(session, query))
+      dataSource.writeAndRead(mode, Dataset.ofRows(session, query))
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)

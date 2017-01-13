@@ -62,16 +62,11 @@ class PartitionedTablePerfStatsSuite
   }
 
   private def setupPartitionedHiveTable(
-      tableName: String, dir: File, scale: Int,
-      clearMetricsBeforeCreate: Boolean = false, repair: Boolean = true): Unit = {
+      tableName: String, dir: File, scale: Int, repair: Boolean = true): Unit = {
     spark.range(scale).selectExpr("id as fieldOne", "id as partCol1", "id as partCol2").write
       .partitionBy("partCol1", "partCol2")
       .mode("overwrite")
       .parquet(dir.getAbsolutePath)
-
-    if (clearMetricsBeforeCreate) {
-      HiveCatalogMetrics.reset()
-    }
 
     spark.sql(s"""
       |create external table $tableName (fieldOne long)
@@ -88,16 +83,11 @@ class PartitionedTablePerfStatsSuite
   }
 
   private def setupPartitionedDatasourceTable(
-      tableName: String, dir: File, scale: Int,
-      clearMetricsBeforeCreate: Boolean = false, repair: Boolean = true): Unit = {
+      tableName: String, dir: File, scale: Int, repair: Boolean = true): Unit = {
     spark.range(scale).selectExpr("id as fieldOne", "id as partCol1", "id as partCol2").write
       .partitionBy("partCol1", "partCol2")
       .mode("overwrite")
       .parquet(dir.getAbsolutePath)
-
-    if (clearMetricsBeforeCreate) {
-      HiveCatalogMetrics.reset()
-    }
 
     spark.sql(s"""
       |create table $tableName (fieldOne long, partCol1 int, partCol2 int)
@@ -271,8 +261,8 @@ class PartitionedTablePerfStatsSuite
     withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
       withTable("test") {
         withTempDir { dir =>
-          setupPartitionedDatasourceTable(
-            "test", dir, scale = 10, clearMetricsBeforeCreate = true, repair = false)
+          HiveCatalogMetrics.reset()
+          setupPartitionedDatasourceTable("test", dir, scale = 10, repair = false)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
         }
@@ -285,8 +275,7 @@ class PartitionedTablePerfStatsSuite
       withTable("test") {
         withTempDir { dir =>
           HiveCatalogMetrics.reset()
-          setupPartitionedHiveTable(
-            "test", dir, scale = 10, clearMetricsBeforeCreate = true, repair = false)
+          setupPartitionedHiveTable("test", dir, scale = 10, repair = false)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
         }
@@ -416,12 +405,8 @@ class PartitionedTablePerfStatsSuite
           })
           executorPool.shutdown()
           executorPool.awaitTermination(30, TimeUnit.SECONDS)
-          // check the cache hit, we use the metric of METRIC_FILES_DISCOVERED and
-          // METRIC_PARALLEL_LISTING_JOB_COUNT to check this, while the lock take effect,
-          // only one thread can really do the build, so the listing job count is 2, the other
-          // one is cache.load func. Also METRIC_FILES_DISCOVERED is $partition_num * 2
-          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 100)
-          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 2)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 50)
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 1)
         }
       }
     }
