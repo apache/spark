@@ -458,7 +458,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("CREATE VIEW testView AS SELECT * FROM jt1 JOIN jt2 ON id1 == id2")
       checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
 
-      val df = (1L until 10L).map(i => i -> i).toDF("id1", "newCol")
+      val df = (1 until 10).map(i => i -> i).toDF("id1", "newCol")
       df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("jt1")
       checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
 
@@ -693,10 +693,20 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("CREATE VIEW testView2(x, y) AS SELECT id1, id FROM testTable")
         checkAnswer(sql("SELECT * FROM testView2 ORDER BY x"), (1 to 9).map(i => Row(i + 1, i)))
 
-        // The view output has different dataType from that of child.
-        val df = (1 until 10).map(i => (i, i)).toDF("id", "id1")
+        // Allow casting from IntegerType to LongType
+        val df = (1 until 10).map(i => (i, i + 1)).toDF("id", "id1")
         df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("testTable")
-        intercept[AnalysisException](sql("SELECT * FROM testView1"))
+        checkAnswer(sql("SELECT * FROM testView1 ORDER BY id1"), (1 to 9).map(i => Row(i, i + 1)))
+
+        // Casting from DoubleType to LongType might truncate, throw an AnalysisException.
+        val df2 = (1 until 10).map(i => (i.toDouble, i.toDouble)).toDF("id", "id1")
+        df2.write.format("json").mode(SaveMode.Overwrite).saveAsTable("testTable")
+        intercept[AnalysisException](sql("SELECT * FROM testView"))
+
+        // Can't cast from ArrayType to LongType, throw an AnalysisException.
+        val df3 = (1 until 10).map(i => (i, Seq(i))).toDF("id", "id1")
+        df3.write.format("json").mode(SaveMode.Overwrite).saveAsTable("testTable")
+        intercept[AnalysisException](sql("SELECT * FROM testView"))
       }
     }
   }

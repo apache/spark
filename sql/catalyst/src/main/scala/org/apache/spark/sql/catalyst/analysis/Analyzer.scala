@@ -139,8 +139,9 @@ class Analyzer(
       ResolveInlineTables ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
-    Batch("View", Once,
-      AliasViewChild(conf)),
+    Batch("View", fixedPoint,
+      AliasViewChild(conf),
+      ResolveUpCast),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
@@ -2265,11 +2266,13 @@ class Analyzer(
    */
   object ResolveUpCast extends Rule[LogicalPlan] {
     private def fail(from: Expression, to: DataType, walkedTypePath: Seq[String]) = {
-      throw new AnalysisException(s"Cannot up cast ${from.sql} from " +
-        s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate\n" +
-        "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
+      val pathInfo = walkedTypePath.map("The type path of the target object is:\n" +
+        _.mkString("", "\n", "\n") +
         "You can either add an explicit cast to the input data or choose a higher precision " +
         "type of the field in the target object")
+      throw new AnalysisException(s"Cannot up cast ${from.sql} from " +
+        s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate\n" +
+        pathInfo)
     }
 
     private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {

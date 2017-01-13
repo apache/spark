@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast}
+import org.apache.spark.sql.catalyst.expressions.{UpCast, Alias, Attribute, Cast}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -44,13 +44,13 @@ case class AliasViewChild(conf: CatalystConf) extends Rule[LogicalPlan] {
             s"columns with the child output ${child.output.mkString("[", ",", "]")}")
       }
       val newOutput = output.zip(child.output).map {
-        case (attr, originAttr) =>
-          if (attr.dataType != originAttr.dataType) {
-            throw new AnalysisException(s"The dataType of $originAttr doesn't match up with " +
-              s"that of $attr, expected ${attr.dataType}, but got ${originAttr.dataType}.")
-          }
-          Alias(originAttr, attr.name)(exprId = attr.exprId, qualifier = attr.qualifier,
-            explicitMetadata = Some(attr.metadata))
+        case (attr, originAttr) if attr != originAttr =>
+          // The dataType of the output attributes may be not the same with that of the view
+          // output, so we should cast the attribute to the dataType of the view output attribute.
+          // Will throw an AnalysisException if the cast can't perform or might truncate.
+          Alias(UpCast(originAttr, attr.dataType, Nil), attr.name)(exprId = attr.exprId,
+            qualifier = attr.qualifier, explicitMetadata = Some(attr.metadata))
+        case (_, originAttr) => originAttr
       }
       v.copy(child = Project(newOutput, child))
   }
