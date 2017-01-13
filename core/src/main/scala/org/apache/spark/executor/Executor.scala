@@ -336,7 +336,7 @@ private[spark] class Executor(
             if (conf.getBoolean("spark.storage.exceptionOnPinLeak", false)) {
               throw new SparkException(errMsg)
             } else {
-              logWarning(errMsg)
+              logInfo(errMsg)
             }
           }
         }

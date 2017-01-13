@@ -172,7 +172,7 @@ class PartitionProviderCompatibilitySuite
           withTempDir { dir2 =>
             sql(
               s"""alter table test partition (partCol=1)
-                |set location '${dir2.getAbsolutePath}'""".stripMargin)
+                |set location '${dir2.toURI}'""".stripMargin)
             assert(sql("select * from test").count() == 4)
             sql(
               """insert overwrite table test

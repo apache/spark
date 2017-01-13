@@ -27,7 +27,7 @@ import scala.util.Try
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkFiles
+import org.apache.spark.{SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -389,13 +389,15 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   createQueryTest("transform",
-    "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
+    "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src",
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("schema-less transform",
     """
       |SELECT TRANSFORM (key, value) USING 'cat' FROM src;
       |SELECT TRANSFORM (*) USING 'cat' FROM src;
-    """.stripMargin)
+    """.stripMargin,
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   val delimiter = "'\t'"
 
@@ -403,19 +405,22 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     s"""
       |SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
       |USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll("\n", " "),
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("transform with custom field delimiter2",
     s"""
       |SELECT TRANSFORM (key, value) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
       |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll("\n", " "),
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("transform with custom field delimiter3",
     s"""
       |SELECT TRANSFORM (*) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
       |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll("\n", " "),
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("transform with SerDe",
     """
@@ -423,9 +428,11 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
       |USING 'cat' AS (tKey, tValue) ROW FORMAT SERDE
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' FROM src;
-    """.stripMargin.replaceAll(System.lineSeparator(), " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "),
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   test("transform with SerDe2") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
 
     sql("CREATE TABLE small_src(key INT, value STRING)")
     sql("INSERT OVERWRITE TABLE small_src SELECT key, value FROM src LIMIT 10")

@@ -1071,11 +1071,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("CTAS: persisted bucketed data source table") {
     withTempPath { dir =>
       withTable("t") {
-        val path = dir.getCanonicalPath
-
         sql(
           s"""CREATE TABLE t USING PARQUET
-             |OPTIONS (PATH '$path')
+             |OPTIONS (PATH '${dir.toURI}')
              |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
              |AS SELECT 1 AS a, 2 AS b
            """.stripMargin
@@ -1093,11 +1091,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
     withTempPath { dir =>
       withTable("t") {
-        val path = dir.getCanonicalPath
-
         sql(
           s"""CREATE TABLE t USING PARQUET
-             |OPTIONS (PATH '$path')
+             |OPTIONS (PATH '${dir.toURI}')
              |CLUSTERED BY (a) INTO 2 BUCKETS
              |AS SELECT 1 AS a, 2 AS b
            """.stripMargin
@@ -1166,26 +1162,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           .write.mode("append").saveAsTable("saveAsTable_too_many_columns")
       }
       assert(e.getMessage.contains("doesn't match"))
-    }
-  }
-
-  test("save API - format hive") {
-    withTempDir { dir =>
-      val path = dir.getCanonicalPath
-      val e = intercept[ClassNotFoundException] {
-        spark.range(10).write.format("hive").mode(SaveMode.Ignore).save(path)
-      }.getMessage
-      assert(e.contains("Failed to find data source: hive"))
-    }
-  }
-
-  test("saveAsTable API - format hive") {
-    val tableName = "tab1"
-    withTable(tableName) {
-      val e = intercept[AnalysisException] {
-        spark.range(10).write.format("hive").mode(SaveMode.Overwrite).saveAsTable(tableName)
-      }.getMessage
-      assert(e.contains("Cannot create hive serde table with saveAsTable API"))
     }
   }
 
