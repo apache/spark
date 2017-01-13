@@ -71,11 +71,3 @@ object EstimationUtils {
     if (outputRowCount > 0) outputRowCount * sizePerRow else 1
   }
 }
-
-/** Attribute Reference extractor */
-object ExtractAttr {
-  def unapply(exp: Expression): Option[AttributeReference] = exp match {
-    case ar: AttributeReference => Some(ar)
-    case _ => None
-  }
-}

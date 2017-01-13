@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import java.math.{BigDecimal => JDecimal}
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{BooleanType, DateType, TimestampType, _}
 
@@ -95,8 +94,6 @@ object Range {
         val min1 = DateTimeUtils.fromJavaTimestamp(min.asInstanceOf[Timestamp])
         val max1 = DateTimeUtils.fromJavaTimestamp(max.asInstanceOf[Timestamp])
         NumericRange(new JDecimal(min1), new JDecimal(max1))
-      case _ =>
-        throw new AnalysisException(s"Type $dataType is not castable to numeric in estimation.")
     }
   }
 

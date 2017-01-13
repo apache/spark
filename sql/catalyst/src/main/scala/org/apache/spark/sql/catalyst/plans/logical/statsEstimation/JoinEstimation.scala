@@ -41,7 +41,7 @@ object JoinEstimation extends Logging {
       case LeftSemi | LeftAnti =>
         LeftSemiAntiEstimation(conf, join).doEstimate()
       case _ =>
-        logDebug(s"Unsupported join type: ${join.joinType}")
+        logDebug(s"[CBO] Unsupported join type: ${join.joinType}")
         None
     }
   }
@@ -281,12 +281,12 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression]): Seq[(AttributeReference, AttributeReference)] = {
     leftKeys.zip(rightKeys).flatMap {
-      case (ExtractAttr(left), ExtractAttr(right)) => Some((left, right))
-      case (left, right) =>
+      case (lk: AttributeReference, rk: AttributeReference) => Some((lk, rk))
+      case (lk, rk) =>
         // Currently we don't deal with equal joins like key1 = key2 + 5.
         // Note: join keys from EqualNullSafe also fall into this case (Coalesce), consider to
         // support it in the future by using `nullCount` in column stats.
-        logDebug(s"Unsupported equi-join expression: left key: $left, right key: $right")
+        logDebug(s"[CBO] Unsupported equi-join expression: left key: $lk, right key: $rk")
         None
     }
   }
