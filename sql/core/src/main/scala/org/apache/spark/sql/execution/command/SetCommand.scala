@@ -79,7 +79,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Queries all key-value pairs that are set in the SQLConf of the sparkSession.
     case None =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.conf.getAll.map { case (k, v) => Row(k, v) }.toSeq
+        sparkSession.conf.getAll.map { case (k, v) => Row(k, v) }.toSeq.sortBy(_.getString(0))
       }
       (keyValueOutput, runFunc)
 
@@ -89,7 +89,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       val runFunc = (sparkSession: SparkSession) => {
         sparkSession.sessionState.conf.getAllDefinedConfs.map { case (key, defaultValue, doc) =>
           Row(key, defaultValue, doc)
-        }
+        }.sortBy(_.getString(0))
       }
       val schema = StructType(
         StructField("key", StringType, nullable = false) ::
