@@ -518,7 +518,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assertDataStructuresEmpty()
   }
 
-  test("unserializable partition") {
+  test("unserializable partitioner") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new Partitioner {
       override def numPartitions = 1
