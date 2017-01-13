@@ -789,55 +789,50 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   )
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
-    val tableMetadata = catalog.getTableMetadata(table)
+    val tableMeta = sparkSession.sessionState.catalog.getTableMetadata(table)
+    val tableName = tableMeta.identifier.quotedString
 
-    // TODO: unify this after we unify the CREATE TABLE syntax for hive serde and data source table.
-    val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
-      showCreateDataSourceTable(tableMetadata)
+    if (tableMeta.unsupportedFeatures.nonEmpty) {
+      throw new AnalysisException(
+        s"Failed to execute SHOW CREATE TABLE against table/view $tableName, " +
+          "which is created by Hive and uses the following unsupported feature(s)\n" +
+          tableMeta.unsupportedFeatures.map(" - " + _).mkString("\n"))
+    }
+
+    val stmt = if (tableMeta.tableType == VIEW) {
+      val builder = StringBuilder.newBuilder
+      builder ++= s"CREATE VIEW $tableName"
+
+      if (tableMeta.schema.nonEmpty) {
+        builder ++= tableMeta.schema.map(_.name).mkString("(", ", ", ")")
+      }
+
+      builder ++= s" AS\n${tableMeta.viewText.get}"
+      builder.toString
+    } else if (DDLUtils.isHiveTable(tableMeta) && tableMeta.properties.nonEmpty) {
+      // If table properties are not empty, this Hive table was probably created via legacy Hive
+      // syntax, and we have to generate CREATE TABLE statement using legacy syntax, as the
+      // official syntax doesn't support table properties.
+      showCreateTableWithLegacySyntax(tableMeta)
     } else {
-      showCreateHiveTable(tableMetadata)
+      showCreateTable(tableMeta)
     }
 
     Seq(Row(stmt))
   }
 
-  private def showCreateHiveTable(metadata: CatalogTable): String = {
-    def reportUnsupportedError(features: Seq[String]): Unit = {
-      throw new AnalysisException(
-        s"Failed to execute SHOW CREATE TABLE against table/view ${metadata.identifier}, " +
-          "which is created by Hive and uses the following unsupported feature(s)\n" +
-          features.map(" - " + _).mkString("\n")
-      )
-    }
-
-    if (metadata.unsupportedFeatures.nonEmpty) {
-      reportUnsupportedError(metadata.unsupportedFeatures)
-    }
-
+  private def showCreateTableWithLegacySyntax(metadata: CatalogTable): String = {
     val builder = StringBuilder.newBuilder
 
-    val tableTypeString = metadata.tableType match {
-      case EXTERNAL => " EXTERNAL TABLE"
-      case VIEW => " VIEW"
-      case MANAGED => " TABLE"
-    }
+    val isExternal = if (metadata.tableType == EXTERNAL) " EXTERNAL" else ""
+    builder ++= s"CREATE$isExternal TABLE ${metadata.identifier.quotedString}"
 
-    builder ++= s"CREATE$tableTypeString ${table.quotedString}"
+    showHiveTableHeader(metadata, builder)
+    showHiveTableNonDataColumns(metadata, builder)
+    showHiveTableStorageInfo(metadata, builder)
+    showHiveTableProperties(metadata, builder)
 
-    if (metadata.tableType == VIEW) {
-      if (metadata.schema.nonEmpty) {
-        builder ++= metadata.schema.map(_.name).mkString("(", ", ", ")")
-      }
-      builder ++= metadata.viewText.mkString(" AS\n", "", "\n")
-    } else {
-      showHiveTableHeader(metadata, builder)
-      showHiveTableNonDataColumns(metadata, builder)
-      showHiveTableStorageInfo(metadata, builder)
-      showHiveTableProperties(metadata, builder)
-    }
-
-    builder.toString()
+    builder.toString
   }
 
   private def showHiveTableHeader(metadata: CatalogTable, builder: StringBuilder): Unit = {
@@ -915,47 +910,55 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     }
   }
 
-  private def showCreateDataSourceTable(metadata: CatalogTable): String = {
+  private def showCreateTable(metadata: CatalogTable): String = {
     val builder = StringBuilder.newBuilder
 
-    builder ++= s"CREATE TABLE ${table.quotedString} "
-    showDataSourceTableDataColumns(metadata, builder)
-    showDataSourceTableOptions(metadata, builder)
-    showDataSourceTableNonDataColumns(metadata, builder)
+    builder ++= s"CREATE TABLE ${metadata.identifier.quotedString} "
+
+    showColumns(metadata, builder)
+    showDataSourceOptions(metadata, builder)
+    showPartitioningAndBucketing(metadata, builder)
+
+    if (metadata.tableType == EXTERNAL) {
+      builder ++= s"LOCATION '${metadata.storage.locationUri.get}'\n"
+    }
+
+    metadata.comment.foreach { comment =>
+      builder ++= s"COMMENT '${escapeSingleQuotedString(comment)}'"
+    }
 
     builder.toString()
   }
 
-  private def showDataSourceTableDataColumns(
-      metadata: CatalogTable, builder: StringBuilder): Unit = {
+  private def showColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val columns = metadata.schema.fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
     builder ++= columns.mkString("(", ", ", ")\n")
   }
 
-  private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
+  private def showDataSourceOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
     builder ++= s"USING ${metadata.provider.get}\n"
 
     val dataSourceOptions = metadata.storage.properties.map {
       case (key, value) => s"${quoteIdentifier(key)} '${escapeSingleQuotedString(value)}'"
-    } ++ metadata.storage.locationUri.flatMap { location =>
-      if (metadata.tableType == MANAGED) {
-        // If it's a managed table, omit PATH option. Spark SQL always creates external table
-        // when the table creation DDL contains the PATH option.
-        None
-      } else {
-        Some(s"path '${escapeSingleQuotedString(location)}'")
-      }
+    }
+
+    val hiveOptions = if (DDLUtils.isHiveTable(metadata)) {
+      Seq(
+        s"${DDLUtils.HIVE_SERDE_OPTION} '${metadata.storage.serde.get}'",
+        s"${DDLUtils.HIVE_INPUT_FORMAT_OPTION} '${metadata.storage.inputFormat.get}'",
+        s"${DDLUtils.HIVE_OUTPUT_FORMAT_OPTION} '${metadata.storage.outputFormat.get}'")
+    } else {
+      Seq.empty[String]
     }
 
     if (dataSourceOptions.nonEmpty) {
       builder ++= "OPTIONS (\n"
-      builder ++= dataSourceOptions.mkString("  ", ",\n  ", "\n")
+      builder ++= (dataSourceOptions ++ hiveOptions).mkString("  ", ",\n  ", "\n")
       builder ++= ")\n"
     }
   }
 
-  private def showDataSourceTableNonDataColumns(
-      metadata: CatalogTable, builder: StringBuilder): Unit = {
+  private def showPartitioningAndBucketing(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val partCols = metadata.partitionColumnNames
     if (partCols.nonEmpty) {
       builder ++= s"PARTITIONED BY ${partCols.mkString("(", ", ", ")")}\n"

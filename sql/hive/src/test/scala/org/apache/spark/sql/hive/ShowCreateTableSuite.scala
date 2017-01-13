@@ -338,9 +338,7 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
         "totalSize",
         "totalNumberFiles",
         "maxFileSize",
-        "minFileSize",
-        // EXTERNAL is not non-deterministic, but it is filtered out for external tables.
-        "EXTERNAL"
+        "minFileSize"
       )
 
       table.copy(

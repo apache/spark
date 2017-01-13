@@ -761,6 +761,9 @@ case class AlterTableSetLocationCommand(
 
 object DDLUtils {
   val HIVE_PROVIDER = "hive"
+  val HIVE_SERDE_OPTION = "serde"
+  val HIVE_INPUT_FORMAT_OPTION = "inputFormat"
+  val HIVE_OUTPUT_FORMAT_OPTION = "outputFormat"
 
   def isHiveTable(table: CatalogTable): Boolean = {
     table.provider.isDefined && table.provider.get.toLowerCase == HIVE_PROVIDER

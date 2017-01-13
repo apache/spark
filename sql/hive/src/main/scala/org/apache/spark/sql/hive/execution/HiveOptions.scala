@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.command.DDLUtils
 
 /**
  * Options for the Hive data source. Note that rule `DetermineHiveSerde` will extract Hive
@@ -87,9 +88,9 @@ object HiveOptions {
   }
 
   val FILE_FORMAT = newOption("fileFormat")
-  val INPUT_FORMAT = newOption("inputFormat")
-  val OUTPUT_FORMAT = newOption("outputFormat")
-  val SERDE = newOption("serde")
+  val INPUT_FORMAT = newOption(DDLUtils.HIVE_INPUT_FORMAT_OPTION)
+  val OUTPUT_FORMAT = newOption(DDLUtils.HIVE_OUTPUT_FORMAT_OPTION)
+  val SERDE = newOption(DDLUtils.HIVE_SERDE_OPTION)
 
   // A map from the public delimiter option keys to the underlying Hive serde property keys.
   val delimiterOptions = Map(
