@@ -32,6 +32,7 @@ import org.apache.spark.ml.optim._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -1204,6 +1205,15 @@ class GeneralizedLinearRegressionSummary private[regression] (
   @Since("2.2.0")
   lazy val numInstances: Long = predictions.count()
 
+
+  /** Name of features. */
+  @Since("2.2.0")
+  lazy val featureName: Array[String] = {
+    val features = AttributeGroup.fromStructField(dataset.schema(model.getFeaturesCol))
+                                  .attributes.get.map(_.name.get)
+    features
+  }
+
   /** The numeric rank of the fitted linear model. */
   @Since("2.0.0")
   lazy val rank: Long = if (model.getFitIntercept) {
@@ -1458,4 +1468,33 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
         "No p-value available for this GeneralizedLinearRegressionModel")
     }
   }
+
+  /**
+    * Summary table with feature name, coefficient standard error,
+    * tValues and pValues.
+    *
+    */
+  @Since("2.2.0")
+  lazy val summaryTable: Seq[_] = {
+    if (isNormalSolver) {
+      val features = if (model.getFitIntercept) {
+        featureName :+ "Intercept"
+      } else {
+        featureName
+      }
+      val coef = if (model.getFitIntercept) {
+        model.coefficients.toArray :+ model.intercept
+      } else {
+        model.coefficients.toArray
+      }
+      val result = for (i <- 0 until coef.length)
+        yield (features(i), coef(i), coefficientStandardErrors(i), tValues(i), pValues(i))
+      result
+    } else {
+      throw new UnsupportedOperationException(
+        "No summary table available for this GeneralizedLinearRegressionModel")
+    }
+  }
+
+
 }
