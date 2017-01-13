@@ -149,10 +149,6 @@ setMethod("predict", signature(object = "BisectingKMeansModel"),
 #' Get fitted result from a bisecting k-means model.
 #' Note: A saved-loaded model does not support this method.
 #'
-#' @param object a fitted bisecting k-means model.
-#' @param method type of fitted results, \code{"centers"} for cluster centers
-#'        or \code{"classes"} for assigned classes.
-#' @param ... additional argument(s) passed to the method.
 #' @return \code{fitted} returns a SparkDataFrame containing fitted values.
 #' @rdname fitted
 #' @export
