@@ -125,7 +125,7 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
           val max_ = Array.fill[Double](n)(Double.MinValue)
           val nnz_ = Array.fill[Long](n)(0L)
           vec.foreachActive {
-            case (i, v) if v != 0.0 =>
+            case (i, v) if v != 0.0 && !v.isNaN =>
               min_(i) = v
               max_(i) = v
               nnz_(i) = 1L
@@ -136,10 +136,11 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
           require(min.length == vec.size,
             s"Dimensions mismatch when adding new sample: ${min.length} != ${vec.size}")
           vec.foreachActive {
-            case (i, v) if v != 0.0 =>
+            case (i, v) if v != 0.0 && !v.isNaN =>
               if (v < min(i)) {
                 min(i) = v
-              } else if (v > max(i)) {
+              }
+              if (v > max(i)) {
                 max(i) = v
               }
               nnz(i) += 1
@@ -168,7 +169,8 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       if (nnz(i) < cnt) {
         if (mins(i) > 0.0) {
           mins(i) = 0.0
-        } else if (maxs(i) < 0.0) {
+        }
+        if (maxs(i) < 0.0) {
           maxs(i) = 0.0
         }
       }
