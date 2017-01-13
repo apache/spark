@@ -68,26 +68,39 @@ class MaxAbsScaler @Since("2.0.0") (@Since("2.0.0") override val uid: String)
   override def fit(dataset: Dataset[_]): MaxAbsScalerModel = {
     transformSchema(dataset.schema, logging = true)
 
-    val numFeatures = dataset.select($(inputCol)).first().getAs[Vector](0).size
     val maxAbs = dataset.select($(inputCol)).rdd.map {
       row => row.getAs[Vector](0)
-    }.treeAggregate[Array[Double]](Array.fill(numFeatures)(0.0))(
+    }.treeAggregate[Array[Double]](Array.emptyDoubleArray)(
       seqOp = {
+        case (max, vec) if max.isEmpty =>
+          vec.toArray.map(math.abs)
         case (max, vec) =>
+          require(max.length == vec.size,
+            s"Dimensions mismatch when adding new sample: ${max.length} != ${vec.size}")
           vec.foreachActive {
-            case (i, v) =>
-              val abs = math.abs(v)
-              if (abs > max(i)) {
-                max(i) = abs
+            case (i, v) if v != 0.0 =>
+              val av = math.abs(v)
+              if (av > max(i)) {
+                max(i) = av
               }
+            case _ =>
           }
           max
       }, combOp = {
+        case (max1, max2) if max1.isEmpty =>
+          max2
+        case (max1, max2) if max2.isEmpty =>
+          max1
         case (max1, max2) =>
-          max1.zip(max2).map {
-            case (m1, m2) => math.max(m1, m2)
+          require(max1.length == max2.length,
+            s"Dimensions mismatch when merging: ${max1.length} != ${max2.length}")
+          for (i <- 0 until max1.length) {
+            max1(i) = math.max(max1(i), max2(i))
           }
+          max1
       })
+
+    require(maxAbs.nonEmpty, "Input dataset must be non-empty")
 
     copyValues(new MaxAbsScalerModel(uid, Vectors.dense(maxAbs)).setParent(this))
   }

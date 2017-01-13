@@ -114,30 +114,65 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   override def fit(dataset: Dataset[_]): MinMaxScalerModel = {
     transformSchema(dataset.schema, logging = true)
 
-    val numFeatures = dataset.select($(inputCol)).first().getAs[Vector](0).size
-    val (mins, maxs) = dataset.select($(inputCol)).rdd.map {
+    val (mins, maxs, nnz, cnt) = dataset.select($(inputCol)).rdd.map {
       row => row.getAs[Vector](0)
-    }.treeAggregate[(Array[Double], Array[Double])](
-      (Array.fill(numFeatures)(Double.MaxValue), Array.fill(numFeatures)(Double.MinValue)))(
+    }.treeAggregate[(Array[Double], Array[Double], Array[Long], Long)](
+      (Array.emptyDoubleArray, Array.emptyDoubleArray, Array.emptyLongArray, 0L))(
       seqOp = {
-        case ((min, max), vec) =>
+        case ((min, max, nnz, cnt), vec) if cnt == 0 =>
+          val n = vec.size
+          val min_ = Array.fill[Double](n)(Double.MaxValue)
+          val max_ = Array.fill[Double](n)(Double.MinValue)
+          val nnz_ = Array.fill[Long](n)(0L)
           vec.foreachActive {
-            case (i, v) =>
+            case (i, v) if v != 0.0 =>
+              min_(i) = v
+              max_(i) = v
+              nnz_(i) = 1L
+            case _ =>
+          }
+          (min_, max_, nnz_, 1L)
+        case ((min, max, nnz, cnt), vec) =>
+          require(min.length == vec.size,
+            s"Dimensions mismatch when adding new sample: ${min.length} != ${vec.size}")
+          vec.foreachActive {
+            case (i, v) if v != 0.0 =>
               if (v < min(i)) {
                 min(i) = v
               } else if (v > max(i)) {
                 max(i) = v
               }
+              nnz(i) += 1
+            case _ =>
           }
-          (min, max)
+          (min, max, nnz, cnt + 1)
       }, combOp = {
-        case ((min1, max1), (min2, max2)) =>
-          (min1.zip(min2).map {
-            case (m1, m2) => math.min(m1, m2)
-          }, max1.zip(max2).map {
-            case (m1, m2) => math.max(m1, m2)
-          })
+        case ((min1, max1, nnz1, cnt1), (min2, max2, nnz2, cnt2)) if cnt1 == 0 =>
+          (min2, max2, nnz2, cnt2)
+        case ((min1, max1, nnz1, cnt1), (min2, max2, nnz2, cnt2)) if cnt2 == 0 =>
+          (min1, max1, nnz1, cnt1)
+        case ((min1, max1, nnz1, cnt1), (min2, max2, nnz2, cnt2)) =>
+          require(min1.length == min2.length,
+            s"Dimensions mismatch when merging: ${min1.length} != ${min2.length}")
+          for (i <- 0 until min1.length) {
+            min1(i) = math.min(min1(i), min2(i))
+            max1(i) = math.max(max1(i), max2(i))
+            nnz1(i) += nnz2(i)
+          }
+          (min1, max1, nnz1, cnt1 + cnt2)
       })
+
+    require(cnt > 0, "Input dataset must be non-empty")
+
+    for(i <- 0 until mins.length) {
+      if (nnz(i) < cnt) {
+        if (mins(i) > 0.0) {
+          mins(i) = 0.0
+        } else if (maxs(i) < 0.0) {
+          maxs(i) = 0.0
+        }
+      }
+    }
 
     copyValues(new MinMaxScalerModel(uid, Vectors.dense(mins), Vectors.dense(maxs))
       .setParent(this))
