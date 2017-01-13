@@ -73,7 +73,7 @@ object UnsupportedOperationChecker {
                 s"streaming DataFrames/DataSets")(plan)
         }
 
-      case InternalOutputModes.Complete | InternalOutputModes.Update if aggregates.isEmpty =>
+      case InternalOutputModes.Complete if aggregates.isEmpty =>
         throwError(
           s"$outputMode output mode not supported when there are no streaming aggregations on " +
             s"streaming DataFrames/Datasets")(plan)

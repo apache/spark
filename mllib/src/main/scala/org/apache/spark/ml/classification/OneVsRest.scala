@@ -308,6 +308,10 @@ final class OneVsRest @Since("1.4.0") (
   override def fit(dataset: Dataset[_]): OneVsRestModel = {
     transformSchema(dataset.schema)
 
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(labelCol, featuresCol, predictionCol)
+    instr.logNamedValue("classifier", $(classifier).getClass.getCanonicalName)
+
     // determine number of classes either from metadata if provided, or via computation.
     val labelSchema = dataset.schema($(labelCol))
     val computeNumClasses: () => Int = () => {
@@ -316,6 +320,7 @@ final class OneVsRest @Since("1.4.0") (
       maxLabelIndex.toInt + 1
     }
     val numClasses = MetadataUtils.getNumClasses(labelSchema).fold(computeNumClasses())(identity)
+    instr.logNumClasses(numClasses)
 
     val multiclassLabeled = dataset.select($(labelCol), $(featuresCol))
 
@@ -339,6 +344,7 @@ final class OneVsRest @Since("1.4.0") (
       paramMap.put(classifier.predictionCol -> getPredictionCol)
       classifier.fit(trainingDataset, paramMap)
     }.toArray[ClassificationModel[_, _]]
+    instr.logNumFeatures(models.head.numFeatures)
 
     if (handlePersistence) {
       multiclassLabeled.unpersist()
@@ -352,6 +358,7 @@ final class OneVsRest @Since("1.4.0") (
       case attr: Attribute => attr
     }
     val model = new OneVsRestModel(uid, labelAttribute.toMetadata(), models).setParent(this)
+    instr.logSuccess(model)
     copyValues(model)
   }
 

@@ -238,7 +238,7 @@ class StreamSuite extends StreamTest {
     }
   }
 
-  testQuietly("fatal errors from a source should be sent to the user") {
+  testQuietly("handle fatal errors thrown from the stream thread") {
     for (e <- Seq(
       new VirtualMachineError {},
       new ThreadDeath,
@@ -259,8 +259,11 @@ class StreamSuite extends StreamTest {
         override def stop(): Unit = {}
       }
       val df = Dataset[Int](sqlContext.sparkSession, StreamingExecutionRelation(source))
-      // These error are fatal errors and should be ignored in `testStream` to not fail the test.
       testStream(df)(
+        // `ExpectFailure(isFatalError = true)` verifies two things:
+        // - Fatal errors can be propagated to `StreamingQuery.exception` and
+        //   `StreamingQuery.awaitTermination` like non fatal errors.
+        // - Fatal errors can be caught by UncaughtExceptionHandler.
         ExpectFailure(isFatalError = true)(ClassTag(e.getClass))
       )
     }

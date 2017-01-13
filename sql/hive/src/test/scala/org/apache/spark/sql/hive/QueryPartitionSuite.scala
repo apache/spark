@@ -40,7 +40,7 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
       val tmpDir = Files.createTempDir()
       // create the table for test
       sql(s"CREATE TABLE table_with_partition(key int,value string) " +
-        s"PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
+        s"PARTITIONED by (ds string) location '${tmpDir.toURI}' ")
       sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') " +
         "SELECT key,value FROM testData")
       sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='2') " +
@@ -71,12 +71,12 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
 
   test("SPARK-13709: reading partitioned Avro table with nested schema") {
     withTempDir { dir =>
-      val path = dir.getCanonicalPath
+      val path = dir.toURI.toString
       val tableName = "spark_13709"
       val tempTableName = "spark_13709_temp"
 
-      new File(path, tableName).mkdir()
-      new File(path, tempTableName).mkdir()
+      new File(dir.getAbsolutePath, tableName).mkdir()
+      new File(dir.getAbsolutePath, tempTableName).mkdir()
 
       val avroSchema =
         """{

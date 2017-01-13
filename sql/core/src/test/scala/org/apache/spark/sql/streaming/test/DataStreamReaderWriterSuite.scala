@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
 
+import org.apache.hadoop.fs.Path
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.PrivateMethodTester.PrivateMethod
@@ -355,7 +356,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
   test("source metadataPath") {
     LastOptions.clear()
 
-    val checkpointLocation = newMetadataDir
+    val checkpointLocationURI = new Path(newMetadataDir).toUri
 
     val df1 = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
@@ -367,21 +368,21 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
 
     val q = df1.union(df2).writeStream
       .format("org.apache.spark.sql.streaming.test")
-      .option("checkpointLocation", checkpointLocation)
+      .option("checkpointLocation", checkpointLocationURI.toString)
       .trigger(ProcessingTime(10.seconds))
       .start()
     q.stop()
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
       spark.sqlContext,
-      checkpointLocation + "/sources/0",
+      s"$checkpointLocationURI/sources/0",
       None,
       "org.apache.spark.sql.streaming.test",
       Map.empty)
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
       spark.sqlContext,
-      checkpointLocation + "/sources/1",
+      s"$checkpointLocationURI/sources/1",
       None,
       "org.apache.spark.sql.streaming.test",
       Map.empty)
