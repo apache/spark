@@ -49,7 +49,8 @@ private[hive] case class MetastoreRelation(
   override def equals(other: Any): Boolean = other match {
     case relation: MetastoreRelation =>
       databaseName == relation.databaseName &&
-        tableName == relation.tableName
+        tableName == relation.tableName &&
+        output == relation.output
     case _ => false
   }
 
