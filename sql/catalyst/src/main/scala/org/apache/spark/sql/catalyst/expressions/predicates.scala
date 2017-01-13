@@ -86,6 +86,19 @@ trait PredicateHelper {
    */
   protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
     expr.references.subsetOf(plan.outputSet)
+
+  /**
+   * Returns true iff `expr` could be evaluated as a condition within join.
+   */
+  protected def canEvaluateWithinJoin(expr: Expression): Boolean = {
+    expr.find {
+      case e: SubqueryExpression =>
+        // non-correlated subquery will be replaced as literal
+        e.children.nonEmpty
+      case e: Unevaluable => true
+      case _ => false
+    }.isEmpty
+  }
 }
 
 @ExpressionDescription(
