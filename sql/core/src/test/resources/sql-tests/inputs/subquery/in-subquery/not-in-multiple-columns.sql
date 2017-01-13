@@ -2,7 +2,7 @@
 
 -- The data sets are populated as follows:
 -- 1) When T1.A1 = T2.A2
---    1.1) T1.B1 = T2.B2 
+--    1.1) T1.B1 = T2.B2
 --    1.2) T1.B1 = T2.B2 returns false
 --    1.3) T1.B1 is null
 --    1.4) T2.B2 is null
@@ -10,7 +10,7 @@
 -- 3) When T1.A1 is null
 -- 4) When T1.A2 is null
 
--- T1.A1  T1.B1     T2.A2  T2.B2    
+-- T1.A1  T1.B1     T2.A2  T2.B2
 -- -----  -----     -----  -----
 --     1      1         1      1    (1.1)
 --     1      3                     (1.2)
