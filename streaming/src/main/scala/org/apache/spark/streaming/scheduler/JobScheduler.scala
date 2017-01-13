@@ -200,6 +200,9 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     job.setEndTime(completedTime)
     listenerBus.post(StreamingListenerOutputOperationCompleted(job.toOutputOperationInfo))
     logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
+    if (jobSet.hasCompleted) {
+      listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
+    }
     job.result match {
       case Failure(e) =>
         reportError("Error running job " + job, e)
@@ -211,7 +214,6 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
             jobSet.totalDelay / 1000.0, jobSet.time.toString,
             jobSet.processingDelay / 1000.0
           ))
-          listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
         }
     }
   }
