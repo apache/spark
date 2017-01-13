@@ -411,8 +411,16 @@ setMethod("summary", signature(object = "LDAModel"),
             vocabSize <- callJMethod(jobj, "vocabSize")
             topics <- dataFrame(callJMethod(jobj, "topics", maxTermsPerTopic))
             vocabulary <- callJMethod(jobj, "vocabulary")
-            trainingLogLikelihood <- callJMethod(jobj, "trainingLogLikelihood")
-            logPrior <- callJMethod(jobj, "logPrior")
+            trainingLogLikelihood <- if (isDistributed) {
+              callJMethod(jobj, "trainingLogLikelihood")
+            } else {
+              NULL
+            }
+            logPrior <- if (isDistributed) {
+              callJMethod(jobj, "logPrior")
+            } else {
+              NULL
+            }
             list(docConcentration = unlist(docConcentration),
                  topicConcentration = topicConcentration,
                  logLikelihood = logLikelihood, logPerplexity = logPerplexity,

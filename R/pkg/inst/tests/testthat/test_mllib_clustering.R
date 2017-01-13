@@ -196,8 +196,8 @@ test_that("spark.lda with text input", {
   expect_true(logPerplexity >= 0 & is.finite(logPerplexity))
   expect_equal(vocabSize, 10)
   expect_true(setequal(stats$vocabulary, c("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")))
-  expect_true(is.nan(trainingLogLikelihood))
-  expect_true(is.nan(logPrior))
+  expect_true(is.null(trainingLogLikelihood))
+  expect_true(is.null(logPrior))
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-lda-text", fileext = ".tmp")
@@ -212,8 +212,8 @@ test_that("spark.lda with text input", {
   expect_equal(logPerplexity, stats2$logPerplexity)
   expect_equal(vocabSize, stats2$vocabSize)
   expect_true(all.equal(vocabulary, stats2$vocabulary))
-  expect_equal(trainingLogLikelihood, stats2$trainingLogLikelihood)
-  expect_equal(logPrior, stats2$logPrior)
+  expect_true(is.null(stats2$trainingLogLikelihood))
+  expect_true(is.null(stats2$logPrior))
 
   unlink(modelPath)
 })

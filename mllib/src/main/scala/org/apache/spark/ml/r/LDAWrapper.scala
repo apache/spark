@@ -82,14 +82,11 @@ private[r] class LDAWrapper private (
   lazy val vocabSize: Int = lda.vocabSize
   lazy val docConcentration: Array[Double] = lda.getEffectiveDocConcentration
   lazy val topicConcentration: Double = lda.getEffectiveTopicConcentration
-  lazy val trainingLogLikelihood: Double = distributedModel match {
-    case null => Double.NaN
-    case _ => distributedModel.trainingLogLikelihood
-  }
-  lazy val logPrior: Double = distributedModel match {
-    case null => Double.NaN
-    case _ => distributedModel.logPrior
-  }
+  // Only applicable to distributed lda model
+  lazy val trainingLogLikelihood: Double = distributedModel.trainingLogLikelihood
+
+  // Only applicable to distributed lda model
+  lazy val logPrior: Double = distributedModel.logPrior
 
   override def write: MLWriter = new LDAWrapper.LDAWrapperWriter(this)
 }
