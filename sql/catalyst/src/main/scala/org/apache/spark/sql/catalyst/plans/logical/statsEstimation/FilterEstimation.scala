@@ -60,7 +60,7 @@ class FilterEstimation extends Logging {
     mutableColStats = mutable.Map.empty ++= statsExprIdMap
 
     // estimate selectivity of this filter predicate
-    val percent: Double = calculateConditions(plan, plan.condition)
+    val filterSelectivity: Double = calculateConditions(plan, plan.condition)
 
     // attributeStats has mapping Attribute-to-ColumnStat.
     // mutableColStats has mapping ExprId-to-ColumnStat.
@@ -73,7 +73,7 @@ class FilterEstimation extends Logging {
     val newColStats = AttributeMap(mutableAttributeStats.toSeq)
 
     val filteredRowCountValue: BigInt =
-      EstimationUtils.ceil(BigDecimal(stats.rowCount.get) * percent)
+      EstimationUtils.ceil(BigDecimal(stats.rowCount.get) * filterSelectivity)
     val avgRowSize = BigDecimal(EstimationUtils.getRowSize(plan.output, newColStats))
     val filteredSizeInBytes: BigInt =
       EstimationUtils.ceil(BigDecimal(filteredRowCountValue) * avgRowSize)
@@ -113,8 +113,15 @@ class FilterEstimation extends Logging {
         val p2 = calculateConditions(plan, cond2, update = false)
         math.min(1.0, p1 + p2 - (p1 * p2))
 
-      case Not(cond) => calculateSingleCondition(plan, cond, isNot = true, update = false)
-      case _ => calculateSingleCondition(plan, condition, isNot = false, update)
+      case Not(cond) => calculateSingleCondition(plan, cond, update = false) match {
+        case Some(percent) => 1.0 - percent
+        case None => 1.0
+      }
+      case _ => calculateSingleCondition(plan, condition, update) match {
+        case Some(percent) => percent
+        case None => 1.0
+          // for not-supported condition, set filter selectivity to a conservative estimate 100%
+      }
     }
   }
 
@@ -125,19 +132,17 @@ class FilterEstimation extends Logging {
    *
    * @param plan the Filter LogicalPlan node
    * @param condition a single logical expression
-   * @param isNot set to true for Not logical operator.  Otherwise it is set to false.
    * @param update a boolean flag to specify if we need to update ColumnStat of a column
    *               for subsequent conditions
-   * @return a doube value to show the percentage of rows meeting a given condition
+   * @return Option[Double] value to show the percentage of rows meeting a given condition.
+    *        It returns None if the condition is not supported.
    */
   def calculateSingleCondition(
       plan: Filter,
       condition: Expression,
-      isNot: Boolean,
       update: Boolean)
-    : Double = {
-    var notSupported: Boolean = false
-    val percent: Double = condition match {
+    : Option[Double] = {
+    condition match {
       // For evaluateBinary method, we assume the literal on the right side of an operator.
       // So we will change the order if not.
 
@@ -183,14 +188,14 @@ class FilterEstimation extends Logging {
         if (plan.child.isInstanceOf[LeafNode ]) {
           evaluateIsNull(plan, ar, true, update)
         } else {
-          1.0
+          None
         }
 
       case IsNotNull(ar: AttributeReference) =>
         if (plan.child.isInstanceOf[LeafNode ]) {
           evaluateIsNull(plan, ar, false, update)
         } else {
-          1.0
+          None
         }
 
       case _ =>
@@ -198,15 +203,7 @@ class FilterEstimation extends Logging {
         // Hence, these string operators Like(_, _) | Contains(_, _) | StartsWith(_, _)
         // | EndsWith(_, _) are not supported yet
         logDebug("[CBO] Unsupported filter condition: " + condition)
-        notSupported = true
-        1.0
-    }
-    if (notSupported) {
-      1.0
-    } else if (isNot) {
-      1.0 - percent
-    } else {
-      percent
+        None
     }
   }
 
@@ -225,10 +222,10 @@ class FilterEstimation extends Logging {
       attrRef: AttributeReference,
       isNull: Boolean,
       update: Boolean)
-    : Double = {
+    : Option[Double] = {
     if (!mutableColStats.contains(attrRef.exprId)) {
       logDebug("[CBO] No statistics for " + attrRef)
-      return 1.0
+      return None
     }
     val aColStat = mutableColStats(attrRef.exprId)
     val rowCountValue = plan.child.statistics.rowCount.get
@@ -251,7 +248,7 @@ class FilterEstimation extends Logging {
         1.0 - nullPercent.toDouble
       }
 
-    percent
+    Some(percent)
   }
 
   /**
@@ -269,10 +266,10 @@ class FilterEstimation extends Logging {
       attrRef: AttributeReference,
       literal: Literal,
       update: Boolean)
-    : Double = {
+    : Option[Double] = {
     if (!mutableColStats.contains(attrRef.exprId)) {
       logDebug("[CBO] No statistics for " + attrRef)
-      return 1.0
+      return None
     }
 
     // Make sure that the Date/Timestamp literal is a valid one
@@ -281,13 +278,13 @@ class FilterEstimation extends Logging {
         val dateLiteral = DateTimeUtils.stringToDate(literal.value.asInstanceOf[UTF8String])
         if (dateLiteral.isEmpty) {
           logDebug("[CBO] Date literal is wrong, No statistics for " + attrRef)
-          return 1.0
+          return None
         }
       case TimestampType =>
         val tsLiteral = DateTimeUtils.stringToTimestamp(literal.value.asInstanceOf[UTF8String])
         if (tsLiteral.isEmpty) {
           logDebug("[CBO] Timestamp literal is wrong, No statistics for " + attrRef)
-          return 1.0
+          return None
         }
       case _ =>
     }
@@ -304,7 +301,7 @@ class FilterEstimation extends Logging {
             // type without min/max and advanced statistics like histogram.
 
             logDebug("[CBO] No statistics for String/Binary type " + attrRef)
-            return 1.0
+            None
         }
     }
   }
@@ -361,7 +358,7 @@ class FilterEstimation extends Logging {
       attrRef: AttributeReference,
       literal: Literal,
       update: Boolean)
-    : Double = {
+    : Option[Double] = {
 
     val aColStat = mutableColStats(attrRef.exprId)
     val ndv = aColStat.distinctCount
@@ -395,9 +392,9 @@ class FilterEstimation extends Logging {
         mutableColStats += (attrRef.exprId -> newStats)
       }
 
-      1.0 / ndv.toDouble
+      Some(1.0 / ndv.toDouble)
     } else {
-      0.0
+      Some(0.0)
     }
 
   }
@@ -417,10 +414,10 @@ class FilterEstimation extends Logging {
       attrRef: AttributeReference,
       hSet: Set[Any],
       update: Boolean)
-    : Double = {
+    : Option[Double] = {
     if (!mutableColStats.contains(attrRef.exprId)) {
       logDebug("[CBO] No statistics for " + attrRef)
-      return 1.0
+      return None
     }
 
     val aColStat = mutableColStats(attrRef.exprId)
@@ -439,7 +436,7 @@ class FilterEstimation extends Logging {
       case StringType | BinaryType => hSet
     }
     if (validQuerySet.isEmpty) {
-      return 0.0
+      return Some(0.0)
     }
 
     val newNdv = validQuerySet.size
@@ -464,7 +461,7 @@ class FilterEstimation extends Logging {
 
     // return the filter selectivity.  Without advanced statistics such as histograms,
     // we have to assume uniform distribution.
-    math.min(1.0, validQuerySet.size / ndv.toDouble)
+    Some(math.min(1.0, validQuerySet.size / ndv.toDouble))
   }
 
   /**
@@ -483,7 +480,7 @@ class FilterEstimation extends Logging {
       attrRef: AttributeReference,
       literal: Literal,
       update: Boolean)
-    : Double = {
+    : Option[Double] = {
 
     var percent = 1.0
     val aColStat = mutableColStats(attrRef.exprId)
@@ -548,7 +545,7 @@ class FilterEstimation extends Logging {
       }
     }
 
-    percent
+    Some(percent)
   }
 
 }
