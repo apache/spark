@@ -1340,7 +1340,8 @@ setGeneric("spark.als", function(data, ...) { standardGeneric("spark.als") })
 
 #' @rdname spark.bisectingKmeans
 #' @export
-setGeneric("spark.bisectingKmeans", function(data, formula, ...) { standardGeneric("spark.bisectingKmeans") })
+setGeneric("spark.bisectingKmeans",
+           function(data, formula, ...) { standardGeneric("spark.bisectingKmeans") })
 
 #' @rdname spark.gaussianMixture
 #' @export

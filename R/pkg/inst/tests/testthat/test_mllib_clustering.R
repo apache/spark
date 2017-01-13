@@ -41,14 +41,16 @@ test_that("spark.bisectingKmeans", {
 
   # Test fitted works on Bisecting KMeans
   fitted.model <- fitted(model)
-  expect_equal(sort(collect(distinct(select(fitted.model, "prediction")))$prediction), c(0, 1, 2, 3))
+  expect_equal(sort(collect(distinct(select(fitted.model, "prediction")))$prediction),
+               c(0, 1, 2, 3))
 
   # Test summary works on KMeans
   summary.model <- summary(model)
   cluster <- summary.model$cluster
   k <- summary.model$k
   expect_equal(k, 4)
-  expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1, 2, 3))
+  expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction),
+               c(0, 1, 2, 3))
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-bisectingkmeans", fileext = ".tmp")

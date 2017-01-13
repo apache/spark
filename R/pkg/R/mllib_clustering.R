@@ -72,7 +72,7 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #' sparkR.session()
 #' data(iris)
 #' df <- createDataFrame(iris)
-#' model <- spark.kmeans(df, Sepal_Length ~ Sepal_Width, k = 4, initMode = "random")
+#' model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
 #' summary(model)
 #'
 #' # fitted values on training data
