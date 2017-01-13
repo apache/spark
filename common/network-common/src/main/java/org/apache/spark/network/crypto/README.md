@@ -63,7 +63,7 @@ Where:
 - ANONCE: the nonce used as the salt when generating the auth key.
 - ENC(): an encryption function that uses the cipher and the generated key. This function
   will also be used in the definition of other messages below.
-- CCHALLENGE: a byte sequence used as a challenge to the server.
+- CHALLENGE: a byte sequence used as a challenge to the server.
 - ||: concatenation operator.
 
 When strings are used where byte arrays are expected, the UTF-8 representation of the string
@@ -92,7 +92,7 @@ The following describes the response from the server:
 
 Where:
 
-- CRESPONSE: the server's response to the client challenge.
+- RESPONSE: the server's response to the client challenge.
 - SNONCE: a nonce to be used as salt when generating the session key.
 - INIV: initialization vector used to initialize the input channel of the client.
 - OUTIV: initialization vector used to initialize the output channel of the client.
@@ -108,8 +108,8 @@ Configuration options are available for the KDF and cipher algorithms to use.
 
 The default KDF is "PBKDF2WithHmacSHA1". Users should be able to select any algorithm
 from those supported by the `javax.crypto.SecretKeyFactory` class, as long as they support
-PBEKeySpec when generating keys. The default number of iterations is calculated to take a
-resonable amount of time on modern CPUs. See the documentation in TransportConf for more
+PBEKeySpec when generating keys. The default number of iterations was chosen to take a
+reasonable amount of time on modern CPUs. See the documentation in TransportConf for more
 details.
 
 The default cipher algorithm is "AES/CTR/NoPadding". Users should be able to select any
