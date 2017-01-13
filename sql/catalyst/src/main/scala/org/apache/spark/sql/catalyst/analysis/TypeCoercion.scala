@@ -51,7 +51,6 @@ object TypeCoercion {
       PromoteStrings ::
       DecimalPrecision ::
       BooleanEquality ::
-      StringToIntegralCasts ::
       FunctionArgumentConversion ::
       CaseWhenCoercion ::
       IfCoercion ::
@@ -425,21 +424,6 @@ object TypeCoercion {
         EqualNullSafe(Cast(left, right.dataType), right)
       case EqualNullSafe(left @ NumericType(), right @ BooleanType()) =>
         EqualNullSafe(left, Cast(right, left.dataType))
-    }
-  }
-
-  /**
-   * When encountering a cast from a string representing a valid fractional number to an integral
-   * type the jvm will throw a `java.lang.NumberFormatException`.  Hive, in contrast, returns the
-   * truncated version of this number.
-   */
-  object StringToIntegralCasts extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
-      // Skip nodes who's children have not been resolved yet.
-      case e if !e.childrenResolved => e
-
-      case Cast(e @ StringType(), t: IntegralType) =>
-        Cast(Cast(e, DecimalType.forType(LongType)), t)
     }
   }
 
