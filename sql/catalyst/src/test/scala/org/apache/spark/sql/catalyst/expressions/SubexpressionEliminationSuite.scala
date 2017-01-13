@@ -172,6 +172,37 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 0)
     assert(equivalence.getAllEquivalentExprs.count(_.size == 1) == 3)  // add, two, explode
   }
+
+  test("Conditional expressions") {
+    val one = Literal(1)
+    val two = Literal(2)
+
+    val add = Add(one, two)
+    val abs = Abs(add)
+    val add2 = Add(add, add)
+
+    // `If` expression
+    val ifExpr = If(
+      GreaterThan(one, two),
+      add,
+      one)
+
+    var equivalence = new EquivalentExpressions
+    equivalence.addExprTree(ifExpr, true)
+    equivalence.addExprTree(add, true)
+    assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 0)
+
+    // `CaseWhen` expression
+    val caseWhenExpr = CaseWhen(
+      Seq(
+        (GreaterThan(one, two), add),
+        (GreaterThan(two, one), add2)))
+
+    equivalence = new EquivalentExpressions
+    equivalence.addExprTree(caseWhenExpr, true)
+    equivalence.addExprTree(add, true)
+    assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 0)
+  }
 }
 
 case class CodegenFallbackExpression(child: Expression)

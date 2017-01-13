@@ -80,11 +80,15 @@ class EquivalentExpressions {
     // There are some special expressions that we should not recurse into children.
     //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
     //   2. ReferenceToExpressions: it's kind of an explicit sub-expression elimination.
+    //   3. Conditional expressions: sub-expression elimination for children of conditional
+    //      expressions would possibly cause not excepted exception and performance regression.
     val shouldRecurse = root match {
       // TODO: some expressions implements `CodegenFallback` but can still do codegen,
       // e.g. `CaseWhen`, we should support them.
       case _: CodegenFallback => false
       case _: ReferenceToExpressions if skipReferenceToExpressions => false
+      case _: If => false
+      case _: CaseWhenBase => false
       case _ => true
     }
     if (!skip && !addExpr(root) && shouldRecurse) {
