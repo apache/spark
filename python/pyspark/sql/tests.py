@@ -478,7 +478,7 @@ class SQLTests(ReusedPySparkTestCase):
             "judf should not be initialized before the first call."
         )
 
-        self.assertTrue(isinstance(f("foo"), Column), "UDF call should return a Column.")
+        self.assertIsInstance(f("foo"), Column, "UDF call should return a Column.")
 
         self.assertIsNotNone(
             f._judf_placeholder,

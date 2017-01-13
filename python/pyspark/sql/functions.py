@@ -1827,25 +1827,26 @@ class UserDefinedFunction(object):
         self.func = func
         self.returnType = returnType
         self._judf_placeholder = None
-        self._name = name
+        self._name = name or (
+            func.__name__ if hasattr(func, '__name__')
+            else func.__class__.__name__)
 
     @property
     def _judf(self):
         if self._judf_placeholder is None:
-            self._judf_placeholder = self._create_judf(self._name)
+            self._judf_placeholder = self._create_judf()
         return self._judf_placeholder
 
-    def _create_judf(self, name):
+    def _create_judf(self):
         from pyspark.sql import SparkSession
+
         sc = SparkContext.getOrCreate()
-        wrapped_func = _wrap_function(sc, self.func, self.returnType)
         spark = SparkSession.builder.getOrCreate()
+
+        wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
-        if name is None:
-            f = self.func
-            name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            name, wrapped_func, jdt)
+            self._name, wrapped_func, jdt)
         return judf
 
     def __call__(self, *cols):
