@@ -18,10 +18,9 @@
 package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{BLAS, Vector, VectorUDT, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -302,16 +301,18 @@ class Word2VecModel private[ml] (
 @Since("1.6.0")
 object Word2VecModel extends MLReadable[Word2VecModel] {
 
+  private case class Data(word: String, vector: Seq[Float])
+
   private[Word2VecModel]
   class Word2VecModelWriter(instance: Word2VecModel) extends MLWriter {
 
-    private case class Data(wordIndex: Map[String, Int], wordVectors: Seq[Float])
-
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.wordVectors.wordIndex, instance.wordVectors.wordVectors.toSeq)
+
+      val wordVectors = instance.wordVectors.getVectors
+      val dataArray = wordVectors.toSeq.map { case (word, vector) => Data(word, vector) }
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(dataArray).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -321,13 +322,25 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
 
     override def load(path: String): Word2VecModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-        .select("wordIndex", "wordVectors")
-        .head()
-      val wordIndex = data.getAs[Map[String, Int]](0)
-      val wordVectors = data.getAs[Seq[Float]](1).toArray
-      val oldModel = new feature.Word2VecModel(wordIndex, wordVectors)
+      val rawData = sparkSession.read.parquet(dataPath)
+
+      val oldModel = if (rawData.columns.contains("wordIndex")) {
+        val data = rawData
+          .select("wordIndex", "wordVectors")
+          .head()
+        val wordIndex = data.getAs[Map[String, Int]](0)
+        val wordVectors = data.getAs[Seq[Float]](1).toArray
+        new feature.Word2VecModel(wordIndex, wordVectors)
+      } else {
+        val wordVectorsMap: Map[String, Array[Float]] = rawData.as[Data]
+          .collect()
+          .map(wordVector => (wordVector.word, wordVector.vector.toArray))
+          .toMap
+        new feature.Word2VecModel(wordVectorsMap)
+      }
+
       val model = new Word2VecModel(metadata.uid, oldModel)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
