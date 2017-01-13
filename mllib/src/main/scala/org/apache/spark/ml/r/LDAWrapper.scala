@@ -46,7 +46,7 @@ private[r] class LDAWrapper private (
 
   private val lda: LDAModel = pipeline.stages.last.asInstanceOf[LDAModel]
 
-  // Only applicable to distributed lda model
+  // The following variables were called by R side code only when the LDA model is distributed
   lazy private val distributedModel =
     pipeline.stages.last.asInstanceOf[DistributedLDAModel]
   lazy val trainingLogLikelihood: Double = distributedModel.trainingLogLikelihood
