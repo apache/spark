@@ -187,7 +187,8 @@ getDefaultSqlSource <- function() {
 #' @param data a list or data.frame.
 #' @param schema a list of column names or named list (StructType), optional.
 #' @param samplingRatio Currently not used.
-#' @param numPartitions the number of partitions of the SparkDataFrame. Defaults to 1.
+#' @param numPartitions the number of partitions of the SparkDataFrame. Defaults to 1, this is
+#'        limited by length of the list or number of rows of the data.frame
 #' @return A SparkDataFrame.
 #' @rdname createDataFrame
 #' @export

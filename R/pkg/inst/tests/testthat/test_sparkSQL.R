@@ -202,6 +202,9 @@ test_that("create DataFrame from RDD", {
   expect_equal(getNumPartitions(toRDD(df)), 2)
   df <- createDataFrame(cars, numPartitions = 3)
   expect_equal(getNumPartitions(toRDD(df)), 3)
+  # validate limit by num of rows
+  df <- createDataFrame(cars, numPartitions = 60)
+  expect_equal(getNumPartitions(toRDD(df)), 50)
   # validate when 1 < (length(coll) / numSlices) << length(coll)
   df <- createDataFrame(cars, numPartitions = 20)
   expect_equal(getNumPartitions(toRDD(df)), 20)

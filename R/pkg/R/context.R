@@ -92,11 +92,14 @@ objectFile <- function(sc, path, minPartitions = NULL) {
 #' larger than that limit, number of slices may be increased.
 #'
 #' In 2.2.0 we are changing how the numSlices are used/computed to handle
-#' 1 < (length(coll) / numSlices) << length(coll) better. This is safe because
-#' parallelize() is not exposed publically. In the specific one case that it is used to convert
-#' R native object into SparkDataFrame, it has always been keeping it at the default of 1.
-#' In the case the object is large, we are explicitly setting the parallism to numSlices (which is
-#' still 1).
+#' 1 < (length(coll) / numSlices) << length(coll) better, and to get the exact number of slices.
+#' This change affects both createDataFrame and spark.lapply.
+#' In the specific one case that it is used to convert R native object into SparkDataFrame, it has
+#' always been kept at the default of 1. In the case the object is large, we are explicitly setting
+#' the parallism to numSlices (which is still 1).
+#'
+#' Specifically, we are changing to split positions to match the calculation in positions() of
+#' ParallelCollectionRDD in Spark.
 #'
 #' @param sc SparkContext to use
 #' @param coll collection to parallelize
@@ -114,6 +117,8 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # TODO: bound/safeguard numSlices
   # TODO: unit tests for if the split works for all primitives
   # TODO: support matrix, data frame, etc
+
+  # Note, for data.frame, createDataFrame turns it into a list before it calls here.
   # nolint start
   # suppress lintr warning: Place a space before left parenthesis, except in a function call.
   if ((!is.list(coll) && !is.vector(coll)) || is.data.frame(coll)) {
@@ -139,9 +144,20 @@ parallelize <- function(sc, coll, numSlices = 1) {
   if (numSerializedSlices > length(coll))
     numSerializedSlices <- length(coll)
 
-  splits <- sort(rep(1: numSerializedSlices, each = 1, length.out = length(coll)))
-  if (length(splits) < 1)
-    splits <- 1
+  # Generate the slice ids to put each row
+  # For instance, for numSerializedSlices of 22, length of 50
+  #  [1]  0  0  2  2  4  4  6  6  6  9  9 11 11 13 13 15 15 15 18 18 20 20 22 22 22
+  # [26] 25 25 27 27 29 29 31 31 31 34 34 36 36 38 38 40 40 40 43 43 45 45 47 47 47
+  # Notice the slice group with 3 slices (ie. 6, 15, 22) are roughly evenly spaced.
+  splits <- if (numSerializedSlices > 0) {
+    unlist(lapply(0: (numSerializedSlices - 1), function(x) {
+      start <- trunc((x * length(coll)) / numSerializedSlices)
+      end <- trunc(((x + 1) * length(coll)) / numSerializedSlices)
+      rep(start, end - start)
+    }))
+  } else {
+    1
+  }
 
   slices <- split(coll, splits)
 
