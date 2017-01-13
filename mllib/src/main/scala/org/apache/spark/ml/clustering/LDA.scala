@@ -892,7 +892,7 @@ class LDA @Since("1.6.0") (
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(featuresCol, topicDistributionCol, k, maxIter, subsamplingRate,
       checkpointInterval, keepLastCheckpoint, optimizeDocConcentration, topicConcentration,
-      docConcentration, learningDecay, optimizer, learningOffset, seed)
+      learningDecay, optimizer, learningOffset, seed)
 
     val oldLDA = new OldLDA()
       .setK($(k))
