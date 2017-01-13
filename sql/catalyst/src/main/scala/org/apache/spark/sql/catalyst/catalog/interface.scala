@@ -196,6 +196,12 @@ case class CatalogTable(
   /** Return the fully qualified name of this table, assuming the database was specified. */
   def qualifiedName: String = identifier.unquotedString
 
+  /**
+   * Return the default database name we use to resolve a view, should be None if the CatalogTable
+   * is not a View.
+   */
+  def viewDefaultDatabase: Option[String] = properties.get(CatalogTable.VIEW_DEFAULT_DATABASE)
+
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
       locationUri: Option[String] = storage.locationUri,
@@ -246,6 +252,9 @@ case class CatalogTable(
   }
 }
 
+object CatalogTable {
+  val VIEW_DEFAULT_DATABASE = "view.default.database"
+}
 
 /**
  * This class of statistics is used in [[CatalogTable]] to interact with metastore.
