@@ -44,14 +44,14 @@ class AggregateFieldExtractionPushdownSuite extends PlanTest {
     val originalQuery =
       testRelation
         .select('a)
-        .groupBy('a getField "a1")('a getField "a1" as 'a1, Count('*))
+        .groupBy('a getField "a1")('a getField "a1" as 'a1, Count("*"))
         .analyze
     val optimized = Optimizer.execute(originalQuery)
     val correctAnswer =
       testRelation
         .select('a)
         .select('a getField "a1" as 'a1)
-        .groupBy('a1)('a1 as 'a1, Count('*))
+        .groupBy('a1)('a1 as 'a1, Count("*"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -62,14 +62,14 @@ class AggregateFieldExtractionPushdownSuite extends PlanTest {
       testRelation
         .select('a, 'c)
         .groupBy('a, 'a getField "a1", 'c getField "c1")(
-          'a, 'a getField "a1" as 'a1, 'c getField "c1" as 'c1, Count('*))
+          'a, 'a getField "a1" as 'a1, 'c getField "c1" as 'c1, Count("*"))
         .analyze
     val optimized = Optimizer.execute(originalQuery)
     val correctAnswer =
       testRelation
         .select('a, 'c)
         .select('a, 'c getField "c1" as 'c1)
-        .groupBy('a, 'a getField "a1", 'c1)('a, 'a getField "a1" as 'a1, 'c1 as 'c1, Count('*))
+        .groupBy('a, 'a getField "a1", 'c1)('a, 'a getField "a1" as 'a1, 'c1 as 'c1, Count("*"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
