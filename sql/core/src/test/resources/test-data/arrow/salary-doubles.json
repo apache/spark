@@ -1,0 +1,50 @@
+{
+    "schema": {
+        "fields": [
+            {
+                "name": "personId",
+                "type": {"name": "int", "isSigned": true, "bitWidth": 32},
+                "nullable": false,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 32}
+                    ]
+                }
+            },
+            {
+                "name": "salary",
+                "type": {"name": "floatingpoint", "precision": "DOUBLE"},
+                "nullable": false,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 32}
+                    ]
+                }
+            }
+        ]
+    },
+
+    "batches": [
+        {
+            "count": 2,
+            "columns": [
+                {
+                    "name": "personId",
+                    "count": 2,
+                    "VALIDITY": [1, 1],
+                    "DATA": [0, 1]
+                },
+                {
+                    "name": "salary",
+                    "count": 2,
+                    "VALIDITY": [1, 1],
+                    "DATA": [2000.0, 1000.0]
+                }
+            ]
+        }
+    ]
+}

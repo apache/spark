@@ -1,0 +1,68 @@
+{
+    "schema": {
+        "fields": [
+            {
+                "name": "i",
+                "type": {"name": "int", "isSigned": true, "bitWidth": 32},
+                "nullable": false,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 8}
+                    ]
+                }
+            },
+            {
+                "name": "a_d",
+                "type": {"name": "floatingpoint", "precision": "DOUBLE"},
+                "nullable": false,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 32}
+                    ]
+                }
+            },
+            {
+                "name": "b_d",
+                "type": {"name": "floatingpoint", "precision": "DOUBLE"},
+                "nullable": true,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 32}
+                    ]
+                }
+            }
+        ]
+    },
+
+    "batches": [
+        {
+            "count": 6,
+            "columns": [
+                {
+                    "name": "i",
+                    "count": 6,
+                    "VALIDITY": [1, 1, 1, 1, 1, 1],
+                    "DATA": [1, 2, 3, 4, 5, 6]
+                },
+                {
+                    "name": "a_d",
+                    "count": 6,
+                    "VALIDITY": [1, 1, 1, 1, 1, 1],
+                    "DATA": [1.0, 2.0, 0.01, 200.0, 0.0001, 20000.0]
+                },
+                {
+                    "name": "b_d",
+                    "count": 6,
+                    "VALIDITY": [1, 0, 0, 1, 0, 1],
+                    "DATA": [1.1, 0, 0, 2.2, 0, 3.3]
+                }
+            ]
+        }
+    ]
+}

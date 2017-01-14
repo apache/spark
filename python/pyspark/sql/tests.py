@@ -2354,6 +2354,15 @@ class ArrowTests(ReusedPySparkTestCase):
     def setUpClass(cls):
         ReusedPySparkTestCase.setUpClass()
         cls.spark = SparkSession(cls.sc)
+        cls.schema = StructType([
+            StructField("str_t", StringType(), True),
+            StructField("int_t", IntegerType(), True),
+            StructField("long_t", LongType(), True),
+            StructField("float_t", FloatType(), True),
+            StructField("double_t", DoubleType(), True)])
+        cls.data = [("a", 1, 10, 0.2, 2.0),
+                    ("b", 2, 20, 0.4, 4.0),
+                    ("c", 3, 30, 0.8, 6.0)]
 
     def assertFramesEqual(self, df_with_arrow, df_without):
         msg = ("DataFrame from Arrow is not equal" +
@@ -2361,20 +2370,27 @@ class ArrowTests(ReusedPySparkTestCase):
                ("\n\nWithout:\n%s\n%s" % (df_without, df_without.dtypes)))
         self.assertTrue(df_without.equals(df_with_arrow), msg=msg)
 
-    def test_arrow_toPandas(self):
-        schema = StructType([
-            StructField("str_t", StringType(), True),  # Fails in conversion
-            StructField("int_t", IntegerType(), True),  # Fails, without is converted to int64
-            StructField("long_t", LongType(), True),  # Fails if nullable=False
-            StructField("double_t", DoubleType(), True)])
-        data = [("a", 1, 10, 2.0),
-                ("b", 2, 20, 4.0),
-                ("c", 3, 30, 6.0)]
+    def test_null_conversion(self):
+        df_null = self.spark.createDataFrame([tuple([None for _ in range(len(self.data[0]))])] +
+                                             self.data)
+        pdf = df_null.toPandas(useArrow=True)
+        null_counts = pdf.isnull().sum().tolist()
+        self.assertTrue(all([c == 1 for c in null_counts]))
 
-        df = self.spark.createDataFrame(data, schema=schema)
-        df = df.select("long_t", "double_t")
-        pdf = df.toPandas(useArrow=False)
-        pdf_arrow = df.toPandas(useArrow=True)
+    def test_toPandas_arrow_toggle(self):
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+        # NOTE - toPandas(useArrow=False) will infer standard data types
+        df_sel = df.select("str_t", "long_t", "double_t")
+        pdf = df_sel.toPandas(useArrow=False)
+        pdf_arrow = df_sel.toPandas(useArrow=True)
+        self.assertFramesEqual(pdf_arrow, pdf)
+
+    def test_pandas_round_trip(self):
+        import pandas as pd
+        data_dict = {name: [self.data[i][j] for i in range(len(self.data))]
+                     for j, name in enumerate(self.schema.names)}
+        pdf = pd.DataFrame(data=data_dict)
+        pdf_arrow = self.spark.createDataFrame(pdf).toPandas(useArrow=True)
         self.assertFramesEqual(pdf_arrow, pdf)
 
 

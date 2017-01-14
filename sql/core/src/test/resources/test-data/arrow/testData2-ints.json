@@ -1,0 +1,50 @@
+{
+    "schema": {
+        "fields": [
+            {
+                "name": "a",
+                "type": {"name": "int", "isSigned": true, "bitWidth": 32},
+                "nullable": false,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 32}
+                    ]
+                }
+            },
+            {
+                "name": "b",
+                "type": {"name": "int", "isSigned": true, "bitWidth": 32},
+                "nullable": false,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 32}
+                    ]
+                }
+            }
+        ]
+    },
+
+    "batches": [
+        {
+            "count": 6,
+            "columns": [
+                {
+                    "name": "a",
+                    "count": 6,
+                    "VALIDITY": [1, 1, 1, 1, 1, 1],
+                    "DATA": [1, 1, 2, 2, 3, 3]
+                },
+                {
+                    "name": "b",
+                    "count": 6,
+                    "VALIDITY": [1, 1, 1, 1, 1, 1],
+                    "DATA": [1, 2, 1, 2, 1, 2]
+                }
+            ]
+        }
+    ]
+}

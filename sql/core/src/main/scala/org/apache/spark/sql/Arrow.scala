@@ -53,7 +53,7 @@ object Arrow {
             buf.writeBoolean(row.getBoolean(ordinal)))
       case ShortType =>
         TypeFuncs(
-          () => new ArrowType.Int(4 * ShortType.defaultSize, true), // TODO - check on this
+          () => new ArrowType.Int(8 * ShortType.defaultSize, true),
           (buf: ArrowBuf) => buf.writeShort(0),
           (row: InternalRow, ordinal: Int, buf: ArrowBuf) => buf.writeShort(row.getShort(ordinal)))
       case IntegerType =>
@@ -127,7 +127,7 @@ object Arrow {
     val numOfRows = rows.length
 
     field.dataType match {
-      case IntegerType | LongType | DoubleType | FloatType | BooleanType | ByteType =>
+      case ShortType | IntegerType | LongType | DoubleType | FloatType | BooleanType | ByteType =>
         val validityVector = new BitVector("validity", allocator)
         val validityMutator = validityVector.getMutator
         validityVector.allocateNew(numOfRows)

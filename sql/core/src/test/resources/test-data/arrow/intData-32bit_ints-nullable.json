@@ -1,0 +1,68 @@
+{
+    "schema": {
+        "fields": [
+            {
+                "name": "i",
+                "type": {"name": "int", "isSigned": true, "bitWidth": 32},
+                "nullable": false,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 8}
+                    ]
+                }
+            },
+            {
+                "name": "a_i",
+                "type": {"name": "int", "isSigned": true, "bitWidth": 32},
+                "nullable": false,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 32}
+                    ]
+                }
+            },
+            {
+                "name": "b_i",
+                "type": {"name": "int", "isSigned": true, "bitWidth": 32},
+                "nullable": true,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 32}
+                    ]
+                }
+            }
+        ]
+    },
+
+    "batches": [
+        {
+            "count": 6,
+            "columns": [
+                {
+                    "name": "i",
+                    "count": 6,
+                    "VALIDITY": [1, 1, 1, 1, 1, 1],
+                    "DATA": [1, 2, 3, 4, 5, 6]
+                },
+                {
+                    "name": "a_i",
+                    "count": 6,
+                    "VALIDITY": [1, 1, 1, 1, 1, 1],
+                    "DATA": [1, -1, 2, -2, 2147483647, -2147483648]
+                },
+                {
+                    "name": "b_i",
+                    "count": 6,
+                    "VALIDITY": [1, 0, 0, 1, 0, 1],
+                    "DATA": [1, -1, 2, -2, 2147483647, -2147483648]
+                }
+            ]
+        }
+    ]
+}

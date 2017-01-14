@@ -1,0 +1,52 @@
+{
+    "schema": {
+        "fields": [
+            {
+                "name": "n",
+                "type": {"name": "int", "isSigned": true, "bitWidth": 32},
+                "nullable": false,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 8}
+                    ]
+                }
+            },
+            {
+                "name": "l",
+                "type": {"name": "utf8"},
+                "nullable": true,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "OFFSET", "typeBitWidth": 32},
+                        {"type": "DATA", "typeBitWidth": 8}
+                    ]
+                }
+            }
+        ]
+    },
+
+    "batches": [
+        {
+            "count": 4,
+            "columns": [
+                {
+                    "name": "n",
+                    "count": 4,
+                    "VALIDITY": [1, 1, 1, 1],
+                    "DATA": [1, 2, 3, 4]
+                },
+                {
+                    "name": "l",
+                    "count": 4,
+                    "VALIDITY": [1, 1, 1, 1],
+                    "OFFSET": [0, 1, 2, 3, 4],
+                    "DATA": ["a", "b", "c", "d"]
+                }
+            ]
+        }
+    ]
+}
