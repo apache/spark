@@ -109,9 +109,8 @@ private[hive] trait HiveStrategies {
           table, partition, planLater(child), overwrite, ifNotExists) :: Nil
 
       case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
-        // Currently we will never hit this branch, as SQL string API can only use `Ignore` or
-        // `ErrorIfExists` mode, and `DataFrameWriter.saveAsTable` doesn't support hive serde
-        // tables yet.
+        // Currently `DataFrameWriter.saveAsTable` doesn't support
+        // the Append mode of hive serde tables yet.
         if (mode == SaveMode.Append) {
           throw new AnalysisException(
             "CTAS for hive serde tables does not support append semantics.")
