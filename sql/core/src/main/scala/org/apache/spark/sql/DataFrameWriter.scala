@@ -380,15 +380,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
       case (true, SaveMode.Overwrite) =>
-        // Get all input data source relations of the query.
+        // Get all input data source or hive relations of the query.
         val srcRelations = df.logicalPlan.collect {
           case LogicalRelation(src: BaseRelation, _, _) => src
           case relation: CatalogRelation if DDLUtils.isHiveTable(relation.catalogTable) =>
             relation.catalogTable.identifier
         }
         EliminateSubqueryAliases(catalog.lookupRelation(tableIdentWithDB)) match {
-          // Only do the check if the table is a data source table (the relation is a BaseRelation).
-          // for creating hive tables.
+          // check if the table is a data source table (the relation is a BaseRelation).
           case LogicalRelation(dest: BaseRelation, _, _) if srcRelations.contains(dest) =>
             throw new AnalysisException(
               s"Cannot overwrite table $tableName that is also being read from")
