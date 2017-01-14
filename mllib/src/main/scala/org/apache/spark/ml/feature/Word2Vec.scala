@@ -18,9 +18,10 @@
 package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{BLAS, Vector, VectorUDT, Vectors}
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -29,6 +30,7 @@ import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Params for [[Word2Vec]] and [[Word2VecModel]].
@@ -312,7 +314,25 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       val wordVectors = instance.wordVectors.getVectors
       val dataArray = wordVectors.toSeq.map { case (word, vector) => Data(word, vector) }
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(dataArray).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(dataArray)
+        .repartition(calculateNumberOfPartitions)
+        .write
+        .parquet(dataPath)
+    }
+
+    val FloatSize = 4
+    val AverageWordSize = 15
+    def calculateNumberOfPartitions(): Int = {
+      // [SPARK-11994] - We want to partition the model in partitions smaller than
+      // spark.kryoserializer.buffer.max
+      val bufferSizeInBytes = Utils.byteStringAsBytes(
+        sc.conf.get("spark.kryoserializer.buffer.max", "64m"))
+      // Calculate the approximate size of the model.
+      // Assuming an average word size of 15 bytes, the formula is:
+      // (floatSize * vectorSize + 15) * numWords
+      val numWords = instance.wordVectors.wordIndex.size
+      val approximateSizeInBytes = (FloatSize * instance.getVectorSize + AverageWordSize) * numWords
+      ((approximateSizeInBytes / bufferSizeInBytes) + 1).toInt
     }
   }
 
@@ -321,10 +341,13 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
     private val className = classOf[Word2VecModel].getName
 
     override def load(path: String): Word2VecModel = {
+      val spark = sparkSession
+      import spark.implicits._
+
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val rawData = sparkSession.read.parquet(dataPath)
+      val rawData = spark.read.parquet(dataPath)
 
       val oldModel = if (rawData.columns.contains("wordIndex")) {
         val data = rawData
