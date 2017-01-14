@@ -474,11 +474,12 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
 function addTooltipsForRDDs(svgContainer) {
   svgContainer.selectAll("g.node").each(function() {
     var node = d3.select(this);
-    var tooltipText = node.attr("name");
+    var tooltipText = node.attr("name").replace("\\n", "<br />");
     if (tooltipText) {
       node.select("circle")
         .attr("data-toggle", "tooltip")
         .attr("data-placement", "bottom")
+        .attr("data-html", "true")
         .attr("title", tooltipText);
     }
     // Link tooltips for all nodes that belong to the same RDD
