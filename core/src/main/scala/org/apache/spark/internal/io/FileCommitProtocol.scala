@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.io
 
+import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
 
 import org.apache.spark.util.Utils
@@ -112,6 +113,14 @@ abstract class FileCommitProtocol {
    * just crashes (or killed) before it can call abort.
    */
   def abortTask(taskContext: TaskAttemptContext): Unit
+
+  /**
+   * Specifies that a file should be deleted with the commit of this job. The default
+   * implementation deletes the file immediately.
+   */
+  def deleteWithJob(fs: FileSystem, path: Path, recursive: Boolean): Boolean = {
+    fs.delete(path, recursive)
+  }
 }
 
 

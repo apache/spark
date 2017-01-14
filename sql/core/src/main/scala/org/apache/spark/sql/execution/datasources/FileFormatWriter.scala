@@ -65,18 +65,18 @@ object FileFormatWriter extends Logging {
       val outputWriterFactory: OutputWriterFactory,
       val allColumns: Seq[Attribute],
       val partitionColumns: Seq[Attribute],
-      val nonPartitionColumns: Seq[Attribute],
+      val dataColumns: Seq[Attribute],
       val bucketSpec: Option[BucketSpec],
       val path: String,
       val customPartitionLocations: Map[TablePartitionSpec, String],
       val maxRecordsPerFile: Long)
     extends Serializable {
 
-    assert(AttributeSet(allColumns) == AttributeSet(partitionColumns ++ nonPartitionColumns),
+    assert(AttributeSet(allColumns) == AttributeSet(partitionColumns ++ dataColumns),
       s"""
          |All columns: ${allColumns.mkString(", ")}
          |Partition columns: ${partitionColumns.mkString(", ")}
-         |Non-partition columns: ${nonPartitionColumns.mkString(", ")}
+         |Data columns: ${dataColumns.mkString(", ")}
        """.stripMargin)
   }
 
@@ -121,7 +121,7 @@ object FileFormatWriter extends Logging {
       outputWriterFactory = outputWriterFactory,
       allColumns = queryExecution.logical.output,
       partitionColumns = partitionColumns,
-      nonPartitionColumns = dataColumns,
+      dataColumns = dataColumns,
       bucketSpec = bucketSpec,
       path = outputSpec.outputPath,
       customPartitionLocations = outputSpec.customPartitionLocations,
@@ -247,9 +247,8 @@ object FileFormatWriter extends Logging {
 
       currentWriter = description.outputWriterFactory.newInstance(
         path = tmpFilePath,
-        dataSchema = description.nonPartitionColumns.toStructType,
+        dataSchema = description.dataColumns.toStructType,
         context = taskAttemptContext)
-      currentWriter.initConverter(dataSchema = description.nonPartitionColumns.toStructType)
     }
 
     override def execute(iter: Iterator[InternalRow]): Set[String] = {
@@ -268,7 +267,7 @@ object FileFormatWriter extends Logging {
         }
 
         val internalRow = iter.next()
-        currentWriter.writeInternal(internalRow)
+        currentWriter.write(internalRow)
         recordsInFile += 1
       }
       releaseResources()
@@ -365,9 +364,8 @@ object FileFormatWriter extends Logging {
 
       currentWriter = description.outputWriterFactory.newInstance(
         path = path,
-        dataSchema = description.nonPartitionColumns.toStructType,
+        dataSchema = description.dataColumns.toStructType,
         context = taskAttemptContext)
-      currentWriter.initConverter(description.nonPartitionColumns.toStructType)
     }
 
     override def execute(iter: Iterator[InternalRow]): Set[String] = {
@@ -384,7 +382,7 @@ object FileFormatWriter extends Logging {
 
       // Returns the data columns to be written given an input row
       val getOutputRow = UnsafeProjection.create(
-        description.nonPartitionColumns, description.allColumns)
+        description.dataColumns, description.allColumns)
 
       // Returns the partition path given a partition key.
       val getPartitionStringFunc = UnsafeProjection.create(
@@ -393,7 +391,7 @@ object FileFormatWriter extends Logging {
       // Sorts the data before write, so that we only need one writer at the same time.
       val sorter = new UnsafeKVExternalSorter(
         sortingKeySchema,
-        StructType.fromAttributes(description.nonPartitionColumns),
+        StructType.fromAttributes(description.dataColumns),
         SparkEnv.get.blockManager,
         SparkEnv.get.serializerManager,
         TaskContext.get().taskMemoryManager().pageSizeBytes,
@@ -449,7 +447,7 @@ object FileFormatWriter extends Logging {
           newOutputWriter(currentKey, getPartitionStringFunc, fileCounter)
         }
 
-        currentWriter.writeInternal(sortedIterator.getValue)
+        currentWriter.write(sortedIterator.getValue)
         recordsInFile += 1
       }
       releaseResources()
