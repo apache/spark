@@ -217,14 +217,6 @@ class HadoopRDD[K, V](
       private val inputMetrics = context.taskMetrics().inputMetrics
       private val existingBytesRead = inputMetrics.bytesRead
 
-      // Sets InputFileBlockHolder for the file block's information
-      split.inputSplit.value match {
-        case fs: FileSplit =>
-          InputFileBlockHolder.set(fs.getPath.toString, fs.getStart, fs.getLength)
-        case _ =>
-          InputFileBlockHolder.unset()
-      }
-
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
       private val getBytesReadCallback: Option[() => Long] = split.inputSplit.value match {
@@ -263,7 +255,23 @@ class HadoopRDD[K, V](
       private val key: K = if (reader == null) null.asInstanceOf[K] else reader.createKey()
       private val value: V = if (reader == null) null.asInstanceOf[V] else reader.createValue()
 
+      private var setInputFileBlockHolder: Boolean = false
+
       override def getNext(): (K, V) = {
+        if (!setInputFileBlockHolder) {
+          // Sets InputFileBlockHolder for the file block's information
+          // We can't set it before consuming this iterator, otherwise some expressions which
+          // use thread local variables will fail when working with Python UDF. That is because
+          // the batch of Python UDF is running in individual thread.
+          split.inputSplit.value match {
+            case fs: FileSplit =>
+              InputFileBlockHolder.set(fs.getPath.toString, fs.getStart, fs.getLength)
+            case _ =>
+              InputFileBlockHolder.unset()
+          }
+          setInputFileBlockHolder = true
+        }
+
         try {
           finished = !reader.next(key, value)
         } catch {
