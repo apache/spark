@@ -284,7 +284,6 @@ case class FileSourceScanExec(
   }
 
   private def inputRDD: RDD[InternalRow] = {
-    val sparkSession = sparkSession
     readerCache.get(sparkSession, new Callable[RDD[InternalRow]] {
       override def call(): RDD[InternalRow] = inputRDDInternal(sparkSession)
     })
