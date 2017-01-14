@@ -575,30 +575,30 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
         checkAnswer(
           sql("SELECT * FROM test_added_partitions"),
-          Seq(("foo", 0), ("bar", 0)).toDF("a", "b"))
+          Seq(Row("foo", 0), Row("bar", 0)))
 
         // Create partition without data files and check whether it can be read
         sql(s"ALTER TABLE test_added_partitions ADD PARTITION (b='1') LOCATION '$partitionDir'")
         checkAnswer(
           sql("SELECT * FROM test_added_partitions"),
-          Seq(("foo", 0), ("bar", 0)).toDF("a", "b"))
+          Seq(Row("foo", 0), Row("bar", 0)))
 
         // Add data files to partition directory and check whether they can be read
         sql("INSERT INTO TABLE test_added_partitions PARTITION (b=1) select 'baz' as a")
         checkAnswer(
           sql("SELECT * FROM test_added_partitions"),
-          Seq(("foo", 0), ("bar", 0), ("baz", 1)).toDF("a", "b"))
+          Seq(Row("foo", 0), Row("bar", 0), Row("baz", 1)))
 
         // Check it with pruning predicates
         checkAnswer(
           sql("SELECT * FROM test_added_partitions where b = 0"),
-          Seq(("foo", 0), ("bar", 0)).toDF("a", "b"))
+          Seq(Row("foo", 0), Row("bar", 0)))
         checkAnswer(
           sql("SELECT * FROM test_added_partitions where b = 1"),
-          Seq(("baz", 1)).toDF("a", "b"))
+          Seq(Row("baz", 1)))
         checkAnswer(
           sql("SELECT * FROM test_added_partitions where b = 2"),
-          Seq[(String, Int)]().toDF("a", "b"))
+          Seq.empty)
 
         // Also verify the inputFiles implementation
         assert(sql("select * from test_added_partitions").inputFiles.length == 2)
@@ -637,7 +637,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
         checkAnswer(
           spark.table("test_added_partitions"),
-          Seq(("0", 1), ("1", 1)).toDF("a", "b"))
+          Seq(Row("0", 1), Row("1", 1)))
       }
     }
   }
