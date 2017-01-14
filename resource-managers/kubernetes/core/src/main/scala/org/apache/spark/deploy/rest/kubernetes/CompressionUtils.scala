@@ -38,11 +38,11 @@ private[spark] object CompressionUtils extends Logging {
 
   /**
    * Compresses all of the given paths into a gzipped-tar archive, returning the compressed data in
-   * memory as an instance of {@link TarGzippedData}. The files are taken without consideration to their
-   * original folder structure, and are added to the tar archive in a flat hierarchy. Directories are
-   * not allowed, and duplicate file names are de-duplicated by appending a numeric suffix to the file name,
-   * before the file extension. For example, if paths a/b.txt and b/b.txt were provided, then the files added
-   * to the tar archive would be b.txt and b-1.txt.
+   * memory as an instance of {@link TarGzippedData}. The files are taken without consideration to
+   * their original folder structure, and are added to the tar archive in a flat hierarchy.
+   * Directories are not allowed, and duplicate file names are de-duplicated by appending a numeric
+   * suffix to the file name, before the file extension. For example, if paths a/b.txt and b/b.txt
+   * were provided, then the files added to the tar archive would be b.txt and b-1.txt.
    * @param paths A list of file paths to be archived
    * @return An in-memory representation of the compressed data.
    */
