@@ -829,8 +829,7 @@ class SessionCatalog(
   }
 
   /**
-   * Verify if the input partition spec exactly matches the existing defined partition spec
-   * The columns must be the same but the orders could be different.
+   * Verify if the input partition spec has any empty value.
    */
   private def requireNonEmptyValueInPartitionSpec(specs: Seq[TablePartitionSpec]): Unit = {
     specs.foreach { s =>
