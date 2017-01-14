@@ -582,38 +582,37 @@ class GeneralizedLinearRegressionSuite
 
   test("generalized linear regression: tweedie family against glm") {
     /*
-        R code:
-        
-        library(statmod)
-        df <- as.data.frame(matrix(c(
-          1.0, 1.0, 0.0, 5.0,
-          0.5, 1.0, 1.0, 2.0,
-          1.0, 1.0, 2.0, 1.0,
-          2.0, 1.0, 3.0, 3.0), 4, 4, byrow = TRUE))
+      R code:
+      library(statmod)
+      df <- as.data.frame(matrix(c(
+        1.0, 1.0, 0.0, 5.0,
+        0.5, 1.0, 1.0, 2.0,
+        1.0, 1.0, 2.0, 1.0,
+        2.0, 1.0, 3.0, 3.0), 4, 4, byrow = TRUE))
 
-        f1 <- V1 ~ -1 + V3 + V4
-        f2 <- V1 ~ V3 + V4
+      f1 <- V1 ~ -1 + V3 + V4
+      f2 <- V1 ~ V3 + V4
 
-        for (f in c(f1, f2)){
-          for (lp in c(0, 1, -1))
-            for (vp in c(1.6, 2.5)){
-              model <- glm(f, df, family = tweedie(var.power = vp, link.power = lp))
-              print(as.vector(coef(model)))
-            }
-        }
-        [1] 0.1496480 -0.0122283
-        [1] 0.1373567 -0.0120673
-        [1] 0.3919109 0.1846094
-        [1] 0.3684426 0.1810662
-        [1] 0.1759887 0.2195818
-        [1] 0.1108561 0.2059430
-        [1] -1.3163732  0.4378139  0.2464114
-        [1] -1.4396020  0.4817364  0.2680088
-        [1] -0.7090230  0.6256309  0.3294324
-        [1] -0.9524928  0.7304267  0.3792687
-        [1] 2.1188978 -0.3360519 -0.2067023
-        [1] 2.1659028 -0.3499170 -0.2128286
-   */
+      for (f in c(f1, f2)) {
+        for (lp in c(0, 1, -1))
+          for (vp in c(1.6, 2.5)) {
+            model <- glm(f, df, family = tweedie(var.power = vp, link.power = lp))
+            print(as.vector(coef(model)))
+          }
+      }
+      [1] 0.1496480 -0.0122283
+      [1] 0.1373567 -0.0120673
+      [1] 0.3919109 0.1846094
+      [1] 0.3684426 0.1810662
+      [1] 0.1759887 0.2195818
+      [1] 0.1108561 0.2059430
+      [1] -1.3163732  0.4378139  0.2464114
+      [1] -1.4396020  0.4817364  0.2680088
+      [1] -0.7090230  0.6256309  0.3294324
+      [1] -0.9524928  0.7304267  0.3792687
+      [1] 2.1188978 -0.3360519 -0.2067023
+      [1] 2.1659028 -0.3499170 -0.2128286
+    */
     val datasetTweedie = Seq(
       Instance(1.0, 1.0, Vectors.dense(0.0, 5.0)),
       Instance(0.5, 1.0, Vectors.dense(1.0, 2.0)),
@@ -671,7 +670,6 @@ class GeneralizedLinearRegressionSuite
   test("generalized linear regression: tweedie family against glm (default power link)") {
     /*
       R code:
-
       library(statmod)
       df <- as.data.frame(matrix(c(
         1.0, 1.0, 0.0, 5.0,
@@ -681,8 +679,8 @@ class GeneralizedLinearRegressionSuite
       var.power <- c(0, 1, 2, 1.5)
       f1 <- V1 ~ -1 + V3 + V4
       f2 <- V1 ~ V3 + V4
-      for (f in c(f1, f2)){
-        for (vp in var.power){
+      for (f in c(f1, f2)) {
+        for (vp in var.power) {
           model <- glm(f, df, family = tweedie(var.power = vp))
           print(as.vector(coef(model)))
         }
@@ -695,7 +693,7 @@ class GeneralizedLinearRegressionSuite
       [1] -1.2689559  0.4230934  0.2388465
       [1] 2.137852 -0.341431 -0.209090
       [1] 1.5953393 -0.1884985 -0.1106335
- */
+    */
     val datasetTweedie = Seq(
       Instance(1.0, 1.0, Vectors.dense(0.0, 5.0)),
       Instance(0.5, 1.0, Vectors.dense(1.0, 2.0)),
@@ -743,7 +741,6 @@ class GeneralizedLinearRegressionSuite
         idx += 1
       }
     }
-
   }
 
   test("glm summary: gaussian family with weight") {
@@ -1260,7 +1257,6 @@ class GeneralizedLinearRegressionSuite
       residuals(model, type="response")
                  1            2            3            4
       0.018067789 -0.003326304  0.038720616 -0.824070943
-
      */
     val datasetWithWeight = Seq(
       Instance(1.0, 1.0, Vectors.dense(0.0, 5.0)),
