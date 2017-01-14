@@ -414,12 +414,12 @@ setMethod("summary", signature(object = "LDAModel"),
             trainingLogLikelihood <- if (isDistributed) {
               callJMethod(jobj, "trainingLogLikelihood")
             } else {
-              NULL
+              NA
             }
             logPrior <- if (isDistributed) {
               callJMethod(jobj, "logPrior")
             } else {
-              NULL
+              NA
             }
             list(docConcentration = unlist(docConcentration),
                  topicConcentration = topicConcentration,
