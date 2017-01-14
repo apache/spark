@@ -281,7 +281,7 @@ private[spark] object JettyUtils extends Logging {
     addFilters(handlers, conf)
 
     val gzipHandlers = handlers.map { h =>
-      // h.setVirtualHosts(Array("@" + SPARK_CONNECTOR_NAME))
+      h.setVirtualHosts(Array("@" + SPARK_CONNECTOR_NAME))
 
       val gzipHandler = new GzipHandler
       gzipHandler.setHandler(h)
