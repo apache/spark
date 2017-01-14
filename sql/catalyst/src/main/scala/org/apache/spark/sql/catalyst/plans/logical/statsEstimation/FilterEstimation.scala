@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
+import java.sql.Date
+
 import scala.collection.immutable.{HashSet, Map}
 import scala.collection.mutable
 
@@ -28,8 +30,11 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-
-case class FilterEstimation(catalystConf: CatalystConf) extends Logging {
+/**
+ * @param plan a LogicalPlan node that must be an instance of Filter
+ * @param catalystConf a configuration showing if CBO is enabled
+ */
+case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Logging {
 
   /**
    * We use a mutable colStats because we need to update the corresponding ColumnStat
@@ -48,10 +53,9 @@ case class FilterEstimation(catalystConf: CatalystConf) extends Logging {
    * is used to compute row count, size in bytes, and the updated statistics after a given
    * predicated is applied.
    *
-   * @param plan a LogicalPlan node that must be an instance of Filter.
    * @return Option[Statistics] When there is no statistics collected, it returns None.
    */
-  def estimate(plan: Filter): Option[Statistics] = {
+  def estimate: Option[Statistics] = {
     val stats: Statistics = plan.child.stats(catalystConf)
     if (stats.rowCount.isEmpty) return None
 
@@ -61,7 +65,7 @@ case class FilterEstimation(catalystConf: CatalystConf) extends Logging {
     mutableColStats = mutable.Map.empty ++= statsExprIdMap
 
     // estimate selectivity of this filter predicate
-    val filterSelectivity: Double = calculateConditions(plan, plan.condition)
+    val filterSelectivity: Double = calculateConditions(plan.condition)
 
     // attributeStats has mapping Attribute-to-ColumnStat.
     // mutableColStats has mapping ExprId-to-ColumnStat.
@@ -91,34 +95,32 @@ case class FilterEstimation(catalystConf: CatalystConf) extends Logging {
    * range condition such as (c > 40 AND c <= 50)
    * For logical OR conditions, we do not update stats after a condition estimation.
    *
-   * @param plan the Filter LogicalPlan node
    * @param condition the compound logical expression
    * @param update a boolean flag to specify if we need to update ColumnStat of a column
    *               for subsequent conditions
    * @return a doube value to show the percentage of rows meeting a given condition
    */
   def calculateConditions(
-      plan: Filter,
       condition: Expression,
       update: Boolean = true)
     : Double = {
 
     condition match {
       case And(cond1, cond2) =>
-        val p1 = calculateConditions(plan, cond1, update)
-        val p2 = calculateConditions(plan, cond2, update)
+        val p1 = calculateConditions(cond1, update)
+        val p2 = calculateConditions(cond2, update)
         p1 * p2
 
       case Or(cond1, cond2) =>
-        val p1 = calculateConditions(plan, cond1, update = false)
-        val p2 = calculateConditions(plan, cond2, update = false)
+        val p1 = calculateConditions(cond1, update = false)
+        val p2 = calculateConditions(cond2, update = false)
         math.min(1.0, p1 + p2 - (p1 * p2))
 
-      case Not(cond) => calculateSingleCondition(plan, cond, update = false) match {
+      case Not(cond) => calculateSingleCondition(cond, update = false) match {
         case Some(percent) => 1.0 - percent
         case None => 1.0
       }
-      case _ => calculateSingleCondition(plan, condition, update) match {
+      case _ => calculateSingleCondition(condition, update) match {
         case Some(percent) => percent
         case None => 1.0
           // for not-supported condition, set filter selectivity to a conservative estimate 100%
@@ -131,15 +133,13 @@ case class FilterEstimation(catalystConf: CatalystConf) extends Logging {
    * Currently we only support binary predicates where one side is a column,
    * and the other is a literal.
    *
-   * @param plan the Filter LogicalPlan node
    * @param condition a single logical expression
    * @param update a boolean flag to specify if we need to update ColumnStat of a column
    *               for subsequent conditions
    * @return Option[Double] value to show the percentage of rows meeting a given condition.
-    *        It returns None if the condition is not supported.
+   *         It returns None if the condition is not supported.
    */
   def calculateSingleCondition(
-      plan: Filter,
       condition: Expression,
       update: Boolean)
     : Option[Double] = {
@@ -187,14 +187,14 @@ case class FilterEstimation(catalystConf: CatalystConf) extends Logging {
       // we support IsNull and IsNotNull only when the child is a leaf node (table).
       case IsNull(ar: AttributeReference) =>
         if (plan.child.isInstanceOf[LeafNode ]) {
-          evaluateIsNull(plan, ar, true, update)
+          evaluateIsNull(ar, true, update)
         } else {
           None
         }
 
       case IsNotNull(ar: AttributeReference) =>
         if (plan.child.isInstanceOf[LeafNode ]) {
-          evaluateIsNull(plan, ar, false, update)
+          evaluateIsNull(ar, false, update)
         } else {
           None
         }
@@ -211,15 +211,14 @@ case class FilterEstimation(catalystConf: CatalystConf) extends Logging {
   /**
    * Returns a percentage of rows meeting "IS NULL" or "IS NOT NULL" condition.
    *
-   * @param plan the Filter LogicalPlan node
    * @param attrRef an AttributeReference (or a column)
    * @param isNull set to true for "IS NULL" condition.  set to false for "IS NOT NULL" condition
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
    *               for subsequent conditions
    * @return a doube value to show the percentage of rows meeting a given condition
+   *         It returns None if no statistics collected for a given column.
    */
   def evaluateIsNull(
-      plan: Filter,
       attrRef: AttributeReference,
       isNull: Boolean,
       update: Boolean)
@@ -261,6 +260,7 @@ case class FilterEstimation(catalystConf: CatalystConf) extends Logging {
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
    *               for subsequent conditions
    * @return a doube value to show the percentage of rows meeting a given condition
+    *         It returns None if no statistics exists for a given column or wrong value.
    */
   def evaluateBinary(
       op: BinaryComparison,
@@ -275,13 +275,13 @@ case class FilterEstimation(catalystConf: CatalystConf) extends Logging {
 
     // Make sure that the Date/Timestamp literal is a valid one
     attrRef.dataType match {
-      case DateType =>
+      case DateType if literal.dataType.isInstanceOf[StringType] =>
         val dateLiteral = DateTimeUtils.stringToDate(literal.value.asInstanceOf[UTF8String])
         if (dateLiteral.isEmpty) {
           logDebug("[CBO] Date literal is wrong, No statistics for " + attrRef)
           return None
         }
-      case TimestampType =>
+      case TimestampType if literal.dataType.isInstanceOf[StringType] =>
         val tsLiteral = DateTimeUtils.stringToTimestamp(literal.value.asInstanceOf[UTF8String])
         if (tsLiteral.isEmpty) {
           logDebug("[CBO] Timestamp literal is wrong, No statistics for " + attrRef)
@@ -309,7 +309,15 @@ case class FilterEstimation(catalystConf: CatalystConf) extends Logging {
 
   /**
    * This method converts a numeric or Literal value of numeric type to a BigDecimal value.
+   * In order to avoid type casting error such as Java int to Java long, we need to
+   * convert a numeric integer value to String, and then convert it to long,
+   * and then convert it to BigDecimal.
    * If isNumeric is true, then it is a numeric value.  Otherwise, it is a Literal value.
+   *
+   * @param literal can be either a Literal or numeric value
+   * @param dataType the column data type
+   * @param isNumeric If isNumeric is true, then it is a numeric value.  Otherwise, it is a Literal value.
+   * @return a BigDecimal value
    */
   def numericLiteralToBigDecimal(
        literal: Any,
@@ -330,17 +338,27 @@ case class FilterEstimation(catalystConf: CatalystConf) extends Logging {
       case DateType =>
         if (isNumeric) BigDecimal(literal.asInstanceOf[BigInt])
         else {
-          val dateLiteral = DateTimeUtils.stringToDate(
-            literal.asInstanceOf[Literal].value.asInstanceOf[UTF8String])
-          BigDecimal(dateLiteral.asInstanceOf[BigInt])
+          val dateLiteral = literal.asInstanceOf[Literal].dataType match {
+            case StringType =>
+              DateTimeUtils.stringToDate(
+              literal.asInstanceOf[Literal].value.asInstanceOf[UTF8String]).
+              getOrElse(0).toString
+            case _ => literal.asInstanceOf[Literal].value.toString
+          }
+          BigDecimal(java.lang.Long.valueOf(dateLiteral))
         }
 
       case TimestampType =>
         if (isNumeric) BigDecimal(literal.asInstanceOf[BigInt])
         else {
-          val tsLiteral = DateTimeUtils.stringToTimestamp(
-            literal.asInstanceOf[Literal].value.asInstanceOf[UTF8String])
-          BigDecimal(tsLiteral.asInstanceOf[BigInt])
+          val tsLiteral = literal.asInstanceOf[Literal].dataType match {
+            case StringType =>
+              DateTimeUtils.stringToTimestamp(
+                literal.asInstanceOf[Literal].value.asInstanceOf[UTF8String]).
+                getOrElse(0).toString
+            case _ => literal.asInstanceOf[Literal].value.toString
+          }
+          BigDecimal(java.lang.Long.valueOf(tsLiteral))
         }
     }
   }
@@ -384,10 +402,31 @@ case class FilterEstimation(catalystConf: CatalystConf) extends Logging {
         // We update ColumnStat structure after apply this equality predicate.
         // Set distinctCount to 1.  Set nullCount to 0.
         val newStats = attrRef.dataType match {
-          case _: NumericType | DateType | TimestampType =>
+          case _: NumericType =>
             val newValue = Some(literal.value)
             aColStat.copy(distinctCount = 1, min = newValue,
               max = newValue, nullCount = 0)
+
+          case DateType =>
+            val dateValue = literal.dataType match {
+            case StringType =>
+              Some(Date.valueOf(literal.value.asInstanceOf[String]))
+            case _ => Some(literal.value)
+            }
+            aColStat.copy(distinctCount = 1, min = dateValue,
+              max = dateValue, nullCount = 0)
+
+          case TimestampType =>
+            val tsValue = literal.dataType match {
+            case StringType =>
+              Some(DateTimeUtils.stringToTimestamp(
+                literal.value.asInstanceOf[UTF8String]).
+                getOrElse(0))
+            case _ => Some(literal.value)
+            }
+            aColStat.copy(distinctCount = 1, min = tsValue,
+              max = tsValue, nullCount = 0)
+
           case _ => aColStat.copy(distinctCount = 1, nullCount = 0)
         }
         mutableColStats += (attrRef.exprId -> newStats)
@@ -409,6 +448,7 @@ case class FilterEstimation(catalystConf: CatalystConf) extends Logging {
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
    *               for subsequent conditions
    * @return a doube value to show the percentage of rows meeting a given condition
+   *         It returns None if no statistics exists for a given column.
    */
 
   def evaluateInSet(

@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.statsEstimation
 
+import java.sql.{Date, Timestamp}
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DateType, IntegerType, TimestampType}
 
 /**
  * In this test suite, we test predicates containing the following operators:
@@ -29,125 +31,156 @@ import org.apache.spark.sql.types.IntegerType
 
 class FilterEstimationSuite extends StatsEstimationTestBase {
 
-  // Suppose our test table has one column called "key".
-  // It has 10 rows with values: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+  // Suppose our test table has 10 rows and 3 columns.
+  // First column cint has values: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
   // Hence, distinctCount:10, min:1, max:10, nullCount:0, avgLen:4, maxLen:4
-  val ar = AttributeReference("key", IntegerType)()
-  val childColStat = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+  val arInt = AttributeReference("cint", IntegerType)()
+  val childColStatInt = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
     nullCount = 0, avgLen = 4, maxLen = 4)
+
+  // Second column cdate has values, from 2017-01-01 through 2017-01-10 for 10 values.
+  val dMin = Date.valueOf("2017-01-01")
+  val dMax = Date.valueOf("2017-01-10")
+  val arDate = AttributeReference("cdate", DateType)()
+  val childColStatDate = ColumnStat(distinctCount = 10, min = Some(dMin), max = Some(dMax),
+    nullCount = 0, avgLen = 4, maxLen = 4)
+
+  // Third column ctimestamp has values from "2017-01-01 01:00:00" through
+  // "2017-01-01 10:00:00" for 10 distinct timestamps (or hours).
+  val tsMin = Timestamp.valueOf("2017-01-01 01:00:00")
+  val tsMax = Timestamp.valueOf("2017-01-01 10:00:00")
+  val arTimestamp = AttributeReference("ctimestamp", TimestampType)()
+  val childColStatTimestamp = ColumnStat(distinctCount = 10, min = Some(tsMin), max = Some(tsMax),
+    nullCount = 0, avgLen = 8, maxLen = 8)
+
   val child = StatsTestPlan(
-    outputList = Seq(ar),
+    outputList = Seq(arInt),
     rowCount = 10L,
-    attributeStats = AttributeMap(Seq(ar -> childColStat))
+    attributeStats = AttributeMap(Seq(
+      arInt -> childColStatInt,
+      arDate -> childColStatDate,
+      arTimestamp -> childColStatTimestamp
+    ))
   )
 
-  test("key = 2") {
-    // the predicate is "WHERE key = 2"
+  test("cint = 2") {
+    // the predicate is "WHERE cint = 2"
     validateEstimatedStats(
-      Filter(EqualTo(ar, Literal(2)), child),
+      arInt,
+      Filter(EqualTo(arInt, Literal(2)), child),
       ColumnStat(distinctCount = 1, min = Some(2), max = Some(2),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(1L)
     )
   }
 
-  test("key = 0") {
-    // the predicate is "WHERE key = 0"
+  test("cint = 0") {
+    // the predicate is "WHERE cint = 0"
     // This is an out-of-range case since 0 is outside the range [min, max]
     validateEstimatedStats(
-      Filter(EqualTo(ar, Literal(0)), child),
+      arInt,
+      Filter(EqualTo(arInt, Literal(0)), child),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(0L)
     )
   }
 
-  test("key < 3") {
-    // the predicate is "WHERE key < 3"
+  test("cint < 3") {
+    // the predicate is "WHERE cint < 3"
     validateEstimatedStats(
-      Filter(LessThan(ar, Literal(3)), child),
+      arInt,
+      Filter(LessThan(arInt, Literal(3)), child),
       ColumnStat(distinctCount = 2, min = Some(1), max = Some(3),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(3L)
     )
   }
 
-  test("key < 0") {
-    // the predicate is "WHERE key < 0"
+  test("cint < 0") {
+    // the predicate is "WHERE cint < 0"
     // This is a corner case since literal 0 is smaller than min.
     validateEstimatedStats(
-      Filter(LessThan(ar, Literal(0)), child),
+      arInt,
+      Filter(LessThan(arInt, Literal(0)), child),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(0L)
     )
   }
 
-  test("key <= 3") {
-    // the predicate is "WHERE key <= 3"
+  test("cint <= 3") {
+    // the predicate is "WHERE cint <= 3"
     validateEstimatedStats(
-      Filter(LessThanOrEqual(ar, Literal(3)), child),
+      arInt,
+      Filter(LessThanOrEqual(arInt, Literal(3)), child),
       ColumnStat(distinctCount = 2, min = Some(1), max = Some(3),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(3L)
     )
   }
 
-  test("key > 6") {
-    // the predicate is "WHERE key > 6"
+  test("cint > 6") {
+    // the predicate is "WHERE cint > 6"
     validateEstimatedStats(
-      Filter(GreaterThan(ar, Literal(6)), child),
+      arInt,
+      Filter(GreaterThan(arInt, Literal(6)), child),
       ColumnStat(distinctCount = 4, min = Some(6), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(5L)
     )
   }
 
-  test("key > 10") {
-    // the predicate is "WHERE key > 10"
+  test("cint > 10") {
+    // the predicate is "WHERE cint > 10"
     // This is a corner case since max value is 10.
     validateEstimatedStats(
-      Filter(GreaterThan(ar, Literal(10)), child),
+      arInt,
+      Filter(GreaterThan(arInt, Literal(10)), child),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(0L)
     )
   }
 
-  test("key >= 6") {
-    // the predicate is "WHERE key >= 6"
+  test("cint >= 6") {
+    // the predicate is "WHERE cint >= 6"
     validateEstimatedStats(
-      Filter(GreaterThanOrEqual(ar, Literal(6)), child),
+      arInt,
+      Filter(GreaterThanOrEqual(arInt, Literal(6)), child),
       ColumnStat(distinctCount = 4, min = Some(6), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(5L)
     )
   }
 
-  test("key IS NULL") {
-    // the predicate is "WHERE key IS NULL"
+  test("cint IS NULL") {
+    // the predicate is "WHERE cint IS NULL"
     validateEstimatedStats(
-      Filter(IsNull(ar), child),
+      arInt,
+      Filter(IsNull(arInt), child),
       ColumnStat(distinctCount = 0, min = None, max = None,
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(0L)
     )
   }
 
-  test("key IS NOT NULL") {
-    // the predicate is "WHERE key IS NOT NULL"
+  test("cint IS NOT NULL") {
+    // the predicate is "WHERE cint IS NOT NULL"
     validateEstimatedStats(
-      Filter(IsNotNull(ar), child),
+      arInt,
+      Filter(IsNotNull(arInt), child),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(10L)
     )
   }
 
-  test("key > 3 AND key <= 6") {
-    // the predicate is "WHERE key > 3 AND key <= 6"
-    val condition = And(GreaterThan(ar, Literal(3)), LessThanOrEqual(ar, Literal(6)))
+  test("cint > 3 AND cint <= 6") {
+    // the predicate is "WHERE cint > 3 AND cint <= 6"
+    val condition = And(GreaterThan(arInt, Literal(3)), LessThanOrEqual(arInt, Literal(6)))
     validateEstimatedStats(
+      arInt,
       Filter(condition, child),
       ColumnStat(distinctCount = 3, min = Some(3), max = Some(6),
         nullCount = 0, avgLen = 4, maxLen = 4),
@@ -155,10 +188,11 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     )
   }
 
-  test("key = 3 OR key = 6") {
-    // the predicate is "WHERE key = 3 OR key = 6"
-    val condition = Or(EqualTo(ar, Literal(3)), EqualTo(ar, Literal(6)))
+  test("cint = 3 OR cint = 6") {
+    // the predicate is "WHERE cint = 3 OR cint = 6"
+    val condition = Or(EqualTo(arInt, Literal(3)), EqualTo(arInt, Literal(6)))
     validateEstimatedStats(
+      arInt,
       Filter(condition, child),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
@@ -166,40 +200,56 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     )
   }
 
-  test("key IN (3, 4, 5)") {
-    // the predicate is "WHERE key IN (3, 4, 5)"
+  test("cint IN (3, 4, 5)") {
+    // the predicate is "WHERE cint IN (3, 4, 5)"
     validateEstimatedStats(
-      Filter(InSet(ar, Set(3, 4, 5)), child),
+      arInt,
+      Filter(InSet(arInt, Set(3, 4, 5)), child),
       ColumnStat(distinctCount = 3, min = Some(3), max = Some(5),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(3L)
     )
   }
 
-  test("key NOT IN (3, 4, 5)") {
-    // the predicate is "WHERE key NOT IN (3, 4, 5)"
+  test("cint NOT IN (3, 4, 5)") {
+    // the predicate is "WHERE cint NOT IN (3, 4, 5)"
     validateEstimatedStats(
-      Filter(Not(InSet(ar, Set(3, 4, 5))), child),
+      arInt,
+      Filter(Not(InSet(arInt, Set(3, 4, 5))), child),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(7L)
     )
   }
 
+  test("cdate = 2017-01-02") {
+    // the predicate is: WHERE cdate = "2017-01-02"
+    val d20170102 = Date.valueOf("2017-01-02")
+    validateEstimatedStats(
+      arDate,
+      Filter(EqualTo(arDate, Literal(d20170102, DateType)),
+        child.copy(outputList = Seq(arDate))),
+      ColumnStat(distinctCount = 1, min = Some(d20170102), max = Some(d20170102),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(1L)
+    )
+  }
+
   private def validateEstimatedStats(
+      ar: AttributeReference,
       filterNode: Filter,
       expectedColStats: ColumnStat,
       rowCount: Option[Long] = None)
-  : Unit = {
+    : Unit = {
 
     val expectedRowCount = rowCount.getOrElse(0L)
-    val expectedAttrStats = toAttributeMap(Seq("key" -> expectedColStats), filterNode)
-    val expectedStats = Statistics(
-      sizeInBytes = getOutputSize(filterNode.output, expectedAttrStats, expectedRowCount),
-      rowCount = Some(expectedRowCount),
-      attributeStats = expectedAttrStats)
+    val expectedAttrStats = toAttributeMap(Seq(ar.name -> expectedColStats), filterNode)
+    val expectedSizeInBytes = getOutputSize(filterNode.output, expectedAttrStats, expectedRowCount)
 
-    assert(filterNode.stats(conf) == expectedStats)
+    val filteredStats = filterNode.stats(conf)
+    assert(filteredStats.sizeInBytes == expectedSizeInBytes)
+    assert(filteredStats.rowCount == rowCount)
+    assert(filteredStats.attributeStats(ar) == expectedColStats)
   }
 
 }

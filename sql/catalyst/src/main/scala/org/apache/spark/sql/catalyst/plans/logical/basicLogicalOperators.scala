@@ -132,12 +132,11 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override def computeStats(conf: CatalystConf): Statistics = {
     if (conf.cboEnabled) {
-      FilterEstimation(conf).estimate(this).getOrElse(super.computeStats(conf))
+      FilterEstimation(this, conf).estimate.getOrElse(super.computeStats(conf))
     } else {
       super.computeStats(conf)
     }
   }
-
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
