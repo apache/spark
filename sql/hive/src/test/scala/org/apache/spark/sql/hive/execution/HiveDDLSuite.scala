@@ -248,10 +248,10 @@ class HiveDDLSuite
   }
 
   test("SPARK-19129: drop partition with a empty string will drop the whole table") {
-    val sentenceData = spark.createDataFrame(Seq((0, "a"), (1, "b"))).toDF("partCol1", "name")
-    sentenceData.write.mode("overwrite").partitionBy("partCol1").saveAsTable("partition_table")
+    val df = spark.createDataFrame(Seq((0, "a"), (1, "b"))).toDF("partCol1", "name")
+    df.write.mode("overwrite").partitionBy("partCol1").saveAsTable("partitionedTable")
     val e = intercept[AnalysisException] {
-      spark.sql("alter table partition_table drop partition(partCol1='')")
+      spark.sql("alter table partitionedTable drop partition(partCol1='')")
     }.getMessage
     assert(e.contains("Partition spec is invalid. The spec ([partCol1=]) contains an empty " +
       "partition column value"))
