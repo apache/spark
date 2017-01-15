@@ -412,7 +412,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
             val dateValue = literal.dataType match {
             case StringType =>
               Some(Date.valueOf(literal.value.toString))
-            case _ => Some(literal.value)
+            case _ => Some(DateTimeUtils.toJavaDate(literal.value.toString.toInt))
             }
             aColStat.copy(distinctCount = 1, min = dateValue,
               max = dateValue, nullCount = 0)
@@ -421,7 +421,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
             val tsValue = literal.dataType match {
             case StringType =>
               Some(Timestamp.valueOf(literal.value.toString))
-            case _ => Some(literal.value)
+            case _ => Some(DateTimeUtils.toJavaTimestamp(literal.value.toString.toLong))
             }
             aColStat.copy(distinctCount = 1, min = tsValue,
               max = tsValue, nullCount = 0)
@@ -571,11 +571,40 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       }
 
       if (update) {
-        op match {
-          case GreaterThan(l, r) => newMin = Some(literal.value)
-          case GreaterThanOrEqual(l, r) => newMin = Some(literal.value)
-          case LessThan(l, r) => newMax = Some(literal.value)
-          case LessThanOrEqual(l, r) => newMax = Some(literal.value)
+        attrRef.dataType match {
+          case DateType =>
+            val dateValue = literal.dataType match {
+              case StringType =>
+                Date.valueOf(literal.value.toString)
+              case _ => DateTimeUtils.toJavaDate(literal.value.toString.toInt)
+            }
+            op match {
+              case GreaterThan(l, r) => newMin = Some(dateValue)
+              case GreaterThanOrEqual(l, r) => newMin = Some(dateValue)
+              case LessThan(l, r) => newMax = Some(dateValue)
+              case LessThanOrEqual(l, r) => newMax = Some(dateValue)
+            }
+
+          case TimestampType =>
+            val tsValue = literal.dataType match {
+              case StringType =>
+                Timestamp.valueOf(literal.value.toString)
+              case _ => DateTimeUtils.toJavaTimestamp(literal.value.toString.toLong)
+            }
+            op match {
+              case GreaterThan(l, r) => newMin = Some(tsValue)
+              case GreaterThanOrEqual(l, r) => newMin = Some(tsValue)
+              case LessThan(l, r) => newMax = Some(tsValue)
+              case LessThanOrEqual(l, r) => newMax = Some(tsValue)
+            }
+
+          case _ =>
+            op match {
+            case GreaterThan (l, r) => newMin = Some (literal.value)
+            case GreaterThanOrEqual (l, r) => newMin = Some (literal.value)
+            case LessThan (l, r) => newMax = Some (literal.value)
+            case LessThanOrEqual (l, r) => newMax = Some (literal.value)
+          }
         }
         newNdv = math.max(math.round(ndv.toDouble * percent), 1)
         val newStats = aColStat.copy(distinctCount = newNdv, min = newMin,

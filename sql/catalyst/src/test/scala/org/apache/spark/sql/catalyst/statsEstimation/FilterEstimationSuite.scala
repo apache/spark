@@ -22,7 +22,8 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
-import org.apache.spark.sql.types.{DateType, IntegerType, TimestampType}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.types.{DateType, IntegerType, LongType, TimestampType}
 
 /**
  * In this test suite, we test predicates containing the following operators:
@@ -224,16 +225,55 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     )
   }
 
+  test("cdate = cast('2017-01-02' AS DATE)") {
+    // the predicate is: WHERE cdate = cast("2017-01-02" AS DATE)
+    val d20170102 = Date.valueOf("2017-01-02")
+    val d20170102_SQLDate = DateTimeUtils.fromJavaDate(d20170102)
+    validateEstimatedStats(
+      arDate,
+      Filter(EqualTo(arDate, Literal(d20170102_SQLDate, IntegerType)),
+        ChildStatsTestPlan(Seq(arDate))),
+      ColumnStat(distinctCount = 1, min = Some(d20170102), max = Some(d20170102),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(1L)
+    )
+  }
+
+  test("cdate < '2017-01-03' ") {
+    // the predicate is: WHERE cdate < "2017-01-03"
+    val d20170103 = Date.valueOf("2017-01-03")
+    validateEstimatedStats(
+      arDate,
+      Filter(LessThan(arDate, Literal("2017-01-03")), ChildStatsTestPlan(Seq(arDate))),
+      ColumnStat(distinctCount = 2, min = Some(dMin), max = Some(d20170103),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(3L)
+    )
+  }
+
   test("ctimestamp = '2017-01-01 02:00:00' ") {
     // the predicate is: WHERE ctimestamp = "2017-01-01 02:00:00"
-    val ts20170102 = Timestamp.valueOf("2017-01-01 02:00:00")
+    val ts2017010102 = Timestamp.valueOf("2017-01-01 02:00:00")
     validateEstimatedStats(
       arTimestamp,
       Filter(EqualTo(arTimestamp, Literal("2017-01-01 02:00:00")),
         ChildStatsTestPlan(Seq(arTimestamp))),
-      ColumnStat(distinctCount = 1, min = Some(ts20170102), max = Some(ts20170102),
+      ColumnStat(distinctCount = 1, min = Some(ts2017010102), max = Some(ts2017010102),
         nullCount = 0, avgLen = 8, maxLen = 8),
       Some(1L)
+    )
+  }
+
+  test("ctimestamp < '2017-01-01 03:00:00' ") {
+    // the predicate is: WHERE ctimestamp < "2017-01-01 03:00:00"
+    val ts2017010103 = Timestamp.valueOf("2017-01-01 03:00:00")
+    validateEstimatedStats(
+      arTimestamp,
+      Filter(LessThan(arTimestamp, Literal("2017-01-01 03:00:00")),
+        ChildStatsTestPlan(Seq(arTimestamp))),
+      ColumnStat(distinctCount = 2, min = Some(tsMin), max = Some(ts2017010103),
+        nullCount = 0, avgLen = 8, maxLen = 8),
+      Some(3L)
     )
   }
 
