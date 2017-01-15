@@ -889,10 +889,7 @@ abstract class CatalogTestUtils {
 
   def newTable(name: String, db: String): CatalogTable = newTable(name, Some(db))
 
-  def newTable(
-      name: String,
-      database: Option[String] = None,
-      provider: Option[String] = Some(defaultProvider)): CatalogTable = {
+  def newTable(name: String, database: Option[String] = None): CatalogTable = {
     CatalogTable(
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
@@ -902,7 +899,7 @@ abstract class CatalogTestUtils {
         .add("col2", "string")
         .add("a", "int")
         .add("b", "string"),
-      provider = provider,
+      provider = Some(defaultProvider),
       partitionColumnNames = Seq("a", "b"),
       bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))
   }
