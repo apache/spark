@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
-import java.sql.{Timestamp, Date}
+import java.sql.{Date, Timestamp}
 
 import scala.collection.immutable.{HashSet, Map}
 import scala.collection.mutable
@@ -316,7 +316,8 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    *
    * @param literal can be either a Literal or numeric value
    * @param dataType the column data type
-   * @param isNumeric If isNumeric is true, then it is a numeric value.  Otherwise, it is a Literal value.
+   * @param isNumeric If isNumeric is true, then it is a numeric value.
+   *                  Otherwise, it is a Literal value.
    * @return a BigDecimal value
    */
   def numericLiteralToBigDecimal(
