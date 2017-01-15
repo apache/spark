@@ -156,8 +156,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
   test("the table type of an external table should be EXTERNAL_TABLE") {
     val catalog = newBasicCatalog()
-    val table =
-      newTable("external_table1", "db2").copy(tableType = CatalogTableType.EXTERNAL)
+    val table = newTable("external_table1", "db2").copy(tableType = CatalogTableType.EXTERNAL)
     catalog.createTable(table, ignoreIfExists = false)
     val actual = catalog.getTable("db2", "external_table1")
     assert(actual.tableType === CatalogTableType.EXTERNAL)
@@ -278,7 +277,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       schema = new StructType()
         .add("HelLo", "int", nullable = false)
         .add("WoRLd", "int", nullable = true),
-      provider = Some("hive"),
+      provider = Some("parquet"),
       partitionColumnNames = Seq("WoRLd"),
       bucketSpec = Some(BucketSpec(4, Seq("HelLo"), Nil)))
     catalog.createTable(tbl, ignoreIfExists = false)
@@ -330,7 +329,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
         .add("col2", "string")
         .add("partCol1", "int")
         .add("partCol2", "string"),
-      provider = Some("hive"),
+      provider = Some("parquet"),
       partitionColumnNames = Seq("partCol1", "partCol2"))
     catalog.createTable(table, ignoreIfExists = false)
 
@@ -357,7 +356,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
         .add("col2", "string")
         .add("partCol1", "int")
         .add("partCol2", "string"),
-      provider = Some("hive"),
+      provider = Some("parquet"),
       partitionColumnNames = Seq("partCol1", "partCol2"))
     catalog.createTable(table, ignoreIfExists = false)
 
@@ -505,7 +504,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
         .add("col2", "string")
         .add("partCol1", "int")
         .add("partCol2", "string"),
-      provider = Some("hive"),
+      provider = Some("parquet"),
       partitionColumnNames = Seq("partCol1", "partCol2"))
     catalog.createTable(table, ignoreIfExists = false)
 
@@ -726,7 +725,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty,
       schema = new StructType().add("a", "int").add("b", "string"),
-      provider = Some("hive")
+      provider = Some("parquet")
     )
 
     catalog.createTable(table, ignoreIfExists = false)
@@ -746,7 +745,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
         Some(Utils.createTempDir().getAbsolutePath),
         None, None, None, false, Map.empty),
       schema = new StructType().add("a", "int").add("b", "string"),
-      provider = Some("hive")
+      provider = Some("parquet")
     )
     catalog.createTable(externalTable, ignoreIfExists = false)
     assert(!exists(db.locationUri, "external_table"))
@@ -763,7 +762,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
         .add("col2", "string")
         .add("partCol1", "int")
         .add("partCol2", "string"),
-      provider = Some("hive"),
+      provider = Some("parquet"),
       partitionColumnNames = Seq("partCol1", "partCol2"))
     catalog.createTable(table, ignoreIfExists = false)
 
@@ -829,6 +828,7 @@ abstract class CatalogTestUtils {
   // Unimplemented methods
   val tableInputFormat: String
   val tableOutputFormat: String
+  val defaultProvider: String
   def newEmptyCatalog(): ExternalCatalog
 
   // These fields must be lazy because they rely on fields that are not implemented yet
@@ -889,7 +889,10 @@ abstract class CatalogTestUtils {
 
   def newTable(name: String, db: String): CatalogTable = newTable(name, Some(db))
 
-  def newTable(name: String, database: Option[String] = None): CatalogTable = {
+  def newTable(
+      name: String,
+      database: Option[String] = None,
+      provider: Option[String] = Some(defaultProvider)): CatalogTable = {
     CatalogTable(
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
@@ -899,7 +902,7 @@ abstract class CatalogTestUtils {
         .add("col2", "string")
         .add("a", "int")
         .add("b", "string"),
-      provider = Some("hive"),
+      provider = provider,
       partitionColumnNames = Seq("a", "b"),
       bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))
   }
