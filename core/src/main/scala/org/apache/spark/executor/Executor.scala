@@ -19,7 +19,7 @@ package org.apache.spark.executor
 
 import java.io.{File, NotSerializableException}
 import java.lang.management.ManagementFactory
-import java.net.URL
+import java.net.{URI, URL}
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
@@ -640,7 +640,7 @@ private[spark] class Executor(
         currentFiles(name) = timestamp
       }
       for ((name, timestamp) <- newJars) {
-        val localName = name.split("/").last
+        val localName = new URI(name).getPath.split("/").last
         val currentTimeStamp = currentJars.get(name)
           .orElse(currentJars.get(localName))
           .getOrElse(-1L)
