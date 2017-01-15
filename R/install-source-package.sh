@@ -29,7 +29,7 @@
 set -o pipefail
 set -e
 
-FWDIR="$(cd `dirname $0`; pwd)"
+FWDIR="$(cd `dirname "${BASH_SOURCE[0]}"`; pwd)"
 pushd $FWDIR > /dev/null
 . $FWDIR/find-r.sh
 

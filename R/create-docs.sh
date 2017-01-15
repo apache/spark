@@ -29,8 +29,8 @@ set -o pipefail
 set -e
 
 # Figure out where the script is
-export FWDIR="$(cd "`dirname "$0"`"; pwd)"
-export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+export FWDIR="$(cd "`dirname "${BASH_SOURCE[0]}"`"; pwd)"
+export SPARK_HOME="$(cd "`dirname "${BASH_SOURCE[0]}"`"/..; pwd)"
 
 # Required for setting SPARK_SCALA_VERSION
 . "${SPARK_HOME}"/bin/load-spark-env.sh
