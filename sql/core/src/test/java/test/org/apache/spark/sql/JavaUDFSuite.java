@@ -121,6 +121,7 @@ public class JavaUDFSuite implements Serializable {
     }, DataTypes.LongType);
 
     spark.range(10).toDF("x").createOrReplaceTempView("tmp");
+    // This tests when Java UDFs are required to be the semantically same (See SPARK-9435).
     List<Row> results = spark.sql("SELECT inc(x) FROM tmp GROUP BY inc(x)").collectAsList();
     Assert.assertEquals(10, results.size());
     long sum = 0;
