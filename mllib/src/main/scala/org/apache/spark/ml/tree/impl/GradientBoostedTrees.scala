@@ -295,7 +295,7 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     var predError: RDD[(Double, Double)] =
       computeInitialPredictionAndError(input, firstTreeWeight, firstTreeModel, loss)
-    predErrorCheckpointer.update(predError)
+    predErrorCheckpointer.update(predError, boostingStrategy.PeriodicRDDStorageLevel)
     logDebug("error of gbt = " + predError.values.mean())
 
     // Note: A model of type regression is used since we require raw prediction
@@ -303,7 +303,8 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     var validatePredError: RDD[(Double, Double)] =
       computeInitialPredictionAndError(validationInput, firstTreeWeight, firstTreeModel, loss)
-    if (validate) validatePredErrorCheckpointer.update(validatePredError)
+    if (validate) validatePredErrorCheckpointer
+      .update(validatePredError, boostingStrategy.PeriodicRDDStorageLevel)
     var bestValidateError = if (validate) validatePredError.values.mean() else 0.0
     var bestM = 1
 
@@ -331,7 +332,7 @@ private[spark] object GradientBoostedTrees extends Logging {
 
       predError = updatePredictionError(
         input, predError, baseLearnerWeights(m), baseLearners(m), loss)
-      predErrorCheckpointer.update(predError)
+      predErrorCheckpointer.update(predError, boostingStrategy.PeriodicRDDStorageLevel)
       logDebug("error of gbt = " + predError.values.mean())
 
       if (validate) {
@@ -342,7 +343,8 @@ private[spark] object GradientBoostedTrees extends Logging {
 
         validatePredError = updatePredictionError(
           validationInput, validatePredError, baseLearnerWeights(m), baseLearners(m), loss)
-        validatePredErrorCheckpointer.update(validatePredError)
+        validatePredErrorCheckpointer
+          .update(validatePredError, boostingStrategy.PeriodicRDDStorageLevel)
         val currentValidateError = validatePredError.values.mean()
         if (bestValidateError - currentValidateError < validationTol * Math.max(
           currentValidateError, 0.01)) {

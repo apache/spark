@@ -137,6 +137,10 @@ class GBTClassifier @Since("1.4.0") (
   @Since("1.4.0")
   override def setStepSize(value: Double): this.type = set(stepSize, value)
 
+  @Since("2.1.0")
+  override def setPeriodicRDDStorageLevel(value: String): this.type =
+    set(PeriodicRDDStorageLevel, value)
+    
   // Parameters from GBTClassifierParams:
 
   /** @group setParam */

@@ -493,13 +493,56 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
 
   setDefault(maxIter -> 20, stepSize -> 0.1)
 
+  final val supportedStorageLevel: Array[String] =
+    Array("DISK_ONLY",
+    "DISK_ONLY_2",
+    "MEMORY_ONLY",
+    "MEMORY_ONLY_2",
+    "MEMORY_ONLY_SER",
+    "MEMORY_ONLY_SER_2",
+    "MEMORY_AND_DISK",
+    "MEMORY_AND_DISK_2",
+    "MEMORY_AND_DISK_SER",
+    "MEMORY_AND_DISK_SER_2",
+    "OFF_HEAP"
+  ).map(_.toLowerCase)
+
+  final val PeriodicRDDStorageLevel: Param[String] = new Param[String](this,
+    "PeriodicRDDStorageLevel",
+    "StorageLevel used for PeriodicRDD. Supported options:" +
+    s" ${supportedStorageLevel.mkString(", ")}",
+    (value: String) => supportedStorageLevel.contains(value.toLowerCase))
+
+  setDefault(PeriodicRDDStorageLevel -> "memory_and_disk")
+
+  private[ml] def getPeriodicRDDStorageLevel: StorageLevel = {
+    PeriodicRDDStorageLevel.name match {
+      case "disk_only" => StorageLevel.DISK_ONLY
+      case "disk_only_2" => StorageLevel.DISK_ONLY_2
+      case "memory_only" => StorageLevel.MEMORY_ONLY
+      case "memory_only_2" => StorageLevel.MEMORY_ONLY_2
+      case "memory_only_ser" => StorageLevel.MEMORY_ONLY_SER
+      case "memory_only_ser_2" => StorageLevel.MEMORY_ONLY_SER_2
+      case "memory_and_disk" => StorageLevel.MEMORY_AND_DISK
+      case "memory_and_disk2" => StorageLevel.MEMORY_AND_DISK_2
+      case "memory_and_disk_ser" => StorageLevel.MEMORY_AND_DISK_SER
+      case "memory_and_disk_ser2" => StorageLevel.MEMORY_AND_DISK_SER_2
+      case "off_heap" => StorageLevel.OFF_HEAP
+      case _ =>
+        // Should never happen because of check in setter method.
+        throw new RuntimeException(s"GBTParams was given bad PeriodicRDDStorageLevel:" +
+          PeriodicRDDStorageLevel.name)
+    }
+  }
+
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(
       categoricalFeatures: Map[Int, Int],
       oldAlgo: OldAlgo.Algo): OldBoostingStrategy = {
     val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 2, oldAlgo, OldVariance)
     // NOTE: The old API does not support "seed" so we ignore it.
-    new OldBoostingStrategy(strategy, getOldLossType, getMaxIter, getStepSize)
+    new OldBoostingStrategy(strategy, getOldLossType, getMaxIter, getStepSize,
+      PeriodicRDDStorageLevel = getPeriodicRDDStorageLevel)
   }
 
   /** Get old Gradient Boosting Loss type */
