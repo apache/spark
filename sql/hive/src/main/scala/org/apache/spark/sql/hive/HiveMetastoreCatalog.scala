@@ -246,13 +246,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         val logicalRelation = cached.getOrElse {
           val sizeInBytes =
             metastoreRelation.stats(sparkSession.sessionState.conf).sizeInBytes.toLong
-          val fileCatalog = {
-            val catalog = new CatalogFileIndex(
+          val fileIndex = {
+            val index = new CatalogFileIndex(
               sparkSession, metastoreRelation.catalogTable, sizeInBytes)
             if (lazyPruningEnabled) {
-              catalog
+              index
             } else {
-              catalog.filterPartitions(Nil)  // materialize all the partitions in memory
+              index.filterPartitions(Nil)  // materialize all the partitions in memory
             }
           }
           val partitionSchemaColumnNames = partitionSchema.map(_.name.toLowerCase).toSet
@@ -261,7 +261,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
               .filterNot(field => partitionSchemaColumnNames.contains(field.name.toLowerCase)))
 
           val relation = HadoopFsRelation(
-            location = fileCatalog,
+            location = fileIndex,
             partitionSchema = partitionSchema,
             dataSchema = dataSchema,
             bucketSpec = bucketSpec,
