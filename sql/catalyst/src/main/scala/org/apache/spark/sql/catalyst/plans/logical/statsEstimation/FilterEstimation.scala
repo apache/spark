@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
-import java.sql.Date
+import java.sql.{Timestamp, Date}
 
 import scala.collection.immutable.{HashSet, Map}
 import scala.collection.mutable
@@ -410,7 +410,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
           case DateType =>
             val dateValue = literal.dataType match {
             case StringType =>
-              Some(Date.valueOf(literal.value.asInstanceOf[String]))
+              Some(Date.valueOf(literal.value.toString))
             case _ => Some(literal.value)
             }
             aColStat.copy(distinctCount = 1, min = dateValue,
@@ -419,9 +419,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
           case TimestampType =>
             val tsValue = literal.dataType match {
             case StringType =>
-              Some(DateTimeUtils.stringToTimestamp(
-                literal.value.asInstanceOf[UTF8String]).
-                getOrElse(0))
+              Some(Timestamp.valueOf(literal.value.toString))
             case _ => Some(literal.value)
             }
             aColStat.copy(distinctCount = 1, min = tsValue,
