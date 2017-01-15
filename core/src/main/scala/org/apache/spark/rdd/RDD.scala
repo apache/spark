@@ -1539,7 +1539,7 @@ abstract class RDD[T: ClassTag](
     // NOTE: we use a global lock here due to complexities downstream with ensuring
     // children RDD partitions point to the correct parent partitions. In the future
     // we should revisit this consideration.
-    if (doCheckpointCalled) {
+    if (doCheckpointCalled && !isCheckpointed) {
       logWarning(s"Because job has been executed on RDD ${id}, checkpoint won't work")
     }
     if (context.checkpointDir.isEmpty) {
@@ -1730,8 +1730,7 @@ abstract class RDD[T: ClassTag](
             dependencies.foreach(_.rdd.doCheckpoint())
           }
           if (storageLevel == StorageLevel.NONE) {
-            logInfo(s"do checkpoint on unpersisted RDD ${id}, it will cause RDD recomputation" +
-              " when saving checkpoint files.")
+            logInfo(s"checkpoint on RDD ${this.toString} will result in recomputation.")
           }
           checkpointData.get.checkpoint()
         } else {
