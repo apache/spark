@@ -42,15 +42,12 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
  * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
  *  of messages
  * per second that each '''partition''' will accept.
- * @param locationStrategy In most cases, pass in [[PreferConsistent]],
+ * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
  *   see [[LocationStrategy]] for more details.
- * @param executorKafkaParams Kafka
- * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
- * configuration parameters</a>.
- *   Requires  "bootstrap.servers" to be set with Kafka broker(s),
- *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
- * @param consumerStrategy In most cases, pass in [[Subscribe]],
+ * @param consumerStrategy In most cases, pass in [[ConsumerStrategies.Subscribe]],
  *   see [[ConsumerStrategy]] for more details
+ * @param ppc configuration of settings such as max rate on a per-partition basis.
+ *   see [[PerPartitionConfig]] for more details.
  * @tparam K type of Kafka message key
  * @tparam V type of Kafka message value
  */
