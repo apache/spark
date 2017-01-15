@@ -432,7 +432,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   }
 
   def removedCount(dataSize: Int, retainedSize: Int): Int = {
-    dataSize - retainedSize + retainedSize / 10
+    math.max(retainedSize / 10, dataSize - retainedSize)
   }
 
   /**
