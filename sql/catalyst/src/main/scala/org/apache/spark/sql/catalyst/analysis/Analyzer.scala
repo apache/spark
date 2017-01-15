@@ -139,9 +139,8 @@ class Analyzer(
       ResolveInlineTables ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
-    Batch("View", fixedPoint,
-      AliasViewChild(conf),
-      ResolveUpCast),
+    Batch("View", Once,
+      AliasViewChild(conf)),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
@@ -2266,19 +2265,11 @@ class Analyzer(
    */
   object ResolveUpCast extends Rule[LogicalPlan] {
     private def fail(from: Expression, to: DataType, walkedTypePath: Seq[String]) = {
-      val pathInfo = walkedTypePath.map("The type path of the target object is:\n" +
-        _.mkString("", "\n", "\n") +
-        "You can either add an explicit cast to the input data or choose a higher precision " +
-        "type of the field in the target object")
       throw new AnalysisException(s"Cannot up cast ${from.sql} from " +
         s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate\n" +
-        pathInfo)
-    }
-
-    private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
-      val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
-      val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
-      toPrecedence > 0 && fromPrecedence > toPrecedence
+        "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
+        "You can either add an explicit cast to the input data or choose a higher precision " +
+        "type of the field in the target object")
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -2288,19 +2279,10 @@ class Analyzer(
       case p => p transformExpressions {
         case u @ UpCast(child, _, _) if !child.resolved => u
 
-        case UpCast(child, dataType, walkedTypePath) => (child.dataType, dataType) match {
-          case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) =>
-            fail(child, to, walkedTypePath)
-          case (from: DecimalType, to: NumericType) if !from.isTighterThan(to) =>
-            fail(child, to, walkedTypePath)
-          case (from, to) if illegalNumericPrecedence(from, to) =>
-            fail(child, to, walkedTypePath)
-          case (TimestampType, DateType) =>
-            fail(child, DateType, walkedTypePath)
-          case (StringType, to: NumericType) =>
-            fail(child, to, walkedTypePath)
-          case _ => Cast(child, dataType.asNullable)
-        }
+        case UpCast(child, dataType, walkedTypePath) if Cast.canUpCast(child.dataType, dataType) =>
+          Cast(child, dataType.asNullable)
+
+        case UpCast(child, dataType, walkedTypePath) => fail(child, dataType, walkedTypePath)
       }
     }
   }
