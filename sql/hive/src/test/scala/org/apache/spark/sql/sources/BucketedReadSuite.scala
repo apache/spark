@@ -20,12 +20,14 @@ package org.apache.spark.sql.sources
 import java.io.File
 import java.net.URI
 
+import org.apache.parquet.hadoop.ParquetOutputFormat
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FilePartition}
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
@@ -512,6 +514,19 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
 
       checkAnswer(hiveContext.table("bucketed_table").groupBy("j").agg(max("k")),
         df1.groupBy("j").agg(max("k")))
+    }
+  }
+
+  test("prune files when not passing filters") {
+    withTable("bucketed_table") {
+      withSQLConf(ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true") {
+        df.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
+        // All partitions should have empty files.
+        hiveContext.table("bucketed_table").filter("j == -1").rdd.partitions.foreach { partition =>
+          val filePartition = partition.asInstanceOf[FilePartition]
+          assert(filePartition.files.isEmpty)
+        }
+      }
     }
   }
 }

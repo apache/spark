@@ -23,7 +23,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
@@ -436,23 +436,37 @@ case class FileSourceScanExec(
       selectedPartitions: Seq[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
-    val bucketed =
-      selectedPartitions.flatMap { p =>
-        p.files.map { f =>
-          val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
-          PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
+    val session = fsRelation.sparkSession
+    val hadoopConf = session.sessionState.newHadoopConf()
+    val partitionFiles = selectedPartitions.flatMap { partition =>
+      partition.files.map((_, partition.values))
+    }
+    val format = fsRelation.fileFormat
+    val splitter =
+      format.buildSplitter(session, fsRelation.location, dataFilters, schema, hadoopConf)
+    val bucketed = partitionFiles.flatMap { case (file, values) =>
+      val blockLocations = getBlockLocations(file)
+      val filePath = file.getPath.toUri.toString
+      if (format.isSplitable(session, fsRelation.options, file.getPath)) {
+        val validSplits = splitter(file)
+        validSplits.map { split =>
+          val hosts = getBlockHosts(blockLocations, split.getStart, split.getLength)
+          PartitionedFile(values, filePath, split.getStart, split.getLength, hosts)
         }
-      }.groupBy { f =>
-        BucketingUtils
-          .getBucketId(new Path(f.filePath).getName)
-          .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
+      } else {
+        val hosts = getBlockHosts(blockLocations, 0, file.getLen)
+        Seq(PartitionedFile(values, filePath, 0, file.getLen, hosts))
       }
-
+    }.groupBy { f =>
+      BucketingUtils
+        .getBucketId(new Path(f.filePath).getName)
+        .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
+    }
     val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
       FilePartition(bucketId, bucketed.getOrElse(bucketId, Nil))
     }
 
-    new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
+    new FileScanRDD(session, readFile, filePartitions)
   }
 
   /**
@@ -467,10 +481,11 @@ case class FileSourceScanExec(
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Seq[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
-    val defaultMaxSplitBytes =
-      fsRelation.sparkSession.sessionState.conf.filesMaxPartitionBytes
-    val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
-    val defaultParallelism = fsRelation.sparkSession.sparkContext.defaultParallelism
+    val session = fsRelation.sparkSession
+    val hadoopConf = session.sessionState.newHadoopConf()
+    val defaultMaxSplitBytes = session.sessionState.conf.filesMaxPartitionBytes
+    val openCostInBytes = session.sessionState.conf.filesOpenCostInBytes
+    val defaultParallelism = session.sparkContext.defaultParallelism
     val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
     val bytesPerCore = totalBytes / defaultParallelism
 
@@ -478,23 +493,32 @@ case class FileSourceScanExec(
     logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
       s"open cost is considered as scanning $openCostInBytes bytes.")
 
-    val splitFiles = selectedPartitions.flatMap { partition =>
-      partition.files.flatMap { file =>
-        val blockLocations = getBlockLocations(file)
-        if (fsRelation.fileFormat.isSplitable(
-            fsRelation.sparkSession, fsRelation.options, file.getPath)) {
-          (0L until file.getLen by maxSplitBytes).map { offset =>
-            val remaining = file.getLen - offset
+    val partitionFiles = selectedPartitions.flatMap { partition =>
+      partition.files.map((_, partition.values))
+    }
+    val format = fsRelation.fileFormat
+    val splitter =
+      format.buildSplitter(session, fsRelation.location, dataFilters, schema, hadoopConf)
+    val splitFiles = partitionFiles.flatMap { case (file, values) =>
+      val blockLocations = getBlockLocations(file)
+      val filePath = file.getPath.toUri.toString
+      // If the format is splittable, attempt to split and filter the file.
+      if (format.isSplitable(session, fsRelation.options, file.getPath)) {
+        val validSplits = splitter(file)
+        validSplits.flatMap { split =>
+          val splitOffset = split.getStart
+          val end = splitOffset + split.getLength
+          (splitOffset until end by maxSplitBytes).map { offset =>
+            val remaining = end - offset
             val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
             val hosts = getBlockHosts(blockLocations, offset, size)
-            PartitionedFile(
-              partition.values, file.getPath.toUri.toString, offset, size, hosts)
+            PartitionedFile(values, filePath, offset, size, hosts)
           }
-        } else {
-          val hosts = getBlockHosts(blockLocations, 0, file.getLen)
-          Seq(PartitionedFile(
-            partition.values, file.getPath.toUri.toString, 0, file.getLen, hosts))
         }
+      } else {
+        // Take the entire file as one partition.
+        val hosts = getBlockHosts(blockLocations, 0, file.getLen)
+        Seq(PartitionedFile(values, filePath, 0, file.getLen, hosts))
       }
     }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
 
@@ -526,7 +550,7 @@ case class FileSourceScanExec(
     }
     closePartition()
 
-    new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
+    new FileScanRDD(session, readFile, partitions)
   }
 
   private def getBlockLocations(file: FileStatus): Array[BlockLocation] = file match {
