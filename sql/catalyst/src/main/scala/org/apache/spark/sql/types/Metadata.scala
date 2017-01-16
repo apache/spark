@@ -22,22 +22,22 @@ import scala.collection.mutable
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.InterfaceStability
 
 
 /**
- * :: DeveloperApi ::
- *
  * Metadata is a wrapper over Map[String, Any] that limits the value type to simple ones: Boolean,
  * Long, Double, String, Metadata, Array[Boolean], Array[Long], Array[Double], Array[String], and
  * Array[Metadata]. JSON is used for serialization.
  *
  * The default constructor is private. User should use either [[MetadataBuilder]] or
- * [[Metadata.fromJson()]] to create Metadata instances.
+ * `Metadata.fromJson()` to create Metadata instances.
  *
  * @param map an immutable map that stores the data
+ *
+ * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 sealed class Metadata private[types] (private[types] val map: Map[String, Any])
   extends Serializable {
 
@@ -114,6 +114,10 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
   private[sql] def jsonValue: JValue = Metadata.toJsonValue(this)
 }
 
+/**
+ * @since 1.3.0
+ */
+@InterfaceStability.Stable
 object Metadata {
 
   private[this] val _empty = new Metadata(Map.empty)
@@ -218,11 +222,11 @@ object Metadata {
 }
 
 /**
- * :: DeveloperApi ::
- *
  * Builder for [[Metadata]]. If there is a key collision, the latter will overwrite the former.
+ *
+ * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 class MetadataBuilder {
 
   private val map: mutable.Map[String, Any] = mutable.Map.empty

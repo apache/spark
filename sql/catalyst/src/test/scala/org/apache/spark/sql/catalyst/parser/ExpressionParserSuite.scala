@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -534,5 +534,14 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("a.123D_column", UnresolvedAttribute("a.123D_column"))
     // ".123BD" should not be treated as token of type BIGDECIMAL_LITERAL
     assertEqual("a.123BD_column", UnresolvedAttribute("a.123BD_column"))
+  }
+
+  test("SPARK-17832 function identifier contains backtick") {
+    val complexName = FunctionIdentifier("`ba`r", Some("`fo`o"))
+    assertEqual(complexName.quotedString, UnresolvedAttribute("`fo`o.`ba`r"))
+    intercept(complexName.unquotedString, "mismatched input")
+    // Function identifier contains countious backticks should be treated correctly.
+    val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
+    assertEqual(complexName2.quotedString, UnresolvedAttribute("fo``o.ba``r"))
   }
 }

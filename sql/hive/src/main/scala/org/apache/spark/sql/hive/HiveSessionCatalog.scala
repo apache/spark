@@ -27,10 +27,11 @@ import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, Gener
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchTableException}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
@@ -41,30 +42,41 @@ import org.apache.spark.util.Utils
 
 private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
+    globalTempViewManager: GlobalTempViewManager,
     sparkSession: SparkSession,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
-    hadoopConf: Configuration)
+    hadoopConf: Configuration,
+    parser: ParserInterface)
   extends SessionCatalog(
     externalCatalog,
+    globalTempViewManager,
     functionResourceLoader,
     functionRegistry,
     conf,
-    hadoopConf) {
+    hadoopConf,
+    parser) {
 
-  override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
-    val table = formatTableName(name.table)
-    if (name.database.isDefined || !tempTables.contains(table)) {
-      val database = name.database.map(formatDatabaseName)
-      val newName = name.copy(database = database, table = table)
-      metastoreCatalog.lookupRelation(newName, alias)
-    } else {
-      val relation = tempTables(table)
-      val tableWithQualifiers = SubqueryAlias(table, relation, None)
-      // If an alias was specified by the lookup, wrap the plan in a subquery so that
-      // attributes are properly qualified with this alias.
-      alias.map(a => SubqueryAlias(a, tableWithQualifiers, None)).getOrElse(tableWithQualifiers)
+  override def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
+    synchronized {
+      val table = formatTableName(name.table)
+      val db = formatDatabaseName(name.database.getOrElse(currentDb))
+      if (db == globalTempViewManager.database) {
+        val relationAlias = alias.getOrElse(table)
+        globalTempViewManager.get(table).map { viewDef =>
+          SubqueryAlias(relationAlias, viewDef, Some(name))
+        }.getOrElse(throw new NoSuchTableException(db, table))
+      } else if (name.database.isDefined || !tempTables.contains(table)) {
+        val newName = name.copy(database = Some(db), table = table)
+        metastoreCatalog.lookupRelation(newName, alias)
+      } else {
+        val relation = tempTables(table)
+        val tableWithQualifiers = SubqueryAlias(table, relation, None)
+        // If an alias was specified by the lookup, wrap the plan in a subquery so that
+        // attributes are properly qualified with this alias.
+        alias.map(a => SubqueryAlias(a, tableWithQualifiers, None)).getOrElse(tableWithQualifiers)
+      }
     }
   }
 
@@ -224,9 +236,8 @@ private[sql] class HiveSessionCatalog(
   // current_user, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
   // in_file, index, matchpath, ngrams, noop, noopstreaming, noopwithmap,
   // noopwithmapstreaming, parse_url_tuple, reflect2, windowingtablefunction.
+  // Note: don't forget to update SessionCatalog.isTemporaryFunction
   private val hiveFunctions = Seq(
-    "hash",
-    "histogram_numeric",
-    "percentile"
+    "histogram_numeric"
   )
 }

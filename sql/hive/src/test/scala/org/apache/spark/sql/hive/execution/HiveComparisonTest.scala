@@ -167,7 +167,7 @@ abstract class HiveComparisonTest
       // and does not return it as a query answer.
       case _: SetCommand => Seq("0")
       case _: ExplainCommand => answer
-      case _: DescribeTableCommand | ShowColumnsCommand(_) =>
+      case _: DescribeTableCommand | ShowColumnsCommand(_, _) =>
         // Filter out non-deterministic lines and lines which do not have actual results but
         // can introduce problems because of the way Hive formats these lines.
         // Then, remove empty lines. Do not sort the results.
@@ -226,7 +226,8 @@ abstract class HiveComparisonTest
       testCaseName: String,
       sql: String,
       reset: Boolean = true,
-      tryWithoutResettingFirst: Boolean = false) {
+      tryWithoutResettingFirst: Boolean = false,
+      skip: Boolean = false) {
     // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
     assert(!testCaseName.contains(":"))
 
@@ -255,6 +256,7 @@ abstract class HiveComparisonTest
     }
 
     test(testCaseName) {
+      assume(!skip)
       logDebug(s"=== HIVE TEST: $testCaseName ===")
 
       val sqlWithoutComment =

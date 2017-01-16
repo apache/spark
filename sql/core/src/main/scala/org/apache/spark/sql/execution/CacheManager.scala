@@ -22,6 +22,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -131,11 +132,15 @@ class CacheManager extends Logging {
 
   /** Replaces segments of the given logical plan with cached versions where possible. */
   def useCachedData(plan: LogicalPlan): LogicalPlan = {
-    plan transformDown {
+    val newPlan = plan transformDown {
       case currentFragment =>
         lookupCachedData(currentFragment)
           .map(_.cachedRepresentation.withOutput(currentFragment.output))
           .getOrElse(currentFragment)
+    }
+
+    newPlan transformAllExpressions {
+      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan))
     }
   }
 
@@ -177,7 +182,7 @@ class CacheManager extends Logging {
 
   /**
    * Traverses a given `plan` and searches for the occurrences of `qualifiedPath` in the
-   * [[org.apache.spark.sql.execution.datasources.FileCatalog]] of any [[HadoopFsRelation]] nodes
+   * [[org.apache.spark.sql.execution.datasources.FileIndex]] of any [[HadoopFsRelation]] nodes
    * in the plan. If found, we refresh the metadata and return true. Otherwise, this method returns
    * false.
    */
@@ -185,9 +190,10 @@ class CacheManager extends Logging {
     plan match {
       case lr: LogicalRelation => lr.relation match {
         case hr: HadoopFsRelation =>
-          val invalidate = hr.location.paths
-            .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
-            .contains(qualifiedPath)
+          val prefixToInvalidate = qualifiedPath.toString
+          val invalidate = hr.location.rootPaths
+            .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory).toString)
+            .exists(_.startsWith(prefixToInvalidate))
           if (invalidate) hr.location.refresh()
           invalidate
         case _ => false

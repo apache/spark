@@ -30,6 +30,7 @@ import org.apache.hadoop.hive.ql.metadata.{Partition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, Expression}
@@ -43,7 +44,6 @@ private[hive] case class MetastoreRelation(
     databaseName: String,
     tableName: String)
     (val catalogTable: CatalogTable,
-     @transient private val client: HiveClient,
      @transient private val sparkSession: SparkSession)
   extends LeafNode with MultiInstanceRelation with FileRelation with CatalogRelation {
 
@@ -59,10 +59,15 @@ private[hive] case class MetastoreRelation(
     Objects.hashCode(databaseName, tableName, output)
   }
 
-  override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: client :: sparkSession :: Nil
+  override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
 
   private def toHiveColumn(c: StructField): FieldSchema = {
-    new FieldSchema(c.name, c.dataType.catalogString, c.getComment.orNull)
+    val typeString = if (c.metadata.contains(HiveUtils.hiveTypeString)) {
+      c.metadata.getString(HiveUtils.hiveTypeString)
+    } else {
+      c.dataType.catalogString
+    }
+    new FieldSchema(c.name, typeString, c.getComment.orNull)
   }
 
   // TODO: merge this with HiveClientImpl#toHiveTable
@@ -108,8 +113,8 @@ private[hive] case class MetastoreRelation(
     new HiveTable(tTable)
   }
 
-  @transient override lazy val statistics: Statistics = {
-    catalogTable.stats.getOrElse(Statistics(
+  @transient override def computeStats(conf: CatalystConf): Statistics = {
+    catalogTable.stats.map(_.toPlanStats(output)).getOrElse(Statistics(
       sizeInBytes = {
         val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
         val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)
@@ -146,11 +151,18 @@ private[hive] case class MetastoreRelation(
 
   // When metastore partition pruning is turned off, we cache the list of all partitions to
   // mimic the behavior of Spark < 1.5
-  private lazy val allPartitions: Seq[CatalogTablePartition] = client.getPartitions(catalogTable)
+  private lazy val allPartitions: Seq[CatalogTablePartition] = {
+    sparkSession.sharedState.externalCatalog.listPartitions(
+      catalogTable.database,
+      catalogTable.identifier.table)
+  }
 
   def getHiveQlPartitions(predicates: Seq[Expression] = Nil): Seq[Partition] = {
     val rawPartitions = if (sparkSession.sessionState.conf.metastorePartitionPruning) {
-      client.getPartitionsByFilter(catalogTable, predicates)
+      sparkSession.sharedState.externalCatalog.listPartitionsByFilter(
+        catalogTable.database,
+        catalogTable.identifier.table,
+        predicates)
     } else {
       allPartitions
     }
@@ -234,8 +246,7 @@ private[hive] case class MetastoreRelation(
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
 
   override def inputFiles: Array[String] = {
-    val partLocations = client
-      .getPartitionsByFilter(catalogTable, Nil)
+    val partLocations = allPartitions
       .flatMap(_.storage.locationUri)
       .toArray
     if (partLocations.nonEmpty) {
@@ -248,6 +259,6 @@ private[hive] case class MetastoreRelation(
   }
 
   override def newInstance(): MetastoreRelation = {
-    MetastoreRelation(databaseName, tableName)(catalogTable, client, sparkSession)
+    MetastoreRelation(databaseName, tableName)(catalogTable, sparkSession)
   }
 }

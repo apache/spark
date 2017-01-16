@@ -36,6 +36,9 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
         (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)), 2)
     val metrics = new MulticlassMetrics(predictionAndLabels)
     val delta = 0.0000001
+    val tpRate0 = 2.0 / (2 + 2)
+    val tpRate1 = 3.0 / (3 + 1)
+    val tpRate2 = 1.0 / (1 + 0)
     val fpRate0 = 1.0 / (9 - 4)
     val fpRate1 = 1.0 / (9 - 4)
     val fpRate2 = 1.0 / (9 - 1)
@@ -53,6 +56,9 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     val f2measure2 = (1 + 2 * 2) * precision2 * recall2 / (2 * 2 * precision2 + recall2)
 
     assert(metrics.confusionMatrix.toArray.sameElements(confusionMatrix.toArray))
+    assert(math.abs(metrics.truePositiveRate(0.0) - tpRate0) < delta)
+    assert(math.abs(metrics.truePositiveRate(1.0) - tpRate1) < delta)
+    assert(math.abs(metrics.truePositiveRate(2.0) - tpRate2) < delta)
     assert(math.abs(metrics.falsePositiveRate(0.0) - fpRate0) < delta)
     assert(math.abs(metrics.falsePositiveRate(1.0) - fpRate1) < delta)
     assert(math.abs(metrics.falsePositiveRate(2.0) - fpRate2) < delta)
@@ -75,6 +81,8 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(math.abs(metrics.accuracy - metrics.recall) < delta)
     assert(math.abs(metrics.accuracy - metrics.fMeasure) < delta)
     assert(math.abs(metrics.accuracy - metrics.weightedRecall) < delta)
+    assert(math.abs(metrics.weightedTruePositiveRate -
+      ((4.0 / 9) * tpRate0 + (4.0 / 9) * tpRate1 + (1.0 / 9) * tpRate2)) < delta)
     assert(math.abs(metrics.weightedFalsePositiveRate -
       ((4.0 / 9) * fpRate0 + (4.0 / 9) * fpRate1 + (1.0 / 9) * fpRate2)) < delta)
     assert(math.abs(metrics.weightedPrecision -

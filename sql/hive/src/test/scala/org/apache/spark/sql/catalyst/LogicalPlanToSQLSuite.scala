@@ -20,8 +20,10 @@ package org.apache.spark.sql.catalyst
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, NoSuchFileException, Paths}
 
+import scala.io.Source
 import scala.util.control.NonFatal
 
+import org.apache.spark.TestUtils
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -45,7 +47,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   // Used for generating new query answer files by saving
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
-  private val goldenSQLPath = getTestResourcePath("sqlgen")
+  private val goldenSQLPath = {
+    // If regenerateGoldenFiles is true, we must be running this in SBT and we use hard-coded
+    // relative path. Otherwise, we use classloader's getResource to find the location.
+    if (regenerateGoldenFiles) {
+      java.nio.file.Paths.get("src", "test", "resources", "sqlgen").toFile.getCanonicalPath
+    } else {
+      getTestResourcePath("sqlgen")
+    }
+  }
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -109,12 +119,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         Files.write(path, answerText.getBytes(StandardCharsets.UTF_8))
       } else {
         val goldenFileName = s"sqlgen/$answerFile.sql"
-        val resourceFile = getClass.getClassLoader.getResource(goldenFileName)
-        if (resourceFile == null) {
+        val resourceStream = getClass.getClassLoader.getResourceAsStream(goldenFileName)
+        if (resourceStream == null) {
           throw new NoSuchFileException(goldenFileName)
         }
-        val path = resourceFile.getPath
-        val answerText = new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8)
+        val answerText = try {
+          Source.fromInputStream(resourceStream).mkString
+        } finally {
+          resourceStream.close
+        }
         val sqls = answerText.split(separator)
         assert(sqls.length == 2, "Golden sql files should have a separator.")
         val expectedSQL = sqls(1).trim()
@@ -564,6 +577,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("script transformation - schemaless") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     checkSQL("SELECT TRANSFORM (a, b, c, d) USING 'cat' FROM parquet_t2",
       "script_transformation_1")
     checkSQL("SELECT TRANSFORM (*) USING 'cat' FROM parquet_t2",
@@ -571,11 +586,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("script transformation - alias list") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     checkSQL("SELECT TRANSFORM (a, b, c, d) USING 'cat' AS (d1, d2, d3, d4) FROM parquet_t2",
       "script_transformation_alias_list")
   }
 
   test("script transformation - alias list with type") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     checkSQL(
       """FROM
         |(FROM parquet_t1 SELECT TRANSFORM(key, value) USING 'cat' AS (thing1 int, thing2 string)) t
@@ -585,6 +604,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("script transformation - row format delimited clause with only one format property") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     checkSQL(
       """SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
         |USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
@@ -594,6 +615,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("script transformation - row format delimited clause with multiple format properties") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     checkSQL(
       """SELECT TRANSFORM (key)
         |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\t'
@@ -605,6 +628,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("script transformation - row format serde clauses with SERDEPROPERTIES") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     checkSQL(
       """SELECT TRANSFORM (key, value)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
@@ -618,6 +643,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("script transformation - row format serde clauses without SERDEPROPERTIES") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     checkSQL(
       """SELECT TRANSFORM (key, value)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
@@ -1158,6 +1185,16 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
           |from dates
         """.stripMargin,
         "interval_arithmetic"
+      )
+    }
+  }
+
+  test("SPARK-17982 - limit") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(id INT, name STRING)")
+      checkSQL(
+        "SELECT * FROM (SELECT id FROM tbl LIMIT 2)",
+        "limit"
       )
     }
   }

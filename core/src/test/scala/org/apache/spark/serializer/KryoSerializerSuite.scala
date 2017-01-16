@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.{Kryo, KryoException}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import org.roaringbitmap.RoaringBitmap
 
@@ -36,6 +36,7 @@ import org.apache.spark.util.Utils
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
   conf.set("spark.kryo.registrator", classOf[MyRegistrator].getName)
+  conf.set("spark.kryo.unsafe", "false")
 
   test("SPARK-7392 configuration limits") {
     val kryoBufferProperty = "spark.kryoserializer.buffer"
@@ -100,7 +101,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(Array("aaa", "bbb", null))
     check(Array(true, false, true))
     check(Array('a', 'b', 'c'))
-    check(Array[Int]())
+    check(Array.empty[Int])
     check(Array(Array("1", "2"), Array("1", "2", "3", "4")))
   }
 
@@ -350,6 +351,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val ser = new KryoSerializer(conf).newInstance()
     val thrown = intercept[SparkException](ser.serialize(largeObject))
     assert(thrown.getMessage.contains(kryoBufferMaxProperty))
+    assert(thrown.getCause.isInstanceOf[KryoException])
   }
 
   test("SPARK-12222: deserialize RoaringBitmap throw Buffer underflow exception") {

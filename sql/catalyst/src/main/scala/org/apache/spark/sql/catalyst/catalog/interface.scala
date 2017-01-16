@@ -20,11 +20,11 @@ package org.apache.spark.sql.catalyst.catalog
 import java.util.Date
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Cast, Literal}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 
 
 /**
@@ -44,6 +44,9 @@ case class CatalogFunction(
  * Storage format, used to describe how a partition or a table is stored.
  */
 case class CatalogStorageFormat(
+    // TODO(ekl) consider storing this field as java.net.URI for type safety. Note that this must
+    // be converted to/from a hadoop Path object using new Path(new URI(locationUri)) and
+    // path.toUri respectively before use as a filesystem path due to URI char escaping.
     locationUri: Option[String],
     inputFormat: Option[String],
     outputFormat: Option[String],
@@ -52,12 +55,10 @@ case class CatalogStorageFormat(
     properties: Map[String, String]) {
 
   override def toString: String = {
-    val serdePropsToString =
-      if (properties.nonEmpty) {
-        s"Properties: " + properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
-      } else {
-        ""
-      }
+    val serdePropsToString = CatalogUtils.maskCredentials(properties) match {
+      case props if props.isEmpty => ""
+      case props => "Properties: " + props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+    }
     val output =
       Seq(locationUri.map("Location: " + _).getOrElse(""),
         inputFormat.map("InputFormat: " + _).getOrElse(""),
@@ -89,13 +90,29 @@ case class CatalogTablePartition(
     parameters: Map[String, String] = Map.empty) {
 
   override def toString: String = {
+    val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
     val output =
       Seq(
-        s"Partition Values: [${spec.values.mkString(", ")}]",
+        s"Partition Values: [$specString]",
         s"$storage",
         s"Partition Parameters:{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
 
     output.filter(_.nonEmpty).mkString("CatalogPartition(\n\t", "\n\t", ")")
+  }
+
+  /** Return the partition location, assuming it is specified. */
+  def location: String = storage.locationUri.getOrElse {
+    val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
+    throw new AnalysisException(s"Partition [$specString] did not specify locationUri")
+  }
+
+  /**
+   * Given the partition schema, returns a row with that schema holding the partition values.
+   */
+  def toRow(partitionSchema: StructType): InternalRow = {
+    InternalRow.fromSeq(partitionSchema.map { field =>
+      Cast(Literal(spec(field.name)), field.dataType).eval()
+    })
   }
 }
 
@@ -116,6 +133,16 @@ case class BucketSpec(
   if (numBuckets <= 0) {
     throw new AnalysisException(s"Expected positive number of buckets, but got `$numBuckets`.")
   }
+
+  override def toString: String = {
+    val bucketString = s"bucket columns: [${bucketColumnNames.mkString(", ")}]"
+    val sortString = if (sortColumnNames.nonEmpty) {
+      s", sort columns: [${sortColumnNames.mkString(", ")}]"
+    } else {
+      ""
+    }
+    s"$numBuckets buckets, $bucketString$sortString"
+  }
 }
 
 /**
@@ -128,6 +155,9 @@ case class BucketSpec(
  *                 Can be None if this table is a View, should be "hive" for hive serde tables.
  * @param unsupportedFeatures is a list of string descriptions of features that are used by the
  *        underlying table but not supported by Spark SQL yet.
+ * @param tracksPartitionsInCatalog whether this table's partition metadata is stored in the
+ *                                  catalog. If false, it is inferred automatically based on file
+ *                                  structure.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -141,11 +171,12 @@ case class CatalogTable(
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
     properties: Map[String, String] = Map.empty,
-    stats: Option[Statistics] = None,
+    stats: Option[CatalogStatistics] = None,
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None,
     comment: Option[String] = None,
-    unsupportedFeatures: Seq[String] = Seq.empty) {
+    unsupportedFeatures: Seq[String] = Seq.empty,
+    tracksPartitionsInCatalog: Boolean = false) {
 
   /** schema of this table's partition columns */
   def partitionSchema: StructType = StructType(schema.filter {
@@ -157,8 +188,19 @@ case class CatalogTable(
     throw new AnalysisException(s"table $identifier did not specify database")
   }
 
+  /** Return the table location, assuming it is specified. */
+  def location: String = storage.locationUri.getOrElse {
+    throw new AnalysisException(s"table $identifier did not specify locationUri")
+  }
+
   /** Return the fully qualified name of this table, assuming the database was specified. */
   def qualifiedName: String = identifier.unquotedString
+
+  /**
+   * Return the default database name we use to resolve a view, should be None if the CatalogTable
+   * is not a View.
+   */
+  def viewDefaultDatabase: Option[String] = properties.get(CatalogTable.VIEW_DEFAULT_DATABASE)
 
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
@@ -203,11 +245,42 @@ case class CatalogTable(
         comment.map("Comment: " + _).getOrElse(""),
         if (properties.nonEmpty) s"Properties: $tableProperties" else "",
         if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",
-        s"$storage")
+        s"$storage",
+        if (tracksPartitionsInCatalog) "Partition Provider: Catalog" else "")
 
     output.filter(_.nonEmpty).mkString("CatalogTable(\n\t", "\n\t", ")")
   }
+}
 
+object CatalogTable {
+  val VIEW_DEFAULT_DATABASE = "view.default.database"
+}
+
+/**
+ * This class of statistics is used in [[CatalogTable]] to interact with metastore.
+ * We define this new class instead of directly using [[Statistics]] here because there are no
+ * concepts of attributes or broadcast hint in catalog.
+ */
+case class CatalogStatistics(
+    sizeInBytes: BigInt,
+    rowCount: Option[BigInt] = None,
+    colStats: Map[String, ColumnStat] = Map.empty) {
+
+  /**
+   * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
+   * on column names.
+   */
+  def toPlanStats(planOutput: Seq[Attribute]): Statistics = {
+    val matched = planOutput.flatMap(a => colStats.get(a.name).map(a -> _))
+    Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
+      attributeStats = AttributeMap(matched))
+  }
+
+  /** Readable string representation for the CatalogStatistics. */
+  def simpleString: String = {
+    val rowCountString = if (rowCount.isDefined) s", ${rowCount.get} rows" else ""
+    s"$sizeInBytes bytes$rowCountString"
+  }
 }
 
 
@@ -254,7 +327,6 @@ trait CatalogRelation {
  * Note that in the future we should consolidate this and HiveCatalogRelation.
  */
 case class SimpleCatalogRelation(
-    databaseName: String,
     metadata: CatalogTable)
   extends LeafNode with CatalogRelation {
 
@@ -271,8 +343,4 @@ case class SimpleCatalogRelation(
       }
     dataCols ++ partCols
   }
-
-  require(
-    metadata.identifier.database == Some(databaseName),
-    "provided database does not match the one specified in the table definition")
 }

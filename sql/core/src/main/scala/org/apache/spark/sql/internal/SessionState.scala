@@ -95,10 +95,12 @@ private[sql] class SessionState(sparkSession: SparkSession) {
    */
   lazy val catalog = new SessionCatalog(
     sparkSession.sharedState.externalCatalog,
+    sparkSession.sharedState.globalTempViewManager,
     functionResourceLoader,
     functionRegistry,
     conf,
-    newHadoopConf())
+    newHadoopConf(),
+    sqlParser)
 
   /**
    * Interface exposed to the user for registering user-defined functions.
@@ -116,7 +118,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
         PreprocessTableInsertion(conf) ::
         new FindDataSourceTable(sparkSession) ::
         DataSourceAnalysis(conf) ::
-        (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
+        new ResolveDataSource(sparkSession) :: Nil
 
       override val extendedCheckRules =
         Seq(PreWriteCheck(conf, catalog), HiveOnlyCheck)

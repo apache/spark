@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
  * The Hive table scan operator.  Column and partition pruning are both handled.
  *
  * @param requestedAttributes Attributes to be fetched from the Hive table.
- * @param relation The Hive table be be scanned.
+ * @param relation The Hive table be scanned.
  * @param partitionPruningPred An optional partition pruning predicate for partitioned table.
  */
 private[hive]
@@ -154,8 +154,9 @@ case class HiveTableScanExec(
     val numOutputRows = longMetric("numOutputRows")
     // Avoid to serialize MetastoreRelation because schema is lazy. (see SPARK-15649)
     val outputSchema = schema
-    rdd.mapPartitionsInternal { iter =>
+    rdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val proj = UnsafeProjection.create(outputSchema)
+      proj.initialize(index)
       iter.map { r =>
         numOutputRows += 1
         proj(r)
