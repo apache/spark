@@ -834,6 +834,21 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.showString(10) === expectedAnswer)
   }
 
+  test("showString: decimals") {
+    val df = Seq(
+      (0L, 10.1D),
+      (10L, 0.101D)
+    ).toDF().select('_1.cast(DecimalType(30, 20)), '_2.cast(DecimalType(30, 20)))
+    val expectedAnswer = """+---+-----+
+                           || _1|   _2|
+                           |+---+-----+
+                           ||  0| 10.1|
+                           || 10|0.101|
+                           |+---+-----+
+                           |""".stripMargin
+    assert(df.showString(10) === expectedAnswer)
+  }
+
   test("showString: minimum column width") {
     val df = Seq(
       (1, 1),
