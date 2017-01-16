@@ -74,12 +74,12 @@ case class AliasViewChild(conf: CatalystConf) extends Rule[LogicalPlan] {
           // The dataType of the output attributes may be not the same with that of the view
           // output, so we should cast the attribute to the dataType of the view output attribute.
           // Will throw an AnalysisException if the cast can't perform or might truncate.
-          if (Cast.canUpCast(originAttr.dataType, attr.dataType)) {
-            Alias(Cast(originAttr, attr.dataType), attr.name)(exprId = attr.exprId,
-              qualifier = attr.qualifier, explicitMetadata = Some(attr.metadata))
-          } else {
+          if (Cast.mayTruncate(originAttr.dataType, attr.dataType)) {
             throw new AnalysisException(s"Cannot up cast ${originAttr.sql} from " +
               s"${originAttr.dataType.simpleString} to ${attr.simpleString} as it may truncate\n")
+          } else {
+            Alias(Cast(originAttr, attr.dataType), attr.name)(exprId = attr.exprId,
+              qualifier = attr.qualifier, explicitMetadata = Some(attr.metadata))
           }
         case (_, originAttr) => originAttr
       }
