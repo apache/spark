@@ -107,7 +107,6 @@ package object dsl {
       UnresolvedExtractValue(expr, Literal(fieldName))
 
     def cast(to: DataType): Expression = Cast(expr, to)
-    def cast(to: DataType, timeZoneId: String): Expression = Cast(expr, to, Option(timeZoneId))
 
     def asc: SortOrder = SortOrder(expr, Ascending)
     def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast)
