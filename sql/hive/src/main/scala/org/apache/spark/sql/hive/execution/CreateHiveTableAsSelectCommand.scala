@@ -87,7 +87,6 @@ case class CreateHiveTableAsSelectCommand(
         case r: MetastoreRelation => r
       }
     }
-
     // TODO ideally, we should get the output data ready first and then
     // add the relation into catalog, just in case of failure occurs while data
     // processing.
