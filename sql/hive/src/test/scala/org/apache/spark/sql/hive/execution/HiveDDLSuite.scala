@@ -33,7 +33,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
@@ -1309,7 +1309,7 @@ class HiveDDLSuite
   }
 
   test("create hive serde table with DataFrameWriter.saveAsTable") {
-    withTable("t", "t2") {
+    withTable("t", "t2", "t3") {
       Seq(1 -> "a").toDF("i", "j")
         .write.format("hive").option("fileFormat", "avro").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a"))
@@ -1343,16 +1343,26 @@ class HiveDDLSuite
       sql("INSERT INTO t SELECT 2, 'b'")
       checkAnswer(spark.table("t"), Row(9, "x") :: Row(2, "b") :: Nil)
 
-      val e = intercept[AnalysisException] {
-        Seq(1 -> "a").toDF("i", "j").write.format("hive").partitionBy("i").saveAsTable("t2")
-      }
-      assert(e.message.contains("A Create Table As Select (CTAS) statement is not allowed " +
-        "to create a partitioned table using Hive"))
-
       val e2 = intercept[AnalysisException] {
         Seq(1 -> "a").toDF("i", "j").write.format("hive").bucketBy(4, "i").saveAsTable("t2")
       }
       assert(e2.message.contains("Creating bucketed Hive serde table is not supported yet"))
+
+      spark.sql("set hive.exec.dynamic.partition.mode=nonstrict")
+      Seq(10 -> "y").toDF("i", "j").write.format("hive").partitionBy("i").saveAsTable("t3")
+      checkAnswer(spark.table("t3"), Row("y", 10) :: Nil)
+      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
+      var partitionSchema = table.partitionSchema
+      assert(partitionSchema.size == 1 && partitionSchema.fields(0).name == "i" &&
+        partitionSchema.fields(0).dataType == IntegerType)
+
+      Seq(11 -> "z").toDF("i", "j").write.mode("overwrite").format("hive")
+        .partitionBy("j").saveAsTable("t3")
+      checkAnswer(spark.table("t3"), Row(11, "z") :: Nil)
+      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
+      partitionSchema = table.partitionSchema
+      assert(partitionSchema.size == 1 && partitionSchema.fields(0).name == "j" &&
+        partitionSchema.fields(0).dataType == StringType)
 
       val e3 = intercept[AnalysisException] {
         spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
