@@ -198,10 +198,12 @@ class ExternalAppendOnlyMap[K, V, C](
         currentMap = null
       }
       isSpilled
-    } else {
+    } else if (currentMap.size > 0) {
       spill(currentMap)
       currentMap = new SizeTrackingAppendOnlyMap[K, C]
       true
+    } else {
+      false
     }
   }
 
