@@ -1364,6 +1364,17 @@ class HiveDDLSuite
       assert(partitionSchema.size == 1 && partitionSchema.fields(0).name == "j" &&
         partitionSchema.fields(0).dataType == StringType)
 
+
+      Seq((1, 2, 3)).toDF("i", "j", "k").write.mode("overwrite").format("hive")
+        .partitionBy("k", "j").saveAsTable("t3")
+      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
+      checkAnswer(spark.table("t3"), Row(1, 3, 2) :: Nil)
+
+      Seq((1, 2, 3)).toDF("i", "j", "k").write.mode("overwrite").format("hive")
+        .partitionBy("j", "k").saveAsTable("t3")
+      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
+      checkAnswer(spark.table("t3"), Row(1, 2, 3) :: Nil)
+
       val e3 = intercept[AnalysisException] {
         spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
       }

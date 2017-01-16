@@ -45,6 +45,17 @@ case class CreateHiveTableAsSelectCommand(
   override def innerChildren: Seq[LogicalPlan] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+
+    val oriQueryOutput = query.output
+    val notPartitionOutputs = oriQueryOutput
+      .filterNot(p => tableDesc.partitionColumnNames.exists(_ == p.name))
+    val partitionOutputs = tableDesc.partitionColumnNames.flatMap {
+      p =>
+        oriQueryOutput.filter(_.name == p)
+    }
+    // the relation should move partition-columns to the last
+    val reorderOutputQuery = Project(notPartitionOutputs ++ partitionOutputs, query)
+
     lazy val metastoreRelation: MetastoreRelation = {
       import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
       import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -64,7 +75,7 @@ case class CreateHiveTableAsSelectCommand(
       val withSchema = if (withFormat.schema.isEmpty) {
         // Hive doesn't support specifying the column list for target table in CTAS
         // However we don't think SparkSQL should follow that.
-        tableDesc.copy(schema = query.output.toStructType)
+        tableDesc.copy(schema = reorderOutputQuery.output.toStructType)
       } else {
         withFormat
       }
@@ -76,16 +87,6 @@ case class CreateHiveTableAsSelectCommand(
         case r: MetastoreRelation => r
       }
     }
-
-    val oriQueryOutput = query.output
-
-    val notPartitionOutputs = oriQueryOutput
-      .filterNot(p => tableDesc.partitionColumnNames.contains(p.name))
-
-    val partitionOutputs = oriQueryOutput
-      .filter(p => tableDesc.partitionColumnNames.contains(p.name))
-
-    val reorderOutputQuery = Project(notPartitionOutputs ++ partitionOutputs, query)
 
     // TODO ideally, we should get the output data ready first and then
     // add the relation into catalog, just in case of failure occurs while data
@@ -99,7 +100,8 @@ case class CreateHiveTableAsSelectCommand(
     } else {
       try {
         sparkSession.sessionState.executePlan(InsertIntoTable(
-          metastoreRelation, Map(), reorderOutputQuery, overwrite = true, ifNotExists = false))
+        metastoreRelation, Map(), reorderOutputQuery, overwrite = true
+          , ifNotExists = false))
           .toRdd
       } catch {
         case NonFatal(e) =>

@@ -178,9 +178,11 @@ case class CatalogTable(
     unsupportedFeatures: Seq[String] = Seq.empty,
     tracksPartitionsInCatalog: Boolean = false) {
 
-  /** schema of this table's partition columns */
-  def partitionSchema: StructType = StructType(schema.filter {
-    c => partitionColumnNames.contains(c.name)
+  /** schema of this table's partition columns
+   * keep the schema order with partitionColumnNames
+   */
+  def partitionSchema: StructType = StructType(partitionColumnNames.flatMap {
+    p => schema.filter(_.name == p)
   })
 
   /** Return the database this table was specified to belong to, assuming it exists. */
