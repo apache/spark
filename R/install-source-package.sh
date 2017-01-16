@@ -37,6 +37,12 @@ if [ -z "$VERSION" ]; then
   VERSION=`grep Version $FWDIR/pkg/DESCRIPTION | awk '{print $NF}'`
 fi
 
+if [ ! -f "$FWDIR"/SparkR_"$VERSION".tar.gz ]; then
+  echo -e "R source package file $FWDIR/SparkR_$VERSION.tar.gz is not found."
+  echo -e "Please build R source package with check-cran.sh"
+  exit -1;
+fi
+
 echo "Removing lib path and installing from source package"
 LIB_DIR="$FWDIR/lib"
 rm -rf $LIB_DIR
