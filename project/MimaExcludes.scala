@@ -44,6 +44,9 @@ object MimaExcludes {
 
     // [SPARK-18537] Add a REST api to spark streaming
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.streaming.scheduler.StreamingListener.onStreamingStarted")
+
+    // [SPARK-14272][ML] Evaluate GaussianMixtureModel with LogLikelihood
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.clustering.GaussianMixtureSummary.this")
   )
 
   // Exclude rules for 2.1.x
