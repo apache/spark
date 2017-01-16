@@ -2281,12 +2281,6 @@ class Analyzer(
         "type of the field in the target object")
     }
 
-    private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
-      val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
-      val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
-      toPrecedence > 0 && fromPrecedence > toPrecedence
-    }
-
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p if !p.childrenResolved => p
       case p if p.resolved => p
@@ -2294,19 +2288,11 @@ class Analyzer(
       case p => p transformExpressions {
         case u @ UpCast(child, _, _) if !child.resolved => u
 
-        case UpCast(child, dataType, walkedTypePath) => (child.dataType, dataType) match {
-          case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) =>
-            fail(child, to, walkedTypePath)
-          case (from: DecimalType, to: NumericType) if !from.isTighterThan(to) =>
-            fail(child, to, walkedTypePath)
-          case (from, to) if illegalNumericPrecedence(from, to) =>
-            fail(child, to, walkedTypePath)
-          case (TimestampType, DateType) =>
-            fail(child, DateType, walkedTypePath)
-          case (StringType, to: NumericType) =>
-            fail(child, to, walkedTypePath)
-          case _ => Cast(child, dataType.asNullable)
-        }
+        case UpCast(child, dataType, walkedTypePath)
+          if Cast.mayTruncate(child.dataType, dataType) =>
+          fail(child, dataType, walkedTypePath)
+
+        case UpCast(child, dataType, walkedTypePath) => Cast(child, dataType.asNullable)
       }
     }
   }
