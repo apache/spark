@@ -110,6 +110,36 @@ public class TaskMemoryManagerSuite {
   }
 
   @Test
+  public void cooperativeSpilling2() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
+    TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
+    TestMemoryConsumer c3 = new TestMemoryConsumer(manager);
+
+    c1.use(20);
+    Assert.assertEquals(20, c1.getUsed());
+    c2.use(80);
+    Assert.assertEquals(80, c2.getUsed());
+    c3.use(80);
+    Assert.assertEquals(20, c1.getUsed());  // c1: not spilled
+    Assert.assertEquals(0, c2.getUsed());   // c2: spilled as it uses more memory
+    Assert.assertEquals(80, c3.getUsed());
+
+    c2.use(50);
+    Assert.assertEquals(20, c1.getUsed());  // c1: not spilled
+    Assert.assertEquals(0, c3.getUsed());   // c3: spilled as it uses more memory
+    Assert.assertEquals(50, c2.getUsed());
+
+    c1.free(20);
+    c2.free(50);
+    c3.free(0);
+    Assert.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
   public void shouldNotForceSpillingInDifferentModes() {
     final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
     memoryManager.limit(100);
