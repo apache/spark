@@ -81,12 +81,14 @@
 
 #dag-viz-graph svg.job g.node circle {
   fill: #444;
+  data-html: true;
 }
 
 #dag-viz-graph svg.job g.node.cached circle {
   fill: #A3F545;
   stroke: #52C366;
   stroke-width: 2px;
+  data-html: true;
 }
 
 /* Stage page specific styles */

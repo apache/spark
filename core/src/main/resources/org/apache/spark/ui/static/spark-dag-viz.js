@@ -173,6 +173,7 @@ function renderDagViz(forJob) {
   });
 
   resizeSvg(svg);
+  intepreteLineBreak(svg);
 }
 
 /* Render the RDD DAG visualization on the stage page. */
@@ -362,6 +363,17 @@ function resizeSvg(svg) {
      .attr("height", height);
 }
 
+
+function intepreteLineBreak(svg) {
+    var allTSpan = svg.selectAll("tspan").each(function() {
+        node = d3.select(this);
+        var text = replaceLineBreak(node[0][0].innerHTML);
+        node.text(text);
+    });
+
+}
+
+
 /*
  * (Job page only) Helper function to draw edges that cross stage boundaries.
  * We need to do this manually because we render each stage separately in dagre-d3.
@@ -470,16 +482,23 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
   edgesContainer.append("path").datum(points).attr("d", line);
 }
 
+/* replace /n with <br/> */
+function replaceLineBreak(str) {
+    return str.replace("\\n", "<br/>");
+}
+
+
 /* (Job page only) Helper function to add tooltips for RDDs. */
 function addTooltipsForRDDs(svgContainer) {
   svgContainer.selectAll("g.node").each(function() {
     var node = d3.select(this);
-    var tooltipText = node.attr("name").replace("\\n", "<br/>");
+    var tooltipText = replaceLineBreak(node.attr("name"));
+//    var tooltipText = node.attr("name").replace("\\n", "<br/>");
     if (tooltipText) {
       node.select("circle")
         .attr("data-toggle", "tooltip")
         .attr("data-placement", "bottom")
-        .attr("data-html", "true")
+//        .attr("data-html", "true")
         .attr("title", tooltipText);
     }
     // Link tooltips for all nodes that belong to the same RDD
