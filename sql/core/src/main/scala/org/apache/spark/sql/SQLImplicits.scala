@@ -259,7 +259,7 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
  * Conflicting implicits are placed here to disambiguate resolution.
  *
  * Reasons for including specific implicits:
- * newProductEncoder - to disambiguate for [[List]]s which are both [[Seq]] and [[Product]]
+ * newProductEncoder - to disambiguate for `List`s which are both `Seq` and `Product`
  */
 trait LowPrioritySQLImplicits {
   /** @since 1.6.0 */
