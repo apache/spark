@@ -30,20 +30,28 @@ set -o pipefail
 set -e
 
 FWDIR="$(cd `dirname "${BASH_SOURCE[0]}"`; pwd)"
-LIB_DIR="$FWDIR/lib"
-
-mkdir -p $LIB_DIR
-
 pushd $FWDIR > /dev/null
 . $FWDIR/find-r.sh
 
-. $FWDIR/create-rd.sh
+if [ -z "$VERSION" ]; then
+  VERSION=`grep Version $FWDIR/pkg/DESCRIPTION | awk '{print $NF}'`
+fi
 
-# Install SparkR to $LIB_DIR
-"$R_SCRIPT_PATH/"R CMD INSTALL --library=$LIB_DIR $FWDIR/pkg/
+if [ ! -f "$FWDIR"/SparkR_"$VERSION".tar.gz ]; then
+  echo -e "R source package file $FWDIR/SparkR_$VERSION.tar.gz is not found."
+  echo -e "Please build R source package with check-cran.sh"
+  exit -1;
+fi
+
+echo "Removing lib path and installing from source package"
+LIB_DIR="$FWDIR/lib"
+rm -rf $LIB_DIR
+mkdir -p $LIB_DIR
+"$R_SCRIPT_PATH/"R CMD INSTALL SparkR_"$VERSION".tar.gz --library=$LIB_DIR
 
 # Zip the SparkR package so that it can be distributed to worker nodes on YARN
-cd $LIB_DIR
+pushd $LIB_DIR > /dev/null
 jar cfM "$LIB_DIR/sparkr.zip" SparkR
-
 popd > /dev/null
+
+popd
