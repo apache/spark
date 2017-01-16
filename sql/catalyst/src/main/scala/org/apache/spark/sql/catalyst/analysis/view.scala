@@ -32,7 +32,11 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * child by:
  * 1. Generate the `queryOutput` by:
  *    1.1. If the query column names are defined, map the column names to attributes in the child
- *         output by name;
+ *         output by name(This is mostly for handling view queries like SELECT * FROM ..., the
+ *         schema of the referenced table/view may change after the view has been created, so we
+ *         have to save the output of the query to `viewQueryColumnNames`, and restore them during
+ *         view resolution, in this way, we are able to get the correct view column ordering and
+ *         omit the extra columns that we don't require);
  *    1.2. Else set the child output attributes to `queryOutput`.
  * 2. Map the `queryQutput` to view output by index, if the corresponding attributes don't match,
  *    try to up cast and alias the attribute in `queryOutput` to the attribute in the view output.
@@ -45,23 +49,23 @@ import org.apache.spark.sql.catalyst.rules.Rule
  */
 case class AliasViewChild(conf: CatalystConf) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case v @ View(desc, output, child) if child.resolved =>
+    case v @ View(desc, output, child) if child.resolved && output != child.output =>
       val resolver = conf.resolver
       val queryColumnNames = desc.viewQueryColumnNames
-      // If the view output doesn't have the same number of columns with the child output and the
-      // query column names, throw an AnalysisException.
-      if (output.length != child.output.length && output.length != queryColumnNames.length) {
-        throw new AnalysisException(
-          s"The view output ${output.mkString("[", ",", "]")} doesn't have the same number of " +
-            s"columns with the child output ${child.output.mkString("[", ",", "]")}")
-      }
-      // If the child output is the same with the view output, we don't need to generate the query
-      // output again.
-      val queryOutput = if (queryColumnNames.nonEmpty && output != child.output) {
+      val queryOutput = if (queryColumnNames.nonEmpty) {
+        // If the view output doesn't have the same number of columns with the query column names,
+        // throw an AnalysisException.
+        if (output.length != queryColumnNames.length) {
+          throw new AnalysisException(
+            s"The view output ${output.mkString("[", ",", "]")} doesn't have the same number of " +
+              s"columns with the query column names ${queryColumnNames.mkString("[", ",", "]")}")
+        }
         desc.viewQueryColumnNames.map { colName =>
           findAttributeByName(colName, child.output, resolver)
         }
       } else {
+        // For view created before Spark 2.2.0, the view text is already fully qualified, the plan
+        // output is the same with the view output.
         child.output
       }
       // Map the attributes in the query output to the attributes in the view output by index.
