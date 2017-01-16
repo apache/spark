@@ -1314,11 +1314,24 @@ class HiveDDLSuite
         .write.format("hive").option("fileFormat", "avro").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a"))
 
-      Seq(10 -> "y").toDF("i", "j")
-        .write.format("hive").mode("append").option("fileFormat", "avro").saveAsTable("t")
-      checkAnswer(spark.table("t"), Row(1, "a") :: Row(10, "y") :: Nil)
+      Seq("c" -> 1).toDF("i", "j").write.format("hive")
+        .mode(SaveMode.Overwrite).option("fileFormat", "parquet").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row("c", 1))
 
-      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      var table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      assert(DDLUtils.isHiveTable(table))
+      assert(table.storage.inputFormat ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
+      assert(table.storage.outputFormat ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+      assert(table.storage.serde ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+
+      Seq(9 -> "x").toDF("i", "j")
+        .write.format("hive").mode(SaveMode.Overwrite).option("fileFormat", "avro").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row(9, "x"))
+
+      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
       assert(DDLUtils.isHiveTable(table))
       assert(table.storage.inputFormat ==
         Some("org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat"))
@@ -1328,7 +1341,16 @@ class HiveDDLSuite
         Some("org.apache.hadoop.hive.serde2.avro.AvroSerDe"))
 
       sql("INSERT INTO t SELECT 2, 'b'")
-      checkAnswer(spark.table("t"), Row(1, "a") :: Row(10, "y") :: Row(2, "b") :: Nil)
+      checkAnswer(spark.table("t"), Row(9, "x") :: Row(2, "b") :: Nil)
+
+      Seq(10 -> "y").toDF("i", "j")
+        .write.format("hive").mode("append").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row(9, "x") :: Row(2, "b") :: Row(10, "y") :: Nil)
+
+      Seq("y" -> 10).toDF("i", "j")
+        .write.format("hive").mode("append").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row(9, "x") :: Row(2, "b")
+        :: Row(10, "y") :: Row(null, "10") :: Nil)
 
       val e = intercept[AnalysisException] {
         Seq(1 -> "a").toDF("i", "j").write.format("hive").partitionBy("i").saveAsTable("t2")
@@ -1344,10 +1366,8 @@ class HiveDDLSuite
       val e3 = intercept[AnalysisException] {
         spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
       }
-      assert(e3.message.contains(
-        "CTAS for hive serde tables does not support overwrite semantics"))
 
-
+      assert(e3.message.contains("Cannot overwrite table default.t that is also being read from"))
     }
   }
 

@@ -109,14 +109,6 @@ private[hive] trait HiveStrategies {
           table, partition, planLater(child), overwrite, ifNotExists) :: Nil
 
       case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
-        // Currently we will never hit this branch, as SQL string API can only use `Ignore` or
-        // `ErrorIfExists` mode, and `DataFrameWriter.saveAsTable` doesn't support hive serde
-        // tables yet.
-        if (mode == SaveMode.Overwrite) {
-          throw new AnalysisException(
-            "CTAS for hive serde tables does not support overwrite semantics.")
-        }
-
         val dbName = tableDesc.identifier.database.getOrElse(sparkSession.catalog.currentDatabase)
         val cmd = CreateHiveTableAsSelectCommand(
           tableDesc.copy(identifier = tableDesc.identifier.copy(database = Some(dbName))),

@@ -175,6 +175,10 @@ setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "charact
 #' @param k number of centers.
 #' @param maxIter maximum iteration number.
 #' @param initMode the initialization algorithm choosen to fit the model.
+#' @param seed the random seed for cluster initialization.
+#' @param initSteps the number of steps for the k-means|| initialization mode.
+#'                  This is an advanced setting, the default of 2 is almost always enough. Must be > 0.
+#' @param tol convergence tolerance of iterations.
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.kmeans} returns a fitted k-means model.
 #' @rdname spark.kmeans
@@ -204,11 +208,16 @@ setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "charact
 #' @note spark.kmeans since 2.0.0
 #' @seealso \link{predict}, \link{read.ml}, \link{write.ml}
 setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, k = 2, maxIter = 20, initMode = c("k-means||", "random")) {
+          function(data, formula, k = 2, maxIter = 20, initMode = c("k-means||", "random"),
+                   seed = NULL, initSteps = 2, tol = 1E-4) {
             formula <- paste(deparse(formula), collapse = "")
             initMode <- match.arg(initMode)
+            if (!is.null(seed)) {
+              seed <- as.character(as.integer(seed))
+            }
             jobj <- callJStatic("org.apache.spark.ml.r.KMeansWrapper", "fit", data@sdf, formula,
-                                as.integer(k), as.integer(maxIter), initMode)
+                                as.integer(k), as.integer(maxIter), initMode, seed,
+                                as.integer(initSteps), as.numeric(tol))
             new("KMeansModel", jobj = jobj)
           })
 
