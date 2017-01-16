@@ -224,7 +224,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val actual = new GaussianMixture().setK(2).setSeed(seed).fit(rDataset)
     modelEquals(expected, actual)
 
-    val llk = expected.computeLogLikelihood(rDataset)
+    val llk = actual.summary.logLikelihood
     assert(llk ~== -46.89499 absTol 1E-5)
   }
 

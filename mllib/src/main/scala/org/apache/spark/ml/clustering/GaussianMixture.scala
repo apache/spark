@@ -130,25 +130,6 @@ class GaussianMixtureModel private[ml] (
   }
 
   /**
-   * Return the total log-likelihood for this model on the given data.
-   */
-  @Since("2.2.0")
-  def computeLogLikelihood(dataset: Dataset[_]): Double = {
-    SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
-    val spark = dataset.sparkSession
-    import spark.implicits._
-
-    val bcWeightAndDists = spark.sparkContext.broadcast(weights.zip(gaussians))
-    dataset.select(col($(featuresCol))).map {
-      case Row(feature: Vector) =>
-        val likelihood = bcWeightAndDists.value.map {
-          case (weight, dist) => EPSILON + weight * dist.pdf(feature)
-        }.sum
-        math.log(likelihood)
-    }.reduce(_ + _)
-  }
-
-  /**
    * Retrieve Gaussian distributions as a DataFrame.
    * Each row represents a Gaussian Distribution.
    * Two columns are defined: mean and cov.
@@ -435,7 +416,7 @@ class GaussianMixture @Since("2.0.0") (
 
     val model = copyValues(new GaussianMixtureModel(uid, weights, gaussianDists)).setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
-      $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
+      $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood)
     model.setSummary(Some(summary))
     instr.logSuccess(model)
     model
@@ -693,6 +674,7 @@ private class ExpectationAggregator(
  *                        in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
+ * @param logLikelihood  Total log-likelihood for this model on the given data.
  */
 @Since("2.0.0")
 @Experimental
@@ -701,7 +683,9 @@ class GaussianMixtureSummary private[clustering] (
     predictionCol: String,
     @Since("2.0.0") val probabilityCol: String,
     featuresCol: String,
-    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
+    k: Int,
+    @Since("2.2.0") val logLikelihood: Double)
+  extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
 
   /**
    * Probability of each cluster.

@@ -281,6 +281,14 @@ class GaussianMixtureSummary(ClusteringSummary):
         """
         return self._call_java("probability")
 
+    @property
+    @since("2.2.0")
+    def logLikelihood(self):
+        """
+        Total log-likelihood for this model on the given data.
+        """
+        return self._call_java("logLikelihood")
+
 
 class KMeansSummary(ClusteringSummary):
     """
