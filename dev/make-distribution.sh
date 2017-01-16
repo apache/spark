@@ -232,14 +232,17 @@ if [ "$MAKE_R" == "true" ]; then
   R_PACKAGE_VERSION=`grep Version $SPARK_HOME/R/pkg/DESCRIPTION | awk '{print $NF}'`
   pushd "$SPARK_HOME/R" > /dev/null
   # Build source package and run full checks
-  # Install source package to get it to generate vignettes, etc.
   # Do not source the check-cran.sh - it should be run from where it is for it to set SPARK_HOME
-  NO_TESTS=1 CLEAN_INSTALL=1 "$SPARK_HOME/"R/check-cran.sh
+  NO_TESTS=1 "$SPARK_HOME/"R/check-cran.sh
+
   # Move R source package to match the Spark release version if the versions are not the same.
   # NOTE(shivaram): `mv` throws an error on Linux if source and destination are same file
   if [ "$R_PACKAGE_VERSION" != "$VERSION" ]; then
     mv $SPARK_HOME/R/SparkR_"$R_PACKAGE_VERSION".tar.gz $SPARK_HOME/R/SparkR_"$VERSION".tar.gz
   fi
+
+  # Install source package to get it to generate vignettes rds files, etc.
+  VERSION=$VERSION "$SPARK_HOME/"R/install-source-package.sh
   popd > /dev/null
 else
   echo "Skipping building R source package"
