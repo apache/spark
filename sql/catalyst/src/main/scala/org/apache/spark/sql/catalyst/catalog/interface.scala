@@ -183,11 +183,15 @@ case class CatalogTable(
 
   import CatalogTable._
 
-  /** schema of this table's partition columns
+  /**
+   * schema of this table's partition columns
    * keep the schema order with partitionColumnNames
    */
-  def partitionSchema: StructType = StructType(partitionColumnNames.flatMap {
-    p => schema.filter(_.name == p)
+  def partitionSchema: StructType = StructType(partitionColumnNames.map {
+    p => schema.find(_.name == p).getOrElse(
+      throw new AnalysisException(s"Partition column [$p] " +
+        s"did not exist in schema ${schema.toString}")
+    )
   })
 
   /** Return the database this table was specified to belong to, assuming it exists. */

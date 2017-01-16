@@ -96,14 +96,8 @@ private[hive] case class MetastoreRelation(
       catalogTable.partitionColumnNames.contains(c.getName)
     }
 
-    // keep the schema order with catalogTable.partitionColumnNames
-    val reorderPartCols = catalogTable.partitionColumnNames.flatMap {
-      p =>
-        partCols.filter(_.getName == p)
-    } ++ partCols.filterNot(p => catalogTable.partitionColumnNames.contains(p.getName))
-
     sd.setCols(schema.asJava)
-    tTable.setPartitionKeys(reorderPartCols.asJava)
+    tTable.setPartitionKeys(partCols.asJava)
 
     catalogTable.storage.locationUri.foreach(sd.setLocation)
     catalogTable.storage.inputFormat.foreach(sd.setInputFormat)

@@ -1348,32 +1348,35 @@ class HiveDDLSuite
       }
       assert(e2.message.contains("Creating bucketed Hive serde table is not supported yet"))
 
-      spark.sql("set hive.exec.dynamic.partition.mode=nonstrict")
-      Seq(10 -> "y").toDF("i", "j").write.format("hive").partitionBy("i").saveAsTable("t3")
-      checkAnswer(spark.table("t3"), Row("y", 10) :: Nil)
-      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
-      var partitionSchema = table.partitionSchema
-      assert(partitionSchema.size == 1 && partitionSchema.fields(0).name == "i" &&
-        partitionSchema.fields(0).dataType == IntegerType)
+      try {
+        spark.sql("set hive.exec.dynamic.partition.mode=nonstrict")
+        Seq(10 -> "y").toDF("i", "j").write.format("hive").partitionBy("i").saveAsTable("t3")
+        checkAnswer(spark.table("t3"), Row("y", 10) :: Nil)
+        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
+        var partitionSchema = table.partitionSchema
+        assert(partitionSchema.size == 1 && partitionSchema.fields(0).name == "i" &&
+          partitionSchema.fields(0).dataType == IntegerType)
 
-      Seq(11 -> "z").toDF("i", "j").write.mode("overwrite").format("hive")
-        .partitionBy("j").saveAsTable("t3")
-      checkAnswer(spark.table("t3"), Row(11, "z") :: Nil)
-      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
-      partitionSchema = table.partitionSchema
-      assert(partitionSchema.size == 1 && partitionSchema.fields(0).name == "j" &&
-        partitionSchema.fields(0).dataType == StringType)
+        Seq(11 -> "z").toDF("i", "j").write.mode("overwrite").format("hive")
+          .partitionBy("j").saveAsTable("t3")
+        checkAnswer(spark.table("t3"), Row(11, "z") :: Nil)
+        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
+        partitionSchema = table.partitionSchema
+        assert(partitionSchema.size == 1 && partitionSchema.fields(0).name == "j" &&
+          partitionSchema.fields(0).dataType == StringType)
 
+        Seq((1, 2, 3)).toDF("i", "j", "k").write.mode("overwrite").format("hive")
+          .partitionBy("k", "j").saveAsTable("t3")
+        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
+        checkAnswer(spark.table("t3"), Row(1, 3, 2) :: Nil)
 
-      Seq((1, 2, 3)).toDF("i", "j", "k").write.mode("overwrite").format("hive")
-        .partitionBy("k", "j").saveAsTable("t3")
-      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
-      checkAnswer(spark.table("t3"), Row(1, 3, 2) :: Nil)
-
-      Seq((1, 2, 3)).toDF("i", "j", "k").write.mode("overwrite").format("hive")
-        .partitionBy("j", "k").saveAsTable("t3")
-      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
-      checkAnswer(spark.table("t3"), Row(1, 2, 3) :: Nil)
+        Seq((1, 2, 3)).toDF("i", "j", "k").write.mode("overwrite").format("hive")
+          .partitionBy("j", "k").saveAsTable("t3")
+        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
+        checkAnswer(spark.table("t3"), Row(1, 2, 3) :: Nil)
+      } finally {
+        spark.sql("set hive.exec.dynamic.partition.mode=strict")
+      }
 
       val e3 = intercept[AnalysisException] {
         spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")

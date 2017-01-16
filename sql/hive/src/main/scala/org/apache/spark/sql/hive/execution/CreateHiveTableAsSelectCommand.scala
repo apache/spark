@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, Project}
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.hive.MetastoreRelation
@@ -46,15 +47,23 @@ case class CreateHiveTableAsSelectCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
 
-    val oriQueryOutput = query.output
-    val notPartitionOutputs = oriQueryOutput
-      .filterNot(p => tableDesc.partitionColumnNames.exists(_ == p.name))
-    val partitionOutputs = tableDesc.partitionColumnNames.flatMap {
-      p =>
-        oriQueryOutput.filter(_.name == p)
+    // relation should move partition columns to the last
+    val (partOutputs, nonPartOutputs) = query.output.partition {
+      a =>
+        tableDesc.partitionColumnNames.contains(a.name)
     }
-    // the relation should move partition-columns to the last
-    val reorderOutputQuery = Project(notPartitionOutputs ++ partitionOutputs, query)
+
+    // the CTAS's SELECT partition-outputs order should be consistent with
+    // tableDesc.partitionColumnNames
+    val reorderPartOutputs = tableDesc.partitionColumnNames.map {
+            p =>
+              partOutputs.find(_.name == p).getOrElse(
+                new AnalysisException(s"Partition column[$p] does not exist " +
+                  s"in query output partition").asInstanceOf[NamedExpression]
+              )
+          }
+
+    val reorderOutputQuery = Project(nonPartOutputs ++ reorderPartOutputs, query)
 
     lazy val metastoreRelation: MetastoreRelation = {
       import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
