@@ -36,8 +36,10 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
 
   def toEdgePartition: EdgePartition[ED, VD] = {
     val edgeArray = edges.trim().array
-    new Sorter(Edge.edgeArraySortDataFormat[ED])
-      .sort(edgeArray, 0, edgeArray.length, Edge.lexicographicOrdering)
+    val sorter = new Sorter(Edge.edgeArraySortDataFormat[ED])
+    if (!sorter.isSorted(edgeArray, 0, edgeArray.length, Edge.lexicographicOrdering)) {
+      sorter.sort(edgeArray, 0, edgeArray.length, Edge.lexicographicOrdering)
+    }
     val localSrcIds = new Array[Int](edgeArray.length)
     val localDstIds = new Array[Int](edgeArray.length)
     val data = new Array[ED](edgeArray.length)
@@ -96,8 +98,10 @@ class ExistingEdgePartitionBuilder[
 
   def toEdgePartition: EdgePartition[ED, VD] = {
     val edgeArray = edges.trim().array
-    new Sorter(EdgeWithLocalIds.edgeArraySortDataFormat[ED])
-      .sort(edgeArray, 0, edgeArray.length, EdgeWithLocalIds.lexicographicOrdering)
+    val sorter = new Sorter(EdgeWithLocalIds.edgeArraySortDataFormat[ED])
+    if (!sorter.isSorted(edgeArray, 0, edgeArray.length, EdgeWithLocalIds.lexicographicOrdering)) {
+      sorter.sort(edgeArray, 0, edgeArray.length, EdgeWithLocalIds.lexicographicOrdering)
+    }
     val localSrcIds = new Array[Int](edgeArray.length)
     val localDstIds = new Array[Int](edgeArray.length)
     val data = new Array[ED](edgeArray.length)

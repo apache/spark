@@ -26,6 +26,15 @@ import org.apache.spark.util.random.XORShiftRandom
 
 class SorterSuite extends SparkFunSuite with Logging {
 
+  test("Check array is sorted") {
+    val rand = new XORShiftRandom(123)
+    val data0 = Array.tabulate[Int](10000) { i => i}
+    assert(new Sorter(new IntArraySortDataFormat).isSorted(data0, 0, data0.length, Ordering.Int))
+
+    val data1 = Array.tabulate[Int](10000) { i => rand.nextInt()}
+    assert(!new Sorter(new IntArraySortDataFormat).isSorted(data1, 0, data1.length, Ordering.Int))
+  }
+
   test("equivalent to Arrays.sort") {
     val rand = new XORShiftRandom(123)
     val data0 = Array.tabulate[Int](10000) { i => rand.nextInt() }
