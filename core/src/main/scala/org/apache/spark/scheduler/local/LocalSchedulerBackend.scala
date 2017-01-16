@@ -21,6 +21,8 @@ import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
@@ -28,7 +30,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.abortTaskSetManager
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.util.RpcUtils
 
 private case class ReviveOffers()
 
@@ -58,6 +62,7 @@ private[spark] class LocalEndpoint(
 
   private val executor = new Executor(
     localExecutorId, localExecutorHostname, SparkEnv.get, userClassPath, isLocal = true)
+  private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(SparkEnv.get.conf)
 
   override def receive: PartialFunction[Any, Unit] = {
     case ReviveOffers =>
@@ -82,9 +87,22 @@ private[spark] class LocalEndpoint(
 
   def reviveOffers() {
     val offers = IndexedSeq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
-    for (task <- scheduler.resourceOffers(offers).flatten) {
-      freeCores -= scheduler.CPUS_PER_TASK
-      executor.launchTask(executorBackend, task, task.serializedTask)
+    val serializedTasks = scheduler.resourceOffers(offers).flatten.map { task =>
+      var serializedTask: ByteBuffer = null
+      try {
+        serializedTask = task.serializedTask
+      } catch {
+        case NonFatal(e) =>
+          abortTaskSetManager(scheduler, task.taskId,
+            s"Failed to serialize task ${task.taskId}, not attempting to retry it.", Some(e))
+      }
+      (task, serializedTask)
+    }
+    if (!serializedTasks.exists(b => b._2 eq null)) {
+      for ((taskDesc, serializedTask) <- serializedTasks) {
+        freeCores -= scheduler.CPUS_PER_TASK
+        executor.launchTask(executorBackend, taskDesc, serializedTask)
+      }
     }
   }
 }

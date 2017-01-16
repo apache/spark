@@ -52,7 +52,7 @@ class TaskDescriptionSuite extends SparkFunSuite {
     )
 
     val serializedTaskDescription = TaskDescription.encode(originalTaskDescription, taskBuffer)
-    val (decodedTaskDescription, _) = TaskDescription.decode(serializedTaskDescription)
+    val (decodedTaskDescription, serializedTask) = TaskDescription.decode(serializedTaskDescription)
 
     // Make sure that all of the fields in the decoded task description match the original.
     assert(decodedTaskDescription.taskId === originalTaskDescription.taskId)
@@ -63,6 +63,6 @@ class TaskDescriptionSuite extends SparkFunSuite {
     assert(decodedTaskDescription.addedFiles.equals(originalFiles))
     assert(decodedTaskDescription.addedJars.equals(originalJars))
     assert(decodedTaskDescription.properties.equals(originalTaskDescription.properties))
-    assert(decodedTaskDescription.serializedTask.equals(taskBuffer))
+    assert(serializedTask.equals(taskBuffer))
   }
 }

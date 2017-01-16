@@ -85,12 +85,12 @@ private[spark] class MesosExecutorBackend
   }
 
   override def launchTask(d: ExecutorDriver, taskInfo: TaskInfo) {
-    val taskDescription = TaskDescription.decode(taskInfo.getData.asReadOnlyByteBuffer())
+    val (taskDesc, serializedTask) = TaskDescription.decode(taskInfo.getData.asReadOnlyByteBuffer())
     if (executor == null) {
       logError("Received launchTask but executor was null")
     } else {
       SparkHadoopUtil.get.runAsSparkUser { () =>
-        executor.launchTask(this, taskDescription)
+        executor.launchTask(this, taskDesc, serializedTask)
       }
     }
   }

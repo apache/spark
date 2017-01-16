@@ -255,8 +255,7 @@ class MesosFineGrainedSchedulerBackendSuite
       index = 0,
       addedFiles = mutable.Map.empty[String, Long],
       addedJars = mutable.Map.empty[String, Long],
-      properties = new Properties(),
-      ByteBuffer.wrap(new Array[Byte](0)))
+      properties = new Properties())
     when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))
     when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
 
@@ -363,8 +362,7 @@ class MesosFineGrainedSchedulerBackendSuite
       index = 0,
       addedFiles = mutable.Map.empty[String, Long],
       addedJars = mutable.Map.empty[String, Long],
-      properties = new Properties(),
-      ByteBuffer.wrap(new Array[Byte](0)))
+      properties = new Properties())
     when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))
     when(taskScheduler.CPUS_PER_TASK).thenReturn(1)
 
