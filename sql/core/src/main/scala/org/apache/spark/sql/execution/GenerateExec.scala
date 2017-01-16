@@ -160,24 +160,17 @@ case class GenerateExec(
 
     // Generate looping variables.
     val index = ctx.freshName("index")
-    val numElements = ctx.freshName("numElements")
-
-    // In case of outer=true we need to make sure the loop is executed at-least once when the
-    // array/map contains no input.
-    // generateOuter is an int. it is set to 1 iff outer is true and the input is empty or null.
-    val generateOuter = ctx.freshName("generateOuter")
-    val isOuter = if (outer) {
-      "true"
-    } else {
-      "false"
-    }
 
     // Add a check if the generate outer flag is true.
-    val checks = optionalCode(outer, s"($generateOuter == 1)")
+    val checks = optionalCode(outer, s"($index == -1)")
 
     // Add position
     val position = if (e.position) {
-      Seq(ExprCode("", "false", index))
+      if (outer) {
+        Seq(ExprCode("", s"$index == -1", index))
+      } else {
+        Seq(ExprCode("", "false", index))
+      }
     } else {
       Seq.empty
     }
@@ -210,13 +203,21 @@ case class GenerateExec(
         (initArrayData, "", values)
     }
 
+    // In case of outer=true we need to make sure the loop is executed at-least once when the
+    // array/map contains no input. We do this by setting the looping index to -1 if there is no
+    // input, evaluation of the array is prevented by a check in the accessor code.
+    val numElements = ctx.freshName("numElements")
+    val init = if (outer) {
+      s"$numElements == 0 ? -1 : 0"
+    } else {
+      "0"
+    }
     val numOutput = metricTerm(ctx, "numOutputRows")
     s"""
        |${data.code}
        |$initMapData
        |int $numElements = ${data.isNull} ? 0 : ${data.value}.numElements();
-       |int $generateOuter = ($numElements == 0 && $isOuter) ? 1 : 0;
-       |for (int $index = 0; $index < $numElements + $generateOuter; $index++) {
+       |for (int $index = $init; $index < $numElements; $index++) {
        |  $numOutput.add(1);
        |  $updateRowData
        |  ${consume(ctx, input ++ position ++ values)}

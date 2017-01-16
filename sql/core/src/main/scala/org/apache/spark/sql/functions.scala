@@ -2877,7 +2877,7 @@ object functions {
    * @group collection_funcs
    * @since 2.2.0
    */
-  def outer_explode(e: Column): Column = withExpr { new OuterExplode(e.expr) }
+  def explode_outer(e: Column): Column = withExpr { GeneratorOuter(Explode(e.expr)) }
 
   /**
    * Creates a new row for each element with position in the given array or map column.
@@ -2894,7 +2894,7 @@ object functions {
    * @group collection_funcs
    * @since 2.2.0
    */
-  def outer_posexplode(e: Column): Column = withExpr { new OuterPosExplode(e.expr) }
+  def posexplode_outer(e: Column): Column = withExpr { GeneratorOuter(PosExplode(e.expr)) }
 
   /**
    * Extracts json object from a json string based on json path specified, and returns json string

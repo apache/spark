@@ -104,7 +104,10 @@ case class Generate(
   def qualifiedGeneratorOutput: Seq[Attribute] = qualifier.map { q =>
     // prepend the new qualifier to the existed one
     generatorOutput.map(a => a.withQualifier(Some(q)))
-  }.getOrElse(generatorOutput)
+  }.getOrElse(generatorOutput).map {
+    // if outer, make all attributes nullable, otherwise keep existing nullability
+    a => a.withNullability(outer || a.nullable)
+  }
 
   def output: Seq[Attribute] = {
     if (join) child.output ++ qualifiedGeneratorOutput else qualifiedGeneratorOutput

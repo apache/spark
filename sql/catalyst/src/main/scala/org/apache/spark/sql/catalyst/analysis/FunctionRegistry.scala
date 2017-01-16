@@ -163,9 +163,11 @@ object FunctionRegistry {
     expression[Abs]("abs"),
     expression[Coalesce]("coalesce"),
     expression[Explode]("explode"),
+    expressionGeneratorOuter[Explode]("explode_outer"),
     expression[Greatest]("greatest"),
     expression[If]("if"),
     expression[Inline]("inline"),
+    expressionGeneratorOuter[Inline]("inline_outer"),
     expression[IsNaN]("isnan"),
     expression[IfNull]("ifnull"),
     expression[IsNull]("isnull"),
@@ -175,10 +177,8 @@ object FunctionRegistry {
     expression[NullIf]("nullif"),
     expression[Nvl]("nvl"),
     expression[Nvl2]("nvl2"),
-    expression[OuterExplode]("outer_explode"),
-    expression[OuterInline]("outer_inline"),
-    expression[OuterPosExplode]("outer_posexplode"),
     expression[PosExplode]("posexplode"),
+    expressionGeneratorOuter[PosExplode]("posexplode_outer"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[Stack]("stack"),
@@ -510,5 +510,13 @@ object FunctionRegistry {
     } else {
       new ExpressionInfo(clazz.getCanonicalName, name)
     }
+  }
+  private def expressionGeneratorOuter[T <: Generator : ClassTag]
+    (name: String): (String, (ExpressionInfo, FunctionBuilder)) = {
+    val regularGen = expression[T](name)
+    val outerBuilder = (args: Seq[Expression]) => {
+      GeneratorOuter(regularGen._2._2(args).asInstanceOf[Generator])
+    }
+    (name, (expressionInfo[GeneratorOuter](name), outerBuilder))
   }
 }

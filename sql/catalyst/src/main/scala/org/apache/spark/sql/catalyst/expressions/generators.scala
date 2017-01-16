@@ -244,11 +244,11 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
       if (position) {
         new StructType()
           .add("pos", IntegerType, nullable = false)
-          .add("key", kt, nullable = true)
+          .add("key", kt, nullable = false)
           .add("value", vt, valueContainsNull)
       } else {
         new StructType()
-          .add("key", kt, nullable = true)
+          .add("key", kt, nullable = false)
           .add("value", vt, valueContainsNull)
       }
   }
@@ -311,7 +311,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
 case class Explode(child: Expression) extends ExplodeBase {
   override val position: Boolean = false
 }
-class OuterExplode(child: Expression) extends GeneratorOuter(Explode(child))
+
 /**
  * Given an input array produces a sequence of rows for each position and value in the array.
  *
@@ -334,7 +334,7 @@ class OuterExplode(child: Expression) extends GeneratorOuter(Explode(child))
 case class PosExplode(child: Expression) extends ExplodeBase {
   override val position = true
 }
-class OuterPosExplode(child: Expression) extends GeneratorOuter(PosExplode(child))
+
 /**
  * Explodes an array of structs into a table.
  */
@@ -380,5 +380,3 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
     child.genCode(ctx)
   }
 }
-
-class OuterInline(child: Expression) extends GeneratorOuter(Inline(child))

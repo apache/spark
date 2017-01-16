@@ -1619,8 +1619,13 @@ class Analyzer(
       case _ => expr
     }
 
-    /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
     private object AliasedGenerator {
+      /**
+       * Extracts a [[Generator]] expression, any names assigned by aliases to the outputs
+       * and the outer flag. The outer flag is used when joining the generator output.
+       * @param e the [[Expression]]
+       * @return (the [[Generator]], seq of output names, outer flag)
+       */
       def unapply(e: Expression): Option[(Generator, Seq[String], Boolean)] = e match {
         case Alias(GeneratorOuter(g: Generator), name) if g.resolved => Some((g, name :: Nil, true))
         case MultiAlias(GeneratorOuter(g: Generator), names) if g.resolved => Some(g, names, true)
@@ -1646,6 +1651,7 @@ class Analyzer(
         var resolvedGenerator: Generate = null
 
         val newProjectList = projectList.flatMap {
+
           case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
             // It's a sanity check, this should not happen as the previous case will throw
             // exception earlier.
