@@ -90,7 +90,7 @@ object Cast {
   }
 
   /**
-   * Return true iff we can cast `from` type to `to` type without truncate. e.g. long -> int,
+   * Return false iff we may truncate during casting `from` type to `to` type. e.g. long -> int,
    * timestamp -> date.
    */
   def canUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
@@ -99,7 +99,7 @@ object Cast {
     case (from, to) if illegalNumericPrecedence(from, to) => false
     case (TimestampType, DateType) => false
     case (StringType, to: NumericType) => false
-    case _ => canCast(from, to)
+    case _ => true
   }
 
   private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
