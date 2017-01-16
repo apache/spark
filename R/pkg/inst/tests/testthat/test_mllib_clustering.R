@@ -154,8 +154,8 @@ test_that("spark.lda with libsvm", {
   expect_true(logPerplexity >= 0 & is.finite(logPerplexity))
   expect_equal(vocabSize, 11)
   expect_true(is.null(vocabulary))
-  expect_true(trainingLogLikelihood <= 0 & !is.nan(trainingLogLikelihood))
-  expect_true(logPrior <= 0 & !is.nan(logPrior))
+  expect_true(trainingLogLikelihood <= 0 & !is.na(trainingLogLikelihood))
+  expect_true(logPrior <= 0 & !is.na(logPrior))
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-lda", fileext = ".tmp")
