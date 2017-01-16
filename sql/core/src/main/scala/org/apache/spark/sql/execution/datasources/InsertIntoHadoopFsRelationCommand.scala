@@ -92,7 +92,7 @@ case class InsertIntoHadoopFsRelationCommand(
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
       case (SaveMode.Overwrite, true) =>
-        deleteMatchingPrefix(fs, qualifiedOutputPath, customPartitionLocations)
+        deleteMatchingPaths(fs, qualifiedOutputPath, customPartitionLocations)
         true
       case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
         true
@@ -159,7 +159,7 @@ case class InsertIntoHadoopFsRelationCommand(
    * Partitions with custom locations are also cleared
    * based on the custom locations map given to this class.
    */
-  private def deleteMatchingPrefix(
+  private def deleteMatchingPaths(
       fs: FileSystem,
       qualifiedOutputPath: Path,
       customPartitionLocations: Map[TablePartitionSpec, String]): Unit = {
