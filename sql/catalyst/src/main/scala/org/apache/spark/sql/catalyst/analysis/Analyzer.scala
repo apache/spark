@@ -2279,7 +2279,8 @@ class Analyzer(
       case p => p transformExpressions {
         case u @ UpCast(child, _, _) if !child.resolved => u
 
-        case UpCast(child, dataType, walkedTypePath) if Cast.mayTruncate(child.dataType, dataType) =>
+        case UpCast(child, dataType, walkedTypePath)
+          if Cast.mayTruncate(child.dataType, dataType) =>
           fail(child, dataType, walkedTypePath)
 
         case UpCast(child, dataType, walkedTypePath) => Cast(child, dataType.asNullable)
