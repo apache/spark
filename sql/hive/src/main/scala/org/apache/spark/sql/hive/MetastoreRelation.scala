@@ -95,7 +95,6 @@ private[hive] case class MetastoreRelation(
     val (partCols, schema) = catalogTable.schema.map(toHiveColumn).partition { c =>
       catalogTable.partitionColumnNames.contains(c.getName)
     }
-
     sd.setCols(schema.asJava)
     tTable.setPartitionKeys(partCols.asJava)
 
