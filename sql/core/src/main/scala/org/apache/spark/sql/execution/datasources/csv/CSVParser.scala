@@ -75,7 +75,6 @@ private[csv] class LineCsvWriter(
   format.setDelimiter(params.delimiter)
   format.setQuote(params.quote)
   format.setQuoteEscape(params.escape)
-  format.setComment(params.comment)
 
   writerSettings.setNullValue(params.nullValue)
   writerSettings.setEmptyValue(params.nullValue)
