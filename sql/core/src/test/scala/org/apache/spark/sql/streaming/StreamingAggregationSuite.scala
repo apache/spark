@@ -19,17 +19,26 @@ package org.apache.spark.sql.streaming
 
 import java.util.TimeZone
 
+import scala.collection.mutable
+import scala.reflect.runtime.{universe => ru}
+
+import org.apache.hadoop.conf.Configuration
+import org.mockito.Mockito
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.PrivateMethodTester._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.OutputMode._
+import org.apache.spark.sql.types._
 
 object FailureSinglton {
   var firstTime = true
@@ -334,5 +343,68 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
       AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
       CheckLastBatch((90L, 1), (100L, 1), (105L, 1))
     )
+  }
+
+  test("abort StateStore in case of error") {
+    quietly {
+      val inputData = MemoryStream[Long]
+      val aggregated =
+        inputData.toDS()
+          .groupBy($"value")
+          .agg(count("*"))
+      var aborted = false
+      testStream(aggregated, Complete)(
+        // This whole `AssertOnQuery` is used to inject a mock state store
+        AssertOnQuery(execution => {
+          // (1) Use reflection to get `StateStore.loadedProviders`
+          val loadedProviders = {
+            val field = ru.typeOf[StateStore.type].decl(ru.TermName("loadedProviders")).asTerm
+            ru.runtimeMirror(StateStore.getClass.getClassLoader)
+              .reflect(StateStore)
+              .reflectField(field)
+              .get
+              .asInstanceOf[mutable.HashMap[StateStoreId, StateStoreProvider]]
+          }
+          // (2) Make a storeId
+          val storeId = {
+            val checkpointLocation =
+              execution invokePrivate PrivateMethod[String]('checkpointFile)("state")
+            StateStoreId(checkpointLocation, 0L, 0)
+          }
+          // (3) Make `mockStore` and `mockProvider`
+          val (mockStore, mockProvider) = {
+            val keySchema = StructType(Seq(
+              StructField("value", LongType, false)))
+            val valueSchema = StructType(Seq(
+              StructField("value", LongType, false), StructField("count", LongType, false)))
+            val storeConf = StateStoreConf.empty
+            val hadoopConf = new Configuration
+            (Mockito.spy(
+              StateStore.get(storeId, keySchema, valueSchema, version = 0, storeConf, hadoopConf)),
+              Mockito.spy(loadedProviders.get(storeId).get))
+          }
+          // (4) Setup `mockStore` and `mockProvider`
+          Mockito.doAnswer(new Answer[Long] {
+            override def answer(invocationOnMock: InvocationOnMock): Long = {
+              sys.error("injected error on commit()")
+            }
+          }).when(mockStore).commit()
+          Mockito.doAnswer(new Answer[Unit] {
+            override def answer(invocationOnMock: InvocationOnMock): Unit = {
+              invocationOnMock.callRealMethod()
+              // Mark the flag for later check
+              aborted = true
+            }
+          }).when(mockStore).abort()
+          Mockito.doReturn(mockStore).when(mockProvider).getStore(version = 0)
+          // (5) Inject `mockProvider`, which later on would inject `mockStore`
+          loadedProviders.put(storeId, mockProvider)
+          true
+        }), // End of AssertOnQuery, i.e. end of injecting `mockStore`
+        AddData(inputData, 1L, 2L, 3L),
+        ExpectFailure[SparkException](),
+        AssertOnQuery { _ => aborted } // Check that `mockStore.abort()` is called upon error
+      )
+    }
   }
 }

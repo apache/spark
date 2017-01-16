@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import org.apache.spark.sql.internal.SQLConf
 
 /** A class that contains configuration parameters for [[StateStore]]s. */
-private[streaming] class StateStoreConf(@transient private val conf: SQLConf) extends Serializable {
+private[sql] class StateStoreConf(@transient private val conf: SQLConf) extends Serializable {
 
   def this() = this(new SQLConf)
 
@@ -29,7 +29,7 @@ private[streaming] class StateStoreConf(@transient private val conf: SQLConf) ex
   val minVersionsToRetain = conf.minBatchesToRetain
 }
 
-private[streaming] object StateStoreConf {
+private[sql] object StateStoreConf {
   val empty = new StateStoreConf()
 
   def apply(conf: SQLConf): StateStoreConf = new StateStoreConf(conf)
