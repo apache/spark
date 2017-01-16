@@ -1453,7 +1453,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)
   }
 
-  ignore("SPARK-18884 correctly handle array inputs in functions.udf") {
+  test("SPARK-18884 correctly handle array inputs in functions.udf") {
     Seq("true", "false").foreach { codegenEnabled =>
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
         // scalastyle:off line.size.limit

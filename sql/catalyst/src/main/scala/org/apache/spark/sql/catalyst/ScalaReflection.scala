@@ -789,6 +789,7 @@ object ScalaReflection extends ScalaReflection {
         (v: Any) => {
           converter(v) match {
             case ar: mutable.WrappedArray[_] => ar.array
+            case value => value
           }
         }
       case _ =>

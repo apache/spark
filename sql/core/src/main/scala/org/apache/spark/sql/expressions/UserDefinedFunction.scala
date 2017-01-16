@@ -48,11 +48,22 @@ case class UserDefinedFunction protected[sql] (
     inputTypes: Option[Seq[DataType]]) {
 
   /**
+   * Type converters from Catalyst to Scala as corresponding to input arguments.
+   * This variable is filled with converters generated via `ScalaReflection.scalaConverterFor`.
+   */
+  private[this] var inputConverters: Option[Seq[Any => Any]] = None
+
+  private[sql] def setInputConverters(converters: Option[Seq[Any => Any]]): this.type = {
+    inputConverters = converters
+    this
+  }
+
+  /**
    * Returns an expression that invokes the UDF, using the given arguments.
    *
    * @since 1.3.0
    */
   def apply(exprs: Column*): Column = {
-    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes.getOrElse(Nil)))
+    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes.getOrElse(Nil), inputConverters))
   }
 }
