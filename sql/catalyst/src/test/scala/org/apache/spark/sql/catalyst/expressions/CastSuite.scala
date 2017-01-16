@@ -42,8 +42,8 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   // expected cannot be null
-  private def checkCast(v: Any, expected: Any, timeZoneId: Option[String] = None): Unit = {
-    checkEvaluation(cast(v, Literal(expected).dataType, timeZoneId), expected)
+  private def checkCast(v: Any, expected: Any): Unit = {
+    checkEvaluation(cast(v, Literal(expected).dataType), expected)
   }
 
   private def checkNullCast(from: DataType, to: DataType): Unit = {
