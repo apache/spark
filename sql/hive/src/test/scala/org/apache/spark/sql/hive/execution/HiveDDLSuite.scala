@@ -1366,7 +1366,6 @@ class HiveDDLSuite
       val e3 = intercept[AnalysisException] {
         spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
       }
-
       assert(e3.message.contains("Cannot overwrite table default.t that is also being read from"))
     }
   }
