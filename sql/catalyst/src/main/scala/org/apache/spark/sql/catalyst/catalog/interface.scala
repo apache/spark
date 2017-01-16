@@ -184,9 +184,9 @@ case class CatalogTable(
   import CatalogTable._
 
   /**
-    * schema of this table's partition columns
-    * keep the schema order with partitionColumnNames
-    */
+   * schema of this table's partition columns
+   * keep the schema order with partitionColumnNames
+   */
   def partitionSchema: StructType = StructType(partitionColumnNames.map {
     p => schema.find(_.name == p).getOrElse(
       throw new AnalysisException(s"Partition column [$p] " +
