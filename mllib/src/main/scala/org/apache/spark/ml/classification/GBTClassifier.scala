@@ -37,7 +37,6 @@ import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTMod
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DoubleType
 
 /**
  * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)

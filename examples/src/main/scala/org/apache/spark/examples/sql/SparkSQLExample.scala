@@ -16,10 +16,6 @@
  */
 package org.apache.spark.examples.sql
 
-// $example on:schema_inferring$
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.Encoder
-// $example off:schema_inferring$
 import org.apache.spark.sql.Row
 // $example on:init_session$
 import org.apache.spark.sql.SparkSession
