@@ -55,10 +55,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     nullCount = 0, avgLen = 8, maxLen = 8)
 
   test("cint = 2") {
-    // the predicate is "WHERE cint = 2"
     validateEstimatedStats(
       arInt,
-      Filter(EqualTo(arInt, Literal(2)), ChildStatsTestPlan(Seq(arInt))),
+      Filter(EqualTo(arInt, Literal(2)), childStatsTestPlan(Seq(arInt))),
       ColumnStat(distinctCount = 1, min = Some(2), max = Some(2),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(1L)
@@ -66,11 +65,10 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint = 0") {
-    // the predicate is "WHERE cint = 0"
     // This is an out-of-range case since 0 is outside the range [min, max]
     validateEstimatedStats(
       arInt,
-      Filter(EqualTo(arInt, Literal(0)), ChildStatsTestPlan(Seq(arInt))),
+      Filter(EqualTo(arInt, Literal(0)), childStatsTestPlan(Seq(arInt))),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(0L)
@@ -78,10 +76,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint < 3") {
-    // the predicate is "WHERE cint < 3"
     validateEstimatedStats(
       arInt,
-      Filter(LessThan(arInt, Literal(3)), ChildStatsTestPlan(Seq(arInt))),
+      Filter(LessThan(arInt, Literal(3)), childStatsTestPlan(Seq(arInt))),
       ColumnStat(distinctCount = 2, min = Some(1), max = Some(3),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(3L)
@@ -89,11 +86,10 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint < 0") {
-    // the predicate is "WHERE cint < 0"
     // This is a corner case since literal 0 is smaller than min.
     validateEstimatedStats(
       arInt,
-      Filter(LessThan(arInt, Literal(0)), ChildStatsTestPlan(Seq(arInt))),
+      Filter(LessThan(arInt, Literal(0)), childStatsTestPlan(Seq(arInt))),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(0L)
@@ -101,10 +97,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint <= 3") {
-    // the predicate is "WHERE cint <= 3"
     validateEstimatedStats(
       arInt,
-      Filter(LessThanOrEqual(arInt, Literal(3)), ChildStatsTestPlan(Seq(arInt))),
+      Filter(LessThanOrEqual(arInt, Literal(3)), childStatsTestPlan(Seq(arInt))),
       ColumnStat(distinctCount = 2, min = Some(1), max = Some(3),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(3L)
@@ -112,10 +107,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint > 6") {
-    // the predicate is "WHERE cint > 6"
     validateEstimatedStats(
       arInt,
-      Filter(GreaterThan(arInt, Literal(6)), ChildStatsTestPlan(Seq(arInt))),
+      Filter(GreaterThan(arInt, Literal(6)), childStatsTestPlan(Seq(arInt))),
       ColumnStat(distinctCount = 4, min = Some(6), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(5L)
@@ -123,11 +117,10 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint > 10") {
-    // the predicate is "WHERE cint > 10"
     // This is a corner case since max value is 10.
     validateEstimatedStats(
       arInt,
-      Filter(GreaterThan(arInt, Literal(10)), ChildStatsTestPlan(Seq(arInt))),
+      Filter(GreaterThan(arInt, Literal(10)), childStatsTestPlan(Seq(arInt))),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(0L)
@@ -135,10 +128,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint >= 6") {
-    // the predicate is "WHERE cint >= 6"
     validateEstimatedStats(
       arInt,
-      Filter(GreaterThanOrEqual(arInt, Literal(6)), ChildStatsTestPlan(Seq(arInt))),
+      Filter(GreaterThanOrEqual(arInt, Literal(6)), childStatsTestPlan(Seq(arInt))),
       ColumnStat(distinctCount = 4, min = Some(6), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(5L)
@@ -146,10 +138,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint IS NULL") {
-    // the predicate is "WHERE cint IS NULL"
     validateEstimatedStats(
       arInt,
-      Filter(IsNull(arInt), ChildStatsTestPlan(Seq(arInt))),
+      Filter(IsNull(arInt), childStatsTestPlan(Seq(arInt))),
       ColumnStat(distinctCount = 0, min = None, max = None,
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(0L)
@@ -157,10 +148,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint IS NOT NULL") {
-    // the predicate is "WHERE cint IS NOT NULL"
     validateEstimatedStats(
       arInt,
-      Filter(IsNotNull(arInt), ChildStatsTestPlan(Seq(arInt))),
+      Filter(IsNotNull(arInt), childStatsTestPlan(Seq(arInt))),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(10L)
@@ -168,11 +158,10 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint > 3 AND cint <= 6") {
-    // the predicate is "WHERE cint > 3 AND cint <= 6"
     val condition = And(GreaterThan(arInt, Literal(3)), LessThanOrEqual(arInt, Literal(6)))
     validateEstimatedStats(
       arInt,
-      Filter(condition, ChildStatsTestPlan(Seq(arInt))),
+      Filter(condition, childStatsTestPlan(Seq(arInt))),
       ColumnStat(distinctCount = 3, min = Some(3), max = Some(6),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(4L)
@@ -180,11 +169,10 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint = 3 OR cint = 6") {
-    // the predicate is "WHERE cint = 3 OR cint = 6"
     val condition = Or(EqualTo(arInt, Literal(3)), EqualTo(arInt, Literal(6)))
     validateEstimatedStats(
       arInt,
-      Filter(condition, ChildStatsTestPlan(Seq(arInt))),
+      Filter(condition, childStatsTestPlan(Seq(arInt))),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(2L)
@@ -192,10 +180,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint IN (3, 4, 5)") {
-    // the predicate is "WHERE cint IN (3, 4, 5)"
     validateEstimatedStats(
       arInt,
-      Filter(InSet(arInt, Set(3, 4, 5)), ChildStatsTestPlan(Seq(arInt))),
+      Filter(InSet(arInt, Set(3, 4, 5)), childStatsTestPlan(Seq(arInt))),
       ColumnStat(distinctCount = 3, min = Some(3), max = Some(5),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(3L)
@@ -203,10 +190,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint NOT IN (3, 4, 5)") {
-    // the predicate is "WHERE cint NOT IN (3, 4, 5)"
     validateEstimatedStats(
       arInt,
-      Filter(Not(InSet(arInt, Set(3, 4, 5))), ChildStatsTestPlan(Seq(arInt))),
+      Filter(Not(InSet(arInt, Set(3, 4, 5))), childStatsTestPlan(Seq(arInt))),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(7L)
@@ -214,11 +200,10 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cdate = '2017-01-02' ") {
-    // the predicate is: WHERE cdate = "2017-01-02"
     val d20170102 = Date.valueOf("2017-01-02")
     validateEstimatedStats(
       arDate,
-      Filter(EqualTo(arDate, Literal("2017-01-02")), ChildStatsTestPlan(Seq(arDate))),
+      Filter(EqualTo(arDate, Literal("2017-01-02")), childStatsTestPlan(Seq(arDate))),
       ColumnStat(distinctCount = 1, min = Some(d20170102), max = Some(d20170102),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(1L)
@@ -226,13 +211,12 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cdate = cast('2017-01-02' AS DATE)") {
-    // the predicate is: WHERE cdate = cast("2017-01-02" AS DATE)
     val d20170102 = Date.valueOf("2017-01-02")
     val d20170102_SQLDate = DateTimeUtils.fromJavaDate(d20170102)
     validateEstimatedStats(
       arDate,
       Filter(EqualTo(arDate, Literal(d20170102_SQLDate, IntegerType)),
-        ChildStatsTestPlan(Seq(arDate))),
+        childStatsTestPlan(Seq(arDate))),
       ColumnStat(distinctCount = 1, min = Some(d20170102), max = Some(d20170102),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(1L)
@@ -240,11 +224,10 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cdate < '2017-01-03' ") {
-    // the predicate is: WHERE cdate < "2017-01-03"
     val d20170103 = Date.valueOf("2017-01-03")
     validateEstimatedStats(
       arDate,
-      Filter(LessThan(arDate, Literal("2017-01-03")), ChildStatsTestPlan(Seq(arDate))),
+      Filter(LessThan(arDate, Literal("2017-01-03")), childStatsTestPlan(Seq(arDate))),
       ColumnStat(distinctCount = 2, min = Some(dMin), max = Some(d20170103),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(3L)
@@ -252,12 +235,24 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("ctimestamp = '2017-01-01 02:00:00' ") {
-    // the predicate is: WHERE ctimestamp = "2017-01-01 02:00:00"
     val ts2017010102 = Timestamp.valueOf("2017-01-01 02:00:00")
     validateEstimatedStats(
       arTimestamp,
       Filter(EqualTo(arTimestamp, Literal("2017-01-01 02:00:00")),
-        ChildStatsTestPlan(Seq(arTimestamp))),
+        childStatsTestPlan(Seq(arTimestamp))),
+      ColumnStat(distinctCount = 1, min = Some(ts2017010102), max = Some(ts2017010102),
+        nullCount = 0, avgLen = 8, maxLen = 8),
+      Some(1L)
+    )
+  }
+
+  test("ctimestamp = cast('2017-01-01 02:00:00' AS TIMESTAMP)") {
+    val ts2017010102 = Timestamp.valueOf("2017-01-01 02:00:00")
+    val ts2017010102_SQLTS = DateTimeUtils.fromJavaTimestamp(ts2017010102)
+    validateEstimatedStats(
+      arTimestamp,
+      Filter(EqualTo(arTimestamp, Literal(ts2017010102_SQLTS, LongType)),
+        childStatsTestPlan(Seq(arTimestamp))),
       ColumnStat(distinctCount = 1, min = Some(ts2017010102), max = Some(ts2017010102),
         nullCount = 0, avgLen = 8, maxLen = 8),
       Some(1L)
@@ -265,19 +260,18 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("ctimestamp < '2017-01-01 03:00:00' ") {
-    // the predicate is: WHERE ctimestamp < "2017-01-01 03:00:00"
     val ts2017010103 = Timestamp.valueOf("2017-01-01 03:00:00")
     validateEstimatedStats(
       arTimestamp,
       Filter(LessThan(arTimestamp, Literal("2017-01-01 03:00:00")),
-        ChildStatsTestPlan(Seq(arTimestamp))),
+        childStatsTestPlan(Seq(arTimestamp))),
       ColumnStat(distinctCount = 2, min = Some(tsMin), max = Some(ts2017010103),
         nullCount = 0, avgLen = 8, maxLen = 8),
       Some(3L)
     )
   }
 
-  def ChildStatsTestPlan(outList: Seq[Attribute]): StatsTestPlan = {
+  private def childStatsTestPlan(outList: Seq[Attribute]): StatsTestPlan = {
     StatsTestPlan(
       outputList = outList,
       rowCount = 10L,

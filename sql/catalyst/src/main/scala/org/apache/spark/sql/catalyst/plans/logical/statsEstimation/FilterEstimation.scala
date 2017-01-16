@@ -38,7 +38,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
 
   /**
    * We use a mutable colStats because we need to update the corresponding ColumnStat
-   * for a column after we apply a predicate condition.  For example, A column c has
+   * for a column after we apply a predicate condition.  For example, column c has
    * [min, max] value as [0, 100].  In a range condition such as (c > 40 AND c <= 50),
    * we need to set the column's [min, max] value to [40, 100] after we evaluate the
    * first condition c > 40.  We need to set the column's [min, max] value to [40, 50]
@@ -60,9 +60,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     if (stats.rowCount.isEmpty) return None
 
     // save a mutable copy of colStats so that we can later change it recursively
-    val statsExprIdMap: Map[ExprId, ColumnStat] =
-      stats.attributeStats.map(kv => (kv._1.exprId, kv._2))
-    mutableColStats = mutable.Map.empty ++= statsExprIdMap
+    mutableColStats = mutable.Map(stats.attributeStats.map(kv => (kv._1.exprId, kv._2)).toSeq: _*)
 
     // estimate selectivity of this filter predicate
     val filterSelectivity: Double = calculateConditions(plan.condition)
@@ -77,13 +75,13 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       mutableColStats.map(kv => expridToAttrMap(kv._1) -> kv._2)
     val newColStats = AttributeMap(mutableAttributeStats.toSeq)
 
-    val filteredRowCountValue: BigInt =
+    val filteredRowCount: BigInt =
       EstimationUtils.ceil(BigDecimal(stats.rowCount.get) * filterSelectivity)
     val filteredSizeInBytes: BigInt = EstimationUtils.ceil(BigDecimal(
-        EstimationUtils.getOutputSize(plan.output, newColStats, filteredRowCountValue)
+        EstimationUtils.getOutputSize(plan.output, newColStats, filteredRowCount)
     ))
 
-    Some(stats.copy(sizeInBytes = filteredSizeInBytes, rowCount = Some(filteredRowCountValue),
+    Some(stats.copy(sizeInBytes = filteredSizeInBytes, rowCount = Some(filteredRowCount),
       attributeStats = newColStats))
   }
 
@@ -118,12 +116,13 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
 
       case Not(cond) => calculateSingleCondition(cond, update = false) match {
         case Some(percent) => 1.0 - percent
+        // for not-supported condition, set filter selectivity to a conservative estimate 100%
         case None => 1.0
       }
       case _ => calculateSingleCondition(condition, update) match {
         case Some(percent) => percent
+        // for not-supported condition, set filter selectivity to a conservative estimate 100%
         case None => 1.0
-          // for not-supported condition, set filter selectivity to a conservative estimate 100%
       }
     }
   }
@@ -187,14 +186,14 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       // we support IsNull and IsNotNull only when the child is a leaf node (table).
       case IsNull(ar: AttributeReference) =>
         if (plan.child.isInstanceOf[LeafNode ]) {
-          evaluateIsNull(ar, true, update)
+          evaluateIsNull(ar, isNull = true, update)
         } else {
           None
         }
 
       case IsNotNull(ar: AttributeReference) =>
         if (plan.child.isInstanceOf[LeafNode ]) {
-          evaluateIsNull(ar, false, update)
+          evaluateIsNull(ar, isNull = false, update)
         } else {
           None
         }
@@ -231,7 +230,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     val rowCountValue = plan.child.stats(catalystConf).rowCount.get
     val nullPercent: BigDecimal =
       if (rowCountValue == 0) 0.0
-      else BigDecimal(aColStat.nullCount)/BigDecimal(rowCountValue)
+      else BigDecimal(aColStat.nullCount) / BigDecimal(rowCountValue)
 
     if (update) {
       val newStats =
@@ -242,7 +241,9 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     }
 
     val percent =
-      if (isNull) nullPercent.toDouble
+      if (isNull) {
+        nullPercent.toDouble
+      }
       else {
         /** ISNOTNULL(column) */
         1.0 - nullPercent.toDouble
@@ -297,11 +298,9 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
           case _: NumericType | DateType | TimestampType =>
             evaluateBinaryForNumeric(op, attrRef, literal, update)
           case StringType | BinaryType =>
-
             // TODO: It is difficult to support other binary comparisons for String/Binary
             // type without min/max and advanced statistics like histogram.
-
-            logDebug("[CBO] No statistics for String/Binary type " + attrRef)
+            logDebug("[CBO] No range comparison statistics for String/Binary type " + attrRef)
             None
         }
     }
@@ -316,8 +315,11 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    *
    * @param literal can be either a Literal or numeric value
    * @param dataType the column data type
-   * @param isNumeric If isNumeric is true, then it is a numeric value.
-   *                  Otherwise, it is a Literal value.
+   * @param isNumeric If isNumeric is true, then it is a numeric value.  For example,
+   *                  a condition "IN (3, 4, 5)" has numeric values since 3, 4, 5 have
+   *                  been converted to integer values (no longer Literal objects).
+   *                  For other conditions, isNumeric is set to false because Literal
+   *                  objects are passed.
    * @return a BigDecimal value
    */
   def numericLiteralToBigDecimal(
@@ -386,7 +388,6 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     // decide if the value is in [min, max] of the column.
     // We currently don't store min/max for binary/string type.
     // Hence, we assume it is in boundary for binary/string type.
-
     val inBoundary: Boolean = attrRef.dataType match {
       case _: NumericType | DateType | TimestampType =>
         val statsRange =
@@ -407,25 +408,22 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
             val newValue = Some(literal.value)
             aColStat.copy(distinctCount = 1, min = newValue,
               max = newValue, nullCount = 0)
-
           case DateType =>
             val dateValue = literal.dataType match {
-            case StringType =>
-              Some(Date.valueOf(literal.value.toString))
-            case _ => Some(DateTimeUtils.toJavaDate(literal.value.toString.toInt))
+              case StringType =>
+                Some(Date.valueOf(literal.value.toString))
+              case _ => Some(DateTimeUtils.toJavaDate(literal.value.toString.toInt))
             }
             aColStat.copy(distinctCount = 1, min = dateValue,
               max = dateValue, nullCount = 0)
-
           case TimestampType =>
             val tsValue = literal.dataType match {
-            case StringType =>
-              Some(Timestamp.valueOf(literal.value.toString))
-            case _ => Some(DateTimeUtils.toJavaTimestamp(literal.value.toString.toLong))
+              case StringType =>
+                Some(Timestamp.valueOf(literal.value.toString))
+              case _ => Some(DateTimeUtils.toJavaTimestamp(literal.value.toString.toLong))
             }
             aColStat.copy(distinctCount = 1, min = tsValue,
               max = tsValue, nullCount = 0)
-
           case _ => aColStat.copy(distinctCount = 1, nullCount = 0)
         }
         mutableColStats += (attrRef.exprId -> newStats)
@@ -469,8 +467,8 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       case _: NumericType | DateType | TimestampType =>
         val statsRange =
           Range(aColStat.min, aColStat.max, aType).asInstanceOf[NumericRange]
-        hSet.map(e => numericLiteralToBigDecimal(e, aType, true)).
-          filter(e => e >= statsRange.min && e <= statsRange.max)
+        hSet.map(e => numericLiteralToBigDecimal(e, aType, isNumeric = true))
+          .filter(e => e >= statsRange.min && e <= statsRange.max)
 
       // We assume the whole set since there is no min/max information for String/Binary type
       case StringType | BinaryType => hSet
@@ -600,11 +598,11 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
 
           case _ =>
             op match {
-            case GreaterThan (l, r) => newMin = Some (literal.value)
-            case GreaterThanOrEqual (l, r) => newMin = Some (literal.value)
-            case LessThan (l, r) => newMax = Some (literal.value)
-            case LessThanOrEqual (l, r) => newMax = Some (literal.value)
-          }
+              case GreaterThan (l, r) => newMin = Some (literal.value)
+              case GreaterThanOrEqual (l, r) => newMin = Some (literal.value)
+              case LessThan (l, r) => newMax = Some (literal.value)
+              case LessThanOrEqual (l, r) => newMax = Some (literal.value)
+            }
         }
         newNdv = math.max(math.round(ndv.toDouble * percent), 1)
         val newStats = aColStat.copy(distinctCount = newNdv, min = newMin,
