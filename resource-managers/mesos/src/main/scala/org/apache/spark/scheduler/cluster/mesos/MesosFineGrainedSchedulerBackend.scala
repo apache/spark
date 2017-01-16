@@ -18,10 +18,12 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
+import java.nio.ByteBuffer
 import java.util.{ArrayList => JArrayList, Collections, List => JList}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, HashSet}
+import scala.util.control.NonFatal
 
 import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.protobuf.ByteString
@@ -29,6 +31,7 @@ import org.apache.mesos.protobuf.ByteString
 import org.apache.spark.{SparkContext, SparkException, TaskState}
 import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.abortTaskSetManager
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.Utils
 
@@ -293,22 +296,32 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       val slavesIdsOfAcceptedOffers = HashSet[String]()
 
       // Call into the TaskSchedulerImpl
-      val acceptedOffers = scheduler.resourceOffers(workerOffers).filter(!_.isEmpty)
-      acceptedOffers
-        .foreach { offer =>
-          offer.foreach { taskDesc =>
-            val slaveId = taskDesc.executorId
-            slavesIdsOfAcceptedOffers += slaveId
-            taskIdToSlaveId(taskDesc.taskId) = slaveId
-            val (mesosTask, remainingResources) = createMesosTask(
-              taskDesc,
-              slaveIdToResources(slaveId),
-              slaveId)
-            mesosTasks.getOrElseUpdate(slaveId, new JArrayList[MesosTaskInfo])
-              .add(mesosTask)
-            slaveIdToResources(slaveId) = remainingResources
-          }
+      val serializedTasks = scheduler.resourceOffers(workerOffers).flatten.map { task =>
+        var serializedTask: ByteBuffer = null
+        try {
+          serializedTask = task.serializedTask
+        } catch {
+          case NonFatal(e) =>
+            abortTaskSetManager(scheduler, task.taskId,
+              s"Failed to serialize task ${task.taskId}, not attempting to retry it.", Some(e))
         }
+        (task, serializedTask)
+      }
+      if (!serializedTasks.exists(b => b._2 eq null)) {
+        serializedTasks.foreach { case (taskDesc, _) =>
+          val slaveId = taskDesc.executorId
+          slavesIdsOfAcceptedOffers += slaveId
+          taskIdToSlaveId(taskDesc.taskId) = slaveId
+          val (mesosTask, remainingResources) = createMesosTask(
+            taskDesc,
+            slaveIdToResources(slaveId),
+            slaveId)
+          mesosTasks.getOrElseUpdate(slaveId, new JArrayList[MesosTaskInfo])
+            .add(mesosTask)
+          slaveIdToResources(slaveId) = remainingResources
+
+        }
+      }
 
       // Reply to the offers
       val filters = Filters.newBuilder().setRefuseSeconds(1).build() // TODO: lower timeout?
@@ -351,7 +364,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       .setExecutor(executorInfo)
       .setName(task.name)
       .addAllResources(cpuResources.asJava)
-      .setData(ByteString.copyFrom(TaskDescription.encode(task)))
+      .setData(ByteString.copyFrom(TaskDescription.encode(task, task.serializedTask)))
       .build()
     (taskInfo, finalResources.asJava)
   }

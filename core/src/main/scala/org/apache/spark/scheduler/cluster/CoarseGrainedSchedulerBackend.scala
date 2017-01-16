@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
@@ -257,24 +258,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Launch tasks returned by a set of resource offers
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
-      for (task <- tasks.flatten) {
-        val serializedTask = try {
-          TaskDescription.encode(task, task.serializedTask)
-        } catch {
-          case NonFatal(e) =>
+      val serializedTasks = tasks.flatten.map { task =>
+        var serializedTask: ByteBuffer = null
+        try {
+          serializedTask = TaskDescription.encode(task, task.serializedTask)
+          if (serializedTask.limit >= maxRpcMessageSize) {
+            val msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
+              "spark.rpc.message.maxSize (%d bytes). Consider increasing " +
+              "spark.rpc.message.maxSize or using broadcast variables for large values."
             abortTaskSetManager(scheduler, task.taskId,
-              s"Failed to serialize task ${task.taskId}, not attempting to retry it.", Some(e))
-            null
-        }
-
-        if (serializedTask != null && serializedTask.limit >= maxRpcMessageSize) {
-          val msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
-            "spark.rpc.message.maxSize (%d bytes). Consider increasing " +
-            "spark.rpc.message.maxSize or using broadcast variables for large values."
-          abortTaskSetManager(scheduler, task.taskId,
-            msg.format(task.taskId, task.index, serializedTask.limit, maxRpcMessageSize))
-        } else if (serializedTask != null) {
-          if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024) {
+              msg.format(task.taskId, task.index, serializedTask.limit, maxRpcMessageSize))
+            serializedTask = null
+          } else if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024) {
             scheduler.taskIdToTaskSetManager.get(task.taskId).filterNot(_.emittedTaskSizeWarning).
               foreach { taskSetMgr =>
                 taskSetMgr.emittedTaskSizeWarning = true
@@ -284,6 +279,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
                   s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
               }
           }
+        } catch {
+          case NonFatal(e) =>
+            abortTaskSetManager(scheduler, task.taskId,
+              s"Failed to serialize task ${task.taskId}, not attempting to retry it.", Some(e))
+        }
+        (task, serializedTask)
+      }
+
+      if (!serializedTasks.exists(b => b._2 eq null)) {
+        for ((task, serializedTask) <- serializedTasks) {
           val executorData = executorDataMap(task.executorId)
           executorData.freeCores -= scheduler.CPUS_PER_TASK
 
@@ -292,10 +297,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
           executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
         }
-
       }
     }
-
 
     // Remove a disconnected slave from the cluster
     private def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
@@ -639,11 +642,11 @@ private[spark] object CoarseGrainedSchedulerBackend extends Logging {
   val ENDPOINT_NAME = "CoarseGrainedScheduler"
   // abort TaskSetManager without exception
   def abortTaskSetManager(
-    scheduler: TaskSchedulerImpl,
-    taskId: Long,
-    msg: => String,
-    exception: Option[Throwable] = None): Unit = {
-    scheduler.taskIdToTaskSetManager.get(taskId).foreach { taskSetMgr =>
+      scheduler: TaskSchedulerImpl,
+      taskId: Long,
+      msg: => String,
+      exception: Option[Throwable] = None): Unit = {
+      scheduler.taskIdToTaskSetManager.get(taskId).foreach { taskSetMgr =>
       try {
         taskSetMgr.abort(msg, exception)
       } catch {
