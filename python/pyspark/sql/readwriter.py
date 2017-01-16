@@ -399,7 +399,8 @@ class DataFrameReader(OptionUtils):
         accessible via JDBC URL ``url`` and connection ``properties``.
 
         Partitions of the table will be retrieved in parallel if either ``column`` or
-        ``predicates`` is specified.
+        ``predicates`` is specified. ``lowerBound` and ``upperBound`` is needed when ``column``
+        is specified.
 
         If both ``column`` and ``predicates`` are specified, ``column`` will be used.
 
@@ -431,6 +432,8 @@ class DataFrameReader(OptionUtils):
         if column is not None:
             if numPartitions is None:
                 numPartitions = self._spark._sc.defaultParallelism
+            assert lowerBound != None, "lowerBound can not be None when ``column`` is specified"
+            assert upperBound != None, "upperBound can not be None when ``column`` is specified"
             return self._df(self._jreader.jdbc(url, table, column, int(lowerBound), int(upperBound),
                                                int(numPartitions), jprop))
         if predicates is not None:
