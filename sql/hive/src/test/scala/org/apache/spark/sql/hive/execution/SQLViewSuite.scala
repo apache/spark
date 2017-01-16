@@ -557,7 +557,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           viewOriginalText = Some("SELECT * FROM jt"),
           viewText = Some("SELECT * FROM jt"),
           properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-            CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NUM -> "2",
+            CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
             s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
             s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
         val view2 = CatalogTable(
@@ -568,7 +568,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           viewOriginalText = Some("SELECT * FROM view1"),
           viewText = Some("SELECT * FROM view1"),
           properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> db,
-            CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NUM -> "2",
+            CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
             s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "x",
             s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "y"))
         activateDatabase(db) {
@@ -590,7 +590,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         viewOriginalText = Some("WITH w AS (SELECT 1 AS n) SELECT n FROM w"),
         viewText = Some("WITH w AS (SELECT 1 AS n) SELECT n FROM w"),
         properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-          CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NUM -> "1",
+          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "1",
           s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "n"))
       hiveContext.sessionState.catalog.createTable(cte_view, ignoreIfExists = false)
       checkAnswer(sql("SELECT * FROM cte_view"), Row(1))
@@ -607,7 +607,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         viewOriginalText = Some("SELECT * FROM jt"),
         viewText = Some("SELECT * FROM jt"),
         properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-          CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NUM -> "2",
+          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
           s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
           s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
       hiveContext.sessionState.catalog.createTable(join_view, ignoreIfExists = false)
@@ -635,7 +635,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         viewOriginalText = Some("SELECT * FROM invalid_db.jt"),
         viewText = Some("SELECT * FROM invalid_db.jt"),
         properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-          CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NUM -> "2",
+          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
           s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
           s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
       hiveContext.sessionState.catalog.createTable(view1, ignoreIfExists = false)
@@ -650,7 +650,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         viewOriginalText = Some("SELECT * FROM invalid_table"),
         viewText = Some("SELECT * FROM invalid_table"),
         properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-          CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NUM -> "2",
+          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
           s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
           s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
       hiveContext.sessionState.catalog.createTable(view2, ignoreIfExists = false)
@@ -665,7 +665,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         viewOriginalText = Some("SELECT * FROM view2"),
         viewText = Some("SELECT * FROM view2"),
         properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-          CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NUM -> "2",
+          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
           s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
           s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
       hiveContext.sessionState.catalog.createTable(view3, ignoreIfExists = false)
@@ -712,7 +712,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           viewOriginalText = Some("SELECT * FROM testTable"),
           viewText = Some("SELECT * FROM testTable"),
           properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-            CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NUM -> "2",
+            CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
             s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
             s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
         hiveContext.sessionState.catalog.createTable(testView, ignoreIfExists = false)
@@ -745,7 +745,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           viewOriginalText = Some("SELECT * FROM testTable"),
           viewText = Some("SELECT * FROM testTable"),
           properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-            CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NUM -> "2",
+            CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
             s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
             s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
         hiveContext.sessionState.catalog.createTable(testView, ignoreIfExists = false)

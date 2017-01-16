@@ -209,12 +209,12 @@ case class CatalogTable(
 
   /**
    * Return the output column names of the query that creates a view, the column names are used to
-   * resolve a view, should be None if the CatalogTable is not a View or created by older versions
+   * resolve a view, should be empty if the CatalogTable is not a View or created by older versions
    * of Spark(before 2.2.0).
    */
   def viewQueryColumnNames: Seq[String] = {
     for {
-      numCols <- properties.get(VIEW_QUERY_OUTPUT_COLUMN_NUM).toSeq
+      numCols <- properties.get(VIEW_QUERY_OUTPUT_NUM_COLUMNS).toSeq
       index <- 0 until numCols.toInt
     } yield properties.getOrElse(
       s"$VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX$index",
@@ -229,7 +229,7 @@ case class CatalogTable(
   def withQueryColumnNames(columns: Seq[String]): CatalogTable = {
     val props = new mutable.HashMap[String, String]
     if (columns.nonEmpty) {
-      props.put(VIEW_QUERY_OUTPUT_COLUMN_NUM, columns.length.toString)
+      props.put(VIEW_QUERY_OUTPUT_NUM_COLUMNS, columns.length.toString)
       columns.zipWithIndex.foreach { case (colName, index) =>
         props.put(s"$VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX$index", colName)
       }
@@ -295,7 +295,7 @@ case class CatalogTable(
 object CatalogTable {
   val VIEW_DEFAULT_DATABASE = "view.default.database"
   val VIEW_QUERY_OUTPUT_PREFIX = "view.query.out."
-  val VIEW_QUERY_OUTPUT_COLUMN_NUM = VIEW_QUERY_OUTPUT_PREFIX + "numCols"
+  val VIEW_QUERY_OUTPUT_NUM_COLUMNS = VIEW_QUERY_OUTPUT_PREFIX + "numCols"
   val VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX = VIEW_QUERY_OUTPUT_PREFIX + "col."
 }
 

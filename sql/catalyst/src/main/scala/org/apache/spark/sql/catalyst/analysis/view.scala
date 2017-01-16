@@ -48,8 +48,8 @@ case class AliasViewChild(conf: CatalystConf) extends Rule[LogicalPlan] {
     case v @ View(desc, output, child) if child.resolved =>
       val resolver = conf.resolver
       val queryColumnNames = desc.viewQueryColumnNames
-      // If the view output doesn't have the same number of columns either with the child output,
-      // or with the query column names, throw an AnalysisException.
+      // If the view output doesn't have the same number of columns with the child output and the
+      // query column names, throw an AnalysisException.
       if (output.length != child.output.length && output.length != queryColumnNames.length) {
         throw new AnalysisException(
           s"The view output ${output.mkString("[", ",", "]")} doesn't have the same number of " +
