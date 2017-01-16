@@ -553,18 +553,24 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           identifier = TableIdentifier("view1", Some(db)),
           tableType = CatalogTableType.VIEW,
           storage = CatalogStorageFormat.empty,
-          schema = new StructType().add("id", "int").add("id1", "int"),
+          schema = new StructType().add("x", "long").add("y", "long"),
           viewOriginalText = Some("SELECT * FROM jt"),
           viewText = Some("SELECT * FROM jt"),
-          properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default"))
+          properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
+            CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
+            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
+            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
         val view2 = CatalogTable(
           identifier = TableIdentifier("view2", Some(db)),
           tableType = CatalogTableType.VIEW,
           storage = CatalogStorageFormat.empty,
-          schema = new StructType().add("id", "int").add("id1", "int"),
+          schema = new StructType().add("id", "long").add("id1", "long"),
           viewOriginalText = Some("SELECT * FROM view1"),
           viewText = Some("SELECT * FROM view1"),
-          properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> db))
+          properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> db,
+            CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
+            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "x",
+            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "y"))
         activateDatabase(db) {
           hiveContext.sessionState.catalog.createTable(view1, ignoreIfExists = false)
           hiveContext.sessionState.catalog.createTable(view2, ignoreIfExists = false)
@@ -583,7 +589,9 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         schema = new StructType().add("n", "int"),
         viewOriginalText = Some("WITH w AS (SELECT 1 AS n) SELECT n FROM w"),
         viewText = Some("WITH w AS (SELECT 1 AS n) SELECT n FROM w"),
-        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default"))
+        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
+          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "1",
+          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "n"))
       hiveContext.sessionState.catalog.createTable(cte_view, ignoreIfExists = false)
       checkAnswer(sql("SELECT * FROM cte_view"), Row(1))
     }
@@ -595,10 +603,13 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         identifier = TableIdentifier("join_view"),
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
-        schema = new StructType().add("id", "int").add("id1", "int"),
+        schema = new StructType().add("id", "long").add("id1", "long"),
         viewOriginalText = Some("SELECT * FROM jt"),
         viewText = Some("SELECT * FROM jt"),
-        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default"))
+        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
+          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
+          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
+          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
       hiveContext.sessionState.catalog.createTable(join_view, ignoreIfExists = false)
       checkAnswer(
         sql("SELECT * FROM join_view t1 JOIN join_view t2 ON t1.id = t2.id ORDER BY t1.id"),
@@ -620,10 +631,13 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         identifier = TableIdentifier("view1"),
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
-        schema = new StructType().add("id", "int").add("id1", "int"),
+        schema = new StructType().add("id", "long").add("id1", "long"),
         viewOriginalText = Some("SELECT * FROM invalid_db.jt"),
         viewText = Some("SELECT * FROM invalid_db.jt"),
-        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default"))
+        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
+          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
+          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
+          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
       hiveContext.sessionState.catalog.createTable(view1, ignoreIfExists = false)
       assertInvalidReference("SELECT * FROM view1")
 
@@ -632,10 +646,13 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         identifier = TableIdentifier("view2"),
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
-        schema = new StructType().add("id", "int").add("id1", "int"),
+        schema = new StructType().add("id", "long").add("id1", "long"),
         viewOriginalText = Some("SELECT * FROM invalid_table"),
         viewText = Some("SELECT * FROM invalid_table"),
-        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default"))
+        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
+          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
+          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
+          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
       hiveContext.sessionState.catalog.createTable(view2, ignoreIfExists = false)
       assertInvalidReference("SELECT * FROM view2")
 
@@ -644,10 +661,13 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         identifier = TableIdentifier("view3"),
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
-        schema = new StructType().add("id", "int").add("id1", "int"),
+        schema = new StructType().add("id", "long").add("id1", "long"),
         viewOriginalText = Some("SELECT * FROM view2"),
         viewText = Some("SELECT * FROM view2"),
-        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default"))
+        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
+          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
+          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
+          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
       hiveContext.sessionState.catalog.createTable(view3, ignoreIfExists = false)
       assertInvalidReference("SELECT * FROM view3")
     }
@@ -680,21 +700,70 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("correctly handle type casting between view output and child output") {
+  test("resolve a view with custom column names") {
     withTable("testTable") {
+      spark.range(1, 10).selectExpr("id", "id + 1 id1").write.saveAsTable("testTable")
       withView("testView") {
-        spark.range(1, 10).toDF("id1").write.format("json").saveAsTable("testTable")
-        sql("CREATE VIEW testView AS SELECT * FROM testTable")
+        val testView = CatalogTable(
+          identifier = TableIdentifier("testView"),
+          tableType = CatalogTableType.VIEW,
+          storage = CatalogStorageFormat.empty,
+          schema = new StructType().add("x", "long").add("y", "long"),
+          viewOriginalText = Some("SELECT * FROM testTable"),
+          viewText = Some("SELECT * FROM testTable"),
+          properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
+            CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
+            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
+            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
+        hiveContext.sessionState.catalog.createTable(testView, ignoreIfExists = false)
+
+        // Correctly resolve a view with custom column names.
+        checkAnswer(sql("SELECT * FROM testView ORDER BY x"), (1 to 9).map(i => Row(i, i + 1)))
+
+        // Correctly resolve a view when the referenced table schema changes.
+        spark.range(1, 10).selectExpr("id", "id + id dummy", "id + 1 id1")
+          .write.mode(SaveMode.Overwrite).saveAsTable("testTable")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY x"), (1 to 9).map(i => Row(i, i + 1)))
+
+        // Throw an AnalysisException if the column name is not found.
+        spark.range(1, 10).selectExpr("id", "id + 1 dummy")
+          .write.mode(SaveMode.Overwrite).saveAsTable("testTable")
+        intercept[AnalysisException](sql("SELECT * FROM testView"))
+      }
+    }
+  }
+
+  test("resolve a view when the dataTypes of referenced table columns changed") {
+    withTable("testTable") {
+      spark.range(1, 10).selectExpr("id", "id + 1 id1").write.saveAsTable("testTable")
+      withView("testView") {
+        val testView = CatalogTable(
+          identifier = TableIdentifier("testView"),
+          tableType = CatalogTableType.VIEW,
+          storage = CatalogStorageFormat.empty,
+          schema = new StructType().add("id", "long").add("id1", "long"),
+          viewOriginalText = Some("SELECT * FROM testTable"),
+          viewText = Some("SELECT * FROM testTable"),
+          properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
+            CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
+            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
+            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
+        hiveContext.sessionState.catalog.createTable(testView, ignoreIfExists = false)
 
         // Allow casting from IntegerType to LongType
-        val df = (1 until 10).map(i => i).toDF("id1")
+        val df = (1 until 10).map(i => (i, i + 1)).toDF("id", "id1")
         df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("testTable")
-        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i)))
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i + 1)))
+
+        // Casting from DoubleType to LongType might truncate, throw an AnalysisException.
+        val df2 = (1 until 10).map(i => (i.toDouble, i.toDouble)).toDF("id", "id1")
+        df2.write.format("json").mode(SaveMode.Overwrite).saveAsTable("testTable")
+        intercept[AnalysisException](sql("SELECT * FROM testView"))
 
         // Can't cast from ArrayType to LongType, throw an AnalysisException.
-        val df2 = (1 until 10).map(i => Seq(i)).toDF("id1")
-        df2.write.format("json").mode(SaveMode.Overwrite).saveAsTable("testTable")
-        intercept[AnalysisException](sql("SELECT * FROM testView ORDER BY id1"))
+        val df3 = (1 until 10).map(i => (i, Seq(i))).toDF("id", "id1")
+        df3.write.format("json").mode(SaveMode.Overwrite).saveAsTable("testTable")
+        intercept[AnalysisException](sql("SELECT * FROM testView"))
       }
     }
   }
