@@ -343,6 +343,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(df.filter('b = "x"').collect(), [Row(a=1, b='x')])
 
     def test_udf_in_filter_on_top_of_join(self):
+        # regression test for SPARK-18589
         from pyspark.sql.functions import udf
         left = self.spark.createDataFrame([Row(a=1)])
         right = self.spark.createDataFrame([Row(b=1)])

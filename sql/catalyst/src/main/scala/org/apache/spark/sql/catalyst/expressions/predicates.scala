@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 
 object InterpretedPredicate {
@@ -90,14 +89,12 @@ trait PredicateHelper {
   /**
    * Returns true iff `expr` could be evaluated as a condition within join.
    */
-  protected def canEvaluateWithinJoin(expr: Expression): Boolean = {
-    expr.find {
-      case e: SubqueryExpression =>
-        // non-correlated subquery will be replaced as literal
-        e.children.nonEmpty
-      case e: Unevaluable => true
-      case _ => false
-    }.isEmpty
+  protected def canEvaluateWithinJoin(expr: Expression): Boolean = expr match {
+    case e: SubqueryExpression =>
+      // non-correlated subquery will be replaced as literal
+      e.children.isEmpty
+    case e: Unevaluable => false
+    case e => e.children.forall(canEvaluateWithinJoin)
   }
 }
 
