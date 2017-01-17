@@ -20,7 +20,6 @@ package org.apache.spark.scheduler
 import org.apache.spark.TaskState
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ui.jobs.UIData.TaskMetricsUIData
 
 /**
  * :: DeveloperApi ::
