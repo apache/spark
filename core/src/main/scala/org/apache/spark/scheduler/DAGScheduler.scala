@@ -1193,7 +1193,23 @@ class DAGScheduler(
             }
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
-              markStageAsFinished(shuffleStage)
+              // Check if there is active tasks running for other partitions.
+              val noActiveTasksForOtherPartitions = taskScheduler.rootPool == null ||
+                !taskScheduler.rootPool.getSortedTaskSetQueue.exists {
+                  tsm =>
+                    tsm.stageId == stageId && !tsm.isZombie && tsm.copiesRunning.exists {
+                      i =>
+                        tsm.tasks(i).partitionId != smt.partitionId && tsm.copiesRunning(i) > 0
+                    }
+                }
+              if (noActiveTasksForOtherPartitions) {
+                markStageAsFinished(shuffleStage)
+              } else {
+                // There can be tasks running for other partitions at this point
+                // for reasons like fetch failed. If so, should not mark the stage
+                // as finished. Thus the running tasks' results will be added to
+                // mapOutputTracker when succeed.
+              }
               logInfo("looking for newly runnable stages")
               logInfo("running: " + runningStages)
               logInfo("waiting: " + waitingStages)
@@ -1212,8 +1228,9 @@ class DAGScheduler(
 
               clearCacheLocs()
 
-              if (!shuffleStage.isAvailable) {
-                // Some tasks had failed; let's resubmit this shuffleStage
+              if (!shuffleStage.isAvailable && noActiveTasksForOtherPartitions) {
+                // Some tasks had failed; let's resubmit this shuffleStage.
+                // Do not resubmit shuffleStage if there is active tasks running.
                 // TODO: Lower-level scheduler should also deal with this
                 logInfo("Resubmitting " + shuffleStage + " (" + shuffleStage.name +
                   ") because some of its tasks had failed: " +

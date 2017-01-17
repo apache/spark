@@ -38,7 +38,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
 
 /**
- * Tests for the  entire scheduler code -- DAGScheduler, TaskSchedulerImpl, TaskSets,
+ * Tests for the entire scheduler code -- DAGScheduler, TaskSchedulerImpl, TaskSets,
  * TaskSetManagers.
  *
  * Test cases are configured by providing a set of jobs to submit, and then simulating interaction
@@ -49,7 +49,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
     with LocalSparkContext {
 
   var taskScheduler: TestTaskScheduler = null
-  var scheduler: DAGScheduler = null
+  var scheduler: TestDAGScheduler = null
   var backend: T = _
 
   override def beforeEach(): Unit = {
@@ -77,7 +77,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
     backend = sc.schedulerBackend.asInstanceOf[T]
     taskScheduler = sc.taskScheduler.asInstanceOf[TestTaskScheduler]
     taskScheduler.initialize(sc.schedulerBackend)
-    scheduler = new DAGScheduler(sc, taskScheduler)
+    scheduler = new TestDAGScheduler(sc, taskScheduler)
     taskScheduler.setDAGScheduler(scheduler)
   }
 
@@ -519,6 +519,18 @@ class TestTaskScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
   }
 }
 
+/** DAGScheduler that just tracks a tiny bit more state to enable checks in tests. */
+class TestDAGScheduler(sc: SparkContext, taskScheduler: TaskScheduler)
+  extends DAGScheduler(sc, taskScheduler) {
+
+  val handledCompletionEvent = scala.collection.mutable.ListBuffer[CompletionEvent]()
+
+  override private[scheduler] def handleTaskCompletion(event: CompletionEvent): Unit = {
+    super.handleTaskCompletion(event)
+    handledCompletionEvent += event
+  }
+}
+
 /**
  * Some very basic tests just to demonstrate the use of the test framework (and verify that it
  * works).
@@ -647,5 +659,71 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       assert(failure.getMessage.contains("test task failure"))
     }
     assertDataStructuresEmpty(noFailure = false)
+  }
+
+  testScheduler("[SPARK-19263] DAGScheduler shouldn't resubmit active taskSet.") {
+    val a = new MockRDD(sc, 2, Nil)
+    val b = shuffle(2, a)
+    val shuffleId = b.shuffleDeps.head.shuffleId
+
+    def runBackend(): Unit = {
+      val (taskDescription, task) = backend.beginTask()
+      task.stageId match {
+        // ShuffleMapTask
+        case 0 =>
+          val stageAttempt = task.stageAttemptId
+          val partitionId = task.partitionId
+          (stageAttempt, partitionId) match {
+            case (0, 0) =>
+              val fetchFailed = FetchFailed(
+                DAGSchedulerSuite.makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored")
+              backend.taskFailed(taskDescription, fetchFailed)
+            case (0, 1) =>
+              // Wait until stage resubmission caused by FetchFailed is finished.
+              waitForCondition(taskScheduler.runningTaskSets.size==2, 5000,
+                "Wait until stage is resubmitted caused by fetch failed")
+
+              // Task(stageAttempt=0, partition=1) will be bogus, because both two
+              // tasks(stageAttempt=0, partition=0, 1) run on hostA.
+              // Pending partitions are (0, 1) after stage resubmission,
+              // then change to be 0 after this bogus task.
+              backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostA", 2))
+            case (1, 1) =>
+              waitForCondition(scheduler.handledCompletionEvent.map(_.task).exists {
+                task => task.stageAttemptId == 1 && task.partitionId == 0
+              }, 5000, "Wait until Success of task(stageAttempt=1 and partition=0)" +
+                " is handled by DAGScheduler.")
+              // Task(stageAttempt=1 and partition=0) should not cause stage resubmission,
+              // even though shuffleStage.pendingPartitions.isEmpty and
+              // shuffleStage.isAvailable is false. Because the stageAttempt=0 is not finished yet.
+              backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostB", 2))
+            case _ =>
+              backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostB", 2))
+          }
+        // ResultTask
+        case 1 => backend.taskSuccess(taskDescription, 10)
+      }
+    }
+
+    withBackend(runBackend _) {
+      val jobFuture = submit(b, (0 until 2).toArray)
+      val duration = Duration(15, SECONDS)
+      awaitJobTermination(jobFuture, duration)
+    }
+    assert(results === (0 until 2).map { _ -> 10}.toMap)
+  }
+
+  def waitForCondition(condition: => Boolean, timeout: Long, msg: String): Unit = {
+    val finishTime = System.currentTimeMillis() + timeout
+    while (System.currentTimeMillis() < finishTime) {
+      if (condition) {
+        return
+      }
+      // Sleep rather than using wait/notify, because this is used only for testing and wait/notify
+      // add overhead in the general case.
+      Thread.sleep(10)
+    }
+    throw new TimeoutException(
+      s"Condition '$msg' failed to become true before $timeout milliseconds elapsed")
   }
 }
