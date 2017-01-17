@@ -633,7 +633,7 @@ object functions {
   def skewness(columnName: String): Column = skewness(Column(columnName))
 
   /**
-   * Aggregate function: alias for [[stddev_samp]].
+   * Aggregate function: alias for `stddev_samp`.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -641,7 +641,7 @@ object functions {
   def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
 
   /**
-   * Aggregate function: alias for [[stddev_samp]].
+   * Aggregate function: alias for `stddev_samp`.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -717,7 +717,7 @@ object functions {
   def sumDistinct(columnName: String): Column = sumDistinct(Column(columnName))
 
   /**
-   * Aggregate function: alias for [[var_samp]].
+   * Aggregate function: alias for `var_samp`.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -725,7 +725,7 @@ object functions {
   def variance(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
 
   /**
-   * Aggregate function: alias for [[var_samp]].
+   * Aggregate function: alias for `var_samp`.
    *
    * @group agg_funcs
    * @since 1.6.0
