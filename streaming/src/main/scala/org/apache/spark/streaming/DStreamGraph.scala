@@ -31,12 +31,15 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   private val inputStreams = new ArrayBuffer[InputDStream[_]]()
   private val outputStreams = new ArrayBuffer[DStream[_]]()
 
+  val inputStreamNameAndID = new ArrayBuffer[(String, Int)]()
+
   var rememberDuration: Duration = null
   var checkpointInProgress = false
 
   var zeroTime: Time = null
   var startTime: Time = null
   var batchDuration: Duration = null
+  var numReceivers: Int = 0
 
   def start(time: Time) {
     this.synchronized {
@@ -45,7 +48,9 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       startTime = time
       outputStreams.foreach(_.initialize(zeroTime))
       outputStreams.foreach(_.remember(rememberDuration))
-      outputStreams.foreach(_.validateAtStart)
+      outputStreams.foreach(_.validateAtStart())
+      numReceivers = inputStreams.count(_.isInstanceOf[ReceiverInputDStream[_]])
+      inputStreams.foreach(is => inputStreamNameAndID.+=((is.name, is.id)))
       inputStreams.par.foreach(_.start())
     }
   }
@@ -106,16 +111,18 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       .toArray
   }
 
-  def getInputStreamName(streamId: Int): Option[String] = synchronized {
-    inputStreams.find(_.id == streamId).map(_.name)
-  }
+  def getReceiverNumber: Int = numReceivers
+
+  def getInputStreamNameAndID: ArrayBuffer[(String, Int)] = inputStreamNameAndID
 
   def generateJobs(time: Time): Seq[Job] = {
     logDebug("Generating jobs for time " + time)
-    val jobs = getOutputStreams().flatMap { outputStream =>
-      val jobOption = outputStream.generateJob(time)
-      jobOption.foreach(_.setCallSite(outputStream.creationSite))
-      jobOption
+    val jobs = this.synchronized {
+      outputStreams.flatMap { outputStream =>
+        val jobOption = outputStream.generateJob(time)
+        jobOption.foreach(_.setCallSite(outputStream.creationSite))
+        jobOption
+      }
     }
     logDebug("Generated " + jobs.length + " jobs for time " + time)
     jobs
