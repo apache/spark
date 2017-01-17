@@ -277,7 +277,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       schema = new StructType()
         .add("HelLo", "int", nullable = false)
         .add("WoRLd", "int", nullable = true),
-      provider = Some("parquet"),
+      provider = Some(defaultProvider),
       partitionColumnNames = Seq("WoRLd"),
       bucketSpec = Some(BucketSpec(4, Seq("HelLo"), Nil)))
     catalog.createTable(tbl, ignoreIfExists = false)
@@ -329,7 +329,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
         .add("col2", "string")
         .add("partCol1", "int")
         .add("partCol2", "string"),
-      provider = Some("parquet"),
+      provider = Some(defaultProvider),
       partitionColumnNames = Seq("partCol1", "partCol2"))
     catalog.createTable(table, ignoreIfExists = false)
 
@@ -356,7 +356,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
         .add("col2", "string")
         .add("partCol1", "int")
         .add("partCol2", "string"),
-      provider = Some("parquet"),
+      provider = Some(defaultProvider),
       partitionColumnNames = Seq("partCol1", "partCol2"))
     catalog.createTable(table, ignoreIfExists = false)
 
@@ -504,7 +504,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
         .add("col2", "string")
         .add("partCol1", "int")
         .add("partCol2", "string"),
-      provider = Some("parquet"),
+      provider = Some(defaultProvider),
       partitionColumnNames = Seq("partCol1", "partCol2"))
     catalog.createTable(table, ignoreIfExists = false)
 
@@ -725,7 +725,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty,
       schema = new StructType().add("a", "int").add("b", "string"),
-      provider = Some("parquet")
+      provider = Some(defaultProvider)
     )
 
     catalog.createTable(table, ignoreIfExists = false)
@@ -745,7 +745,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
         Some(Utils.createTempDir().getAbsolutePath),
         None, None, None, false, Map.empty),
       schema = new StructType().add("a", "int").add("b", "string"),
-      provider = Some("parquet")
+      provider = Some(defaultProvider)
     )
     catalog.createTable(externalTable, ignoreIfExists = false)
     assert(!exists(db.locationUri, "external_table"))
@@ -762,7 +762,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
         .add("col2", "string")
         .add("partCol1", "int")
         .add("partCol2", "string"),
-      provider = Some("parquet"),
+      provider = Some(defaultProvider),
       partitionColumnNames = Seq("partCol1", "partCol2"))
     catalog.createTable(table, ignoreIfExists = false)
 

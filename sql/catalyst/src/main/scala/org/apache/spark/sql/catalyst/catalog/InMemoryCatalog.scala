@@ -186,11 +186,6 @@ class InMemoryCatalog(
     val db = tableDefinition.identifier.database.get
     requireDbExists(db)
     val table = tableDefinition.identifier.table
-    if (tableDefinition.provider.isDefined && tableDefinition.provider.get.toLowerCase == "hive") {
-      throw new AnalysisException(
-        s"Hive support is required for creating a Hive data source table `$table`; or create " +
-          "a file-based data source table instead")
-    }
     if (tableExists(db, table)) {
       if (!ignoreIfExists) {
         throw new TableAlreadyExistsException(db = db, table = table)

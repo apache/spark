@@ -1488,8 +1488,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val e = intercept[AnalysisException] {
         sql(s"CREATE TABLE $tabName (i INT, j STRING)")
       }.getMessage
-      assert(e.contains("Hive support is required for creating a Hive data source table " +
-        "`tbl`; or create a file-based data source table instead"))
+      assert(e.contains("Hive support is required to CREATE Hive TABLE"))
     }
   }
 
@@ -1503,11 +1502,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
             s"""
                |CREATE EXTERNAL TABLE $tabName (i INT, j STRING)
                |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-               |LOCATION '$tempDir'
+               |LOCATION '${tempDir.toURI}'
            """.stripMargin)
         }.getMessage
-        assert(e.contains("Hive support is required for creating a Hive data source table " +
-          "`tbl`; or create a file-based data source table instead"))
+        assert(e.contains("Hive support is required to CREATE Hive TABLE"))
       }
     }
   }
@@ -1568,7 +1566,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("USE temp")
     sql("DROP DATABASE temp")
     val e = intercept[AnalysisException] {
-        sql("CREATE TABLE t (a INT, b INT)")
+        sql("CREATE TABLE t (a INT, b INT) USING parquet")
       }.getMessage
     assert(e.contains("Database 'temp' not found"))
   }
@@ -1682,7 +1680,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       withTable("my_ext_tab") {
         (("a", "b") :: Nil).toDF().write.parquet(tempDir.getCanonicalPath)
         (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
-        sql(s"CREATE TABLE my_ext_tab using parquet LOCATION '$tempDir'")
+        sql(s"CREATE TABLE my_ext_tab using parquet LOCATION '${tempDir.toURI}'")
         sql(s"CREATE VIEW my_view AS SELECT 1")
         intercept[NoSuchTableException] {
           sql("TRUNCATE TABLE my_temp_tab")
