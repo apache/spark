@@ -251,6 +251,11 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     val familyAndLink = new FamilyAndLink(familyObj, linkObj)
 
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, linkPredictionCol,
+      family, solver, fitIntercept, link, maxIter, regParam, tol)
+    instr.logNumFeatures(numFeatures)
+
     if (numFeatures > WeightedLeastSquares.MAX_NUM_FEATURES) {
       val msg = "Currently, GeneralizedLinearRegression only supports number of features" +
         s" <= ${WeightedLeastSquares.MAX_NUM_FEATURES}. Found $numFeatures in the input dataset."
@@ -264,7 +269,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
           Instance(label, weight, features)
       }
 
-    if (familyObj == Gaussian && linkObj == Identity) {
+    val model = if (familyObj == Gaussian && linkObj == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
@@ -274,21 +279,23 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
           .setParent(this))
       val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
         wlsModel.diagInvAtWA.toArray, 1, getSolver)
-      return model.setSummary(Some(trainingSummary))
+      model.setSummary(Some(trainingSummary))
+    } else {
+      // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
+      val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
+      val optimizer = new IterativelyReweightedLeastSquares(initialModel,
+        familyAndLink.reweightFunc, $(fitIntercept), $(regParam), $(maxIter), $(tol))
+      val irlsModel = optimizer.fit(instances)
+      val model = copyValues(
+        new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
+          .setParent(this))
+      val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
+        irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
+      model.setSummary(Some(trainingSummary))
     }
 
-    // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
-    val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
-    val optimizer = new IterativelyReweightedLeastSquares(initialModel, familyAndLink.reweightFunc,
-      $(fitIntercept), $(regParam), $(maxIter), $(tol))
-    val irlsModel = optimizer.fit(instances)
-
-    val model = copyValues(
-      new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
-        .setParent(this))
-    val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
-      irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
-    model.setSummary(Some(trainingSummary))
+    instr.logSuccess(model)
+    model
   }
 
   @Since("2.0.0")
