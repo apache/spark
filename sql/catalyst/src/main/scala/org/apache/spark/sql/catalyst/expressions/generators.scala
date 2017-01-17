@@ -204,6 +204,15 @@ case class Stack(children: Seq[Expression]) extends Generator {
   }
 }
 
+case class GeneratorOuter(child: Generator) extends UnaryExpression with Generator {
+  final override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+  override def elementSchema: StructType = child.elementSchema
+}
 /**
  * A base class for [[Explode]] and [[PosExplode]].
  */

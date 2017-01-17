@@ -162,11 +162,15 @@ case class GenerateExec(
     val index = ctx.freshName("index")
 
     // Add a check if the generate outer flag is true.
-    val checks = optionalCode(outer, data.isNull)
+    val checks = optionalCode(outer, s"($index == -1)")
 
     // Add position
     val position = if (e.position) {
-      Seq(ExprCode("", "false", index))
+      if (outer) {
+        Seq(ExprCode("", s"$index == -1", index))
+      } else {
+        Seq(ExprCode("", "false", index))
+      }
     } else {
       Seq.empty
     }
