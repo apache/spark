@@ -1781,11 +1781,25 @@ Apart from these, the following properties are also available, and may be useful
         </td>
     </tr>
     <tr>
+        <td><code>spark.ssl.[namespace].port</code></td>
+        <td>None</td>
+        <td>
+            The port where the SSL service will listen on.
+
+            <br />The port must be defined within a namespace configuration; see
+            <a href="security.html#ssl-configuration">SSL Configuration</a> for the available
+            namespaces.
+
+            <br />When not set, the SSL port will be derived from the non-SSL port for the
+            same service. A value of "0" will make the service bind to an ephemeral port.
+        </td>
+    </tr>
+    <tr>
         <td><code>spark.ssl.enabledAlgorithms</code></td>
         <td>Empty</td>
         <td>
             A comma separated list of ciphers. The specified ciphers must be supported by JVM.
-            The reference list of protocols one can find on
+            The reference list of protocols one can found on
             <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
             page.
             Note: If not set, it will use the default cipher suites of JVM.

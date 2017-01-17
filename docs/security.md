@@ -49,10 +49,6 @@ component-specific configuration namespaces used to override the default setting
     <th>Component</th>
   </tr>
   <tr>
-    <td><code>spark.ssl.fs</code></td>
-    <td>HTTP file server and broadcast server</td>
-  </tr>
-  <tr>
     <td><code>spark.ssl.ui</code></td>
     <td>Spark application Web UI</td>
   </tr>
