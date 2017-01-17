@@ -471,6 +471,7 @@ private[hive] class HiveClientImpl(
     // do the check at first and collect all the matching partitions
     val matchingParts =
       specs.flatMap { s =>
+        assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
         // The provided spec here can be a partial spec, i.e. it will match all partitions
         // whose specs are supersets of this partial spec. E.g. If a table has partitions
         // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
@@ -545,6 +546,7 @@ private[hive] class HiveClientImpl(
           // -1 for result limit means "no limit/return all"
           client.getPartitionNames(table.database, table.identifier.table, -1)
         case Some(s) =>
+          assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
           client.getPartitionNames(table.database, table.identifier.table, s.asJava, -1)
       }
     hivePartitionNames.asScala.sorted
@@ -568,7 +570,9 @@ private[hive] class HiveClientImpl(
     val hiveTable = toHiveTable(table)
     val parts = spec match {
       case None => shim.getAllPartitions(client, hiveTable).map(fromHivePartition)
-      case Some(s) => client.getPartitions(hiveTable, s.asJava).asScala.map(fromHivePartition)
+      case Some(s) =>
+        assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
+        client.getPartitions(hiveTable, s.asJava).asScala.map(fromHivePartition)
     }
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts
