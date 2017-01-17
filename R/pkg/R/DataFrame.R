@@ -91,7 +91,7 @@ dataFrame <- function(sdf, isCached = FALSE) {
 #'}
 #' @aliases name,SparkDataFrame-method
 #' @noRd
-#' @note explain since 2.1.0
+#' @note explain since 2.2.0
 setMethod("name",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -113,7 +113,7 @@ setMethod("name",
 #'}
 #' @aliases setName,SparkDataFrame-method
 #' @noRd
-#' @note explain since 2.1.0
+#' @note explain since 2.2.0
 setMethod("setName",
           signature(x = "SparkDataFrame", name = "character"),
           function(x, name) {

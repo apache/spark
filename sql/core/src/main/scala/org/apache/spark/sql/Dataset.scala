@@ -173,11 +173,11 @@ class Dataset[T] private[sql](
   }
 
   /** A friendly name for this Dataset */
-  @Since("2.1.0")
+  @Since("2.2.0")
   var name: String = null
 
   /** Assign a name to this Dataset */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setName(_name: String): this.type = {
     name = _name
     this
