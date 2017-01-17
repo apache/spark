@@ -2169,9 +2169,7 @@ class RDD(object):
         """
         Return the name of this RDD.
         """
-        n = self._jrdd.name()
-        if n:
-            return n
+        return self._jrdd.name()
 
     @ignore_unicode_prefix
     def setName(self, name):

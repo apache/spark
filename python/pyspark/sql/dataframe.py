@@ -90,9 +90,7 @@ class DataFrame(object):
         """
         Return the name of this Dataset.
         """
-        n = self._jdf.name()
-        if n:
-            return n
+        return self._jdf.name()
 
     @ignore_unicode_prefix
     @since(2.1)
