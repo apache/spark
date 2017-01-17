@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import java.text.DecimalFormat
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
@@ -54,8 +56,10 @@ case class Statistics(
 
   /** Readable string representation for the Statistics. */
   def simpleString: String = {
-    Seq(s"sizeInBytes=$sizeInBytes",
-      if (rowCount.isDefined) s"rowCount=${rowCount.get}" else "",
+    // Show numbers in thousands
+    val form = new DecimalFormat(",###")
+    Seq(s"sizeInBytes=${form.format(sizeInBytes)}",
+      if (rowCount.isDefined) s"rowCount=${form.format(rowCount.get)}" else "",
       s"isBroadcastable=$isBroadcastable"
     ).filter(_.nonEmpty).mkString(", ")
   }

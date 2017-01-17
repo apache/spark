@@ -115,6 +115,17 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     Statistics(sizeInBytes = children.map(_.stats(conf).sizeInBytes).product)
   }
 
+  /** String representation with statistics for the logical plan. */
+  def treeStringWithStats(conf: CatalystConf): String = {
+    // Fill the stats cache
+    stats(conf)
+    generateTreeString(0, Nil, new StringBuilder, verbose = true, addSuffix = true).toString
+  }
+
+  override def verboseStringWithSuffix: String = {
+    super.verboseString + statsCache.map(": " + _.simpleString).getOrElse("")
+  }
+
   /**
    * Returns the maximum number of rows that this plan may compute.
    *

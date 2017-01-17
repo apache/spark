@@ -112,7 +112,11 @@ case class ExplainCommand(
       if (codegen) {
         codegenString(queryExecution.executedPlan)
       } else if (extended) {
-        queryExecution.toString
+        if (sparkSession.sessionState.conf.showStatsInExplain) {
+          queryExecution.toStringWithStats
+        } else {
+          queryExecution.toString
+        }
       } else {
         queryExecution.simpleString
       }
