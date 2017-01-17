@@ -432,8 +432,8 @@ class DataFrameReader(OptionUtils):
         if column is not None:
             assert lowerBound is not None, "lowerBound can not be None when ``column`` is specified"
             assert upperBound is not None, "upperBound can not be None when ``column`` is specified"
-            assert numPartitions is not None, "numPartitions can not be None " \
-                                              "when ``column`` is specified"
+            assert numPartitions is not None, \
+                "numPartitions can not be None when ``column`` is specified"
             return self._df(self._jreader.jdbc(url, table, column, int(lowerBound), int(upperBound),
                                                int(numPartitions), jprop))
         if predicates is not None:
