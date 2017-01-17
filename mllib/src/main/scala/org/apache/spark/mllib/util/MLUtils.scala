@@ -149,7 +149,7 @@ object MLUtils extends Logging {
    * Save labeled data in LIBSVM format.
    * @param data an RDD of LabeledPoint to be saved
    * @param dir directory to save the data
-   * @see [[org.apache.spark.mllib.util.MLUtils#loadLibSVMFile]]
+   * @see `org.apache.spark.mllib.util.MLUtils.loadLibSVMFile`
    */
   @Since("1.0.0")
   def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {

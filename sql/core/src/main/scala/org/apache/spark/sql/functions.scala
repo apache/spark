@@ -633,7 +633,7 @@ object functions {
   def skewness(columnName: String): Column = skewness(Column(columnName))
 
   /**
-   * Aggregate function: alias for [[stddev_samp]].
+   * Aggregate function: alias for `stddev_samp`.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -641,7 +641,7 @@ object functions {
   def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
 
   /**
-   * Aggregate function: alias for [[stddev_samp]].
+   * Aggregate function: alias for `stddev_samp`.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -717,7 +717,7 @@ object functions {
   def sumDistinct(columnName: String): Column = sumDistinct(Column(columnName))
 
   /**
-   * Aggregate function: alias for [[var_samp]].
+   * Aggregate function: alias for `var_samp`.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -725,7 +725,7 @@ object functions {
   def variance(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
 
   /**
-   * Aggregate function: alias for [[var_samp]].
+   * Aggregate function: alias for `var_samp`.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -785,10 +785,13 @@ object functions {
   /**
    * Window function: returns the rank of rows within a window partition, without any gaps.
    *
-   * The difference between rank and denseRank is that denseRank leaves no gaps in ranking
-   * sequence when there are ties. That is, if you were ranking a competition using denseRank
+   * The difference between rank and dense_rank is that denseRank leaves no gaps in ranking
+   * sequence when there are ties. That is, if you were ranking a competition using dense_rank
    * and had three people tie for second place, you would say that all three were in second
-   * place and that the next person came in third.
+   * place and that the next person came in third. Rank would give me sequential numbers, making
+   * the person that came in third place (after the ties) would register as coming in fifth.
+   *
+   * This is equivalent to the DENSE_RANK function in SQL.
    *
    * @group window_funcs
    * @since 1.6.0
@@ -929,10 +932,11 @@ object functions {
   /**
    * Window function: returns the rank of rows within a window partition.
    *
-   * The difference between rank and denseRank is that denseRank leaves no gaps in ranking
-   * sequence when there are ties. That is, if you were ranking a competition using denseRank
+   * The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
+   * sequence when there are ties. That is, if you were ranking a competition using dense_rank
    * and had three people tie for second place, you would say that all three were in second
-   * place and that the next person came in third.
+   * place and that the next person came in third. Rank would give me sequential numbers, making
+   * the person that came in third place (after the ties) would register as coming in fifth.
    *
    * This is equivalent to the RANK function in SQL.
    *

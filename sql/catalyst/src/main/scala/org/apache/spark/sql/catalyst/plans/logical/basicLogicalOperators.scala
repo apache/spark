@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{CatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTypes}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{AggregateEstimation, ProjectEstimation}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -53,6 +55,14 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
 
   override def validConstraints: Set[Expression] =
     child.constraints.union(getAliasedConstraints(projectList))
+
+  override def computeStats(conf: CatalystConf): Statistics = {
+    if (conf.cboEnabled) {
+      ProjectEstimation.estimate(conf, this).getOrElse(super.computeStats(conf))
+    } else {
+      super.computeStats(conf)
+    }
+  }
 }
 
 /**
@@ -158,11 +168,11 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
     }
   }
 
-  override lazy val statistics: Statistics = {
-    val leftSize = left.statistics.sizeInBytes
-    val rightSize = right.statistics.sizeInBytes
+  override def computeStats(conf: CatalystConf): Statistics = {
+    val leftSize = left.stats(conf).sizeInBytes
+    val rightSize = right.stats(conf).sizeInBytes
     val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
-    val isBroadcastable = left.statistics.isBroadcastable || right.statistics.isBroadcastable
+    val isBroadcastable = left.stats(conf).isBroadcastable || right.stats(conf).isBroadcastable
 
     Statistics(sizeInBytes = sizeInBytes, isBroadcastable = isBroadcastable)
   }
@@ -175,8 +185,8 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
 
   override protected def validConstraints: Set[Expression] = leftConstraints
 
-  override lazy val statistics: Statistics = {
-    left.statistics.copy()
+  override def computeStats(conf: CatalystConf): Statistics = {
+    left.stats(conf).copy()
   }
 }
 
@@ -214,8 +224,8 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     children.length > 1 && childrenResolved && allChildrenCompatible
   }
 
-  override lazy val statistics: Statistics = {
-    val sizeInBytes = children.map(_.statistics.sizeInBytes).sum
+  override def computeStats(conf: CatalystConf): Statistics = {
+    val sizeInBytes = children.map(_.stats(conf).sizeInBytes).sum
     Statistics(sizeInBytes = sizeInBytes)
   }
 
@@ -323,14 +333,14 @@ case class Join(
     case _ => resolvedExceptNatural
   }
 
-  override lazy val statistics: Statistics = joinType match {
+  override def computeStats(conf: CatalystConf): Statistics = joinType match {
     case LeftAnti | LeftSemi =>
       // LeftSemi and LeftAnti won't ever be bigger than left
-      left.statistics.copy()
+      left.stats(conf).copy()
     case _ =>
       // make sure we don't propagate isBroadcastable in other joins, because
       // they could explode the size.
-      super.statistics.copy(isBroadcastable = false)
+      super.computeStats(conf).copy(isBroadcastable = false)
   }
 }
 
@@ -341,7 +351,8 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   // set isBroadcastable to true so the child will be broadcasted
-  override lazy val statistics: Statistics = super.statistics.copy(isBroadcastable = true)
+  override def computeStats(conf: CatalystConf): Statistics =
+    super.computeStats(conf).copy(isBroadcastable = true)
 }
 
 /**
@@ -375,6 +386,35 @@ case class InsertIntoTable(
   assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
 
   override lazy val resolved: Boolean = childrenResolved && table.resolved
+}
+
+/**
+ * A container for holding the view description(CatalogTable), and the output of the view. The
+ * child should be a logical plan parsed from the `CatalogTable.viewText`, should throw an error
+ * if the `viewText` is not defined.
+ * This operator will be removed at the end of analysis stage.
+ *
+ * @param desc A view description(CatalogTable) that provides necessary information to resolve the
+ *             view.
+ * @param output The output of a view operator, this is generated during planning the view, so that
+ *               we are able to decouple the output from the underlying structure.
+ * @param child The logical plan of a view operator, it should be a logical plan parsed from the
+ *              `CatalogTable.viewText`, should throw an error if the `viewText` is not defined.
+ */
+case class View(
+    desc: CatalogTable,
+    output: Seq[Attribute],
+    child: LogicalPlan) extends LogicalPlan with MultiInstanceRelation {
+
+  override lazy val resolved: Boolean = child.resolved
+
+  override def children: Seq[LogicalPlan] = child :: Nil
+
+  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+
+  override def simpleString: String = {
+    s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
+  }
 }
 
 /**
@@ -458,7 +498,7 @@ case class Range(
 
   override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
-  override lazy val statistics: Statistics = {
+  override def computeStats(conf: CatalystConf): Statistics = {
     val sizeInBytes = LongType.defaultSize * numElements
     Statistics( sizeInBytes = sizeInBytes )
   }
@@ -491,11 +531,19 @@ case class Aggregate(
     child.constraints.union(getAliasedConstraints(nonAgg))
   }
 
-  override lazy val statistics: Statistics = {
-    if (groupingExpressions.isEmpty) {
-      super.statistics.copy(sizeInBytes = 1)
+  override def computeStats(conf: CatalystConf): Statistics = {
+    def simpleEstimation: Statistics = {
+      if (groupingExpressions.isEmpty) {
+        super.computeStats(conf).copy(sizeInBytes = 1)
+      } else {
+        super.computeStats(conf)
+      }
+    }
+
+    if (conf.cboEnabled) {
+      AggregateEstimation.estimate(conf, this).getOrElse(simpleEstimation)
     } else {
-      super.statistics
+      simpleEstimation
     }
   }
 }
@@ -596,8 +644,8 @@ case class Expand(
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
-  override lazy val statistics: Statistics = {
-    val sizeInBytes = super.statistics.sizeInBytes * projections.length
+  override def computeStats(conf: CatalystConf): Statistics = {
+    val sizeInBytes = super.computeStats(conf).sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
 
@@ -667,7 +715,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
       case _ => None
     }
   }
-  override lazy val statistics: Statistics = {
+  override def computeStats(conf: CatalystConf): Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = if (limit == 0) {
       // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
@@ -676,7 +724,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
     } else {
       (limit: Long) * output.map(a => a.dataType.defaultSize).sum
     }
-    child.statistics.copy(sizeInBytes = sizeInBytes)
+    child.stats(conf).copy(sizeInBytes = sizeInBytes)
   }
 }
 
@@ -688,7 +736,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
       case _ => None
     }
   }
-  override lazy val statistics: Statistics = {
+  override def computeStats(conf: CatalystConf): Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = if (limit == 0) {
       // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
@@ -697,7 +745,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
     } else {
       (limit: Long) * output.map(a => a.dataType.defaultSize).sum
     }
-    child.statistics.copy(sizeInBytes = sizeInBytes)
+    child.stats(conf).copy(sizeInBytes = sizeInBytes)
   }
 }
 
@@ -731,14 +779,14 @@ case class Sample(
 
   override def output: Seq[Attribute] = child.output
 
-  override lazy val statistics: Statistics = {
+  override def computeStats(conf: CatalystConf): Statistics = {
     val ratio = upperBound - lowerBound
     // BigInt can't multiply with Double
-    var sizeInBytes = child.statistics.sizeInBytes * (ratio * 100).toInt / 100
+    var sizeInBytes = child.stats(conf).sizeInBytes * (ratio * 100).toInt / 100
     if (sizeInBytes == 0) {
       sizeInBytes = 1
     }
-    child.statistics.copy(sizeInBytes = sizeInBytes)
+    child.stats(conf).copy(sizeInBytes = sizeInBytes)
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil
@@ -792,13 +840,5 @@ case class RepartitionByExpression(
 case object OneRowRelation extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
-
-  /**
-   * Computes [[Statistics]] for this plan. The default implementation assumes the output
-   * cardinality is the product of all child plan's cardinality, i.e. applies in the case
-   * of cartesian joins.
-   *
-   * [[LeafNode]]s must override this.
-   */
-  override lazy val statistics: Statistics = Statistics(sizeInBytes = 1)
+  override def computeStats(conf: CatalystConf): Statistics = Statistics(sizeInBytes = 1)
 }
