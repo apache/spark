@@ -96,7 +96,7 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   }
 
   /**
-   * Logs the successful completion of the training session and the value of the learned model.
+   * Logs the successful completion of the training session.
    */
   def logSuccess(model: Model[_]): Unit = {
     log(s"training finished")

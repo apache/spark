@@ -171,10 +171,16 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, featureIndex, isotonic)
+    instr.logNumFeatures(1)
+
     val isotonicRegression = new MLlibIsotonicRegression().setIsotonic($(isotonic))
     val oldModel = isotonicRegression.run(instances)
 
-    copyValues(new IsotonicRegressionModel(uid, oldModel).setParent(this))
+    val model = copyValues(new IsotonicRegressionModel(uid, oldModel).setParent(this))
+    instr.logSuccess(model)
+    model
   }
 
   @Since("1.5.0")
