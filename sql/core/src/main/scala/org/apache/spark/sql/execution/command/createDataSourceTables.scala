@@ -71,15 +71,6 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         options = table.storage.properties ++ pathOption,
         catalogTable = Some(tableWithDefaultOptions)).resolveRelation()
 
-    dataSource match {
-      case fs: HadoopFsRelation =>
-        if (table.tableType == CatalogTableType.EXTERNAL && fs.location.rootPaths.isEmpty) {
-          throw new AnalysisException(
-            "Cannot create a file-based external data source table without path")
-        }
-      case _ =>
-    }
-
     val partitionColumnNames = if (table.schema.nonEmpty) {
       table.partitionColumnNames
     } else {
