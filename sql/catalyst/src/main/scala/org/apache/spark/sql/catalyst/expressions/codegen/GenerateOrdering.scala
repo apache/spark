@@ -131,15 +131,17 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           return 0;
         """
       },
-      foldFunctions = _.map { funCall =>
-        val comp = ctx.freshName("comp")
-        s"""
-          int $comp = $funCall;
-          if ($comp != 0) {
-            return $comp;
-          }
-        """
-      }.mkString)
+      foldFunctions = { funCalls =>
+        funCalls.zipWithIndex.map { case (funCall, i) =>
+          val comp = ctx.freshName("comp")
+          s"""
+            int $comp = $funCall;
+            if ($comp != 0) {
+              return $comp;
+            }
+          """
+        }.mkString
+      })
   }
 
   protected def create(ordering: Seq[SortOrder]): BaseOrdering = {
