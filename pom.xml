@@ -228,8 +228,7 @@
       <id>central</id>
       <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
-      <!--<url>https://repo1.maven.org/maven2</url>-->
-      <url>http://maven.aliyun.com/nexus/content/groups/public</url>
+      <url>https://repo1.maven.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -241,8 +240,7 @@
   <pluginRepositories>
     <pluginRepository>
       <id>central</id>
-      <!--<url>https://repo1.maven.org/maven2</url>-->
-      <url>http://maven.aliyun.com/nexus/content/groups/public</url>
+      <url>https://repo1.maven.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
