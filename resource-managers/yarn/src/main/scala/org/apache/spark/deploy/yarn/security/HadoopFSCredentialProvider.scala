@@ -47,7 +47,7 @@ private[security] class HadoopFSCredentialProvider
     // NameNode to access, used to get tokens from different FileSystems
     val tmpCreds = new Credentials()
     val tokenRenewer = getTokenRenewer(hadoopConf)
-    nnsToAccess(hadoopConf, sparkConf).foreach { dst =>
+    hadoopFSsToAccess(hadoopConf, sparkConf).foreach { dst =>
       val dstFs = dst.getFileSystem(hadoopConf)
       logInfo("getting token for: " + dst)
       dstFs.addDelegationTokens(tokenRenewer, tmpCreds)
@@ -80,7 +80,7 @@ private[security] class HadoopFSCredentialProvider
     // user as renewer.
     sparkConf.get(PRINCIPAL).flatMap { renewer =>
       val creds = new Credentials()
-      nnsToAccess(hadoopConf, sparkConf).foreach { dst =>
+      hadoopFSsToAccess(hadoopConf, sparkConf).foreach { dst =>
         val dstFs = dst.getFileSystem(hadoopConf)
         dstFs.addDelegationTokens(renewer, creds)
       }
@@ -112,8 +112,8 @@ private[security] class HadoopFSCredentialProvider
     delegTokenRenewer
   }
 
-  private def nnsToAccess(hadoopConf: Configuration, sparkConf: SparkConf): Set[Path] = {
-    sparkConf.get(NAMENODES_TO_ACCESS).map(new Path(_)).toSet +
+  private def hadoopFSsToAccess(hadoopConf: Configuration, sparkConf: SparkConf): Set[Path] = {
+    sparkConf.get(FILESYSTEMS_TO_ACCESS).map(new Path(_)).toSet +
       sparkConf.get(STAGING_DIR).map(new Path(_))
         .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory)
   }

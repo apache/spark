@@ -248,6 +248,11 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val FILESYSTEMS_TO_ACCESS = ConfigBuilder("spark.yarn.access.hadoopFileSystems")
+    .doc("Extra Hadoop filesystem URLs for which to request delegation tokens. The filesystem " +
+      "that hosts fs.defaultFS does not need to be listed here.")
+    .fallbackConf(NAMENODES_TO_ACCESS)
+
   /* Rolled log aggregation configuration. */
 
   private[spark] val ROLLED_LOG_INCLUDE_PATTERN =
