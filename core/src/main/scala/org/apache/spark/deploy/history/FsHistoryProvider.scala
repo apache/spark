@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.history
 
 import java.io.{FileNotFoundException, IOException, OutputStream}
+import java.net.URLDecoder
 import java.util.UUID
 import java.util.concurrent.{Executors, ExecutorService, Future, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
@@ -93,9 +94,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val NUM_PROCESSING_THREADS = conf.getInt(SPARK_HISTORY_FS_NUM_REPLAY_THREADS,
     Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
 
-  private val logDir = conf.getOption("spark.history.fs.logDirectory")
+  private val logURIString = conf.getOption("spark.history.fs.logDirectory")
     .map { d => Utils.resolveURI(d).toString }
     .getOrElse(DEFAULT_LOG_DIR)
+
+  private val logDir = URLDecoder.decode(logURIString, "UTF-8")
 
   private val HISTORY_UI_ACLS_ENABLE = conf.getBoolean("spark.history.ui.acls.enable", false)
   private val HISTORY_UI_ADMIN_ACLS = conf.get("spark.history.ui.admin.acls", "")
