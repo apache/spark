@@ -399,8 +399,8 @@ class DataFrameReader(OptionUtils):
         accessible via JDBC URL ``url`` and connection ``properties``.
 
         Partitions of the table will be retrieved in parallel if either ``column`` or
-        ``predicates`` is specified. ``lowerBound` and ``upperBound`` is needed when ``column``
-        is specified.
+        ``predicates`` is specified. ``lowerBound`, ``upperBound`` and ``numPartitions``
+        is needed when ``column`` is specified.
 
         If both ``column`` and ``predicates`` are specified, ``column`` will be used.
 
