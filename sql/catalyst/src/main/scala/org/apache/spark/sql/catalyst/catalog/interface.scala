@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.net.URI
 import java.util.Date
 
 import scala.collection.mutable
@@ -50,7 +51,7 @@ case class CatalogStorageFormat(
     // TODO(ekl) consider storing this field as java.net.URI for type safety. Note that this must
     // be converted to/from a hadoop Path object using new Path(new URI(locationUri)) and
     // path.toUri respectively before use as a filesystem path due to URI char escaping.
-    locationUri: Option[String],
+    locationUri: Option[URI],
     inputFormat: Option[String],
     outputFormat: Option[String],
     serde: Option[String],
@@ -104,7 +105,7 @@ case class CatalogTablePartition(
   }
 
   /** Return the partition location, assuming it is specified. */
-  def location: String = storage.locationUri.getOrElse {
+  def location: String = storage.locationUri.map(_.toString).getOrElse {
     val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
     throw new AnalysisException(s"Partition [$specString] did not specify locationUri")
   }
@@ -194,7 +195,7 @@ case class CatalogTable(
   }
 
   /** Return the table location, assuming it is specified. */
-  def location: String = storage.locationUri.getOrElse {
+  def location: String = storage.locationUri.map(_.toString).getOrElse {
     throw new AnalysisException(s"table $identifier did not specify locationUri")
   }
 
@@ -244,7 +245,7 @@ case class CatalogTable(
 
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
-      locationUri: Option[String] = storage.locationUri,
+      locationUri: Option[URI] = storage.locationUri,
       inputFormat: Option[String] = storage.inputFormat,
       outputFormat: Option[String] = storage.outputFormat,
       compressed: Boolean = false,

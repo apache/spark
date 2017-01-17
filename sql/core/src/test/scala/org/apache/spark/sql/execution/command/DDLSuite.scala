@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.io.File
+import java.net.URI
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -78,7 +79,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   private def generateTable(catalog: SessionCatalog, name: TableIdentifier): CatalogTable = {
     val storage =
       CatalogStorageFormat(
-        locationUri = Some(catalog.defaultTablePath(name)),
+        locationUri = Some(new URI(catalog.defaultTablePath(name))),
         inputFormat = None,
         outputFormat = None,
         serde = None,

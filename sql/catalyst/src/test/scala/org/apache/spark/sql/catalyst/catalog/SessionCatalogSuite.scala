@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.net.URI
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
@@ -843,8 +845,8 @@ class SessionCatalogSuite extends PlanTest {
     val oldPart1 = catalog.getPartition(TableIdentifier("tbl2", Some("db2")), part1.spec)
     val oldPart2 = catalog.getPartition(TableIdentifier("tbl2", Some("db2")), part2.spec)
     catalog.alterPartitions(TableIdentifier("tbl2", Some("db2")), Seq(
-      oldPart1.copy(storage = storageFormat.copy(locationUri = Some(newLocation))),
-      oldPart2.copy(storage = storageFormat.copy(locationUri = Some(newLocation)))))
+      oldPart1.copy(storage = storageFormat.copy(locationUri = Some(new URI(newLocation)))),
+      oldPart2.copy(storage = storageFormat.copy(locationUri = Some(new URI(newLocation))))))
     val newPart1 = catalog.getPartition(TableIdentifier("tbl2", Some("db2")), part1.spec)
     val newPart2 = catalog.getPartition(TableIdentifier("tbl2", Some("db2")), part2.spec)
     assert(newPart1.storage.locationUri == Some(newLocation))

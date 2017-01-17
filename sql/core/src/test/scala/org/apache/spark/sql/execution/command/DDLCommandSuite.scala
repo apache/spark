@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
-import scala.reflect.{classTag, ClassTag}
+import java.net.URI
+
+import scala.reflect.{ClassTag, classTag}
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
@@ -409,7 +411,7 @@ class DDLCommandSuite extends PlanTest {
     val expectedTableDesc = CatalogTable(
       identifier = TableIdentifier("my_tab"),
       tableType = CatalogTableType.EXTERNAL,
-      storage = CatalogStorageFormat.empty.copy(locationUri = Some("/tmp/file")),
+      storage = CatalogStorageFormat.empty.copy(locationUri = Some(new URI("/tmp/file"))),
       schema = new StructType().add("a", IntegerType).add("b", StringType),
       provider = Some("parquet"))
 

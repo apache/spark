@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
+import java.net.URI
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -27,7 +28,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema}
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, Database => HiveDatabase}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
@@ -407,7 +408,7 @@ private[hive] class HiveClientImpl(
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
         storage = CatalogStorageFormat(
-          locationUri = shim.getDataLocation(h),
+          locationUri = shim.getDataLocation(h).map(new URI(_)),
           // To avoid ClassNotFound exception, we try our best to not get the format class, but get
           // the class name directly. However, for non-native tables, there is no interface to get
           // the format class name, so we may still throw ClassNotFound in this case.
@@ -842,7 +843,7 @@ private[hive] class HiveClientImpl(
     hiveTable.setOwner(conf.getUser)
     hiveTable.setCreateTime((table.createTime / 1000).toInt)
     hiveTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)
-    table.storage.locationUri.foreach { loc => shim.setDataLocation(hiveTable, loc) }
+    table.storage.locationUri.foreach { loc => shim.setDataLocation(hiveTable, loc.toString) }
     table.storage.inputFormat.map(toInputFormat).foreach(hiveTable.setInputFormatClass)
     table.storage.outputFormat.map(toOutputFormat).foreach(hiveTable.setOutputFormatClass)
     hiveTable.setSerializationLib(
@@ -867,7 +868,7 @@ private[hive] class HiveClientImpl(
     }
     val storageDesc = new StorageDescriptor
     val serdeInfo = new SerDeInfo
-    p.storage.locationUri.foreach(storageDesc.setLocation)
+    p.storage.locationUri.foreach(u => storageDesc.setLocation(u.toString))
     p.storage.inputFormat.foreach(storageDesc.setInputFormat)
     p.storage.outputFormat.foreach(storageDesc.setOutputFormat)
     p.storage.serde.foreach(serdeInfo.setSerializationLib)
@@ -885,7 +886,7 @@ private[hive] class HiveClientImpl(
     CatalogTablePartition(
       spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
       storage = CatalogStorageFormat(
-        locationUri = Option(apiPartition.getSd.getLocation),
+        locationUri = Option(apiPartition.getSd.getLocation).map(new URI(_)),
         inputFormat = Option(apiPartition.getSd.getInputFormat),
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),

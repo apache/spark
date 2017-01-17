@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.net.URI
 import java.util.{ServiceConfigurationError, ServiceLoader}
 
 import scala.collection.JavaConverters._
@@ -25,8 +26,8 @@ import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.deploy.SparkHadoopUtil
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable}
@@ -642,6 +643,7 @@ object DataSource {
   def buildStorageFormatFromOptions(options: Map[String, String]): CatalogStorageFormat = {
     val path = new CaseInsensitiveMap(options).get("path")
     val optionsWithoutPath = options.filterKeys(_.toLowerCase != "path")
-    CatalogStorageFormat.empty.copy(locationUri = path, properties = optionsWithoutPath)
+    CatalogStorageFormat.empty.copy(locationUri = path.map(new URI(_)),
+      properties = optionsWithoutPath)
   }
 }

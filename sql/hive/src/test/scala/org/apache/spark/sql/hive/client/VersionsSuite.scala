@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.{ByteArrayOutputStream, File, PrintStream}
+import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
@@ -346,7 +347,7 @@ class VersionsSuite extends SparkFunSuite with SQLTestUtils with TestHiveSinglet
       val spec = Map("key1" -> "1", "key2" -> "2")
       val newLocation = Utils.createTempDir().getPath()
       val storage = storageFormat.copy(
-        locationUri = Some(newLocation),
+        locationUri = Some(new URI(newLocation)),
         // needed for 0.12 alter partitions
         serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
       val partition = CatalogTablePartition(spec, storage)

@@ -72,7 +72,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         logDebug(s"Creating new cached data source for $in")
         val table = sparkSession.sharedState.externalCatalog.getTable(in.database, in.name)
 
-        val pathOption = table.storage.locationUri.map("path" -> _)
+        val pathOption = table.storage.locationUri.map("path" -> _.toString)
         val dataSource =
           DataSource(
             sparkSession,
