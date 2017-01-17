@@ -874,7 +874,7 @@ test_that("spark.lda with libsvm", {
   model2 <- read.ml(modelPath)
   stats2 <- summary(model2)
 
-  expect_false(stats2$isDistributed)
+  expect_true(stats2$isDistributed)
   expect_equal(logLikelihood, stats2$logLikelihood)
   expect_equal(logPerplexity, stats2$logPerplexity)
   expect_equal(vocabSize, stats2$vocabSize)
