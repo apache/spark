@@ -1462,7 +1462,8 @@ object GeneralizedLinearRegressionSuite {
     "maxIter" -> 2,  // intentionally small
     "tol" -> 0.8,
     "regParam" -> 0.01,
-    "predictionCol" -> "myPrediction")
+    "predictionCol" -> "myPrediction",
+    "variancePower" -> 1.0)
 
   def generateGeneralizedLinearRegressionInput(
       intercept: Double,

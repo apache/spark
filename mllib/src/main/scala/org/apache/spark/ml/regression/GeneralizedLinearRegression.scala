@@ -76,7 +76,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * @group param
    */
   @Since("2.2.0")
-  final val variancePower: Param[Double] = new Param(this, "variancePower",
+  final val variancePower: DoubleParam = new DoubleParam(this, "variancePower",
     "The power in the variance function of the Tweedie distribution which characterizes " +
     "the relationship between the variance and mean of the distribution. " +
     "Used only for the Tweedie family. Supported values: 0 and [1, Inf).",
@@ -114,7 +114,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * @group param
    */
   @Since("2.2.0")
-  final val linkPower: Param[Double] = new Param(this, "linkPower",
+  final val linkPower: DoubleParam = new DoubleParam(this, "linkPower",
     "The index in the power link function. This is used to specify the link function in the " +
     "Tweedie family.")
 
