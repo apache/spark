@@ -271,6 +271,27 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     )
   }
 
+  // This is a corner test case.  We want to test if we can handle the case when the number of
+  // valid values in IN clause is greater than the number of distinct values for a given column.
+  // For example, column has only 2 distinct values 1 and 6.
+  // The predicate is: column IN (1, 2, 3, 4, 5).
+  test("cint IN (1, 2, 3, 4, 5)") {
+    val cornerChildColStatInt = ColumnStat(distinctCount = 2, min = Some(1), max = Some(6),
+      nullCount = 0, avgLen = 4, maxLen = 4)
+    val cornerChildStatsTestplan = StatsTestPlan(
+      outputList = Seq(arInt),
+      rowCount = 2L,
+      attributeStats = AttributeMap(Seq(arInt -> cornerChildColStatInt))
+    )
+    validateEstimatedStats(
+      arInt,
+      Filter(InSet(arInt, Set(1, 2, 3, 4, 5)), cornerChildStatsTestplan),
+      ColumnStat(distinctCount = 2, min = Some(1), max = Some(5),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(2L)
+    )
+  }
+
   private def childStatsTestPlan(outList: Seq[Attribute]): StatsTestPlan = {
     StatsTestPlan(
       outputList = outList,

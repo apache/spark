@@ -96,12 +96,9 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * @param condition the compound logical expression
    * @param update a boolean flag to specify if we need to update ColumnStat of a column
    *               for subsequent conditions
-   * @return a doube value to show the percentage of rows meeting a given condition
+   * @return a double value to show the percentage of rows meeting a given condition
    */
-  def calculateConditions(
-      condition: Expression,
-      update: Boolean = true)
-    : Double = {
+  def calculateConditions(condition: Expression, update: Boolean = true): Double = {
 
     condition match {
       case And(cond1, cond2) =>
@@ -138,10 +135,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * @return Option[Double] value to show the percentage of rows meeting a given condition.
    *         It returns None if the condition is not supported.
    */
-  def calculateSingleCondition(
-      condition: Expression,
-      update: Boolean)
-    : Option[Double] = {
+  def calculateSingleCondition(condition: Expression, update: Boolean): Option[Double] = {
     condition match {
       // For evaluateBinary method, we assume the literal on the right side of an operator.
       // So we will change the order if not.
@@ -477,7 +471,9 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       return Some(0.0)
     }
 
-    val newNdv = validQuerySet.size
+    // newNdv should be no greater than the old ndv.  For example, column has only 2 values
+    // 1 and 6. The predicate column IN (1, 2, 3, 4, 5). validQuerySet.size is 5.
+    val newNdv = math.min(validQuerySet.size.toLong, ndv.longValue())
     val(newMax, newMin) = aType match {
       case _: NumericType | DateType | TimestampType =>
         val tmpSet: Set[Double] = validQuerySet.map(e => e.toString.toDouble)
@@ -555,6 +551,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
 
       // Without advanced statistics like histogram, we assume uniform data distribution.
       // We just prorate the adjusted range over the initial range to compute filter selectivity.
+      // For ease of computation, we convert all relevant numeric values to Double.
       percent = op match {
         case LessThan(l, r) =>
           (literalToDouble - minToDouble) / (maxToDouble - minToDouble)
