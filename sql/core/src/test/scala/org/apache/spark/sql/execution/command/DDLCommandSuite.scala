@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.net.URI
 
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._

@@ -895,7 +895,8 @@ abstract class CatalogTestUtils {
     CatalogTable(
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
-      storage = storageFormat.copy(locationUri = Some(new URI(Utils.createTempDir().getAbsolutePath))),
+      storage = storageFormat.copy(locationUri = Some(new URI(Utils.createTempDir()
+        .getAbsolutePath))),
       schema = new StructType()
         .add("col1", "int")
         .add("col2", "string")
