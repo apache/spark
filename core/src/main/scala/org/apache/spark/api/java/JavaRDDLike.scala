@@ -393,7 +393,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def treeReduce(f: JFunction2[T, T, T], depth: Int): T = rdd.treeReduce(f, depth)
 
   /**
-   * [[org.apache.spark.api.java.JavaRDDLike#treeReduce]] with suggested depth 2.
+   * `org.apache.spark.api.java.JavaRDDLike.treeReduce` with suggested depth 2.
    */
   def treeReduce(f: JFunction2[T, T, T]): T = treeReduce(f, 2)
 
@@ -440,7 +440,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
-   * [[org.apache.spark.api.java.JavaRDDLike#treeAggregate]] with suggested depth 2.
+   * `org.apache.spark.api.java.JavaRDDLike.treeAggregate` with suggested depth 2.
    */
   def treeAggregate[U](
       zeroValue: U,

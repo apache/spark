@@ -83,8 +83,8 @@ object DecisionTree extends Serializable with Logging {
    *                 categorical), depth of the tree, quantile calculation strategy, etc.
    * @return DecisionTreeModel that can be used for prediction.
    *
-   * @note Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
-   * and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
+   * @note Using `org.apache.spark.mllib.tree.DecisionTree.trainClassifier`
+   * and `org.apache.spark.mllib.tree.DecisionTree.trainRegressor`
    * is recommended to clearly separate classification and regression.
    */
   @Since("1.0.0")
@@ -105,8 +105,8 @@ object DecisionTree extends Serializable with Logging {
    *                 1 internal node + 2 leaf nodes).
    * @return DecisionTreeModel that can be used for prediction.
    *
-   * @note Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
-   * and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
+   * @note Using `org.apache.spark.mllib.tree.DecisionTree.trainClassifier`
+   * and `org.apache.spark.mllib.tree.DecisionTree.trainRegressor`
    * is recommended to clearly separate classification and regression.
    */
   @Since("1.0.0")
@@ -133,8 +133,8 @@ object DecisionTree extends Serializable with Logging {
    * @param numClasses Number of classes for classification. Default value of 2.
    * @return DecisionTreeModel that can be used for prediction.
    *
-   * @note Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
-   * and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
+   * @note Using `org.apache.spark.mllib.tree.DecisionTree.trainClassifier`
+   * and `org.apache.spark.mllib.tree.DecisionTree.trainRegressor`
    * is recommended to clearly separate classification and regression.
    */
   @Since("1.2.0")
@@ -167,8 +167,8 @@ object DecisionTree extends Serializable with Logging {
    *                                indexed from 0: {0, 1, ..., k-1}.
    * @return DecisionTreeModel that can be used for prediction.
    *
-   * @note Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
-   * and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
+   * @note Using `org.apache.spark.mllib.tree.DecisionTree.trainClassifier`
+   * and `org.apache.spark.mllib.tree.DecisionTree.trainRegressor`
    * is recommended to clearly separate classification and regression.
    */
   @Since("1.0.0")
@@ -218,7 +218,7 @@ object DecisionTree extends Serializable with Logging {
   }
 
   /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
+   * Java-friendly API for `org.apache.spark.mllib.tree.DecisionTree.trainClassifier`
    */
   @Since("1.1.0")
   def trainClassifier(
@@ -262,7 +262,7 @@ object DecisionTree extends Serializable with Logging {
   }
 
   /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
+   * Java-friendly API for `org.apache.spark.mllib.tree.DecisionTree.trainRegressor`
    */
   @Since("1.1.0")
   def trainRegressor(

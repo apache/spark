@@ -218,7 +218,9 @@ class FPGrowth private (
     new FPGrowthModel(freqItemsets)
   }
 
-  /** Java-friendly version of [[run]]. */
+  /**
+   * Java-friendly version of `run`.
+   */
   @Since("1.3.0")
   def run[Item, Basket <: JavaIterable[Item]](data: JavaRDD[Basket]): FPGrowthModel[Item] = {
     implicit val tag = fakeClassTag[Item]
