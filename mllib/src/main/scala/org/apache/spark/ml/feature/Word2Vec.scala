@@ -303,7 +303,7 @@ class Word2VecModel private[ml] (
 @Since("1.6.0")
 object Word2VecModel extends MLReadable[Word2VecModel] {
 
-  private case class Data(word: String, vector: Seq[Float])
+  private case class Data(word: String, vector: Array[Float])
 
   private[Word2VecModel]
   class Word2VecModelWriter(instance: Word2VecModel) extends MLWriter {
@@ -312,7 +312,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
 
       val wordVectors = instance.wordVectors.getVectors
-      val dataArray = wordVectors.toSeq.map { case (word, vector) => Data(word, vector) }
+      val dataArray = wordVectors.toSeq.map { case (word, vector) => Data(word, vector) }.toArray
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(dataArray)
         .repartition(calculateNumberOfPartitions)
@@ -357,9 +357,9 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
         val wordVectors = data.getAs[Seq[Float]](1).toArray
         new feature.Word2VecModel(wordIndex, wordVectors)
       } else {
-        val wordVectorsMap: Map[String, Array[Float]] = rawData.as[Data]
+        val wordVectorsMap = rawData.as[Data]
           .collect()
-          .map(wordVector => (wordVector.word, wordVector.vector.toArray))
+          .map(wordVector => (wordVector.word, wordVector.vector))
           .toMap
         new feature.Word2VecModel(wordVectorsMap)
       }
