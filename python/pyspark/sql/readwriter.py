@@ -432,8 +432,8 @@ class DataFrameReader(OptionUtils):
         if column is not None:
             if numPartitions is None:
                 numPartitions = self._spark._sc.defaultParallelism
-            assert lowerBound != None, "lowerBound can not be None when ``column`` is specified"
-            assert upperBound != None, "upperBound can not be None when ``column`` is specified"
+            assert lowerBound is not None, "lowerBound can not be None when ``column`` is specified"
+            assert upperBound is not None, "upperBound can not be None when ``column`` is specified"
             return self._df(self._jreader.jdbc(url, table, column, int(lowerBound), int(upperBound),
                                                int(numPartitions), jprop))
         if predicates is not None:
