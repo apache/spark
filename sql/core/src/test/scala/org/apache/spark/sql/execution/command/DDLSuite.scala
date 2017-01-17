@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.io.File
+import java.net.URI
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -1786,5 +1787,32 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val df = sql("show databases")
     val rows: Seq[Row] = df.toLocalIterator().asScala.toSeq
     assert(rows.length > 0)
+  }
+
+  test("SET LOCATION for managed table") {
+    withTable("src") {
+      withTempDir { dir =>
+        sql("CREATE TABLE tbl(i INT) USING parquet")
+        sql("INSERT INTO tbl SELECT 1")
+        checkAnswer(spark.table("tbl"), Row(1))
+        val defaultTablePath = spark.sessionState.catalog
+          .getTableMetadata(TableIdentifier("tbl")).storage.locationUri.get
+
+        sql(s"ALTER TABLE tbl SET LOCATION '${dir.getCanonicalPath}'")
+        // SET LOCATION won't move data from previous table path to new table path.
+        assert(spark.table("tbl").count() == 0)
+        // the previous table path should be still there.
+        assert(new File(new URI(defaultTablePath)).exists())
+
+        sql("INSERT INTO tbl SELECT 2")
+        checkAnswer(spark.table("tbl"), Row(2))
+        // newly inserted data will go to the new table path.
+        assert(dir.listFiles().nonEmpty)
+
+        sql("DROP TABLE tbl")
+        // the new table path will be removed after DROP TABLE.
+        assert(!dir.exists())
+      }
+    }
   }
 }
