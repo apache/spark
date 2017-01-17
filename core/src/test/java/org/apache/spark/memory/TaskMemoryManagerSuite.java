@@ -125,17 +125,22 @@ public class TaskMemoryManagerSuite {
     Assert.assertEquals(80, c2.getUsed());
     c3.use(80);
     Assert.assertEquals(20, c1.getUsed());  // c1: not spilled
-    Assert.assertEquals(0, c2.getUsed());   // c2: spilled as it uses more memory
+    Assert.assertEquals(0, c2.getUsed());   // c2: spilled as it has required size of memory
     Assert.assertEquals(80, c3.getUsed());
 
-    c2.use(50);
+    c2.use(80);
     Assert.assertEquals(20, c1.getUsed());  // c1: not spilled
-    Assert.assertEquals(0, c3.getUsed());   // c3: spilled as it uses more memory
-    Assert.assertEquals(50, c2.getUsed());
+    Assert.assertEquals(0, c3.getUsed());   // c3: spilled as it has required size of memory
+    Assert.assertEquals(80, c2.getUsed());
 
-    c1.free(20);
-    c2.free(50);
-    c3.free(0);
+    c3.use(10);
+    Assert.assertEquals(0, c1.getUsed());   // c1: spilled as it has required size of memory
+    Assert.assertEquals(80, c2.getUsed());  // c2: not spilled as spilling c1 already satisfies c3
+    Assert.assertEquals(10, c3.getUsed());
+
+    c1.free(0);
+    c2.free(80);
+    c3.free(10);
     Assert.assertEquals(0, manager.cleanUpAllAllocatedMemory());
   }
 

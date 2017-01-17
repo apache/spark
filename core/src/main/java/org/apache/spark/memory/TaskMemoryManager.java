@@ -68,13 +68,7 @@ public class TaskMemoryManager {
       // We can only compare the consumers which use the same mode.
       assert (consumer1.getMode() == consumer2.getMode()) :
         "Try to compare two MemoryConsumers which are in different memory mode.";
-      if (consumer1.getUsed() < consumer2.getUsed()) {
-        return 1;
-      } else if (consumer1.getUsed() > consumer2.getUsed()) {
-        return -1;
-      } else {
-        return 0;
-      }
+      return Long.compare(consumer2.getUsed(), consumer1.getUsed());
     }
   }
 
@@ -173,28 +167,36 @@ public class TaskMemoryManager {
         // Sort the consumers according their memory usage. So we avoid spilling the same consumer
         // which is just spilled in last few times and re-spilling on it will produce many small
         // spill files.
-        List<MemoryConsumer> sortedList = new ArrayList<>();
+        List<MemoryConsumer> sortedList = new ArrayList<>(consumers.size());
         for (MemoryConsumer c: consumers) {
           if (c != consumer && c.getUsed() > 0 && c.getMode() == mode) {
             sortedList.add(c);
           }
         }
         Collections.sort(sortedList, new ConsumerComparator());
-        for (MemoryConsumer c: sortedList) {
-          try {
-            long released = c.spill(required - got, consumer);
-            if (released > 0) {
-              logger.debug("Task {} released {} from {} for {}", taskAttemptId,
-                Utils.bytesToString(released), c, consumer);
-              got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
-              if (got >= required) {
-                break;
+        for (int listIndex = 0; listIndex < sortedList.size(); listIndex++) {
+          MemoryConsumer c = sortedList.get(listIndex);
+          // Try to only spill on the consumer which has the required size of memory.
+          // As the consumers are sorted in descending order, if the next consumer doesn't have
+          // the required memory, then we need to spill the current consumer at least.
+          boolean doSpill = (listIndex + 1) == sortedList.size() ||
+            sortedList.get(listIndex + 1).getUsed() < (required - got);
+          if (doSpill) {
+            try {
+              long released = c.spill(required - got, consumer);
+              if (released > 0) {
+                logger.debug("Task {} released {} from {} for {}", taskAttemptId,
+                  Utils.bytesToString(released), c, consumer);
+                got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
+                if (got >= required) {
+                  break;
+                }
               }
+            } catch (IOException e) {
+              logger.error("error while calling spill() on " + c, e);
+              throw new OutOfMemoryError("error while calling spill() on " + c + " : "
+                + e.getMessage());
             }
-          } catch (IOException e) {
-            logger.error("error while calling spill() on " + c, e);
-            throw new OutOfMemoryError("error while calling spill() on " + c + " : "
-              + e.getMessage());
           }
         }
       }
