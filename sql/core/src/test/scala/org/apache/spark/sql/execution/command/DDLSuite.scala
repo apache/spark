@@ -1802,7 +1802,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         // SET LOCATION won't move data from previous table path to new table path.
         assert(spark.table("tbl").count() == 0)
         // the previous table path should be still there.
-        assert(new File(new URI(defaultTablePath)).exists())
+        assert(new File(defaultTablePath).exists())
 
         sql("INSERT INTO tbl SELECT 2")
         checkAnswer(spark.table("tbl"), Row(2))
