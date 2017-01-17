@@ -21,7 +21,6 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SortExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
@@ -897,17 +896,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       joined.dropDuplicates(),
       (1, 2), (1, 1), (2, 1), (2, 2))
-  }
-
-  test("SPARK-19065 dropDuplicates should not create expressions using the same id") {
-    val ds = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS().dropDuplicates("_1")
-    var exprs = Set.empty[NamedExpression]
-    ds.logicalPlan.transformAllExpressions { case e: NamedExpression =>
-      exprs += e
-      e
-    }
-    val duplicatedExprs = exprs.groupBy(expr => expr.exprId).filter(_._2.size > 1).values
-    assert(duplicatedExprs.isEmpty)
   }
 
   test("SPARK-16097: Encoders.tuple should handle null object correctly") {
