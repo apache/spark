@@ -370,28 +370,35 @@ class HiveDDLSuite
       spark.range(10).write.saveAsTable(tabName)
       val viewName = "view1"
       withView(viewName) {
+        def checkProperties(
+            properties: Map[String, String],
+            expected: Map[String, String]): Boolean = {
+          properties.filterNot { case (key, value) =>
+            Seq("transient_lastDdlTime", CatalogTable.VIEW_DEFAULT_DATABASE).contains(key) ||
+              key.startsWith(CatalogTable.VIEW_QUERY_OUTPUT_PREFIX)
+          } == expected
+        }
+
         val catalog = spark.sessionState.catalog
         sql(s"CREATE VIEW $viewName AS SELECT * FROM $tabName")
 
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map())
+        checkProperties(catalog.getTableMetadata(TableIdentifier(viewName)).properties, Map())
         sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "an"))
+        checkProperties(catalog.getTableMetadata(TableIdentifier(viewName)).properties,
+          Map("p" -> "an"))
 
         // no exception or message will be issued if we set it again
         sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "an"))
+        checkProperties(catalog.getTableMetadata(TableIdentifier(viewName)).properties,
+          Map("p" -> "an"))
 
         // the value will be updated if we set the same key to a different value
         sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'b')")
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "b"))
+        checkProperties(catalog.getTableMetadata(TableIdentifier(viewName)).properties,
+          Map("p" -> "b"))
 
         sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map())
+        checkProperties(catalog.getTableMetadata(TableIdentifier(viewName)).properties, Map())
 
         val message = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
@@ -644,10 +651,7 @@ class HiveDDLSuite
           Seq(
             Row("# View Information", "", ""),
             Row("View Original Text:", "SELECT * FROM tbl", ""),
-            Row("View Expanded Text:",
-              "SELECT `gen_attr_0` AS `a` FROM (SELECT `gen_attr_0` FROM " +
-              "(SELECT `a` AS `gen_attr_0` FROM `default`.`tbl`) AS gen_subquery_0) AS tbl",
-              "")
+            Row("View Expanded Text:", "SELECT * FROM tbl", "")
           )
         ))
       }
