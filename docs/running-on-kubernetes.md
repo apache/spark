@@ -31,16 +31,16 @@ For example, if the registry host is `registry-host` and the registry is listeni
 Kubernetes applications can be executed via `spark-submit`. For example, to compute the value of pi, assuming the images
 are set up as described above:
 
-    bin/spark-submit 
-      --deploy-mode cluster 
-      --class org.apache.spark.examples.SparkPi 
-      --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port>
-      --kubernetes-namespace default
-      --conf spark.executor.instances=5 
-      --conf spark.app.name=spark-pi
-      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver:latest
-      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest
-      examples/jars/spark_2.11-2.2.0.jar
+    bin/spark-submit \
+      --deploy-mode cluster \
+      --class org.apache.spark.examples.SparkPi \
+      --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port> \
+      --kubernetes-namespace default \
+      --conf spark.executor.instances=5 \
+      --conf spark.app.name=spark-pi \
+      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver:latest \
+      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
+      examples/jars/spark_examples_2.11-2.2.0.jar
 
 <!-- TODO master should default to https if no scheme is specified -->
 The Spark master, specified either via passing the `--master` command line argument to `spark-submit` or by setting
@@ -75,53 +75,53 @@ examples of providing application dependencies.
 
 To submit an application with both the main resource and two other jars living on the submitting user's machine:
 
-    bin/spark-submit
-      --deploy-mode cluster
-      --class com.example.applications.SampleApplication
-      --master k8s://https://192.168.99.100
-      --kubernetes-namespace default 
-      --upload-jars /home/exampleuser/exampleapplication/dep1.jar,/home/exampleuser/exampleapplication/dep2.jar
-      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver:latest
-      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest
+    bin/spark-submit \
+      --deploy-mode cluster \
+      --class com.example.applications.SampleApplication \
+      --master k8s://https://192.168.99.100 \
+      --kubernetes-namespace default \
+      --upload-jars /home/exampleuser/exampleapplication/dep1.jar,/home/exampleuser/exampleapplication/dep2.jar \
+      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver:latest \
+      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
       /home/exampleuser/exampleapplication/main.jar
       
 Note that since passing the jars through the `--upload-jars` command line argument is equivalent to setting the
 `spark.kubernetes.driver.uploads.jars` Spark property, the above will behave identically to this command:
 
-    bin/spark-submit
-      --deploy-mode cluster
-      --class com.example.applications.SampleApplication
-      --master k8s://https://192.168.99.100
-      --kubernetes-namespace default 
-      --conf spark.kubernetes.driver.uploads.jars=/home/exampleuser/exampleapplication/dep1.jar,/home/exampleuser/exampleapplication/dep2.jar
-      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver:latest
-      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest
+    bin/spark-submit \
+      --deploy-mode cluster \
+      --class com.example.applications.SampleApplication \
+      --master k8s://https://192.168.99.100 \
+      --kubernetes-namespace default \
+      --conf spark.kubernetes.driver.uploads.jars=/home/exampleuser/exampleapplication/dep1.jar,/home/exampleuser/exampleapplication/dep2.jar \
+      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver:latest \
+      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
       /home/exampleuser/exampleapplication/main.jar
 
 To specify a main application resource that can be downloaded from an HTTP service, and if a plugin for that application
 is located in the jar `/opt/spark-plugins/app-plugin.jar` on the docker image's disk:
 
-    bin/spark-submit 
-      --deploy-mode cluster 
-      --class com.example.applications.PluggableApplication
-      --master k8s://https://192.168.99.100
-      --kubernetes-namespace default 
-      --jars /opt/spark-plugins/app-plugin.jar
-      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver-custom:latest
-      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest
+    bin/spark-submit \
+      --deploy-mode cluster \
+      --class com.example.applications.PluggableApplication \
+      --master k8s://https://192.168.99.100 \
+      --kubernetes-namespace default \
+      --jars /opt/spark-plugins/app-plugin.jar \
+      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver-custom:latest \
+      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
       http://example.com:8080/applications/sparkpluggable/app.jar
       
 Note that since passing the jars through the `--jars` command line argument is equivalent to setting the `spark.jars`
 Spark property, the above will behave identically to this command:
 
-    bin/spark-submit 
-      --deploy-mode cluster 
-      --class com.example.applications.PluggableApplication
-      --master k8s://https://192.168.99.100
-      --kubernetes-namespace default 
-      --conf spark.jars=file:///opt/spark-plugins/app-plugin.jar
-      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver-custom:latest
-      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest
+    bin/spark-submit \
+      --deploy-mode cluster \
+      --class com.example.applications.PluggableApplication \
+      --master k8s://https://192.168.99.100 \
+      --kubernetes-namespace default \
+      --conf spark.jars=file:///opt/spark-plugins/app-plugin.jar \
+      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver-custom:latest \
+      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
       http://example.com:8080/applications/sparkpluggable/app.jar
       
 ### Spark Properties
