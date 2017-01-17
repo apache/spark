@@ -17,19 +17,15 @@
 
 package org.apache.spark.sql
 
-<<<<<<< 35be82eec3b22e5af9c0b77ef4978d134bcd5482
 import java.util.Locale
 
 import scala.collection.JavaConverters._
-=======
-import java.sql.{Date, Timestamp}
->>>>>>> Move Field function test to ColumnExpressionSuite
 
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
 
-import org.apache.spark.sql.catalyst.expressions.{Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
