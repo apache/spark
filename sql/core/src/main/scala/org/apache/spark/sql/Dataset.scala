@@ -2469,7 +2469,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def persist(): this.type = {
-    sparkSession.sharedState.cacheManager.cacheQuery(this)
+    sparkSession.sharedState.cacheManager.cacheQuery(this, Option(name))
     this
   }
 
@@ -2491,7 +2491,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def persist(newLevel: StorageLevel): this.type = {
-    sparkSession.sharedState.cacheManager.cacheQuery(this, None, newLevel)
+    sparkSession.sharedState.cacheManager.cacheQuery(this, Option(name), newLevel)
     this
   }
 
