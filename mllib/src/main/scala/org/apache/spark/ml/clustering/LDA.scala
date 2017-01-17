@@ -42,9 +42,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, monotonically_increasing_id, udf}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.VersionUtils
 import org.apache.spark.util.PeriodicCheckpointer
-
+import org.apache.spark.util.VersionUtils
 
 private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasMaxIter
   with HasSeed with HasCheckpointInterval {
