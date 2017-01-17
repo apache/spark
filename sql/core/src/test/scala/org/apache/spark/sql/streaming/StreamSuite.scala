@@ -304,6 +304,32 @@ class StreamSuite extends StreamTest {
       q.stop()
     }
   }
+
+  test("SPARK-19065: dropDuplicates should not create expressions using the same id") {
+    withTempPath { testPath =>
+      val data = Seq((1, 2), (2, 3), (3, 4))
+      data.toDS.write.mode("overwrite").json(testPath.getCanonicalPath)
+      val schema = spark.read.json(testPath.getCanonicalPath).schema
+      val query = spark
+        .readStream
+        .schema(schema)
+        .json(testPath.getCanonicalPath)
+        .dropDuplicates("_1")
+        .writeStream
+        .format("memory")
+        .queryName("testquery")
+        .outputMode("complete")
+        .start()
+      try {
+        query.processAllAvailable()
+        if (query.exception.isDefined) {
+          throw query.exception.get
+        }
+      } finally {
+        query.stop()
+      }
+    }
+  }
 }
 
 /**
