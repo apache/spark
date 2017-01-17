@@ -56,7 +56,11 @@ class BisectingKMeansSuite
 
   test("SPARK-16473: Verify Bisecting K-Means does not fail in edge case where" +
     "one cluster is empty after split") {
-    val bkm = new BisectingKMeans().setK(k).setMinDivisibleClusterSize(4).setMaxIter(4)
+    val bkm = new BisectingKMeans()
+      .setK(k)
+      .setMinDivisibleClusterSize(4)
+      .setMaxIter(4)
+      .setSeed(123)
 
     // Verify fit does not fail on very sparse data
     val model = bkm.fit(sparseDataset)
