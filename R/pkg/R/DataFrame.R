@@ -90,7 +90,7 @@ dataFrame <- function(sdf, isCached = FALSE) {
 #' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' df.name()
+#' name(df)
 #'}
 #' @aliases name,SparkDataFrame-method
 #' @export
@@ -108,7 +108,7 @@ setMethod("name",
 #' @param x The SparkDataFrame whose name is to be set.
 #' @param name The SparkDataFrame name to be set.
 #' @family SparkDataFrame functions
-#' @return a new SparkDataFrame renamed.
+#' @return the SparkDataFrame renamed.
 #' @rdname name
 #' @examples
 #'\dontrun{
