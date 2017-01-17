@@ -130,11 +130,11 @@ private[spark] object UIData {
       _metrics = TaskUIData.toTaskMetricsUIData(metrics)
     }
 
-    def taskDuration: Long = {
+    def taskDuration: Option[Long] = {
       if (taskInfo.status == "RUNNING") {
-        _taskInfo.timeRunning(System.currentTimeMillis)
+        Some(_taskInfo.timeRunning(System.currentTimeMillis))
       } else {
-        _metrics.map(_.executorRunTime).getOrElse(1L)
+        _metrics.map(_.executorRunTime)
       }
     }
   }

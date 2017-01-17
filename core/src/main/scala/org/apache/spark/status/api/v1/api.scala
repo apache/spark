@@ -158,7 +158,7 @@ class TaskData private[spark](
     val index: Int,
     val attempt: Int,
     val launchTime: Date,
-    val duration: Long,
+    val duration: Option[Long] = None,
     val executorId: String,
     val host: String,
     val status: String,
