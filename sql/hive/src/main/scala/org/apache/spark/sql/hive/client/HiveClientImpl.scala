@@ -546,6 +546,7 @@ private[hive] class HiveClientImpl(
           // -1 for result limit means "no limit/return all"
           client.getPartitionNames(table.database, table.identifier.table, -1)
         case Some(s) =>
+          assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
           client.getPartitionNames(table.database, table.identifier.table, s.asJava, -1)
       }
     hivePartitionNames.asScala.sorted
