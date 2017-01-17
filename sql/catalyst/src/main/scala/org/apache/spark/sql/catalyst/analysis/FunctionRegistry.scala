@@ -511,12 +511,13 @@ object FunctionRegistry {
       new ExpressionInfo(clazz.getCanonicalName, name)
     }
   }
+
   private def expressionGeneratorOuter[T <: Generator : ClassTag]
     (name: String): (String, (ExpressionInfo, FunctionBuilder)) = {
-    val regularGen = expression[T](name)
+    val (_, (info, generatorBuilder)) = expression[T](name)
     val outerBuilder = (args: Seq[Expression]) => {
-      GeneratorOuter(regularGen._2._2(args).asInstanceOf[Generator])
+      GeneratorOuter(generatorBuilder(args).asInstanceOf[Generator])
     }
-    (name, (expressionInfo[GeneratorOuter](name), outerBuilder))
+    (name, (info, outerBuilder))
   }
 }

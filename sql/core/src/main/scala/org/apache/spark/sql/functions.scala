@@ -2889,7 +2889,7 @@ object functions {
 
   /**
    * Creates a new row for each element with position in the given array or map column.
-   * Unlike posexplode, if the array/map is null or empty then the row (0, null) is produced.
+   * Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
    *
    * @group collection_funcs
    * @since 2.2.0
