@@ -160,8 +160,8 @@ class BinaryClassificationMetrics @Since("2.2.0") (
   private lazy val (
     cumulativeCounts: RDD[(Double, BinaryLabelCounter)],
     confusions: RDD[(Double, BinaryConfusionMatrix)]) = {
-    // Create a bin for each distinct score value, count positives and negatives within each bin,
-    // and then sort by score values in descending order.
+    // Create a bin for each distinct score value, count weighted positives and
+    // negatives within each bin, and then sort by score values in descending order.
     val counts = scoreAndLabelsWithWeights.combineByKey(
       createCombiner = (labelAndWeight: (Double, Double)) =>
         new BinaryLabelCounter(0L, 0L) += (labelAndWeight._1, labelAndWeight._2),
