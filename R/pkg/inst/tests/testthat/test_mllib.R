@@ -860,7 +860,7 @@ test_that("spark.lda with libsvm", {
   weights <- stats$topicTopTermsWeights
   vocabulary <- stats$vocabulary
 
-  expect_false(isDistributed)
+  expect_true(isDistributed)
   expect_true(logLikelihood <= 0 & is.finite(logLikelihood))
   expect_true(logPerplexity >= 0 & is.finite(logPerplexity))
   expect_equal(vocabSize, 11)
