@@ -174,6 +174,7 @@ function renderDagViz(forJob) {
 
   resizeSvg(svg);
   intepreteLineBreak(svg);
+  enableDataHtml();
 }
 
 /* Render the RDD DAG visualization on the stage page. */
@@ -365,14 +366,18 @@ function resizeSvg(svg) {
 
 
 function intepreteLineBreak(svg) {
-    var allTSpan = svg.selectAll("tspan").each(function() {
-        node = d3.select(this);
-        var text = replaceLineBreak(node[0][0].innerHTML);
-        node.text(text);
-    });
-
+  var allTSpan = svg.selectAll("tspan").each(function() {
+    node = d3.select(this);
+    var text = replaceLineBreak(node[0][0].innerHTML);
+    node.text(text);
+    d3.select(this).attr("data-html", "true");
+  });
 }
 
+//
+//function enableDataHtml() {
+//
+//}
 
 /*
  * (Job page only) Helper function to draw edges that cross stage boundaries.
@@ -498,7 +503,7 @@ function addTooltipsForRDDs(svgContainer) {
       node.select("circle")
         .attr("data-toggle", "tooltip")
         .attr("data-placement", "bottom")
-//        .attr("data-html", "true")
+        .attr("data-html", "true")
         .attr("title", tooltipText);
     }
     // Link tooltips for all nodes that belong to the same RDD
