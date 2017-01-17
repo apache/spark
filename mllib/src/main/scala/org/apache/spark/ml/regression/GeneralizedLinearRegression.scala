@@ -21,7 +21,6 @@ import java.util.Locale
 
 import breeze.stats.{distributions => dist}
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
@@ -36,7 +35,8 @@ import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.sql.types.{DataType, DoubleType, StringType, StructType, StructField}
+import org.apache.spark.sql.SparkSession
 
 
 /**
@@ -1206,12 +1206,19 @@ class GeneralizedLinearRegressionSummary private[regression] (
   lazy val numInstances: Long = predictions.count()
 
 
-  /** Name of features. */
+  /**
+   * Name of features. If the name cannot be retrieved from attributes,
+   * use default "V0", "V1", ...
+   */
   @Since("2.2.0")
   lazy val featureName: Array[String] = {
-    val features = AttributeGroup.fromStructField(dataset.schema(model.getFeaturesCol))
-                                  .attributes.get.map(_.name.get)
-    features
+    val featureAttrs = AttributeGroup.fromStructField(
+      dataset.schema(model.getFeaturesCol)).attributes
+    if (featureAttrs == None) {
+      Array.tabulate[String](origModel.numFeatures)((x: Int) => ("V" + x))
+    } else {
+      featureAttrs.get.map(_.name.get)
+    }
   }
 
   /** The numeric rank of the fitted linear model. */
@@ -1475,21 +1482,23 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
     *
     */
   @Since("2.2.0")
-  lazy val summaryTable: Seq[_] = {
+  lazy val summaryTable: DataFrame = {
     if (isNormalSolver) {
-      val features = if (model.getFitIntercept) {
-        featureName :+ "Intercept"
-      } else {
-        featureName
+      var featureNames = featureName
+      var coefficients = model.coefficients.toArray
+      if (model.getFitIntercept) {
+        featureNames = featureNames :+ "Intercept"
+        coefficients = coefficients :+ model.intercept
       }
-      val coef = if (model.getFitIntercept) {
-        model.coefficients.toArray :+ model.intercept
-      } else {
-        model.coefficients.toArray
-      }
-      val result = for (i <- 0 until coef.length)
-        yield (features(i), coef(i), coefficientStandardErrors(i), tValues(i), pValues(i))
-      result
+      var result = for (i <- 0 until coefficients.length) yield
+        (featureNames(i), coefficients(i), coefficientStandardErrors(i), tValues(i), pValues(i))
+      /*if (model.getFitIntercept) {
+        result = ((coefficients.length - 1) +: Array.range(0, (coefficients.length - 1)))
+          .map(result(_)).toSeq
+      }*/
+      val spark = SparkSession.builder().getOrCreate()
+      import spark.implicits._
+      result.toDF("Feature", "Estimate", "StdError", "tValue", "pValue").repartition(1)
     } else {
       throw new UnsupportedOperationException(
         "No summary table available for this GeneralizedLinearRegressionModel")
