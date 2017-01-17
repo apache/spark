@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.JavaConverters._
 import java.net.URI
+
+import scala.collection.JavaConverters._
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
