@@ -46,6 +46,8 @@ case class CreateHiveTableAsSelectCommand(
   override def innerChildren: Seq[LogicalPlan] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    // the CTAS's SELECT partition-outputs order should be consistent with
+    // tableDesc.partitionColumnNames
     val partitionAttrs = tableDesc.partitionColumnNames.map {
             p =>
               query.output.find(_.name == p).getOrElse(
@@ -55,8 +57,6 @@ case class CreateHiveTableAsSelectCommand(
           }
     val partitionSet = AttributeSet(partitionAttrs)
     val dataAttrs = query.output.filterNot(partitionSet.contains)
-    // the CTAS's SELECT partition-outputs order should be consistent with
-    // tableDesc.partitionColumnNames
     val reorderedOutputQuery = Project(dataAttrs ++ partitionAttrs, query)
 
     lazy val metastoreRelation: MetastoreRelation = {
