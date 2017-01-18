@@ -24,7 +24,6 @@ import java.util.Properties
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
 
 /**

@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, IOException, PrintStream}
+import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
 import java.security.PrivilegedExceptionAction
