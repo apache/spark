@@ -50,7 +50,7 @@
 #'                 \itemize{
 #'                   \item Mac OS X: \file{~/Library/Caches/spark}
 #'                   \item Unix: \env{$XDG_CACHE_HOME} if defined, otherwise \file{~/.cache/spark}
-#'                   \item Windows: \file{\%LOCALAPPDATA\%\\spark\\spark\\Cache}.
+#'                   \item Windows: \file{\%LOCALAPPDATA\%\\Apache\\Spark\\Cache}.
 #'                 }
 #' @param overwrite If \code{TRUE}, download and overwrite the existing tar file in localDir
 #'                  and force re-install Spark (in case the local directory or file is corrupted)
@@ -239,7 +239,7 @@ sparkCachePath <- function() {
                    "or restart and enter an installation path in localDir.")
       stop(msg)
     } else {
-      path <- file.path(winAppPath, "spark", "spark", "Cache")
+      path <- file.path(winAppPath, "Apache", "Spark", "Cache")
     }
   } else if (.Platform$OS.type == "unix") {
     if (Sys.info()["sysname"] == "Darwin") {

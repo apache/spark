@@ -25,7 +25,7 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogRelation, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
 import org.apache.spark.sql.sources.BaseRelation
@@ -372,6 +372,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val tableIdentWithDB = tableIdent.copy(database = Some(db))
     val tableName = tableIdentWithDB.unquotedString
 
+    var tableRelation: Option[LogicalPlan] = None
+    if (tableExists) {
+      tableRelation = Some(catalog.lookupRelation(tableIdentWithDB))
+    }
+
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
         // Do nothing
@@ -386,7 +391,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           case relation: CatalogRelation if DDLUtils.isHiveTable(relation.catalogTable) =>
             relation.catalogTable.identifier
         }
-        EliminateSubqueryAliases(catalog.lookupRelation(tableIdentWithDB)) match {
+        EliminateSubqueryAliases(tableRelation.get) match {
           // check if the table is a data source table (the relation is a BaseRelation).
           case LogicalRelation(dest: BaseRelation, _, _) if srcRelations.contains(dest) =>
             throw new AnalysisException(
@@ -406,8 +411,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         catalog.refreshTable(tableIdentWithDB)
 
       case (true, SaveMode.Append)
-        if DDLUtils.isHiveTable(
-          EliminateSubqueryAliases(catalog.lookupRelation(tableIdentWithDB))
+        if tableRelation.isDefined && tableRelation.get.isInstanceOf[CatalogRelation]
+          && DDLUtils.isHiveTable(EliminateSubqueryAliases(tableRelation.get)
             .asInstanceOf[CatalogRelation].catalogTable) =>
          insertInto(tableIdentWithDB)
       case _ => createTable(tableIdent)

@@ -633,7 +633,7 @@ object functions {
   def skewness(columnName: String): Column = skewness(Column(columnName))
 
   /**
-   * Aggregate function: alias for [[stddev_samp]].
+   * Aggregate function: alias for `stddev_samp`.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -641,7 +641,7 @@ object functions {
   def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
 
   /**
-   * Aggregate function: alias for [[stddev_samp]].
+   * Aggregate function: alias for `stddev_samp`.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -717,7 +717,7 @@ object functions {
   def sumDistinct(columnName: String): Column = sumDistinct(Column(columnName))
 
   /**
-   * Aggregate function: alias for [[var_samp]].
+   * Aggregate function: alias for `var_samp`.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -725,7 +725,7 @@ object functions {
   def variance(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
 
   /**
-   * Aggregate function: alias for [[var_samp]].
+   * Aggregate function: alias for `var_samp`.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -2871,12 +2871,30 @@ object functions {
   def explode(e: Column): Column = withExpr { Explode(e.expr) }
 
   /**
+   * Creates a new row for each element in the given array or map column.
+   * Unlike explode, if the array/map is null or empty then null is produced.
+   *
+   * @group collection_funcs
+   * @since 2.2.0
+   */
+  def explode_outer(e: Column): Column = withExpr { GeneratorOuter(Explode(e.expr)) }
+
+  /**
    * Creates a new row for each element with position in the given array or map column.
    *
    * @group collection_funcs
    * @since 2.1.0
    */
   def posexplode(e: Column): Column = withExpr { PosExplode(e.expr) }
+
+  /**
+   * Creates a new row for each element with position in the given array or map column.
+   * Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
+   *
+   * @group collection_funcs
+   * @since 2.2.0
+   */
+  def posexplode_outer(e: Column): Column = withExpr { GeneratorOuter(PosExplode(e.expr)) }
 
   /**
    * Extracts json object from a json string based on json path specified, and returns json string

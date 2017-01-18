@@ -331,7 +331,7 @@ class SessionCatalog(
   def loadPartition(
       name: TableIdentifier,
       loadPath: String,
-      partition: TablePartitionSpec,
+      spec: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
@@ -340,8 +340,9 @@ class SessionCatalog(
     val table = formatTableName(name.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
+    requireNonEmptyValueInPartitionSpec(Seq(spec))
     externalCatalog.loadPartition(
-      db, table, loadPath, partition, isOverwrite, holdDDLTime, inheritTableSpecs, isSrcLocal)
+      db, table, loadPath, spec, isOverwrite, holdDDLTime, inheritTableSpecs, isSrcLocal)
   }
 
   def defaultTablePath(tableIdent: TableIdentifier): String = {
@@ -693,6 +694,7 @@ class SessionCatalog(
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
     requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
+    requireNonEmptyValueInPartitionSpec(parts.map(_.spec))
     externalCatalog.createPartitions(db, table, parts, ignoreIfExists)
   }
 
@@ -711,6 +713,7 @@ class SessionCatalog(
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
     requirePartialMatchedPartitionSpec(specs, getTableMetadata(tableName))
+    requireNonEmptyValueInPartitionSpec(specs)
     externalCatalog.dropPartitions(db, table, specs, ignoreIfNotExists, purge, retainData)
   }
 
@@ -731,6 +734,8 @@ class SessionCatalog(
     requireTableExists(TableIdentifier(table, Option(db)))
     requireExactMatchedPartitionSpec(specs, tableMetadata)
     requireExactMatchedPartitionSpec(newSpecs, tableMetadata)
+    requireNonEmptyValueInPartitionSpec(specs)
+    requireNonEmptyValueInPartitionSpec(newSpecs)
     externalCatalog.renamePartitions(db, table, specs, newSpecs)
   }
 
@@ -749,6 +754,7 @@ class SessionCatalog(
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
     requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
+    requireNonEmptyValueInPartitionSpec(parts.map(_.spec))
     externalCatalog.alterPartitions(db, table, parts)
   }
 
@@ -762,6 +768,7 @@ class SessionCatalog(
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
     requireExactMatchedPartitionSpec(Seq(spec), getTableMetadata(tableName))
+    requireNonEmptyValueInPartitionSpec(Seq(spec))
     externalCatalog.getPartition(db, table, spec)
   }
 
@@ -781,6 +788,7 @@ class SessionCatalog(
     requireTableExists(TableIdentifier(table, Option(db)))
     partialSpec.foreach { spec =>
       requirePartialMatchedPartitionSpec(Seq(spec), getTableMetadata(tableName))
+      requireNonEmptyValueInPartitionSpec(Seq(spec))
     }
     externalCatalog.listPartitionNames(db, table, partialSpec)
   }
@@ -801,6 +809,7 @@ class SessionCatalog(
     requireTableExists(TableIdentifier(table, Option(db)))
     partialSpec.foreach { spec =>
       requirePartialMatchedPartitionSpec(Seq(spec), getTableMetadata(tableName))
+      requireNonEmptyValueInPartitionSpec(Seq(spec))
     }
     externalCatalog.listPartitions(db, table, partialSpec)
   }
@@ -817,6 +826,19 @@ class SessionCatalog(
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
     externalCatalog.listPartitionsByFilter(db, table, predicates)
+  }
+
+  /**
+   * Verify if the input partition spec has any empty value.
+   */
+  private def requireNonEmptyValueInPartitionSpec(specs: Seq[TablePartitionSpec]): Unit = {
+    specs.foreach { s =>
+      if (s.values.exists(_.isEmpty)) {
+        val spec = s.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+        throw new AnalysisException(
+          s"Partition spec is invalid. The spec ($spec) contains an empty partition column value")
+      }
+    }
   }
 
   /**

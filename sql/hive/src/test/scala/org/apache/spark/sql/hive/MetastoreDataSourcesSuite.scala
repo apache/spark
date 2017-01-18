@@ -419,16 +419,12 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       sql(s"CREATE TABLE $tableName STORED AS SEQUENCEFILE AS SELECT 1 AS key, 'abc' AS value")
 
       val df = sql(s"SELECT key, value FROM $tableName")
-      val e = intercept[AnalysisException] {
-        df.write.mode(SaveMode.Append).saveAsTable(tableName)
-      }.getMessage
-      assert(e.contains("Saving data in the Hive serde table default.tab1 is not supported " +
-        "yet. Please use the insertInto() API as an alternative."))
+      df.write.mode(SaveMode.Append).saveAsTable(tableName)
 
       df.write.insertInto(tableName)
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
-        Row(1, "abc") :: Row(1, "abc") :: Nil
+        Row(1, "abc") :: Row(1, "abc") :: Row(1, "abc") :: Row(1, "abc") :: Nil
       )
     }
   }

@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
@@ -245,6 +246,16 @@ class HiveDDLSuite
         assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
       }
     }
+  }
+
+  test("SPARK-19129: drop partition with a empty string will drop the whole table") {
+    val df = spark.createDataFrame(Seq((0, "a"), (1, "b"))).toDF("partCol1", "name")
+    df.write.mode("overwrite").partitionBy("partCol1").saveAsTable("partitionedTable")
+    val e = intercept[AnalysisException] {
+      spark.sql("alter table partitionedTable drop partition(partCol1='')")
+    }.getMessage
+    assert(e.contains("Partition spec is invalid. The spec ([partCol1=]) contains an empty " +
+      "partition column value"))
   }
 
   test("add/drop partitions - external table") {
@@ -789,7 +800,7 @@ class HiveDDLSuite
 
   test("Create Cataloged Table As Select - Drop Table After Runtime Exception") {
     withTable("tab") {
-      intercept[RuntimeException] {
+      intercept[SparkException] {
         sql(
           """
             |CREATE TABLE tab
@@ -1263,7 +1274,7 @@ class HiveDDLSuite
         sql("INSERT INTO t SELECT 1")
         checkAnswer(spark.table("t"), Row(1))
         // Check if this is compressed as ZLIB.
-        val maybeOrcFile = path.listFiles().find(_.getName.endsWith("part-00000"))
+        val maybeOrcFile = path.listFiles().find(!_.getName.endsWith(".crc"))
         assert(maybeOrcFile.isDefined)
         val orcFilePath = maybeOrcFile.get.toPath.toString
         val expectedCompressionKind =
