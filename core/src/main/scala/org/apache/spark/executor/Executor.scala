@@ -148,6 +148,8 @@ private[spark] class Executor(
 
   startDriverHeartbeater()
 
+  private[executor] def numRunningTasks: Int = runningTasks.size()
+
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
     val tr = new TaskRunner(context, taskDescription)
     runningTasks.put(taskDescription.taskId, tr)
@@ -340,6 +342,14 @@ private[spark] class Executor(
             }
           }
         }
+        task.context.fetchFailed.foreach { fetchFailure =>
+          // uh-oh.  it appears the user code has caught the fetch-failure without throwing any
+          // other exceptions.  Its *possible* this is what the user meant to do (though highly
+          // unlikely).  So we will log an error and keep going.
+          logError(s"TID ${taskId} completed successfully though internally it encountered " +
+            s"unrecoverable fetch failures!  Most likely this means user code is incorrectly " +
+            s"swallowing Spark's internal exceptions", fetchFailure)
+        }
         val taskFinish = System.currentTimeMillis()
         val taskFinishCpu = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
           threadMXBean.getCurrentThreadCpuTime
@@ -402,6 +412,13 @@ private[spark] class Executor(
       } catch {
         case ffe: FetchFailedException =>
           val reason = ffe.toTaskFailedReason
+          setTaskFinishedAndClearInterruptStatus()
+          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
+
+        case t: Throwable if task.context.fetchFailed.isDefined =>
+          // tbere was a fetch failure in the task, but some user code wrapped that exception
+          // and threw something else.  Regardless, we treat it as a fetch failure.
+          val reason = task.context.fetchFailed.get.toTaskFailedReason
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 

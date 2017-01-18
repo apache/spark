@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.{FetchFailed, TaskFailedReason}
+import org.apache.spark.{FetchFailed, TaskContext, TaskFailedReason}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
@@ -44,6 +44,12 @@ private[spark] class FetchFailedException(
       cause: Throwable) {
     this(bmAddress, shuffleId, mapId, reduceId, cause.getMessage, cause)
   }
+
+  // SPARK-19267. We set the fetch failure in the task context, so that even if there is user-code
+  // which intercepts this exception (possibly wrapping it), the Executor can still tell there was
+  // a fetch failure, and send the correct error msg back to the driver.  The TaskContext won't be
+  // defined if this is run on the driver (just in test cases) -- we can safely ignore then.
+  Option(TaskContext.get()).map(_.setFetchFailed(this))
 
   def toTaskFailedReason: TaskFailedReason = FetchFailed(bmAddress, shuffleId, mapId, reduceId,
     Utils.exceptionString(this))

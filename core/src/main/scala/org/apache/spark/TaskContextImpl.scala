@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util._
 
 private[spark] class TaskContextImpl(
@@ -55,6 +56,8 @@ private[spark] class TaskContextImpl(
 
   // Whether the task has failed.
   @volatile private var failed: Boolean = false
+
+  var fetchFailed: Option[FetchFailedException] = None
 
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     onCompleteCallbacks += listener
@@ -124,6 +127,10 @@ private[spark] class TaskContextImpl(
 
   private[spark] override def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
     taskMetrics.registerAccumulator(a)
+  }
+
+  private[spark] override def setFetchFailed(fetchFailed: FetchFailedException): Unit = {
+    this.fetchFailed = Some(fetchFailed)
   }
 
 }
