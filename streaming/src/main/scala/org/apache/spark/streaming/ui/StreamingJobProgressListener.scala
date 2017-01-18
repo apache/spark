@@ -169,7 +169,7 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
   }
 
   def numInactiveReceivers: Int = {
-    ssc.graph.getReceiverNumber - numActiveReceivers
+    ssc.graph.getNumReceivers - numActiveReceivers
   }
 
   def numTotalCompletedBatches: Long = synchronized {
@@ -197,7 +197,7 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
   }
 
   def retainedCompletedBatches: Seq[BatchUIData] = synchronized {
-    completedBatchUIData
+    completedBatchUIData.toIndexedSeq
   }
 
   def streamName(streamId: Int): Option[String] = {
