@@ -2017,7 +2017,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |{
       |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeBlacklisted",
       |  "time" : ${nodeBlacklistedTime},
-      |  "nodeId" : "node1",
+      |  "hostId" : "node1",
       |  "executorFailures" : 33
       |}
     """.stripMargin
@@ -2026,7 +2026,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |{
       |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeUnblacklisted",
       |  "time" : ${nodeUnblacklistedTime},
-      |  "nodeId" : "node1"
+      |  "hostId" : "node1"
       |}
     """.stripMargin
 }

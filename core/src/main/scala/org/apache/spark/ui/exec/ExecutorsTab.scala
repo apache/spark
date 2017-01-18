@@ -163,7 +163,8 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
   }
 
   private def updateExecutorBlacklist(
-      eid: String, isBlacklisted: Boolean): Unit = {
+      eid: String,
+      isBlacklisted: Boolean): Unit = {
     val execTaskSummary = executorToTaskSummary.getOrElseUpdate(eid, ExecutorTaskSummary(eid))
     execTaskSummary.isBlacklisted = isBlacklisted
   }
@@ -183,9 +184,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
   override def onNodeBlacklisted(
       nodeBlacklisted: SparkListenerNodeBlacklisted)
   : Unit = synchronized {
-    /*
-    Implicitly blacklist every executor associated with this node, and show this in the UI.
-    */
+    // Implicitly blacklist every executor associated with this node, and show this in the UI.
     activeStorageStatusList.foreach { status =>
       if (status.blockManagerId.host == nodeBlacklisted.hostId) {
         updateExecutorBlacklist(status.blockManagerId.executorId, true)
