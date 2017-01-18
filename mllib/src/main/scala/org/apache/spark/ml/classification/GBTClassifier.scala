@@ -37,7 +37,6 @@ import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTMod
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DoubleType
 
 /**
  * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
@@ -160,7 +159,9 @@ class GBTClassifier @Since("1.4.0") (
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
 
     val instr = Instrumentation.create(this, oldDataset)
-    instr.logParams(params: _*)
+    instr.logParams(labelCol, featuresCol, predictionCol, impurity, lossType,
+      maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
+      seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval)
     instr.logNumFeatures(numFeatures)
     instr.logNumClasses(2)
 

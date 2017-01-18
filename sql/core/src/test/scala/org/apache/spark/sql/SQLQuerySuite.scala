@@ -2497,9 +2497,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       } finally {
         newSession.sessionState.conf.setConf(SQLConf.RUN_SQL_ON_FILES, originalValue)
       }
+      
+  test("should be able to resolve a persistent view") {
+    withTable("t1", "t2") {
+      withView("v1") {
+        sql("CREATE TABLE `t1` USING parquet AS SELECT * FROM VALUES(1, 1) AS t1(a, b)")
+        sql("CREATE TABLE `t2` USING parquet AS SELECT * FROM VALUES('a', 2, 1.0) AS t2(d, e, f)")
+        sql("CREATE VIEW `v1`(x, y) AS SELECT * FROM t1")
+        checkAnswer(spark.table("v1").orderBy("x"), Row(1, 1))
+
+        sql("ALTER VIEW `v1` AS SELECT * FROM t2")
+        checkAnswer(spark.table("v1").orderBy("f"), Row("a", 2, 1.0))
+      }
     }
   }
- 
   test(
     "SPARK-19059: Unable to retrieve data from parquet table whose name startswith underscore") {
     sql("CREATE TABLE `_tbl`(i INT) USING parquet")
