@@ -370,35 +370,30 @@ class HiveDDLSuite
       spark.range(10).write.saveAsTable(tabName)
       val viewName = "view1"
       withView(viewName) {
-        def checkProperties(
-            properties: Map[String, String],
-            expected: Map[String, String]): Boolean = {
+        def checkProperties(expected: Map[String, String]): Boolean = {
+          val properties = spark.sessionState.catalog.getTableMetadata(TableIdentifier(viewName))
+            .properties
           properties.filterNot { case (key, value) =>
             Seq("transient_lastDdlTime", CatalogTable.VIEW_DEFAULT_DATABASE).contains(key) ||
               key.startsWith(CatalogTable.VIEW_QUERY_OUTPUT_PREFIX)
           } == expected
         }
-
-        val catalog = spark.sessionState.catalog
         sql(s"CREATE VIEW $viewName AS SELECT * FROM $tabName")
 
-        checkProperties(catalog.getTableMetadata(TableIdentifier(viewName)).properties, Map())
+        checkProperties(Map())
         sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
-        checkProperties(catalog.getTableMetadata(TableIdentifier(viewName)).properties,
-          Map("p" -> "an"))
+        checkProperties(Map("p" -> "an"))
 
         // no exception or message will be issued if we set it again
         sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
-        checkProperties(catalog.getTableMetadata(TableIdentifier(viewName)).properties,
-          Map("p" -> "an"))
+        checkProperties(Map("p" -> "an"))
 
         // the value will be updated if we set the same key to a different value
         sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'b')")
-        checkProperties(catalog.getTableMetadata(TableIdentifier(viewName)).properties,
-          Map("p" -> "b"))
+        checkProperties(Map("p" -> "b"))
 
         sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
-        checkProperties(catalog.getTableMetadata(TableIdentifier(viewName)).properties, Map())
+        checkProperties(Map())
 
         val message = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")

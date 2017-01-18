@@ -225,9 +225,10 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withView("testView") {
       sql(
         """CREATE VIEW IF NOT EXISTS
-        |default.testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
-        |TBLPROPERTIES ('a' = 'b')
-        |AS SELECT * FROM jt""".stripMargin)
+          |default.testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
+          |TBLPROPERTIES ('a' = 'b')
+          |AS SELECT * FROM jt
+          |""".stripMargin)
       checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))
     }
   }

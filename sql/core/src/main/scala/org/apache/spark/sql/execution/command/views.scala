@@ -165,8 +165,7 @@ case class CreateViewCommand(
       }
     } else {
       // Create the view if it doesn't exist.
-      catalog.createTable(prepareTable(sparkSession, analyzedPlan),
-        ignoreIfExists = false)
+      catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
     }
     Seq.empty[Row]
   }
@@ -228,14 +227,13 @@ case class CreateViewCommand(
         "It is not allowed to create a persisted view from the Dataset API")
     }
 
-    val aliasedPlan = aliasPlan(session, analyzedPlan)
     val newProperties = generateViewProperties(properties, session, analyzedPlan)
 
     CatalogTable(
       identifier = name,
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
-      schema = aliasedPlan.schema,
+      schema = aliasPlan(session, analyzedPlan).schema,
       properties = newProperties,
       viewOriginalText = originalText,
       viewText = originalText,
