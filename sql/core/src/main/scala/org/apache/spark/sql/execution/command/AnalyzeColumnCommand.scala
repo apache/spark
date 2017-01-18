@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -64,7 +64,7 @@ case class AnalyzeColumnCommand(
       AnalyzeColumnCommand.computeColumnStats(sparkSession, tableIdent.table, relation, columnNames)
 
     // We also update table-level stats in order to keep them consistent with column-level stats.
-    val statistics = Statistics(
+    val statistics = CatalogStatistics(
       sizeInBytes = sizeInBytes,
       rowCount = Some(rowCount),
       // Newly computed column stats should override the existing ones.

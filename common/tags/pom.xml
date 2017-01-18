@@ -36,9 +36,9 @@
 
   <dependencies>
     <dependency>
-      <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <scope>compile</scope>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+      <version>${scala.version}</version>
     </dependency>
   </dependencies>
 

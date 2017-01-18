@@ -41,8 +41,8 @@ import org.apache.spark.storage.StorageLevel
  * with Kafka broker(s) specified in host1:port1,host2:port2 form.
  * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
  * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
- * In most cases, use [[DirectKafkaInputDStream.preferConsistent]]
- * Use [[DirectKafkaInputDStream.preferBrokers]] if your executors are on same nodes as brokers.
+ * In most cases, use [[LocationStrategies.PreferConsistent]]
+ * Use [[LocationStrategies.PreferBrokers]] if your executors are on same nodes as brokers.
  * @param useConsumerCache whether to use a consumer from a per-jvm cache
  * @tparam K type of Kafka message key
  * @tparam V type of Kafka message value

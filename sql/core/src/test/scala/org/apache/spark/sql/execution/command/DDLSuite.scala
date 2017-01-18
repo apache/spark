@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.io.File
+import java.net.URI
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -84,12 +85,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         serde = None,
         compressed = false,
         properties = Map())
+    val metadata = new MetadataBuilder()
+      .putString("key", "value")
+      .build()
     CatalogTable(
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
       schema = new StructType()
-        .add("col1", "int")
+        .add("col1", "int", nullable = true, metadata = metadata)
         .add("col2", "string")
         .add("a", "int")
         .add("b", "int"),
@@ -342,7 +346,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
     }
-    assert(e.message == "partition column c is not defined in table `tbl`, " +
+    assert(e.message == "partition column c is not defined in table tbl, " +
       "defined table columns are: a, b")
   }
 
@@ -350,7 +354,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
     }
-    assert(e.message == "bucket column c is not defined in table `tbl`, " +
+    assert(e.message == "bucket column c is not defined in table tbl, " +
       "defined table columns are: a, b")
   }
 
@@ -769,6 +773,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   test("alter table: set serde partition (datasource table)") {
     testSetSerdePartition(isDatasourceTable = true)
+  }
+
+  test("alter table: change column") {
+    testChangeColumn(isDatasourceTable = false)
+  }
+
+  test("alter table: change column (datasource table)") {
+    testChangeColumn(isDatasourceTable = true)
   }
 
   test("alter table: bucketing is not supported") {
@@ -1368,6 +1380,26 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       Set(Map("a" -> "1", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
   }
 
+  private def testChangeColumn(isDatasourceTable: Boolean): Unit = {
+    val catalog = spark.sessionState.catalog
+    val resolver = spark.sessionState.conf.resolver
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    def getMetadata(colName: String): Metadata = {
+      val column = catalog.getTableMetadata(tableIdent).schema.fields.find { field =>
+        resolver(field.name, colName)
+      }
+      column.map(_.metadata).getOrElse(Metadata.empty)
+    }
+    // Ensure that change column will preserve other metadata fields.
+    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 INT COMMENT 'this is col1'")
+    assert(getMetadata("col1").getString("key") == "value")
+  }
+
   test("drop build-in function") {
     Seq("true", "false").foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
@@ -1755,5 +1787,32 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val df = sql("show databases")
     val rows: Seq[Row] = df.toLocalIterator().asScala.toSeq
     assert(rows.length > 0)
+  }
+
+  test("SET LOCATION for managed table") {
+    withTable("src") {
+      withTempDir { dir =>
+        sql("CREATE TABLE tbl(i INT) USING parquet")
+        sql("INSERT INTO tbl SELECT 1")
+        checkAnswer(spark.table("tbl"), Row(1))
+        val defaultTablePath = spark.sessionState.catalog
+          .getTableMetadata(TableIdentifier("tbl")).storage.locationUri.get
+
+        sql(s"ALTER TABLE tbl SET LOCATION '${dir.getCanonicalPath}'")
+        // SET LOCATION won't move data from previous table path to new table path.
+        assert(spark.table("tbl").count() == 0)
+        // the previous table path should be still there.
+        assert(new File(new URI(defaultTablePath)).exists())
+
+        sql("INSERT INTO tbl SELECT 2")
+        checkAnswer(spark.table("tbl"), Row(2))
+        // newly inserted data will go to the new table path.
+        assert(dir.listFiles().nonEmpty)
+
+        sql("DROP TABLE tbl")
+        // the new table path will be removed after DROP TABLE.
+        assert(!dir.exists())
+      }
+    }
   }
 }

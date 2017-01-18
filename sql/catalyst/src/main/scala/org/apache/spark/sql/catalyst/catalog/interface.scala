@@ -19,12 +19,15 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.util.Date
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Cast, Literal}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
+
 
 
 /**
@@ -133,6 +136,16 @@ case class BucketSpec(
   if (numBuckets <= 0) {
     throw new AnalysisException(s"Expected positive number of buckets, but got `$numBuckets`.")
   }
+
+  override def toString: String = {
+    val bucketString = s"bucket columns: [${bucketColumnNames.mkString(", ")}]"
+    val sortString = if (sortColumnNames.nonEmpty) {
+      s", sort columns: [${sortColumnNames.mkString(", ")}]"
+    } else {
+      ""
+    }
+    s"$numBuckets buckets, $bucketString$sortString"
+  }
 }
 
 /**
@@ -161,12 +174,14 @@ case class CatalogTable(
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
     properties: Map[String, String] = Map.empty,
-    stats: Option[Statistics] = None,
+    stats: Option[CatalogStatistics] = None,
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
     tracksPartitionsInCatalog: Boolean = false) {
+
+  import CatalogTable._
 
   /** schema of this table's partition columns */
   def partitionSchema: StructType = StructType(schema.filter {
@@ -185,6 +200,47 @@ case class CatalogTable(
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
   def qualifiedName: String = identifier.unquotedString
+
+  /**
+   * Return the default database name we use to resolve a view, should be None if the CatalogTable
+   * is not a View or created by older versions of Spark(before 2.2.0).
+   */
+  def viewDefaultDatabase: Option[String] = properties.get(VIEW_DEFAULT_DATABASE)
+
+  /**
+   * Return the output column names of the query that creates a view, the column names are used to
+   * resolve a view, should be empty if the CatalogTable is not a View or created by older versions
+   * of Spark(before 2.2.0).
+   */
+  def viewQueryColumnNames: Seq[String] = {
+    for {
+      numCols <- properties.get(VIEW_QUERY_OUTPUT_NUM_COLUMNS).toSeq
+      index <- 0 until numCols.toInt
+    } yield properties.getOrElse(
+      s"$VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX$index",
+      throw new AnalysisException("Corrupted view query output column names in catalog: " +
+        s"$numCols parts expected, but part $index is missing.")
+    )
+  }
+
+  /**
+   * Insert/Update the view query output column names in `properties`.
+   */
+  def withQueryColumnNames(columns: Seq[String]): CatalogTable = {
+    val props = new mutable.HashMap[String, String]
+    if (columns.nonEmpty) {
+      props.put(VIEW_QUERY_OUTPUT_NUM_COLUMNS, columns.length.toString)
+      columns.zipWithIndex.foreach { case (colName, index) =>
+        props.put(s"$VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX$index", colName)
+      }
+    }
+
+    // We can't use `filterKeys` here, as the map returned by `filterKeys` is not serializable,
+    // while `CatalogTable` should be serializable.
+    copy(properties = properties.filterNot { case (key, _) =>
+      key.startsWith(VIEW_QUERY_OUTPUT_PREFIX)
+    } ++ props)
+  }
 
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
@@ -236,6 +292,40 @@ case class CatalogTable(
   }
 }
 
+object CatalogTable {
+  val VIEW_DEFAULT_DATABASE = "view.default.database"
+  val VIEW_QUERY_OUTPUT_PREFIX = "view.query.out."
+  val VIEW_QUERY_OUTPUT_NUM_COLUMNS = VIEW_QUERY_OUTPUT_PREFIX + "numCols"
+  val VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX = VIEW_QUERY_OUTPUT_PREFIX + "col."
+}
+
+/**
+ * This class of statistics is used in [[CatalogTable]] to interact with metastore.
+ * We define this new class instead of directly using [[Statistics]] here because there are no
+ * concepts of attributes or broadcast hint in catalog.
+ */
+case class CatalogStatistics(
+    sizeInBytes: BigInt,
+    rowCount: Option[BigInt] = None,
+    colStats: Map[String, ColumnStat] = Map.empty) {
+
+  /**
+   * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
+   * on column names.
+   */
+  def toPlanStats(planOutput: Seq[Attribute]): Statistics = {
+    val matched = planOutput.flatMap(a => colStats.get(a.name).map(a -> _))
+    Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
+      attributeStats = AttributeMap(matched))
+  }
+
+  /** Readable string representation for the CatalogStatistics. */
+  def simpleString: String = {
+    val rowCountString = if (rowCount.isDefined) s", ${rowCount.get} rows" else ""
+    s"$sizeInBytes bytes$rowCountString"
+  }
+}
+
 
 case class CatalogTableType private(name: String)
 object CatalogTableType {
@@ -280,7 +370,6 @@ trait CatalogRelation {
  * Note that in the future we should consolidate this and HiveCatalogRelation.
  */
 case class SimpleCatalogRelation(
-    databaseName: String,
     metadata: CatalogTable)
   extends LeafNode with CatalogRelation {
 
@@ -297,8 +386,4 @@ case class SimpleCatalogRelation(
       }
     dataCols ++ partCols
   }
-
-  require(
-    metadata.identifier.database == Some(databaseName),
-    "provided database does not match the one specified in the table definition")
 }

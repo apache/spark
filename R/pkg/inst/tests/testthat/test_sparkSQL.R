@@ -196,6 +196,26 @@ test_that("create DataFrame from RDD", {
   expect_equal(dtypes(df), list(c("name", "string"), c("age", "int"), c("height", "float")))
   expect_equal(as.list(collect(where(df, df$name == "John"))),
                list(name = "John", age = 19L, height = 176.5))
+  expect_equal(getNumPartitions(toRDD(df)), 1)
+
+  df <- as.DataFrame(cars, numPartitions = 2)
+  expect_equal(getNumPartitions(toRDD(df)), 2)
+  df <- createDataFrame(cars, numPartitions = 3)
+  expect_equal(getNumPartitions(toRDD(df)), 3)
+  # validate limit by num of rows
+  df <- createDataFrame(cars, numPartitions = 60)
+  expect_equal(getNumPartitions(toRDD(df)), 50)
+  # validate when 1 < (length(coll) / numSlices) << length(coll)
+  df <- createDataFrame(cars, numPartitions = 20)
+  expect_equal(getNumPartitions(toRDD(df)), 20)
+
+  df <- as.DataFrame(data.frame(0))
+  expect_is(df, "SparkDataFrame")
+  df <- createDataFrame(list(list(1)))
+  expect_is(df, "SparkDataFrame")
+  df <- as.DataFrame(data.frame(0), numPartitions = 2)
+  # no data to partition, goes to 1
+  expect_equal(getNumPartitions(toRDD(df)), 1)
 
   setHiveContext(sc)
   sql("CREATE TABLE people (name string, age double, height float)")
@@ -205,6 +225,7 @@ test_that("create DataFrame from RDD", {
                c(16))
   expect_equal(collect(sql("SELECT height from people WHERE name ='Bob'"))$height,
                c(176.5))
+  sql("DROP TABLE people")
   unsetHiveContext()
 })
 
@@ -212,7 +233,8 @@ test_that("createDataFrame uses files for large objects", {
   # To simulate a large file scenario, we set spark.r.maxAllocationLimit to a smaller value
   conf <- callJMethod(sparkSession, "conf")
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
-  df <- suppressWarnings(createDataFrame(iris))
+  df <- suppressWarnings(createDataFrame(iris, numPartitions = 3))
+  expect_equal(getNumPartitions(toRDD(df)), 3)
 
   # Resetting the conf back to default value
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", toString(.Machine$integer.max / 10))
@@ -1000,6 +1022,17 @@ test_that("select operators", {
   expect_equal(columns(df), c("name", "age", "age2"))
   expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
 
+  df$age2 <- 21
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 21)), 3)
+
+  df$age2 <- c(22)
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 22)), 3)
+
+  expect_error(df$age3 <- c(22, NA),
+              "value must be a Column, literal value as atomic in length of 1, or NULL")
+
   # Test parameter drop
   expect_equal(class(df[, 1]) == "SparkDataFrame", T)
   expect_equal(class(df[, 1, drop = T]) == "Column", T)
@@ -1688,12 +1721,13 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   unlink(jsonPath3)
 })
 
-test_that("toJSON() returns an RDD of the correct values", {
-  df <- read.json(jsonPath)
-  testRDD <- toJSON(df)
-  expect_is(testRDD, "RDD")
-  expect_equal(getSerializedMode(testRDD), "string")
-  expect_equal(collectRDD(testRDD)[[1]], mockLines[1])
+test_that("toJSON() on DataFrame", {
+  df <- as.DataFrame(cars)
+  df_json <- toJSON(df)
+  expect_is(df_json, "SparkDataFrame")
+  expect_equal(colnames(df_json), c("value"))
+  expect_equal(head(df_json, 1),
+              data.frame(value = "{\"speed\":4.0,\"dist\":2.0}", stringsAsFactors = FALSE))
 })
 
 test_that("showDF()", {
@@ -1775,6 +1809,13 @@ test_that("withColumn() and withColumnRenamed()", {
   newDF <- withColumn(df, "age", df$age + 2)
   expect_equal(length(columns(newDF)), 2)
   expect_equal(first(filter(newDF, df$name != "Michael"))$age, 32)
+
+  newDF <- withColumn(df, "age", 18)
+  expect_equal(length(columns(newDF)), 2)
+  expect_equal(first(newDF)$age, 18)
+
+  expect_error(withColumn(df, "age", list("a")),
+              "Literal value must be atomic in length of 1")
 
   newDF2 <- withColumnRenamed(df, "age", "newerAge")
   expect_equal(length(columns(newDF2)), 2)
@@ -2612,7 +2653,7 @@ test_that("randomSplit", {
   expect_true(all(sapply(abs(counts / num - weights / sum(weights)), function(e) { e < 0.05 })))
 })
 
-test_that("Setting and getting config on SparkSession", {
+test_that("Setting and getting config on SparkSession, sparkR.conf(), sparkR.uiWebUrl()", {
   # first, set it to a random but known value
   conf <- callJMethod(sparkSession, "conf")
   property <- paste0("spark.testing.", as.character(runif(1)))
@@ -2636,6 +2677,9 @@ test_that("Setting and getting config on SparkSession", {
   expect_equal(appNameValue, "sparkSession test")
   expect_equal(testValue, value)
   expect_error(sparkR.conf("completely.dummy"), "Config 'completely.dummy' is not set")
+
+  url <- sparkR.uiWebUrl()
+  expect_equal(substr(url, 1, 7), "http://")
 })
 
 test_that("enableHiveSupport on SparkSession", {

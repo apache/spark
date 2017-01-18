@@ -46,11 +46,12 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
-from pyspark.sql import SparkSession, HiveContext, Column, Row
+from pyspark import SparkContext
+from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type
 from pyspark.tests import ReusedPySparkTestCase, SparkSubmitTests
-from pyspark.sql.functions import UserDefinedFunction, sha2
+from pyspark.sql.functions import UserDefinedFunction, sha2, lit
 from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
 
@@ -204,6 +205,11 @@ class SQLTests(ReusedPySparkTestCase):
         ReusedPySparkTestCase.tearDownClass()
         cls.spark.stop()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+
+    def test_sqlcontext_reuses_sparksession(self):
+        sqlContext1 = SQLContext(self.sc)
+        sqlContext2 = SQLContext(self.sc)
+        self.assertTrue(sqlContext1.sparkSession is sqlContext2.sparkSession)
 
     def test_row_should_be_read_only(self):
         row = Row(a=1, b=2)
@@ -1065,7 +1071,8 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(df.schema.simpleString(), "struct<data:string>")
 
     def test_stream_save_options(self):
-        df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+        df = self.spark.readStream.format('text').load('python/test_support/sql/streaming') \
+            .withColumn('id', lit(1))
         for q in self.spark._wrapped.streams.active:
             q.stop()
         tmpPath = tempfile.mkdtemp()
@@ -1074,7 +1081,7 @@ class SQLTests(ReusedPySparkTestCase):
         out = os.path.join(tmpPath, 'out')
         chk = os.path.join(tmpPath, 'chk')
         q = df.writeStream.option('checkpointLocation', chk).queryName('this_query') \
-            .format('parquet').outputMode('append').option('path', out).start()
+            .format('parquet').partitionBy('id').outputMode('append').option('path', out).start()
         try:
             self.assertEqual(q.name, 'this_query')
             self.assertTrue(q.isActive)
@@ -1128,9 +1135,25 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(df.isStreaming)
         out = os.path.join(tmpPath, 'out')
         chk = os.path.join(tmpPath, 'chk')
-        q = df.writeStream \
+
+        def func(x):
+            time.sleep(1)
+            return x
+
+        from pyspark.sql.functions import col, udf
+        sleep_udf = udf(func)
+
+        # Use "sleep_udf" to delay the progress update so that we can test `lastProgress` when there
+        # were no updates.
+        q = df.select(sleep_udf(col("value")).alias('value')).writeStream \
             .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
         try:
+            # "lastProgress" will return None in most cases. However, as it may be flaky when
+            # Jenkins is very slow, we don't assert it. If there is something wrong, "lastProgress"
+            # may throw error with a high chance and make this test flaky, so we should still be
+            # able to detect broken codes.
+            q.lastProgress
+
             q.processAllAvailable()
             lastProgress = q.lastProgress
             recentProgress = q.recentProgress
@@ -1867,6 +1890,28 @@ class HiveSparkSubmitTests(SparkSubmitTests):
         self.assertEqual(0, proc.returncode)
         self.assertIn("default", out.decode('utf-8'))
         self.assertTrue(os.path.exists(metastore_path))
+
+
+class SQLTests2(ReusedPySparkTestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+        cls.spark = SparkSession(cls.sc)
+
+    @classmethod
+    def tearDownClass(cls):
+        ReusedPySparkTestCase.tearDownClass()
+        cls.spark.stop()
+
+    # We can't include this test into SQLTests because we will stop class's SparkContext and cause
+    # other tests failed.
+    def test_sparksession_with_stopped_sparkcontext(self):
+        self.sc.stop()
+        sc = SparkContext('local[4]', self.sc.appName)
+        spark = SparkSession.builder.getOrCreate()
+        df = spark.createDataFrame([(1, 2)], ["c", "c"])
+        df.collect()
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):

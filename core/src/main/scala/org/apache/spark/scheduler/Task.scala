@@ -48,6 +48,8 @@ import org.apache.spark.util._
  * @param partitionId index of the number in the RDD
  * @param metrics a `TaskMetrics` that is created at driver side and sent to executor side.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
+ * @param serializedTaskMetrics a `TaskMetrics` that is created and serialized on the driver side
+ *                              and sent to executor side.
  *
  * The parameters below are optional:
  * @param jobId id of the job this task belongs to
@@ -58,12 +60,16 @@ private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
-    // The default value is only used in tests.
-    val metrics: TaskMetrics = TaskMetrics.registered,
     @transient var localProperties: Properties = new Properties,
+    // The default value is only used in tests.
+    serializedTaskMetrics: Array[Byte] =
+      SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array(),
     val jobId: Option[Int] = None,
     val appId: Option[String] = None,
     val appAttemptId: Option[String] = None) extends Serializable {
+
+  @transient lazy val metrics: TaskMetrics =
+    SparkEnv.get.closureSerializer.newInstance().deserialize(ByteBuffer.wrap(serializedTaskMetrics))
 
   /**
    * Called by [[org.apache.spark.executor.Executor]] to run this task.
@@ -207,91 +213,5 @@ private[spark] abstract class Task[T](
     if (interruptThread && taskThread != null) {
       taskThread.interrupt()
     }
-  }
-}
-
-/**
- * Handles transmission of tasks and their dependencies, because this can be slightly tricky. We
- * need to send the list of JARs and files added to the SparkContext with each task to ensure that
- * worker nodes find out about it, but we can't make it part of the Task because the user's code in
- * the task might depend on one of the JARs. Thus we serialize each task as multiple objects, by
- * first writing out its dependencies.
- */
-private[spark] object Task {
-  /**
-   * Serialize a task and the current app dependencies (files and JARs added to the SparkContext)
-   */
-  def serializeWithDependencies(
-      task: Task[_],
-      currentFiles: mutable.Map[String, Long],
-      currentJars: mutable.Map[String, Long],
-      serializer: SerializerInstance)
-    : ByteBuffer = {
-
-    val out = new ByteBufferOutputStream(4096)
-    val dataOut = new DataOutputStream(out)
-
-    // Write currentFiles
-    dataOut.writeInt(currentFiles.size)
-    for ((name, timestamp) <- currentFiles) {
-      dataOut.writeUTF(name)
-      dataOut.writeLong(timestamp)
-    }
-
-    // Write currentJars
-    dataOut.writeInt(currentJars.size)
-    for ((name, timestamp) <- currentJars) {
-      dataOut.writeUTF(name)
-      dataOut.writeLong(timestamp)
-    }
-
-    // Write the task properties separately so it is available before full task deserialization.
-    val propBytes = Utils.serialize(task.localProperties)
-    dataOut.writeInt(propBytes.length)
-    dataOut.write(propBytes)
-
-    // Write the task itself and finish
-    dataOut.flush()
-    val taskBytes = serializer.serialize(task)
-    Utils.writeByteBuffer(taskBytes, out)
-    out.close()
-    out.toByteBuffer
-  }
-
-  /**
-   * Deserialize the list of dependencies in a task serialized with serializeWithDependencies,
-   * and return the task itself as a serialized ByteBuffer. The caller can then update its
-   * ClassLoaders and deserialize the task.
-   *
-   * @return (taskFiles, taskJars, taskProps, taskBytes)
-   */
-  def deserializeWithDependencies(serializedTask: ByteBuffer)
-    : (HashMap[String, Long], HashMap[String, Long], Properties, ByteBuffer) = {
-
-    val in = new ByteBufferInputStream(serializedTask)
-    val dataIn = new DataInputStream(in)
-
-    // Read task's files
-    val taskFiles = new HashMap[String, Long]()
-    val numFiles = dataIn.readInt()
-    for (i <- 0 until numFiles) {
-      taskFiles(dataIn.readUTF()) = dataIn.readLong()
-    }
-
-    // Read task's JARs
-    val taskJars = new HashMap[String, Long]()
-    val numJars = dataIn.readInt()
-    for (i <- 0 until numJars) {
-      taskJars(dataIn.readUTF()) = dataIn.readLong()
-    }
-
-    val propLength = dataIn.readInt()
-    val propBytes = new Array[Byte](propLength)
-    dataIn.readFully(propBytes, 0, propLength)
-    val taskProps = Utils.deserialize[Properties](propBytes)
-
-    // Create a sub-buffer for the rest of the data, which is the serialized Task object
-    val subBuffer = serializedTask.slice()  // ByteBufferInputStream will have read just up to task
-    (taskFiles, taskJars, taskProps, subBuffer)
   }
 }

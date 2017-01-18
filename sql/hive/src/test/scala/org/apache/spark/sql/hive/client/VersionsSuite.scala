@@ -28,7 +28,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPermanentFunctionException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.util.quietly
@@ -137,11 +137,12 @@ class VersionsSuite extends SparkFunSuite with SQLTestUtils with TestHiveSinglet
     test(s"$version: getDatabase") {
       // No exception should be thrown
       client.getDatabase("default")
+      intercept[NoSuchDatabaseException](client.getDatabase("nonexist"))
     }
 
-    test(s"$version: getDatabaseOption") {
-      assert(client.getDatabaseOption("default").isDefined)
-      assert(client.getDatabaseOption("nonexist") == None)
+    test(s"$version: databaseExists") {
+      assert(client.databaseExists("default") == true)
+      assert(client.databaseExists("nonexist") == false)
     }
 
     test(s"$version: listDatabases") {
@@ -155,9 +156,9 @@ class VersionsSuite extends SparkFunSuite with SQLTestUtils with TestHiveSinglet
     }
 
     test(s"$version: dropDatabase") {
-      assert(client.getDatabaseOption("temporary").isDefined)
+      assert(client.databaseExists("temporary") == true)
       client.dropDatabase("temporary", ignoreIfNotExists = false, cascade = true)
-      assert(client.getDatabaseOption("temporary").isEmpty)
+      assert(client.databaseExists("temporary") == false)
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -543,6 +544,30 @@ class VersionsSuite extends SparkFunSuite with SQLTestUtils with TestHiveSinglet
       withTable("tbl") {
         spark.sql("CREATE TABLE tbl AS SELECT 1 AS a")
         assert(spark.table("tbl").collect().toSeq == Seq(Row(1)))
+      }
+    }
+
+    test(s"$version: Delete the temporary staging directory and files after each insert") {
+      withTempDir { tmpDir =>
+        withTable("tab") {
+          spark.sql(
+            s"""
+               |CREATE TABLE tab(c1 string)
+               |location '${tmpDir.toURI.toString}'
+             """.stripMargin)
+
+          (1 to 3).map { i =>
+            spark.sql(s"INSERT OVERWRITE TABLE tab SELECT '$i'")
+          }
+          def listFiles(path: File): List[String] = {
+            val dir = path.listFiles()
+            val folders = dir.filter(_.isDirectory).toList
+            val filePaths = dir.map(_.getName).toList
+            folders.flatMap(listFiles) ++: filePaths
+          }
+          val expectedFiles = ".part-00000.crc" :: "part-00000" :: Nil
+          assert(listFiles(tmpDir).sorted == expectedFiles)
+        }
       }
     }
 

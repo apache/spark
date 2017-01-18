@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.execution.streaming
 
 import scala.language.implicitConversions
 
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -37,7 +36,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Append output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, InternalOutputModes.Append)
+    val sink = new MemorySink(schema, OutputMode.Append)
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -71,7 +70,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Update output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, InternalOutputModes.Update)
+    val sink = new MemorySink(schema, OutputMode.Update)
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -105,7 +104,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Complete output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, InternalOutputModes.Complete)
+    val sink = new MemorySink(schema, OutputMode.Complete)
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -187,20 +186,45 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     query.stop()
   }
 
+  test("registering as a table in Update output mode") {
+    val input = MemoryStream[Int]
+    val query = input.toDF().writeStream
+      .format("memory")
+      .outputMode("update")
+      .queryName("memStream")
+      .start()
+    input.addData(1, 2, 3)
+    query.processAllAvailable()
+
+    checkDataset(
+      spark.table("memStream").as[Int],
+      1, 2, 3)
+
+    input.addData(4, 5, 6)
+    query.processAllAvailable()
+    checkDataset(
+      spark.table("memStream").as[Int],
+      1, 2, 3, 4, 5, 6)
+
+    query.stop()
+  }
+
   test("MemoryPlan statistics") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, InternalOutputModes.Append)
+    val sink = new MemorySink(schema, OutputMode.Append)
     val plan = new MemoryPlan(sink)
 
     // Before adding data, check output
     checkAnswer(sink.allData, Seq.empty)
-    assert(plan.statistics.sizeInBytes === 0)
+    assert(plan.stats(sqlConf).sizeInBytes === 0)
 
     sink.addBatch(0, 1 to 3)
-    assert(plan.statistics.sizeInBytes === 12)
+    plan.invalidateStatsCache()
+    assert(plan.stats(sqlConf).sizeInBytes === 12)
 
     sink.addBatch(1, 4 to 6)
-    assert(plan.statistics.sizeInBytes === 24)
+    plan.invalidateStatsCache()
+    assert(plan.stats(sqlConf).sizeInBytes === 24)
   }
 
   ignore("stress test") {
