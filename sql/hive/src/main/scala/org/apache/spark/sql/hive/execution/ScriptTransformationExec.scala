@@ -52,7 +52,7 @@ import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfig
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
  */
-case class ScriptTransformation(
+case class ScriptTransformationExec(
     input: Seq[Expression],
     script: String,
     output: Seq[Attribute],

@@ -21,14 +21,14 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, ScriptTransformation}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.{DDLUtils, ExecutedCommandExec}
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -86,6 +86,47 @@ class DetermineHiveSerde(conf: SQLConf) extends Rule[LogicalPlan] {
   }
 }
 
+class HiveAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case InsertIntoTable(table: MetastoreRelation, partSpec, query, overwrite, ifNotExists)
+        if hasBeenPreprocessed(table.output, table.partitionKeys.toStructType, partSpec, query) =>
+      InsertIntoHiveTable(table, partSpec, query, overwrite, ifNotExists)
+
+    case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
+      // Currently `DataFrameWriter.saveAsTable` doesn't support the Append mode of hive serde
+      // tables yet.
+      if (mode == SaveMode.Append) {
+        throw new AnalysisException(
+          "CTAS for hive serde tables does not support append semantics.")
+      }
+
+      val dbName = tableDesc.identifier.database.getOrElse(session.catalog.currentDatabase)
+      CreateHiveTableAsSelectCommand(
+        tableDesc.copy(identifier = tableDesc.identifier.copy(database = Some(dbName))),
+        query,
+        mode == SaveMode.Ignore)
+  }
+
+  /**
+   * Returns true if the [[InsertIntoTable]] plan has already been preprocessed by analyzer rule
+   * [[PreprocessTableInsertion]]. It is important that this rule([[HiveAnalysis]]) has to
+   * be run after [[PreprocessTableInsertion]], to normalize the column names in partition spec and
+   * fix the schema mismatch by adding Cast.
+   */
+  private def hasBeenPreprocessed(
+      tableOutput: Seq[Attribute],
+      partSchema: StructType,
+      partSpec: Map[String, Option[String]],
+      query: LogicalPlan): Boolean = {
+    val partColNames = partSchema.map(_.name).toSet
+    query.resolved && partSpec.keys.forall(partColNames.contains) && {
+      val staticPartCols = partSpec.filter(_._2.isDefined).keySet
+      val expectedColumns = tableOutput.filterNot(a => staticPartCols.contains(a.name))
+      expectedColumns.toStructType.sameType(query.schema)
+    }
+  }
+}
+
 private[hive] trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
   self: SparkPlanner =>
@@ -94,35 +135,9 @@ private[hive] trait HiveStrategies {
 
   object Scripts extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.ScriptTransformation(input, script, output, child, ioschema) =>
+      case ScriptTransformation(input, script, output, child, ioschema) =>
         val hiveIoSchema = HiveScriptIOSchema(ioschema)
-        ScriptTransformation(input, script, output, planLater(child), hiveIoSchema) :: Nil
-      case _ => Nil
-    }
-  }
-
-  object DataSinks extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.InsertIntoTable(
-          table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
-        InsertIntoHiveTable(
-          table, partition, planLater(child), overwrite, ifNotExists) :: Nil
-
-      case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
-        // Currently `DataFrameWriter.saveAsTable` doesn't support
-        // the Append mode of hive serde tables yet.
-        if (mode == SaveMode.Append) {
-          throw new AnalysisException(
-            "CTAS for hive serde tables does not support append semantics.")
-        }
-
-        val dbName = tableDesc.identifier.database.getOrElse(sparkSession.catalog.currentDatabase)
-        val cmd = CreateHiveTableAsSelectCommand(
-          tableDesc.copy(identifier = tableDesc.identifier.copy(database = Some(dbName))),
-          query,
-          mode == SaveMode.Ignore)
-        ExecutedCommandExec(cmd) :: Nil
-
+        ScriptTransformationExec(input, script, output, planLater(child), hiveIoSchema) :: Nil
       case _ => Nil
     }
   }
