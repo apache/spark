@@ -29,16 +29,16 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("show stats in explain command") {
     withSQLConf("spark.sql.statistics.showInExplain" -> "false") {
-      checkKeywordsNotExist(sql(" explain  select * from src "), "sizeInBytes", "rowCount")
-      checkKeywordsNotExist(sql(" explain  extended select * from src "), "sizeInBytes", "rowCount")
+      checkKeywordsNotExist(sql("EXPLAIN  SELECT * FROM src "), "sizeInBytes", "rowCount")
+      checkKeywordsNotExist(sql("EXPLAIN EXTENDED  SELECT * FROM src "), "sizeInBytes", "rowCount")
     }
     withSQLConf("spark.sql.statistics.showInExplain" -> "true") {
-      checkKeywordsExist(sql(" explain  extended select * from src "), "sizeInBytes")
+      checkKeywordsExist(sql("EXPLAIN EXTENDED  SELECT * FROM src "), "sizeInBytes")
       sql("ANALYZE TABLE src COMPUTE STATISTICS")
       // Stats contain rowCount after the analyze command
-      checkKeywordsExist(sql(" explain  extended select * from src "), "sizeInBytes", "rowCount")
+      checkKeywordsExist(sql("EXPLAIN EXTENDED  SELECT * FROM src "), "sizeInBytes", "rowCount")
       // No stats when there's no "extended"
-      checkKeywordsNotExist(sql(" explain  select * from src "), "sizeInBytes", "rowCount")
+      checkKeywordsNotExist(sql("EXPLAIN  SELECT * FROM src "), "sizeInBytes", "rowCount")
     }
   }
 
