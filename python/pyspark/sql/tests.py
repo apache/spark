@@ -442,7 +442,6 @@ class SQLTests(ReusedPySparkTestCase):
         def filename(path):
             return path
 
-        self.spark.udf.register('sameText', filename)
         sameText = udf(filename, StringType())
 
         rdd = self.sc.textFile('python/test_support/sql/people.json')
@@ -457,8 +456,8 @@ class SQLTests(ReusedPySparkTestCase):
             'org.apache.hadoop.io.Text')
 
         df2 = self.spark.read.json(rdd2).select(input_file_name().alias('file'))
-        row = df2.select(sameText(df2['file'])).first()
-        self.assertTrue(row[0].find("people.json") != -1)
+        row2 = df2.select(sameText(df2['file'])).first()
+        self.assertTrue(row2[0].find("people.json") != -1)
 
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
