@@ -3055,6 +3055,7 @@ object functions {
     val types = (1 to x).foldRight("RT")((i, s) => {s"A$i, $s"})
     val typeTags = (1 to x).map(i => s"A$i: TypeTag").foldLeft("RT: TypeTag")(_ + ", " + _)
     val inputTypes = (1 to x).foldRight("Nil")((i, s) => {s"ScalaReflection.schemaFor(typeTag[A$i]).dataType :: $s"})
+    val inputConverters = (1 to x).foldRight("Nil")((i, s) => {s"ScalaReflection.scalaConverterFor(typeTag[A$i]) :: $s"})
     println(s"""
     /**
      * Defines a user-defined function of ${x} arguments as user-defined function (UDF).
@@ -3065,7 +3066,8 @@ object functions {
      */
     def udf[$typeTags](f: Function$x[$types]): UserDefinedFunction = {
       val inputTypes = Try($inputTypes).toOption
-      UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
+      val inputConverters = Try($inputConverters).toOption
+      UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes).setInputConverters(inputConverters)
     }""")
   }
 

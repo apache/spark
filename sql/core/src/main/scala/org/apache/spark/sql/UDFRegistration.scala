@@ -83,6 +83,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       val types = (1 to x).foldRight("RT")((i, s) => {s"A$i, $s"})
       val typeTags = (1 to x).map(i => s"A${i}: TypeTag").foldLeft("RT: TypeTag")(_ + ", " + _)
       val inputTypes = (1 to x).foldRight("Nil")((i, s) => {s"ScalaReflection.schemaFor[A$i].dataType :: $s"})
+      val inputConverters = (1 to x).foldRight("Nil")((i, s) => {s"ScalaReflection.scalaConverterFor(typeTag[A$i]) :: $s"})
       println(s"""
         /**
          * Register a Scala closure of ${x} arguments as user-defined function (UDF).
@@ -92,9 +93,10 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         def register[$typeTags](name: String, func: Function$x[$types]): UserDefinedFunction = {
           val dataType = ScalaReflection.schemaFor[RT].dataType
           val inputTypes = Try($inputTypes).toOption
+          val inputConverters = Try($inputConverters).toOption
           def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), inputConverters)
           functionRegistry.registerFunction(name, builder)
-          UserDefinedFunction(func, dataType, inputTypes)
+          UserDefinedFunction(func, dataType, inputTypes).setInputConverters(inputConverters)
         }""")
     }
 
