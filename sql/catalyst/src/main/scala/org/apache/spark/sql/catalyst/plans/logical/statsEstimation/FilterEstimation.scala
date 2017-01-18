@@ -305,11 +305,10 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * In order to avoid type casting error such as Java int to Java long, we need to
    * convert a numeric integer value to String, and then convert it to long,
    * and then convert it to BigDecimal.
-   * If isNumeric is true, then it is a numeric value.  Otherwise, it is a Literal value.
    *
    * @param attrDataType the column data type
-   * @param litValue can be either a Literal or numeric value
-   * @param litDataType
+   * @param litValue the literal value
+   * @param litDataType the data type of literal value
    * @return a BigDecimal value
    */
   def numericLiteralToBigDecimal(
@@ -469,7 +468,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
         val tmpSet: Set[Double] = validQuerySet.map(e => e.toString.toDouble)
         (Some(tmpSet.max), Some(tmpSet.min))
       case DateType =>
-        if (hSet.isInstanceOf[Set[String]]) {
+        if (hSet.forall(e => e.isInstanceOf[String])) {
           val dateMax = Date.valueOf(hSet.asInstanceOf[Set[String]].max)
           val dateMin = Date.valueOf(hSet.asInstanceOf[Set[String]].min)
           (Some(dateMax), Some(dateMin))
@@ -478,7 +477,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
           (Some(tmpSet.max), Some(tmpSet.min))
         }
       case TimestampType =>
-        if (hSet.isInstanceOf[Set[String]]) {
+        if (hSet.forall(e => e.isInstanceOf[String])) {
           val dateMax = Timestamp.valueOf(hSet.asInstanceOf[Set[String]].max)
           val dateMin = Timestamp.valueOf(hSet.asInstanceOf[Set[String]].min)
           (Some(dateMax), Some(dateMin))

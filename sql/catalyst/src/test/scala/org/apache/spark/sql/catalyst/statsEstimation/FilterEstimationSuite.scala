@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
  */
 class FilterEstimationSuite extends StatsEstimationTestBase {
 
-  // Suppose our test table has 10 rows and 3 columns.
+  // Suppose our test table has 10 rows and 6 columns.
   // First column cint has values: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
   // Hence, distinctCount:10, min:1, max:10, nullCount:0, avgLen:4, maxLen:4
   val arInt = AttributeReference("cint", IntegerType)()
@@ -58,6 +58,16 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   val decMax = new java.math.BigDecimal("2.000000000000000000")
   val arDecimal = AttributeReference("cdecimal", DecimalType(12, 2))()
   val childColStatDecimal = ColumnStat(distinctCount = 10, min = Some(decMin), max = Some(decMax),
+    nullCount = 0, avgLen = 8, maxLen = 8)
+
+  // Fifth column cfloat has 10 float values: 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0
+  val arFloat = AttributeReference("cfloat", FloatType)()
+  val childColStatFloat = ColumnStat(distinctCount = 10, min = Some(1.0), max = Some(10.0),
+    nullCount = 0, avgLen = 4, maxLen = 4)
+
+  // Sixth column cdouble has 10 double values: 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0
+  val arDouble = AttributeReference("cdouble", FloatType)()
+  val childColStatDouble = ColumnStat(distinctCount = 10, min = Some(1.0), max = Some(10.0),
     nullCount = 0, avgLen = 8, maxLen = 8)
 
   test("cint = 2") {
@@ -314,6 +324,26 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     )
   }
 
+  test("cfloat < 3.0") {
+    validateEstimatedStats(
+      arFloat,
+      Filter(LessThan(arFloat, Literal(3.0)), childStatsTestPlan(Seq(arFloat))),
+      ColumnStat(distinctCount = 2, min = Some(1.0), max = Some(3.0),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(3L)
+    )
+  }
+
+  test("cdouble < 3.0") {
+    validateEstimatedStats(
+      arDouble,
+      Filter(LessThan(arDouble, Literal(3.0)), childStatsTestPlan(Seq(arDouble))),
+      ColumnStat(distinctCount = 2, min = Some(1.0), max = Some(3.0),
+        nullCount = 0, avgLen = 8, maxLen = 8),
+      Some(3L)
+    )
+  }
+
   // This is a corner test case.  We want to test if we can handle the case when the number of
   // valid values in IN clause is greater than the number of distinct values for a given column.
   // For example, column has only 2 distinct values 1 and 6.
@@ -343,7 +373,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         arInt -> childColStatInt,
         arDate -> childColStatDate,
         arTimestamp -> childColStatTimestamp,
-        arDecimal -> childColStatDecimal
+        arDecimal -> childColStatDecimal,
+        arFloat -> childColStatFloat,
+        arDouble -> childColStatDouble
       ))
     )
   }
