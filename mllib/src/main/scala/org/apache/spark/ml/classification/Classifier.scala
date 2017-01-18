@@ -27,7 +27,7 @@ import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * (private[spark]) Params for classification.
