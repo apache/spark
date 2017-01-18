@@ -45,7 +45,7 @@ Running any of the integration tests requires including `kubernetes-integration-
 order to prepare the environment for running the integration tests, the `pre-integration-test` step must be run in Maven
 on the `resource-managers/kubernetes/integration-tests` module:
 
-  build/mvn pre-integration-test -Pkubernetes -Pkubernetes-integration-tests -pl resource-managers/kubernetes/integration-tests -am
+    build/mvn pre-integration-test -Pkubernetes -Pkubernetes-integration-tests -pl resource-managers/kubernetes/integration-tests -am
  
 Afterwards, the integration tests can be executed with Maven or your IDE. Note that when running tests from an IDE, the
 `pre-integration-test` phase must be run every time the Spark main code changes. When running tests from the
