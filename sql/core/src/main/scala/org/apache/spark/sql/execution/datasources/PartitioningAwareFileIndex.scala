@@ -385,7 +385,7 @@ object PartitioningAwareFileIndex extends Logging {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
     val name = path.getName.toLowerCase
-     
+    
     // [SPARK-17599] Prevent InMemoryFileIndex from failing if path doesn't exist
     // Note that statuses only include FileStatus for the files and dirs directly under path,
     // and does not include anything else recursively.
@@ -394,7 +394,7 @@ object PartitioningAwareFileIndex extends Logging {
         logWarning(s"The directory $path was not found. Was it deleted very recently?")
         Array.empty[FileStatus]
     }
-      
+    
     val filteredStatuses = statuses.filterNot(status => shouldFilterOut(status.getPath.getName))
 
     val allLeafStatuses = {
