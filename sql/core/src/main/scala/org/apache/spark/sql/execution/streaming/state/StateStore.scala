@@ -83,7 +83,7 @@ trait StateStore {
   /**
    * Whether all updates have been committed
    */
-  private[state] def hasCommitted: Boolean
+  private[streaming] def hasCommitted: Boolean
 }
 
 
