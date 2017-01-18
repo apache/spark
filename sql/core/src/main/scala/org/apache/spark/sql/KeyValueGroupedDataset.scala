@@ -24,8 +24,10 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.streaming.InternalState
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
+import org.apache.spark.sql.streaming.State
 
 /**
  * :: Experimental ::
@@ -107,6 +109,18 @@ class KeyValueGroupedDataset[K, V] private[sql](
     implicit val uEnc = encoder
     mapValues { (v: V) => func.call(v) }
   }
+
+  def mapValuesWithState[STATE: Encoder, OUT: Encoder](
+      func: (V, State[STATE]) => OUT): Dataset[OUT] = {
+    Dataset[OUT](
+      sparkSession,
+      MapGroupsWithState[K, V, STATE, OUT](
+        func.asInstanceOf[(V, InternalState[STATE]) => OUT],
+        groupingAttributes,
+        dataAttributes,
+        logicalPlan))
+  }
+
 
   /**
    * Returns a [[Dataset]] that contains each unique key. This is equivalent to doing mapping

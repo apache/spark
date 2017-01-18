@@ -23,14 +23,14 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.streaming.{OutputMode, State}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 
 /** Used to identify the state store for a given operator. */
@@ -176,7 +176,7 @@ case class StateStoreSaveExec(
             }
 
             // Assumption: Append mode can be done only when watermark has been specified
-            store.remove(watermarkPredicate.get.eval)
+            store.remove(watermarkPredicate.get.eval _)
             store.commit()
 
             numTotalStateRows += store.numKeys()
@@ -199,7 +199,7 @@ case class StateStoreSaveExec(
               override def hasNext: Boolean = {
                 if (!baseIterator.hasNext) {
                   // Remove old aggregates if watermark specified
-                  if (watermarkPredicate.nonEmpty) store.remove(watermarkPredicate.get.eval)
+                  if (watermarkPredicate.nonEmpty) store.remove(watermarkPredicate.get.eval _)
                   store.commit()
                   numTotalStateRows += store.numKeys()
                   false
@@ -226,4 +226,61 @@ case class StateStoreSaveExec(
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+}
+
+case class MapGroupsWithStateExec(
+    func: (Any, State[Any]) => Any,
+    keyDeserializer: Expression,
+    valueDeserializer: Expression,
+    groupingAttributes: Seq[Attribute],
+    dataAttributes: Seq[Attribute],
+    outputObjAttr: Attribute,
+    stateId: Option[OperatorStateId],
+    stateDeserializer: Expression,
+    stateSerializer: Seq[NamedExpression],
+    child: SparkPlan) extends UnaryExecNode with ObjectProducerExec with StatefulOperator {
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def requiredChildDistribution: Seq[Distribution] =
+    ClusteredDistribution(groupingAttributes) :: Nil
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
+    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitionsWithStateStore[InternalRow](
+      getStateId.checkpointLocation,
+      operatorId = getStateId.operatorId,
+      storeVersion = getStateId.batchId,
+      groupingAttributes.toStructType,
+      child.output.toStructType,
+      sqlContext.sessionState,
+      Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
+        val getKeyObj = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
+        val getKey = GenerateUnsafeProjection.generate(groupingAttributes, child.output)
+        val getValueObj = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
+        val outputMappedObj = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
+
+        val getStateObj =
+          ObjectOperator.deserializeRowToObject(stateDeserializer)
+        val outputStateObj = ObjectOperator.serializeObjectToRow(stateSerializer)
+
+        iter.map { row =>
+          val key = getKey(row)
+          val keyObj = getKeyObj(row)
+          val valueObj = getValueObj(row)
+          val stateObjOption = store.get(key).map(getStateObj)
+          val wrappedState = new StateImpl[Any]()
+          wrappedState.wrap(stateObjOption)
+          val mapped = func(key, wrappedState)
+          if (wrappedState.isRemoved) {
+            store.remove(key)
+          } else if (wrappedState.isUpdated) {
+            store.put(key, outputStateObj(wrappedState.get()))
+          }
+          outputMappedObj(mapped)
+        }
+      }
+  }
 }

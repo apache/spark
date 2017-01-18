@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.streaming.InternalState
 import org.apache.spark.sql.types._
 
 object CatalystSerde {
@@ -312,6 +313,39 @@ case class MapGroups(
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer
+
+/** Factory for constructing new `MapGroups` nodes. */
+object MapGroupsWithState {
+  def apply[K: Encoder, T: Encoder, S: Encoder, U: Encoder](
+      func: (T, InternalState[S]) => U,
+      groupingAttributes: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      child: LogicalPlan): LogicalPlan = {
+    val mapped = new MapGroupsWithState(
+      func.asInstanceOf[(Any, InternalState[Any]) => Any],
+      UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
+      UnresolvedDeserializer(encoderFor[T].deserializer, dataAttributes),
+      groupingAttributes,
+      dataAttributes,
+      CatalystSerde.generateObjAttr[U],
+      encoderFor[S].deserializer,
+      encoderFor[S].namedExpressions,
+      child)
+    CatalystSerde.serialize[U](mapped)
+  }
+}
+
+case class MapGroupsWithState(
+    func: (Any, InternalState[Any]) => Any,
+    keyDeserializer: Expression,
+    valueDeserializer: Expression,
+    groupingAttributes: Seq[Attribute],
+    dataAttributes: Seq[Attribute],
+    outputObjAttr: Attribute,
+    stateDeserializer: Expression,
+    stateSerializer: Seq[NamedExpression],
+    child: LogicalPlan) extends UnaryNode with ObjectProducer
+
 
 /** Factory for constructing new `FlatMapGroupsInR` nodes. */
 object FlatMapGroupsInR {

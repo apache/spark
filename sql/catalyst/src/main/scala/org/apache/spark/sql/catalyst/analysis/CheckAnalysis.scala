@@ -405,6 +405,8 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
           case o if !o.resolved =>
+            println(o)
+            println(o.expressions.filterNot(_.resolved).mkString("\n"))
             failAnalysis(
               s"unresolved operator ${operator.simpleString}")
 
