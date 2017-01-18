@@ -57,12 +57,26 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     testStream(result, Append)(
       AddData(inputData, "a"),
       CheckLastBatch(("a", "1")),
+      assertNumStateRows(1),
       AddData(inputData, "a", "b"),
       CheckLastBatch(("a", "2"), ("b", "1")),
-      AddData(inputData, "a", "b"),
-      CheckLastBatch(("a", "-1"), ("b", "2")),    // state for a remove
-      AddData(inputData, "a", "b"),
-      CheckLastBatch(("a", "1"), ("b", "-1"))     // state for a recreated
+      assertNumStateRows(2),
+      StopStream,
+      StartStream(),
+      AddData(inputData, "a", "b"), // should remove state for "a" and return count as -1
+      CheckLastBatch(("a", "-1"), ("b", "2")),
+      assertNumStateRows(1),
+      StopStream,
+      StartStream(),
+      AddData(inputData, "a", "b", "c"), // should recreate state for "a" and return count as 1
+      CheckLastBatch(("a", "1"), ("b", "-1"), ("c", "1")),
+      assertNumStateRows(2)
     )
+  }
+
+  private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>
+    val progressWithData = q.recentProgress.filter(_.numInputRows > 0).lastOption.get
+    assert(progressWithData.stateOperators(0).numRowsTotal === numTotalRows)
+    true
   }
 }

@@ -247,9 +247,20 @@ case class MapGroupsWithStateExec(
     ClusteredDistribution(groupingAttributes) :: Nil
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
+    Seq(groupingAttributes.map(SortOrder(_, Ascending)))   // is this ordering needed?
+
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
+    "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"),
+    "numRemovedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of removed state rows")
+  )
 
   override protected def doExecute(): RDD[InternalRow] = {
+    val numTotalStateRows = longMetric("numTotalStateRows")
+    val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+    val numRemovedStateRows = longMetric("numRemovedStateRows")
+
     child.execute().mapPartitionsWithStateStore[InternalRow](
       getStateId.checkpointLocation,
       operatorId = getStateId.operatorId,
@@ -259,6 +270,7 @@ case class MapGroupsWithStateExec(
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
         try {
+
           val getKey = GenerateUnsafeProjection.generate(groupingAttributes, child.output)
           val getValueObj = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
           val outputMappedObj = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
@@ -277,12 +289,17 @@ case class MapGroupsWithStateExec(
             val mapped = func(valueObj, wrappedState)
             if (wrappedState.isRemoved) {
               store.remove(key)
+              numRemovedStateRows += 1
             } else if (wrappedState.isUpdated) {
               store.put(key, outputStateObj(wrappedState.get()))
+              numUpdatedStateRows += 1
             }
             outputMappedObj(mapped)
           }
-          CompletionIterator[InternalRow, Iterator[InternalRow]](mappedIter, { store.commit() })
+          CompletionIterator[InternalRow, Iterator[InternalRow]](mappedIter, {
+            store.commit()
+            numTotalStateRows += store.numKeys()
+          })
         } catch {
           case e: Throwable =>
             store.abort()
