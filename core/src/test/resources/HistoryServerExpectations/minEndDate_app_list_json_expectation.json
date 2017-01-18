@@ -7,7 +7,10 @@
     "lastUpdated" : "",
     "duration" : 10505,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1430917380893,
+    "endTimeEpoch" : 1430917391398
   } ]
 }, {
   "id" : "local-1430917381535",
@@ -19,7 +22,10 @@
     "lastUpdated" : "",
     "duration" : 57,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1430917380893,
+    "endTimeEpoch" : 1430917380950
   }, {
     "attemptId" : "1",
     "startTime" : "2015-05-06T13:03:00.880GMT",
@@ -27,6 +33,10 @@
     "lastUpdated" : "",
     "duration" : 10,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "completed" : true,
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1430917380880,
+    "endTimeEpoch" : 1430917380890
   } ]
 } ]
