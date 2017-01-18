@@ -83,7 +83,9 @@ case class UnresolvedTableValuedFunction(functionName: String, functionArgs: Seq
 /**
  * Holds the name of an attribute that has yet to be resolved.
  */
-case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {
+case class UnresolvedAttribute(
+    nameParts: Seq[String],
+    targetPlanIdOpt: Option[Long] = None) extends Attribute with Unevaluable {
 
   def name: String =
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
@@ -162,7 +164,7 @@ object UnresolvedAttribute {
     }
     if (inBacktick) throw e
     nameParts += tmp.mkString
-    nameParts.toSeq
+    nameParts
   }
 }
 

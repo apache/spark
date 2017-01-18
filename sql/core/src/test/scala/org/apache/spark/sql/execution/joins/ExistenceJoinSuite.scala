@@ -62,16 +62,16 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
       Row(6, null)
     )), new StructType().add("c", IntegerType).add("d", DoubleType))
 
-  private lazy val singleConditionEQ = (left.col("a") === right.col("c")).expr
+  private lazy val singleConditionEQ = (left.colInternal("a") === right.colInternal("c")).expr
 
   private lazy val composedConditionEQ = {
-    And((left.col("a") === right.col("c")).expr,
-      LessThan(left.col("b").expr, right.col("d").expr))
+    And((left.colInternal("a") === right.colInternal("c")).expr,
+      LessThan(left.colInternal("b").expr, right.colInternal("d").expr))
   }
 
   private lazy val composedConditionNEQ = {
-    And((left.col("a") < right.col("c")).expr,
-      LessThan(left.col("b").expr, right.col("d").expr))
+    And((left.colInternal("a") < right.colInternal("c")).expr,
+      LessThan(left.colInternal("b").expr, right.colInternal("d").expr))
   }
 
   // Note: the input dataframes and expression must be evaluated lazily because
@@ -252,6 +252,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
     LeftAnti,
     left,
     rightUniqueKey,
-    (left.col("a") === rightUniqueKey.col("c") && left.col("b") < rightUniqueKey.col("d")).expr,
+    (left.colInternal("a") === rightUniqueKey.colInternal("c") &&
+      left.colInternal("b") < rightUniqueKey.colInternal("d")).expr,
     Seq(Row(1, 2.0), Row(1, 2.0), Row(3, 3.0), Row(null, null), Row(null, 5.0), Row(6, null)))
 }

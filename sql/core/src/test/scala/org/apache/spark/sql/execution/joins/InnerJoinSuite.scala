@@ -219,7 +219,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     "inner join, one match per row",
     myUpperCaseData,
     myLowerCaseData,
-    () => (myUpperCaseData.col("N") === myLowerCaseData.col("n")).expr,
+    () => (myUpperCaseData.colInternal("N") === myLowerCaseData.colInternal("n")).expr,
     Seq(
       (1, "A", 1, "a"),
       (2, "B", 2, "b"),
@@ -235,7 +235,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       "inner join, multiple matches",
       left,
       right,
-      () => (left.col("a") === right.col("a")).expr,
+      () => (left.colInternal("a") === right.colInternal("a")).expr,
       Seq(
         (1, 1, 1, 1),
         (1, 1, 1, 2),
@@ -252,7 +252,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       "inner join, no matches",
       left,
       right,
-      () => (left.col("a") === right.col("a")).expr,
+      () => (left.colInternal("a") === right.colInternal("a")).expr,
       Seq.empty
     )
   }
@@ -264,7 +264,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       "inner join, null safe",
       left,
       right,
-      () => (left.col("b") <=> right.col("b")).expr,
+      () => (left.colInternal("b") <=> right.colInternal("b")).expr,
       Seq(
         (1, 0, 1, 0),
         (2, null, 2, null)
@@ -280,7 +280,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       "SPARK-15822 - test structs as keys",
       left,
       right,
-      () => (left.col("key") === right.col("key")).expr,
+      () => (left.colInternal("key") === right.colInternal("key")).expr,
       Seq(
         (Row(0, 0), "L0", Row(0, 0), "R0"),
         (Row(1, 1), "L1", Row(1, 1), "R1"),

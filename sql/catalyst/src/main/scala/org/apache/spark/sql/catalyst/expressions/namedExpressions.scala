@@ -220,7 +220,7 @@ case class AttributeReference(
   extends Attribute with Unevaluable {
 
   /**
-   * Returns true iff the expression id is the same for both attributes.
+   * Returns true if the expression id is the same for both attributes.
    */
   def sameRef(other: AttributeReference): Boolean = this.exprId == other.exprId
 

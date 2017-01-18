@@ -57,8 +57,8 @@ class OuterJoinSuite extends SparkPlanTest with SharedSQLContext {
     )), new StructType().add("c", IntegerType).add("d", DoubleType))
 
   private lazy val condition = {
-    And((left.col("a") === right.col("c")).expr,
-      LessThan(left.col("b").expr, right.col("d").expr))
+    And((left.colInternal("a") === right.colInternal("c")).expr,
+      LessThan(left.colInternal("b").expr, right.colInternal("d").expr))
   }
 
   // Note: the input dataframes and expression must be evaluated lazily because

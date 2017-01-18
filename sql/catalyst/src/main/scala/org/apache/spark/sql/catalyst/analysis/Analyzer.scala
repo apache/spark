@@ -646,31 +646,31 @@ class Analyzer(
       right.collect {
         // Handle base relations that might appear more than once.
         case oldVersion: MultiInstanceRelation
-            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+          if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
           val newVersion = oldVersion.newInstance()
           (oldVersion, newVersion)
 
         case oldVersion: SerializeFromObject
-            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+          if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
           (oldVersion, oldVersion.copy(serializer = oldVersion.serializer.map(_.newInstance())))
 
         // Handle projects that create conflicting aliases.
         case oldVersion @ Project(projectList, _)
-            if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
+          if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
           (oldVersion, oldVersion.copy(projectList = newAliases(projectList)))
 
         case oldVersion @ Aggregate(_, aggregateExpressions, _)
-            if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
+          if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
           (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
 
         case oldVersion: Generate
-            if oldVersion.generatedSet.intersect(conflictingAttributes).nonEmpty =>
+          if oldVersion.generatedSet.intersect(conflictingAttributes).nonEmpty =>
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
           (oldVersion, oldVersion.copy(generatorOutput = newOutput))
 
         case oldVersion @ Window(windowExpressions, _, _, child)
-            if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
-              .nonEmpty =>
+          if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
+            .nonEmpty =>
           (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
       }
         // Only handle first case, others will be fixed on the next pass.
@@ -687,11 +687,16 @@ class Analyzer(
           val newRight = right transformUp {
             case r if r == oldRelation => newRelation
           } transformUp {
-            case other => other transformExpressions {
-              case a: Attribute =>
-                attributeRewrites.get(a).getOrElse(a).withQualifier(a.qualifier)
-            }
+            case other =>
+              val transformed = other transformExpressions {
+                case a: Attribute =>
+                  attributeRewrites.get(a).getOrElse(a).withQualifier(a.qualifier)
+              }
+
+              transformed.setPlanId(other.planId)
+              transformed
           }
+          newRight.setPlanId(right.planId)
           newRight
       }
     }
@@ -754,11 +759,18 @@ class Analyzer(
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        q transformExpressionsUp  {
-          case u @ UnresolvedAttribute(nameParts) =>
+        q transformExpressionsUp {
+          case u @ UnresolvedAttribute(nameParts, targetPlanIdOpt) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result =
-              withPosition(u) { q.resolveChildren(nameParts, resolver).getOrElse(u) }
+              withPosition(u) {
+                targetPlanIdOpt match {
+                  case Some(targetPlanId) =>
+                    resolveExpressionFromSpecificLogicalPlan(nameParts, q, targetPlanId)
+                  case None =>
+                    q.resolveChildren(nameParts, resolver).getOrElse(u)
+                }
+              }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
@@ -836,6 +848,19 @@ class Analyzer(
     exprs.exists(_.find(_.isInstanceOf[UnresolvedDeserializer]).isDefined)
   }
 
+  private[sql] def resolveExpressionFromSpecificLogicalPlan(
+      nameParts: Seq[String],
+      planToSearchFrom: LogicalPlan,
+      targetPlanId: Long): Expression = {
+    lazy val name = UnresolvedAttribute(nameParts).name
+    planToSearchFrom.findByBreadthFirst(_.planId == targetPlanId) match {
+      case Some(foundPlan) =>
+        foundPlan.resolve(nameParts, resolver).get
+      case None =>
+        failAnalysis(s"Could not find $name in any logical plan.")
+    }
+  }
+
   protected[sql] def resolveExpression(
       expr: Expression,
       plan: LogicalPlan,
@@ -847,8 +872,14 @@ class Analyzer(
     try {
       expr transformUp {
         case GetColumnByOrdinal(ordinal, _) => plan.output(ordinal)
-        case u @ UnresolvedAttribute(nameParts) =>
-          withPosition(u) { plan.resolve(nameParts, resolver).getOrElse(u) }
+        case u @ UnresolvedAttribute(nameParts, targetPlanIdOpt) =>
+          withPosition(u) {
+            targetPlanIdOpt match {
+              case Some(targetPlanId) =>
+                resolveExpressionFromSpecificLogicalPlan(nameParts, plan, targetPlanId)
+              case None => plan.resolve(nameParts, resolver).getOrElse(u)
+            }
+          }
         case UnresolvedExtractValue(child, fieldName) if child.resolved =>
           ExtractValue(child, fieldName, resolver)
       }
@@ -1076,12 +1107,17 @@ class Analyzer(
       plan transformDown {
         case q: LogicalPlan if q.childrenResolved && !q.resolved =>
           q transformExpressions {
-            case u @ UnresolvedAttribute(nameParts) =>
+            case u @ UnresolvedAttribute(nameParts, targetPlanIdOpt) =>
               withPosition(u) {
                 try {
-                  outer.resolve(nameParts, resolver) match {
-                    case Some(outerAttr) => OuterReference(outerAttr)
-                    case None => u
+                  targetPlanIdOpt match {
+                    case Some(targetPlanId) =>
+                      resolveExpressionFromSpecificLogicalPlan(nameParts, outer, targetPlanId)
+                    case None =>
+                      outer.resolve(nameParts, resolver) match {
+                        case Some(outerAttr) => OuterReference(outerAttr)
+                        case None => u
+                      }
                   }
                 } catch {
                   case _: AnalysisException => u

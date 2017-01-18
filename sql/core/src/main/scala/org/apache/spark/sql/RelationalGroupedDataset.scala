@@ -411,7 +411,9 @@ class RelationalGroupedDataset protected[sql](
       packageNames: Array[Byte],
       broadcastVars: Array[Broadcast[Object]],
       outputSchema: StructType): DataFrame = {
-      val groupingNamedExpressions = groupingExprs.map(alias)
+      val groupingNamedExpressions = groupingExprs
+        .map(df.sparkSession.sessionState.analyzer.resolveExpression(_, df.logicalPlan))
+        .map(alias)
       val groupingCols = groupingNamedExpressions.map(Column(_))
       val groupingDataFrame = df.select(groupingCols : _*)
       val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)

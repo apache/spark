@@ -627,7 +627,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
           Row(id, name, age, salary)
       }.toSeq)
     assert(df.schema.map(_.name) === Seq("id", "name", "age", "salary"))
-    assert(df("id") == person("id"))
+    val dfAnalyzer = df.sparkSession.sessionState.analyzer
+    val personAnalyzer = person.sparkSession.sessionState.analyzer
+    assert(dfAnalyzer.resolveExpression(df("id").expr, df.queryExecution.analyzed) ==
+      personAnalyzer.resolveExpression(person("id").expr, person.queryExecution.analyzed))
   }
 
   test("drop top level columns that contains dot") {
@@ -1599,6 +1602,28 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val schemas = List.range(0, size).map(a => StructField("name" + a, LongType, true))
     val df = spark.createDataFrame(rdd, StructType(schemas), false)
     assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
+  }
+
+  test("""SPARK-17154: df("column_name") should return correct result when we do self-join""") {
+    val df = Seq(
+      (1, "a", "A"),
+      (2, "b", "B"),
+      (3, "c", "C"),
+      (4, "d", "D"),
+      (5, "e", "E")).toDF("col1", "col2", "col3")
+    val filtered = df.filter("col1 != 3").select("col1", "col2")
+    val joined = filtered.join(df, filtered("col1") === df("col1"), "inner")
+    val selected1 = joined.select(df("col3"))
+
+    checkAnswer(selected1, Row("A") :: Row("B") :: Row("D") :: Row("E") :: Nil)
+
+    val rightOuterJoined = filtered.join(df, filtered("col1") === df("col1"), "right")
+    val selected2 = rightOuterJoined.select(df("col1"))
+
+    checkAnswer(selected2, Row(1) :: Row(2) :: Row(3) :: Row(4) :: Row(5) :: Nil)
+
+    val selected3 = rightOuterJoined.select(filtered("col1"))
+    checkAnswer(selected3, Row(1) :: Row(2) :: Row(null) :: Row(4) :: Row(5) :: Nil)
   }
 
   test("SPARK-17409: Do Not Optimize Query in CTAS (Data source tables) More Than Once") {

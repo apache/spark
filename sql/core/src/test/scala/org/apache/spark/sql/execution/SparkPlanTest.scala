@@ -242,7 +242,7 @@ object SparkPlanTest {
         case plan: SparkPlan =>
           val inputMap = plan.children.flatMap(_.output).map(a => (a.name, a)).toMap
           plan transformExpressions {
-            case UnresolvedAttribute(Seq(u)) =>
+            case UnresolvedAttribute(Seq(u), _) =>
               inputMap.getOrElse(u,
                 sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
           }

@@ -1075,12 +1075,11 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  def col(colName: String): Column = colName match {
-    case "*" =>
-      Column(ResolvedStar(queryExecution.analyzed.output))
-    case _ =>
-      val expr = resolve(colName)
-      Column(expr)
+  def col(colName: String): Column = withStarResolved(colName) {
+    val expr = UnresolvedAttribute(
+      UnresolvedAttribute.parseAttributeName(colName),
+      Some(queryExecution.analyzed.planId))
+    Column(expr)
   }
 
   /**
@@ -1957,9 +1956,17 @@ class Dataset[T] private[sql](
    */
   def drop(col: Column): DataFrame = {
     val expression = col match {
-      case Column(u: UnresolvedAttribute) =>
-        queryExecution.analyzed.resolveQuoted(
-          u.name, sparkSession.sessionState.analyzer.resolver).getOrElse(u)
+      case Column(u @ UnresolvedAttribute(nameParts, targetPlanIdOpt)) =>
+        val plan = queryExecution.analyzed
+        val analyzer = sparkSession.sessionState.analyzer
+        val resolver = analyzer.resolver
+
+        targetPlanIdOpt match {
+          case Some(targetPlanId) =>
+            analyzer.resolveExpressionFromSpecificLogicalPlan(nameParts, plan, targetPlanId)
+          case None =>
+            plan.resolveQuoted(u.name, resolver).getOrElse(u)
+        }
       case Column(expr: Expression) => expr
     }
     val attrs = this.logicalPlan.output
@@ -2789,6 +2796,19 @@ class Dataset[T] private[sql](
     withTypedPlan {
       Sort(sortOrder, global = global, logicalPlan)
     }
+  }
+
+  /** Another version of `col` which resolve an expression immediately.
+   *  Mainly intended to use for test for example in case of passing columns to a SparkPlan.
+   */
+  private[sql] def colInternal(colName: String): Column = withStarResolved(colName) {
+    val expr = resolve(colName)
+    Column(expr)
+  }
+
+  private def withStarResolved(colName: String)(f: => Column): Column = colName match {
+    case "*" => Column(ResolvedStar(queryExecution.analyzed.output))
+    case _ => f
   }
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */
