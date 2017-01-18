@@ -1309,7 +1309,7 @@ class HiveDDLSuite
   }
 
   test("create hive serde table with DataFrameWriter.saveAsTable") {
-    withTable("t", "t2", "t3") {
+    withTable("t", "t2") {
       Seq(1 -> "a").toDF("i", "j")
         .write.format("hive").option("fileFormat", "avro").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a"))
