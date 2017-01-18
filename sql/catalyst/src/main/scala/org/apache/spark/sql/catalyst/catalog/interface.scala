@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.StructType
 
 
+
 /**
  * A function defined in the catalog.
  *
