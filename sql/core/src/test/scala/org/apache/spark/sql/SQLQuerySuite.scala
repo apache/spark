@@ -2499,4 +2499,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+ 
+  test(
+    "SPARK-19059: Unable to retrieve data from parquet table whose name startswith underscore") {
+    sql("CREATE TABLE `_tbl`(i INT) USING parquet")
+    sql("INSERT INTO `_tbl` VALUES (1), (2), (3)")
+    checkAnswer( sql("SELECT * FROM `_tbl`"), Row(1) :: Row(2) :: Row(3) :: Nil)
+    sql("ALTER TABLE `_tbl` RENAME TO `tbl`")
+    checkAnswer( sql("SELECT * FROM `tbl`"), Row(1) :: Row(2) :: Row(3) :: Nil)
+    sql("DROP TABLE `tbl`")
+    sql("CREATE TABLE `tbl`(i INT) USING parquet")
+    sql("INSERT INTO `tbl` VALUES (1), (2), (3)")
+    checkAnswer( sql("SELECT * FROM `tbl`"), Row(1) :: Row(2) :: Row(3) :: Nil)
+    sql("DROP TABLE `tbl`")
+  }
 }
