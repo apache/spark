@@ -385,7 +385,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                 .streamingQuery
             // Wait until the initialization finishes, because some tests need to use `logicalPlan`
             // after starting the query.
-            currentStream.awaitInitialization(streamingTimeout.toMillis)
+            try {
+              currentStream.awaitInitialization(streamingTimeout.toMillis)
+            } catch {
+              case _: StreamingQueryException =>
+                // Ignore the exception. `StopStream` or `ExpectFailure` will catch it as well.
+            }
 
           case AdvanceManualClock(timeToAdd) =>
             verify(currentStream != null,
