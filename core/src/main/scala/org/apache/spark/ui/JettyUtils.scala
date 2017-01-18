@@ -337,10 +337,10 @@ private[spark] object JettyUtils extends Logging {
       val securePort = sslOptions.createJettySslContextFactory().map { factory =>
         val securePort = sslOptions.port.getOrElse(if (port > 0) Utils.userPort(port, 400) else 0)
         val secureServerName = if (serverName.nonEmpty) s"$serverName (HTTPS)" else serverName
+        val connectionFactories = AbstractConnectionFactory.getFactories(factory,
+          new HttpConnectionFactory())
 
         def sslConnect(currentPort: Int): (ServerConnector, Int) = {
-          val connectionFactories = AbstractConnectionFactory.getFactories(factory,
-            new HttpConnectionFactory())
           newConnector(connectionFactories, currentPort)
         }
 
@@ -365,14 +365,15 @@ private[spark] object JettyUtils extends Logging {
         redirector.start()
       }
 
-      // Add all the known handlers and install the connectors.
+      server.addConnector(httpConnector)
+
+      // Add all the known handlers now that connectors are configured.
       handlers.foreach { h =>
         val gzipHandler = new GzipHandler()
         gzipHandler.setHandler(h)
         collection.addHandler(gzipHandler)
         gzipHandler.start()
       }
-      server.addConnector(httpConnector)
 
       pool.setMaxThreads(math.max(pool.getMaxThreads, minThreads))
       ServerInfo(server, httpPort, securePort, collection)
