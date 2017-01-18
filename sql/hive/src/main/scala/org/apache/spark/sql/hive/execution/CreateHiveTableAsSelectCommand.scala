@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, Project}
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.hive.MetastoreRelation
@@ -46,23 +46,18 @@ case class CreateHiveTableAsSelectCommand(
   override def innerChildren: Seq[LogicalPlan] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-
-    // relation should move partition columns to the last
-    val (partOutputs, nonPartOutputs) = query.output.partition { a =>
-        tableDesc.partitionColumnNames.contains(a.name)
-    }
-
-    // the CTAS's SELECT partition-outputs order should be consistent with
-    // tableDesc.partitionColumnNames
-    val reorderedPartOutputs = tableDesc.partitionColumnNames.map {
+    val partitionAttrs = tableDesc.partitionColumnNames.map {
             p =>
-              partOutputs.find(_.name == p).getOrElse(
+              query.output.find(_.name == p).getOrElse(
                 new AnalysisException(s"Partition column[$p] does not exist " +
                   s"in query output partition").asInstanceOf[NamedExpression]
               )
           }
-
-    val reorderOutputQuery = Project(nonPartOutputs ++ reorderedPartOutputs, query)
+    val partitionSet = AttributeSet(partitionAttrs)
+    val dataAttrs = query.output.filterNot(partitionSet.contains)
+    // the CTAS's SELECT partition-outputs order should be consistent with
+    // tableDesc.partitionColumnNames
+    val reorderedOutputQuery = Project(dataAttrs ++ partitionAttrs, query)
 
     lazy val metastoreRelation: MetastoreRelation = {
       import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
@@ -83,7 +78,7 @@ case class CreateHiveTableAsSelectCommand(
       val withSchema = if (withFormat.schema.isEmpty) {
         // Hive doesn't support specifying the column list for target table in CTAS
         // However we don't think SparkSQL should follow that.
-        tableDesc.copy(schema = reorderOutputQuery.output.toStructType)
+        tableDesc.copy(schema = reorderedOutputQuery.schema)
       } else {
         withFormat
       }
@@ -106,8 +101,8 @@ case class CreateHiveTableAsSelectCommand(
       }
     } else {
       try {
-        sparkSession.sessionState.executePlan(InsertIntoTable(
-        metastoreRelation, Map(), reorderOutputQuery, overwrite = true, ifNotExists = false)).toRdd
+        sparkSession.sessionState.executePlan(InsertIntoTable(metastoreRelation,
+          Map(), reorderedOutputQuery, overwrite = true, ifNotExists = false)).toRdd
       } catch {
         case NonFatal(e) =>
           // drop the created table.

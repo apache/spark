@@ -1355,8 +1355,8 @@ class HiveDDLSuite
     }
   }
 
-  test("create hive serde table with DataFrameWriter.saveAsTable with partitionBy") {
-    withTable("t") {
+  test("create hive serde table as select with DataFrameWriter.saveAsTable with partitionBy") {
+    withTable("t", "t1") {
       withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
         Seq(10 -> "y").toDF("i", "j").write.format("hive").partitionBy("i").saveAsTable("t")
         checkAnswer(spark.table("t"), Row("y", 10) :: Nil)
@@ -1375,13 +1375,14 @@ class HiveDDLSuite
 
         Seq((1, 2, 3)).toDF("i", "j", "k").write.mode("overwrite").format("hive")
           .partitionBy("k", "j").saveAsTable("t")
-        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         checkAnswer(spark.table("t"), Row(1, 3, 2) :: Nil)
 
         Seq((1, 2, 3)).toDF("i", "j", "k").write.mode("overwrite").format("hive")
           .partitionBy("j", "k").saveAsTable("t")
-        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         checkAnswer(spark.table("t"), Row(1, 2, 3) :: Nil)
+
+        spark.sql("create table t1 as select * from t")
+        checkAnswer(spark.table("t1"), Row(1, 2, 3) :: Nil)
       }
     }
   }
