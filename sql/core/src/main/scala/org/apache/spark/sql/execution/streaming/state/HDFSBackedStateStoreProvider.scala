@@ -203,7 +203,7 @@ private[state] class HDFSBackedStateStoreProvider(
     /**
      * Whether all updates have been committed
      */
-    override private[state] def hasCommitted: Boolean = {
+    override private[streaming] def hasCommitted: Boolean = {
       state == COMMITTED
     }
 
