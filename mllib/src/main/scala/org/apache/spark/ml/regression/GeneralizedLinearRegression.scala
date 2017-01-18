@@ -1208,14 +1208,14 @@ class GeneralizedLinearRegressionSummary private[regression] (
 
   /**
    * Name of features. If the name cannot be retrieved from attributes,
-   * use default "V0", "V1", ...
+   * use default names "V1", "V2", ...
    */
   @Since("2.2.0")
   lazy val featureName: Array[String] = {
     val featureAttrs = AttributeGroup.fromStructField(
       dataset.schema(model.getFeaturesCol)).attributes
     if (featureAttrs == None) {
-      Array.tabulate[String](origModel.numFeatures)((x: Int) => ("V" + x))
+      Array.tabulate[String](origModel.numFeatures)((x: Int) => ("V" + (x + 1)))
     } else {
       featureAttrs.get.map(_.name.get)
     }
@@ -1477,8 +1477,8 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   }
 
   /**
-    * Summary table with feature name, coefficient standard error,
-    * tValues and pValues.
+    * Summary table with feature name, coefficient, standard error,
+    * tValue and pValue.
     *
     */
   @Since("2.2.0")
@@ -1486,19 +1486,19 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
     if (isNormalSolver) {
       var featureNames = featureName
       var coefficients = model.coefficients.toArray
+      var idx = Array.range(0, coefficients.length)
       if (model.getFitIntercept) {
         featureNames = featureNames :+ "Intercept"
         coefficients = coefficients :+ model.intercept
+        // reorder so that intercept comes first
+        idx = (coefficients.length - 1) +: idx
       }
-      var result = for (i <- 0 until coefficients.length) yield
+      val result = for (i <- idx.toSeq) yield
         (featureNames(i), coefficients(i), coefficientStandardErrors(i), tValues(i), pValues(i))
-      /*if (model.getFitIntercept) {
-        result = ((coefficients.length - 1) +: Array.range(0, (coefficients.length - 1)))
-          .map(result(_)).toSeq
-      }*/
+
       val spark = SparkSession.builder().getOrCreate()
       import spark.implicits._
-      result.toDF("Feature", "Estimate", "StdError", "tValue", "pValue").repartition(1)
+      result.toDF("Feature", "Estimate", "StdError", "TValue", "PValue").repartition(1)
     } else {
       throw new UnsupportedOperationException(
         "No summary table available for this GeneralizedLinearRegressionModel")
