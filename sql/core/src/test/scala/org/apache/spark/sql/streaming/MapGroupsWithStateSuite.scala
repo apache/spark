@@ -35,11 +35,18 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
   test("basics") {
     val inputData = MemoryStream[String]
 
-    // Function to maintain a running count
+    // Function to maintain running count up to 2, and then remove the count
+    // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
     val stateFunc = (data: String, state: State[Int]) => {
-      val count = state.getOption().getOrElse(0) + 1
-      state.update(count)
-      (data, count.toString)
+      val oldCount = state.getOption().getOrElse(0)
+      if (oldCount == 2) {
+        state.remove()
+        (data, "-1")
+      } else {
+        val newCount = oldCount + 1
+        state.update(newCount)
+        (data, newCount.toString)
+      }
     }
 
     val result =
@@ -51,7 +58,11 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
       AddData(inputData, "a"),
       CheckLastBatch(("a", "1")),
       AddData(inputData, "a", "b"),
-      CheckLastBatch(("a", "2"), ("b", "1"))
+      CheckLastBatch(("a", "2"), ("b", "1")),
+      AddData(inputData, "a", "b"),
+      CheckLastBatch(("a", "-1"), ("b", "2")),    // state for a remove
+      AddData(inputData, "a", "b"),
+      CheckLastBatch(("a", "1"), ("b", "-1"))     // state for a recreated
     )
   }
 }
