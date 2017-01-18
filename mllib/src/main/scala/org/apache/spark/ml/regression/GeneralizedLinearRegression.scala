@@ -21,21 +21,22 @@ import java.util.Locale
 
 import breeze.stats.{distributions => dist}
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.optim._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataType, DoubleType, StringType, StructType, StructField}
+import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 import org.apache.spark.sql.SparkSession
 
 
@@ -1504,5 +1505,4 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
         "No summary table available for this GeneralizedLinearRegressionModel")
     }
   }
-
 }
