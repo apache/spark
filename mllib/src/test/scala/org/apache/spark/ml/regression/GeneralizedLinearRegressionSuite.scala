@@ -18,6 +18,7 @@
 package org.apache.spark.ml.regression
 
 import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
@@ -1527,7 +1528,7 @@ class GeneralizedLinearRegressionSuite
   test("glm summary: feature name") {
     // dataset1 with no attribute
     val dataset1 = Seq(
-      Instance(2.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(2.0, 1.0, Vectors.dense(0.0, 5.0)),
       Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
       Instance(3.0, 3.0, Vectors.dense(2.0, 11.0)),
       Instance(9.0, 4.0, Vectors.dense(3.0, 13.0)),
@@ -1547,20 +1548,18 @@ class GeneralizedLinearRegressionSuite
 
     val expectedFeature = Seq(Array("V1", "V2"), Array("x1", "x2"))
 
-    val trainer = new GeneralizedLinearRegression()
     var idx = 0
     for (dataset <- Seq(dataset1, dataset2)) {
-      val model = trainer.fit(dataset)
-      model.summary.featureName
-        .zip(expectedFeature(idx)).foreach{ x => assert(x._1 === x._2,
-        "Feature name mismatch in glm summary") }
+      val model = new GeneralizedLinearRegression().fit(dataset)
+      model.summary.featureName.zip(expectedFeature(idx))
+        .foreach{ x => assert(x._1 === x._2) }
       idx += 1
     }
   }
 
   test("glm summary: summaryTable") {
     val dataset = Seq(
-      Instance(2.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(2.0, 1.0, Vectors.dense(0.0, 5.0)),
       Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
       Instance(3.0, 3.0, Vectors.dense(2.0, 11.0)),
       Instance(9.0, 4.0, Vectors.dense(3.0, 13.0)),
