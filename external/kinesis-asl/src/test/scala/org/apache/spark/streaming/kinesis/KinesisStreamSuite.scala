@@ -247,7 +247,9 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       }
       ssc.start()
 
-      val (testData1, testData2, testData3) = (1 to 10, 11 to 20, 21 to 30)
+      val testData1 = 1 to 10
+      val testData2 = 11 to 20
+      val testData3 = 21 to 30
 
       eventually(timeout(60 seconds), interval(10 second)) {
         localTestUtils.pushData(testData1, aggregateTestData)
@@ -271,8 +273,8 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
           "\nData received does not match data sent after splitting a shard")
       }
 
-      val Seq(shardToMerge, adjShared) = splitOpenShards
-      localTestUtils.mergeShard(shardToMerge.getShardId, adjShared.getShardId)
+      val Seq(shardToMerge, adjShard) = splitOpenShards
+      localTestUtils.mergeShard(shardToMerge.getShardId, adjShard.getShardId)
       val (mergedOpenShards, mergedCloseShards) = localTestUtils.getShards().partition { shard =>
         shard.getSequenceNumberRange.getEndingSequenceNumber == null
       }
