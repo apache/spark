@@ -427,10 +427,6 @@ $(document).ready(function () {
                         {
                             "targets": [ 16 ],
                             "visible": getThreadDumpEnabled()
-                        },
-                        {
-                            "targets": [ 17 ],
-                            "visible": workersExist(response)
                         }
                     ],
                     "order": [[0, "asc"]]
