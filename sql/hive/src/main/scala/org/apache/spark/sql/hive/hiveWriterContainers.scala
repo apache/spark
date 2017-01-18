@@ -21,7 +21,6 @@ import java.text.NumberFormat
 import java.util.{Date, Locale}
 
 import scala.collection.JavaConverters._
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -34,10 +33,10 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.Object
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
-
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
@@ -322,6 +321,10 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       }
       commit()
     } catch {
+      case ffe: FetchFailedException =>
+        logError("Aborting task because of FetchFailedException.", ffe)
+        abortTask()
+        throw ffe
       case cause: Throwable =>
         logError("Aborting task.", cause)
         abortTask()
