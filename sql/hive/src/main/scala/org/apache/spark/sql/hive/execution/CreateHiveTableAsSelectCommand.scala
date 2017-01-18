@@ -48,14 +48,13 @@ case class CreateHiveTableAsSelectCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
 
     // relation should move partition columns to the last
-    val (partOutputs, nonPartOutputs) = query.output.partition {
-      a =>
+    val (partOutputs, nonPartOutputs) = query.output.partition { a =>
         tableDesc.partitionColumnNames.contains(a.name)
     }
 
     // the CTAS's SELECT partition-outputs order should be consistent with
     // tableDesc.partitionColumnNames
-    val reorderPartOutputs = tableDesc.partitionColumnNames.map {
+    val reorderedPartOutputs = tableDesc.partitionColumnNames.map {
             p =>
               partOutputs.find(_.name == p).getOrElse(
                 new AnalysisException(s"Partition column[$p] does not exist " +
@@ -63,7 +62,7 @@ case class CreateHiveTableAsSelectCommand(
               )
           }
 
-    val reorderOutputQuery = Project(nonPartOutputs ++ reorderPartOutputs, query)
+    val reorderOutputQuery = Project(nonPartOutputs ++ reorderedPartOutputs, query)
 
     lazy val metastoreRelation: MetastoreRelation = {
       import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
@@ -108,9 +107,7 @@ case class CreateHiveTableAsSelectCommand(
     } else {
       try {
         sparkSession.sessionState.executePlan(InsertIntoTable(
-        metastoreRelation, Map(), reorderOutputQuery, overwrite = true
-          , ifNotExists = false))
-          .toRdd
+        metastoreRelation, Map(), reorderOutputQuery, overwrite = true, ifNotExists = false)).toRdd
       } catch {
         case NonFatal(e) =>
           // drop the created table.
