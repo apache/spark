@@ -176,6 +176,7 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> summary.clusterSizes
     [2, 2, 2]
     >>> summary.logLikelihood
+    8.1463602464817928
     >>> weights = model.weights
     >>> len(weights)
     3
