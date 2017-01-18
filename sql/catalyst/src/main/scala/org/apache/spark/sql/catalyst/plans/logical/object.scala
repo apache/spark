@@ -328,7 +328,7 @@ object MapGroupsWithState {
       groupingAttributes,
       dataAttributes,
       CatalystSerde.generateObjAttr[U],
-      encoderFor[S].deserializer,
+      encoderFor[S].resolveAndBind().deserializer,
       encoderFor[S].namedExpressions,
       child)
     CatalystSerde.serialize[U](mapped)

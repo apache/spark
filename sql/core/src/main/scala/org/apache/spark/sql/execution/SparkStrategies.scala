@@ -255,7 +255,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           planLater(child))
         execPlan :: Nil
       case _ =>
-        println("here")
         Nil
     }
   }

@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{OutputMode, State}
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.{CompletionIterator, NextIterator}
 
 
 /** Used to identify the state store for a given operator. */
@@ -230,7 +231,7 @@ case class StateStoreSaveExec(
 
 case class MapGroupsWithStateExec(
     func: (Any, State[Any]) => Any,
-    keyDeserializer: Expression,
+    keyDeserializer: Expression,   // probably not needed
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
@@ -257,30 +258,36 @@ case class MapGroupsWithStateExec(
       child.output.toStructType,
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
-        val getKeyObj = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
-        val getKey = GenerateUnsafeProjection.generate(groupingAttributes, child.output)
-        val getValueObj = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
-        val outputMappedObj = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
+        try {
+          val getKey = GenerateUnsafeProjection.generate(groupingAttributes, child.output)
+          val getValueObj = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
+          val outputMappedObj = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
 
-        val getStateObj =
-          ObjectOperator.deserializeRowToObject(stateDeserializer)
-        val outputStateObj = ObjectOperator.serializeObjectToRow(stateSerializer)
+          val getStateObj =
+            ObjectOperator.deserializeRowToObject(stateDeserializer)
+          val outputStateObj = ObjectOperator.serializeObjectToRow(stateSerializer)
 
-        iter.map { row =>
-          val key = getKey(row)
-          val keyObj = getKeyObj(row)
-          val valueObj = getValueObj(row)
-          val stateObjOption = store.get(key).map(getStateObj)
-          val wrappedState = new StateImpl[Any]()
-          wrappedState.wrap(stateObjOption)
-          val mapped = func(key, wrappedState)
-          if (wrappedState.isRemoved) {
-            store.remove(key)
-          } else if (wrappedState.isUpdated) {
-            store.put(key, outputStateObj(wrappedState.get()))
+          val mappedIter = iter.map { row =>
+            val key = getKey(row)
+            val valueObj = getValueObj(row)
+            val stateObjOption = store.get(key).map(getStateObj)
+            val wrappedState = new StateImpl[Any]()
+            wrappedState.wrap(stateObjOption)
+
+            val mapped = func(valueObj, wrappedState)
+            if (wrappedState.isRemoved) {
+              store.remove(key)
+            } else if (wrappedState.isUpdated) {
+              store.put(key, outputStateObj(wrappedState.get()))
+            }
+            outputMappedObj(mapped)
           }
-          outputMappedObj(mapped)
+          CompletionIterator[InternalRow, Iterator[InternalRow]](mappedIter, { store.commit() })
+        } catch {
+          case e: Throwable =>
+            store.abort()
+            throw e
         }
-      }
+    }
   }
 }
