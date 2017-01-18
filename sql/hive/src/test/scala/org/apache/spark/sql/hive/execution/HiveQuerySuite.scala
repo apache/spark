@@ -388,6 +388,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     }
   }
 
+  // Some tests suing script transformation are skipped as it requires `/bin/bash` which
+  // can be missing or differently located.
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src",
     skip = !TestUtils.testCommandAvailable("/bin/bash"))
