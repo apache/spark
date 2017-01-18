@@ -210,8 +210,7 @@ class LinearSVC @Since("2.2.0") (
       val optimizer = new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
       val initialCoefWithIntercept = Vectors.zeros(numFeaturesPlusIntercept)
       if ($(fitIntercept)) {
-        initialCoefWithIntercept.toArray(numFeatures) = math.log(
-          histogram(1) / histogram(0))
+        initialCoefWithIntercept.toArray(numFeatures) = 0D
       }
 
       val states = optimizer.iterations(new CachedDiffFunction(costFun),

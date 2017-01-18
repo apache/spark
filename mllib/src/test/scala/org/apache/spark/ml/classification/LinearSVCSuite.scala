@@ -98,7 +98,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(lsvc.getFeaturesCol === "features")
     assert(lsvc.getPredictionCol === "prediction")
     assert(lsvc.getRawPredictionCol === "rawPrediction")
-    val model = lsvc.setMaxIter(2).fit(smallBinaryDataset)
+    val model = lsvc.setMaxIter(5).fit(smallBinaryDataset)
     model.transform(smallBinaryDataset)
       .select("label", "prediction", "rawPrediction")
       .collect()
@@ -115,11 +115,11 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("linear svc doesn't fit intercept when fitIntercept is off") {
-    val lsvc = new LinearSVC().setFitIntercept(false).setMaxIter(2)
+    val lsvc = new LinearSVC().setFitIntercept(false).setMaxIter(5)
     val model = lsvc.fit(smallBinaryDataset)
     assert(model.intercept === 0.0)
 
-    val lsvc2 = new LinearSVC().setFitIntercept(true).setMaxIter(2)
+    val lsvc2 = new LinearSVC().setFitIntercept(true).setMaxIter(5)
     val model2 = lsvc2.fit(smallBinaryDataset)
     assert(model2.intercept !== 0.0)
   }
@@ -130,7 +130,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       assert(m1.intercept ~== m2.intercept absTol 0.05)
     }
 
-    val estimator = new LinearSVC().setRegParam(0.1)
+    val estimator = new LinearSVC().setRegParam(0.01).setTol(0.01)
     val dataset = smallBinaryDataset
     MLTestingUtils.testArbitrarilyScaledWeights[LinearSVCModel, LinearSVC](
       dataset.as[LabeledPoint], estimator, modelEquals)
@@ -141,7 +141,10 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("linearSVC comparison with R e1071") {
-    val trainer1 = (new LinearSVC).setFitIntercept(true).setMaxIter(100)
+    val trainer1 = new LinearSVC()
+      .setRegParam(0.00002)
+      .setMaxIter(200)
+      .setTol(1e-4)
     val model1 = trainer1.fit(binaryDataset)
 
     /*
@@ -151,10 +154,11 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       data <- read.csv("/home/yuhao/workspace/github/hhbyyh/Test/SVM/svm/part-00000", header=FALSE)
       label <- factor(data$V1)
       features <- as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-      svm_model <- svm(features, label, type='C', kernel='linear', cost=10, scale=F)
-      w <- t(svm_model$coefs) %*% svm_model$SV
+      svm_model <- svm(features, label, type='C', kernel='linear', cost=10, scale=F, tolerance=1e-4)
+      summary(svm_model)
+      w <- -t(svm_model$coefs) %*% svm_model$SV
       w
-      -svm_model$rho
+      svm_model$rho
 
       > w
              data.V2   data.V3   data.V4   data.V5
@@ -163,10 +167,41 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       [1] -7.440296
 
      */
-    val coefficientsR = Vectors.dense(-7.310475, -14.89742, -22.21019, -29.83495)
-    val interceptR = -7.440296
-    assert(model1.intercept / interceptR ~== -0.9 relTol 2E-2)
-    assert((model1.coefficients.asBreeze :/ coefficientsR.asBreeze).forall(_ ~== -0.9 relTol 1E-2))
+    val coefficientsR = Vectors.dense(7.310475, 14.89742, 22.21019, 29.83495)
+    val interceptR = 7.440296
+    assert(model1.intercept ~== interceptR relTol 1E-2)
+    assert(model1.coefficients ~== coefficientsR relTol 1E-2)
+  }
+
+  test("linearSVC comparison with scikit-learn") {
+    val trainer1 = new LinearSVC()
+      .setRegParam(0.00002)
+      .setMaxIter(200)
+      .setTol(1e-4)
+    val model1 = trainer1.fit(binaryDataset)
+
+    /*
+      Use the following python code to load the data and train the model using scikit-learn package.
+
+      import numpy as np
+      from sklearn import svm
+      f = open("/home/yuhao/workspace/github/hhbyyh/Test/SVM/svm/part-00000")
+      data = np.loadtxt(f,  delimiter=",")
+      X = data[:, 1:]  # select columns 1 through end
+      y = data[:, 0]   # select column 0 as label
+      clf = svm.LinearSVC(fit_intercept=True, C=10, loss='hinge', tol=1e-4, random_state=42)
+      m = clf.fit(X, y)
+      print m.coef_
+      print m.intercept_
+
+      [[  7.24690165  14.77029087  21.99924004  29.5575729 ]]
+      [ 7.36947518]
+     */
+
+    val coefficientsSK = Vectors.dense(7.24690165, 14.77029087, 21.99924004, 29.5575729)
+    val interceptSK = 7.36947518
+    assert(model1.intercept ~== interceptSK relTol 1E-3)
+    assert(model1.coefficients ~== coefficientsSK relTol 4E-3)
   }
 
   test("read/write: SVM") {
