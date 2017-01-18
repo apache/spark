@@ -1799,7 +1799,7 @@ Apart from these, the following properties are also available, and may be useful
         <td>Empty</td>
         <td>
             A comma separated list of ciphers. The specified ciphers must be supported by JVM.
-            The reference list of protocols one can found on
+            The reference list of protocols one can find on
             <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
             page.
             Note: If not set, it will use the default cipher suites of JVM.
