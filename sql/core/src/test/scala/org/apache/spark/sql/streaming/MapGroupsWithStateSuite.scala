@@ -41,6 +41,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
       state.update(count)
       (data, count.toString)
     }
+
     val result =
       inputData.toDS()
         .groupByKey(x => x)
