@@ -465,8 +465,6 @@ private class LinearSVCAggregator(
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
-      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
-
       if (weight == 0.0) return this
       val localFeaturesStd = bcFeaturesStd.value
       val localCoefficients = coefficientsArray

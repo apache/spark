@@ -151,7 +151,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       Use the following R code to load the data and train the model using glmnet package.
 
       library(e1071)
-      data <- read.csv("/home/yuhao/workspace/github/hhbyyh/Test/SVM/svm/part-00000", header=FALSE)
+      data <- read.csv("path/target/tmp/LinearSVC/binaryDataset/part-00000", header=FALSE)
       label <- factor(data$V1)
       features <- as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
       svm_model <- svm(features, label, type='C', kernel='linear', cost=10, scale=F, tolerance=1e-4)
@@ -185,7 +185,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
       import numpy as np
       from sklearn import svm
-      f = open("/home/yuhao/workspace/github/hhbyyh/Test/SVM/svm/part-00000")
+      f = open("path/target/tmp/LinearSVC/binaryDataset/part-00000")
       data = np.loadtxt(f,  delimiter=",")
       X = data[:, 1:]  # select columns 1 through end
       y = data[:, 0]   # select column 0 as label
