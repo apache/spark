@@ -66,6 +66,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
         PreprocessTableInsertion(conf) ::
         DataSourceAnalysis(conf) ::
         new DetermineHiveSerde(conf) ::
+        new HiveAnalysis(sparkSession) ::
         new ResolveDataSource(sparkSession) :: Nil
 
       override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
@@ -88,7 +89,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
           SpecialLimits,
           InMemoryScans,
           HiveTableScans,
-          DataSinks,
           Scripts,
           Aggregation,
           JoinSelection,
