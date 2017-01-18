@@ -155,6 +155,16 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
   }
 
+  test("createTableOptions") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    val m = intercept[org.h2.jdbc.JdbcSQLException] {
+      df.write.option("createTableOptions", "ENGINE tableEngineName")
+        .jdbc(url1, "TEST.CREATETBLOPTS", properties)
+    }.getMessage
+    assert(m.contains("Class \"TABLEENGINENAME\" not found"))
+  }
+
   test("Incompatible INSERT to append") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
