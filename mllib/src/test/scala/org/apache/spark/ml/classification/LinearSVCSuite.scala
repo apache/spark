@@ -40,7 +40,6 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   @transient var smallBinaryDataset: Dataset[_] = _
   @transient var smallValidationDataset: Dataset[_] = _
   @transient var binaryDataset: Dataset[_] = _
-  private val eps: Double = 1e-5
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -140,7 +139,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       dataset.as[LabeledPoint], estimator, modelEquals, 42L)
   }
 
-  test("linearSVC comparison with R e1071") {
+  test("linearSVC comparison with R e1071 and scikit-learn") {
     val trainer1 = new LinearSVC()
       .setRegParam(0.00002)
       .setMaxIter(200)
@@ -155,30 +154,21 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       label <- factor(data$V1)
       features <- as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
       svm_model <- svm(features, label, type='C', kernel='linear', cost=10, scale=F, tolerance=1e-4)
-      summary(svm_model)
-      w <- -t(svm_model$coefs) %*% svm_model$SV
+      w <- t(svm_model$coefs) %*% svm_model$SV
       w
-      svm_model$rho
+      -svm_model$rho
 
       > w
              data.V2   data.V3   data.V4   data.V5
-      [1,] -7.310475 -14.89742 -22.21019 -29.83495
+      [1,] -7.310338 -14.89741 -22.21005 -29.83508
       > -svm_model$rho
-      [1] -7.440296
+      [1] -7.440177
 
      */
     val coefficientsR = Vectors.dense(7.310475, 14.89742, 22.21019, 29.83495)
     val interceptR = 7.440296
     assert(model1.intercept ~== interceptR relTol 1E-2)
     assert(model1.coefficients ~== coefficientsR relTol 1E-2)
-  }
-
-  test("linearSVC comparison with scikit-learn") {
-    val trainer1 = new LinearSVC()
-      .setRegParam(0.00002)
-      .setMaxIter(200)
-      .setTol(1e-4)
-    val model1 = trainer1.fit(binaryDataset)
 
     /*
       Use the following python code to load the data and train the model using scikit-learn package.
