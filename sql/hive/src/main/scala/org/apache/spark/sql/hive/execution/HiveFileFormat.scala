@@ -46,7 +46,9 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc) extends FileFormat {
   override def inferSchema(
       sparkSession: SparkSession,
       options: Map[String, String],
-      files: Seq[FileStatus]): Option[StructType] = None
+      files: Seq[FileStatus]): Option[StructType] = {
+    throw new UnsupportedOperationException(s"inferSchema is not supported for hive data source.")
+  }
 
   override def prepareWrite(
       sparkSession: SparkSession,
