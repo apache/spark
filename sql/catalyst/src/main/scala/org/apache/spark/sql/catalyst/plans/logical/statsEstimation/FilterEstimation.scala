@@ -307,56 +307,40 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * and then convert it to BigDecimal.
    * If isNumeric is true, then it is a numeric value.  Otherwise, it is a Literal value.
    *
-   * @param literal can be either a Literal or numeric value
-   * @param dataType the column data type
-   * @param isNumeric If isNumeric is true, then it is a numeric value.  For example,
-   *                  a condition "IN (3, 4, 5)" has numeric values since 3, 4, 5 have
-   *                  been converted to integer values (no longer Literal objects).
-   *                  For other conditions, isNumeric is set to false because Literal
-   *                  objects are passed.
+   * @param attrDataType the column data type
+   * @param litValue can be either a Literal or numeric value
+   * @param litDataType
    * @return a BigDecimal value
    */
   def numericLiteralToBigDecimal(
-       literal: Any,
-       dataType: DataType,
-       isNumeric: Boolean = false)
+       attrDataType: DataType,
+       litValue: Any,
+       litDataType: DataType)
     : BigDecimal = {
-    dataType match {
+    attrDataType match {
       case _: IntegralType =>
-        val stringValue: String =
-          if (isNumeric) literal.toString
-          else literal.asInstanceOf[Literal].value.toString
-        BigDecimal(java.lang.Long.valueOf(stringValue))
+        BigDecimal(java.lang.Long.valueOf(litValue.toString))
 
       case _: FractionalType =>
-        if (isNumeric) BigDecimal(literal.asInstanceOf[Double])
-        else BigDecimal(literal.asInstanceOf[Literal].value.asInstanceOf[Double])
+        BigDecimal(litValue.toString.toDouble)
 
       case DateType =>
-        if (isNumeric) BigDecimal(literal.asInstanceOf[BigInt])
-        else {
-          val dateLiteral = literal.asInstanceOf[Literal].dataType match {
-            case StringType =>
-              DateTimeUtils.stringToDate(
-              literal.asInstanceOf[Literal].value.asInstanceOf[UTF8String]).
-              getOrElse(0).toString
-            case _ => literal.asInstanceOf[Literal].value.toString
-          }
-          BigDecimal(java.lang.Long.valueOf(dateLiteral))
+        val dateLiteral = litDataType match {
+          case StringType =>
+            DateTimeUtils.stringToDate(litValue.asInstanceOf[UTF8String])
+              .getOrElse(0).toString
+          case _ => litValue.toString
         }
+        BigDecimal(java.lang.Long.valueOf(dateLiteral))
 
       case TimestampType =>
-        if (isNumeric) BigDecimal(literal.asInstanceOf[BigInt])
-        else {
-          val tsLiteral = literal.asInstanceOf[Literal].dataType match {
-            case StringType =>
-              DateTimeUtils.stringToTimestamp(
-                literal.asInstanceOf[Literal].value.asInstanceOf[UTF8String]).
-                getOrElse(0).toString
-            case _ => literal.asInstanceOf[Literal].value.toString
-          }
-          BigDecimal(java.lang.Long.valueOf(tsLiteral))
+        val tsLiteral = litDataType match {
+          case StringType =>
+            DateTimeUtils.stringToTimestamp(litValue.asInstanceOf[UTF8String])
+                .getOrElse(0).toString
+          case _ => litValue.toString
         }
+        BigDecimal(java.lang.Long.valueOf(tsLiteral))
     }
   }
 
@@ -386,7 +370,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       case _: NumericType | DateType | TimestampType =>
         val statsRange =
           Range(aColStat.min, aColStat.max, attrRef.dataType).asInstanceOf[NumericRange]
-        val lit = numericLiteralToBigDecimal(literal, attrRef.dataType)
+        val lit = numericLiteralToBigDecimal(attrRef.dataType, literal.value, literal.dataType)
         (lit >= statsRange.min) && (lit <= statsRange.max)
 
       case _ => true  /** for String/Binary type */
@@ -461,8 +445,14 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       case _: NumericType | DateType | TimestampType =>
         val statsRange =
           Range(aColStat.min, aColStat.max, aType).asInstanceOf[NumericRange]
-        hSet.map(e => numericLiteralToBigDecimal(e, aType, isNumeric = true))
-          .filter(e => e >= statsRange.min && e <= statsRange.max)
+        val hSetMap = hSet.map(e =>
+            if (e.isInstanceOf[String]) {
+              val utf8String = UTF8String.fromString(e.asInstanceOf[String])
+              numericLiteralToBigDecimal(aType, utf8String, StringType)
+            } else {
+              numericLiteralToBigDecimal(aType, e, aType)
+            })
+        hSetMap.filter(e => e >= statsRange.min && e <= statsRange.max)
 
       // We assume the whole set since there is no min/max information for String/Binary type
       case StringType | BinaryType => hSet
@@ -475,9 +465,27 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     // 1 and 6. The predicate column IN (1, 2, 3, 4, 5). validQuerySet.size is 5.
     val newNdv = math.min(validQuerySet.size.toLong, ndv.longValue())
     val(newMax, newMin) = aType match {
-      case _: NumericType | DateType | TimestampType =>
+      case _: NumericType =>
         val tmpSet: Set[Double] = validQuerySet.map(e => e.toString.toDouble)
         (Some(tmpSet.max), Some(tmpSet.min))
+      case DateType =>
+        if (hSet.isInstanceOf[Set[String]]) {
+          val dateMax = Date.valueOf(hSet.asInstanceOf[Set[String]].max)
+          val dateMin = Date.valueOf(hSet.asInstanceOf[Set[String]].min)
+          (Some(dateMax), Some(dateMin))
+        } else {
+          val tmpSet: Set[Long] = validQuerySet.map(e => e.toString.toLong)
+          (Some(tmpSet.max), Some(tmpSet.min))
+        }
+      case TimestampType =>
+        if (hSet.isInstanceOf[Set[String]]) {
+          val dateMax = Timestamp.valueOf(hSet.asInstanceOf[Set[String]].max)
+          val dateMin = Timestamp.valueOf(hSet.asInstanceOf[Set[String]].min)
+          (Some(dateMax), Some(dateMin))
+        } else {
+          val tmpSet: Set[Long] = validQuerySet.map(e => e.toString.toLong)
+          (Some(tmpSet.max), Some(tmpSet.min))
+        }
       case _ =>
         (None, None)
     }
@@ -522,7 +530,8 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     val statsRange =
       Range(aColStat.min, aColStat.max, attrRef.dataType).asInstanceOf[NumericRange]
 
-    val literalValueBD = numericLiteralToBigDecimal(literal, attrRef.dataType)
+    val literalValueBD =
+      numericLiteralToBigDecimal(attrRef.dataType, literal.value, literal.dataType)
 
     // determine the overlapping degree between predicate range and column's range
     val (noOverlap: Boolean, completeOverlap: Boolean) = op match {

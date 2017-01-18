@@ -23,13 +23,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types.{DateType, IntegerType, LongType, TimestampType}
+import org.apache.spark.sql.types._
 
 /**
  * In this test suite, we test predicates containing the following operators:
  * =, <, <=, >, >=, AND, OR, IS NULL, IS NOT NULL, IN, NOT IN
  */
-
 class FilterEstimationSuite extends StatsEstimationTestBase {
 
   // Suppose our test table has 10 rows and 3 columns.
@@ -39,19 +38,26 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   val childColStatInt = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
     nullCount = 0, avgLen = 4, maxLen = 4)
 
-  // Second column cdate has values, from 2017-01-01 through 2017-01-10 for 10 values.
+  // Second column cdate has 10 values from 2017-01-01 through 2017-01-10.
   val dMin = Date.valueOf("2017-01-01")
   val dMax = Date.valueOf("2017-01-10")
   val arDate = AttributeReference("cdate", DateType)()
   val childColStatDate = ColumnStat(distinctCount = 10, min = Some(dMin), max = Some(dMax),
     nullCount = 0, avgLen = 4, maxLen = 4)
 
-  // Third column ctimestamp has values from "2017-01-01 01:00:00" through
+  // Third column ctimestamp has 10 values from "2017-01-01 01:00:00" through
   // "2017-01-01 10:00:00" for 10 distinct timestamps (or hours).
   val tsMin = Timestamp.valueOf("2017-01-01 01:00:00")
   val tsMax = Timestamp.valueOf("2017-01-01 10:00:00")
   val arTimestamp = AttributeReference("ctimestamp", TimestampType)()
   val childColStatTimestamp = ColumnStat(distinctCount = 10, min = Some(tsMin), max = Some(tsMax),
+    nullCount = 0, avgLen = 8, maxLen = 8)
+
+  // Fourth column cdate has 10 values from 0.20 through 2.00 at increment of 0.2.
+  val decMin = new java.math.BigDecimal("0.200000000000000000")
+  val decMax = new java.math.BigDecimal("2.000000000000000000")
+  val arDecimal = AttributeReference("cdecimal", DecimalType(12, 2))()
+  val childColStatDecimal = ColumnStat(distinctCount = 10, min = Some(decMin), max = Some(decMax),
     nullCount = 0, avgLen = 8, maxLen = 8)
 
   test("cint = 2") {
@@ -234,6 +240,19 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     )
   }
 
+  test("cdate IN ('2017-01-03', '2017-01-04', '2017-01-05')") {
+    val d20170103 = Date.valueOf("2017-01-03")
+    val d20170105 = Date.valueOf("2017-01-05")
+    validateEstimatedStats(
+      arDate,
+      Filter(InSet(arDate, Set("2017-01-03", "2017-01-04", "2017-01-05")),
+        childStatsTestPlan(Seq(arDate))),
+      ColumnStat(distinctCount = 3, min = Some(d20170103), max = Some(d20170105),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+      Some(3L)
+    )
+  }
+
   test("ctimestamp = '2017-01-01 02:00:00' ") {
     val ts2017010102 = Timestamp.valueOf("2017-01-01 02:00:00")
     validateEstimatedStats(
@@ -271,6 +290,30 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     )
   }
 
+  test("cdecimal = 0.40") {
+    val dec_0_40 = new java.math.BigDecimal("0.400000000000000000")
+    validateEstimatedStats(
+      arDecimal,
+      Filter(EqualTo(arDecimal, Literal(dec_0_40, DecimalType(12, 2))),
+        childStatsTestPlan(Seq(arDecimal))),
+      ColumnStat(distinctCount = 1, min = Some(dec_0_40), max = Some(dec_0_40),
+        nullCount = 0, avgLen = 8, maxLen = 8),
+      Some(1L)
+    )
+  }
+
+  test("cdecimal < 0.60 ") {
+    val dec_0_60 = new java.math.BigDecimal("0.600000000000000000")
+    validateEstimatedStats(
+      arDecimal,
+      Filter(LessThan(arDecimal, Literal(dec_0_60, DecimalType(12, 2))),
+        childStatsTestPlan(Seq(arDecimal))),
+      ColumnStat(distinctCount = 2, min = Some(decMin), max = Some(dec_0_60),
+        nullCount = 0, avgLen = 8, maxLen = 8),
+      Some(3L)
+    )
+  }
+
   // This is a corner test case.  We want to test if we can handle the case when the number of
   // valid values in IN clause is greater than the number of distinct values for a given column.
   // For example, column has only 2 distinct values 1 and 6.
@@ -299,7 +342,8 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(Seq(
         arInt -> childColStatInt,
         arDate -> childColStatDate,
-        arTimestamp -> childColStatTimestamp
+        arTimestamp -> childColStatTimestamp,
+        arDecimal -> childColStatDecimal
       ))
     )
   }
@@ -308,10 +352,10 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       ar: AttributeReference,
       filterNode: Filter,
       expectedColStats: ColumnStat,
-      rowCount: Option[Long] = None)
+      rowCount: Option[BigInt] = None)
     : Unit = {
 
-    val expectedRowCount = rowCount.getOrElse(0L)
+    val expectedRowCount: BigInt = rowCount.getOrElse(0L)
     val expectedAttrStats = toAttributeMap(Seq(ar.name -> expectedColStats), filterNode)
     val expectedSizeInBytes = getOutputSize(filterNode.output, expectedAttrStats, expectedRowCount)
 
