@@ -1208,7 +1208,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
 
   /**
    * Name of features. If the name cannot be retrieved from attributes,
-   * use default names "V1", "V2", ...
+   * set default names to "V1", "V2", and so on.
    */
   @Since("2.2.0")
   lazy val featureName: Array[String] = {
@@ -1504,6 +1504,5 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
         "No summary table available for this GeneralizedLinearRegressionModel")
     }
   }
-
 
 }

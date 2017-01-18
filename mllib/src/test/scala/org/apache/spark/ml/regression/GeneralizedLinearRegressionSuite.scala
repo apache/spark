@@ -1525,7 +1525,7 @@ class GeneralizedLinearRegressionSuite
 
 
   test("glm summary: feature name") {
-    // dataset with no attribute
+    // dataset1 with no attribute
     val dataset1 = Seq(
       Instance(2.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
       Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
@@ -1534,7 +1534,7 @@ class GeneralizedLinearRegressionSuite
       Instance(2.0, 5.0, Vectors.dense(2.0, 3.0))
     ).toDF()
 
-    // dataset with attribute
+    // dataset2 with attribute
     val datasetTmp = Seq(
       (2.0, 1.0, 0.0, 5.0),
       (8.0, 2.0, 1.0, 7.0),
