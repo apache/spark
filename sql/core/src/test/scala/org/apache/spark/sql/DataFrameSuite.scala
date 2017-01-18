@@ -1481,18 +1481,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
             udf { (ar1: Seq[Int], ar2: Seq[Int], ar3: Seq[Int], ar4: Seq[Int], ar5: Seq[Int], ar6: Seq[Int], ar7: Seq[Int], ar8: Seq[Int], ar9: Seq[Int], ar10: Seq[Int]) => (ar1 ++ ar2 ++ ar3 ++ ar4 ++ ar5 ++ ar6 ++ ar7 ++ ar8 ++ ar9 ++ ar10).sum }
           )
         ).map { case (udf1, udf2, udf3, udf4, udf5, udf6, udf7, udf8, udf9, udf10) =>
-          val arVal = functions.array(lit(1), lit(1))
-          val df = spark.range(1)
-          checkAnswer(df.select(udf1(arVal)), Row(2) :: Nil)
-          checkAnswer(df.select(udf2(arVal, arVal)), Row(4) :: Nil)
-          checkAnswer(df.select(udf3(arVal, arVal, arVal)), Row(6) :: Nil)
-          checkAnswer(df.select(udf4(arVal, arVal, arVal, arVal)), Row(8) :: Nil)
-          checkAnswer(df.select(udf5(arVal, arVal, arVal, arVal, arVal)), Row(10) :: Nil)
-          checkAnswer(df.select(udf6(arVal, arVal, arVal, arVal, arVal, arVal)), Row(12) :: Nil)
-          checkAnswer(df.select(udf7(arVal, arVal, arVal, arVal, arVal, arVal, arVal)), Row(14) :: Nil)
-          checkAnswer(df.select(udf8(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal)), Row(16) :: Nil)
-          checkAnswer(df.select(udf9(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal)), Row(18) :: Nil)
-          checkAnswer(df.select(udf10(arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal, arVal)), Row(20) :: Nil)
+          val df = spark.range(1, 2).select(array('id, 'id).as("arVal"))
+          checkAnswer(df.select(udf1('arVal)), Row(2) :: Nil)
+          checkAnswer(df.select(udf2('arVal, 'arVal)), Row(4) :: Nil)
+          checkAnswer(df.select(udf3('arVal, 'arVal, 'arVal)), Row(6) :: Nil)
+          checkAnswer(df.select(udf4('arVal, 'arVal, 'arVal, 'arVal)), Row(8) :: Nil)
+          checkAnswer(df.select(udf5('arVal, 'arVal, 'arVal, 'arVal, 'arVal)), Row(10) :: Nil)
+          checkAnswer(df.select(udf6('arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal)), Row(12) :: Nil)
+          checkAnswer(df.select(udf7('arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal)), Row(14) :: Nil)
+          checkAnswer(df.select(udf8('arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal)), Row(16) :: Nil)
+          checkAnswer(df.select(udf9('arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal)), Row(18) :: Nil)
+          checkAnswer(df.select(udf10('arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal, 'arVal)), Row(20) :: Nil)
         }
         // scalastyle:on line.size.limit
       }
@@ -1502,7 +1501,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-18884 correctly handle array inputs in UDFRegistration.register") {
     // scalastyle:off line.size.limit
     Seq("true", "false").foreach { codegenEnabled =>
-      Seq((1, 1)).toDF("a", "b").select(array($"a", $"b").as("arVal")).createOrReplaceTempView("t")
+      spark.range(1, 2).select(array('id, 'id).as("arVal")).createOrReplaceTempView("t")
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
         // Register UDFs for `Array`
         spark.udf.register("testArrayUdf1", (ar1: Array[Int]) => ar1.sum)
