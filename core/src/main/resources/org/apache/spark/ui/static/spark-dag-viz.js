@@ -174,7 +174,7 @@ function renderDagViz(forJob) {
 
   resizeSvg(svg);
   intepreteLineBreak(svg);
-  enableDataHtml();
+//  enableDataHtml();
 }
 
 /* Render the RDD DAG visualization on the stage page. */
@@ -368,9 +368,36 @@ function resizeSvg(svg) {
 function intepreteLineBreak(svg) {
   var allTSpan = svg.selectAll("tspan").each(function() {
     node = d3.select(this);
-    var text = replaceLineBreak(node[0][0].innerHTML);
-    node.text(text);
-    d3.select(this).attr("data-html", "true");
+    var original = node[0][0].innerHTML;
+    if (original.indexOf("\\n") != -1) {
+      var arr = original.split("\\n");
+      var parent = this.parentNode;
+//      parent.remove(); // remove all children
+
+//      var newNode = document.createElement("tspan");
+//      newNode.dy = "1em";
+//      newNode.x = "1";
+//      newNode.space = "preserve";
+
+//        .attr("dy", "1em")
+//        .attr("x", "1")
+//        .attr("space", "preserve");
+      var newNode = node[0][0].clone();
+
+      node[0][0].innerHTML = arr[0];
+      node[0][0].text = arr[0];
+//      newNode.attr("innerHTML", arr[1]);
+
+      newNode.attributes = node[0][0].attributes
+      newNode.innerHTML = arr[1];
+      newNode.text = arr[1];
+
+      parent.appendChild(newNode);
+
+//    var text = replaceLineBreak(original);
+//    node.text(text);
+//    d3.select(this).attr("data-html", "true");
+    }
   });
 }
 
