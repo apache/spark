@@ -177,8 +177,6 @@ class DecisionTreeClassificationModel private[ml] (
   /**
    * Construct a decision tree classification model.
    * @param rootNode  Root node of tree, with other nodes attached.
-   * @param numFeatures The number of features.
-   * @param numClasses The number of classes to predict.
    */
   private[ml] def this(rootNode: Node, numFeatures: Int, numClasses: Int) =
     this(Identifiable.randomUID("dtc"), rootNode, numFeatures, numClasses)

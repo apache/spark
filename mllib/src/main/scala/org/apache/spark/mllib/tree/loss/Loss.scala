@@ -70,8 +70,6 @@ trait Loss extends Serializable {
 private[spark] trait ClassificationLoss extends Loss {
   /**
    * Computes the class probability given the margin.
-   * @param prediction The margin.
-   * @return The class probability from the margin.
    */
-  private[spark] def computeProbability(prediction: Double): Double
+  private[spark] def computeProbability(margin: Double): Double
 }

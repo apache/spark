@@ -52,9 +52,10 @@ object LogLoss extends ClassificationLoss {
     2.0 * MLUtils.log1pExp(-margin)
   }
 
-  override private[spark] def computeProbability(prediction: Double): Double = {
-    // The probability can be calculated as:
-    // p+(x) = 1 / (1 + e^(-2 * F(x)))
-    1.0 / (1.0 + math.exp(-2.0 * prediction))
+  /**
+   * Returns the estimated probability of a label of 1.0.
+   */
+  override private[spark] def computeProbability(margin: Double): Double = {
+    1.0 / (1.0 + math.exp(-2.0 * margin))
   }
 }
