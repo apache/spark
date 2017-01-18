@@ -195,6 +195,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     requireDbExists(db)
     verifyTableProperties(tableDefinition)
 
+    if (tableDefinition.schema.length <= 0 && DDLUtils.isHiveTable(tableDefinition)) {
+      throw new AnalysisException("Unable to infer the schema. " +
+        s"The schema specification is required to create the table ${tableDefinition.identifier}.")
+    }
+
     if (tableExists(db, table) && !ignoreIfExists) {
       throw new TableAlreadyExistsException(db = db, table = table)
     }
