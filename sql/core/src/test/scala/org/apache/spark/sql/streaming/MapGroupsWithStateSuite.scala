@@ -43,7 +43,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     val result =
       inputData.toDS()
         .groupByKey(x => x)
-        .mapValuesWithState[Int, (String, String)](stateFunc)
+        .mapGroupsWithState[Int, (String, String)](stateFunc)
 
     testStream(result, Append)(
       AddData(inputData, "a"),

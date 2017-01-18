@@ -110,7 +110,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
     mapValues { (v: V) => func.call(v) }
   }
 
-  def mapValuesWithState[STATE: Encoder, OUT: Encoder](
+  def mapGroupsWithState[STATE: Encoder, OUT: Encoder](
       func: (V, State[STATE]) => OUT): Dataset[OUT] = {
     Dataset[OUT](
       sparkSession,
