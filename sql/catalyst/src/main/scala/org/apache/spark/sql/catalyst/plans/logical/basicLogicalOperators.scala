@@ -101,10 +101,17 @@ case class Generate(
 
   override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)
 
-  def qualifiedGeneratorOutput: Seq[Attribute] = qualifier.map { q =>
-    // prepend the new qualifier to the existed one
-    generatorOutput.map(a => a.withQualifier(Some(q)))
-  }.getOrElse(generatorOutput)
+  def qualifiedGeneratorOutput: Seq[Attribute] = {
+    val qualifiedOutput = qualifier.map { q =>
+      // prepend the new qualifier to the existed one
+      generatorOutput.map(a => a.withQualifier(Some(q)))
+    }.getOrElse(generatorOutput)
+    val nullableOutput = qualifiedOutput.map {
+      // if outer, make all attributes nullable, otherwise keep existing nullability
+      a => a.withNullability(outer || a.nullable)
+    }
+    nullableOutput
+  }
 
   def output: Seq[Attribute] = {
     if (join) child.output ++ qualifiedGeneratorOutput else qualifiedGeneratorOutput
