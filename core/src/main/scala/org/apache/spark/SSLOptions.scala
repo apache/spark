@@ -169,7 +169,7 @@ private[spark] object SSLOptions extends Logging {
 
     val port = conf.getOption(s"$ns.port").map(_.toInt)
     port.foreach { p =>
-      require(p >= 0, "Port number must be a positive value.")
+      require(p >= 0, "Port number must be a non-negative value.")
     }
 
     val keyStore = conf.getOption(s"$ns.keyStore").map(new File(_))
