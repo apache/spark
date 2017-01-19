@@ -18,10 +18,9 @@
 package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{BLAS, Vector, VectorUDT, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -30,7 +29,7 @@ import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, VersionUtils}
 
 /**
  * Params for [[Word2Vec]] and [[Word2VecModel]].
@@ -345,19 +344,19 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       import spark.implicits._
 
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
 
       val dataPath = new Path(path, "data").toString
-      val rawData = spark.read.parquet(dataPath)
 
-      val oldModel = if (rawData.columns.contains("wordIndex")) {
-        val data = rawData
+      val oldModel = if (major.toInt < 2 || (major.toInt == 2 && minor.toInt < 2)) {
+        val data = spark.read.parquet(dataPath)
           .select("wordIndex", "wordVectors")
           .head()
         val wordIndex = data.getAs[Map[String, Int]](0)
         val wordVectors = data.getAs[Seq[Float]](1).toArray
         new feature.Word2VecModel(wordIndex, wordVectors)
       } else {
-        val wordVectorsMap = rawData.as[Data]
+        val wordVectorsMap = spark.read.parquet(dataPath).as[Data]
           .collect()
           .map(wordVector => (wordVector.word, wordVector.vector))
           .toMap
