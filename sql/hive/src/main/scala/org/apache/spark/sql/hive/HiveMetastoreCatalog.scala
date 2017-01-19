@@ -126,7 +126,31 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       qualifiedTableName.database, qualifiedTableName.name)
 
     if (DDLUtils.isDatasourceTable(table)) {
-      val dataSourceTable = cachedDataSourceTables(qualifiedTableName)
+      val dataSourceTable =
+        cachedDataSourceTables(qualifiedTableName) match {
+          case l @ LogicalRelation(relation: HadoopFsRelation, _, _) =>
+            val location = table.storage.locationUri
+            val cachedLocation = relation.location.rootPaths
+            val isSamePath = location.isDefined && cachedLocation.size == 1 &&
+              // Ignore the scheme difference when comparing the paths
+              cachedLocation.head.toUri.getPath == new Path(location.get).toUri.getPath
+            // If we have the same paths, same schema, and same partition spec,
+            // we will use the cached relation.
+            val useCached =
+              isSamePath &&
+              l.schema.sameType(table.schema) &&
+              relation.bucketSpec == table.bucketSpec &&
+              relation.partitionSchema == table.partitionSchema
+            if (useCached) {
+              l
+            } else {
+              // If the cached relation is not updated, we invalidate it right away.
+              cachedDataSourceTables.invalidate(qualifiedTableName)
+              // Reload it from the external catalog
+              cachedDataSourceTables(qualifiedTableName)
+            }
+          case o => o
+        }
       val qualifiedTable = SubqueryAlias(qualifiedTableName.name, dataSourceTable, None)
       // Then, if alias is specified, wrap the table with a Subquery using the alias.
       // Otherwise, wrap the table with a Subquery using the table name.

@@ -521,10 +521,12 @@ class HiveDDLSuite
     assume(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
     assume(oldPart.storage.properties.filterKeys(expectedSerdeProps.contains) !=
       expectedSerdeProps, "bad test: serde properties were already set")
-    sql(s"""ALTER TABLE boxes PARTITION (width=4)
-      |    SET SERDE '$expectedSerde'
-      |    WITH SERDEPROPERTIES ($expectedSerdePropsString)
-      |""".stripMargin)
+    sql(
+      s"""
+        |ALTER TABLE boxes PARTITION (width=4)
+        |SET SERDE '$expectedSerde'
+        |WITH SERDEPROPERTIES ($expectedSerdePropsString)
+       """.stripMargin)
     val newPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
     assert(newPart.storage.serde == Some(expectedSerde))
     assume(newPart.storage.properties.filterKeys(expectedSerdeProps.contains) ==
@@ -566,6 +568,61 @@ class HiveDDLSuite
       assert(catalog.getPartition(tableIdent, part2).parameters("numFiles") == "2")
     } finally {
       fs.delete(root, true)
+    }
+  }
+
+  test("Alter Table Set Location") {
+    withTable("tab1", "tab2") {
+      val catalog = spark.sessionState.catalog
+      sql("CREATE TABLE tab1 using parquet AS SELECT 1 as a")
+      sql("CREATE TABLE tab2 using parquet AS SELECT 2 as a")
+      checkAnswer(spark.table("tab1"), Seq(Row(1)))
+      checkAnswer(spark.table("tab2"), Seq(Row(2)))
+      val metadataTab1 = catalog.getTableMetadata(TableIdentifier("tab1"))
+      val locTab1 = metadataTab1.storage.locationUri
+      val metadataTab2 = catalog.getTableMetadata(TableIdentifier("tab2"))
+      val locTab2 = metadataTab2.storage.locationUri
+      assert(locTab1.isDefined)
+      assert(locTab2.isDefined)
+      try {
+        sql(s"ALTER TABLE tab2 SET LOCATION '${locTab1.get}'")
+        checkAnswer(spark.table("tab2"), Seq(Row(1)))
+      } finally {
+        val root = new Path(locTab2.get)
+        val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+        fs.delete(root, true)
+      }
+    }
+  }
+
+  test("Alter Table Rename Partition") {
+    withTempView("tempView1") {
+      withTable("partitionedTab") {
+        spark.range(2).select('id as 'a, 'id as 'b).createTempView("tempView1")
+        sql(
+          """
+            |CREATE TABLE partitionedTab
+            |USING parquet
+            |PARTITIONED BY (b)
+            |AS SELECT a, b from tempView1
+          """.stripMargin)
+        // fill the cache
+        checkAnswer(spark.table("partitionedTab"), Seq(Row(0, 0), Row(1, 1)))
+
+        sql("ALTER TABLE partitionedTab PARTITION (b=1) RENAME TO PARTITION (b=3)")
+        checkAnswer(spark.table("partitionedTab"), Seq(Row(0, 0), Row(1, 3)))
+      }
+    }
+  }
+
+  test("Alter Table Rename Table") {
+    withTable("tab1", "tab2") {
+      sql("CREATE TABLE tab1 using parquet AS SELECT 1 as a")
+      // fill the cache
+      checkAnswer(spark.table("tab1"), Seq(Row(1)))
+
+      sql(s"ALTER TABLE tab1 RENAME TO tab2")
+      checkAnswer(spark.table("tab2"), Seq(Row(1)))
     }
   }
 
