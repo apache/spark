@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, SimpleCatalogRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, ScriptTransformation}
@@ -124,6 +124,21 @@ class HiveAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
       val expectedColumns = tableOutput.filterNot(a => staticPartCols.contains(a.name))
       expectedColumns.toStructType.sameType(query.schema)
     }
+  }
+}
+
+/**
+ * Replaces [[SimpleCatalogRelation]] with [[MetastoreRelation]] if its table provider is hive.
+ */
+class FindHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case i @ InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _)
+        if DDLUtils.isHiveTable(s.metadata) =>
+      i.copy(table =
+        MetastoreRelation(s.metadata.database, s.metadata.identifier.table)(s.metadata, session))
+
+    case s: SimpleCatalogRelation if DDLUtils.isHiveTable(s.metadata) =>
+      MetastoreRelation(s.metadata.database, s.metadata.identifier.table)(s.metadata, session)
   }
 }
 
