@@ -1366,7 +1366,7 @@ class HiveDDLSuite
         checkAnswer(spark.table("t"), Row(1, 2, 3) :: Nil)
 
         spark.sql("create table t1 using hive partitioned by (i) as select 1 as i, 'a' as j")
-        checkAnswer(spark.table("t1"), Row('a', 1) :: Nil)
+        checkAnswer(spark.table("t1"), Row("a", 1) :: Nil)
       }
     }
   }
