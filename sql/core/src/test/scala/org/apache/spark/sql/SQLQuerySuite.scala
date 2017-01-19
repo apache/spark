@@ -2497,6 +2497,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       } finally {
         newSession.sessionState.conf.setConf(SQLConf.RUN_SQL_ON_FILES, originalValue)
       }
+    }
+  }
       
   test("should be able to resolve a persistent view") {
     withTable("t1", "t2") {
@@ -2511,6 +2513,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+  
   test(
     "SPARK-19059: Unable to retrieve data from parquet table whose name startswith underscore") {
     sql("CREATE TABLE `_tbl`(i INT) USING parquet")
