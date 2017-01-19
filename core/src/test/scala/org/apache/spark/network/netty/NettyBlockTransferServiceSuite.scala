@@ -23,7 +23,6 @@ import org.mockito.Mockito.mock
 import org.scalatest._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.internal.config._
 import org.apache.spark.network.BlockDataManager
 
 class NettyBlockTransferServiceSuite

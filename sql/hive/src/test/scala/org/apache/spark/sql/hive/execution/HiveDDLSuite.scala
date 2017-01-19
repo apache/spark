@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
@@ -247,6 +248,16 @@ class HiveDDLSuite
     }
   }
 
+  test("SPARK-19129: drop partition with a empty string will drop the whole table") {
+    val df = spark.createDataFrame(Seq((0, "a"), (1, "b"))).toDF("partCol1", "name")
+    df.write.mode("overwrite").partitionBy("partCol1").saveAsTable("partitionedTable")
+    val e = intercept[AnalysisException] {
+      spark.sql("alter table partitionedTable drop partition(partCol1='')")
+    }.getMessage
+    assert(e.contains("Partition spec is invalid. The spec ([partCol1=]) contains an empty " +
+      "partition column value"))
+  }
+
   test("add/drop partitions - external table") {
     val catalog = spark.sessionState.catalog
     withTempDir { tmpDir =>
@@ -370,28 +381,30 @@ class HiveDDLSuite
       spark.range(10).write.saveAsTable(tabName)
       val viewName = "view1"
       withView(viewName) {
-        val catalog = spark.sessionState.catalog
+        def checkProperties(expected: Map[String, String]): Boolean = {
+          val properties = spark.sessionState.catalog.getTableMetadata(TableIdentifier(viewName))
+            .properties
+          properties.filterNot { case (key, value) =>
+            Seq("transient_lastDdlTime", CatalogTable.VIEW_DEFAULT_DATABASE).contains(key) ||
+              key.startsWith(CatalogTable.VIEW_QUERY_OUTPUT_PREFIX)
+          } == expected
+        }
         sql(s"CREATE VIEW $viewName AS SELECT * FROM $tabName")
 
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map())
+        checkProperties(Map())
         sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "an"))
+        checkProperties(Map("p" -> "an"))
 
         // no exception or message will be issued if we set it again
         sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "an"))
+        checkProperties(Map("p" -> "an"))
 
         // the value will be updated if we set the same key to a different value
         sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'b')")
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "b"))
+        checkProperties(Map("p" -> "b"))
 
         sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map())
+        checkProperties(Map())
 
         val message = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
@@ -644,10 +657,7 @@ class HiveDDLSuite
           Seq(
             Row("# View Information", "", ""),
             Row("View Original Text:", "SELECT * FROM tbl", ""),
-            Row("View Expanded Text:",
-              "SELECT `gen_attr_0` AS `a` FROM (SELECT `gen_attr_0` FROM " +
-              "(SELECT `a` AS `gen_attr_0` FROM `default`.`tbl`) AS gen_subquery_0) AS tbl",
-              "")
+            Row("View Expanded Text:", "SELECT * FROM tbl", "")
           )
         ))
       }
@@ -789,7 +799,7 @@ class HiveDDLSuite
 
   test("Create Cataloged Table As Select - Drop Table After Runtime Exception") {
     withTable("tab") {
-      intercept[RuntimeException] {
+      intercept[SparkException] {
         sql(
           """
             |CREATE TABLE tab
@@ -1263,7 +1273,7 @@ class HiveDDLSuite
         sql("INSERT INTO t SELECT 1")
         checkAnswer(spark.table("t"), Row(1))
         // Check if this is compressed as ZLIB.
-        val maybeOrcFile = path.listFiles().find(_.getName.endsWith("part-00000"))
+        val maybeOrcFile = path.listFiles().find(!_.getName.endsWith(".crc"))
         assert(maybeOrcFile.isDefined)
         val orcFilePath = maybeOrcFile.get.toPath.toString
         val expectedCompressionKind =
@@ -1382,6 +1392,100 @@ class HiveDDLSuite
         Seq(1 -> "a").toDF("i", "j").write.format("hive").save(dir.getAbsolutePath)
       }
       assert(e2.message.contains("Hive data source can only be used with tables"))
+    }
+  }
+
+  test("the columns order in catalog should respect the order when create table") {
+    withTable("t", "t1") {
+      val structType = Seq(("a", IntegerType), ("b", IntegerType),
+        ("c", StringType), ("d", StringType))
+      val partStructType = Seq(("c", StringType), ("d", StringType))
+
+      sql(
+        """CREATE TABLE IF NOT EXISTS t(a int, b int, c string, d string)
+          | using parquet
+          | partitioned by (c, d)""".stripMargin)
+      var table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      assert(table.schema.map(s => (s.name, s.dataType)) == structType)
+      assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType)
+
+      val structType1 = Seq(("b", IntegerType), ("a", IntegerType),
+        ("d", StringType), ("c", StringType))
+      val partStructType1 = Seq(("d", StringType), ("c", StringType))
+
+      sql(
+        """CREATE TABLE IF NOT EXISTS t1(b int, a int, c string, d string)
+          | using parquet
+          | partitioned by (d, c)""".stripMargin)
+      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(table.schema.map(s => (s.name, s.dataType)) == structType1)
+      assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType1)
+
+      sql(
+        """CREATE TABLE IF NOT EXISTS t3(a int, b int)
+          | using hive
+          | partitioned by (c string, d string)""".stripMargin)
+      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
+      assert(table.schema.map(s => (s.name, s.dataType)) == structType)
+      assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType)
+
+      sql(
+        """CREATE TABLE IF NOT EXISTS t4(b int, a int)
+          | using hive
+          | partitioned by (d string, c string)""".stripMargin)
+      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t4"))
+      assert(table.schema.map(s => (s.name, s.dataType)) == structType1)
+      assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType1)
+    }
+  }
+
+  test("CTAS: the columns order in catalog should respect the order when create table") {
+    withTable("t", "t1") {
+      val structType = Seq(("a", IntegerType), ("b", IntegerType),
+        ("c", StringType), ("d", StringType))
+      val partStructType = Seq(("c", StringType), ("d", StringType))
+
+      sql(
+        """CREATE TABLE IF NOT EXISTS t
+          | using parquet
+          | partitioned by (c, d)
+          | as select 1 as a, 2 as b, 'x' as c, 'y' as d""".stripMargin)
+      var table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      assert(table.schema.map(s => (s.name, s.dataType)) == structType)
+      assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType)
+
+      val structType1 = Seq(("b", IntegerType), ("a", IntegerType),
+        ("d", StringType), ("c", StringType))
+      val partStructType1 = Seq(("d", StringType), ("c", StringType))
+
+      sql(
+        """CREATE TABLE IF NOT EXISTS t1
+          | using parquet
+          | partitioned by (d, c)
+          | as select 1 as b, 2 as a, 'x' as c, 'y' as d""".stripMargin)
+      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(table.schema.map(s => (s.name, s.dataType)) == structType1)
+      assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType1)
+
+      withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
+        sql(
+          """CREATE TABLE IF NOT EXISTS t3
+            | using hive
+            | partitioned by (c, d)
+            | as select 1 as a, 2 as b, 'x' as c, 'y' as d""".stripMargin)
+        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
+        assert(table.schema.map(s => (s.name, s.dataType)) == structType)
+        assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType)
+
+        sql(
+          """CREATE TABLE IF NOT EXISTS t4
+            | using hive
+            | partitioned by (d, c)
+            | as select 1 as b, 2 as a, 'x' as c, 'y' as d""".stripMargin)
+        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t4"))
+        assert(table.schema.map(s => (s.name, s.dataType)) == structType1)
+        assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType1)
+      }
     }
   }
 }

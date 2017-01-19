@@ -223,25 +223,6 @@ case class CatalogTable(
     )
   }
 
-  /**
-   * Insert/Update the view query output column names in `properties`.
-   */
-  def withQueryColumnNames(columns: Seq[String]): CatalogTable = {
-    val props = new mutable.HashMap[String, String]
-    if (columns.nonEmpty) {
-      props.put(VIEW_QUERY_OUTPUT_NUM_COLUMNS, columns.length.toString)
-      columns.zipWithIndex.foreach { case (colName, index) =>
-        props.put(s"$VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX$index", colName)
-      }
-    }
-
-    // We can't use `filterKeys` here, as the map returned by `filterKeys` is not serializable,
-    // while `CatalogTable` should be serializable.
-    copy(properties = properties.filterNot { case (key, _) =>
-      key.startsWith(VIEW_QUERY_OUTPUT_PREFIX)
-    } ++ props)
-  }
-
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
       locationUri: Option[String] = storage.locationUri,

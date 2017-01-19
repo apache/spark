@@ -397,6 +397,13 @@ setMethod("spark.lda", signature(data = "SparkDataFrame"),
 #'         \item{\code{topics}}{top 10 terms and their weights of all topics}
 #'         \item{\code{vocabulary}}{whole terms of the training corpus, NULL if libsvm format file
 #'               used as training set}
+#'         \item{\code{trainingLogLikelihood}}{Log likelihood of the observed tokens in the training set,
+#'               given the current parameter estimates:
+#'               log P(docs | topics, topic distributions for docs, Dirichlet hyperparameters)
+#'               It is only for distributed LDA model (i.e., optimizer = "em")}
+#'         \item{\code{logPrior}}{Log probability of the current parameter estimate:
+#'               log P(topics, topic distributions for docs | Dirichlet hyperparameters)
+#'               It is only for distributed LDA model (i.e., optimizer = "em")}
 #' @rdname spark.lda
 #' @aliases summary,LDAModel-method
 #' @export
@@ -413,11 +420,22 @@ setMethod("summary", signature(object = "LDAModel"),
             vocabSize <- callJMethod(jobj, "vocabSize")
             topics <- dataFrame(callJMethod(jobj, "topics", maxTermsPerTopic))
             vocabulary <- callJMethod(jobj, "vocabulary")
+            trainingLogLikelihood <- if (isDistributed) {
+              callJMethod(jobj, "trainingLogLikelihood")
+            } else {
+              NA
+            }
+            logPrior <- if (isDistributed) {
+              callJMethod(jobj, "logPrior")
+            } else {
+              NA
+            }
             list(docConcentration = unlist(docConcentration),
                  topicConcentration = topicConcentration,
                  logLikelihood = logLikelihood, logPerplexity = logPerplexity,
                  isDistributed = isDistributed, vocabSize = vocabSize,
-                 topics = topics, vocabulary = unlist(vocabulary))
+                 topics = topics, vocabulary = unlist(vocabulary),
+                 trainingLogLikelihood = trainingLogLikelihood, logPrior = logPrior)
           })
 
 #  Returns the log perplexity of a Latent Dirichlet Allocation model produced by \code{spark.lda}
