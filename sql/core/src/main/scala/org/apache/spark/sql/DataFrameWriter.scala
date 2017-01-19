@@ -23,15 +23,17 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogRelation, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
-import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, CreateTable, DataSource, HadoopFsRelation}
+import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
- * key-value stores, etc). Use [[Dataset.write]] to access this.
+ * key-value stores, etc). Use `Dataset.write` to access this.
  *
  * @since 1.4.0
  */
@@ -149,7 +151,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * predicates on the partitioned columns. In order for partitioning to work well, the number
    * of distinct values in each column should typically be less than tens of thousands.
    *
-   * This was initially applicable for Parquet but in 1.5+ covers JSON, text, ORC and avro as well.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
    *
    * @since 1.4.0
    */
@@ -163,7 +165,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Buckets the output by the given columns. If specified, the output is laid out on the file
    * system similar to Hive's bucketing scheme.
    *
-   * This is applicable for Parquet, JSON and ORC.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
    *
    * @since 2.0
    */
@@ -177,7 +179,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Sorts the output in each bucket by the given columns.
    *
-   * This is applicable for Parquet, JSON and ORC.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
    *
    * @since 2.0
    */
@@ -188,7 +190,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] at the specified path.
+   * Saves the content of the `DataFrame` at the specified path.
    *
    * @since 1.4.0
    */
@@ -198,11 +200,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] as the specified table.
+   * Saves the content of the `DataFrame` as the specified table.
    *
    * @since 1.4.0
    */
   def save(): Unit = {
+    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+      throw new AnalysisException("Hive data source can only be used with tables, you can not " +
+        "write files of Hive data source directly.")
+    }
+
     assertNotBucketed("save")
     val dataSource = DataSource(
       df.sparkSession,
@@ -213,11 +220,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     dataSource.write(mode, df)
   }
+
   /**
-   * Inserts the content of the [[DataFrame]] to the specified table. It requires that
-   * the schema of the [[DataFrame]] is the same as the schema of the table.
+   * Inserts the content of the `DataFrame` to the specified table. It requires that
+   * the schema of the `DataFrame` is the same as the schema of the table.
    *
-   * Note: Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based
+   * @note Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based
    * resolution. For example:
    *
    * {{{
@@ -321,15 +329,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] as the specified table.
+   * Saves the content of the `DataFrame` as the specified table.
    *
    * In the case the table already exists, behavior of this function depends on the
    * save mode, specified by the `mode` function (default to throwing an exception).
-   * When `mode` is `Overwrite`, the schema of the [[DataFrame]] does not need to be
+   * When `mode` is `Overwrite`, the schema of the `DataFrame` does not need to be
    * the same as that of the existing table.
    *
    * When `mode` is `Append`, if there is an existing table, we will use the format and options of
-   * the existing table. The column order in the schema of the [[DataFrame]] doesn't need to be same
+   * the existing table. The column order in the schema of the `DataFrame` doesn't need to be same
    * as that of the existing table. Unlike `insertInto`, `saveAsTable` will use the column names to
    * find the correct column positions. For example:
    *
@@ -345,7 +353,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *    +---+---+
    * }}}
    *
-   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * When the DataFrame is created from a non-partitioned `HadoopFsRelation` with a single input
    * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
    * and Parquet), the table is persisted in a Hive compatible format, which means other systems
    * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
@@ -358,11 +366,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
-    if (source.toLowerCase == "hive") {
-      throw new AnalysisException("Cannot create hive serde table with saveAsTable API")
-    }
-
-    val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
+    val catalog = df.sparkSession.sessionState.catalog
+    val tableExists = catalog.tableExists(tableIdent)
+    val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
+    val tableIdentWithDB = tableIdent.copy(database = Some(db))
+    val tableName = tableIdentWithDB.unquotedString
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
@@ -371,29 +379,59 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case (true, SaveMode.ErrorIfExists) =>
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
-      case _ =>
-        val tableType = if (new CaseInsensitiveMap(extraOptions.toMap).contains("path")) {
-          CatalogTableType.EXTERNAL
-        } else {
-          CatalogTableType.MANAGED
+      case (true, SaveMode.Overwrite) =>
+        // Get all input data source or hive relations of the query.
+        val srcRelations = df.logicalPlan.collect {
+          case LogicalRelation(src: BaseRelation, _, _) => src
+          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.catalogTable) =>
+            relation.catalogTable.identifier
+        }
+        EliminateSubqueryAliases(catalog.lookupRelation(tableIdentWithDB)) match {
+          // check if the table is a data source table (the relation is a BaseRelation).
+          case LogicalRelation(dest: BaseRelation, _, _) if srcRelations.contains(dest) =>
+            throw new AnalysisException(
+              s"Cannot overwrite table $tableName that is also being read from")
+          // check hive table relation when overwrite mode
+          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.catalogTable)
+            && srcRelations.contains(relation.catalogTable.identifier) =>
+            throw new AnalysisException(
+              s"Cannot overwrite table $tableName that is also being read from")
+          case _ => // OK
         }
 
-        val tableDesc = CatalogTable(
-          identifier = tableIdent,
-          tableType = tableType,
-          storage = CatalogStorageFormat.empty.copy(properties = extraOptions.toMap),
-          schema = new StructType,
-          provider = Some(source),
-          partitionColumnNames = partitioningColumns.getOrElse(Nil),
-          bucketSpec = getBucketSpec
-        )
-        val cmd = CreateTable(tableDesc, mode, Some(df.logicalPlan))
-        df.sparkSession.sessionState.executePlan(cmd).toRdd
+        // Drop the existing table
+        catalog.dropTable(tableIdentWithDB, ignoreIfNotExists = true, purge = false)
+        createTable(tableIdentWithDB)
+        // Refresh the cache of the table in the catalog.
+        catalog.refreshTable(tableIdentWithDB)
+
+      case _ => createTable(tableIdent)
     }
   }
 
+  private def createTable(tableIdent: TableIdentifier): Unit = {
+    val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
+    val tableType = if (storage.locationUri.isDefined) {
+      CatalogTableType.EXTERNAL
+    } else {
+      CatalogTableType.MANAGED
+    }
+
+    val tableDesc = CatalogTable(
+      identifier = tableIdent,
+      tableType = tableType,
+      storage = storage,
+      schema = new StructType,
+      provider = Some(source),
+      partitionColumnNames = partitioningColumns.getOrElse(Nil),
+      bucketSpec = getBucketSpec
+    )
+    df.sparkSession.sessionState.executePlan(
+      CreateTable(tableDesc, mode, Some(df.logicalPlan))).toRdd
+  }
+
   /**
-   * Saves the content of the [[DataFrame]] to an external database table via JDBC. In the case the
+   * Saves the content of the `DataFrame` to an external database table via JDBC. In the case the
    * table already exists in the external database, behavior of this function depends on the
    * save mode, specified by the `mode` function (default to throwing an exception).
    *
@@ -426,15 +464,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     assertNotPartitioned("jdbc")
     assertNotBucketed("jdbc")
-    // connectionProperties should override settings in extraOptions
-    this.extraOptions = this.extraOptions ++ (connectionProperties.asScala)
+    // connectionProperties should override settings in extraOptions.
+    this.extraOptions ++= connectionProperties.asScala
     // explicit url and dbtable should override all
     this.extraOptions += ("url" -> url, "dbtable" -> table)
     format("jdbc").save()
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in JSON format at the specified path.
+   * Saves the content of the `DataFrame` in JSON format (<a href="http://jsonlines.org/">
+   * JSON Lines text format or newline-delimited JSON</a>) at the specified path.
    * This is equivalent to:
    * {{{
    *   format("json").save(path)
@@ -460,7 +499,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in Parquet format at the specified path.
+   * Saves the content of the `DataFrame` in Parquet format at the specified path.
    * This is equivalent to:
    * {{{
    *   format("parquet").save(path)
@@ -481,7 +520,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in ORC format at the specified path.
+   * Saves the content of the `DataFrame` in ORC format at the specified path.
    * This is equivalent to:
    * {{{
    *   format("orc").save(path)
@@ -502,7 +541,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in a text file at the specified path.
+   * Saves the content of the `DataFrame` in a text file at the specified path.
    * The DataFrame must have only one column that is of string type.
    * Each row becomes a new line in the output file. For example:
    * {{{
@@ -527,7 +566,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in CSV format at the specified path.
+   * Saves the content of the `DataFrame` in CSV format at the specified path.
    * This is equivalent to:
    * {{{
    *   format("csv").save(path)
@@ -573,7 +612,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
 
-  private var extraOptions = new scala.collection.mutable.HashMap[String, String]
+  private val extraOptions = new scala.collection.mutable.HashMap[String, String]
 
   private var partitioningColumns: Option[Seq[String]] = None
 

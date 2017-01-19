@@ -184,8 +184,11 @@ getDefaultSqlSource <- function() {
 #'
 #' Converts R data.frame or list into SparkDataFrame.
 #'
-#' @param data an RDD or list or data.frame.
+#' @param data a list or data.frame.
 #' @param schema a list of column names or named list (StructType), optional.
+#' @param samplingRatio Currently not used.
+#' @param numPartitions the number of partitions of the SparkDataFrame. Defaults to 1, this is
+#'        limited by length of the list or number of rows of the data.frame
 #' @return A SparkDataFrame.
 #' @rdname createDataFrame
 #' @export
@@ -195,12 +198,14 @@ getDefaultSqlSource <- function() {
 #' df1 <- as.DataFrame(iris)
 #' df2 <- as.DataFrame(list(3,4,5,6))
 #' df3 <- createDataFrame(iris)
+#' df4 <- createDataFrame(cars, numPartitions = 2)
 #' }
 #' @name createDataFrame
 #' @method createDataFrame default
 #' @note createDataFrame since 1.4.0
 # TODO(davies): support sampling and infer type from NA
-createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
+createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0,
+                                    numPartitions = NULL) {
   sparkSession <- getSparkSession()
 
   if (is.data.frame(data)) {
@@ -233,7 +238,11 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
 
   if (is.list(data)) {
     sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
-    rdd <- parallelize(sc, data)
+    if (!is.null(numPartitions)) {
+      rdd <- parallelize(sc, data, numSlices = numToInt(numPartitions))
+    } else {
+      rdd <- parallelize(sc, data, numSlices = 1)
+    }
   } else if (inherits(data, "RDD")) {
     rdd <- data
   } else {
@@ -283,14 +292,13 @@ createDataFrame <- function(x, ...) {
   dispatchFunc("createDataFrame(data, schema = NULL)", x, ...)
 }
 
-#' @param samplingRatio Currently not used.
 #' @rdname createDataFrame
 #' @aliases createDataFrame
 #' @export
 #' @method as.DataFrame default
 #' @note as.DataFrame since 1.6.0
-as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
-  createDataFrame(data, schema)
+as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0, numPartitions = NULL) {
+  createDataFrame(data, schema, samplingRatio, numPartitions)
 }
 
 #' @param ... additional argument(s).
@@ -324,7 +332,8 @@ setMethod("toDF", signature(x = "RDD"),
 
 #' Create a SparkDataFrame from a JSON file.
 #'
-#' Loads a JSON file (one object per line), returning the result as a SparkDataFrame
+#' Loads a JSON file (\href{http://jsonlines.org/}{JSON Lines text format or newline-delimited JSON}
+#' ), returning the result as a SparkDataFrame
 #' It goes through the entire dataset once to determine the schema.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
@@ -349,7 +358,7 @@ read.json.default <- function(path, ...) {
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
-  sdf <- callJMethod(read, "json", paths)
+  sdf <- handledCallJMethod(read, "json", paths)
   dataFrame(sdf)
 }
 
@@ -421,7 +430,7 @@ read.orc <- function(path, ...) {
   path <- suppressWarnings(normalizePath(path))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
-  sdf <- callJMethod(read, "orc", path)
+  sdf <- handledCallJMethod(read, "orc", path)
   dataFrame(sdf)
 }
 
@@ -443,7 +452,7 @@ read.parquet.default <- function(path, ...) {
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
-  sdf <- callJMethod(read, "parquet", paths)
+  sdf <- handledCallJMethod(read, "parquet", paths)
   dataFrame(sdf)
 }
 
@@ -495,7 +504,7 @@ read.text.default <- function(path, ...) {
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
-  sdf <- callJMethod(read, "text", paths)
+  sdf <- handledCallJMethod(read, "text", paths)
   dataFrame(sdf)
 }
 
@@ -633,7 +642,7 @@ tableNames <- function(x, ...) {
 cacheTable.default <- function(tableName) {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
-  callJMethod(catalog, "cacheTable", tableName)
+  invisible(callJMethod(catalog, "cacheTable", tableName))
 }
 
 cacheTable <- function(x, ...) {
@@ -662,7 +671,7 @@ cacheTable <- function(x, ...) {
 uncacheTable.default <- function(tableName) {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
-  callJMethod(catalog, "uncacheTable", tableName)
+  invisible(callJMethod(catalog, "uncacheTable", tableName))
 }
 
 uncacheTable <- function(x, ...) {
@@ -685,7 +694,7 @@ uncacheTable <- function(x, ...) {
 clearCache.default <- function() {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
-  callJMethod(catalog, "clearCache")
+  invisible(callJMethod(catalog, "clearCache"))
 }
 
 clearCache <- function() {
@@ -729,6 +738,7 @@ dropTempTable <- function(x, ...) {
 #' If the view has been cached before, then it will also be uncached.
 #'
 #' @param viewName the name of the view to be dropped.
+#' @return TRUE if the view is dropped successfully, FALSE otherwise.
 #' @rdname dropTempView
 #' @name dropTempView
 #' @export
@@ -913,12 +923,13 @@ read.jdbc <- function(url, tableName,
     } else {
       numPartitions <- numToInt(numPartitions)
     }
-    sdf <- callJMethod(read, "jdbc", url, tableName, as.character(partitionColumn),
-                       numToInt(lowerBound), numToInt(upperBound), numPartitions, jprops)
+    sdf <- handledCallJMethod(read, "jdbc", url, tableName, as.character(partitionColumn),
+                              numToInt(lowerBound), numToInt(upperBound), numPartitions, jprops)
   } else if (length(predicates) > 0) {
-    sdf <- callJMethod(read, "jdbc", url, tableName, as.list(as.character(predicates)), jprops)
+    sdf <- handledCallJMethod(read, "jdbc", url, tableName, as.list(as.character(predicates)),
+                              jprops)
   } else {
-    sdf <- callJMethod(read, "jdbc", url, tableName, jprops)
+    sdf <- handledCallJMethod(read, "jdbc", url, tableName, jprops)
   }
   dataFrame(sdf)
 }

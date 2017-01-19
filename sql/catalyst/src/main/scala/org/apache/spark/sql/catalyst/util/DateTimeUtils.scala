@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
-import java.util.{Calendar, TimeZone}
+import java.util.{Calendar, Locale, TimeZone}
 import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
@@ -79,14 +79,14 @@ object DateTimeUtils {
   // `SimpleDateFormat` is not thread-safe.
   val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
     override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
     }
   }
 
   // `SimpleDateFormat` is not thread-safe.
   private val threadLocalDateFormat = new ThreadLocal[DateFormat] {
     override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd")
+      new SimpleDateFormat("yyyy-MM-dd", Locale.US)
     }
   }
 
@@ -142,7 +142,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the number of days since epoch from from java.sql.Date.
+   * Returns the number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
     millisToDays(date.getTime)
@@ -503,7 +503,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Calculates the year and and the number of the day in the year for the given
+   * Calculates the year and the number of the day in the year for the given
    * number of days. The given days is the number of days since 1.1.1970.
    *
    * The calculation uses the fact that the period 1.1.2001 until 31.12.2400 is

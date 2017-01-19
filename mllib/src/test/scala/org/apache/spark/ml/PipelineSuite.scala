@@ -101,13 +101,31 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     }
   }
 
+  test("Pipeline.copy") {
+    val hashingTF = new HashingTF()
+      .setNumFeatures(100)
+    val pipeline = new Pipeline("pipeline").setStages(Array[Transformer](hashingTF))
+    val copied = pipeline.copy(ParamMap(hashingTF.numFeatures -> 10))
+
+    assert(copied.uid === pipeline.uid,
+      "copy should create an instance with the same UID")
+    assert(copied.getStages(0).asInstanceOf[HashingTF].getNumFeatures === 10,
+      "copy should handle extra stage params")
+  }
+
   test("PipelineModel.copy") {
     val hashingTF = new HashingTF()
       .setNumFeatures(100)
-    val model = new PipelineModel("pipeline", Array[Transformer](hashingTF))
+    val model = new PipelineModel("pipelineModel", Array[Transformer](hashingTF))
+      .setParent(new Pipeline())
     val copied = model.copy(ParamMap(hashingTF.numFeatures -> 10))
-    require(copied.stages(0).asInstanceOf[HashingTF].getNumFeatures === 10,
+
+    assert(copied.uid === model.uid,
+      "copy should create an instance with the same UID")
+    assert(copied.stages(0).asInstanceOf[HashingTF].getNumFeatures === 10,
       "copy should handle extra stage params")
+    assert(copied.parent === model.parent,
+      "copy should create an instance with the same parent")
   }
 
   test("pipeline model constructors") {

@@ -245,7 +245,8 @@ streaming_kafka_0_10 = Module(
     name="streaming-kafka-0-10",
     dependencies=[streaming],
     source_file_regexes=[
-        "external/kafka-0-10",
+        # The ending "/" is necessary otherwise it will include "sql-kafka" codes
+        "external/kafka-0-10/",
         "external/kafka-0-10-assembly",
     ],
     sbt_test_goals=[
@@ -469,7 +470,7 @@ yarn = Module(
     name="yarn",
     dependencies=[],
     source_file_regexes=[
-        "yarn/",
+        "resource-managers/yarn/",
         "common/network-yarn/",
     ],
     build_profile_flags=["-Pyarn"],
@@ -485,7 +486,7 @@ yarn = Module(
 mesos = Module(
     name="mesos",
     dependencies=[],
-    source_file_regexes=["mesos/"],
+    source_file_regexes=["resource-managers/mesos/"],
     build_profile_flags=["-Pmesos"],
     sbt_test_goals=["mesos/test"]
 )

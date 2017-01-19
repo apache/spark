@@ -238,7 +238,9 @@ class JavaSparkContext(val sc: SparkContext)
    * }}}
    *
    * Do
-   * `JavaPairRDD<String, byte[]> rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")`,
+   * {{{
+   *   JavaPairRDD<String, byte[]> rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")
+   * }}}
    *
    * then `rdd` contains
    * {{{
@@ -270,7 +272,9 @@ class JavaSparkContext(val sc: SparkContext)
    * }}}
    *
    * Do
-   * `JavaPairRDD<String, byte[]> rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")`,
+   * {{{
+   *   JavaPairRDD<String, byte[]> rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")
+   * }}},
    *
    * then `rdd` contains
    * {{{
@@ -298,7 +302,7 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Get an RDD for a Hadoop SequenceFile with given key and value types.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -316,7 +320,7 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Get an RDD for a Hadoop SequenceFile.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -366,7 +370,7 @@ class JavaSparkContext(val sc: SparkContext)
    * @param valueClass Class of the values
    * @param minPartitions Minimum number of Hadoop Splits to generate.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -396,7 +400,7 @@ class JavaSparkContext(val sc: SparkContext)
    * @param keyClass Class of the keys
    * @param valueClass Class of the values
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -416,7 +420,7 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Get an RDD for a Hadoop file with an arbitrary InputFormat.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -437,7 +441,7 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Get an RDD for a Hadoop file with an arbitrary InputFormat
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -458,7 +462,7 @@ class JavaSparkContext(val sc: SparkContext)
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -487,7 +491,7 @@ class JavaSparkContext(val sc: SparkContext)
    * @param kClass Class of the keys
    * @param vClass Class of the values
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -694,7 +698,7 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Returns the Hadoop configuration used for the Hadoop code (e.g. file systems) we reuse.
    *
-   * '''Note:''' As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
+   * @note As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
    * plan to set some global configurations for all Hadoop RDDs.
    */
   def hadoopConfiguration(): Configuration = {
@@ -749,7 +753,7 @@ class JavaSparkContext(val sc: SparkContext)
 
   /**
    * Get a local property set in this thread, or null if it is missing. See
-   * [[org.apache.spark.api.java.JavaSparkContext.setLocalProperty]].
+   * `org.apache.spark.api.java.JavaSparkContext.setLocalProperty`.
    */
   def getLocalProperty(key: String): String = sc.getLocalProperty(key)
 
@@ -769,7 +773,7 @@ class JavaSparkContext(val sc: SparkContext)
    * Application programmers can use this method to group all those jobs together and give a
    * group description. Once set, the Spark web UI will associate such jobs with this group.
    *
-   * The application can also use [[org.apache.spark.api.java.JavaSparkContext.cancelJobGroup]]
+   * The application can also use `org.apache.spark.api.java.JavaSparkContext.cancelJobGroup`
    * to cancel all running jobs in this group. For example,
    * {{{
    * // In the main thread:
@@ -802,7 +806,7 @@ class JavaSparkContext(val sc: SparkContext)
 
   /**
    * Cancel active jobs for the specified group. See
-   * [[org.apache.spark.api.java.JavaSparkContext.setJobGroup]] for more information.
+   * `org.apache.spark.api.java.JavaSparkContext.setJobGroup` for more information.
    */
   def cancelJobGroup(groupId: String): Unit = sc.cancelJobGroup(groupId)
 
@@ -811,7 +815,8 @@ class JavaSparkContext(val sc: SparkContext)
 
   /**
    * Returns a Java map of JavaRDDs that have marked themselves as persistent via cache() call.
-   * Note that this does not necessarily mean the caching or computation was successful.
+   *
+   * @note This does not necessarily mean the caching or computation was successful.
    */
   def getPersistentRDDs: JMap[java.lang.Integer, JavaRDD[_]] = {
     sc.getPersistentRDDs.mapValues(s => JavaRDD.fromRDD(s))

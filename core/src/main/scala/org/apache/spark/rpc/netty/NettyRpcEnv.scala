@@ -407,11 +407,9 @@ private[netty] class NettyRpcEnv(
     }
 
   }
-
 }
 
 private[netty] object NettyRpcEnv extends Logging {
-
   /**
    * When deserializing the [[NettyRpcEndpointRef]], it needs a reference to [[NettyRpcEnv]].
    * Use `currentEnv` to wrap the deserialization codes. E.g.,

@@ -83,7 +83,7 @@ trait StateStore {
   /**
    * Whether all updates have been committed
    */
-  private[state] def hasCommitted: Boolean
+  private[streaming] def hasCommitted: Boolean
 }
 
 
@@ -99,13 +99,16 @@ trait StateStoreProvider {
 
 
 /** Trait representing updates made to a [[StateStore]]. */
-sealed trait StoreUpdate
+sealed trait StoreUpdate {
+  def key: UnsafeRow
+  def value: UnsafeRow
+}
 
 case class ValueAdded(key: UnsafeRow, value: UnsafeRow) extends StoreUpdate
 
 case class ValueUpdated(key: UnsafeRow, value: UnsafeRow) extends StoreUpdate
 
-case class KeyRemoved(key: UnsafeRow) extends StoreUpdate
+case class ValueRemoved(key: UnsafeRow, value: UnsafeRow) extends StoreUpdate
 
 
 /**
