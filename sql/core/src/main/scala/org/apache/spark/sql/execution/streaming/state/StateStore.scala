@@ -134,7 +134,7 @@ object StateStore extends Logging {
     private val runnable = new Runnable {
       override def run(): Unit = {
         try {
-          doMaintenance()
+          task
         } catch {
           case NonFatal(e) =>
             logWarning("Error running maintenance thread", e)
