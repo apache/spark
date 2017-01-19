@@ -419,12 +419,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       sql(s"CREATE TABLE $tableName STORED AS SEQUENCEFILE AS SELECT 1 AS key, 'abc' AS value")
 
       val df = sql(s"SELECT key, value FROM $tableName")
-      df.write.mode(SaveMode.Append).saveAsTable(tableName)
-
       df.write.insertInto(tableName)
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
-        Row(1, "abc") :: Row(1, "abc") :: Row(1, "abc") :: Row(1, "abc") :: Nil
+        Row(1, "abc") :: Row(1, "abc") :: Nil
       )
     }
   }
