@@ -1355,34 +1355,18 @@ class HiveDDLSuite
     }
   }
 
-  test("create hive serde table as select with DataFrameWriter.saveAsTable with partitionBy") {
+  test("create hive serde table as select") {
     withTable("t", "t1") {
       withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
         Seq(10 -> "y").toDF("i", "j").write.format("hive").partitionBy("i").saveAsTable("t")
         checkAnswer(spark.table("t"), Row("y", 10) :: Nil)
-        var table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        var partitionSchema = table.partitionSchema
-        assert(partitionSchema.size == 1 && partitionSchema.fields(0).name == "i" &&
-          partitionSchema.fields(0).dataType == IntegerType)
-
-        Seq(11 -> "z").toDF("i", "j").write.mode("overwrite").format("hive")
-          .partitionBy("j").saveAsTable("t")
-        checkAnswer(spark.table("t"), Row(11, "z") :: Nil)
-        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        partitionSchema = table.partitionSchema
-        assert(partitionSchema.size == 1 && partitionSchema.fields(0).name == "j" &&
-          partitionSchema.fields(0).dataType == StringType)
-
-        Seq((1, 2, 3)).toDF("i", "j", "k").write.mode("overwrite").format("hive")
-          .partitionBy("k", "j").saveAsTable("t")
-        checkAnswer(spark.table("t"), Row(1, 3, 2) :: Nil)
 
         Seq((1, 2, 3)).toDF("i", "j", "k").write.mode("overwrite").format("hive")
           .partitionBy("j", "k").saveAsTable("t")
         checkAnswer(spark.table("t"), Row(1, 2, 3) :: Nil)
 
-        spark.sql("create table t1 as select * from t")
-        checkAnswer(spark.table("t1"), Row(1, 2, 3) :: Nil)
+        spark.sql("create table t1 using hive partitioned by (i) as select 1 as i, 'a' as j")
+        checkAnswer(spark.table("t1"), Row('a', 1) :: Nil)
       }
     }
   }
