@@ -58,7 +58,7 @@ case class ScalaUDF(
     (1 to 22).map { x =>
       val anys = (1 to x).map(x => "Any").reduce(_ + ", " + _)
       val childs = (0 to x - 1).map(x => s"val child$x = children($x)").reduce(_ + "\n  " + _)
-      val converters = (0 to x - 1).map(x => s"lazy val converter$x = CatalystTypeConverters.createToScalaConverter(child$x.dataType)").reduce(_ + "\n  " + _)
+      val converters = (0 to x - 1).map(x => s"lazy val converter$x = inputConverters.map(_($x)).getOrElse(CatalystTypeConverters.createToScalaConverter(child$x.dataType)")).reduce(_ + "\n  " + _)
       val evals = (0 to x - 1).map(x => s"converter$x(child$x.eval(input))").reduce(_ + ",\n      " + _)
 
       s"""case $x =>
@@ -89,9 +89,7 @@ case class ScalaUDF(
     case 1 =>
       val func = function.asInstanceOf[(Any) => Any]
       val child0 = children(0)
-      lazy val converter0 = inputConverters.map {
-        case Seq(c0) => c0
-      }.getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)))
@@ -101,16 +99,8 @@ case class ScalaUDF(
       val func = function.asInstanceOf[(Any, Any) => Any]
       val child0 = children(0)
       val child1 = children(1)
-      lazy val (
-          converter0,
-          converter1
-        ) = inputConverters.map {
-        case Seq(c0, c1) =>
-          (c0, c1)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -122,18 +112,9 @@ case class ScalaUDF(
       val child0 = children(0)
       val child1 = children(1)
       val child2 = children(2)
-      lazy val (
-          converter0,
-          converter1,
-          converter2
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2) =>
-          (c0, c1, c2)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -147,20 +128,10 @@ case class ScalaUDF(
       val child1 = children(1)
       val child2 = children(2)
       val child3 = children(3)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3) =>
-          (c0, c1, c2, c3)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -176,22 +147,11 @@ case class ScalaUDF(
       val child2 = children(2)
       val child3 = children(3)
       val child4 = children(4)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4) =>
-          (c0, c1, c2, c3, c4)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -209,24 +169,12 @@ case class ScalaUDF(
       val child3 = children(3)
       val child4 = children(4)
       val child5 = children(5)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5) =>
-          (c0, c1, c2, c3, c4, c5)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -246,26 +194,13 @@ case class ScalaUDF(
       val child4 = children(4)
       val child5 = children(5)
       val child6 = children(6)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6) =>
-          (c0, c1, c2, c3, c4, c5, c6)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -287,28 +222,14 @@ case class ScalaUDF(
       val child5 = children(5)
       val child6 = children(6)
       val child7 = children(7)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -332,30 +253,15 @@ case class ScalaUDF(
       val child6 = children(6)
       val child7 = children(7)
       val child8 = children(8)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7,
-          converter8
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7, c8) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7, c8)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType),
-          CatalystTypeConverters.createToScalaConverter(child8.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
+      lazy val converter8 = inputConverters.map(_(8)).getOrElse(CatalystTypeConverters.createToScalaConverter(child8.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -381,32 +287,16 @@ case class ScalaUDF(
       val child7 = children(7)
       val child8 = children(8)
       val child9 = children(9)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7,
-          converter8,
-          converter9
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7, c8, c9) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType),
-          CatalystTypeConverters.createToScalaConverter(child8.dataType),
-          CatalystTypeConverters.createToScalaConverter(child9.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
+      lazy val converter8 = inputConverters.map(_(8)).getOrElse(CatalystTypeConverters.createToScalaConverter(child8.dataType))
+      lazy val converter9 = inputConverters.map(_(9)).getOrElse(CatalystTypeConverters.createToScalaConverter(child9.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -434,34 +324,17 @@ case class ScalaUDF(
       val child8 = children(8)
       val child9 = children(9)
       val child10 = children(10)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7,
-          converter8,
-          converter9,
-          converter10
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType),
-          CatalystTypeConverters.createToScalaConverter(child8.dataType),
-          CatalystTypeConverters.createToScalaConverter(child9.dataType),
-          CatalystTypeConverters.createToScalaConverter(child10.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
+      lazy val converter8 = inputConverters.map(_(8)).getOrElse(CatalystTypeConverters.createToScalaConverter(child8.dataType))
+      lazy val converter9 = inputConverters.map(_(9)).getOrElse(CatalystTypeConverters.createToScalaConverter(child9.dataType))
+      lazy val converter10 = inputConverters.map(_(10)).getOrElse(CatalystTypeConverters.createToScalaConverter(child10.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -491,36 +364,18 @@ case class ScalaUDF(
       val child9 = children(9)
       val child10 = children(10)
       val child11 = children(11)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7,
-          converter8,
-          converter9,
-          converter10,
-          converter11
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType),
-          CatalystTypeConverters.createToScalaConverter(child8.dataType),
-          CatalystTypeConverters.createToScalaConverter(child9.dataType),
-          CatalystTypeConverters.createToScalaConverter(child10.dataType),
-          CatalystTypeConverters.createToScalaConverter(child11.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
+      lazy val converter8 = inputConverters.map(_(8)).getOrElse(CatalystTypeConverters.createToScalaConverter(child8.dataType))
+      lazy val converter9 = inputConverters.map(_(9)).getOrElse(CatalystTypeConverters.createToScalaConverter(child9.dataType))
+      lazy val converter10 = inputConverters.map(_(10)).getOrElse(CatalystTypeConverters.createToScalaConverter(child10.dataType))
+      lazy val converter11 = inputConverters.map(_(11)).getOrElse(CatalystTypeConverters.createToScalaConverter(child11.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -552,38 +407,19 @@ case class ScalaUDF(
       val child10 = children(10)
       val child11 = children(11)
       val child12 = children(12)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7,
-          converter8,
-          converter9,
-          converter10,
-          converter11,
-          converter12
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType),
-          CatalystTypeConverters.createToScalaConverter(child8.dataType),
-          CatalystTypeConverters.createToScalaConverter(child9.dataType),
-          CatalystTypeConverters.createToScalaConverter(child10.dataType),
-          CatalystTypeConverters.createToScalaConverter(child11.dataType),
-          CatalystTypeConverters.createToScalaConverter(child12.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
+      lazy val converter8 = inputConverters.map(_(8)).getOrElse(CatalystTypeConverters.createToScalaConverter(child8.dataType))
+      lazy val converter9 = inputConverters.map(_(9)).getOrElse(CatalystTypeConverters.createToScalaConverter(child9.dataType))
+      lazy val converter10 = inputConverters.map(_(10)).getOrElse(CatalystTypeConverters.createToScalaConverter(child10.dataType))
+      lazy val converter11 = inputConverters.map(_(11)).getOrElse(CatalystTypeConverters.createToScalaConverter(child11.dataType))
+      lazy val converter12 = inputConverters.map(_(12)).getOrElse(CatalystTypeConverters.createToScalaConverter(child12.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -617,40 +453,20 @@ case class ScalaUDF(
       val child11 = children(11)
       val child12 = children(12)
       val child13 = children(13)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7,
-          converter8,
-          converter9,
-          converter10,
-          converter11,
-          converter12,
-          converter13
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType),
-          CatalystTypeConverters.createToScalaConverter(child8.dataType),
-          CatalystTypeConverters.createToScalaConverter(child9.dataType),
-          CatalystTypeConverters.createToScalaConverter(child10.dataType),
-          CatalystTypeConverters.createToScalaConverter(child11.dataType),
-          CatalystTypeConverters.createToScalaConverter(child12.dataType),
-          CatalystTypeConverters.createToScalaConverter(child13.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
+      lazy val converter8 = inputConverters.map(_(8)).getOrElse(CatalystTypeConverters.createToScalaConverter(child8.dataType))
+      lazy val converter9 = inputConverters.map(_(9)).getOrElse(CatalystTypeConverters.createToScalaConverter(child9.dataType))
+      lazy val converter10 = inputConverters.map(_(10)).getOrElse(CatalystTypeConverters.createToScalaConverter(child10.dataType))
+      lazy val converter11 = inputConverters.map(_(11)).getOrElse(CatalystTypeConverters.createToScalaConverter(child11.dataType))
+      lazy val converter12 = inputConverters.map(_(12)).getOrElse(CatalystTypeConverters.createToScalaConverter(child12.dataType))
+      lazy val converter13 = inputConverters.map(_(13)).getOrElse(CatalystTypeConverters.createToScalaConverter(child13.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -686,42 +502,21 @@ case class ScalaUDF(
       val child12 = children(12)
       val child13 = children(13)
       val child14 = children(14)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7,
-          converter8,
-          converter9,
-          converter10,
-          converter11,
-          converter12,
-          converter13,
-          converter14
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType),
-          CatalystTypeConverters.createToScalaConverter(child8.dataType),
-          CatalystTypeConverters.createToScalaConverter(child9.dataType),
-          CatalystTypeConverters.createToScalaConverter(child10.dataType),
-          CatalystTypeConverters.createToScalaConverter(child11.dataType),
-          CatalystTypeConverters.createToScalaConverter(child12.dataType),
-          CatalystTypeConverters.createToScalaConverter(child13.dataType),
-          CatalystTypeConverters.createToScalaConverter(child14.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
+      lazy val converter8 = inputConverters.map(_(8)).getOrElse(CatalystTypeConverters.createToScalaConverter(child8.dataType))
+      lazy val converter9 = inputConverters.map(_(9)).getOrElse(CatalystTypeConverters.createToScalaConverter(child9.dataType))
+      lazy val converter10 = inputConverters.map(_(10)).getOrElse(CatalystTypeConverters.createToScalaConverter(child10.dataType))
+      lazy val converter11 = inputConverters.map(_(11)).getOrElse(CatalystTypeConverters.createToScalaConverter(child11.dataType))
+      lazy val converter12 = inputConverters.map(_(12)).getOrElse(CatalystTypeConverters.createToScalaConverter(child12.dataType))
+      lazy val converter13 = inputConverters.map(_(13)).getOrElse(CatalystTypeConverters.createToScalaConverter(child13.dataType))
+      lazy val converter14 = inputConverters.map(_(14)).getOrElse(CatalystTypeConverters.createToScalaConverter(child14.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -759,44 +554,22 @@ case class ScalaUDF(
       val child13 = children(13)
       val child14 = children(14)
       val child15 = children(15)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7,
-          converter8,
-          converter9,
-          converter10,
-          converter11,
-          converter12,
-          converter13,
-          converter14,
-          converter15
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType),
-          CatalystTypeConverters.createToScalaConverter(child8.dataType),
-          CatalystTypeConverters.createToScalaConverter(child9.dataType),
-          CatalystTypeConverters.createToScalaConverter(child10.dataType),
-          CatalystTypeConverters.createToScalaConverter(child11.dataType),
-          CatalystTypeConverters.createToScalaConverter(child12.dataType),
-          CatalystTypeConverters.createToScalaConverter(child13.dataType),
-          CatalystTypeConverters.createToScalaConverter(child14.dataType),
-          CatalystTypeConverters.createToScalaConverter(child15.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
+      lazy val converter8 = inputConverters.map(_(8)).getOrElse(CatalystTypeConverters.createToScalaConverter(child8.dataType))
+      lazy val converter9 = inputConverters.map(_(9)).getOrElse(CatalystTypeConverters.createToScalaConverter(child9.dataType))
+      lazy val converter10 = inputConverters.map(_(10)).getOrElse(CatalystTypeConverters.createToScalaConverter(child10.dataType))
+      lazy val converter11 = inputConverters.map(_(11)).getOrElse(CatalystTypeConverters.createToScalaConverter(child11.dataType))
+      lazy val converter12 = inputConverters.map(_(12)).getOrElse(CatalystTypeConverters.createToScalaConverter(child12.dataType))
+      lazy val converter13 = inputConverters.map(_(13)).getOrElse(CatalystTypeConverters.createToScalaConverter(child13.dataType))
+      lazy val converter14 = inputConverters.map(_(14)).getOrElse(CatalystTypeConverters.createToScalaConverter(child14.dataType))
+      lazy val converter15 = inputConverters.map(_(15)).getOrElse(CatalystTypeConverters.createToScalaConverter(child15.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -836,46 +609,23 @@ case class ScalaUDF(
       val child14 = children(14)
       val child15 = children(15)
       val child16 = children(16)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7,
-          converter8,
-          converter9,
-          converter10,
-          converter11,
-          converter12,
-          converter13,
-          converter14,
-          converter15,
-          converter16
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType),
-          CatalystTypeConverters.createToScalaConverter(child8.dataType),
-          CatalystTypeConverters.createToScalaConverter(child9.dataType),
-          CatalystTypeConverters.createToScalaConverter(child10.dataType),
-          CatalystTypeConverters.createToScalaConverter(child11.dataType),
-          CatalystTypeConverters.createToScalaConverter(child12.dataType),
-          CatalystTypeConverters.createToScalaConverter(child13.dataType),
-          CatalystTypeConverters.createToScalaConverter(child14.dataType),
-          CatalystTypeConverters.createToScalaConverter(child15.dataType),
-          CatalystTypeConverters.createToScalaConverter(child16.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
+      lazy val converter8 = inputConverters.map(_(8)).getOrElse(CatalystTypeConverters.createToScalaConverter(child8.dataType))
+      lazy val converter9 = inputConverters.map(_(9)).getOrElse(CatalystTypeConverters.createToScalaConverter(child9.dataType))
+      lazy val converter10 = inputConverters.map(_(10)).getOrElse(CatalystTypeConverters.createToScalaConverter(child10.dataType))
+      lazy val converter11 = inputConverters.map(_(11)).getOrElse(CatalystTypeConverters.createToScalaConverter(child11.dataType))
+      lazy val converter12 = inputConverters.map(_(12)).getOrElse(CatalystTypeConverters.createToScalaConverter(child12.dataType))
+      lazy val converter13 = inputConverters.map(_(13)).getOrElse(CatalystTypeConverters.createToScalaConverter(child13.dataType))
+      lazy val converter14 = inputConverters.map(_(14)).getOrElse(CatalystTypeConverters.createToScalaConverter(child14.dataType))
+      lazy val converter15 = inputConverters.map(_(15)).getOrElse(CatalystTypeConverters.createToScalaConverter(child15.dataType))
+      lazy val converter16 = inputConverters.map(_(16)).getOrElse(CatalystTypeConverters.createToScalaConverter(child16.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -917,48 +667,24 @@ case class ScalaUDF(
       val child15 = children(15)
       val child16 = children(16)
       val child17 = children(17)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7,
-          converter8,
-          converter9,
-          converter10,
-          converter11,
-          converter12,
-          converter13,
-          converter14,
-          converter15,
-          converter16,
-          converter17
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType),
-          CatalystTypeConverters.createToScalaConverter(child8.dataType),
-          CatalystTypeConverters.createToScalaConverter(child9.dataType),
-          CatalystTypeConverters.createToScalaConverter(child10.dataType),
-          CatalystTypeConverters.createToScalaConverter(child11.dataType),
-          CatalystTypeConverters.createToScalaConverter(child12.dataType),
-          CatalystTypeConverters.createToScalaConverter(child13.dataType),
-          CatalystTypeConverters.createToScalaConverter(child14.dataType),
-          CatalystTypeConverters.createToScalaConverter(child15.dataType),
-          CatalystTypeConverters.createToScalaConverter(child16.dataType),
-          CatalystTypeConverters.createToScalaConverter(child17.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
+      lazy val converter8 = inputConverters.map(_(8)).getOrElse(CatalystTypeConverters.createToScalaConverter(child8.dataType))
+      lazy val converter9 = inputConverters.map(_(9)).getOrElse(CatalystTypeConverters.createToScalaConverter(child9.dataType))
+      lazy val converter10 = inputConverters.map(_(10)).getOrElse(CatalystTypeConverters.createToScalaConverter(child10.dataType))
+      lazy val converter11 = inputConverters.map(_(11)).getOrElse(CatalystTypeConverters.createToScalaConverter(child11.dataType))
+      lazy val converter12 = inputConverters.map(_(12)).getOrElse(CatalystTypeConverters.createToScalaConverter(child12.dataType))
+      lazy val converter13 = inputConverters.map(_(13)).getOrElse(CatalystTypeConverters.createToScalaConverter(child13.dataType))
+      lazy val converter14 = inputConverters.map(_(14)).getOrElse(CatalystTypeConverters.createToScalaConverter(child14.dataType))
+      lazy val converter15 = inputConverters.map(_(15)).getOrElse(CatalystTypeConverters.createToScalaConverter(child15.dataType))
+      lazy val converter16 = inputConverters.map(_(16)).getOrElse(CatalystTypeConverters.createToScalaConverter(child16.dataType))
+      lazy val converter17 = inputConverters.map(_(17)).getOrElse(CatalystTypeConverters.createToScalaConverter(child17.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -1002,50 +728,25 @@ case class ScalaUDF(
       val child16 = children(16)
       val child17 = children(17)
       val child18 = children(18)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7,
-          converter8,
-          converter9,
-          converter10,
-          converter11,
-          converter12,
-          converter13,
-          converter14,
-          converter15,
-          converter16,
-          converter17,
-          converter18
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType),
-          CatalystTypeConverters.createToScalaConverter(child8.dataType),
-          CatalystTypeConverters.createToScalaConverter(child9.dataType),
-          CatalystTypeConverters.createToScalaConverter(child10.dataType),
-          CatalystTypeConverters.createToScalaConverter(child11.dataType),
-          CatalystTypeConverters.createToScalaConverter(child12.dataType),
-          CatalystTypeConverters.createToScalaConverter(child13.dataType),
-          CatalystTypeConverters.createToScalaConverter(child14.dataType),
-          CatalystTypeConverters.createToScalaConverter(child15.dataType),
-          CatalystTypeConverters.createToScalaConverter(child16.dataType),
-          CatalystTypeConverters.createToScalaConverter(child17.dataType),
-          CatalystTypeConverters.createToScalaConverter(child18.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
+      lazy val converter8 = inputConverters.map(_(8)).getOrElse(CatalystTypeConverters.createToScalaConverter(child8.dataType))
+      lazy val converter9 = inputConverters.map(_(9)).getOrElse(CatalystTypeConverters.createToScalaConverter(child9.dataType))
+      lazy val converter10 = inputConverters.map(_(10)).getOrElse(CatalystTypeConverters.createToScalaConverter(child10.dataType))
+      lazy val converter11 = inputConverters.map(_(11)).getOrElse(CatalystTypeConverters.createToScalaConverter(child11.dataType))
+      lazy val converter12 = inputConverters.map(_(12)).getOrElse(CatalystTypeConverters.createToScalaConverter(child12.dataType))
+      lazy val converter13 = inputConverters.map(_(13)).getOrElse(CatalystTypeConverters.createToScalaConverter(child13.dataType))
+      lazy val converter14 = inputConverters.map(_(14)).getOrElse(CatalystTypeConverters.createToScalaConverter(child14.dataType))
+      lazy val converter15 = inputConverters.map(_(15)).getOrElse(CatalystTypeConverters.createToScalaConverter(child15.dataType))
+      lazy val converter16 = inputConverters.map(_(16)).getOrElse(CatalystTypeConverters.createToScalaConverter(child16.dataType))
+      lazy val converter17 = inputConverters.map(_(17)).getOrElse(CatalystTypeConverters.createToScalaConverter(child17.dataType))
+      lazy val converter18 = inputConverters.map(_(18)).getOrElse(CatalystTypeConverters.createToScalaConverter(child18.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -1091,52 +792,26 @@ case class ScalaUDF(
       val child17 = children(17)
       val child18 = children(18)
       val child19 = children(19)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7,
-          converter8,
-          converter9,
-          converter10,
-          converter11,
-          converter12,
-          converter13,
-          converter14,
-          converter15,
-          converter16,
-          converter17,
-          converter18,
-          converter19
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType),
-          CatalystTypeConverters.createToScalaConverter(child8.dataType),
-          CatalystTypeConverters.createToScalaConverter(child9.dataType),
-          CatalystTypeConverters.createToScalaConverter(child10.dataType),
-          CatalystTypeConverters.createToScalaConverter(child11.dataType),
-          CatalystTypeConverters.createToScalaConverter(child12.dataType),
-          CatalystTypeConverters.createToScalaConverter(child13.dataType),
-          CatalystTypeConverters.createToScalaConverter(child14.dataType),
-          CatalystTypeConverters.createToScalaConverter(child15.dataType),
-          CatalystTypeConverters.createToScalaConverter(child16.dataType),
-          CatalystTypeConverters.createToScalaConverter(child17.dataType),
-          CatalystTypeConverters.createToScalaConverter(child18.dataType),
-          CatalystTypeConverters.createToScalaConverter(child19.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
+      lazy val converter8 = inputConverters.map(_(8)).getOrElse(CatalystTypeConverters.createToScalaConverter(child8.dataType))
+      lazy val converter9 = inputConverters.map(_(9)).getOrElse(CatalystTypeConverters.createToScalaConverter(child9.dataType))
+      lazy val converter10 = inputConverters.map(_(10)).getOrElse(CatalystTypeConverters.createToScalaConverter(child10.dataType))
+      lazy val converter11 = inputConverters.map(_(11)).getOrElse(CatalystTypeConverters.createToScalaConverter(child11.dataType))
+      lazy val converter12 = inputConverters.map(_(12)).getOrElse(CatalystTypeConverters.createToScalaConverter(child12.dataType))
+      lazy val converter13 = inputConverters.map(_(13)).getOrElse(CatalystTypeConverters.createToScalaConverter(child13.dataType))
+      lazy val converter14 = inputConverters.map(_(14)).getOrElse(CatalystTypeConverters.createToScalaConverter(child14.dataType))
+      lazy val converter15 = inputConverters.map(_(15)).getOrElse(CatalystTypeConverters.createToScalaConverter(child15.dataType))
+      lazy val converter16 = inputConverters.map(_(16)).getOrElse(CatalystTypeConverters.createToScalaConverter(child16.dataType))
+      lazy val converter17 = inputConverters.map(_(17)).getOrElse(CatalystTypeConverters.createToScalaConverter(child17.dataType))
+      lazy val converter18 = inputConverters.map(_(18)).getOrElse(CatalystTypeConverters.createToScalaConverter(child18.dataType))
+      lazy val converter19 = inputConverters.map(_(19)).getOrElse(CatalystTypeConverters.createToScalaConverter(child19.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -1184,54 +859,27 @@ case class ScalaUDF(
       val child18 = children(18)
       val child19 = children(19)
       val child20 = children(20)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7,
-          converter8,
-          converter9,
-          converter10,
-          converter11,
-          converter12,
-          converter13,
-          converter14,
-          converter15,
-          converter16,
-          converter17,
-          converter18,
-          converter19,
-          converter20
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType),
-          CatalystTypeConverters.createToScalaConverter(child8.dataType),
-          CatalystTypeConverters.createToScalaConverter(child9.dataType),
-          CatalystTypeConverters.createToScalaConverter(child10.dataType),
-          CatalystTypeConverters.createToScalaConverter(child11.dataType),
-          CatalystTypeConverters.createToScalaConverter(child12.dataType),
-          CatalystTypeConverters.createToScalaConverter(child13.dataType),
-          CatalystTypeConverters.createToScalaConverter(child14.dataType),
-          CatalystTypeConverters.createToScalaConverter(child15.dataType),
-          CatalystTypeConverters.createToScalaConverter(child16.dataType),
-          CatalystTypeConverters.createToScalaConverter(child17.dataType),
-          CatalystTypeConverters.createToScalaConverter(child18.dataType),
-          CatalystTypeConverters.createToScalaConverter(child19.dataType),
-          CatalystTypeConverters.createToScalaConverter(child20.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
+      lazy val converter8 = inputConverters.map(_(8)).getOrElse(CatalystTypeConverters.createToScalaConverter(child8.dataType))
+      lazy val converter9 = inputConverters.map(_(9)).getOrElse(CatalystTypeConverters.createToScalaConverter(child9.dataType))
+      lazy val converter10 = inputConverters.map(_(10)).getOrElse(CatalystTypeConverters.createToScalaConverter(child10.dataType))
+      lazy val converter11 = inputConverters.map(_(11)).getOrElse(CatalystTypeConverters.createToScalaConverter(child11.dataType))
+      lazy val converter12 = inputConverters.map(_(12)).getOrElse(CatalystTypeConverters.createToScalaConverter(child12.dataType))
+      lazy val converter13 = inputConverters.map(_(13)).getOrElse(CatalystTypeConverters.createToScalaConverter(child13.dataType))
+      lazy val converter14 = inputConverters.map(_(14)).getOrElse(CatalystTypeConverters.createToScalaConverter(child14.dataType))
+      lazy val converter15 = inputConverters.map(_(15)).getOrElse(CatalystTypeConverters.createToScalaConverter(child15.dataType))
+      lazy val converter16 = inputConverters.map(_(16)).getOrElse(CatalystTypeConverters.createToScalaConverter(child16.dataType))
+      lazy val converter17 = inputConverters.map(_(17)).getOrElse(CatalystTypeConverters.createToScalaConverter(child17.dataType))
+      lazy val converter18 = inputConverters.map(_(18)).getOrElse(CatalystTypeConverters.createToScalaConverter(child18.dataType))
+      lazy val converter19 = inputConverters.map(_(19)).getOrElse(CatalystTypeConverters.createToScalaConverter(child19.dataType))
+      lazy val converter20 = inputConverters.map(_(20)).getOrElse(CatalystTypeConverters.createToScalaConverter(child20.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
@@ -1281,56 +929,28 @@ case class ScalaUDF(
       val child19 = children(19)
       val child20 = children(20)
       val child21 = children(21)
-      lazy val (
-          converter0,
-          converter1,
-          converter2,
-          converter3,
-          converter4,
-          converter5,
-          converter6,
-          converter7,
-          converter8,
-          converter9,
-          converter10,
-          converter11,
-          converter12,
-          converter13,
-          converter14,
-          converter15,
-          converter16,
-          converter17,
-          converter18,
-          converter19,
-          converter20,
-          converter21
-        ) = inputConverters.map {
-        case Seq(c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20, c21) =>
-          (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20, c21)
-      }.getOrElse((
-          CatalystTypeConverters.createToScalaConverter(child0.dataType),
-          CatalystTypeConverters.createToScalaConverter(child1.dataType),
-          CatalystTypeConverters.createToScalaConverter(child2.dataType),
-          CatalystTypeConverters.createToScalaConverter(child3.dataType),
-          CatalystTypeConverters.createToScalaConverter(child4.dataType),
-          CatalystTypeConverters.createToScalaConverter(child5.dataType),
-          CatalystTypeConverters.createToScalaConverter(child6.dataType),
-          CatalystTypeConverters.createToScalaConverter(child7.dataType),
-          CatalystTypeConverters.createToScalaConverter(child8.dataType),
-          CatalystTypeConverters.createToScalaConverter(child9.dataType),
-          CatalystTypeConverters.createToScalaConverter(child10.dataType),
-          CatalystTypeConverters.createToScalaConverter(child11.dataType),
-          CatalystTypeConverters.createToScalaConverter(child12.dataType),
-          CatalystTypeConverters.createToScalaConverter(child13.dataType),
-          CatalystTypeConverters.createToScalaConverter(child14.dataType),
-          CatalystTypeConverters.createToScalaConverter(child15.dataType),
-          CatalystTypeConverters.createToScalaConverter(child16.dataType),
-          CatalystTypeConverters.createToScalaConverter(child17.dataType),
-          CatalystTypeConverters.createToScalaConverter(child18.dataType),
-          CatalystTypeConverters.createToScalaConverter(child19.dataType),
-          CatalystTypeConverters.createToScalaConverter(child20.dataType),
-          CatalystTypeConverters.createToScalaConverter(child21.dataType)
-        ))
+      lazy val converter0 = inputConverters.map(_(0)).getOrElse(CatalystTypeConverters.createToScalaConverter(child0.dataType))
+      lazy val converter1 = inputConverters.map(_(1)).getOrElse(CatalystTypeConverters.createToScalaConverter(child1.dataType))
+      lazy val converter2 = inputConverters.map(_(2)).getOrElse(CatalystTypeConverters.createToScalaConverter(child2.dataType))
+      lazy val converter3 = inputConverters.map(_(3)).getOrElse(CatalystTypeConverters.createToScalaConverter(child3.dataType))
+      lazy val converter4 = inputConverters.map(_(4)).getOrElse(CatalystTypeConverters.createToScalaConverter(child4.dataType))
+      lazy val converter5 = inputConverters.map(_(5)).getOrElse(CatalystTypeConverters.createToScalaConverter(child5.dataType))
+      lazy val converter6 = inputConverters.map(_(6)).getOrElse(CatalystTypeConverters.createToScalaConverter(child6.dataType))
+      lazy val converter7 = inputConverters.map(_(7)).getOrElse(CatalystTypeConverters.createToScalaConverter(child7.dataType))
+      lazy val converter8 = inputConverters.map(_(8)).getOrElse(CatalystTypeConverters.createToScalaConverter(child8.dataType))
+      lazy val converter9 = inputConverters.map(_(9)).getOrElse(CatalystTypeConverters.createToScalaConverter(child9.dataType))
+      lazy val converter10 = inputConverters.map(_(10)).getOrElse(CatalystTypeConverters.createToScalaConverter(child10.dataType))
+      lazy val converter11 = inputConverters.map(_(11)).getOrElse(CatalystTypeConverters.createToScalaConverter(child11.dataType))
+      lazy val converter12 = inputConverters.map(_(12)).getOrElse(CatalystTypeConverters.createToScalaConverter(child12.dataType))
+      lazy val converter13 = inputConverters.map(_(13)).getOrElse(CatalystTypeConverters.createToScalaConverter(child13.dataType))
+      lazy val converter14 = inputConverters.map(_(14)).getOrElse(CatalystTypeConverters.createToScalaConverter(child14.dataType))
+      lazy val converter15 = inputConverters.map(_(15)).getOrElse(CatalystTypeConverters.createToScalaConverter(child15.dataType))
+      lazy val converter16 = inputConverters.map(_(16)).getOrElse(CatalystTypeConverters.createToScalaConverter(child16.dataType))
+      lazy val converter17 = inputConverters.map(_(17)).getOrElse(CatalystTypeConverters.createToScalaConverter(child17.dataType))
+      lazy val converter18 = inputConverters.map(_(18)).getOrElse(CatalystTypeConverters.createToScalaConverter(child18.dataType))
+      lazy val converter19 = inputConverters.map(_(19)).getOrElse(CatalystTypeConverters.createToScalaConverter(child19.dataType))
+      lazy val converter20 = inputConverters.map(_(20)).getOrElse(CatalystTypeConverters.createToScalaConverter(child20.dataType))
+      lazy val converter21 = inputConverters.map(_(21)).getOrElse(CatalystTypeConverters.createToScalaConverter(child21.dataType))
       (input: InternalRow) => {
         func(
           converter0(child0.eval(input)),
