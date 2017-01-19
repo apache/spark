@@ -56,10 +56,10 @@ private[spark] class Client(
   private val master = rawMaster.replaceFirst("k8s://", "")
 
   private val launchTime = System.currentTimeMillis
-  private val kubernetesAppId = sparkConf.getOption("spark.app.name")
+  private val appName = sparkConf.getOption("spark.app.name")
     .orElse(sparkConf.getOption("spark.app.id"))
-    .getOrElse(s"spark-$launchTime")
-
+    .getOrElse("spark")
+  private val kubernetesAppId = s"$appName-$launchTime"
   private val secretName = s"spark-submission-server-secret-$kubernetesAppId"
   private val driverLauncherSelectorValue = s"driver-launcher-$launchTime"
   private val driverDockerImage = sparkConf.get(
