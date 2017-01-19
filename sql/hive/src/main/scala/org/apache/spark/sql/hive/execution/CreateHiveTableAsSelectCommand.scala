@@ -69,7 +69,7 @@ case class CreateHiveTableAsSelectCommand(
         withFormat
       }
 
-      sparkSession.sessionState.catalog.createTable(withSchema, ignoreIfExists = false)
+      sparkSession.sessionState.catalog.createTable(withSchema, ignoreIfExists = true)
 
       // Get the Metastore Relation
       sparkSession.sessionState.catalog.lookupRelation(tableIdentifier) match {
@@ -81,7 +81,8 @@ case class CreateHiveTableAsSelectCommand(
     // processing.
     if (sparkSession.sessionState.catalog.tableExists(tableIdentifier)) {
       if (ignoreIfExists) {
-        // table already exists, will do nothing, to keep consistent with Hive
+        sparkSession.sessionState.executePlan(InsertIntoTable(
+          metastoreRelation, Map(), query, overwrite = false, ifNotExists = false)).toRdd
       } else {
         throw new AnalysisException(s"$tableIdentifier already exists.")
       }
