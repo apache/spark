@@ -1423,7 +1423,6 @@ class HiveDDLSuite
 
       sql(
         """CREATE TABLE IF NOT EXISTS t3(a int, b int)
-          | using hive
           | partitioned by (c string, d string)""".stripMargin)
       table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
       assert(table.schema.map(s => (s.name, s.dataType)) == structType)
@@ -1431,7 +1430,6 @@ class HiveDDLSuite
 
       sql(
         """CREATE TABLE IF NOT EXISTS t4(b int, a int)
-          | using hive
           | partitioned by (d string, c string)""".stripMargin)
       table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t4"))
       assert(table.schema.map(s => (s.name, s.dataType)) == structType1)
