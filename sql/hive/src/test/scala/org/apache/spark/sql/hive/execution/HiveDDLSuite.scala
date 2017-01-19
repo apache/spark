@@ -1396,7 +1396,7 @@ class HiveDDLSuite
   }
 
   test("the columns order in catalog should respect the order when create table") {
-    withTable("t", "t1") {
+    withTable("t", "t1", "t2", "t3") {
       val structType = Seq(("a", IntegerType), ("b", IntegerType),
         ("c", StringType), ("d", StringType))
       val partStructType = Seq(("c", StringType), ("d", StringType))
@@ -1422,23 +1422,23 @@ class HiveDDLSuite
       assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType1)
 
       sql(
-        """CREATE TABLE IF NOT EXISTS t3(a int, b int)
+        """CREATE TABLE IF NOT EXISTS t2(a int, b int)
           | partitioned by (c string, d string)""".stripMargin)
-      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
+      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
       assert(table.schema.map(s => (s.name, s.dataType)) == structType)
       assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType)
 
       sql(
-        """CREATE TABLE IF NOT EXISTS t4(b int, a int)
+        """CREATE TABLE IF NOT EXISTS t3(b int, a int)
           | partitioned by (d string, c string)""".stripMargin)
-      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t4"))
+      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
       assert(table.schema.map(s => (s.name, s.dataType)) == structType1)
       assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType1)
     }
   }
 
   test("CTAS: the columns order in catalog should respect the order when create table") {
-    withTable("t", "t1") {
+    withTable("t", "t1", "t2", "t3") {
       val structType = Seq(("a", IntegerType), ("b", IntegerType),
         ("c", StringType), ("d", StringType))
       val partStructType = Seq(("c", StringType), ("d", StringType))
@@ -1467,20 +1467,20 @@ class HiveDDLSuite
 
       withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
         sql(
-          """CREATE TABLE IF NOT EXISTS t3
+          """CREATE TABLE IF NOT EXISTS t2
             | using hive
             | partitioned by (c, d)
             | as select 1 as a, 2 as b, 'x' as c, 'y' as d""".stripMargin)
-        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
+        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
         assert(table.schema.map(s => (s.name, s.dataType)) == structType)
         assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType)
 
         sql(
-          """CREATE TABLE IF NOT EXISTS t4
+          """CREATE TABLE IF NOT EXISTS t3
             | using hive
             | partitioned by (d, c)
             | as select 1 as b, 2 as a, 'x' as c, 'y' as d""".stripMargin)
-        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t4"))
+        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
         assert(table.schema.map(s => (s.name, s.dataType)) == structType1)
         assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType1)
       }
