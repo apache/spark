@@ -1422,15 +1422,17 @@ class HiveDDLSuite
       assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType1)
 
       sql(
-        """CREATE TABLE IF NOT EXISTS t2(a int, b int)
-          | partitioned by (c string, d string)""".stripMargin)
+        """CREATE TABLE IF NOT EXISTS t2(a int, b int, c string, d string)
+          | using hive
+          | partitioned by (c, d)""".stripMargin)
       table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
       assert(table.schema.map(s => (s.name, s.dataType)) == structType)
       assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType)
 
       sql(
-        """CREATE TABLE IF NOT EXISTS t3(b int, a int)
-          | partitioned by (d string, c string)""".stripMargin)
+        """CREATE TABLE IF NOT EXISTS t3(b int, a int, d string, c string)
+          | using hive
+          | partitioned by (d, c)""".stripMargin)
       table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
       assert(table.schema.map(s => (s.name, s.dataType)) == structType1)
       assert(table.partitionSchema.map(s => (s.name, s.dataType)) == partStructType1)
