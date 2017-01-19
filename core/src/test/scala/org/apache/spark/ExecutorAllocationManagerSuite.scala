@@ -1156,9 +1156,9 @@ private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend
   override def defaultParallelism(): Int = sb.defaultParallelism()
 
   // Unused.
-  override def killExecutorsOnHost(host: String): Seq[String] = { Seq.empty[String] }
+  override def killExecutorsOnHost(host: String): Boolean = false
 
   // Unused.
   override def killExecutors(executorIds: Seq[String], replace: Boolean, force: Boolean)
-  : Unit = {}
+  : Seq[String] = Seq.empty[String]
 }
