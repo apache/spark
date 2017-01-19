@@ -35,7 +35,7 @@ private[r] class BisectingKMeansWrapper private (
     val size: Array[Long],
     val isLoaded: Boolean = false) extends MLWritable {
   private val bisectingKmeansModel: BisectingKMeansModel =
-    pipeline.stages(1).asInstanceOf[BisectingKMeansModel]
+    pipeline.stages.last.asInstanceOf[BisectingKMeansModel]
 
   lazy val coefficients: Array[Double] = bisectingKmeansModel.clusterCenters.flatMap(_.toArray)
 
@@ -68,8 +68,9 @@ private[r] object BisectingKMeansWrapper extends MLReadable[BisectingKMeansWrapp
       formula: String,
       k: Int,
       maxIter: Int,
-      minDivisibleClusterSize: Double,
-      seed: String): BisectingKMeansWrapper = {
+      seed: String,
+      minDivisibleClusterSize: Double
+      ): BisectingKMeansWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)

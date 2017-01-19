@@ -58,9 +58,11 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #' @param k the desired number of leaf clusters. Must be > 1.
 #'          The actual number could be smaller if there are no divisible leaf clusters.
 #' @param maxIter maximum iteration number.
+#' @param seed the random seed.
 #' @param minDivisibleClusterSize The minimum number of points (if greater than or equal to 1.0)
 #'                                or the minimum proportion of points (if less than 1.0) of a divisible cluster.
-#' @param seed the random seed.
+#'                                Note that it is an advanced. The default value should be enough
+#'                                for most cases.
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.bisectingKmeans} returns a fitted bisecting k-means model.
 #' @rdname spark.bisectingKmeans
@@ -70,7 +72,6 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' data(iris)
 #' df <- createDataFrame(iris)
 #' model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
 #' summary(model)
@@ -90,14 +91,14 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #' @note spark.bisectingKmeans since 2.2.0
 #' @seealso \link{predict}, \link{read.ml}, \link{write.ml}
 setMethod("spark.bisectingKmeans", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, k = 4, maxIter = 20, minDivisibleClusterSize = 1.0, seed = NULL) {
+          function(data, formula, k = 4, maxIter = 20, seed = NULL, minDivisibleClusterSize = 1.0) {
             formula <- paste0(deparse(formula), collapse = "")
             if (!is.null(seed)) {
               seed <- as.character(as.integer(seed))
             }
             jobj <- callJStatic("org.apache.spark.ml.r.BisectingKMeansWrapper", "fit",
                                 data@sdf, formula, as.integer(k), as.integer(maxIter),
-                                as.numeric(minDivisibleClusterSize), seed)
+                                seed, as.numeric(minDivisibleClusterSize))
             new("BisectingKMeansModel", jobj = jobj)
           })
 
@@ -150,12 +151,12 @@ setMethod("predict", signature(object = "BisectingKMeansModel"),
 #' Note: A saved-loaded model does not support this method.
 #'
 #' @return \code{fitted} returns a SparkDataFrame containing fitted values.
-#' @rdname fitted
+#' @rdname spark.bisectingKmeans
 #' @export
 #' @examples
 #' \dontrun{
 #' model <- spark.bisectingKmeans(trainingData, ~ ., 2)
-#' fitted.model <- fitted(model)
+#' fitted.model <- fitted(model, "centers")
 #' showDF(fitted.model)
 #'}
 #' @note fitted since 2.2.0
