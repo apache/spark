@@ -112,17 +112,21 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
         throw new AnalysisException("Saving data into a view is not allowed.")
       }
 
-      val (existingProvider, specifiedProvider) = DDLUtils.isHiveTable(existingTable) match {
+      val (isProviderMatch, existingProvider, specifiedProvider) =
+        DDLUtils.isHiveTable(existingTable) match {
         case false =>
-          (DataSource.lookupDataSource(existingTable.provider.get),
-            DataSource.lookupDataSource(tableDesc.provider.get))
+          val existing = DataSource.lookupDataSource(existingTable.provider.get)
+          val specified = DataSource.lookupDataSource(tableDesc.provider.get)
+          (existing == specified, existing.getSimpleName, specified.getSimpleName)
         case true =>
-          (existingTable.provider.get, tableDesc.provider.get)
+          val existing = existingTable.provider.get
+          val specified = tableDesc.provider.get
+          (existing == specified, existing, specified)
       }
       // Check if the specified data source match the data source of the existing table.
       // TODO: Check that options from the resolved relation match the relation that we are
       // inserting into (i.e. using the same compression).
-      if (existingProvider != specifiedProvider) {
+      if (!isProviderMatch) {
         throw new AnalysisException(s"The format of the existing table $tableName is " +
           s"`$existingProvider`. It doesn't match the specified format `$specifiedProvider`.")
       }
