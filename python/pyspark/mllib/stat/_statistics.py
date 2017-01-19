@@ -160,13 +160,10 @@ class Statistics(object):
     @ignore_unicode_prefix
     def chiSqTest(observed, expected=None):
         """
-        .. note:: Experimental
-
         If `observed` is Vector, conduct Pearson's chi-squared goodness
         of fit test of the observed data against the expected distribution,
         or againt the uniform distribution (by default), with each category
         having an expected frequency of `1 / len(observed)`.
-        (Note: `observed` cannot contain negative values)
 
         If `observed` is matrix, conduct Pearson's independence test on the
         input contingency matrix, which cannot contain negative entries or
@@ -177,6 +174,8 @@ class Statistics(object):
         For each feature, the (feature, label) pairs are converted into a
         contingency matrix for which the chi-squared statistic is computed.
         All label and feature values must be categorical.
+
+        .. note:: `observed` cannot contain negative values
 
         :param observed: it could be a vector containing the observed categorical
                          counts/relative frequencies, or the contingency matrix
@@ -246,8 +245,6 @@ class Statistics(object):
     @ignore_unicode_prefix
     def kolmogorovSmirnovTest(data, distName="norm", *params):
         """
-        .. note:: Experimental
-
         Performs the Kolmogorov-Smirnov (KS) test for data sampled from
         a continuous distribution. It tests the null hypothesis that
         the data is generated from a particular distribution.
@@ -306,11 +303,15 @@ class Statistics(object):
 
 def _test():
     import doctest
-    from pyspark import SparkContext
+    from pyspark.sql import SparkSession
     globs = globals().copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("mllib.stat.statistics tests")\
+        .getOrCreate()
+    globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
         exit(-1)
 

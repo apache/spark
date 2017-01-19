@@ -42,6 +42,7 @@ class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
       .collect()
 
     /* Verify results using the `R` code:
+       library(arules)
        transactions = as(sapply(
          list("r z h k p",
               "z y x w v u t s",
@@ -52,7 +53,7 @@ class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
          FUN=function(x) strsplit(x," ",fixed=TRUE)),
          "transactions")
        ars = apriori(transactions,
-                     parameter = list(support = 0.0, confidence = 0.5, target="rules", minlen=2))
+                     parameter = list(support = 0.5, confidence = 0.9, target="rules", minlen=2))
        arsDF = as(ars, "data.frame")
        arsDF$support = arsDF$support * length(transactions)
        names(arsDF)[names(arsDF) == "support"] = "freq"

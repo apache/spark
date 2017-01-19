@@ -22,7 +22,6 @@
  To run this example use
     `$ bin/spark-submit examples/src/main/python/streaming/queue_stream.py
 """
-import sys
 import time
 
 from pyspark import SparkContext
@@ -36,8 +35,8 @@ if __name__ == "__main__":
     # Create the queue through which RDDs can be pushed to
     # a QueueInputDStream
     rddQueue = []
-    for i in xrange(5):
-        rddQueue += [ssc.sparkContext.parallelize([j for j in xrange(1, 1001)], 10)]
+    for i in range(5):
+        rddQueue += [ssc.sparkContext.parallelize([j for j in range(1, 1001)], 10)]
 
     # Create the QueueInputDStream and use it do some processing
     inputStream = ssc.queueStream(rddQueue)

@@ -24,7 +24,8 @@ along with if you launch Spark's interactive shell -- either `bin/spark-shell` f
 
 <div data-lang="scala"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} uses Scala {{site.SCALA_BINARY_VERSION}}. To write
+Spark {{site.SPARK_VERSION}} is built and distributed to work with Scala {{site.SCALA_BINARY_VERSION}} 
+by default. (Spark can be built to work with other versions of Scala, too.) To write
 applications in Scala, you will need to use a compatible Scala version (e.g. {{site.SCALA_BINARY_VERSION}}.X).
 
 To write a Spark application, you need to add a Maven dependency on Spark. Spark is available through Maven Central at:
@@ -34,8 +35,7 @@ To write a Spark application, you need to add a Maven dependency on Spark. Spark
     version = {{site.SPARK_VERSION}}
 
 In addition, if you wish to access an HDFS cluster, you need to add a dependency on
-`hadoop-client` for your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+`hadoop-client` for your version of HDFS.
 
     groupId = org.apache.hadoop
     artifactId = hadoop-client
@@ -59,6 +59,8 @@ Spark {{site.SPARK_VERSION}} works with Java 7 and higher. If you are using Java
 for concisely writing functions, otherwise you can use the classes in the
 [org.apache.spark.api.java.function](api/java/index.html?org/apache/spark/api/java/function/package-summary.html) package.
 
+Note that support for Java 7 is deprecated as of Spark 2.0.0 and may be removed in Spark 2.2.0.
+
 To write a Spark application in Java, you need to add a dependency on Spark. Spark is available through Maven Central at:
 
     groupId = org.apache.spark
@@ -66,8 +68,7 @@ To write a Spark application in Java, you need to add a dependency on Spark. Spa
     version = {{site.SPARK_VERSION}}
 
 In addition, if you wish to access an HDFS cluster, you need to add a dependency on
-`hadoop-client` for your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+`hadoop-client` for your version of HDFS.
 
     groupId = org.apache.hadoop
     artifactId = hadoop-client
@@ -85,16 +86,17 @@ import org.apache.spark.SparkConf
 
 <div data-lang="python"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} works with Python 2.6 or higher (but not Python 3). It uses the standard CPython interpreter,
-so C libraries like NumPy can be used.
+Spark {{site.SPARK_VERSION}} works with Python 2.6+ or Python 3.4+. It can use the standard CPython interpreter,
+so C libraries like NumPy can be used. It also works with PyPy 2.3+.
+
+Note that support for Python 2.6 is deprecated as of Spark 2.0.0, and may be removed in Spark 2.2.0.
 
 To run Spark applications in Python, use the `bin/spark-submit` script located in the Spark directory.
 This script will load Spark's Java/Scala libraries and allow you to submit applications to a cluster.
 You can also use `bin/pyspark` to launch an interactive Python shell.
 
 If you wish to access HDFS data, you need to use a build of PySpark linking
-to your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+to your version of HDFS.
 [Prebuilt packages](http://spark.apache.org/downloads.html) are also available on the Spark homepage
 for common HDFS versions.
 
@@ -102,6 +104,14 @@ Finally, you need to import some Spark classes into your program. Add the follow
 
 {% highlight python %}
 from pyspark import SparkContext, SparkConf
+{% endhighlight %}
+
+PySpark requires the same minor version of Python in both driver and workers. It uses the default python version in PATH,
+you can specify which version of Python you want to use by `PYSPARK_PYTHON`, for example:
+
+{% highlight bash %}
+$ PYSPARK_PYTHON=python3.4 bin/pyspark
+$ PYSPARK_PYTHON=/opt/pypy-2.5/bin/pypy bin/spark-submit examples/src/main/python/pi.py
 {% endhighlight %}
 
 </div>
@@ -174,9 +184,9 @@ in-process.
 In the Spark shell, a special interpreter-aware SparkContext is already created for you, in the
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
 context connects to using the `--master` argument, and you can add JARs to the classpath
-by passing a comma-separated list to the `--jars` argument. You can also add dependencies 
-(e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates 
-to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. SonaType)
+by passing a comma-separated list to the `--jars` argument. You can also add dependencies
+(e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
+to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. Sonatype)
 can be passed to the `--repositories` argument. For example, to run `bin/spark-shell` on exactly
 four cores, use:
 
@@ -208,9 +218,9 @@ variable called `sc`. Making your own SparkContext will not work. You can set wh
 context connects to using the `--master` argument, and you can add Python .zip, .egg or .py files
 to the runtime path by passing a comma-separated list to `--py-files`. You can also add dependencies
 (e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
-to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. SonaType)
-can be passed to the `--repositories` argument. Any python dependencies a Spark Package has (listed in 
-the requirements.txt of that package) must be manually installed using pip when necessary.
+to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. Sonatype)
+can be passed to the `--repositories` argument. Any Python dependencies a Spark package has (listed in
+the requirements.txt of that package) must be manually installed using `pip` when necessary.
 For example, to run `bin/pyspark` on exactly four cores, use:
 
 {% highlight bash %}
@@ -234,16 +244,17 @@ use IPython, set the `PYSPARK_DRIVER_PYTHON` variable to `ipython` when running 
 $ PYSPARK_DRIVER_PYTHON=ipython ./bin/pyspark
 {% endhighlight %}
 
-You can customize the `ipython` command by setting `PYSPARK_DRIVER_PYTHON_OPTS`. For example, to launch
-the [IPython Notebook](http://ipython.org/notebook.html) with PyLab plot support:
+To use the Jupyter notebook (previously known as the IPython notebook), 
 
 {% highlight bash %}
-$ PYSPARK_DRIVER_PYTHON=ipython PYSPARK_DRIVER_PYTHON_OPTS="notebook" ./bin/pyspark
+$ PYSPARK_DRIVER_PYTHON=jupyter ./bin/pyspark
 {% endhighlight %}
 
-After the IPython Notebook server is launched, you can create a new "Python 2" notebook from 
-the "Files" tab. Inside the notebook, you can input the command `%pylab inline` as part of 
-your notebook before you start to try Spark from the IPython notebook.
+You can customize the `ipython` or `jupyter` commands by setting `PYSPARK_DRIVER_PYTHON_OPTS`. 
+
+After the Jupyter Notebook server is launched, you can create a new "Python 2" notebook from
+the "Files" tab. Inside the notebook, you can input the command `%pylab inline` as part of
+your notebook before you start to try Spark from the Jupyter notebook.
 
 </div>
 
@@ -321,7 +332,7 @@ Text file RDDs can be created using `SparkContext`'s `textFile` method. This met
 
 {% highlight scala %}
 scala> val distFile = sc.textFile("data.txt")
-distFile: RDD[String] = MappedRDD@1d4cee08
+distFile: org.apache.spark.rdd.RDD[String] = data.txt MapPartitionsRDD[10] at textFile at <console>:26
 {% endhighlight %}
 
 Once created, `distFile` can be acted on by dataset operations. For example, we can add up the sizes of all the lines using the `map` and `reduce` operations as follows: `distFile.map(s => s.length).reduce((a, b) => a + b)`.
@@ -332,11 +343,11 @@ Some notes on reading files with Spark:
 
 * All of Spark's file-based input methods, including `textFile`, support running on directories, compressed files, and wildcards as well. For example, you can use `textFile("/my/directory")`, `textFile("/my/directory/*.txt")`, and `textFile("/my/directory/*.gz")`.
 
-* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 64MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
+* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 128MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
 
 Apart from text files, Spark's Scala API also supports several other data formats:
 
-* `SparkContext.wholeTextFiles` lets you read a directory containing multiple small text files, and returns each of them as (filename, content) pairs. This is in contrast with `textFile`, which would return one record per line in each file.
+* `SparkContext.wholeTextFiles` lets you read a directory containing multiple small text files, and returns each of them as (filename, content) pairs. This is in contrast with `textFile`, which would return one record per line in each file. Partitioning is determined by data locality which, in some cases, may result in too few partitions. For those cases, `wholeTextFiles` provides an optional second argument for controlling the minimal number of partitions.
 
 * For [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), use SparkContext's `sequenceFile[K, V]` method where `K` and `V` are the types of key and values in the file. These should be subclasses of Hadoop's [Writable](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/Writable.html) interface, like [IntWritable](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/IntWritable.html) and [Text](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/Text.html). In addition, Spark allows you to specify native types for a few common Writables; for example, `sequenceFile[Int, String]` will automatically read IntWritables and Texts.
 
@@ -364,7 +375,7 @@ Some notes on reading files with Spark:
 
 * All of Spark's file-based input methods, including `textFile`, support running on directories, compressed files, and wildcards as well. For example, you can use `textFile("/my/directory")`, `textFile("/my/directory/*.txt")`, and `textFile("/my/directory/*.gz")`.
 
-* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 64MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
+* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 128MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
 
 Apart from text files, Spark's Java API also supports several other data formats:
 
@@ -396,7 +407,7 @@ Some notes on reading files with Spark:
 
 * All of Spark's file-based input methods, including `textFile`, support running on directories, compressed files, and wildcards as well. For example, you can use `textFile("/my/directory")`, `textFile("/my/directory/*.txt")`, and `textFile("/my/directory/*.gz")`.
 
-* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 64MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
+* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 128MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
 
 Apart from text files, Spark's Python API also supports several other data formats:
 
@@ -410,9 +421,9 @@ Apart from text files, Spark's Python API also supports several other data forma
 
 **Writable Support**
 
-PySpark SequenceFile support loads an RDD of key-value pairs within Java, converts Writables to base Java types, and pickles the 
-resulting Java objects using [Pyrolite](https://github.com/irmen/Pyrolite/). When saving an RDD of key-value pairs to SequenceFile, 
-PySpark does the reverse. It unpickles Python objects into Java objects and then converts them to Writables. The following 
+PySpark SequenceFile support loads an RDD of key-value pairs within Java, converts Writables to base Java types, and pickles the
+resulting Java objects using [Pyrolite](https://github.com/irmen/Pyrolite/). When saving an RDD of key-value pairs to SequenceFile,
+PySpark does the reverse. It unpickles Python objects into Java objects and then converts them to Writables. The following
 Writables are automatically converted:
 
 <table class="table">
@@ -427,9 +438,9 @@ Writables are automatically converted:
 <tr><td>MapWritable</td><td>dict</td></tr>
 </table>
 
-Arrays are not handled out-of-the-box. Users need to specify custom `ArrayWritable` subtypes when reading or writing. When writing, 
-users also need to specify custom converters that convert arrays to custom `ArrayWritable` subtypes. When reading, the default 
-converter will convert custom `ArrayWritable` subtypes to Java `Object[]`, which then get pickled to Python tuples. To get 
+Arrays are not handled out-of-the-box. Users need to specify custom `ArrayWritable` subtypes when reading or writing. When writing,
+users also need to specify custom converters that convert arrays to custom `ArrayWritable` subtypes. When reading, the default
+converter will convert custom `ArrayWritable` subtypes to Java `Object[]`, which then get pickled to Python tuples. To get
 Python `array.array` for arrays of primitive types, users need to specify custom converters.
 
 **Saving and Loading SequenceFiles**
@@ -438,7 +449,7 @@ Similarly to text files, SequenceFiles can be saved and loaded by specifying the
 classes can be specified, but for standard Writables this is not required.
 
 {% highlight python %}
->>> rdd = sc.parallelize(range(1, 4)).map(lambda x: (x, "a" * x ))
+>>> rdd = sc.parallelize(range(1, 4)).map(lambda x: (x, "a" * x))
 >>> rdd.saveAsSequenceFile("path/to/file")
 >>> sorted(sc.sequenceFile("path/to/file").collect())
 [(1, u'a'), (2, u'aa'), (3, u'aaa')]
@@ -446,16 +457,18 @@ classes can be specified, but for standard Writables this is not required.
 
 **Saving and Loading Other Hadoop Input/Output Formats**
 
-PySpark can also read any Hadoop InputFormat or write any Hadoop OutputFormat, for both 'new' and 'old' Hadoop MapReduce APIs. 
+PySpark can also read any Hadoop InputFormat or write any Hadoop OutputFormat, for both 'new' and 'old' Hadoop MapReduce APIs.
 If required, a Hadoop configuration can be passed in as a Python dict. Here is an example using the
 Elasticsearch ESInputFormat:
 
 {% highlight python %}
 $ SPARK_CLASSPATH=/path/to/elasticsearch-hadoop.jar ./bin/pyspark
->>> conf = {"es.resource" : "index/type"}   # assume Elasticsearch is running on localhost defaults
->>> rdd = sc.newAPIHadoopRDD("org.elasticsearch.hadoop.mr.EsInputFormat",\
-    "org.apache.hadoop.io.NullWritable", "org.elasticsearch.hadoop.mr.LinkedMapWritable", conf=conf)
->>> rdd.first()         # the result is a MapWritable that is converted to a Python dict
+>>> conf = {"es.resource" : "index/type"}  # assume Elasticsearch is running on localhost defaults
+>>> rdd = sc.newAPIHadoopRDD("org.elasticsearch.hadoop.mr.EsInputFormat",
+                             "org.apache.hadoop.io.NullWritable",
+                             "org.elasticsearch.hadoop.mr.LinkedMapWritable",
+                             conf=conf)
+>>> rdd.first()  # the result is a MapWritable that is converted to a Python dict
 (u'Elasticsearch ID',
  {u'field1': True,
   u'field2': u'Some Text',
@@ -466,15 +479,15 @@ Note that, if the InputFormat simply depends on a Hadoop configuration and/or in
 the key and value classes can easily be converted according to the above table,
 then this approach should work well for such cases.
 
-If you have custom serialized binary data (such as loading data from Cassandra / HBase), then you will first need to 
+If you have custom serialized binary data (such as loading data from Cassandra / HBase), then you will first need to
 transform that data on the Scala/Java side to something which can be handled by Pyrolite's pickler.
-A [Converter](api/scala/index.html#org.apache.spark.api.python.Converter) trait is provided 
-for this. Simply extend this trait and implement your transformation code in the ```convert``` 
-method. Remember to ensure that this class, along with any dependencies required to access your ```InputFormat```, are packaged into your Spark job jar and included on the PySpark 
+A [Converter](api/scala/index.html#org.apache.spark.api.python.Converter) trait is provided
+for this. Simply extend this trait and implement your transformation code in the ```convert```
+method. Remember to ensure that this class, along with any dependencies required to access your ```InputFormat```, are packaged into your Spark job jar and included on the PySpark
 classpath.
 
-See the [Python examples]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python) and 
-the [Converter examples]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/pythonconverters) 
+See the [Python examples]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python) and
+the [Converter examples]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/pythonconverters)
 for examples of using Cassandra / HBase ```InputFormat``` and ```OutputFormat``` with custom converters.
 
 </div>
@@ -484,7 +497,7 @@ for examples of using Cassandra / HBase ```InputFormat``` and ```OutputFormat```
 
 RDDs support two types of operations: *transformations*, which create a new dataset from an existing one, and *actions*, which return a value to the driver program after running a computation on the dataset. For example, `map` is a transformation that passes each dataset element through a function and returns a new RDD representing the results. On the other hand, `reduce` is an action that aggregates all the elements of the RDD using some function and returns the final result to the driver program (although there is also a parallel `reduceByKey` that returns a distributed dataset).
 
-All transformations in Spark are <i>lazy</i>, in that they do not compute their results right away. Instead, they just remember the transformations applied to some base dataset (e.g. a file). The transformations are only computed when an action requires a result to be returned to the driver program. This design enables Spark to run more efficiently -- for example, we can realize that a dataset created through `map` will be used in a `reduce` and return only the result of the `reduce` to the driver, rather than the larger mapped dataset.
+All transformations in Spark are <i>lazy</i>, in that they do not compute their results right away. Instead, they just remember the transformations applied to some base dataset (e.g. a file). The transformations are only computed when an action requires a result to be returned to the driver program. This design enables Spark to run more efficiently. For example, we can realize that a dataset created through `map` will be used in a `reduce` and return only the result of the `reduce` to the driver, rather than the larger mapped dataset.
 
 By default, each transformed RDD may be recomputed each time you run an action on it. However, you may also *persist* an RDD in memory using the `persist` (or `cache`) method, in which case Spark will keep the elements around on the cluster for much faster access the next time you query it. There is also support for persisting RDDs on disk, or replicated across multiple nodes.
 
@@ -541,7 +554,7 @@ returning only its answer to the driver program.
 If we also wanted to use `lineLengths` again later, we could add:
 
 {% highlight java %}
-lineLengths.persist();
+lineLengths.persist(StorageLevel.MEMORY_ONLY());
 {% endhighlight %}
 
 before the `reduce`, which would cause `lineLengths` to be saved in memory after the first time it is computed.
@@ -611,7 +624,7 @@ class MyClass {
 }
 {% endhighlight %}
 
-Here, if we create a `new MyClass` and call `doStuff` on it, the `map` inside there references the
+Here, if we create a new `MyClass` instance and call `doStuff` on it, the `map` inside there references the
 `func1` method *of that `MyClass` instance*, so the whole object needs to be sent to the cluster. It is
 similar to writing `rdd.map(x => this.func1(x))`.
 
@@ -624,7 +637,7 @@ class MyClass {
 }
 {% endhighlight %}
 
-is equilvalent to writing `rdd.map(x => this.field + x)`, which references all of `this`. To avoid this
+is equivalent to writing `rdd.map(x => this.field + x)`, which references all of `this`. To avoid this
 issue, the simplest way is to copy `field` into a local variable instead of accessing it externally:
 
 {% highlight scala %}
@@ -750,7 +763,7 @@ One of the harder things about Spark is understanding the scope and life cycle o
 
 #### Example
 
-Consider the naive RDD element sum below, which behaves completely differently depending on whether execution is happening within the same JVM. A common example of this is when running Spark in `local` mode (`--master = local[n]`) versus deploying a Spark application to a cluster (e.g. via spark-submit to YARN): 
+Consider the naive RDD element sum below, which may behave differently depending on whether execution is happening within the same JVM. A common example of this is when running Spark in `local` mode (`--master = local[n]`) versus deploying a Spark application to a cluster (e.g. via spark-submit to YARN):
 
 <div class="codetabs">
 
@@ -769,7 +782,7 @@ println("Counter value: " + counter)
 <div data-lang="java"  markdown="1">
 {% highlight java %}
 int counter = 0;
-JavaRDD<Integer> rdd = sc.parallelize(data); 
+JavaRDD<Integer> rdd = sc.parallelize(data);
 
 // Wrong: Don't do this!!
 rdd.foreach(x -> counter += x);
@@ -784,10 +797,12 @@ counter = 0
 rdd = sc.parallelize(data)
 
 # Wrong: Don't do this!!
-rdd.foreach(lambda x: counter += x)
+def increment_counter(x):
+    global counter
+    counter += x
+rdd.foreach(increment_counter)
 
-print("Counter value: " + counter)
-
+print("Counter value: ", counter)
 {% endhighlight %}
 </div>
 
@@ -795,19 +810,19 @@ print("Counter value: " + counter)
 
 #### Local vs. cluster modes
 
-The primary challenge is that the behavior of the above code is undefined. In local mode with a single JVM, the above code will sum the values within the RDD and store it in **counter**. This is because both the RDD and the variable **counter** are in the same memory space on the driver node. 
+The behavior of the above code is undefined, and may not work as intended. To execute jobs, Spark breaks up the processing of RDD operations into tasks, each of which is executed by an executor. Prior to execution, Spark computes the task's **closure**. The closure is those variables and methods which must be visible for the executor to perform its computations on the RDD (in this case `foreach()`). This closure is serialized and sent to each executor.
 
-However, in `cluster` mode, what happens is more complicated, and the above may not work as intended. To execute jobs, Spark breaks up the processing of RDD operations into tasks - each of which is operated on by an executor. Prior to execution, Spark computes the **closure**. The closure is those variables and methods which must be visible for the executor to perform its computations on the RDD (in this case `foreach()`). This closure is serialized and sent to each executor. In `local` mode, there is only the one executors so everything shares the same closure. In other modes however, this is not the case and the executors running on seperate worker nodes each have their own copy of the closure.
+The variables within the closure sent to each executor are now copies and thus, when **counter** is referenced within the `foreach` function, it's no longer the **counter** on the driver node. There is still a **counter** in the memory of the driver node but this is no longer visible to the executors! The executors only see the copy from the serialized closure. Thus, the final value of **counter** will still be zero since all operations on **counter** were referencing the value within the serialized closure.
 
-What is happening here is that the variables within the closure sent to each executor are now copies and thus, when **counter** is referenced within the `foreach` function, it's no longer the **counter** on the driver node. There is still a **counter** in the memory of the driver node but this is no longer visible to the executors! The executors only sees the copy from the serialized closure. Thus, the final value of **counter** will still be zero since all operations on **counter** were referencing the value within the serialized closure.  
+In local mode, in some circumstances the `foreach` function will actually execute within the same JVM as the driver and will reference the same original **counter**, and may actually update it.
 
-To ensure well-defined behavior in these sorts of scenarios one should use an [`Accumulator`](#AccumLink). Accumulators in Spark are used specifically to provide a mechanism for safely updating a variable when execution is split up across worker nodes in a cluster. The Accumulators section of this guide discusses these in more detail.  
+To ensure well-defined behavior in these sorts of scenarios one should use an [`Accumulator`](#accumulators). Accumulators in Spark are used specifically to provide a mechanism for safely updating a variable when execution is split up across worker nodes in a cluster. The Accumulators section of this guide discusses these in more detail.  
 
 In general, closures - constructs like loops or locally defined methods, should not be used to mutate some global state. Spark does not define or guarantee the behavior of mutations to objects referenced from outside of closures. Some code that does this may work in local mode, but that's just by accident and such code will not behave as expected in distributed mode. Use an Accumulator instead if some global aggregation is needed.
 
-#### Printing elements of an RDD 
+#### Printing elements of an RDD
 Another common idiom is attempting to print out the elements of an RDD using `rdd.foreach(println)` or `rdd.map(println)`. On a single machine, this will generate the expected output and print all the RDD's elements. However, in `cluster` mode, the output to `stdout` being called by the executors is now writing to the executor's `stdout` instead, not the one on the driver, so `stdout` on the driver won't show these! To print all elements on the driver, one can use the `collect()` method to first bring the RDD to the driver node thus: `rdd.collect().foreach(println)`. This can cause the driver to run out of memory, though, because `collect()` fetches the entire RDD to a single machine; if you only need to print a few elements of the RDD, a safer approach is to use the `take()`: `rdd.take(100).foreach(println)`.
- 
+
 ### Working with Key-Value Pairs
 
 <div class="codetabs">
@@ -851,7 +866,7 @@ only available on RDDs of key-value pairs.
 The most common ones are distributed "shuffle" operations, such as grouping or aggregating the elements
 by a key.
 
-In Java, key-value pairs are represented using the 
+In Java, key-value pairs are represented using the
 [scala.Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) class
 from the Scala standard library. You can simply call `new Tuple2(a, b)` to create a tuple, and access
 its fields later with `tuple._1()` and `tuple._2()`.
@@ -966,7 +981,7 @@ for details.
   <td> <b>groupByKey</b>([<i>numTasks</i>]) <a name="GroupByLink"></a> </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Iterable&lt;V&gt;) pairs. <br />
     <b>Note:</b> If you are grouping in order to perform an aggregation (such as a sum or
-      average) over each key, using <code>reduceByKey</code> or <code>aggregateByKey</code> will yield much better 
+      average) over each key, using <code>reduceByKey</code> or <code>aggregateByKey</code> will yield much better
       performance.
     <br />
     <b>Note:</b> By default, the level of parallelism in the output depends on the number of partitions of the parent RDD.
@@ -1017,7 +1032,7 @@ for details.
 <tr>
   <td> <b>repartitionAndSortWithinPartitions</b>(<i>partitioner</i>) <a name="Repartition2Link"></a></td>
   <td> Repartition the RDD according to the given partitioner and, within each resulting partition,
-  sort records by their keys. This is more efficient than calling <code>repartition</code> and then sorting within 
+  sort records by their keys. This is more efficient than calling <code>repartition</code> and then sorting within
   each partition because it can push the sorting down into the shuffle machinery. </td>
 </tr>
 </table>
@@ -1030,7 +1045,7 @@ RDD API doc
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
  [Python](api/python/pyspark.html#pyspark.RDD),
  [R](api/R/index.html))
- 
+
 and pair RDD functions doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
@@ -1086,10 +1101,13 @@ for details.
 </tr>
 <tr>
   <td> <b>foreach</b>(<i>func</i>) </td>
-  <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an <a href="#AccumLink">Accumulator</a> or interacting with external storage systems. 
-  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#ClosuresLink">Understanding closures </a> for more details.</td>
+  <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an <a href="#accumulators">Accumulator</a> or interacting with external storage systems.
+  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#understanding-closures-a-nameclosureslinka">Understanding closures </a> for more details.</td>
 </tr>
 </table>
+
+The Spark RDD API also exposes asynchronous versions of some actions, like `foreachAsync` for `foreach`, which immediately return a `FutureAction` to the caller instead of blocking on completion of the action. This can be used to manage or wait for the asynchronous execution of the action.
+
 
 ### Shuffle operations
 
@@ -1110,13 +1128,13 @@ co-located to compute the result.
 In Spark, data is generally not distributed across partitions to be in the necessary place for a
 specific operation. During computations, a single task will operate on a single partition - thus, to
 organize all the data for a single `reduceByKey` reduce task to execute, Spark needs to perform an
-all-to-all operation. It must read from all partitions to find all the values for all keys, 
-and then bring together values across partitions to compute the final result for each key - 
+all-to-all operation. It must read from all partitions to find all the values for all keys,
+and then bring together values across partitions to compute the final result for each key -
 this is called the **shuffle**.
 
 Although the set of elements in each partition of newly shuffled data will be deterministic, and so
-is the ordering of partitions themselves, the ordering of these elements is not. If one desires predictably 
-ordered data following shuffle then it's possible to use: 
+is the ordering of partitions themselves, the ordering of these elements is not. If one desires predictably
+ordered data following shuffle then it's possible to use:
 
 * `mapPartitions` to sort each partition using, for example, `.sorted`
 * `repartitionAndSortWithinPartitions` to efficiently sort partitions while simultaneously repartitioning
@@ -1133,26 +1151,26 @@ network I/O. To organize data for the shuffle, Spark generates sets of tasks - *
 organize the data, and a set of *reduce* tasks to aggregate it. This nomenclature comes from
 MapReduce and does not directly relate to Spark's `map` and `reduce` operations.
 
-Internally, results from individual map tasks are kept in memory until they can't fit. Then, these 
-are sorted based on the target partition and written to a single file. On the reduce side, tasks 
+Internally, results from individual map tasks are kept in memory until they can't fit. Then, these
+are sorted based on the target partition and written to a single file. On the reduce side, tasks
 read the relevant sorted blocks.
-        
-Certain shuffle operations can consume significant amounts of heap memory since they employ 
-in-memory data structures to organize records before or after transferring them. Specifically, 
-`reduceByKey` and `aggregateByKey` create these structures on the map side, and `'ByKey` operations 
-generate these on the reduce side. When data does not fit in memory Spark will spill these tables 
+
+Certain shuffle operations can consume significant amounts of heap memory since they employ
+in-memory data structures to organize records before or after transferring them. Specifically,
+`reduceByKey` and `aggregateByKey` create these structures on the map side, and `'ByKey` operations
+generate these on the reduce side. When data does not fit in memory Spark will spill these tables
 to disk, incurring the additional overhead of disk I/O and increased garbage collection.
 
 Shuffle also generates a large number of intermediate files on disk. As of Spark 1.3, these files
-are preserved until the corresponding RDDs are no longer used and are garbage collected. 
-This is done so the shuffle files don't need to be re-created if the lineage is re-computed. 
-Garbage collection may happen only after a long period time, if the application retains references 
-to these RDDs or if GC does not kick in frequently. This means that long-running Spark jobs may 
+are preserved until the corresponding RDDs are no longer used and are garbage collected.
+This is done so the shuffle files don't need to be re-created if the lineage is re-computed.
+Garbage collection may happen only after a long period of time, if the application retains references
+to these RDDs or if GC does not kick in frequently. This means that long-running Spark jobs may
 consume a large amount of disk space. The temporary storage directory is specified by the
 `spark.local.dir` configuration parameter when configuring the Spark context.
 
 Shuffle behavior can be tuned by adjusting a variety of configuration parameters. See the
-'Shuffle Behavior' section within the [Spark Configuration Guide](configuration.html). 
+'Shuffle Behavior' section within the [Spark Configuration Guide](configuration.html).
 
 ## RDD Persistence
 
@@ -1169,7 +1187,7 @@ that originally created it.
 
 In addition, each persisted RDD can be stored using a different *storage level*, allowing you, for example,
 to persist the dataset on disk, persist it in memory but as serialized Java objects (to save space),
-replicate it across nodes, or store it off-heap in [Tachyon](http://tachyon-project.org/).
+replicate it across nodes.
 These levels are set by passing a
 `StorageLevel` object ([Scala](api/scala/index.html#org.apache.spark.storage.StorageLevel),
 [Java](api/java/index.html?org/apache/spark/storage/StorageLevel.html),
@@ -1191,14 +1209,14 @@ storage levels is:
     partitions that don't fit on disk, and read them from there when they're needed. </td>
 </tr>
 <tr>
-  <td> MEMORY_ONLY_SER </td>
+  <td> MEMORY_ONLY_SER <br /> (Java and Scala) </td>
   <td> Store RDD as <i>serialized</i> Java objects (one byte array per partition).
     This is generally more space-efficient than deserialized objects, especially when using a
     <a href="tuning.html">fast serializer</a>, but more CPU-intensive to read.
   </td>
 </tr>
 <tr>
-  <td> MEMORY_AND_DISK_SER </td>
+  <td> MEMORY_AND_DISK_SER <br /> (Java and Scala) </td>
   <td> Similar to MEMORY_ONLY_SER, but spill partitions that don't fit in memory to disk instead of
     recomputing them on the fly each time they're needed. </td>
 </tr>
@@ -1212,20 +1230,14 @@ storage levels is:
 </tr>
 <tr>
   <td> OFF_HEAP (experimental) </td>
-  <td> Store RDD in serialized format in <a href="http://tachyon-project.org">Tachyon</a>.
-    Compared to MEMORY_ONLY_SER, OFF_HEAP reduces garbage collection overhead and allows executors
-    to be smaller and to share a pool of memory, making it attractive in environments with
-    large heaps or multiple concurrent applications. Furthermore, as the RDDs reside in Tachyon,
-    the crash of an executor does not lead to losing the in-memory cache. In this mode, the memory
-    in Tachyon is discardable. Thus, Tachyon does not attempt to reconstruct a block that it evicts
-    from memory. If you plan to use Tachyon as the off heap store, Spark is compatible with Tachyon
-    out-of-the-box. Please refer to this <a href="http://tachyon-project.org/master/Running-Spark-on-Tachyon.html">page</a>
-    for the suggested version pairings.
-  </td>
+  <td> Similar to MEMORY_ONLY_SER, but store the data in
+    <a href="configuration.html#memory-management">off-heap memory</a>. This requires off-heap memory to be enabled. </td>
 </tr>
 </table>
 
-**Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/2/library/pickle.html) library, so it does not matter whether you choose a serialized level.*
+**Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/2/library/pickle.html) library, 
+so it does not matter whether you choose a serialized level. The available storage levels in Python include `MEMORY_ONLY`, `MEMORY_ONLY_2`, 
+`MEMORY_AND_DISK`, `MEMORY_AND_DISK_2`, `DISK_ONLY`, and `DISK_ONLY_2`.*
 
 Spark also automatically persists some intermediate data in shuffle operations (e.g. `reduceByKey`), even without users calling `persist`. This is done to avoid recomputing the entire input if a node fails during the shuffle. We still recommend users call `persist` on the resulting RDD if they plan to reuse it.
 
@@ -1238,7 +1250,7 @@ efficiency. We recommend going through the following process to select one:
   This is the most CPU-efficient option, allowing operations on the RDDs to run as fast as possible.
 
 * If not, try using `MEMORY_ONLY_SER` and [selecting a fast serialization library](tuning.html) to
-make the objects much more space-efficient, but still reasonably fast to access. 
+make the objects much more space-efficient, but still reasonably fast to access. (Java and Scala)
 
 * Don't spill to disk unless the functions that computed your datasets are expensive, or they filter
 a large amount of the data. Otherwise, recomputing a partition may be as fast as reading it from
@@ -1249,11 +1261,6 @@ requests from a web application). *All* the storage levels provide full fault to
 recomputing lost data, but the replicated ones let you continue running tasks on the RDD without
 waiting to recompute a lost partition.
 
-* In environments with high amounts of memory or multiple applications, the experimental `OFF_HEAP`
-mode has several advantages:
-   * It allows multiple executors to share the same pool of memory in Tachyon.
-   * It significantly reduces garbage collection costs.
-   * Cached data is not lost if individual executors crash.
 
 ### Removing Data
 
@@ -1331,69 +1338,89 @@ run on the cluster so that `v` is not shipped to the nodes more than once. In ad
 `v` should not be modified after it is broadcast in order to ensure that all nodes get the same
 value of the broadcast variable (e.g. if the variable is shipped to a new node later).
 
-## Accumulators <a name="AccumLink"></a>
+## Accumulators
 
-Accumulators are variables that are only "added" to through an associative operation and can
+Accumulators are variables that are only "added" to through an associative and commutative operation and can
 therefore be efficiently supported in parallel. They can be used to implement counters (as in
 MapReduce) or sums. Spark natively supports accumulators of numeric types, and programmers
-can add support for new types. If accumulators are created with a name, they will be
-displayed in Spark's UI. This can be useful for understanding the progress of 
+can add support for new types.
+
+As a user, you can create named or unnamed accumulators. As seen in the image below, a named accumulator (in this instance `counter`) will display in the web UI for the stage that modifies that accumulator. Spark displays the value for each accumulator modified by a task in the "Tasks" table.
+
+<p style="text-align: center;">
+  <img src="img/spark-webui-accumulators.png" title="Accumulators in the Spark UI" alt="Accumulators in the Spark UI" />
+</p>
+
+Tracking accumulators in the UI can be useful for understanding the progress of 
 running stages (NOTE: this is not yet supported in Python).
-
-An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks
-running on the cluster can then add to it using the `add` method or the `+=` operator (in Scala and Python).
-However, they cannot read its value.
-Only the driver program can read the accumulator's value, using its `value` method.
-
-The code below shows an accumulator being used to add up the elements of an array:
 
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
 
-{% highlight scala %}
-scala> val accum = sc.accumulator(0, "My Accumulator")
-accum: spark.Accumulator[Int] = 0
+A numeric accumulator can be created by calling `SparkContext.longAccumulator()` or `SparkContext.doubleAccumulator()`
+to accumulate values of type Long or Double, respectively. Tasks running on a cluster can then add to it using
+the `add` method.  However, they cannot read its value. Only the driver program can read the accumulator's value, 
+using its `value` method.
 
-scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum += x)
+The code below shows an accumulator being used to add up the elements of an array:
+
+{% highlight scala %}
+scala> val accum = sc.longAccumulator("My Accumulator")
+accum: org.apache.spark.util.LongAccumulator = LongAccumulator(id: 0, name: Some(My Accumulator), value: 0)
+
+scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum.add(x))
 ...
 10/09/29 18:41:08 INFO SparkContext: Tasks finished in 0.317106 s
 
 scala> accum.value
-res2: Int = 10
+res2: Long = 10
 {% endhighlight %}
 
-While this code used the built-in support for accumulators of type Int, programmers can also
-create their own types by subclassing [AccumulatorParam](api/scala/index.html#org.apache.spark.AccumulatorParam).
-The AccumulatorParam interface has two methods: `zero` for providing a "zero value" for your data
-type, and `addInPlace` for adding two values together. For example, supposing we had a `Vector` class
+While this code used the built-in support for accumulators of type Long, programmers can also
+create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.util.AccumulatorV2).
+The AccumulatorV2 abstract class has several methods which one has to override: `reset` for resetting
+the accumulator to zero, `add` for adding another value into the accumulator,
+`merge` for merging another same-type accumulator into this one. Other methods that must be overridden
+are contained in the [API documentation](api/scala/index.html#org.apache.spark.util.AccumulatorV2). For example, supposing we had a `MyVector` class
 representing mathematical vectors, we could write:
 
 {% highlight scala %}
-object VectorAccumulatorParam extends AccumulatorParam[Vector] {
-  def zero(initialValue: Vector): Vector = {
-    Vector.zeros(initialValue.size)
+class VectorAccumulatorV2 extends AccumulatorV2[MyVector, MyVector] {
+
+  private val myVector: MyVector = MyVector.createZeroVector
+
+  def reset(): Unit = {
+    myVector.reset()
   }
-  def addInPlace(v1: Vector, v2: Vector): Vector = {
-    v1 += v2
+
+  def add(v: MyVector): Unit = {
+    myVector.add(v)
   }
+  ...
 }
 
 // Then, create an Accumulator of this type:
-val vecAccum = sc.accumulator(new Vector(...))(VectorAccumulatorParam)
+val myVectorAcc = new VectorAccumulatorV2
+// Then, register it into spark context:
+sc.register(myVectorAcc, "MyVectorAcc1")
 {% endhighlight %}
 
-In Scala, Spark also supports the more general [Accumulable](api/scala/index.html#org.apache.spark.Accumulable)
-interface to accumulate data where the resulting type is not the same as the elements added (e.g. build
-a list by collecting together elements), and the `SparkContext.accumulableCollection` method for accumulating
-common Scala collection types.
+Note that, when programmers define their own type of AccumulatorV2, the resulting type can be different than that of the elements added.
 
 </div>
 
 <div data-lang="java"  markdown="1">
 
+A numeric accumulator can be created by calling `SparkContext.longAccumulator()` or `SparkContext.doubleAccumulator()`
+to accumulate values of type Long or Double, respectively. Tasks running on a cluster can then add to it using
+the `add` method.  However, they cannot read its value. Only the driver program can read the accumulator's value, 
+using its `value` method.
+
+The code below shows an accumulator being used to add up the elements of an array:
+
 {% highlight java %}
-Accumulator<Integer> accum = sc.accumulator(0);
+LongAccumulator accum = jsc.sc().longAccumulator();
 
 sc.parallelize(Arrays.asList(1, 2, 3, 4)).foreach(x -> accum.add(x));
 // ...
@@ -1403,43 +1430,57 @@ accum.value();
 // returns 10
 {% endhighlight %}
 
-While this code used the built-in support for accumulators of type Integer, programmers can also
-create their own types by subclassing [AccumulatorParam](api/java/index.html?org/apache/spark/AccumulatorParam.html).
-The AccumulatorParam interface has two methods: `zero` for providing a "zero value" for your data
-type, and `addInPlace` for adding two values together. For example, supposing we had a `Vector` class
+While this code used the built-in support for accumulators of type Long, programmers can also
+create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.util.AccumulatorV2).
+The AccumulatorV2 abstract class has several methods which one has to override: `reset` for resetting
+the accumulator to zero, `add` for adding another value into the accumulator,
+`merge` for merging another same-type accumulator into this one. Other methods that must be overridden
+are contained in the [API documentation](api/scala/index.html#org.apache.spark.util.AccumulatorV2). For example, supposing we had a `MyVector` class
 representing mathematical vectors, we could write:
 
 {% highlight java %}
-class VectorAccumulatorParam implements AccumulatorParam<Vector> {
-  public Vector zero(Vector initialValue) {
-    return Vector.zeros(initialValue.size());
+class VectorAccumulatorV2 implements AccumulatorV2<MyVector, MyVector> {
+
+  private MyVector myVector = MyVector.createZeroVector();
+
+  public void reset() {
+    myVector.reset();
   }
-  public Vector addInPlace(Vector v1, Vector v2) {
-    v1.addInPlace(v2); return v1;
+
+  public void add(MyVector v) {
+    myVector.add(v);
   }
+  ...
 }
 
 // Then, create an Accumulator of this type:
-Accumulator<Vector> vecAccum = sc.accumulator(new Vector(...), new VectorAccumulatorParam());
+VectorAccumulatorV2 myVectorAcc = new VectorAccumulatorV2();
+// Then, register it into spark context:
+jsc.sc().register(myVectorAcc, "MyVectorAcc1");
 {% endhighlight %}
 
-In Java, Spark also supports the more general [Accumulable](api/java/index.html?org/apache/spark/Accumulable.html)
-interface to accumulate data where the resulting type is not the same as the elements added (e.g. build
-a list by collecting together elements).
+Note that, when programmers define their own type of AccumulatorV2, the resulting type can be different than that of the elements added.
 
 </div>
 
 <div data-lang="python"  markdown="1">
 
+An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks
+running on a cluster can then add to it using the `add` method or the `+=` operator. However, they cannot read its value.
+Only the driver program can read the accumulator's value, using its `value` method.
+
+The code below shows an accumulator being used to add up the elements of an array:
+
 {% highlight python %}
 >>> accum = sc.accumulator(0)
+>>> accum
 Accumulator<id=0, value=0>
 
 >>> sc.parallelize([1, 2, 3, 4]).foreach(lambda x: accum.add(x))
 ...
 10/09/29 18:41:08 INFO SparkContext: Tasks finished in 0.317106 s
 
-scala> accum.value
+>>> accum.value
 10
 {% endhighlight %}
 
@@ -1466,25 +1507,25 @@ vecAccum = sc.accumulator(Vector(...), VectorAccumulatorParam())
 
 </div>
 
-For accumulator updates performed inside <b>actions only</b>, Spark guarantees that each task's update to the accumulator 
-will only be applied once, i.e. restarted tasks will not update the value. In transformations, users should be aware 
+For accumulator updates performed inside <b>actions only</b>, Spark guarantees that each task's update to the accumulator
+will only be applied once, i.e. restarted tasks will not update the value. In transformations, users should be aware
 of that each task's update may be applied more than once if tasks or job stages are re-executed.
 
 Accumulators do not change the lazy evaluation model of Spark. If they are being updated within an operation on an RDD, their value is only updated once that RDD is computed as part of an action. Consequently, accumulator updates are not guaranteed to be executed when made within a lazy transformation like `map()`. The below code fragment demonstrates this property:
 
 <div class="codetabs">
 
-<div data-lang="scala"  markdown="1">
+<div data-lang="scala" markdown="1">
 {% highlight scala %}
-val accum = sc.accumulator(0)
-data.map { x => accum += x; f(x) }
-// Here, accum is still 0 because no actions have caused the `map` to be computed.
+val accum = sc.longAccumulator
+data.map { x => accum.add(x); x }
+// Here, accum is still 0 because no actions have caused the map operation to be computed.
 {% endhighlight %}
 </div>
 
 <div data-lang="java"  markdown="1">
 {% highlight java %}
-Accumulator<Integer> accum = sc.accumulator(0);
+LongAccumulator accum = jsc.sc().longAccumulator();
 data.map(x -> { accum.add(x); return f(x); });
 // Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
@@ -1494,8 +1535,8 @@ data.map(x -> { accum.add(x); return f(x); });
 {% highlight python %}
 accum = sc.accumulator(0)
 def g(x):
-  accum.add(x)
-  return f(x)
+    accum.add(x)
+    return f(x)
 data.map(g)
 # Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
@@ -1521,49 +1562,6 @@ Simply create a `SparkContext` in your test with the master URL set to `local`, 
 and then call `SparkContext.stop()` to tear it down.
 Make sure you stop the context within a `finally` block or the test framework's `tearDown` method,
 as Spark does not support two contexts running concurrently in the same program.
-
-# Migrating from pre-1.0 Versions of Spark
-
-<div class="codetabs">
-
-<div data-lang="scala"  markdown="1">
-
-Spark 1.0 freezes the API of Spark Core for the 1.X series, in that any API available today that is
-not marked "experimental" or "developer API" will be supported in future versions.
-The only change for Scala users is that the grouping operations, e.g. `groupByKey`, `cogroup` and `join`,
-have changed from returning `(Key, Seq[Value])` pairs to `(Key, Iterable[Value])`.
-
-</div>
-
-<div data-lang="java"  markdown="1">
-
-Spark 1.0 freezes the API of Spark Core for the 1.X series, in that any API available today that is
-not marked "experimental" or "developer API" will be supported in future versions.
-Several changes were made to the Java API:
-
-* The Function classes in `org.apache.spark.api.java.function` became interfaces in 1.0, meaning that old
-  code that `extends Function` should `implement Function` instead.
-* New variants of the `map` transformations, like `mapToPair` and `mapToDouble`, were added to create RDDs
-  of special data types.
-* Grouping operations like `groupByKey`, `cogroup` and `join` have changed from returning 
-  `(Key, List<Value>)` pairs to `(Key, Iterable<Value>)`.
-
-</div>
-
-<div data-lang="python"  markdown="1">
-
-Spark 1.0 freezes the API of Spark Core for the 1.X series, in that any API available today that is
-not marked "experimental" or "developer API" will be supported in future versions.
-The only change for Python users is that the grouping operations, e.g. `groupByKey`, `cogroup` and `join`,
-have changed from returning (key, list of values) pairs to (key, iterable of values).
-
-</div>
-
-</div>
-
-Migration guides are also available for [Spark Streaming](streaming-programming-guide.html#migration-guide-from-091-or-below-to-1x),
-[MLlib](mllib-guide.html#migration-guide) and [GraphX](graphx-programming-guide.html#migrating-from-spark-091).
-
 
 # Where to Go from Here
 

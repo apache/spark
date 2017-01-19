@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql
 
+import org.scalatest.{FunSpec, Matchers}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
-import org.scalatest.{Matchers, FunSpec}
 
 class RowTest extends FunSpec with Matchers {
 
@@ -29,8 +30,10 @@ class RowTest extends FunSpec with Matchers {
     StructField("col2", StringType) ::
     StructField("col3", IntegerType) :: Nil)
   val values = Array("value1", "value2", 1)
+  val valuesWithoutCol3 = Array[Any](null, "value2", null)
 
   val sampleRow: Row = new GenericRowWithSchema(values, schema)
+  val sampleRowWithoutCol3: Row = new GenericRowWithSchema(valuesWithoutCol3, schema)
   val noSchemaRow: Row = new GenericRow(values)
 
   describe("Row (without schema)") {
@@ -68,6 +71,24 @@ class RowTest extends FunSpec with Matchers {
       )
       sampleRow.getValuesMap(List("col1", "col2")) shouldBe expected
     }
+
+    it("getValuesMap() retrieves null value on non AnyVal Type") {
+      val expected = Map(
+        "col1" -> null,
+        "col2" -> "value2"
+      )
+      sampleRowWithoutCol3.getValuesMap[String](List("col1", "col2")) shouldBe expected
+    }
+
+    it("getAs() on type extending AnyVal throws an exception when accessing field that is null") {
+      intercept[NullPointerException] {
+        sampleRowWithoutCol3.getInt(sampleRowWithoutCol3.fieldIndex("col3"))
+      }
+    }
+
+    it("getAs() on type extending AnyVal does not throw exception when value is null") {
+      sampleRowWithoutCol3.getAs[String](sampleRowWithoutCol3.fieldIndex("col1")) shouldBe null
+    }
   }
 
   describe("row equals") {
@@ -82,6 +103,36 @@ class RowTest extends FunSpec with Matchers {
 
     it("equality check for internal rows") {
       internalRow shouldEqual internalRow2
+    }
+  }
+
+  describe("row immutability") {
+    val values = Seq(1, 2, "3", "IV", 6L)
+    val externalRow = Row.fromSeq(values)
+    val internalRow = InternalRow.fromSeq(values)
+
+    def modifyValues(values: Seq[Any]): Seq[Any] = {
+      val array = values.toArray
+      array(2) = "42"
+      array
+    }
+
+    it("copy should return same ref for external rows") {
+      externalRow should be theSameInstanceAs externalRow.copy()
+    }
+
+    it("copy should return same ref for internal rows") {
+      internalRow should be theSameInstanceAs internalRow.copy()
+    }
+
+    it("toSeq should not expose internal state for external rows") {
+      val modifiedValues = modifyValues(externalRow.toSeq)
+      externalRow.toSeq should not equal modifiedValues
+    }
+
+    it("toSeq should not expose internal state for internal rows") {
+      val modifiedValues = modifyValues(internalRow.toSeq(Seq.empty))
+      internalRow.toSeq(Seq.empty) should not equal modifiedValues
     }
   }
 }

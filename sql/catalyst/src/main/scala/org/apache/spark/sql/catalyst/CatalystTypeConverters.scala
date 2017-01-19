@@ -19,16 +19,16 @@ package org.apache.spark.sql.catalyst
 
 import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
+import java.math.{BigInteger => JavaBigInteger}
 import java.sql.{Date, Timestamp}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
-import scala.collection.mutable.HashMap
 import scala.language.existentials
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -53,13 +53,6 @@ object CatalystTypeConverters {
     }
   }
 
-  private def isWholePrimitive(dt: DataType): Boolean = dt match {
-    case dt if isPrimitive(dt) => true
-    case ArrayType(elementType, _) => isWholePrimitive(elementType)
-    case MapType(keyType, valueType, _) => isWholePrimitive(keyType) && isWholePrimitive(valueType)
-    case _ => false
-  }
-
   private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
     val converter = dataType match {
       case udt: UserDefinedType[_] => UDTConverter(udt)
@@ -69,7 +62,7 @@ object CatalystTypeConverters {
       case StringType => StringConverter
       case DateType => DateConverter
       case TimestampType => TimestampConverter
-      case dt: DecimalType => BigDecimalConverter
+      case dt: DecimalType => new DecimalConverter(dt)
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
       case ShortType => ShortConverter
@@ -144,92 +137,95 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: InternalRow, column: Int): Any = row.get(column, dataType)
   }
 
-  private case class UDTConverter(
-      udt: UserDefinedType[_]) extends CatalystTypeConverter[Any, Any, Any] {
-    override def toCatalystImpl(scalaValue: Any): Any = udt.serialize(scalaValue)
-    override def toScala(catalystValue: Any): Any = udt.deserialize(catalystValue)
-    override def toScalaImpl(row: InternalRow, column: Int): Any =
+  private case class UDTConverter[A >: Null](
+      udt: UserDefinedType[A]) extends CatalystTypeConverter[A, A, Any] {
+    // toCatalyst (it calls toCatalystImpl) will do null check.
+    override def toCatalystImpl(scalaValue: A): Any = udt.serialize(scalaValue)
+
+    override def toScala(catalystValue: Any): A = {
+      if (catalystValue == null) null else udt.deserialize(catalystValue)
+    }
+
+    override def toScalaImpl(row: InternalRow, column: Int): A =
       toScala(row.get(column, udt.sqlType))
   }
 
   /** Converter for arrays, sequences, and Java iterables. */
   private case class ArrayConverter(
-      elementType: DataType) extends CatalystTypeConverter[Any, Seq[Any], Seq[Any]] {
+      elementType: DataType) extends CatalystTypeConverter[Any, Seq[Any], ArrayData] {
 
     private[this] val elementConverter = getConverterForType(elementType)
 
-    private[this] val isNoChange = isWholePrimitive(elementType)
-
-    override def toCatalystImpl(scalaValue: Any): Seq[Any] = {
+    override def toCatalystImpl(scalaValue: Any): ArrayData = {
       scalaValue match {
-        case a: Array[_] => a.toSeq.map(elementConverter.toCatalyst)
-        case s: Seq[_] => s.map(elementConverter.toCatalyst)
+        case a: Array[_] =>
+          new GenericArrayData(a.map(elementConverter.toCatalyst))
+        case s: Seq[_] =>
+          new GenericArrayData(s.map(elementConverter.toCatalyst).toArray)
         case i: JavaIterable[_] =>
           val iter = i.iterator
-          var convertedIterable: List[Any] = List()
+          val convertedIterable = scala.collection.mutable.ArrayBuffer.empty[Any]
           while (iter.hasNext) {
             val item = iter.next()
-            convertedIterable :+= elementConverter.toCatalyst(item)
+            convertedIterable += elementConverter.toCatalyst(item)
           }
-          convertedIterable
+          new GenericArrayData(convertedIterable.toArray)
       }
     }
 
-    override def toScala(catalystValue: Seq[Any]): Seq[Any] = {
+    override def toScala(catalystValue: ArrayData): Seq[Any] = {
       if (catalystValue == null) {
         null
-      } else if (isNoChange) {
-        catalystValue
+      } else if (isPrimitive(elementType)) {
+        catalystValue.toArray[Any](elementType)
       } else {
-        catalystValue.map(elementConverter.toScala)
+        val result = new Array[Any](catalystValue.numElements())
+        catalystValue.foreach(elementType, (i, e) => {
+          result(i) = elementConverter.toScala(e)
+        })
+        result
       }
     }
 
     override def toScalaImpl(row: InternalRow, column: Int): Seq[Any] =
-      toScala(row.get(column, ArrayType(elementType)).asInstanceOf[Seq[Any]])
+      toScala(row.getArray(column))
   }
 
   private case class MapConverter(
       keyType: DataType,
       valueType: DataType)
-    extends CatalystTypeConverter[Any, Map[Any, Any], Map[Any, Any]] {
+    extends CatalystTypeConverter[Any, Map[Any, Any], MapData] {
 
     private[this] val keyConverter = getConverterForType(keyType)
     private[this] val valueConverter = getConverterForType(valueType)
 
-    private[this] val isNoChange = isWholePrimitive(keyType) && isWholePrimitive(valueType)
+    override def toCatalystImpl(scalaValue: Any): MapData = {
+      val keyFunction = (k: Any) => keyConverter.toCatalyst(k)
+      val valueFunction = (k: Any) => valueConverter.toCatalyst(k)
 
-    override def toCatalystImpl(scalaValue: Any): Map[Any, Any] = scalaValue match {
-      case m: Map[_, _] =>
-        m.map { case (k, v) =>
-          keyConverter.toCatalyst(k) -> valueConverter.toCatalyst(v)
-        }
-
-      case jmap: JavaMap[_, _] =>
-        val iter = jmap.entrySet.iterator
-        val convertedMap: HashMap[Any, Any] = HashMap()
-        while (iter.hasNext) {
-          val entry = iter.next()
-          val key = keyConverter.toCatalyst(entry.getKey)
-          convertedMap(key) = valueConverter.toCatalyst(entry.getValue)
-        }
-        convertedMap
+      scalaValue match {
+        case map: Map[_, _] => ArrayBasedMapData(map, keyFunction, valueFunction)
+        case javaMap: JavaMap[_, _] => ArrayBasedMapData(javaMap, keyFunction, valueFunction)
+      }
     }
 
-    override def toScala(catalystValue: Map[Any, Any]): Map[Any, Any] = {
+    override def toScala(catalystValue: MapData): Map[Any, Any] = {
       if (catalystValue == null) {
         null
-      } else if (isNoChange) {
-        catalystValue
       } else {
-        catalystValue.map { case (k, v) =>
-          keyConverter.toScala(k) -> valueConverter.toScala(v)
-        }
+        val keys = catalystValue.keyArray().toArray[Any](keyType)
+        val values = catalystValue.valueArray().toArray[Any](valueType)
+        val convertedKeys =
+          if (isPrimitive(keyType)) keys else keys.map(keyConverter.toScala)
+        val convertedValues =
+          if (isPrimitive(valueType)) values else values.map(valueConverter.toScala)
+
+        convertedKeys.zip(convertedValues).toMap
       }
     }
 
     override def toScalaImpl(row: InternalRow, column: Int): Map[Any, Any] =
-      toScala(row.get(column, MapType(keyType, valueType)).asInstanceOf[Map[Any, Any]])
+      toScala(row.getMap(column))
   }
 
   private case class StructConverter(
@@ -305,15 +301,27 @@ object CatalystTypeConverters {
       DateTimeUtils.toJavaTimestamp(row.getLong(column))
   }
 
-  private object BigDecimalConverter extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
-    override def toCatalystImpl(scalaValue: Any): Decimal = scalaValue match {
-      case d: BigDecimal => Decimal(d)
-      case d: JavaBigDecimal => Decimal(d)
-      case d: Decimal => d
+  private class DecimalConverter(dataType: DecimalType)
+    extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
+    override def toCatalystImpl(scalaValue: Any): Decimal = {
+      val decimal = scalaValue match {
+        case d: BigDecimal => Decimal(d)
+        case d: JavaBigDecimal => Decimal(d)
+        case d: JavaBigInteger => Decimal(d)
+        case d: Decimal => d
+      }
+      if (decimal.changePrecision(dataType.precision, dataType.scale)) {
+        decimal
+      } else {
+        null
+      }
     }
-    override def toScala(catalystValue: Decimal): JavaBigDecimal = catalystValue.toJavaBigDecimal
+    override def toScala(catalystValue: Decimal): JavaBigDecimal = {
+      if (catalystValue == null) null
+      else catalystValue.toJavaBigDecimal
+    }
     override def toScalaImpl(row: InternalRow, column: Int): JavaBigDecimal =
-      row.getDecimal(column).toJavaBigDecimal
+      row.getDecimal(column, dataType.precision, dataType.scale).toJavaBigDecimal
   }
 
   private abstract class PrimitiveConverter[T] extends CatalystTypeConverter[T, Any, Any] {
@@ -354,7 +362,7 @@ object CatalystTypeConverters {
    * Typical use case would be converting a collection of rows that have the same schema. You will
    * call this function once to get a converter, and apply it to every row.
    */
-  private[sql] def createToCatalystConverter(dataType: DataType): Any => Any = {
+  def createToCatalystConverter(dataType: DataType): Any => Any = {
     if (isPrimitive(dataType)) {
       // Although the `else` branch here is capable of handling inbound conversion of primitives,
       // we add some special-case handling for those types here. The motivation for this relates to
@@ -381,7 +389,7 @@ object CatalystTypeConverters {
    * Typical use case would be converting a collection of rows that have the same schema. You will
    * call this function once to get a converter, and apply it to every row.
    */
-  private[sql] def createToScalaConverter(dataType: DataType): Any => Any = {
+  def createToScalaConverter(dataType: DataType): Any => Any = {
     if (isPrimitive(dataType)) {
       identity
     } else {
@@ -400,13 +408,16 @@ object CatalystTypeConverters {
     case s: String => StringConverter.toCatalyst(s)
     case d: Date => DateConverter.toCatalyst(d)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
-    case d: BigDecimal => BigDecimalConverter.toCatalyst(d)
-    case d: JavaBigDecimal => BigDecimalConverter.toCatalyst(d)
-    case seq: Seq[Any] => seq.map(convertToCatalyst)
+    case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
+    case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
+    case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
-    case arr: Array[Any] => arr.map(convertToCatalyst)
-    case m: Map[_, _] =>
-      m.map { case (k, v) => (convertToCatalyst(k), convertToCatalyst(v)) }.toMap
+    case arr: Array[Any] => new GenericArrayData(arr.map(convertToCatalyst))
+    case map: Map[_, _] =>
+      ArrayBasedMapData(
+        map,
+        (key: Any) => convertToCatalyst(key),
+        (value: Any) => convertToCatalyst(value))
     case other => other
   }
 

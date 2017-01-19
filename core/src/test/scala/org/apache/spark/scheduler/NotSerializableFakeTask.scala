@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.TaskContext
 

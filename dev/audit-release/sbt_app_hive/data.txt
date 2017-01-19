@@ -1,9 +1,0 @@
-0val_0
-1val_1
-2val_2
-3val_3
-4val_4
-5val_5
-6val_6
-7val_7
-9val_9

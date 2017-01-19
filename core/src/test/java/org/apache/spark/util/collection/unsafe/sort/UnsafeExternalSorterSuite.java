@@ -18,50 +18,54 @@
 package org.apache.spark.util.collection.unsafe.sort;
 
 import java.io.File;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.UUID;
 
 import scala.Tuple2;
 import scala.Tuple2$;
-import scala.runtime.AbstractFunction1;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
-import static org.junit.Assert.*;
-import static org.mockito.AdditionalAnswers.returnsFirstArg;
-import static org.mockito.AdditionalAnswers.returnsSecondArg;
-import static org.mockito.Answers.RETURNS_SMART_NULLS;
-import static org.mockito.Mockito.*;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
+import org.apache.spark.memory.TestMemoryManager;
+import org.apache.spark.memory.TaskMemoryManager;
+import org.apache.spark.serializer.JavaSerializer;
 import org.apache.spark.serializer.SerializerInstance;
-import org.apache.spark.shuffle.ShuffleMemoryManager;
+import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.*;
-import org.apache.spark.unsafe.PlatformDependent;
-import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
-import org.apache.spark.unsafe.memory.MemoryAllocator;
-import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
+
+import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.junit.Assert.*;
+import static org.mockito.Answers.RETURNS_SMART_NULLS;
+import static org.mockito.Mockito.*;
 
 public class UnsafeExternalSorterSuite {
 
-  final TaskMemoryManager memoryManager =
-    new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP));
+  private final SparkConf conf = new SparkConf();
+
+  final LinkedList<File> spillFilesCreated = new LinkedList<>();
+  final TestMemoryManager memoryManager =
+    new TestMemoryManager(conf.clone().set("spark.memory.offHeap.enabled", "false"));
+  final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
+  final SerializerManager serializerManager = new SerializerManager(
+    new JavaSerializer(conf),
+    conf.clone().set("spark.shuffle.spill.compress", "false"));
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
-  final PrefixComparator prefixComparator = new PrefixComparator() {
-    @Override
-    public int compare(long prefix1, long prefix2) {
-      return (int) prefix1 - (int) prefix2;
-    }
-  };
+  final PrefixComparator prefixComparator = PrefixComparators.LONG;
   // Since the key fits within the 8-byte prefix, we don't need to do any record comparison, so
   // use a dummy comparator
   final RecordComparator recordComparator = new RecordComparator() {
@@ -75,33 +79,31 @@ public class UnsafeExternalSorterSuite {
     }
   };
 
-  @Mock(answer = RETURNS_SMART_NULLS) ShuffleMemoryManager shuffleMemoryManager;
+  File tempDir;
   @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
   @Mock(answer = RETURNS_SMART_NULLS) DiskBlockManager diskBlockManager;
   @Mock(answer = RETURNS_SMART_NULLS) TaskContext taskContext;
 
-  File tempDir;
+  protected boolean shouldUseRadixSort() { return false; }
 
-  private static final class CompressStream extends AbstractFunction1<OutputStream, OutputStream> {
-    @Override
-    public OutputStream apply(OutputStream stream) {
-      return stream;
-    }
-  }
+  private final long pageSizeBytes = conf.getSizeAsBytes("spark.buffer.pageSize", "4m");
 
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    tempDir = new File(Utils.createTempDir$default$1());
+    tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
+    spillFilesCreated.clear();
     taskContext = mock(TaskContext.class);
     when(taskContext.taskMetrics()).thenReturn(new TaskMetrics());
-    when(shuffleMemoryManager.tryToAcquire(anyLong())).then(returnsFirstArg());
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
-    when(diskBlockManager.createTempLocalBlock()).thenAnswer(new Answer<Tuple2<TempLocalBlockId, File>>() {
+    when(diskBlockManager.createTempLocalBlock()).thenAnswer(
+        new Answer<Tuple2<TempLocalBlockId, File>>() {
       @Override
-      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock) throws Throwable {
+      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock)
+          throws Throwable {
         TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
         File file = File.createTempFile("spillFile", ".spill", tempDir);
+        spillFilesCreated.add(file);
         return Tuple2$.MODULE$.apply(blockId, file);
       }
     });
@@ -116,38 +118,64 @@ public class UnsafeExternalSorterSuite {
         Object[] args = invocationOnMock.getArguments();
 
         return new DiskBlockObjectWriter(
-          (BlockId) args[0],
           (File) args[1],
+          serializerManager,
           (SerializerInstance) args[2],
           (Integer) args[3],
-          new CompressStream(),
           false,
-          (ShuffleWriteMetrics) args[4]
+          (ShuffleWriteMetrics) args[4],
+          (BlockId) args[0]
         );
       }
     });
-    when(blockManager.wrapForCompression(any(BlockId.class), any(InputStream.class)))
-      .then(returnsSecondArg());
+  }
+
+  @After
+  public void tearDown() {
+    try {
+      assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
+    } finally {
+      Utils.deleteRecursively(tempDir);
+      tempDir = null;
+    }
+  }
+
+  private void assertSpillFilesWereCleanedUp() {
+    for (File spillFile : spillFilesCreated) {
+      assertFalse("Spill file " + spillFile.getPath() + " was not cleaned up",
+        spillFile.exists());
+    }
   }
 
   private static void insertNumber(UnsafeExternalSorter sorter, int value) throws Exception {
-    final int[] arr = new int[] { value };
-    sorter.insertRecord(arr, PlatformDependent.INT_ARRAY_OFFSET, 4, value);
+    final int[] arr = new int[]{ value };
+    sorter.insertRecord(arr, Platform.INT_ARRAY_OFFSET, 4, value, false);
+  }
+
+  private static void insertRecord(
+      UnsafeExternalSorter sorter,
+      int[] record,
+      long prefix) throws IOException {
+    sorter.insertRecord(record, Platform.INT_ARRAY_OFFSET, record.length * 4, prefix, false);
+  }
+
+  private UnsafeExternalSorter newSorter() throws IOException {
+    return UnsafeExternalSorter.create(
+      taskMemoryManager,
+      blockManager,
+      serializerManager,
+      taskContext,
+      recordComparator,
+      prefixComparator,
+      /* initialSize */ 1024,
+      pageSizeBytes,
+      UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD,
+      shouldUseRadixSort());
   }
 
   @Test
   public void testSortingOnlyByPrefix() throws Exception {
-
-    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
-      memoryManager,
-      shuffleMemoryManager,
-      blockManager,
-      taskContext,
-      recordComparator,
-      prefixComparator,
-      1024,
-      new SparkConf());
-
+    final UnsafeExternalSorter sorter = newSorter();
     insertNumber(sorter, 5);
     insertNumber(sorter, 1);
     insertNumber(sorter, 3);
@@ -162,33 +190,23 @@ public class UnsafeExternalSorterSuite {
       iter.loadNext();
       assertEquals(i, iter.getKeyPrefix());
       assertEquals(4, iter.getRecordLength());
-      // TODO: read rest of value.
+      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
     }
 
-    // TODO: test for cleanup:
-    // assert(tempDir.isEmpty)
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
   }
 
   @Test
   public void testSortingEmptyArrays() throws Exception {
-
-    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
-      memoryManager,
-      shuffleMemoryManager,
-      blockManager,
-      taskContext,
-      recordComparator,
-      prefixComparator,
-      1024,
-      new SparkConf());
-
-    sorter.insertRecord(null, 0, 0, 0);
-    sorter.insertRecord(null, 0, 0, 0);
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.insertRecord(null, 0, 0, 0, false);
+    sorter.insertRecord(null, 0, 0, 0, false);
     sorter.spill();
-    sorter.insertRecord(null, 0, 0, 0);
+    sorter.insertRecord(null, 0, 0, 0, false);
     sorter.spill();
-    sorter.insertRecord(null, 0, 0, 0);
-    sorter.insertRecord(null, 0, 0, 0);
+    sorter.insertRecord(null, 0, 0, 0, false);
+    sorter.insertRecord(null, 0, 0, 0, false);
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
 
@@ -197,25 +215,255 @@ public class UnsafeExternalSorterSuite {
       assertEquals(0, iter.getKeyPrefix());
       assertEquals(0, iter.getRecordLength());
     }
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testSortTimeMetric() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    long prevSortTime = sorter.getSortTimeNanos();
+    assertEquals(prevSortTime, 0);
+
+    sorter.insertRecord(null, 0, 0, 0, false);
+    sorter.spill();
+    assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
+    prevSortTime = sorter.getSortTimeNanos();
+
+    sorter.spill();  // no sort needed
+    assertEquals(sorter.getSortTimeNanos(), prevSortTime);
+
+    sorter.insertRecord(null, 0, 0, 0, false);
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
+  }
+
+  @Test
+  public void spillingOccursInResponseToMemoryPressure() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    // This should be enough records to completely fill up a data page:
+    final int numRecords = (int) (pageSizeBytes / (4 + 4));
+    for (int i = 0; i < numRecords; i++) {
+      insertNumber(sorter, numRecords - i);
+    }
+    assertEquals(1, sorter.getNumberOfAllocatedPages());
+    memoryManager.markExecutionAsOutOfMemoryOnce();
+    // The insertion of this record should trigger a spill:
+    insertNumber(sorter, 0);
+    // Ensure that spill files were created
+    assertThat(tempDir.listFiles().length, greaterThanOrEqualTo(1));
+    // Read back the sorted data:
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+
+    int i = 0;
+    while (iter.hasNext()) {
+      iter.loadNext();
+      assertEquals(i, iter.getKeyPrefix());
+      assertEquals(4, iter.getRecordLength());
+      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+      i++;
+    }
+    assertEquals(numRecords + 1, i);
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
   }
 
   @Test
   public void testFillingPage() throws Exception {
-    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
-      memoryManager,
-      shuffleMemoryManager,
+    final UnsafeExternalSorter sorter = newSorter();
+    byte[] record = new byte[16];
+    while (sorter.getNumberOfAllocatedPages() < 2) {
+      sorter.insertRecord(record, Platform.BYTE_ARRAY_OFFSET, record.length, 0, false);
+    }
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void sortingRecordsThatExceedPageSize() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    final int[] largeRecord = new int[(int) pageSizeBytes + 16];
+    Arrays.fill(largeRecord, 456);
+    final int[] smallRecord = new int[100];
+    Arrays.fill(smallRecord, 123);
+
+    insertRecord(sorter, largeRecord, 456);
+    sorter.spill();
+    insertRecord(sorter, smallRecord, 123);
+    sorter.spill();
+    insertRecord(sorter, smallRecord, 123);
+    insertRecord(sorter, largeRecord, 456);
+
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    // Small record
+    assertTrue(iter.hasNext());
+    iter.loadNext();
+    assertEquals(123, iter.getKeyPrefix());
+    assertEquals(smallRecord.length * 4, iter.getRecordLength());
+    assertEquals(123, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    // Small record
+    assertTrue(iter.hasNext());
+    iter.loadNext();
+    assertEquals(123, iter.getKeyPrefix());
+    assertEquals(smallRecord.length * 4, iter.getRecordLength());
+    assertEquals(123, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    // Large record
+    assertTrue(iter.hasNext());
+    iter.loadNext();
+    assertEquals(456, iter.getKeyPrefix());
+    assertEquals(largeRecord.length * 4, iter.getRecordLength());
+    assertEquals(456, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    // Large record
+    assertTrue(iter.hasNext());
+    iter.loadNext();
+    assertEquals(456, iter.getKeyPrefix());
+    assertEquals(largeRecord.length * 4, iter.getRecordLength());
+    assertEquals(456, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+
+    assertFalse(iter.hasNext());
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void forcedSpillingWithReadIterator() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    long[] record = new long[100];
+    int recordSize = record.length * 8;
+    int n = (int) pageSizeBytes / recordSize * 3;
+    for (int i = 0; i < n; i++) {
+      record[0] = (long) i;
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0, false);
+    }
+    assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
+    UnsafeExternalSorter.SpillableIterator iter =
+      (UnsafeExternalSorter.SpillableIterator) sorter.getSortedIterator();
+    int lastv = 0;
+    for (int i = 0; i < n / 3; i++) {
+      iter.hasNext();
+      iter.loadNext();
+      assertTrue(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == i);
+      lastv = i;
+    }
+    assertTrue(iter.spill() > 0);
+    assertEquals(0, iter.spill());
+    assertTrue(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == lastv);
+    for (int i = n / 3; i < n; i++) {
+      iter.hasNext();
+      iter.loadNext();
+      assertEquals(i, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
+    }
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void forcedSpillingWithNotReadIterator() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    long[] record = new long[100];
+    int recordSize = record.length * 8;
+    int n = (int) pageSizeBytes / recordSize * 3;
+    for (int i = 0; i < n; i++) {
+      record[0] = (long) i;
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0, false);
+    }
+    assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
+    UnsafeExternalSorter.SpillableIterator iter =
+      (UnsafeExternalSorter.SpillableIterator) sorter.getSortedIterator();
+    assertTrue(iter.spill() > 0);
+    assertEquals(0, iter.spill());
+    for (int i = 0; i < n; i++) {
+      iter.hasNext();
+      iter.loadNext();
+      assertEquals(i, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
+    }
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void forcedSpillingWithoutComparator() throws Exception {
+    final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
+      taskMemoryManager,
       blockManager,
+      serializerManager,
+      taskContext,
+      null,
+      null,
+      /* initialSize */ 1024,
+      pageSizeBytes,
+      UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD,
+      shouldUseRadixSort());
+    long[] record = new long[100];
+    int recordSize = record.length * 8;
+    int n = (int) pageSizeBytes / recordSize * 3;
+    int batch = n / 4;
+    for (int i = 0; i < n; i++) {
+      record[0] = (long) i;
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0, false);
+      if (i % batch == batch - 1) {
+        sorter.spill();
+      }
+    }
+    UnsafeSorterIterator iter = sorter.getIterator();
+    for (int i = 0; i < n; i++) {
+      iter.hasNext();
+      iter.loadNext();
+      assertEquals(i, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
+    }
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testPeakMemoryUsed() throws Exception {
+    final long recordLengthBytes = 8;
+    final long pageSizeBytes = 256;
+    final long numRecordsPerPage = pageSizeBytes / recordLengthBytes;
+    final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
+      taskMemoryManager,
+      blockManager,
+      serializerManager,
       taskContext,
       recordComparator,
       prefixComparator,
       1024,
-      new SparkConf());
+      pageSizeBytes,
+      UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD,
+      shouldUseRadixSort());
 
-    byte[] record = new byte[16];
-    while (sorter.getNumberOfAllocatedPages() < 2) {
-      sorter.insertRecord(record, PlatformDependent.BYTE_ARRAY_OFFSET, record.length, 0);
+    // Peak memory should be monotonically increasing. More specifically, every time
+    // we allocate a new page it should increase by exactly the size of the page.
+    long previousPeakMemory = sorter.getPeakMemoryUsedBytes();
+    long newPeakMemory;
+    try {
+      for (int i = 0; i < numRecordsPerPage * 10; i++) {
+        insertNumber(sorter, i);
+        newPeakMemory = sorter.getPeakMemoryUsedBytes();
+        if (i % numRecordsPerPage == 0) {
+          // We allocated a new page for this record, so peak memory should change
+          assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
+        } else {
+          assertEquals(previousPeakMemory, newPeakMemory);
+        }
+        previousPeakMemory = newPeakMemory;
+      }
+
+      // Spilling should not change peak memory
+      sorter.spill();
+      newPeakMemory = sorter.getPeakMemoryUsedBytes();
+      assertEquals(previousPeakMemory, newPeakMemory);
+      for (int i = 0; i < numRecordsPerPage; i++) {
+        insertNumber(sorter, i);
+      }
+      newPeakMemory = sorter.getPeakMemoryUsedBytes();
+      assertEquals(previousPeakMemory, newPeakMemory);
+    } finally {
+      sorter.cleanupResources();
+      assertSpillFilesWereCleanedUp();
     }
-    sorter.freeMemory();
   }
 
 }
+

@@ -26,15 +26,18 @@ if not (ENV['SKIP_API'] == '1')
     curr_dir = pwd
     cd("..")
 
-    puts "Running 'build/sbt -Pkinesis-asl compile unidoc' from " + pwd + "; this may take a few minutes..."
-    puts `build/sbt -Pkinesis-asl compile unidoc`
+    puts "Running 'build/sbt -Pkinesis-asl clean compile unidoc' from " + pwd + "; this may take a few minutes..."
+    system("build/sbt -Pkinesis-asl clean compile unidoc") || raise("Unidoc generation failed")
 
     puts "Moving back into docs dir."
     cd("docs")
 
+    puts "Removing old docs"
+    puts `rm -rf api`
+
     # Copy over the unified ScalaDoc for all projects to api/scala.
     # This directory will be copied over to _site when `jekyll` command is run.
-    source = "../target/scala-2.10/unidoc"
+    source = "../target/scala-2.11/unidoc"
     dest = "api/scala"
 
     puts "Making directory " + dest
@@ -110,33 +113,41 @@ if not (ENV['SKIP_API'] == '1')
     File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
   end
 
-  # Build Sphinx docs for Python
+  if not (ENV['SKIP_PYTHONDOC'] == '1')
+    # Build Sphinx docs for Python
 
-  puts "Moving to python/docs directory and building sphinx."
-  cd("../python/docs")
-  puts `make html`
+    puts "Moving to python/docs directory and building sphinx."
+    cd("../python/docs")
+    system("make html") || raise("Python doc generation failed")
 
-  puts "Moving back into home dir."
-  cd("../../")
+    puts "Moving back into docs dir."
+    cd("../../docs")
 
-  puts "Making directory api/python"
-  mkdir_p "docs/api/python"
+    puts "Making directory api/python"
+    mkdir_p "api/python"
 
-  puts "cp -r python/docs/_build/html/. docs/api/python"
-  cp_r("python/docs/_build/html/.", "docs/api/python")
+    puts "cp -r ../python/docs/_build/html/. api/python"
+    cp_r("../python/docs/_build/html/.", "api/python")
+  end
 
-  # Build SparkR API docs
-  puts "Moving to R directory and building roxygen docs."
-  cd("R")
-  puts `./create-docs.sh`
+  if not (ENV['SKIP_RDOC'] == '1')
+    # Build SparkR API docs
 
-  puts "Moving back into home dir."
-  cd("../")
+    puts "Moving to R directory and building roxygen docs."
+    cd("../R")
+    system("./create-docs.sh") || raise("R doc generation failed")
 
-  puts "Making directory api/R"
-  mkdir_p "docs/api/R"
+    puts "Moving back into docs dir."
+    cd("../docs")
 
-  puts "cp -r R/pkg/html/. docs/api/R"
-  cp_r("R/pkg/html/.", "docs/api/R")
+    puts "Making directory api/R"
+    mkdir_p "api/R"
+
+    puts "cp -r ../R/pkg/html/. api/R"
+    cp_r("../R/pkg/html/.", "api/R")
+
+    puts "cp ../R/pkg/DESCRIPTION api"
+    cp("../R/pkg/DESCRIPTION", "api")
+  end
 
 end

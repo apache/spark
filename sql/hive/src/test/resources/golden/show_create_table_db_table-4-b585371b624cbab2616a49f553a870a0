@@ -1,4 +1,4 @@
-CREATE  TABLE `tmp_feng.tmp_showcrt`(
+CREATE TABLE `tmp_feng.tmp_showcrt`(
   `key` string, 
   `value` int)
 ROW FORMAT SERDE 

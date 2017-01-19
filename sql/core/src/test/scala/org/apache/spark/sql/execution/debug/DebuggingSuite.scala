@@ -18,15 +18,24 @@
 package org.apache.spark.sql.execution.debug
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestData.TestData
 
-class DebuggingSuite extends SparkFunSuite {
+class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
+
   test("DataFrame.debug()") {
     testData.debug()
   }
 
-  test("DataFrame.typeCheck()") {
-    testData.typeCheck()
+  test("Dataset.debug()") {
+    import testImplicits._
+    testData.as[TestData].debug()
+  }
+
+  test("debugCodegen") {
+    val res = codegenString(spark.range(10).groupBy("id").count().queryExecution.executedPlan)
+    assert(res.contains("Subtree 1 / 2"))
+    assert(res.contains("Subtree 2 / 2"))
+    assert(res.contains("Object[]"))
   }
 }

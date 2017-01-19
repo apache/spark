@@ -17,29 +17,111 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.types.StructType
 
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
+  private var _analyzed: Boolean = false
+
+  /**
+   * Marks this plan as already analyzed.  This should only be called by CheckAnalysis.
+   */
+  private[catalyst] def setAnalyzed(): Unit = { _analyzed = true }
+
+  /**
+   * Returns true if this node and its children have already been gone through analysis and
+   * verification.  Note that this is only an optimization used to avoid analyzing trees that
+   * have already been analyzed, and can be reset by transformations.
+   */
+  def analyzed: Boolean = _analyzed
+
+  /** Returns true if this subtree contains any streaming data sources. */
+  def isStreaming: Boolean = children.exists(_.isStreaming == true)
+
+  /**
+   * Returns a copy of this node where `rule` has been recursively applied first to all of its
+   * children and then itself (post-order). When `rule` does not apply to a given node, it is left
+   * unchanged.  This function is similar to `transformUp`, but skips sub-trees that have already
+   * been marked as analyzed.
+   *
+   * @param rule the function use to transform this nodes children
+   */
+  def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
+    if (!analyzed) {
+      val afterRuleOnChildren = transformChildren(rule, (t, r) => t.resolveOperators(r))
+      if (this fastEquals afterRuleOnChildren) {
+        CurrentOrigin.withOrigin(origin) {
+          rule.applyOrElse(this, identity[LogicalPlan])
+        }
+      } else {
+        CurrentOrigin.withOrigin(origin) {
+          rule.applyOrElse(afterRuleOnChildren, identity[LogicalPlan])
+        }
+      }
+    } else {
+      this
+    }
+  }
+
+  /**
+   * Recursively transforms the expressions of a tree, skipping nodes that have already
+   * been analyzed.
+   */
+  def resolveExpressions(r: PartialFunction[Expression, Expression]): LogicalPlan = {
+    this resolveOperators  {
+      case p => p.transformExpressions(r)
+    }
+  }
+
+  /** A cache for the estimated statistics, such that it will only be computed once. */
+  private var statsCache: Option[Statistics] = None
+
+  /**
+   * Returns the estimated statistics for the current logical plan node. Under the hood, this
+   * method caches the return value, which is computed based on the configuration passed in the
+   * first time. If the configuration changes, the cache can be invalidated by calling
+   * [[invalidateStatsCache()]].
+   */
+  final def stats(conf: CatalystConf): Statistics = statsCache.getOrElse {
+    statsCache = Some(computeStats(conf))
+    statsCache.get
+  }
+
+  /** Invalidates the stats cache. See [[stats]] for more information. */
+  final def invalidateStatsCache(): Unit = {
+    statsCache = None
+    children.foreach(_.invalidateStatsCache())
+  }
+
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
-   * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
+   * cardinality is the product of all child plan's cardinality, i.e. applies in the case
    * of cartesian joins.
    *
    * [[LeafNode]]s must override this.
    */
-  def statistics: Statistics = {
-    if (children.size == 0) {
+  protected def computeStats(conf: CatalystConf): Statistics = {
+    if (children.isEmpty) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
     }
-    Statistics(sizeInBytes = children.map(_.statistics.sizeInBytes).product)
+    Statistics(sizeInBytes = children.map(_.stats(conf).sizeInBytes).product)
   }
+
+  /**
+   * Returns the maximum number of rows that this plan may compute.
+   *
+   * Any operator that a Limit can be pushed passed should override this function (e.g., Union).
+   * Any operator that can push through a Limit should override this function (e.g., Project).
+   */
+  def maxRows: Option[Long] = None
 
   /**
    * Returns true if this expression and all its children have been resolved to a specific schema
@@ -57,49 +139,23 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
 
+  override lazy val canonicalized: LogicalPlan = EliminateSubqueryAliases(this)
+
   /**
-   * Returns true when the given logical plan will return the same results as this logical plan.
-   *
-   * Since its likely undecidable to generally determine if two given plans will produce the same
-   * results, it is okay for this function to return false, even if the results are actually
-   * the same.  Such behavior will not affect correctness, only the application of performance
-   * enhancements like caching.  However, it is not acceptable to return true if the results could
-   * possibly be different.
-   *
-   * By default this function performs a modified version of equality that is tolerant of cosmetic
-   * differences like attribute naming and or expression id differences.  Logical operators that
-   * can do better should override this function.
+   * Resolves a given schema to concrete [[Attribute]] references in this query plan. This function
+   * should only be called on analyzed plans since it will throw [[AnalysisException]] for
+   * unresolved [[Attribute]]s.
    */
-  def sameResult(plan: LogicalPlan): Boolean = {
-    val cleanLeft = EliminateSubQueries(this)
-    val cleanRight = EliminateSubQueries(plan)
-
-    cleanLeft.getClass == cleanRight.getClass &&
-      cleanLeft.children.size == cleanRight.children.size && {
-      logDebug(
-        s"[${cleanRight.cleanArgs.mkString(", ")}] == [${cleanLeft.cleanArgs.mkString(", ")}]")
-      cleanRight.cleanArgs == cleanLeft.cleanArgs
-    } &&
-    (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
-  }
-
-  /** Args that have cleaned such that differences in expression id should not affect equality */
-  protected lazy val cleanArgs: Seq[Any] = {
-    val input = children.flatMap(_.output)
-    productIterator.map {
-      // Children are checked using sameResult above.
-      case tn: TreeNode[_] if containsChild(tn) => null
-      case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
-      case s: Option[_] => s.map {
-        case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
-        case other => other
+  def resolve(schema: StructType, resolver: Resolver): Seq[Attribute] = {
+    schema.map { field =>
+      resolve(field.name :: Nil, resolver).map {
+        case a: AttributeReference => a
+        case other => sys.error(s"can not handle nested schema yet...  plan $this")
+      }.getOrElse {
+        throw new AnalysisException(
+          s"Unable to resolve ${field.name} given [${output.map(_.name).mkString(", ")}]")
       }
-      case s: Seq[_] => s.map {
-        case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
-        case other => other
-      }
-      case other => other
-    }.toSeq
+    }
   }
 
   /**
@@ -130,47 +186,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   def resolveQuoted(
       name: String,
       resolver: Resolver): Option[NamedExpression] = {
-    resolve(parseAttributeName(name), output, resolver)
-  }
-
-  /**
-   * Internal method, used to split attribute name by dot with backticks rule.
-   * Backticks must appear in pairs, and the quoted string must be a complete name part,
-   * which means `ab..c`e.f is not allowed.
-   * Escape character is not supported now, so we can't use backtick inside name part.
-   */
-  private def parseAttributeName(name: String): Seq[String] = {
-    val e = new AnalysisException(s"syntax error in attribute name: $name")
-    val nameParts = scala.collection.mutable.ArrayBuffer.empty[String]
-    val tmp = scala.collection.mutable.ArrayBuffer.empty[Char]
-    var inBacktick = false
-    var i = 0
-    while (i < name.length) {
-      val char = name(i)
-      if (inBacktick) {
-        if (char == '`') {
-          inBacktick = false
-          if (i + 1 < name.length && name(i + 1) != '.') throw e
-        } else {
-          tmp += char
-        }
-      } else {
-        if (char == '`') {
-          if (tmp.nonEmpty) throw e
-          inBacktick = true
-        } else if (char == '.') {
-          if (name(i - 1) == '.' || i == name.length - 1) throw e
-          nameParts += tmp.mkString
-          tmp.clear()
-        } else {
-          tmp += char
-        }
-      }
-      i += 1
-    }
-    if (inBacktick) throw e
-    nameParts += tmp.mkString
-    nameParts.toSeq
+    resolve(UnresolvedAttribute.parseAttributeName(name), output, resolver)
   }
 
   /**
@@ -185,7 +201,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
     assert(nameParts.length > 1)
-    if (attribute.qualifiers.exists(resolver(_, nameParts.head))) {
+    if (attribute.qualifier.exists(resolver(_, nameParts.head))) {
       // At least one qualifier matches. See if remaining parts match.
       val remainingParts = nameParts.tail
       resolveAsColumn(remainingParts, resolver, attribute)
@@ -204,7 +220,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       nameParts: Seq[String],
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
-    if (resolver(attribute.name, nameParts.head)) {
+    if (!attribute.isGenerated && resolver(attribute.name, nameParts.head)) {
       Option((attribute.withName(nameParts.head), nameParts.tail.toList))
     } else {
       None
@@ -250,13 +266,13 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       // One match, but we also need to extract the requested nested field.
       case Seq((a, nestedFields)) =>
         // The foldLeft adds ExtractValues for every remaining parts of the identifier,
-        // and wrap it with UnresolvedAlias which will be removed later.
+        // and aliased it with the last part of the name.
         // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
-        // Then this will add ExtractValue("c", ExtractValue("b", a)), and wrap it as
-        // UnresolvedAlias(ExtractValue("c", ExtractValue("b", a))).
+        // Then this will add ExtractValue("c", ExtractValue("b", a)), and alias the final
+        // expression as "c".
         val fieldExprs = nestedFields.foldLeft(a: Expression)((expr, fieldName) =>
           ExtractValue(expr, Literal(fieldName), resolver))
-        Some(UnresolvedAlias(fieldExprs))
+        Some(Alias(fieldExprs, nestedFields.last)())
 
       // No matches.
       case Seq() =>
@@ -270,13 +286,19 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
           s"Reference '$name' is ambiguous, could be: $referenceNames.")
     }
   }
+
+  /**
+   * Refreshes (or invalidates) any metadata/data cached in the plan recursively.
+   */
+  def refresh(): Unit = children.foreach(_.refresh())
 }
 
 /**
  * A logical plan node with no children.
  */
 abstract class LeafNode extends LogicalPlan {
-  override def children: Seq[LogicalPlan] = Nil
+  override final def children: Seq[LogicalPlan] = Nil
+  override def producedAttributes: AttributeSet = outputSet
 }
 
 /**
@@ -285,7 +307,45 @@ abstract class LeafNode extends LogicalPlan {
 abstract class UnaryNode extends LogicalPlan {
   def child: LogicalPlan
 
-  override def children: Seq[LogicalPlan] = child :: Nil
+  override final def children: Seq[LogicalPlan] = child :: Nil
+
+  /**
+   * Generates an additional set of aliased constraints by replacing the original constraint
+   * expressions with the corresponding alias
+   */
+  protected def getAliasedConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
+    var allConstraints = child.constraints.asInstanceOf[Set[Expression]]
+    projectList.foreach {
+      case a @ Alias(e, _) =>
+        // For every alias in `projectList`, replace the reference in constraints by its attribute.
+        allConstraints ++= allConstraints.map(_ transform {
+          case expr: Expression if expr.semanticEquals(e) =>
+            a.toAttribute
+        })
+        allConstraints += EqualNullSafe(e, a.toAttribute)
+      case _ => // Don't change.
+    }
+
+    allConstraints -- child.constraints
+  }
+
+  override protected def validConstraints: Set[Expression] = child.constraints
+
+  override def computeStats(conf: CatalystConf): Statistics = {
+    // There should be some overhead in Row object, the size should not be zero when there is
+    // no columns, this help to prevent divide-by-zero error.
+    val childRowSize = child.output.map(_.dataType.defaultSize).sum + 8
+    val outputRowSize = output.map(_.dataType.defaultSize).sum + 8
+    // Assume there will be the same number of rows as child has.
+    var sizeInBytes = (child.stats(conf).sizeInBytes * outputRowSize) / childRowSize
+    if (sizeInBytes == 0) {
+      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
+      // (product of children).
+      sizeInBytes = 1
+    }
+
+    child.stats(conf).copy(sizeInBytes = sizeInBytes)
+  }
 }
 
 /**
@@ -295,5 +355,5 @@ abstract class BinaryNode extends LogicalPlan {
   def left: LogicalPlan
   def right: LogicalPlan
 
-  override def children: Seq[LogicalPlan] = Seq(left, right)
+  override final def children: Seq[LogicalPlan] = Seq(left, right)
 }

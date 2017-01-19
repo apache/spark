@@ -19,6 +19,8 @@ package org.apache.spark.deploy.history
 
 import java.util.zip.ZipOutputStream
 
+import scala.xml.Node
+
 import org.apache.spark.SparkException
 import org.apache.spark.ui.SparkUI
 
@@ -33,25 +35,85 @@ private[spark] case class ApplicationAttemptInfo(
 private[spark] case class ApplicationHistoryInfo(
     id: String,
     name: String,
-    attempts: List[ApplicationAttemptInfo])
+    attempts: List[ApplicationAttemptInfo]) {
+
+  /**
+   * Has this application completed?
+   * @return true if the most recent attempt has completed
+   */
+  def completed: Boolean = {
+    attempts.nonEmpty && attempts.head.completed
+  }
+}
+
+/**
+ *  A probe which can be invoked to see if a loaded Web UI has been updated.
+ *  The probe is expected to be relative purely to that of the UI returned
+ *  in the same [[LoadedAppUI]] instance. That is, whenever a new UI is loaded,
+ *  the probe returned with it is the one that must be used to check for it
+ *  being out of date; previous probes must be discarded.
+ */
+private[history] abstract class HistoryUpdateProbe {
+  /**
+   * Return true if the history provider has a later version of the application
+   * attempt than the one against this probe was constructed.
+   * @return
+   */
+  def isUpdated(): Boolean
+}
+
+/**
+ * All the information returned from a call to `getAppUI()`: the new UI
+ * and any required update state.
+ * @param ui Spark UI
+ * @param updateProbe probe to call to check on the update state of this application attempt
+ */
+private[history] case class LoadedAppUI(
+    ui: SparkUI,
+    updateProbe: () => Boolean)
 
 private[history] abstract class ApplicationHistoryProvider {
+
+  /**
+   * Returns the count of application event logs that the provider is currently still processing.
+   * History Server UI can use this to indicate to a user that the application listing on the UI
+   * can be expected to list additional known applications once the processing of these
+   * application event logs completes.
+   *
+   * A History Provider that does not have a notion of count of event logs that may be pending
+   * for processing need not override this method.
+   *
+   * @return Count of application event logs that are currently under process
+   */
+  def getEventLogsUnderProcess(): Int = {
+    return 0;
+  }
+
+  /**
+   * Returns the time the history provider last updated the application history information
+   *
+   * @return 0 if this is undefined or unsupported, otherwise the last updated time in millis
+   */
+  def getLastUpdatedTime(): Long = {
+    return 0;
+  }
 
   /**
    * Returns a list of applications available for the history server to show.
    *
    * @return List of all know applications.
    */
-  def getListing(): Iterable[ApplicationHistoryInfo]
+  def getListing(): Iterator[ApplicationHistoryInfo]
 
   /**
    * Returns the Spark UI for a specific application.
    *
    * @param appId The application ID.
    * @param attemptId The application attempt ID (or None if there is no attempt ID).
-   * @return The application's UI, or None if application is not found.
+   * @return a [[LoadedAppUI]] instance containing the application's UI and any state information
+   *         for update probes, or `None` if the application/attempt is not found.
    */
-  def getAppUI(appId: String, attemptId: Option[String]): Option[SparkUI]
+  def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI]
 
   /**
    * Called when the server is shutting down.
@@ -73,4 +135,13 @@ private[history] abstract class ApplicationHistoryProvider {
   @throws(classOf[SparkException])
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
 
+  /**
+   * @return the [[ApplicationHistoryInfo]] for the appId if it exists.
+   */
+  def getApplicationInfo(appId: String): Option[ApplicationHistoryInfo]
+
+  /**
+   * @return html text to display when the application list is empty
+   */
+  def getEmptyListingHtml(): Seq[Node] = Seq.empty
 }

@@ -20,4 +20,4 @@ rem
 rem This is the entry point for running PySpark. To avoid polluting the
 rem environment, it just launches a new cmd to do the real work.
 
-cmd /V /E /C %~dp0pyspark2.cmd %*
+cmd /V /E /C "%~dp0pyspark2.cmd" %*

@@ -16,15 +16,15 @@
  */
 package org.apache.spark.status.api.v1
 
+import javax.ws.rs.{GET, PathParam, Produces}
 import javax.ws.rs.core.MediaType
-import javax.ws.rs.{Produces, PathParam, GET}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class OneApplicationResource(uiRoot: UIRoot) {
 
   @GET
   def getApp(@PathParam("appId") appId: String): ApplicationInfo = {
-    val apps = uiRoot.getApplicationInfoList.find { _.id == appId }
+    val apps = uiRoot.getApplicationInfo(appId)
     apps.getOrElse(throw new NotFoundException("unknown app: " + appId))
   }
 

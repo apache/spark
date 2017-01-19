@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * The default uncaught exception handler for Executors terminates the whole process, to avoid
@@ -29,11 +29,15 @@ private[spark] object SparkUncaughtExceptionHandler
 
   override def uncaughtException(thread: Thread, exception: Throwable) {
     try {
-      logError("Uncaught exception in thread " + thread, exception)
+      // Make it explicit that uncaught exceptions are thrown when container is shutting down.
+      // It will help users when they analyze the executor logs
+      val inShutdownMsg = if (ShutdownHookManager.inShutdown()) "[Container in shutdown] " else ""
+      val errMsg = "Uncaught exception in thread "
+      logError(inShutdownMsg + errMsg + thread, exception)
 
       // We may have been called from a shutdown hook. If so, we must not call System.exit().
       // (If we do, we will deadlock.)
-      if (!Utils.inShutdown()) {
+      if (!ShutdownHookManager.inShutdown()) {
         if (exception.isInstanceOf[OutOfMemoryError]) {
           System.exit(SparkExitCode.OOM)
         } else {

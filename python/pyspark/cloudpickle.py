@@ -43,6 +43,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 from __future__ import print_function
 
 import operator
+import opcode
 import os
 import io
 import pickle
@@ -53,6 +54,8 @@ from functools import partial
 import itertools
 import dis
 import traceback
+import weakref
+
 
 if sys.version < '3':
     from pickle import Pickler
@@ -68,10 +71,10 @@ else:
     PY3 = True
 
 #relevant opcodes
-STORE_GLOBAL = dis.opname.index('STORE_GLOBAL')
-DELETE_GLOBAL = dis.opname.index('DELETE_GLOBAL')
-LOAD_GLOBAL = dis.opname.index('LOAD_GLOBAL')
-GLOBAL_OPS = [STORE_GLOBAL, DELETE_GLOBAL, LOAD_GLOBAL]
+STORE_GLOBAL = opcode.opmap['STORE_GLOBAL']
+DELETE_GLOBAL = opcode.opmap['DELETE_GLOBAL']
+LOAD_GLOBAL = opcode.opmap['LOAD_GLOBAL']
+GLOBAL_OPS = (STORE_GLOBAL, DELETE_GLOBAL, LOAD_GLOBAL)
 HAVE_ARGUMENT = dis.HAVE_ARGUMENT
 EXTENDED_ARG = dis.EXTENDED_ARG
 
@@ -88,6 +91,43 @@ for k, v in types.__dict__.items():
 
 def _builtin_type(name):
     return getattr(types, name)
+
+
+if sys.version_info < (3, 4):
+    def _walk_global_ops(code):
+        """
+        Yield (opcode, argument number) tuples for all
+        global-referencing instructions in *code*.
+        """
+        code = getattr(code, 'co_code', b'')
+        if not PY3:
+            code = map(ord, code)
+
+        n = len(code)
+        i = 0
+        extended_arg = 0
+        while i < n:
+            op = code[i]
+            i += 1
+            if op >= HAVE_ARGUMENT:
+                oparg = code[i] + code[i + 1] * 256 + extended_arg
+                extended_arg = 0
+                i += 2
+                if op == EXTENDED_ARG:
+                    extended_arg = oparg * 65536
+                if op in GLOBAL_OPS:
+                    yield op, oparg
+
+else:
+    def _walk_global_ops(code):
+        """
+        Yield (opcode, argument number) tuples for all
+        global-referencing instructions in *code*.
+        """
+        for instr in dis.get_instructions(code):
+            op = instr.opcode
+            if op in GLOBAL_OPS:
+                yield op, instr.arg
 
 
 class CloudPickler(Pickler):
@@ -109,6 +149,16 @@ class CloudPickler(Pickler):
             if 'recursion' in e.args[0]:
                 msg = """Could not pickle object as excessively deep recursion required."""
                 raise pickle.PicklingError(msg)
+        except pickle.PickleError:
+            raise
+        except Exception as e:
+            if "'i' format requires" in e.message:
+                msg = "Object too large to serialize: " + e.message
+            else:
+                msg = "Could not serialize object: " + e.__class__.__name__ + ": " + e.message
+            print_exec(sys.stderr)
+            raise pickle.PicklingError(msg)
+            
 
     def save_memoryview(self, obj):
         """Fallback to save_string"""
@@ -169,7 +219,12 @@ class CloudPickler(Pickler):
 
         if name is None:
             name = obj.__name__
-        modname = pickle.whichmodule(obj, name)
+        try:
+            # whichmodule() could fail, see
+            # https://bitbucket.org/gutworth/six/issues/63/importing-six-breaks-pickling
+            modname = pickle.whichmodule(obj, name)
+        except Exception:
+            modname = None
         # print('which gives %s %s %s' % (modname, obj, name))
         try:
             themodule = sys.modules[modname]
@@ -241,41 +296,38 @@ class CloudPickler(Pickler):
         save(f_globals)
         save(defaults)
         save(dct)
+        save(func.__module__)
         write(pickle.TUPLE)
         write(pickle.REDUCE)  # applies _fill_function on the tuple
 
-    @staticmethod
-    def extract_code_globals(co):
+    _extract_code_globals_cache = (
+        weakref.WeakKeyDictionary()
+        if sys.version_info >= (2, 7) and not hasattr(sys, "pypy_version_info")
+        else {})
+
+    @classmethod
+    def extract_code_globals(cls, co):
         """
         Find all globals names read or written to by codeblock co
         """
-        code = co.co_code
-        if not PY3:
-            code = [ord(c) for c in code]
-        names = co.co_names
-        out_names = set()
+        out_names = cls._extract_code_globals_cache.get(co)
+        if out_names is None:
+            try:
+                names = co.co_names
+            except AttributeError:
+                # PyPy "builtin-code" object
+                out_names = set()
+            else:
+                out_names = set(names[oparg]
+                                for op, oparg in _walk_global_ops(co))
 
-        n = len(code)
-        i = 0
-        extended_arg = 0
-        while i < n:
-            op = code[i]
+                # see if nested function have any global refs
+                if co.co_consts:
+                    for const in co.co_consts:
+                        if type(const) is types.CodeType:
+                            out_names |= cls.extract_code_globals(const)
 
-            i += 1
-            if op >= HAVE_ARGUMENT:
-                oparg = code[i] + code[i+1] * 256 + extended_arg
-                extended_arg = 0
-                i += 2
-                if op == EXTENDED_ARG:
-                    extended_arg = oparg*65536
-                if op in GLOBAL_OPS:
-                    out_names.add(names[oparg])
-
-        # see if nested function have any global refs
-        if co.co_consts:
-            for const in co.co_consts:
-                if type(const) is types.CodeType:
-                    out_names |= CloudPickler.extract_code_globals(const)
+            cls._extract_code_globals_cache[co] = out_names
 
         return out_names
 
@@ -325,7 +377,12 @@ class CloudPickler(Pickler):
 
         modname = getattr(obj, "__module__", None)
         if modname is None:
-            modname = pickle.whichmodule(obj, name)
+            try:
+                # whichmodule() could fail, see
+                # https://bitbucket.org/gutworth/six/issues/63/importing-six-breaks-pickling
+                modname = pickle.whichmodule(obj, name)
+            except Exception:
+                modname = '__main__'
 
         if modname == '__main__':
             themodule = None
@@ -350,7 +407,31 @@ class CloudPickler(Pickler):
             if new_override:
                 d['__new__'] = obj.__new__
 
-            self.save_reduce(typ, (obj.__name__, obj.__bases__, d), obj=obj)
+            # workaround for namedtuple (hijacked by PySpark)
+            if getattr(obj, '_is_namedtuple_', False):
+                self.save_reduce(_load_namedtuple, (obj.__name__, obj._fields))
+                return
+
+            self.save(_load_class)
+            self.save_reduce(typ, (obj.__name__, obj.__bases__, {"__doc__": obj.__doc__}), obj=obj)
+            d.pop('__doc__', None)
+            # handle property and staticmethod
+            dd = {}
+            for k, v in d.items():
+                if isinstance(v, property):
+                    k = ('property', k)
+                    v = (v.fget, v.fset, v.fdel, v.__doc__)
+                elif isinstance(v, staticmethod) and hasattr(v, '__func__'):
+                    k = ('staticmethod', k)
+                    v = v.__func__
+                elif isinstance(v, classmethod) and hasattr(v, '__func__'):
+                    k = ('classmethod', k)
+                    v = v.__func__
+                dd[k] = v
+            self.save(dd)
+            self.write(pickle.TUPLE2)
+            self.write(pickle.REDUCE)
+
         else:
             raise pickle.PicklingError("Can't pickle %r" % obj)
 
@@ -363,7 +444,7 @@ class CloudPickler(Pickler):
             self.save_reduce(types.MethodType, (obj.__func__, obj.__self__), obj=obj)
         else:
             self.save_reduce(types.MethodType, (obj.__func__, obj.__self__, obj.__self__.__class__),
-                         obj=obj)
+                             obj=obj)
     dispatch[types.MethodType] = save_instancemethod
 
     def save_inst(self, obj):
@@ -674,13 +755,14 @@ def _genpartial(func, args, kwds):
     return partial(func, *args, **kwds)
 
 
-def _fill_function(func, globals, defaults, dict):
+def _fill_function(func, globals, defaults, dict, module):
     """ Fills in the rest of function data into the skeleton function object
         that were created via _make_skel_func().
          """
     func.__globals__.update(globals)
     func.__defaults__ = defaults
     func.__dict__ = dict
+    func.__module__ = module
 
     return func
 
@@ -706,6 +788,31 @@ def _make_skel_func(code, closures, base_globals = None):
 
     return types.FunctionType(code, base_globals,
                               None, None, closure)
+
+
+def _load_class(cls, d):
+    """
+    Loads additional properties into class `cls`.
+    """
+    for k, v in d.items():
+        if isinstance(k, tuple):
+            typ, k = k
+            if typ == 'property':
+                v = property(*v)
+            elif typ == 'staticmethod':
+                v = staticmethod(v)
+            elif typ == 'classmethod':
+                v = classmethod(v)
+        setattr(cls, k, v)
+    return cls
+
+
+def _load_namedtuple(name, fields):
+    """
+    Loads a class generated by namedtuple
+    """
+    from collections import namedtuple
+    return namedtuple(name, fields)
 
 
 """Constructors for 3rd party libraries

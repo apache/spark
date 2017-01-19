@@ -20,11 +20,12 @@ package org.apache.spark.ml.util
 import scala.collection.immutable.HashMap
 
 import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types.StructField
 
 
 /**
- * Helper utilities for tree-based algorithms
+ * Helper utilities for algorithms using ML metadata
  */
 private[spark] object MetadataUtils {
 
@@ -47,7 +48,7 @@ private[spark] object MetadataUtils {
    *                        If a feature does not have metadata, it is assumed to be continuous.
    *                        If a feature is Nominal, then it must have the number of values
    *                        specified.
-   * @return  Map: feature index --> number of categories.
+   * @return  Map: feature index to number of categories.
    *          The map's set of keys will be the set of categorical feature indices.
    */
   def getCategoricalFeatures(featuresSchema: StructField): Map[Int, Int] = {
@@ -74,4 +75,20 @@ private[spark] object MetadataUtils {
     }
   }
 
+  /**
+   * Takes a Vector column and a list of feature names, and returns the corresponding list of
+   * feature indices in the column, in order.
+   * @param col  Vector column which must have feature names specified via attributes
+   * @param names  List of feature names
+   */
+  def getFeatureIndicesFromNames(col: StructField, names: Array[String]): Array[Int] = {
+    require(col.dataType.isInstanceOf[VectorUDT], s"getFeatureIndicesFromNames expected column $col"
+      + s" to be Vector type, but it was type ${col.dataType} instead.")
+    val inputAttr = AttributeGroup.fromStructField(col)
+    names.map { name =>
+      require(inputAttr.hasAttr(name),
+        s"getFeatureIndicesFromNames found no feature with name $name in column $col.")
+      inputAttr.getAttr(name).index.get
+    }
+  }
 }

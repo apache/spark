@@ -19,15 +19,11 @@ package org.apache.spark.mllib.linalg
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
 import com.github.fommil.netlib.ARPACK
-import org.netlib.util.{intW, doubleW}
-
-import org.apache.spark.annotation.Experimental
+import org.netlib.util.{doubleW, intW}
 
 /**
- * :: Experimental ::
  * Compute eigen-decomposition.
  */
-@Experimental
 private[mllib] object EigenValueDecomposition {
   /**
    * Compute the leading k eigenvalues and eigenvectors on a symmetric square matrix using ARPACK.
@@ -36,7 +32,7 @@ private[mllib] object EigenValueDecomposition {
    *
    * @param mul a function that multiplies the symmetric matrix with a DenseVector.
    * @param n dimension of the square matrix (maximum Int.MaxValue).
-   * @param k number of leading eigenvalues required, 0 < k < n.
+   * @param k number of leading eigenvalues required, where k must be positive and less than n.
    * @param tol tolerance of the eigs computation.
    * @param maxIterations the maximum number of Arnoldi update iterations.
    * @return a dense vector of eigenvalues in descending order and a dense matrix of eigenvectors
@@ -46,7 +42,7 @@ private[mllib] object EigenValueDecomposition {
    *       for more details). The maximum number of Arnoldi update iterations is set to 300 in this
    *       function.
    */
-  private[mllib] def symmetricEigs(
+  def symmetricEigs(
       mul: BDV[Double] => BDV[Double],
       n: Int,
       k: Int,

@@ -21,15 +21,20 @@ import warnings
 
 if sys.version > '3':
     xrange = range
+    basestring = str
 
+from pyspark import SparkContext, since
 from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
+from pyspark.sql import DataFrame
 
 
 class MLUtils(object):
 
     """
     Helper methods to load, save and pre-process data used in MLlib.
+
+    .. versionadded:: 1.0.0
     """
 
     @staticmethod
@@ -67,6 +72,7 @@ class MLUtils(object):
         return " ".join(items)
 
     @staticmethod
+    @since("1.0.0")
     def loadLibSVMFile(sc, path, numFeatures=-1, minPartitions=None, multiclass=None):
         """
         Loads labeled data in the LIBSVM format into an RDD of
@@ -121,6 +127,7 @@ class MLUtils(object):
         return parsed.map(lambda x: LabeledPoint(x[0], Vectors.sparse(numFeatures, x[1], x[2])))
 
     @staticmethod
+    @since("1.0.0")
     def saveAsLibSVMFile(data, dir):
         """
         Save labeled data in LIBSVM format.
@@ -133,8 +140,8 @@ class MLUtils(object):
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from glob import glob
         >>> from pyspark.mllib.util import MLUtils
-        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, 1.23), (2, 4.56)])), \
-                        LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
+        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, 1.23), (2, 4.56)])),
+        ...             LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
         >>> tempFile = NamedTemporaryFile(delete=True)
         >>> tempFile.close()
         >>> MLUtils.saveAsLibSVMFile(sc.parallelize(examples), tempFile.name)
@@ -145,6 +152,7 @@ class MLUtils(object):
         lines.saveAsTextFile(dir)
 
     @staticmethod
+    @since("1.1.0")
     def loadLabeledPoints(sc, path, minPartitions=None):
         """
         Load labeled points saved using RDD.saveAsTextFile.
@@ -158,8 +166,8 @@ class MLUtils(object):
         >>> from tempfile import NamedTemporaryFile
         >>> from pyspark.mllib.util import MLUtils
         >>> from pyspark.mllib.regression import LabeledPoint
-        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, -1.23), (2, 4.56e-7)])), \
-                        LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
+        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, -1.23), (2, 4.56e-7)])),
+        ...             LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
         >>> tempFile = NamedTemporaryFile(delete=True)
         >>> tempFile.close()
         >>> sc.parallelize(examples, 1).saveAsTextFile(tempFile.name)
@@ -170,6 +178,7 @@ class MLUtils(object):
         return callMLlibFunc("loadLabeledPoints", sc, path, minPartitions)
 
     @staticmethod
+    @since("1.5.0")
     def appendBias(data):
         """
         Returns a new vector with `1.0` (bias) appended to
@@ -184,6 +193,7 @@ class MLUtils(object):
             return _convert_to_vector(np.append(vec.toArray(), 1.0))
 
     @staticmethod
+    @since("1.5.0")
     def loadVectors(sc, path):
         """
         Loads vectors saved using `RDD[Vector].saveAsTextFile`
@@ -191,10 +201,172 @@ class MLUtils(object):
         """
         return callMLlibFunc("loadVectors", sc, path)
 
+    @staticmethod
+    @since("2.0.0")
+    def convertVectorColumnsToML(dataset, *cols):
+        """
+        Converts vector columns in an input DataFrame from the
+        :py:class:`pyspark.mllib.linalg.Vector` type to the new
+        :py:class:`pyspark.ml.linalg.Vector` type under the `spark.ml`
+        package.
+
+        :param dataset:
+          input dataset
+        :param cols:
+          a list of vector columns to be converted.
+          New vector columns will be ignored. If unspecified, all old
+          vector columns will be converted excepted nested ones.
+        :return:
+          the input dataset with old vector columns converted to the
+          new vector type
+
+        >>> import pyspark
+        >>> from pyspark.mllib.linalg import Vectors
+        >>> from pyspark.mllib.util import MLUtils
+        >>> df = spark.createDataFrame(
+        ...     [(0, Vectors.sparse(2, [1], [1.0]), Vectors.dense(2.0, 3.0))],
+        ...     ["id", "x", "y"])
+        >>> r1 = MLUtils.convertVectorColumnsToML(df).first()
+        >>> isinstance(r1.x, pyspark.ml.linalg.SparseVector)
+        True
+        >>> isinstance(r1.y, pyspark.ml.linalg.DenseVector)
+        True
+        >>> r2 = MLUtils.convertVectorColumnsToML(df, "x").first()
+        >>> isinstance(r2.x, pyspark.ml.linalg.SparseVector)
+        True
+        >>> isinstance(r2.y, pyspark.mllib.linalg.DenseVector)
+        True
+        """
+        if not isinstance(dataset, DataFrame):
+            raise TypeError("Input dataset must be a DataFrame but got {}.".format(type(dataset)))
+        return callMLlibFunc("convertVectorColumnsToML", dataset, list(cols))
+
+    @staticmethod
+    @since("2.0.0")
+    def convertVectorColumnsFromML(dataset, *cols):
+        """
+        Converts vector columns in an input DataFrame to the
+        :py:class:`pyspark.mllib.linalg.Vector` type from the new
+        :py:class:`pyspark.ml.linalg.Vector` type under the `spark.ml`
+        package.
+
+        :param dataset:
+          input dataset
+        :param cols:
+          a list of vector columns to be converted.
+          Old vector columns will be ignored. If unspecified, all new
+          vector columns will be converted except nested ones.
+        :return:
+          the input dataset with new vector columns converted to the
+          old vector type
+
+        >>> import pyspark
+        >>> from pyspark.ml.linalg import Vectors
+        >>> from pyspark.mllib.util import MLUtils
+        >>> df = spark.createDataFrame(
+        ...     [(0, Vectors.sparse(2, [1], [1.0]), Vectors.dense(2.0, 3.0))],
+        ...     ["id", "x", "y"])
+        >>> r1 = MLUtils.convertVectorColumnsFromML(df).first()
+        >>> isinstance(r1.x, pyspark.mllib.linalg.SparseVector)
+        True
+        >>> isinstance(r1.y, pyspark.mllib.linalg.DenseVector)
+        True
+        >>> r2 = MLUtils.convertVectorColumnsFromML(df, "x").first()
+        >>> isinstance(r2.x, pyspark.mllib.linalg.SparseVector)
+        True
+        >>> isinstance(r2.y, pyspark.ml.linalg.DenseVector)
+        True
+        """
+        if not isinstance(dataset, DataFrame):
+            raise TypeError("Input dataset must be a DataFrame but got {}.".format(type(dataset)))
+        return callMLlibFunc("convertVectorColumnsFromML", dataset, list(cols))
+
+    @staticmethod
+    @since("2.0.0")
+    def convertMatrixColumnsToML(dataset, *cols):
+        """
+        Converts matrix columns in an input DataFrame from the
+        :py:class:`pyspark.mllib.linalg.Matrix` type to the new
+        :py:class:`pyspark.ml.linalg.Matrix` type under the `spark.ml`
+        package.
+
+        :param dataset:
+          input dataset
+        :param cols:
+          a list of matrix columns to be converted.
+          New matrix columns will be ignored. If unspecified, all old
+          matrix columns will be converted excepted nested ones.
+        :return:
+          the input dataset with old matrix columns converted to the
+          new matrix type
+
+        >>> import pyspark
+        >>> from pyspark.mllib.linalg import Matrices
+        >>> from pyspark.mllib.util import MLUtils
+        >>> df = spark.createDataFrame(
+        ...     [(0, Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4]),
+        ...     Matrices.dense(2, 2, range(4)))], ["id", "x", "y"])
+        >>> r1 = MLUtils.convertMatrixColumnsToML(df).first()
+        >>> isinstance(r1.x, pyspark.ml.linalg.SparseMatrix)
+        True
+        >>> isinstance(r1.y, pyspark.ml.linalg.DenseMatrix)
+        True
+        >>> r2 = MLUtils.convertMatrixColumnsToML(df, "x").first()
+        >>> isinstance(r2.x, pyspark.ml.linalg.SparseMatrix)
+        True
+        >>> isinstance(r2.y, pyspark.mllib.linalg.DenseMatrix)
+        True
+        """
+        if not isinstance(dataset, DataFrame):
+            raise TypeError("Input dataset must be a DataFrame but got {}.".format(type(dataset)))
+        return callMLlibFunc("convertMatrixColumnsToML", dataset, list(cols))
+
+    @staticmethod
+    @since("2.0.0")
+    def convertMatrixColumnsFromML(dataset, *cols):
+        """
+        Converts matrix columns in an input DataFrame to the
+        :py:class:`pyspark.mllib.linalg.Matrix` type from the new
+        :py:class:`pyspark.ml.linalg.Matrix` type under the `spark.ml`
+        package.
+
+        :param dataset:
+          input dataset
+        :param cols:
+          a list of matrix columns to be converted.
+          Old matrix columns will be ignored. If unspecified, all new
+          matrix columns will be converted except nested ones.
+        :return:
+          the input dataset with new matrix columns converted to the
+          old matrix type
+
+        >>> import pyspark
+        >>> from pyspark.ml.linalg import Matrices
+        >>> from pyspark.mllib.util import MLUtils
+        >>> df = spark.createDataFrame(
+        ...     [(0, Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4]),
+        ...     Matrices.dense(2, 2, range(4)))], ["id", "x", "y"])
+        >>> r1 = MLUtils.convertMatrixColumnsFromML(df).first()
+        >>> isinstance(r1.x, pyspark.mllib.linalg.SparseMatrix)
+        True
+        >>> isinstance(r1.y, pyspark.mllib.linalg.DenseMatrix)
+        True
+        >>> r2 = MLUtils.convertMatrixColumnsFromML(df, "x").first()
+        >>> isinstance(r2.x, pyspark.mllib.linalg.SparseMatrix)
+        True
+        >>> isinstance(r2.y, pyspark.ml.linalg.DenseMatrix)
+        True
+        """
+        if not isinstance(dataset, DataFrame):
+            raise TypeError("Input dataset must be a DataFrame but got {}.".format(type(dataset)))
+        return callMLlibFunc("convertMatrixColumnsFromML", dataset, list(cols))
+
 
 class Saveable(object):
     """
     Mixin for models and transformers which may be saved as files.
+
+    .. versionadded:: 1.3.0
     """
 
     def save(self, sc, path):
@@ -220,15 +392,25 @@ class JavaSaveable(Saveable):
     """
     Mixin for models that provide save() through their Scala
     implementation.
+
+    .. versionadded:: 1.3.0
     """
 
+    @since("1.3.0")
     def save(self, sc, path):
+        """Save this model to the given path."""
+        if not isinstance(sc, SparkContext):
+            raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
         self._java_model.save(sc._jsc.sc(), path)
 
 
 class Loader(object):
     """
     Mixin for classes which can load saved models from files.
+
+    .. versionadded:: 1.3.0
     """
 
     @classmethod
@@ -250,6 +432,8 @@ class JavaLoader(Loader):
     """
     Mixin for classes which can load saved models using its Scala
     implementation.
+
+    .. versionadded:: 1.3.0
     """
 
     @classmethod
@@ -274,15 +458,21 @@ class JavaLoader(Loader):
         return java_obj.load(sc._jsc.sc(), path)
 
     @classmethod
+    @since("1.3.0")
     def load(cls, sc, path):
+        """Load a model from the given path."""
         java_model = cls._load_java(sc, path)
         return cls(java_model)
 
 
 class LinearDataGenerator(object):
-    """Utils for generating linear data"""
+    """Utils for generating linear data.
+
+    .. versionadded:: 1.5.0
+    """
 
     @staticmethod
+    @since("1.5.0")
     def generateLinearInput(intercept, weights, xMean, xVariance,
                             nPoints, seed, eps):
         """
@@ -294,6 +484,7 @@ class LinearDataGenerator(object):
         :param: seed      Random Seed
         :param: eps       Used to scale the noise. If eps is set high,
                           the amount of gaussian noise added is more.
+
         Returns a list of LabeledPoints of length nPoints
         """
         weights = [float(weight) for weight in weights]
@@ -304,10 +495,11 @@ class LinearDataGenerator(object):
             xVariance, int(nPoints), int(seed), float(eps)))
 
     @staticmethod
+    @since("1.5.0")
     def generateLinearRDD(sc, nexamples, nfeatures, eps,
                           nParts=2, intercept=0.0):
         """
-        Generate a RDD of LabeledPoints.
+        Generate an RDD of LabeledPoints.
         """
         return callMLlibFunc(
             "generateLinearRDDWrapper", sc, int(nexamples), int(nfeatures),
@@ -316,13 +508,18 @@ class LinearDataGenerator(object):
 
 def _test():
     import doctest
-    from pyspark.context import SparkContext
+    from pyspark.sql import SparkSession
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    globs['sc'] = SparkContext('local[2]', 'PythonTest', batchSize=2)
+    spark = SparkSession.builder\
+        .master("local[2]")\
+        .appName("mllib.util tests")\
+        .getOrCreate()
+    globs['spark'] = spark
+    globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
         exit(-1)
 

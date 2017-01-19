@@ -19,12 +19,11 @@ package org.apache.spark.util
 
 import java.util.concurrent.CopyOnWriteArrayList
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
-import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.internal.Logging
 
 /**
  * An event bus which posts events to its listeners.
@@ -37,8 +36,16 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
   /**
    * Add a listener to listen events. This method is thread-safe and can be called in any thread.
    */
-  final def addListener(listener: L) {
+  final def addListener(listener: L): Unit = {
     listeners.add(listener)
+  }
+
+  /**
+   * Remove a listener and it won't receive any events. This method is thread-safe and can be called
+   * in any thread.
+   */
+  final def removeListener(listener: L): Unit = {
+    listeners.remove(listener)
   }
 
   /**
@@ -46,14 +53,14 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * `postToAll` in the same thread for all events.
    */
   final def postToAll(event: E): Unit = {
-    // JavaConversions will create a JIterableWrapper if we use some Scala collection functions.
-    // However, this method will be called frequently. To avoid the wrapper cost, here ewe use
+    // JavaConverters can create a JIterableWrapper if we use asScala.
+    // However, this method will be called frequently. To avoid the wrapper cost, here we use
     // Java Iterator directly.
     val iter = listeners.iterator
     while (iter.hasNext) {
       val listener = iter.next()
       try {
-        onPostEvent(listener, event)
+        doPostEvent(listener, event)
       } catch {
         case NonFatal(e) =>
           logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
@@ -63,13 +70,13 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
 
   /**
    * Post an event to the specified listener. `onPostEvent` is guaranteed to be called in the same
-   * thread.
+   * thread for all listeners.
    */
-  def onPostEvent(listener: L, event: E): Unit
+  protected def doPostEvent(listener: L, event: E): Unit
 
   private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
     val c = implicitly[ClassTag[T]].runtimeClass
-    listeners.filter(_.getClass == c).map(_.asInstanceOf[T]).toSeq
+    listeners.asScala.filter(_.getClass == c).map(_.asInstanceOf[T]).toSeq
   }
 
 }

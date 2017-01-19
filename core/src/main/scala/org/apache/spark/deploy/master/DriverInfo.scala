@@ -19,7 +19,6 @@ package org.apache.spark.deploy.master
 
 import java.util.Date
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.DriverDescription
 import org.apache.spark.util.Utils
 

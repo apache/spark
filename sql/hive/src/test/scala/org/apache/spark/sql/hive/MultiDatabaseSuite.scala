@@ -17,35 +17,100 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.{QueryTest, SQLContext, SaveMode}
 
-class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
-  override val sqlContext: SQLContext = TestHive
+class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  private lazy val df = spark.range(10).coalesce(1).toDF()
 
-  import sqlContext.sql
+  private def checkTablePath(dbName: String, tableName: String): Unit = {
+    val metastoreTable = spark.sharedState.externalCatalog.getTable(dbName, tableName)
+    val expectedPath =
+      spark.sharedState.externalCatalog.getDatabase(dbName).locationUri + "/" + tableName
 
-  private val df = sqlContext.range(10).coalesce(1)
+    assert(metastoreTable.location === expectedPath)
+  }
+
+  private def getTableNames(dbName: Option[String] = None): Array[String] = {
+    dbName match {
+      case Some(db) => spark.catalog.listTables(db).collect().map(_.name)
+      case None => spark.catalog.listTables().collect().map(_.name)
+    }
+  }
 
   test(s"saveAsTable() to non-default database - with USE - Overwrite") {
     withTempDatabase { db =>
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
-        assert(sqlContext.tableNames().contains("t"))
-        checkAnswer(sqlContext.table("t"), df)
+        assert(getTableNames().contains("t"))
+        checkAnswer(spark.table("t"), df)
       }
 
-      assert(sqlContext.tableNames(db).contains("t"))
-      checkAnswer(sqlContext.table(s"$db.t"), df)
+      assert(getTableNames(Option(db)).contains("t"))
+      checkAnswer(spark.table(s"$db.t"), df)
+
+      checkTablePath(db, "t")
     }
   }
 
   test(s"saveAsTable() to non-default database - without USE - Overwrite") {
     withTempDatabase { db =>
       df.write.mode(SaveMode.Overwrite).saveAsTable(s"$db.t")
-      assert(sqlContext.tableNames(db).contains("t"))
-      checkAnswer(sqlContext.table(s"$db.t"), df)
+      assert(getTableNames(Option(db)).contains("t"))
+      checkAnswer(spark.table(s"$db.t"), df)
+
+      checkTablePath(db, "t")
+    }
+  }
+
+  test(s"createExternalTable() to non-default database - with USE") {
+    withTempDatabase { db =>
+      activateDatabase(db) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          df.write.format("parquet").mode(SaveMode.Overwrite).save(path)
+
+          spark.catalog.createExternalTable("t", path, "parquet")
+          assert(getTableNames(Option(db)).contains("t"))
+          checkAnswer(spark.table("t"), df)
+
+          sql(
+            s"""
+              |CREATE TABLE t1
+              |USING parquet
+              |OPTIONS (
+              |  path '${dir.toURI}'
+              |)
+            """.stripMargin)
+          assert(getTableNames(Option(db)).contains("t1"))
+          checkAnswer(spark.table("t1"), df)
+        }
+      }
+    }
+  }
+
+  test(s"createExternalTable() to non-default database - without USE") {
+    withTempDatabase { db =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        df.write.format("parquet").mode(SaveMode.Overwrite).save(path)
+        spark.catalog.createExternalTable(s"$db.t", path, "parquet")
+
+        assert(getTableNames(Option(db)).contains("t"))
+        checkAnswer(spark.table(s"$db.t"), df)
+
+        sql(
+          s"""
+              |CREATE TABLE $db.t1
+              |USING parquet
+              |OPTIONS (
+              |  path '${dir.toURI}'
+              |)
+            """.stripMargin)
+        assert(getTableNames(Option(db)).contains("t1"))
+        checkAnswer(spark.table(s"$db.t1"), df)
+      }
     }
   }
 
@@ -54,12 +119,14 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
         df.write.mode(SaveMode.Append).saveAsTable("t")
-        assert(sqlContext.tableNames().contains("t"))
-        checkAnswer(sqlContext.table("t"), df.unionAll(df))
+        assert(getTableNames().contains("t"))
+        checkAnswer(spark.table("t"), df.union(df))
       }
 
-      assert(sqlContext.tableNames(db).contains("t"))
-      checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
+      assert(getTableNames(Option(db)).contains("t"))
+      checkAnswer(spark.table(s"$db.t"), df.union(df))
+
+      checkTablePath(db, "t")
     }
   }
 
@@ -67,8 +134,10 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
     withTempDatabase { db =>
       df.write.mode(SaveMode.Overwrite).saveAsTable(s"$db.t")
       df.write.mode(SaveMode.Append).saveAsTable(s"$db.t")
-      assert(sqlContext.tableNames(db).contains("t"))
-      checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
+      assert(getTableNames(Option(db)).contains("t"))
+      checkAnswer(spark.table(s"$db.t"), df.union(df))
+
+      checkTablePath(db, "t")
     }
   }
 
@@ -76,10 +145,10 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
     withTempDatabase { db =>
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
-        assert(sqlContext.tableNames().contains("t"))
+        assert(getTableNames().contains("t"))
 
         df.write.insertInto(s"$db.t")
-        checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
+        checkAnswer(spark.table(s"$db.t"), df.union(df))
       }
     }
   }
@@ -88,13 +157,13 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
     withTempDatabase { db =>
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
-        assert(sqlContext.tableNames().contains("t"))
+        assert(getTableNames().contains("t"))
       }
 
-      assert(sqlContext.tableNames(db).contains("t"))
+      assert(getTableNames(Option(db)).contains("t"))
 
       df.write.insertInto(s"$db.t")
-      checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
+      checkAnswer(spark.table(s"$db.t"), df.union(df))
     }
   }
 
@@ -102,10 +171,10 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
     withTempDatabase { db =>
       activateDatabase(db) {
         sql("CREATE TABLE t (key INT)")
-        checkAnswer(sqlContext.table("t"), sqlContext.emptyDataFrame)
+        checkAnswer(spark.table("t"), spark.emptyDataFrame)
       }
 
-      checkAnswer(sqlContext.table(s"$db.t"), sqlContext.emptyDataFrame)
+      checkAnswer(spark.table(s"$db.t"), spark.emptyDataFrame)
     }
   }
 
@@ -113,25 +182,25 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
     withTempDatabase { db =>
       activateDatabase(db) {
         sql(s"CREATE TABLE t (key INT)")
-        assert(sqlContext.tableNames().contains("t"))
-        assert(!sqlContext.tableNames("default").contains("t"))
+        assert(getTableNames().contains("t"))
+        assert(!getTableNames(Option("default")).contains("t"))
       }
 
-      assert(!sqlContext.tableNames().contains("t"))
-      assert(sqlContext.tableNames(db).contains("t"))
+      assert(!getTableNames().contains("t"))
+      assert(getTableNames(Option(db)).contains("t"))
 
       activateDatabase(db) {
         sql(s"DROP TABLE t")
-        assert(!sqlContext.tableNames().contains("t"))
-        assert(!sqlContext.tableNames("default").contains("t"))
+        assert(!getTableNames().contains("t"))
+        assert(!getTableNames(Option("default")).contains("t"))
       }
 
-      assert(!sqlContext.tableNames().contains("t"))
-      assert(!sqlContext.tableNames(db).contains("t"))
+      assert(!getTableNames().contains("t"))
+      assert(!getTableNames(Option(db)).contains("t"))
     }
   }
 
-  test("Refreshes a table in a non-default database") {
+  test("Refreshes a table in a non-default database - with USE") {
     import org.apache.spark.sql.functions.lit
 
     withTempDatabase { db =>
@@ -143,16 +212,101 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
             s"""CREATE EXTERNAL TABLE t (id BIGINT)
                |PARTITIONED BY (p INT)
                |STORED AS PARQUET
-               |LOCATION '$path'
+               |LOCATION '${dir.toURI}'
              """.stripMargin)
 
-          checkAnswer(sqlContext.table("t"), sqlContext.emptyDataFrame)
+          checkAnswer(spark.table("t"), spark.emptyDataFrame)
 
           df.write.parquet(s"$path/p=1")
           sql("ALTER TABLE t ADD PARTITION (p=1)")
           sql("REFRESH TABLE t")
-          checkAnswer(sqlContext.table("t"), df.withColumn("p", lit(1)))
+          checkAnswer(spark.table("t"), df.withColumn("p", lit(1)))
+
+          df.write.parquet(s"$path/p=2")
+          sql("ALTER TABLE t ADD PARTITION (p=2)")
+          spark.catalog.refreshTable("t")
+          checkAnswer(
+            spark.table("t"),
+            df.withColumn("p", lit(1)).union(df.withColumn("p", lit(2))))
         }
+      }
+    }
+  }
+
+  test("Refreshes a table in a non-default database - without USE") {
+    import org.apache.spark.sql.functions.lit
+
+    withTempDatabase { db =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+
+        sql(
+          s"""CREATE EXTERNAL TABLE $db.t (id BIGINT)
+               |PARTITIONED BY (p INT)
+               |STORED AS PARQUET
+               |LOCATION '${dir.toURI}'
+             """.stripMargin)
+
+        checkAnswer(spark.table(s"$db.t"), spark.emptyDataFrame)
+
+        df.write.parquet(s"$path/p=1")
+        sql(s"ALTER TABLE $db.t ADD PARTITION (p=1)")
+        sql(s"REFRESH TABLE $db.t")
+        checkAnswer(spark.table(s"$db.t"), df.withColumn("p", lit(1)))
+
+        df.write.parquet(s"$path/p=2")
+        sql(s"ALTER TABLE $db.t ADD PARTITION (p=2)")
+        spark.catalog.refreshTable(s"$db.t")
+        checkAnswer(
+          spark.table(s"$db.t"),
+          df.withColumn("p", lit(1)).union(df.withColumn("p", lit(2))))
+      }
+    }
+  }
+
+  test("invalid database name and table names") {
+    {
+      val message = intercept[AnalysisException] {
+        df.write.format("parquet").saveAsTable("`d:b`.`t:a`")
+      }.getMessage
+      assert(message.contains("Database 'd:b' not found"))
+    }
+
+    {
+      val message = intercept[AnalysisException] {
+        df.write.format("parquet").saveAsTable("`d:b`.`table`")
+      }.getMessage
+      assert(message.contains("Database 'd:b' not found"))
+    }
+
+    withTempDir { dir =>
+      {
+        val message = intercept[AnalysisException] {
+          sql(
+            s"""
+            |CREATE TABLE `d:b`.`t:a` (a int)
+            |USING parquet
+            |OPTIONS (
+            |  path '${dir.toURI}'
+            |)
+            """.stripMargin)
+        }.getMessage
+        assert(message.contains("`t:a` is not a valid name for tables/databases. " +
+          "Valid names only contain alphabet characters, numbers and _."))
+      }
+
+      {
+        val message = intercept[AnalysisException] {
+          sql(
+            s"""
+              |CREATE TABLE `d:b`.`table` (a int)
+              |USING parquet
+              |OPTIONS (
+              |  path '${dir.toURI}'
+              |)
+              """.stripMargin)
+        }.getMessage
+        assert(message.contains("Database 'd:b' not found"))
       }
     }
   }

@@ -21,14 +21,13 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.storage.{BlockId, BlockManager}
-import scala.Some
 
 private[spark] class BlockRDDPartition(val blockId: BlockId, idx: Int) extends Partition {
   val index = idx
 }
 
 private[spark]
-class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds: Array[BlockId])
+class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[BlockId])
   extends RDD[T](sc, Nil) {
 
   @transient lazy val _locations = BlockManager.blockIdsToHosts(blockIds, SparkEnv.get)
@@ -36,16 +35,16 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
 
   override def getPartitions: Array[Partition] = {
     assertValid()
-    (0 until blockIds.length).map(i => {
+    (0 until blockIds.length).map { i =>
       new BlockRDDPartition(blockIds(i), i).asInstanceOf[Partition]
-    }).toArray
+    }.toArray
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     assertValid()
     val blockManager = SparkEnv.get.blockManager
     val blockId = split.asInstanceOf[BlockRDDPartition].blockId
-    blockManager.get(blockId) match {
+    blockManager.get[T](blockId) match {
       case Some(block) => block.data.asInstanceOf[Iterator[T]]
       case None =>
         throw new Exception("Could not compute split, block " + blockId + " not found")
@@ -64,7 +63,7 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
    */
   private[spark] def removeBlocks() {
     blockIds.foreach { blockId =>
-      sc.env.blockManager.master.removeBlock(blockId)
+      sparkContext.env.blockManager.master.removeBlock(blockId)
     }
     _isValid = false
   }

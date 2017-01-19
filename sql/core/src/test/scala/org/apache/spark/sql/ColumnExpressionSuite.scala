@@ -17,82 +17,109 @@
 
 package org.apache.spark.sql
 
+import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
 
-import org.apache.spark.sql.execution.Project
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
+import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-class ColumnExpressionSuite extends QueryTest {
-  import org.apache.spark.sql.TestData._
+class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+  private lazy val booleanData = {
+    spark.createDataFrame(sparkContext.parallelize(
+      Row(false, false) ::
+      Row(false, true) ::
+      Row(true, false) ::
+      Row(true, true) :: Nil),
+      StructType(Seq(StructField("a", BooleanType), StructField("b", BooleanType))))
+  }
 
-  test("alias") {
+  test("column names with space") {
+    val df = Seq((1, "a")).toDF("name with space", "name.with.dot")
+
+    checkAnswer(
+      df.select(df("name with space")),
+      Row(1) :: Nil)
+
+    checkAnswer(
+      df.select($"name with space"),
+      Row(1) :: Nil)
+
+    checkAnswer(
+      df.select(col("name with space")),
+      Row(1) :: Nil)
+
+    checkAnswer(
+      df.select("name with space"),
+      Row(1) :: Nil)
+
+    checkAnswer(
+      df.select(expr("`name with space`")),
+      Row(1) :: Nil)
+  }
+
+  test("column names with dot") {
+    val df = Seq((1, "a")).toDF("name with space", "name.with.dot").as("a")
+
+    checkAnswer(
+      df.select(df("`name.with.dot`")),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select($"`name.with.dot`"),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select(col("`name.with.dot`")),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select("`name.with.dot`"),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select(expr("`name.with.dot`")),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select(df("a.`name.with.dot`")),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select($"a.`name.with.dot`"),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select(col("a.`name.with.dot`")),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select("a.`name.with.dot`"),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select(expr("a.`name.with.dot`")),
+      Row("a") :: Nil)
+  }
+
+  test("alias and name") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     assert(df.select(df("a").as("b")).columns.head === "b")
     assert(df.select(df("a").alias("b")).columns.head === "b")
+    assert(df.select(df("a").name("b")).columns.head === "b")
   }
 
-  test("single explode") {
-    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
-    checkAnswer(
-      df.select(explode('intList)),
-      Row(1) :: Row(2) :: Row(3) :: Nil)
-  }
-
-  test("explode and other columns") {
-    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
-
-    checkAnswer(
-      df.select($"a", explode('intList)),
-      Row(1, 1) ::
-      Row(1, 2) ::
-      Row(1, 3) :: Nil)
-
-    checkAnswer(
-      df.select($"*", explode('intList)),
-      Row(1, Seq(1, 2, 3), 1) ::
-      Row(1, Seq(1, 2, 3), 2) ::
-      Row(1, Seq(1, 2, 3), 3) :: Nil)
-  }
-
-  test("aliased explode") {
-    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
-
-    checkAnswer(
-      df.select(explode('intList).as('int)).select('int),
-      Row(1) :: Row(2) :: Row(3) :: Nil)
-
-    checkAnswer(
-      df.select(explode('intList).as('int)).select(sum('int)),
-      Row(6) :: Nil)
-  }
-
-  test("explode on map") {
-    val df = Seq((1, Map("a" -> "b"))).toDF("a", "map")
-
-    checkAnswer(
-      df.select(explode('map)),
-      Row("a", "b"))
-  }
-
-  test("explode on map with aliases") {
-    val df = Seq((1, Map("a" -> "b"))).toDF("a", "map")
-
-    checkAnswer(
-      df.select(explode('map).as("key1" :: "value1" :: Nil)).select("key1", "value1"),
-      Row("a", "b"))
-  }
-
-  test("self join explode") {
-    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
-    val exploded = df.select(explode('intList).as('i))
-
-    checkAnswer(
-      exploded.join(exploded, exploded("i") === exploded("i")).agg(count("*")),
-      Row(3) :: Nil)
+  test("as propagates metadata") {
+    val metadata = new MetadataBuilder
+    metadata.putString("key", "value")
+    val origCol = $"a".as("b", metadata.build())
+    val newCol = origCol.as("c")
+    assert(newCol.expr.asInstanceOf[NamedExpression].metadata.getString("key") === "value")
   }
 
   test("collect on column produced by a binary operator") {
@@ -187,7 +214,7 @@ class ColumnExpressionSuite extends QueryTest {
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
 
     checkAnswer(
-      ctx.sql("select isnull(null), isnull(1)"),
+      sql("select isnull(null), isnull(1)"),
       Row(true, false))
   }
 
@@ -197,12 +224,12 @@ class ColumnExpressionSuite extends QueryTest {
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
 
     checkAnswer(
-      ctx.sql("select isnotnull(null), isnotnull('a')"),
+      sql("select isnotnull(null), isnotnull('a')"),
       Row(false, true))
   }
 
   test("isNaN") {
-    val testData = ctx.createDataFrame(ctx.sparkContext.parallelize(
+    val testData = spark.createDataFrame(sparkContext.parallelize(
       Row(Double.NaN, Float.NaN) ::
       Row(math.log(-1), math.log(-3).toFloat) ::
       Row(null, null) ::
@@ -214,30 +241,34 @@ class ColumnExpressionSuite extends QueryTest {
       Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
-      testData.select(isNaN($"a"), isNaN($"b")),
+      testData.select(isnan($"a"), isnan($"b")),
       Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
-      ctx.sql("select isnan(15), isnan('invalid')"),
+      sql("select isnan(15), isnan('invalid')"),
       Row(false, false))
   }
 
   test("nanvl") {
-    val testData = ctx.createDataFrame(ctx.sparkContext.parallelize(
-      Row(null, 3.0, Double.NaN, Double.PositiveInfinity) :: Nil),
+    val testData = spark.createDataFrame(sparkContext.parallelize(
+      Row(null, 3.0, Double.NaN, Double.PositiveInfinity, 1.0f, 4) :: Nil),
       StructType(Seq(StructField("a", DoubleType), StructField("b", DoubleType),
-        StructField("c", DoubleType), StructField("d", DoubleType))))
+        StructField("c", DoubleType), StructField("d", DoubleType),
+        StructField("e", FloatType), StructField("f", IntegerType))))
 
     checkAnswer(
       testData.select(
-        nanvl($"a", lit(5)), nanvl($"b", lit(10)),
-        nanvl($"c", lit(null).cast(DoubleType)), nanvl($"d", lit(10))),
-      Row(null, 3.0, null, Double.PositiveInfinity)
+        nanvl($"a", lit(5)), nanvl($"b", lit(10)), nanvl(lit(10), $"b"),
+        nanvl($"c", lit(null).cast(DoubleType)), nanvl($"d", lit(10)),
+        nanvl($"b", $"e"), nanvl($"e", $"f")),
+      Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
     )
-    testData.registerTempTable("t")
+    testData.createOrReplaceTempView("t")
     checkAnswer(
-      ctx.sql("select nanvl(a, 5), nanvl(b, 10), nanvl(c, null), nanvl(d, 10) from t"),
-      Row(null, 3.0, null, Double.PositiveInfinity)
+      sql(
+        "select nanvl(a, 5), nanvl(b, 10), nanvl(10, b), nanvl(c, null), nanvl(d, 10), " +
+          " nanvl(b, e), nanvl(e, f) from t"),
+      Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
     )
   }
 
@@ -261,8 +292,8 @@ class ColumnExpressionSuite extends QueryTest {
       testData2.collect().toSeq.filter(r => r.getInt(0) == r.getInt(1)))
   }
 
-  test("!==") {
-    val nullData = ctx.createDataFrame(ctx.sparkContext.parallelize(
+  test("=!=") {
+    val nullData = spark.createDataFrame(sparkContext.parallelize(
       Row(1, 1) ::
       Row(1, 2) ::
       Row(1, null) ::
@@ -280,6 +311,17 @@ class ColumnExpressionSuite extends QueryTest {
     checkAnswer(
       nullData.filter($"a" <=> $"b"),
       Row(1, 1) :: Row(null, null) :: Nil)
+
+    val nullData2 = spark.createDataFrame(sparkContext.parallelize(
+        Row("abc") ::
+        Row(null)  ::
+        Row("xyz") :: Nil),
+        StructType(Seq(StructField("a", StringType, true))))
+
+    checkAnswer(
+      nullData2.filter($"a" <=> null),
+      Row(null) :: Nil)
+
   }
 
   test(">") {
@@ -323,7 +365,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("between") {
-    val testData = ctx.sparkContext.parallelize(
+    val testData = sparkContext.parallelize(
       (0, 1, 2) ::
       (1, 2, 3) ::
       (2, 1, 0) ::
@@ -338,26 +380,25 @@ class ColumnExpressionSuite extends QueryTest {
 
   test("in") {
     val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
-    checkAnswer(df.filter($"a".in(1, 2)),
+    checkAnswer(df.filter($"a".isin(1, 2)),
       df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
-    checkAnswer(df.filter($"a".in(3, 2)),
+    checkAnswer(df.filter($"a".isin(3, 2)),
       df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
-    checkAnswer(df.filter($"a".in(3, 1)),
+    checkAnswer(df.filter($"a".isin(3, 1)),
       df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
-    checkAnswer(df.filter($"b".in("y", "x")),
+    checkAnswer(df.filter($"b".isin("y", "x")),
       df.collect().toSeq.filter(r => r.getString(1) == "y" || r.getString(1) == "x"))
-    checkAnswer(df.filter($"b".in("z", "x")),
+    checkAnswer(df.filter($"b".isin("z", "x")),
       df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "x"))
-    checkAnswer(df.filter($"b".in("z", "y")),
+    checkAnswer(df.filter($"b".isin("z", "y")),
       df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y"))
-  }
 
-  val booleanData = ctx.createDataFrame(ctx.sparkContext.parallelize(
-    Row(false, false) ::
-      Row(false, true) ::
-      Row(true, false) ::
-      Row(true, true) :: Nil),
-    StructType(Seq(StructField("a", BooleanType), StructField("b", BooleanType))))
+    val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
+
+    intercept[AnalysisException] {
+      df2.filter($"a".isin($"b"))
+    }
+  }
 
   test("&&") {
     checkAnswer(
@@ -442,7 +483,7 @@ class ColumnExpressionSuite extends QueryTest {
     )
 
     checkAnswer(
-      ctx.sql("SELECT upper('aB'), ucase('cDe')"),
+      sql("SELECT upper('aB'), ucase('cDe')"),
       Row("AB", "CDE"))
   }
 
@@ -463,36 +504,109 @@ class ColumnExpressionSuite extends QueryTest {
     )
 
     checkAnswer(
-      ctx.sql("SELECT lower('aB'), lcase('cDe')"),
+      sql("SELECT lower('aB'), lcase('cDe')"),
       Row("ab", "cde"))
   }
 
-  test("monotonicallyIncreasingId") {
+  test("monotonically_increasing_id") {
     // Make sure we have 2 partitions, each with 2 records.
-    val df = ctx.sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
+    val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
       Iterator(Tuple1(1), Tuple1(2))
     }.toDF("a")
     checkAnswer(
-      df.select(monotonicallyIncreasingId()),
-      Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
+      df.select(monotonically_increasing_id(), expr("monotonically_increasing_id()")),
+      Row(0L, 0L) ::
+        Row(1L, 1L) ::
+        Row((1L << 33) + 0L, (1L << 33) + 0L) ::
+        Row((1L << 33) + 1L, (1L << 33) + 1L) :: Nil
     )
   }
 
-  test("sparkPartitionId") {
+  test("spark_partition_id") {
     // Make sure we have 2 partitions, each with 2 records.
-    val df = ctx.sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
+    val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
       Iterator(Tuple1(1), Tuple1(2))
     }.toDF("a")
     checkAnswer(
-      df.select(sparkPartitionId()),
+      df.select(spark_partition_id()),
       Row(0) :: Row(0) :: Row(1) :: Row(1) :: Nil
     )
   }
 
-  test("lift alias out of cast") {
-    compareExpressions(
-      col("1234").as("name").cast("int").expr,
-      col("1234").cast("int").as("name").expr)
+  test("input_file_name, input_file_block_start, input_file_block_length - FileScanRDD") {
+    withTempPath { dir =>
+      val data = sparkContext.parallelize(0 to 10).toDF("id")
+      data.write.parquet(dir.getCanonicalPath)
+
+      // Test the 3 expressions when reading from files
+      val q = spark.read.parquet(dir.getCanonicalPath).select(
+        input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()"))
+      val firstRow = q.head()
+      assert(firstRow.getString(0).contains(dir.toURI.getPath))
+      assert(firstRow.getLong(1) == 0)
+      assert(firstRow.getLong(2) > 0)
+
+      // Now read directly from the original RDD without going through any files to make sure
+      // we are returning empty string, -1, and -1.
+      checkAnswer(
+        data.select(
+          input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()")
+        ).limit(1),
+        Row("", -1L, -1L))
+    }
+  }
+
+  test("input_file_name, input_file_block_start, input_file_block_length - HadoopRDD") {
+    withTempPath { dir =>
+      val data = sparkContext.parallelize((0 to 10).map(_.toString)).toDF()
+      data.write.text(dir.getCanonicalPath)
+      val df = spark.sparkContext.textFile(dir.getCanonicalPath).toDF()
+
+      // Test the 3 expressions when reading from files
+      val q = df.select(
+        input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()"))
+      val firstRow = q.head()
+      assert(firstRow.getString(0).contains(dir.toURI.getPath))
+      assert(firstRow.getLong(1) == 0)
+      assert(firstRow.getLong(2) > 0)
+
+      // Now read directly from the original RDD without going through any files to make sure
+      // we are returning empty string, -1, and -1.
+      checkAnswer(
+        data.select(
+          input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()")
+        ).limit(1),
+        Row("", -1L, -1L))
+    }
+  }
+
+  test("input_file_name, input_file_block_start, input_file_block_length - NewHadoopRDD") {
+    withTempPath { dir =>
+      val data = sparkContext.parallelize((0 to 10).map(_.toString)).toDF()
+      data.write.text(dir.getCanonicalPath)
+      val rdd = spark.sparkContext.newAPIHadoopFile(
+        dir.getCanonicalPath,
+        classOf[NewTextInputFormat],
+        classOf[LongWritable],
+        classOf[Text])
+      val df = rdd.map(pair => pair._2.toString).toDF()
+
+      // Test the 3 expressions when reading from files
+      val q = df.select(
+        input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()"))
+      val firstRow = q.head()
+      assert(firstRow.getString(0).contains(dir.toURI.getPath))
+      assert(firstRow.getLong(1) == 0)
+      assert(firstRow.getLong(2) > 0)
+
+      // Now read directly from the original RDD without going through any files to make sure
+      // we are returning empty string, -1, and -1.
+      checkAnswer(
+        data.select(
+          input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()")
+        ).limit(1),
+        Row("", -1L, -1L))
+    }
   }
 
   test("columns can be compared") {
@@ -521,8 +635,8 @@ class ColumnExpressionSuite extends QueryTest {
     }
 
     def checkNumProjects(df: DataFrame, expectedNumProjects: Int): Unit = {
-      val projects = df.queryExecution.executedPlan.collect {
-        case project: Project => project
+      val projects = df.queryExecution.sparkPlan.collect {
+        case tungstenProject: ProjectExec => tungstenProject
       }
       assert(projects.size === expectedNumProjects)
     }
@@ -598,5 +712,4 @@ class ColumnExpressionSuite extends QueryTest {
       testData2.select($"a".bitwiseXOR($"b").bitwiseXOR(39)),
       testData2.collect().toSeq.map(r => Row(r.getInt(0) ^ r.getInt(1) ^ 39)))
   }
-
 }

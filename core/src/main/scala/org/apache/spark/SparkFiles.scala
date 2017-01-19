@@ -34,6 +34,6 @@ object SparkFiles {
    * Get the root directory that contains files added through `SparkContext.addFile()`.
    */
   def getRootDirectory(): String =
-    SparkEnv.get.sparkFilesDir
+    SparkEnv.get.driverTmpDir.getOrElse(".")
 
 }

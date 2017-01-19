@@ -19,9 +19,11 @@ package org.apache.spark.network.netty
 
 import java.nio.ByteBuffer
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+import scala.language.existentials
+import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.BlockDataManager
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
@@ -38,6 +40,7 @@ import org.apache.spark.storage.{BlockId, StorageLevel}
  * is equivalent to one Spark-level shuffle block.
  */
 class NettyBlockRpcServer(
+    appId: String,
     serializer: Serializer,
     blockManager: BlockDataManager)
   extends RpcHandler with Logging {
@@ -46,26 +49,31 @@ class NettyBlockRpcServer(
 
   override def receive(
       client: TransportClient,
-      messageBytes: Array[Byte],
+      rpcMessage: ByteBuffer,
       responseContext: RpcResponseCallback): Unit = {
-    val message = BlockTransferMessage.Decoder.fromByteArray(messageBytes)
+    val message = BlockTransferMessage.Decoder.fromByteBuffer(rpcMessage)
     logTrace(s"Received request: $message")
 
     message match {
       case openBlocks: OpenBlocks =>
         val blocks: Seq[ManagedBuffer] =
           openBlocks.blockIds.map(BlockId.apply).map(blockManager.getBlockData)
-        val streamId = streamManager.registerStream(blocks.iterator)
+        val streamId = streamManager.registerStream(appId, blocks.iterator.asJava)
         logTrace(s"Registered streamId $streamId with ${blocks.size} buffers")
-        responseContext.onSuccess(new StreamHandle(streamId, blocks.size).toByteArray)
+        responseContext.onSuccess(new StreamHandle(streamId, blocks.size).toByteBuffer)
 
       case uploadBlock: UploadBlock =>
-        // StorageLevel is serialized as bytes using our JavaSerializer.
-        val level: StorageLevel =
-          serializer.newInstance().deserialize(ByteBuffer.wrap(uploadBlock.metadata))
+        // StorageLevel and ClassTag are serialized as bytes using our JavaSerializer.
+        val (level: StorageLevel, classTag: ClassTag[_]) = {
+          serializer
+            .newInstance()
+            .deserialize(ByteBuffer.wrap(uploadBlock.metadata))
+            .asInstanceOf[(StorageLevel, ClassTag[_])]
+        }
         val data = new NioManagedBuffer(ByteBuffer.wrap(uploadBlock.blockData))
-        blockManager.putBlockData(BlockId(uploadBlock.blockId), data, level)
-        responseContext.onSuccess(new Array[Byte](0))
+        val blockId = BlockId(uploadBlock.blockId)
+        blockManager.putBlockData(blockId, data, level, classTag)
+        responseContext.onSuccess(ByteBuffer.allocate(0))
     }
   }
 

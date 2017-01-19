@@ -62,6 +62,13 @@ private[spark] object ToolTips {
     """Time that the executor spent paused for Java garbage collection while the task was
        running."""
 
+  val PEAK_EXECUTION_MEMORY =
+    """Execution memory refers to the memory used by internal data structures created during
+       shuffles, aggregations and joins when Tungsten is enabled. The value of this accumulator
+       should be approximately the sum of the peak sizes across all such data structures created
+       in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and
+       external sort."""
+
   val JOB_TIMELINE =
     """Shows when jobs started and ended and when executors joined or left. Drag to scroll.
        Click Enable Zooming and use mouse wheel to zoom in/out."""
@@ -79,5 +86,17 @@ private[spark] object ToolTips {
     """Shows a graph of RDD operations in this stage, and RDDs inside each one. A stage can run
        multiple operations (e.g. two map() functions) if they can be pipelined. Some operations
        also create multiple RDDs internally. Cached RDDs are shown in green.
+    """
+
+  val TASK_TIME =
+  "Shaded red when garbage collection (GC) time is over 10% of task time"
+
+  val BLACKLISTED =
+  "Shows if this executor has been blacklisted by the scheduler due to task failures."
+
+  val APPLICATION_EXECUTOR_LIMIT =
+    """Maximum number of executors that this application will use. This limit is finite only when
+       dynamic allocation is enabled. The number of granted executors may exceed the limit
+       ephemerally when executors are being killed.
     """
 }

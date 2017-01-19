@@ -18,11 +18,12 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.AccumulatorV2
 
 /**
- * Low-level task scheduler interface, currently implemented exclusively by TaskSchedulerImpl.
+ * Low-level task scheduler interface, currently implemented exclusively by
+ * [[org.apache.spark.scheduler.TaskSchedulerImpl]].
  * This interface allows plugging in different task schedulers. Each TaskScheduler schedules tasks
  * for a single SparkContext. These schedulers get sets of tasks submitted to them from the
  * DAGScheduler for each stage, and are responsible for sending the tasks to the cluster, running
@@ -51,7 +52,7 @@ private[spark] trait TaskScheduler {
   def submitTasks(taskSet: TaskSet): Unit
 
   // Cancel a stage.
-  def cancelTasks(stageId: Int, interruptThread: Boolean)
+  def cancelTasks(stageId: Int, interruptThread: Boolean): Unit
 
   // Set the DAG scheduler for upcalls. This is guaranteed to be set before submitTasks is called.
   def setDAGScheduler(dagScheduler: DAGScheduler): Unit
@@ -64,8 +65,10 @@ private[spark] trait TaskScheduler {
    * alive. Return true if the driver knows about the given block manager. Otherwise, return false,
    * indicating that the block manager should re-register.
    */
-  def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
-    blockManagerId: BlockManagerId): Boolean
+  def executorHeartbeatReceived(
+      execId: String,
+      accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
+      blockManagerId: BlockManagerId): Boolean
 
   /**
    * Get an application ID associated with the job.

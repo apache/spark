@@ -34,26 +34,13 @@ public class StorageLevels {
   public static final StorageLevel MEMORY_AND_DISK_2 = create(true, true, false, true, 2);
   public static final StorageLevel MEMORY_AND_DISK_SER = create(true, true, false, false, 1);
   public static final StorageLevel MEMORY_AND_DISK_SER_2 = create(true, true, false, false, 2);
-  public static final StorageLevel OFF_HEAP = create(false, false, true, false, 1);
+  public static final StorageLevel OFF_HEAP = create(true, true, true, false, 1);
 
   /**
    * Create a new StorageLevel object.
    * @param useDisk saved to disk, if true
-   * @param useMemory saved to memory, if true
-   * @param deserialized saved as deserialized objects, if true
-   * @param replication replication factor
-   */
-  @Deprecated
-  public static StorageLevel create(boolean useDisk, boolean useMemory, boolean deserialized,
-      int replication) {
-    return StorageLevel.apply(useDisk, useMemory, false, deserialized, replication);
-  }
-
-  /**
-   * Create a new StorageLevel object.
-   * @param useDisk saved to disk, if true
-   * @param useMemory saved to memory, if true
-   * @param useOffHeap saved to Tachyon, if true
+   * @param useMemory saved to on-heap memory, if true
+   * @param useOffHeap saved to off-heap memory, if true
    * @param deserialized saved as deserialized objects, if true
    * @param replication replication factor
    */

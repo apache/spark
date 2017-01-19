@@ -17,10 +17,11 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataOutput, DataInput}
 import java.{util => ju}
+import java.io.{DataInput, DataOutput}
+import java.nio.charset.StandardCharsets
 
-import com.google.common.base.Charsets.UTF_8
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.io._
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
@@ -62,10 +63,9 @@ private[python] class TestInputKeyConverter extends Converter[Any, Any] {
 }
 
 private[python] class TestInputValueConverter extends Converter[Any, Any] {
-  import collection.JavaConversions._
   override def convert(obj: Any): ju.List[Double] = {
     val m = obj.asInstanceOf[MapWritable]
-    seqAsJavaList(m.keySet.map(w => w.asInstanceOf[DoubleWritable].get()).toSeq)
+    m.keySet.asScala.map(_.asInstanceOf[DoubleWritable].get()).toSeq.asJava
   }
 }
 
@@ -76,9 +76,8 @@ private[python] class TestOutputKeyConverter extends Converter[Any, Any] {
 }
 
 private[python] class TestOutputValueConverter extends Converter[Any, Any] {
-  import collection.JavaConversions._
   override def convert(obj: Any): DoubleWritable = {
-    new DoubleWritable(obj.asInstanceOf[java.util.Map[Double, _]].keySet().head)
+    new DoubleWritable(obj.asInstanceOf[java.util.Map[Double, _]].keySet().iterator().next())
   }
 }
 
@@ -135,7 +134,7 @@ object WriteInputFormatTestDataGenerator {
     sc.parallelize(intKeys).saveAsSequenceFile(intPath)
     sc.parallelize(intKeys.map{ case (k, v) => (k.toDouble, v) }).saveAsSequenceFile(doublePath)
     sc.parallelize(intKeys.map{ case (k, v) => (k.toString, v) }).saveAsSequenceFile(textPath)
-    sc.parallelize(intKeys.map{ case (k, v) => (k, v.getBytes(UTF_8)) }
+    sc.parallelize(intKeys.map{ case (k, v) => (k, v.getBytes(StandardCharsets.UTF_8)) }
       ).saveAsSequenceFile(bytesPath)
     val bools = Seq((1, true), (2, true), (2, false), (3, true), (2, false), (1, false))
     sc.parallelize(bools).saveAsSequenceFile(boolPath)
@@ -145,7 +144,7 @@ object WriteInputFormatTestDataGenerator {
 
     // Create test data for ArrayWritable
     val data = Seq(
-      (1, Array()),
+      (1, Array.empty[Double]),
       (2, Array(3.0, 4.0, 5.0)),
       (3, Array(4.0, 5.0, 6.0))
     )

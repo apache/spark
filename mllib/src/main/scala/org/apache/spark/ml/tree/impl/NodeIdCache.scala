@@ -21,12 +21,10 @@ import java.io.IOException
 
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.tree.{LearningNode, Split}
-import org.apache.spark.mllib.tree.impl.BaggedPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -79,8 +77,8 @@ private[spark] class NodeIdCache(
   // Indicates whether we can checkpoint
   private val canCheckpoint = nodeIdsForInstances.sparkContext.getCheckpointDir.nonEmpty
 
-  // FileSystem instance for deleting checkpoints as needed
-  private val fs = FileSystem.get(nodeIdsForInstances.sparkContext.hadoopConfiguration)
+  // Hadoop Configuration for deleting checkpoints as needed
+  private val hadoopConf = nodeIdsForInstances.sparkContext.hadoopConfiguration
 
   /**
    * Update the node index values in the cache.
@@ -122,7 +120,7 @@ private[spark] class NodeIdCache(
     rddUpdateCount += 1
 
     // Handle checkpointing if the directory is not None.
-    if (canCheckpoint && (rddUpdateCount % checkpointInterval) == 0) {
+    if (canCheckpoint && checkpointInterval != -1 && (rddUpdateCount % checkpointInterval) == 0) {
       // Let's see if we can delete previous checkpoints.
       var canDelete = true
       while (checkpointQueue.size > 1 && canDelete) {
@@ -132,7 +130,9 @@ private[spark] class NodeIdCache(
           val old = checkpointQueue.dequeue()
           // Since the old checkpoint is not deleted by Spark, we'll manually delete it here.
           try {
-            fs.delete(new Path(old.getCheckpointFile.get), true)
+            val path = new Path(old.getCheckpointFile.get)
+            val fs = path.getFileSystem(hadoopConf)
+            fs.delete(path, true)
           } catch {
             case e: IOException =>
               logError("Decision Tree learning using cacheNodeIds failed to remove checkpoint" +
@@ -156,7 +156,9 @@ private[spark] class NodeIdCache(
       val old = checkpointQueue.dequeue()
       if (old.getCheckpointFile.isDefined) {
         try {
-          fs.delete(new Path(old.getCheckpointFile.get), true)
+          val path = new Path(old.getCheckpointFile.get)
+          val fs = path.getFileSystem(hadoopConf)
+          fs.delete(path, true)
         } catch {
           case e: IOException =>
             logError("Decision Tree learning using cacheNodeIds failed to remove checkpoint" +
@@ -164,14 +166,13 @@ private[spark] class NodeIdCache(
         }
       }
     }
-  }
-  if (prevNodeIdsForInstances != null) {
-    // Unpersist the previous one if one exists.
-    prevNodeIdsForInstances.unpersist()
+    if (prevNodeIdsForInstances != null) {
+      // Unpersist the previous one if one exists.
+      prevNodeIdsForInstances.unpersist()
+    }
   }
 }
 
-@DeveloperApi
 private[spark] object NodeIdCache {
   /**
    * Initialize the node Id cache with initial node Id values.

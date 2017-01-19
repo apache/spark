@@ -20,17 +20,18 @@ package org.apache.spark.sql.types
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
+import org.apache.spark.annotation.InterfaceStability
 
 /**
- * :: DeveloperApi ::
  * The data type for Maps. Keys in a map are not allowed to have `null` values.
  *
- * Please use [[DataTypes.createMapType()]] to create a specific instance.
+ * Please use `DataTypes.createMapType()` to create a specific instance.
  *
  * @param keyType The data type of map keys.
  * @param valueType The data type of map values.
  * @param valueContainsNull Indicates if map values have `null` values.
  */
+@InterfaceStability.Stable
 case class MapType(
   keyType: DataType,
   valueType: DataType,
@@ -55,18 +56,29 @@ case class MapType(
 
   /**
    * The default size of a value of the MapType is
-   * 100 * (the default size of the key type + the default size of the value type).
-   * (We assume that there are 100 elements).
+   * (the default size of the key type + the default size of the value type).
+   * We assume that there is only 1 element on average in a map. See SPARK-18853.
    */
-  override def defaultSize: Int = 100 * (keyType.defaultSize + valueType.defaultSize)
+  override def defaultSize: Int = 1 * (keyType.defaultSize + valueType.defaultSize)
 
   override def simpleString: String = s"map<${keyType.simpleString},${valueType.simpleString}>"
 
-  private[spark] override def asNullable: MapType =
+  override def catalogString: String = s"map<${keyType.catalogString},${valueType.catalogString}>"
+
+  override def sql: String = s"MAP<${keyType.sql}, ${valueType.sql}>"
+
+  override private[spark] def asNullable: MapType =
     MapType(keyType.asNullable, valueType.asNullable, valueContainsNull = true)
+
+  override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
+    f(this) || keyType.existsRecursively(f) || valueType.existsRecursively(f)
+  }
 }
 
-
+/**
+ * @since 1.3.0
+ */
+@InterfaceStability.Stable
 object MapType extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType = apply(NullType, NullType)

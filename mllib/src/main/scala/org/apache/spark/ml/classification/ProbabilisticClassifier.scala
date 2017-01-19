@@ -18,19 +18,18 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DoubleType, DataType, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * (private[classification])  Params for probabilistic classification.
  */
 private[classification] trait ProbabilisticClassifierParams
-  extends ClassifierParams with HasProbabilityCol {
-
+  extends ClassifierParams with HasProbabilityCol with HasThresholds {
   override protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
@@ -46,12 +45,12 @@ private[classification] trait ProbabilisticClassifierParams
  *
  * Single-label binary or multiclass classifier which can output class conditional probabilities.
  *
- * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
+ * @tparam FeaturesType  Type of input features.  E.g., `Vector`
  * @tparam E  Concrete Estimator type
  * @tparam M  Concrete Model type
  */
 @DeveloperApi
-private[spark] abstract class ProbabilisticClassifier[
+abstract class ProbabilisticClassifier[
     FeaturesType,
     E <: ProbabilisticClassifier[FeaturesType, E, M],
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
@@ -59,6 +58,9 @@ private[spark] abstract class ProbabilisticClassifier[
 
   /** @group setParam */
   def setProbabilityCol(value: String): E = set(probabilityCol, value).asInstanceOf[E]
+
+  /** @group setParam */
+  def setThresholds(value: Array[Double]): E = set(thresholds, value).asInstanceOf[E]
 }
 
 
@@ -68,11 +70,11 @@ private[spark] abstract class ProbabilisticClassifier[
  * Model produced by a [[ProbabilisticClassifier]].
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
- * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
+ * @tparam FeaturesType  Type of input features.  E.g., `Vector`
  * @tparam M  Concrete Model type
  */
 @DeveloperApi
-private[spark] abstract class ProbabilisticClassificationModel[
+abstract class ProbabilisticClassificationModel[
     FeaturesType,
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
   extends ClassificationModel[FeaturesType, M] with ProbabilisticClassifierParams {
@@ -80,18 +82,31 @@ private[spark] abstract class ProbabilisticClassificationModel[
   /** @group setParam */
   def setProbabilityCol(value: String): M = set(probabilityCol, value).asInstanceOf[M]
 
+  /** @group setParam */
+  def setThresholds(value: Array[Double]): M = {
+    require(value.length == numClasses, this.getClass.getSimpleName +
+      ".setThresholds() called with non-matching numClasses and thresholds.length." +
+      s" numClasses=$numClasses, but thresholds has length ${value.length}")
+    set(thresholds, value).asInstanceOf[M]
+  }
+
   /**
    * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by
    * parameters:
    *  - predicted labels as [[predictionCol]] of type [[Double]]
-   *  - raw predictions (confidences) as [[rawPredictionCol]] of type [[Vector]]
-   *  - probability of each class as [[probabilityCol]] of type [[Vector]].
+   *  - raw predictions (confidences) as [[rawPredictionCol]] of type `Vector`
+   *  - probability of each class as [[probabilityCol]] of type `Vector`.
    *
    * @param dataset input dataset
    * @return transformed dataset
    */
-  override def transform(dataset: DataFrame): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
+    if (isDefined(thresholds)) {
+      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
+        ".transform() called with non-matching numClasses and thresholds.length." +
+        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
+    }
 
     // Output selected columns only.
     // This is a bit complicated since it tries to avoid repeated computation.
@@ -135,7 +150,7 @@ private[spark] abstract class ProbabilisticClassificationModel[
       this.logWarning(s"$uid: ProbabilisticClassificationModel.transform() was called as NOOP" +
         " since no output columns were set.")
     }
-    outputData
+    outputData.toDF
   }
 
   /**
@@ -155,6 +170,14 @@ private[spark] abstract class ProbabilisticClassificationModel[
     raw2probabilityInPlace(probs)
   }
 
+  override protected def raw2prediction(rawPrediction: Vector): Double = {
+    if (!isDefined(thresholds)) {
+      rawPrediction.argmax
+    } else {
+      probability2prediction(raw2probability(rawPrediction))
+    }
+  }
+
   /**
    * Predict the probability of each class given the features.
    * These predictions are also called class conditional probabilities.
@@ -170,8 +193,56 @@ private[spark] abstract class ProbabilisticClassificationModel[
 
   /**
    * Given a vector of class conditional probabilities, select the predicted label.
-   * This may be overridden to support thresholds which favor particular labels.
+   * This supports thresholds which favor particular labels.
    * @return  predicted label
    */
-  protected def probability2prediction(probability: Vector): Double = probability.argmax
+  protected def probability2prediction(probability: Vector): Double = {
+    if (!isDefined(thresholds)) {
+      probability.argmax
+    } else {
+      val thresholds = getThresholds
+      var argMax = 0
+      var max = Double.NegativeInfinity
+      var i = 0
+      val probabilitySize = probability.size
+      while (i < probabilitySize) {
+        // Thresholds are all > 0, excepting that at most one may be 0.
+        // The single class whose threshold is 0, if any, will always be predicted
+        // ('scaled' = +Infinity). However in the case that this class also has
+        // 0 probability, the class will not be selected ('scaled' is NaN).
+        val scaled = probability(i) / thresholds(i)
+        if (scaled > max) {
+          max = scaled
+          argMax = i
+        }
+        i += 1
+      }
+      argMax
+    }
+  }
+}
+
+private[ml] object ProbabilisticClassificationModel {
+
+  /**
+   * Normalize a vector of raw predictions to be a multinomial probability vector, in place.
+   *
+   * The input raw predictions should be nonnegative.
+   * The output vector sums to 1, unless the input vector is all-0 (in which case the output is
+   * all-0 too).
+   *
+   * NOTE: This is NOT applicable to all models, only ones which effectively use class
+   *       instance counts for raw predictions.
+   */
+  def normalizeToProbabilitiesInPlace(v: DenseVector): Unit = {
+    val sum = v.values.sum
+    if (sum != 0) {
+      var i = 0
+      val size = v.size
+      while (i < size) {
+        v.values(i) /= sum
+        i += 1
+      }
+    }
+  }
 }

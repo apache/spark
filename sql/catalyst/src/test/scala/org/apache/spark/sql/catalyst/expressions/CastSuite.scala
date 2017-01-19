@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Timestamp, Date}
-import java.util.{TimeZone, Calendar}
+import java.sql.{Date, Timestamp}
+import java.util.{Calendar, TimeZone}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -41,6 +42,43 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   // expected cannot be null
   private def checkCast(v: Any, expected: Any): Unit = {
     checkEvaluation(cast(v, Literal(expected).dataType), expected)
+  }
+
+  private def checkNullCast(from: DataType, to: DataType): Unit = {
+    checkEvaluation(Cast(Literal.create(null, from), to), null)
+  }
+
+  test("null cast") {
+    import DataTypeTestUtils._
+
+    // follow [[org.apache.spark.sql.catalyst.expressions.Cast.canCast]] logic
+    // to ensure we test every possible cast situation here
+    atomicTypes.zip(atomicTypes).foreach { case (from, to) =>
+      checkNullCast(from, to)
+    }
+
+    atomicTypes.foreach(dt => checkNullCast(NullType, dt))
+    atomicTypes.foreach(dt => checkNullCast(dt, StringType))
+    checkNullCast(StringType, BinaryType)
+    checkNullCast(StringType, BooleanType)
+    checkNullCast(DateType, BooleanType)
+    checkNullCast(TimestampType, BooleanType)
+    numericTypes.foreach(dt => checkNullCast(dt, BooleanType))
+
+    checkNullCast(StringType, TimestampType)
+    checkNullCast(BooleanType, TimestampType)
+    checkNullCast(DateType, TimestampType)
+    numericTypes.foreach(dt => checkNullCast(dt, TimestampType))
+
+    checkNullCast(StringType, DateType)
+    checkNullCast(TimestampType, DateType)
+
+    checkNullCast(StringType, CalendarIntervalType)
+    numericTypes.foreach(dt => checkNullCast(StringType, dt))
+    numericTypes.foreach(dt => checkNullCast(BooleanType, dt))
+    numericTypes.foreach(dt => checkNullCast(DateType, dt))
+    numericTypes.foreach(dt => checkNullCast(TimestampType, dt))
+    for (from <- numericTypes; to <- numericTypes) checkNullCast(from, to)
   }
 
   test("cast string to date") {
@@ -69,8 +107,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast string to timestamp") {
-    checkEvaluation(Cast(Literal("123"), TimestampType),
-      null)
+    checkEvaluation(Cast(Literal("123"), TimestampType), null)
 
     var c = Calendar.getInstance()
     c.set(2015, 0, 1, 0, 0, 0)
@@ -206,10 +243,9 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(cast(123L, DecimalType.USER_DEFAULT), Decimal(123))
     checkEvaluation(cast(123L, DecimalType(3, 0)), Decimal(123))
-    checkEvaluation(cast(123L, DecimalType(3, 1)), Decimal(123.0))
+    checkEvaluation(cast(123L, DecimalType(3, 1)), null)
 
-    // TODO: Fix the following bug and re-enable it.
-    // checkEvaluation(cast(123L, DecimalType(2, 0)), null)
+    checkEvaluation(cast(123L, DecimalType(2, 0)), null)
   }
 
   test("cast from boolean") {
@@ -223,8 +259,8 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("cast from int 2") {
     checkEvaluation(cast(1, LongType), 1.toLong)
-    checkEvaluation(cast(cast(1000, TimestampType), LongType), 1.toLong)
-    checkEvaluation(cast(cast(-1200, TimestampType), LongType), -2.toLong)
+    checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
+    checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
 
     checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
     checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
@@ -262,7 +298,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("cast from string") {
     assert(cast("abcdef", StringType).nullable === false)
     assert(cast("abcdef", BinaryType).nullable === false)
-    assert(cast("abcdef", BooleanType).nullable === false)
+    assert(cast("abcdef", BooleanType).nullable === true)
     assert(cast("abcdef", TimestampType).nullable === true)
     assert(cast("abcdef", LongType).nullable === true)
     assert(cast("abcdef", IntegerType).nullable === true)
@@ -313,14 +349,14 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
-      0.toShort)
+      5.toShort)
     checkEvaluation(
       cast(cast(cast(cast(cast(cast("5", TimestampType), ByteType),
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
       null)
     checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
       ByteType), TimestampType), LongType), StringType), ShortType),
-      0.toShort)
+      5.toShort)
 
     checkEvaluation(cast("23", DoubleType), 23d)
     checkEvaluation(cast("23", IntegerType), 23)
@@ -330,7 +366,6 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast("23", ShortType), 23.toShort)
     checkEvaluation(cast("2012-12-11", DoubleType), null)
     checkEvaluation(cast(123, IntegerType), 123)
-
 
     checkEvaluation(cast(Literal.create(null, IntegerType), ShortType), null)
   }
@@ -444,10 +479,12 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(ts, LongType), 15.toLong)
     checkEvaluation(cast(ts, FloatType), 15.003f)
     checkEvaluation(cast(ts, DoubleType), 15.003)
-    checkEvaluation(cast(cast(tss, ShortType), TimestampType), DateTimeUtils.fromJavaTimestamp(ts))
+    checkEvaluation(cast(cast(tss, ShortType), TimestampType),
+      DateTimeUtils.fromJavaTimestamp(ts) * 1000)
     checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts))
-    checkEvaluation(cast(cast(tss, LongType), TimestampType), DateTimeUtils.fromJavaTimestamp(ts))
+      DateTimeUtils.fromJavaTimestamp(ts) * 1000)
+    checkEvaluation(cast(cast(tss, LongType), TimestampType),
+      DateTimeUtils.fromJavaTimestamp(ts) * 1000)
     checkEvaluation(
       cast(cast(millis.toFloat / 1000, TimestampType), FloatType),
       millis.toFloat / 1000)
@@ -468,10 +505,12 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast from array") {
-    val array = Literal.create(Seq("123", "abc", "", null),
+    val array = Literal.create(Seq("123", "true", "f", null),
       ArrayType(StringType, containsNull = true))
-    val array_notNull = Literal.create(Seq("123", "abc", ""),
+    val array_notNull = Literal.create(Seq("123", "true", "f"),
       ArrayType(StringType, containsNull = false))
+
+    checkNullCast(ArrayType(StringType), ArrayType(IntegerType))
 
     {
       val ret = cast(array, ArrayType(IntegerType, containsNull = true))
@@ -485,7 +524,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     {
       val ret = cast(array, ArrayType(BooleanType, containsNull = true))
       assert(ret.resolved === true)
-      checkEvaluation(ret, Seq(true, true, false, null))
+      checkEvaluation(ret, Seq(null, true, false, null))
     }
     {
       val ret = cast(array, ArrayType(BooleanType, containsNull = false))
@@ -504,12 +543,11 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     {
       val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = true))
       assert(ret.resolved === true)
-      checkEvaluation(ret, Seq(true, true, false))
+      checkEvaluation(ret, Seq(null, true, false))
     }
     {
       val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = false))
-      assert(ret.resolved === true)
-      checkEvaluation(ret, Seq(true, true, false))
+      assert(ret.resolved === false)
     }
 
     {
@@ -520,11 +558,13 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("cast from map") {
     val map = Literal.create(
-      Map("a" -> "123", "b" -> "abc", "c" -> "", "d" -> null),
+      Map("a" -> "123", "b" -> "true", "c" -> "f", "d" -> null),
       MapType(StringType, StringType, valueContainsNull = true))
     val map_notNull = Literal.create(
-      Map("a" -> "123", "b" -> "abc", "c" -> ""),
+      Map("a" -> "123", "b" -> "true", "c" -> "f"),
       MapType(StringType, StringType, valueContainsNull = false))
+
+    checkNullCast(MapType(StringType, IntegerType), MapType(StringType, StringType))
 
     {
       val ret = cast(map, MapType(StringType, IntegerType, valueContainsNull = true))
@@ -538,7 +578,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     {
       val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = true))
       assert(ret.resolved === true)
-      checkEvaluation(ret, Map("a" -> true, "b" -> true, "c" -> false, "d" -> null))
+      checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false, "d" -> null))
     }
     {
       val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = false))
@@ -561,12 +601,11 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     {
       val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = true))
       assert(ret.resolved === true)
-      checkEvaluation(ret, Map("a" -> true, "b" -> true, "c" -> false))
+      checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false))
     }
     {
       val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
-      assert(ret.resolved === true)
-      checkEvaluation(ret, Map("a" -> true, "b" -> true, "c" -> false))
+      assert(ret.resolved === false)
     }
     {
       val ret = cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
@@ -580,11 +619,19 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast from struct") {
+    checkNullCast(
+      StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType))),
+      StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", StringType))))
+
     val struct = Literal.create(
       InternalRow(
         UTF8String.fromString("123"),
-        UTF8String.fromString("abc"),
-        UTF8String.fromString(""),
+        UTF8String.fromString("true"),
+        UTF8String.fromString("f"),
         null),
       StructType(Seq(
         StructField("a", StringType, nullable = true),
@@ -594,8 +641,8 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     val struct_notNull = Literal.create(
       InternalRow(
         UTF8String.fromString("123"),
-        UTF8String.fromString("abc"),
-        UTF8String.fromString("")),
+        UTF8String.fromString("true"),
+        UTF8String.fromString("f")),
       StructType(Seq(
         StructField("a", StringType, nullable = false),
         StructField("b", StringType, nullable = false),
@@ -625,7 +672,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("c", BooleanType, nullable = true),
         StructField("d", BooleanType, nullable = true))))
       assert(ret.resolved === true)
-      checkEvaluation(ret, InternalRow(true, true, false, null))
+      checkEvaluation(ret, InternalRow(null, true, false, null))
     }
     {
       val ret = cast(struct, StructType(Seq(
@@ -657,15 +704,14 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = true))))
       assert(ret.resolved === true)
-      checkEvaluation(ret, InternalRow(true, true, false))
+      checkEvaluation(ret, InternalRow(null, true, false))
     }
     {
       val ret = cast(struct_notNull, StructType(Seq(
         StructField("a", BooleanType, nullable = true),
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = false))))
-      assert(ret.resolved === true)
-      checkEvaluation(ret, InternalRow(true, true, false))
+      assert(ret.resolved === false)
     }
 
     {
@@ -681,15 +727,22 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("cast struct with a timestamp field") {
+    val originalSchema = new StructType().add("tsField", TimestampType, nullable = false)
+    // nine out of ten times I'm casting a struct, it's to normalize its fields nullability
+    val targetSchema = new StructType().add("tsField", TimestampType, nullable = true)
+
+    val inp = Literal.create(InternalRow(0L), originalSchema)
+    val expected = InternalRow(0L)
+    checkEvaluation(cast(inp, targetSchema), expected)
+  }
+
   test("complex casting") {
     val complex = Literal.create(
-      InternalRow(
-        Seq(UTF8String.fromString("123"), UTF8String.fromString("abc"), UTF8String.fromString("")),
-        Map(
-          UTF8String.fromString("a") -> UTF8String.fromString("123"),
-          UTF8String.fromString("b") -> UTF8String.fromString("abc"),
-          UTF8String.fromString("c") -> UTF8String.fromString("")),
-        InternalRow(0)),
+      Row(
+        Seq("123", "true", "f"),
+        Map("a" -> "123", "b" -> "true", "c" -> "f"),
+        Row(0)),
       StructType(Seq(
         StructField("a",
           ArrayType(StringType, containsNull = false), nullable = true),
@@ -708,24 +761,49 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructType(Seq(
           StructField("l", LongType, nullable = true)))))))
 
-    assert(ret.resolved === true)
-    checkEvaluation(ret, InternalRow(
-      Seq(123, null, null),
-      Map(
-        UTF8String.fromString("a") -> true,
-        UTF8String.fromString("b") -> true,
-        UTF8String.fromString("c") -> false),
-      InternalRow(0L)))
+    assert(ret.resolved === false)
   }
 
-  test("case between string and interval") {
-    import org.apache.spark.unsafe.types.Interval
+  test("cast between string and interval") {
+    import org.apache.spark.unsafe.types.CalendarInterval
 
-    checkEvaluation(Cast(Literal("interval -3 month 7 hours"), IntervalType),
-      new Interval(-3, 7 * Interval.MICROS_PER_HOUR))
+    checkEvaluation(Cast(Literal(""), CalendarIntervalType), null)
+    checkEvaluation(Cast(Literal("interval -3 month 7 hours"), CalendarIntervalType),
+      new CalendarInterval(-3, 7 * CalendarInterval.MICROS_PER_HOUR))
     checkEvaluation(Cast(Literal.create(
-      new Interval(15, -3 * Interval.MICROS_PER_DAY), IntervalType), StringType),
+      new CalendarInterval(15, -3 * CalendarInterval.MICROS_PER_DAY), CalendarIntervalType),
+      StringType),
       "interval 1 years 3 months -3 days")
   }
 
+  test("cast string to boolean") {
+    checkCast("t", true)
+    checkCast("true", true)
+    checkCast("tRUe", true)
+    checkCast("y", true)
+    checkCast("yes", true)
+    checkCast("1", true)
+
+    checkCast("f", false)
+    checkCast("false", false)
+    checkCast("FAlsE", false)
+    checkCast("n", false)
+    checkCast("no", false)
+    checkCast("0", false)
+
+    checkEvaluation(cast("abc", BooleanType), null)
+    checkEvaluation(cast("", BooleanType), null)
+  }
+
+  test("SPARK-16729 type checking for casting to date type") {
+    assert(cast("1234", DateType).checkInputDataTypes().isSuccess)
+    assert(cast(new Timestamp(1), DateType).checkInputDataTypes().isSuccess)
+    assert(cast(false, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1.toByte, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1.toShort, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1L, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1.0.toFloat, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1.0, DateType).checkInputDataTypes().isFailure)
+  }
 }

@@ -1,0 +1,8 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.lintr$
+^cran-comments\.md$
+^NEWS\.md$
+^README\.Rmd$
+^src-native$
+^html$

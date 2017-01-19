@@ -23,7 +23,7 @@ import javax.xml.transform.stream.StreamResult
 import org.jpmml.model.JAXBUtil
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.pmml.export.PMMLModelExportFactory
 
 /**
@@ -33,6 +33,7 @@ import org.apache.spark.mllib.pmml.export.PMMLModelExportFactory
  * developed by the Data Mining Group (www.dmg.org).
  */
 @DeveloperApi
+@Since("1.4.0")
 trait PMMLExportable {
 
   /**
@@ -44,38 +45,34 @@ trait PMMLExportable {
   }
 
   /**
-   * :: Experimental ::
    * Export the model to a local file in PMML format
    */
-  @Experimental
+  @Since("1.4.0")
   def toPMML(localPath: String): Unit = {
     toPMML(new StreamResult(new File(localPath)))
   }
 
   /**
-   * :: Experimental ::
    * Export the model to a directory on a distributed file system in PMML format
    */
-  @Experimental
+  @Since("1.4.0")
   def toPMML(sc: SparkContext, path: String): Unit = {
     val pmml = toPMML()
     sc.parallelize(Array(pmml), 1).saveAsTextFile(path)
   }
 
   /**
-   * :: Experimental ::
    * Export the model to the OutputStream in PMML format
    */
-  @Experimental
+  @Since("1.4.0")
   def toPMML(outputStream: OutputStream): Unit = {
     toPMML(new StreamResult(outputStream))
   }
 
   /**
-   * :: Experimental ::
    * Export the model to a String in PMML format
    */
-  @Experimental
+  @Since("1.4.0")
   def toPMML(): String = {
     val writer = new StringWriter
     toPMML(new StreamResult(writer))

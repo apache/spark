@@ -17,24 +17,21 @@
 
 package org.apache.spark.sql.types
 
-import scala.util.Try
-import scala.util.parsing.combinator.RegexParsers
-
+import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
-import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.util.Utils
 
-
 /**
- * :: DeveloperApi ::
  * The base type of all Spark SQL data types.
+ *
+ * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 abstract class DataType extends AbstractDataType {
   /**
    * Enables matching against DataType for expressions:
@@ -51,7 +48,9 @@ abstract class DataType extends AbstractDataType {
   def defaultSize: Int
 
   /** Name of the type used in JSON serialization. */
-  def typeName: String = this.getClass.getSimpleName.stripSuffix("$").dropRight(4).toLowerCase
+  def typeName: String = {
+    this.getClass.getSimpleName.stripSuffix("$").stripSuffix("Type").stripSuffix("UDT").toLowerCase
+  }
 
   private[sql] def jsonValue: JValue = typeName
 
@@ -63,6 +62,14 @@ abstract class DataType extends AbstractDataType {
 
   /** Readable string representation for the type. */
   def simpleString: String = typeName
+
+  /** String representation for the type saved in external catalogs. */
+  def catalogString: String = simpleString
+
+  /** Readable string representation for the type with truncation */
+  private[sql] def simpleString(maxNumberFields: Int): String = simpleString
+
+  def sql: String = simpleString.toUpperCase
 
   /**
    * Check if `this` and `other` are the same data type when ignoring nullability
@@ -77,34 +84,34 @@ abstract class DataType extends AbstractDataType {
    */
   private[spark] def asNullable: DataType
 
+  /**
+   * Returns true if any `DataType` of this DataType tree satisfies the given function `f`.
+   */
+  private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = f(this)
+
   override private[sql] def defaultConcreteType: DataType = this
 
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
 }
 
 
+/**
+ * @since 1.3.0
+ */
+@InterfaceStability.Stable
 object DataType {
-  private[sql] def fromString(raw: String): DataType = {
-    Try(DataType.fromJson(raw)).getOrElse(DataType.fromCaseClassString(raw))
-  }
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
-  /**
-   * @deprecated As of 1.2.0, replaced by `DataType.fromJson()`
-   */
-  @deprecated("Use DataType.fromJson instead", "1.2.0")
-  def fromCaseClassString(string: String): DataType = CaseClassStringParser(string)
-
   private val nonDecimalNameToType = {
-    Seq(NullType, DateType, TimestampType, BinaryType,
-      IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
+    Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
+      DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType)
       .map(t => t.typeName -> t).toMap
   }
 
   /** Given the string representation of a type, return its DataType */
   private def nameToType(name: String): DataType = {
-    val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\d+)\s*\)""".r
+    val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
@@ -120,7 +127,7 @@ object DataType {
   }
 
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
-  private def parseDataType(json: JValue): DataType = json match {
+  private[sql] def parseDataType(json: JValue): DataType = json match {
     case JString(name) =>
       nameToType(name)
 
@@ -142,12 +149,21 @@ object DataType {
     ("type", JString("struct"))) =>
       StructType(fields.map(parseStructField))
 
+    // Scala/Java UDT
     case JSortedObject(
     ("class", JString(udtClass)),
     ("pyClass", _),
     ("sqlType", _),
     ("type", JString("udt"))) =>
       Utils.classForName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
+
+    // Python UDT
+    case JSortedObject(
+    ("pyClass", JString(pyClass)),
+    ("serializedClass", JString(serialized)),
+    ("sqlType", v: JValue),
+    ("type", JString("udt"))) =>
+        new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
   }
 
   private def parseStructField(json: JValue): StructField = json match {
@@ -163,73 +179,6 @@ object DataType {
     ("nullable", JBool(nullable)),
     ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType), nullable)
-  }
-
-  private object CaseClassStringParser extends RegexParsers {
-    protected lazy val primitiveType: Parser[DataType] =
-      ( "StringType" ^^^ StringType
-        | "FloatType" ^^^ FloatType
-        | "IntegerType" ^^^ IntegerType
-        | "ByteType" ^^^ ByteType
-        | "ShortType" ^^^ ShortType
-        | "DoubleType" ^^^ DoubleType
-        | "LongType" ^^^ LongType
-        | "BinaryType" ^^^ BinaryType
-        | "BooleanType" ^^^ BooleanType
-        | "DateType" ^^^ DateType
-        | "DecimalType()" ^^^ DecimalType.USER_DEFAULT
-        | fixedDecimalType
-        | "TimestampType" ^^^ TimestampType
-        )
-
-    protected lazy val fixedDecimalType: Parser[DataType] =
-      ("DecimalType(" ~> "[0-9]+".r) ~ ("," ~> "[0-9]+".r <~ ")") ^^ {
-        case precision ~ scale => DecimalType(precision.toInt, scale.toInt)
-      }
-
-    protected lazy val arrayType: Parser[DataType] =
-      "ArrayType" ~> "(" ~> dataType ~ "," ~ boolVal <~ ")" ^^ {
-        case tpe ~ _ ~ containsNull => ArrayType(tpe, containsNull)
-      }
-
-    protected lazy val mapType: Parser[DataType] =
-      "MapType" ~> "(" ~> dataType ~ "," ~ dataType ~ "," ~ boolVal <~ ")" ^^ {
-        case t1 ~ _ ~ t2 ~ _ ~ valueContainsNull => MapType(t1, t2, valueContainsNull)
-      }
-
-    protected lazy val structField: Parser[StructField] =
-      ("StructField(" ~> "[a-zA-Z0-9_]*".r) ~ ("," ~> dataType) ~ ("," ~> boolVal <~ ")") ^^ {
-        case name ~ tpe ~ nullable =>
-          StructField(name, tpe, nullable = nullable)
-      }
-
-    protected lazy val boolVal: Parser[Boolean] =
-      ( "true" ^^^ true
-        | "false" ^^^ false
-        )
-
-    protected lazy val structType: Parser[DataType] =
-      "StructType\\([A-zA-z]*\\(".r ~> repsep(structField, ",") <~ "))" ^^ {
-        case fields => StructType(fields)
-      }
-
-    protected lazy val dataType: Parser[DataType] =
-      ( arrayType
-        | mapType
-        | structType
-        | primitiveType
-        )
-
-    /**
-     * Parses a string representation of a DataType.
-     *
-     * TODO: Generate parser as pickler...
-     */
-    def apply(asString: String): DataType = parseAll(dataType, asString) match {
-      case Success(result, _) => result
-      case failure: NoSuccess =>
-        throw new IllegalArgumentException(s"Unsupported dataType: $asString, $failure")
-    }
   }
 
   protected[types] def buildFormattedString(
@@ -296,6 +245,30 @@ object DataType {
             fromField.name == toField.name &&
               (toField.nullable || !fromField.nullable) &&
               equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType)
+          }
+
+      case (fromDataType, toDataType) => fromDataType == toDataType
+    }
+  }
+
+  /**
+   * Compares two types, ignoring nullability of ArrayType, MapType, StructType, and ignoring case
+   * sensitivity of field names in StructType.
+   */
+  private[sql] def equalsIgnoreCaseAndNullability(from: DataType, to: DataType): Boolean = {
+    (from, to) match {
+      case (ArrayType(fromElement, _), ArrayType(toElement, _)) =>
+        equalsIgnoreCaseAndNullability(fromElement, toElement)
+
+      case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
+        equalsIgnoreCaseAndNullability(fromKey, toKey) &&
+          equalsIgnoreCaseAndNullability(fromValue, toValue)
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields).forall { case (l, r) =>
+            l.name.equalsIgnoreCase(r.name) &&
+              equalsIgnoreCaseAndNullability(l.dataType, r.dataType)
           }
 
       case (fromDataType, toDataType) => fromDataType == toDataType

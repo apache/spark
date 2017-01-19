@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
@@ -57,18 +59,18 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
  *
  * @param _rdd the parent RDD
  * @param partitioner partitioner used to partition the shuffle output
- * @param serializer [[org.apache.spark.serializer.Serializer Serializer]] to use. If set to None,
- *                   the default serializer, as specified by `spark.serializer` config option, will
- *                   be used.
+ * @param serializer [[org.apache.spark.serializer.Serializer Serializer]] to use. If not set
+ *                   explicitly then the default serializer, as specified by `spark.serializer`
+ *                   config option, will be used.
  * @param keyOrdering key ordering for RDD's shuffles
  * @param aggregator map/reduce-side aggregator for RDD's shuffle
  * @param mapSideCombine whether to perform partial aggregation (also known as map-side combine)
  */
 @DeveloperApi
-class ShuffleDependency[K, V, C](
-    @transient _rdd: RDD[_ <: Product2[K, V]],
+class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
+    @transient private val _rdd: RDD[_ <: Product2[K, V]],
     val partitioner: Partitioner,
-    val serializer: Option[Serializer] = None,
+    val serializer: Serializer = SparkEnv.get.serializer,
     val keyOrdering: Option[Ordering[K]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
     val mapSideCombine: Boolean = false)
@@ -76,10 +78,17 @@ class ShuffleDependency[K, V, C](
 
   override def rdd: RDD[Product2[K, V]] = _rdd.asInstanceOf[RDD[Product2[K, V]]]
 
+  private[spark] val keyClassName: String = reflect.classTag[K].runtimeClass.getName
+  private[spark] val valueClassName: String = reflect.classTag[V].runtimeClass.getName
+  // Note: It's possible that the combiner class tag is null, if the combineByKey
+  // methods in PairRDDFunctions are used instead of combineByKeyWithClassTag.
+  private[spark] val combinerClassName: Option[String] =
+    Option(reflect.classTag[C]).map(_.runtimeClass.getName)
+
   val shuffleId: Int = _rdd.context.newShuffleId()
 
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
-    shuffleId, _rdd.partitions.size, this)
+    shuffleId, _rdd.partitions.length, this)
 
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.java
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.mapred.InputSplit
@@ -37,7 +37,7 @@ class JavaHadoopRDD[K, V](rdd: HadoopRDD[K, V])
   def mapPartitionsWithInputSplit[R](
       f: JFunction2[InputSplit, java.util.Iterator[(K, V)], java.util.Iterator[R]],
       preservesPartitioning: Boolean = false): JavaRDD[R] = {
-    new JavaRDD(rdd.mapPartitionsWithInputSplit((a, b) => f.call(a, asJavaIterator(b)),
+    new JavaRDD(rdd.mapPartitionsWithInputSplit((a, b) => f.call(a, b.asJava).asScala,
       preservesPartitioning)(fakeClassTag))(fakeClassTag)
   }
 }

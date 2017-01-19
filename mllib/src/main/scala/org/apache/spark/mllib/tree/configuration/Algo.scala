@@ -17,15 +17,16 @@
 
 package org.apache.spark.mllib.tree.configuration
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Since
 
 /**
- * :: Experimental ::
  * Enum to select the algorithm for the decision tree
  */
-@Experimental
+@Since("1.0.0")
 object Algo extends Enumeration {
+  @Since("1.0.0")
   type Algo = Value
+  @Since("1.0.0")
   val Classification, Regression = Value
 
   private[mllib] def fromString(name: String): Algo = name match {

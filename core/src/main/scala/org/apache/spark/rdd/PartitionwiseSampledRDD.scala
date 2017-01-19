@@ -32,7 +32,7 @@ class PartitionwiseSampledRDDPartition(val prev: Partition, val seed: Long)
 }
 
 /**
- * A RDD sampled from its parent RDD partition-wise. For each partition of the parent RDD,
+ * An RDD sampled from its parent RDD partition-wise. For each partition of the parent RDD,
  * a user-specified [[org.apache.spark.util.random.RandomSampler]] instance is used to obtain
  * a random sample of the records in the partition. The random seeds assigned to the samplers
  * are guaranteed to have different values.
@@ -47,8 +47,8 @@ class PartitionwiseSampledRDDPartition(val prev: Partition, val seed: Long)
 private[spark] class PartitionwiseSampledRDD[T: ClassTag, U: ClassTag](
     prev: RDD[T],
     sampler: RandomSampler[T, U],
-    @transient preservesPartitioning: Boolean,
-    @transient seed: Long = Utils.random.nextLong)
+    preservesPartitioning: Boolean,
+    @transient private val seed: Long = Utils.random.nextLong)
   extends RDD[U](prev) {
 
   @transient override val partitioner = if (preservesPartitioning) prev.partitioner else None

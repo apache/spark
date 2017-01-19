@@ -109,13 +109,13 @@ function toggleDagViz(forJob) {
 }
 
 $(function (){
-  if (window.localStorage.getItem(expandDagVizArrowKey(false)) == "true") {
+  if ($("#stage-dag-viz").length &&
+      window.localStorage.getItem(expandDagVizArrowKey(false)) == "true") {
     // Set it to false so that the click function can revert it
     window.localStorage.setItem(expandDagVizArrowKey(false), "false");
     toggleDagViz(false);
-  }
-
-  if (window.localStorage.getItem(expandDagVizArrowKey(true)) == "true") {
+  } else if ($("#job-dag-viz").length &&
+      window.localStorage.getItem(expandDagVizArrowKey(true)) == "true") {
     // Set it to false so that the click function can revert it
     window.localStorage.setItem(expandDagVizArrowKey(true), "false");
     toggleDagViz(true);
@@ -222,10 +222,11 @@ function renderDagVizForJob(svgContainer) {
       var attemptId = 0
       var stageLink = d3.select("#stage-" + stageId + "-" + attemptId)
         .select("a.name-link")
-        .attr("href") + "&expandDagViz=true";
+        .attr("href");
       container = svgContainer
         .append("a")
         .attr("xlink:href", stageLink)
+        .attr("onclick", "window.localStorage.setItem(expandDagVizArrowKey(false), true)")
         .append("g")
         .attr("id", containerId);
     }
@@ -284,7 +285,7 @@ function renderDot(dot, container, forJob) {
   renderer(container, g);
 
   // Find the stage cluster and mark it for styling and post-processing
-  container.selectAll("g.cluster[name*=\"Stage\"]").classed("stage", true);
+  container.selectAll("g.cluster[name^=\"Stage \"]").classed("stage", true);
 }
 
 /* -------------------- *

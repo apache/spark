@@ -19,11 +19,10 @@ package org.apache.spark.input
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable}
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
-import org.apache.spark.Logging
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 
 /**
  * Custom Input Format for reading and splitting flat binary files that contain records,
@@ -36,7 +35,7 @@ private[spark] object FixedLengthBinaryInputFormat {
 
   /** Retrieves the record length property from a Hadoop configuration */
   def getRecordLength(context: JobContext): Int = {
-    SparkHadoopUtil.get.getConfigurationFromJobContext(context).get(RECORD_LENGTH_PROPERTY).toInt
+    context.getConfiguration.get(RECORD_LENGTH_PROPERTY).toInt
   }
 }
 

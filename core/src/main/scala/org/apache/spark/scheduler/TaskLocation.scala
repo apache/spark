@@ -31,7 +31,9 @@ private[spark] sealed trait TaskLocation {
  */
 private [spark]
 case class ExecutorCacheTaskLocation(override val host: String, executorId: String)
-  extends TaskLocation
+  extends TaskLocation {
+  override def toString: String = s"${TaskLocation.executorLocationTag}${host}_$executorId"
+}
 
 /**
  * A location on a host.
@@ -53,21 +55,32 @@ private[spark] object TaskLocation {
   // confusion.  See  RFC 952 and RFC 1123 for information about the format of hostnames.
   val inMemoryLocationTag = "hdfs_cache_"
 
+  // Identify locations of executors with this prefix.
+  val executorLocationTag = "executor_"
+
   def apply(host: String, executorId: String): TaskLocation = {
     new ExecutorCacheTaskLocation(host, executorId)
   }
 
   /**
    * Create a TaskLocation from a string returned by getPreferredLocations.
-   * These strings have the form [hostname] or hdfs_cache_[hostname], depending on whether the
-   * location is cached.
+   * These strings have the form executor_[hostname]_[executorid], [hostname], or
+   * hdfs_cache_[hostname], depending on whether the location is cached.
    */
   def apply(str: String): TaskLocation = {
     val hstr = str.stripPrefix(inMemoryLocationTag)
     if (hstr.equals(str)) {
-      new HostTaskLocation(str)
+      if (str.startsWith(executorLocationTag)) {
+        val hostAndExecutorId = str.stripPrefix(executorLocationTag)
+        val splits = hostAndExecutorId.split("_", 2)
+        require(splits.length == 2, "Illegal executor location format: " + str)
+        val Array(host, executorId) = splits
+        new ExecutorCacheTaskLocation(host, executorId)
+      } else {
+        new HostTaskLocation(str)
+      }
     } else {
-      new HostTaskLocation(hstr)
+      new HDFSCacheTaskLocation(hstr)
     }
   }
 }

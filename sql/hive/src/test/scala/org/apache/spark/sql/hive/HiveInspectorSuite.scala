@@ -30,10 +30,17 @@ import org.apache.hadoop.io.LongWritable
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
 
 class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
+
+  def unwrap(data: Any, oi: ObjectInspector): Any = {
+    val unwrapper = unwrapperFor(oi)
+    unwrapper(data)
+  }
+
   test("Test wrap SettableStructObjectInspector") {
     val udaf = new UDAFPercentile.PercentileLongEvaluator()
     udaf.init()
@@ -74,6 +81,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
 
   val data =
     Literal(true) ::
+    Literal(null) ::
     Literal(0.asInstanceOf[Byte]) ::
     Literal(0.asInstanceOf[Short]) ::
     Literal(0) ::
@@ -133,8 +141,8 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     }
   }
 
-  def checkValues(row1: Seq[Any], row2: InternalRow): Unit = {
-    row1.zip(row2.toSeq).foreach { case (r1, r2) =>
+  def checkValues(row1: Seq[Any], row2: InternalRow, row2Schema: StructType): Unit = {
+    row1.zip(row2.toSeq(row2Schema)).foreach { case (r1, r2) =>
       checkValue(r1, r2)
     }
   }
@@ -147,6 +155,8 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
       case (r1: Array[Byte], r2: Array[Byte])
         if r1 != null && r2 != null && r1.length == r2.length =>
         r1.zip(r2).foreach { case (b1, b2) => assert(b1 === b2) }
+      // We don't support equality & ordering for map type, so skip it.
+      case (r1: MapData, r2: MapData) =>
       case (r1, r2) => assert(r1 === r2)
     }
   }
@@ -209,15 +219,17 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
       case (t, idx) => StructField(s"c_$idx", t)
     })
     val inspector = toInspector(dt)
-    checkValues(row,
-      unwrap(wrap(InternalRow.fromSeq(row), inspector, dt), inspector).asInstanceOf[InternalRow])
+    checkValues(
+      row,
+      unwrap(wrap(InternalRow.fromSeq(row), inspector, dt), inspector).asInstanceOf[InternalRow],
+      dt)
     checkValue(null, unwrap(wrap(null, toInspector(dt), dt), toInspector(dt)))
   }
 
   test("wrap / unwrap Array Type") {
     val dt = ArrayType(dataTypes(0))
 
-    val d = row(0) :: row(0) :: Nil
+    val d = new GenericArrayData(Array(row(0), row(0)))
     checkValue(d, unwrap(wrap(d, toInspector(dt), dt), toInspector(dt)))
     checkValue(null, unwrap(wrap(null, toInspector(dt), dt), toInspector(dt)))
     checkValue(d,
@@ -230,7 +242,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
   test("wrap / unwrap Map Type") {
     val dt = MapType(dataTypes(0), dataTypes(1))
 
-    val d = Map(row(0) -> row(1))
+    val d = ArrayBasedMapData(Array(row(0)), Array(row(1)))
     checkValue(d, unwrap(wrap(d, toInspector(dt), dt), toInspector(dt)))
     checkValue(null, unwrap(wrap(null, toInspector(dt), dt), toInspector(dt)))
     checkValue(d,

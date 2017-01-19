@@ -20,6 +20,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 import java.io.File;
 import java.io.IOException;
 
+import org.apache.spark.serializer.SerializerManager;
 import scala.Tuple2;
 
 import org.apache.spark.executor.ShuffleWriteMetrics;
@@ -28,14 +29,14 @@ import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.DiskBlockObjectWriter;
 import org.apache.spark.storage.TempLocalBlockId;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 
 /**
  * Spills a list of sorted records to disk. Spill files have the following format:
  *
  *   [# of records (int)] [[len (int)][prefix (long)][data (bytes)]...]
  */
-final class UnsafeSorterSpillWriter {
+public final class UnsafeSorterSpillWriter {
 
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
 
@@ -117,11 +118,11 @@ final class UnsafeSorterSpillWriter {
     long recordReadPosition = baseOffset;
     while (dataRemaining > 0) {
       final int toTransfer = Math.min(freeSpaceInWriteBuffer, dataRemaining);
-      PlatformDependent.copyMemory(
+      Platform.copyMemory(
         baseObject,
         recordReadPosition,
         writeBuffer,
-        PlatformDependent.BYTE_ARRAY_OFFSET + (DISK_WRITE_BUFFER_SIZE - freeSpaceInWriteBuffer),
+        Platform.BYTE_ARRAY_OFFSET + (DISK_WRITE_BUFFER_SIZE - freeSpaceInWriteBuffer),
         toTransfer);
       writer.write(writeBuffer, 0, (DISK_WRITE_BUFFER_SIZE - freeSpaceInWriteBuffer) + toTransfer);
       recordReadPosition += toTransfer;
@@ -135,12 +136,17 @@ final class UnsafeSorterSpillWriter {
   }
 
   public void close() throws IOException {
-    writer.commitAndClose();
+    writer.commitAndGet();
+    writer.close();
     writer = null;
     writeBuffer = null;
   }
 
-  public UnsafeSorterSpillReader getReader(BlockManager blockManager) throws IOException {
-    return new UnsafeSorterSpillReader(blockManager, file, blockId);
+  public File getFile() {
+    return file;
+  }
+
+  public UnsafeSorterSpillReader getReader(SerializerManager serializerManager) throws IOException {
+    return new UnsafeSorterSpillReader(serializerManager, file, blockId);
   }
 }

@@ -30,3 +30,4 @@ rem Zip the SparkR package so that it can be distributed to worker nodes on YARN
 pushd %SPARK_HOME%\R\lib
 %JAVA_HOME%\bin\jar.exe cfM "%SPARK_HOME%\R\lib\sparkr.zip" SparkR
 popd
+

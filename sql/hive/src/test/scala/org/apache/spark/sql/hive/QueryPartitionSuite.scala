@@ -17,51 +17,133 @@
 
 package org.apache.spark.sql.hive
 
-import com.google.common.io.Files
+import java.io.File
 
-import org.apache.spark.sql.{QueryTest, _}
+import com.google.common.io.Files
+import org.apache.hadoop.fs.FileSystem
+
+import org.apache.spark.sql._
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
+class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import spark.implicits._
 
-class QueryPartitionSuite extends QueryTest {
+  test("SPARK-5068: query data when path doesn't exist") {
+    withSQLConf((SQLConf.HIVE_VERIFY_PARTITION_PATH.key, "true")) {
+      val testData = sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString))).toDF()
+      testData.createOrReplaceTempView("testData")
 
-  private lazy val ctx = org.apache.spark.sql.hive.test.TestHive
-  import ctx.implicits._
-  import ctx.sql
+      val tmpDir = Files.createTempDir()
+      // create the table for test
+      sql(s"CREATE TABLE table_with_partition(key int,value string) " +
+        s"PARTITIONED by (ds string) location '${tmpDir.toURI}' ")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') " +
+        "SELECT key,value FROM testData")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='2') " +
+        "SELECT key,value FROM testData")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='3') " +
+        "SELECT key,value FROM testData")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='4') " +
+        "SELECT key,value FROM testData")
 
-  test("SPARK-5068: query data when path doesn't exist"){
-    val testData = ctx.sparkContext.parallelize(
-      (1 to 10).map(i => TestData(i, i.toString))).toDF()
-    testData.registerTempTable("testData")
+      // test for the exist path
+      checkAnswer(sql("select key,value from table_with_partition"),
+        testData.toDF.collect ++ testData.toDF.collect
+          ++ testData.toDF.collect ++ testData.toDF.collect)
 
-    val tmpDir = Files.createTempDir()
-    // create the table for test
-    sql(s"CREATE TABLE table_with_partition(key int,value string) " +
-      s"PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') " +
-      "SELECT key,value FROM testData")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='2') " +
-      "SELECT key,value FROM testData")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='3') " +
-      "SELECT key,value FROM testData")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='4') " +
-      "SELECT key,value FROM testData")
+      // delete the path of one partition
+      tmpDir.listFiles
+        .find { f => f.isDirectory && f.getName().startsWith("ds=") }
+        .foreach { f => Utils.deleteRecursively(f) }
 
-    // test for the exist path
-    checkAnswer(sql("select key,value from table_with_partition"),
-      testData.toDF.collect ++ testData.toDF.collect
-        ++ testData.toDF.collect ++ testData.toDF.collect)
+      // test for after delete the path
+      checkAnswer(sql("select key,value from table_with_partition"),
+        testData.toDF.collect ++ testData.toDF.collect ++ testData.toDF.collect)
 
-    // delete the path of one partition
-    tmpDir.listFiles
-      .find { f => f.isDirectory && f.getName().startsWith("ds=") }
-      .foreach { f => Utils.deleteRecursively(f) }
+      sql("DROP TABLE IF EXISTS table_with_partition")
+      sql("DROP TABLE IF EXISTS createAndInsertTest")
+    }
+  }
 
-    // test for after delete the path
-    checkAnswer(sql("select key,value from table_with_partition"),
-      testData.toDF.collect ++ testData.toDF.collect ++ testData.toDF.collect)
+  test("SPARK-13709: reading partitioned Avro table with nested schema") {
+    withTempDir { dir =>
+      val path = dir.toURI.toString
+      val tableName = "spark_13709"
+      val tempTableName = "spark_13709_temp"
 
-    sql("DROP TABLE table_with_partition")
-    sql("DROP TABLE createAndInsertTest")
+      new File(dir.getAbsolutePath, tableName).mkdir()
+      new File(dir.getAbsolutePath, tempTableName).mkdir()
+
+      val avroSchema =
+        """{
+          |  "name": "test_record",
+          |  "type": "record",
+          |  "fields": [ {
+          |    "name": "f0",
+          |    "type": "int"
+          |  }, {
+          |    "name": "f1",
+          |    "type": {
+          |      "type": "record",
+          |      "name": "inner",
+          |      "fields": [ {
+          |        "name": "f10",
+          |        "type": "int"
+          |      }, {
+          |        "name": "f11",
+          |        "type": "double"
+          |      } ]
+          |    }
+          |  } ]
+          |}
+        """.stripMargin
+
+      withTable(tableName, tempTableName) {
+        // Creates the external partitioned Avro table to be tested.
+        sql(
+          s"""CREATE EXTERNAL TABLE $tableName
+             |PARTITIONED BY (ds STRING)
+             |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+             |STORED AS
+             |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+             |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+             |LOCATION '$path/$tableName'
+             |TBLPROPERTIES ('avro.schema.literal' = '$avroSchema')
+           """.stripMargin
+        )
+
+        // Creates an temporary Avro table used to prepare testing Avro file.
+        sql(
+          s"""CREATE EXTERNAL TABLE $tempTableName
+             |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+             |STORED AS
+             |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+             |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+             |LOCATION '$path/$tempTableName'
+             |TBLPROPERTIES ('avro.schema.literal' = '$avroSchema')
+           """.stripMargin
+        )
+
+        // Generates Avro data.
+        sql(s"INSERT OVERWRITE TABLE $tempTableName SELECT 1, STRUCT(2, 2.5)")
+
+        // Adds generated Avro data as a new partition to the testing table.
+        sql(s"ALTER TABLE $tableName ADD PARTITION (ds = 'foo') LOCATION '$path/$tempTableName'")
+
+        // The following query fails before SPARK-13709 is fixed. This is because when reading data
+        // from table partitions, Avro deserializer needs the Avro schema, which is defined in
+        // table property "avro.schema.literal". However, we only initializes the deserializer using
+        // partition properties, which doesn't include the wanted property entry. Merging two sets
+        // of properties solves the problem.
+        checkAnswer(
+          sql(s"SELECT * FROM $tableName"),
+          Row(1, Row(2, 2.5D), "foo")
+        )
+      }
+    }
   }
 }

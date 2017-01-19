@@ -17,19 +17,20 @@
 
 package org.apache.spark.sql.hive.thriftserver.ui
 
-import org.apache.spark.sql.hive.thriftserver.{HiveThriftServer2, SparkSQLEnv}
+import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab._
 import org.apache.spark.ui.{SparkUI, SparkUITab}
-import org.apache.spark.{SparkContext, Logging, SparkException}
 
 /**
- * Spark Web UI tab that shows statistics of a streaming job.
+ * Spark Web UI tab that shows statistics of jobs running in the thrift server.
  * This assumes the given SparkContext has enabled its SparkUI.
  */
 private[thriftserver] class ThriftServerTab(sparkContext: SparkContext)
-  extends SparkUITab(getSparkUI(sparkContext), "sql") with Logging {
+  extends SparkUITab(getSparkUI(sparkContext), "sqlserver") with Logging {
 
-  override val name = "SQL"
+  override val name = "JDBC/ODBC Server"
 
   val parent = getSparkUI(sparkContext)
   val listener = HiveThriftServer2.listener

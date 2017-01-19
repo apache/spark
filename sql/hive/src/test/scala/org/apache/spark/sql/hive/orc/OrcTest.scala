@@ -22,15 +22,12 @@ import java.io.File
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
-private[sql] trait OrcTest extends SQLTestUtils { this: SparkFunSuite =>
-  lazy val sqlContext = org.apache.spark.sql.hive.test.TestHive
-
-  import sqlContext.implicits._
-  import sqlContext.sparkContext
+private[sql] trait OrcTest extends SQLTestUtils with TestHiveSingleton {
+  import testImplicits._
 
   /**
    * Writes `data` to a Orc file, which is then passed to `f` and will be deleted after `f`
@@ -52,7 +49,7 @@ private[sql] trait OrcTest extends SQLTestUtils { this: SparkFunSuite =>
   protected def withOrcDataFrame[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: DataFrame => Unit): Unit = {
-    withOrcFile(data)(path => f(sqlContext.read.orc(path)))
+    withOrcFile(data)(path => f(spark.read.orc(path)))
   }
 
   /**
@@ -64,8 +61,8 @@ private[sql] trait OrcTest extends SQLTestUtils { this: SparkFunSuite =>
       (data: Seq[T], tableName: String)
       (f: => Unit): Unit = {
     withOrcDataFrame(data) { df =>
-      sqlContext.registerDataFrameAsTable(df, tableName)
-      withTempTable(tableName)(f)
+      df.createOrReplaceTempView(tableName)
+      withTempView(tableName)(f)
     }
   }
 

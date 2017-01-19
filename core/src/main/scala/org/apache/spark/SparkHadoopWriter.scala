@@ -20,12 +20,14 @@ package org.apache.spark
 import java.io.IOException
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Date, Locale}
 
-import org.apache.hadoop.mapred._
 import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapred._
+import org.apache.hadoop.mapreduce.TaskType
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.HadoopRDD
 import org.apache.spark.util.SerializableJobConf
@@ -37,10 +39,7 @@ import org.apache.spark.util.SerializableJobConf
  * a filename to write to, etc, exactly like in a Hadoop MapReduce job.
  */
 private[spark]
-class SparkHadoopWriter(@transient jobConf: JobConf)
-  extends Logging
-  with SparkHadoopMapRedUtil
-  with Serializable {
+class SparkHadoopWriter(jobConf: JobConf) extends Logging with Serializable {
 
   private val now = new Date()
   private val conf = new SerializableJobConf(jobConf)
@@ -68,12 +67,12 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
 
   def setup(jobid: Int, splitid: Int, attemptid: Int) {
     setIDs(jobid, splitid, attemptid)
-    HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmm").format(now),
+    HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(now),
       jobid, splitID, attemptID, conf.value)
   }
 
   def open() {
-    val numfmt = NumberFormat.getInstance()
+    val numfmt = NumberFormat.getInstance(Locale.US)
     numfmt.setMinimumIntegerDigits(5)
     numfmt.setGroupingUsed(false)
 
@@ -104,8 +103,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
   }
 
   def commit() {
-    SparkHadoopMapRedUtil.commitTask(
-      getOutputCommitter(), getTaskContext(), jobID, splitID, attemptID)
+    SparkHadoopMapRedUtil.commitTask(getOutputCommitter(), getTaskContext(), jobID, splitID)
   }
 
   def commitJob() {
@@ -132,7 +130,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
 
   private def getJobContext(): JobContext = {
     if (jobContext == null) {
-      jobContext = newJobContext(conf.value, jID.value)
+      jobContext = new JobContextImpl(conf.value, jID.value)
     }
     jobContext
   }
@@ -144,34 +142,19 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
     taskContext
   }
 
+  protected def newTaskAttemptContext(
+      conf: JobConf,
+      attemptId: TaskAttemptID): TaskAttemptContext = {
+    new TaskAttemptContextImpl(conf, attemptId)
+  }
+
   private def setIDs(jobid: Int, splitid: Int, attemptid: Int) {
     jobID = jobid
     splitID = splitid
     attemptID = attemptid
 
-    jID = new SerializableWritable[JobID](SparkHadoopWriter.createJobID(now, jobid))
+    jID = new SerializableWritable[JobID](SparkHadoopWriterUtils.createJobID(now, jobid))
     taID = new SerializableWritable[TaskAttemptID](
-        new TaskAttemptID(new TaskID(jID.value, true, splitID), attemptID))
-  }
-}
-
-private[spark]
-object SparkHadoopWriter {
-  def createJobID(time: Date, id: Int): JobID = {
-    val formatter = new SimpleDateFormat("yyyyMMddHHmm")
-    val jobtrackerID = formatter.format(time)
-    new JobID(jobtrackerID, id)
-  }
-
-  def createPathFromString(path: String, conf: JobConf): Path = {
-    if (path == null) {
-      throw new IllegalArgumentException("Output path is null")
-    }
-    val outputPath = new Path(path)
-    val fs = outputPath.getFileSystem(conf)
-    if (outputPath == null || fs == null) {
-      throw new IllegalArgumentException("Incorrectly formatted output path")
-    }
-    outputPath.makeQualified(fs)
+        new TaskAttemptID(new TaskID(jID.value, TaskType.MAP, splitID), attemptID))
   }
 }

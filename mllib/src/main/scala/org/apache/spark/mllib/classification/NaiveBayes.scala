@@ -24,12 +24,15 @@ import scala.collection.JavaConverters._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
-import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, SparseVector, Vector}
+import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
+import org.apache.spark.ml.classification.{NaiveBayes => NewNaiveBayes}
+import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.SparkSession
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -40,11 +43,12 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
  *              where D is number of features
  * @param modelType The type of NB model to fit  can be "multinomial" or "bernoulli"
  */
+@Since("0.9.0")
 class NaiveBayesModel private[spark] (
-    val labels: Array[Double],
-    val pi: Array[Double],
-    val theta: Array[Array[Double]],
-    val modelType: String)
+    @Since("1.0.0") val labels: Array[Double],
+    @Since("0.9.0") val pi: Array[Double],
+    @Since("0.9.0") val theta: Array[Array[Double]],
+    @Since("1.4.0") val modelType: String)
   extends ClassificationModel with Serializable with Saveable {
 
   import NaiveBayes.{Bernoulli, Multinomial, supportedModelTypes}
@@ -72,7 +76,7 @@ class NaiveBayesModel private[spark] (
     case Multinomial => (None, None)
     case Bernoulli =>
       val negTheta = thetaMatrix.map(value => math.log(1.0 - math.exp(value)))
-      val ones = new DenseVector(Array.fill(thetaMatrix.numCols){1.0})
+      val ones = new DenseVector(Array.fill(thetaMatrix.numCols) {1.0})
       val thetaMinusNegTheta = thetaMatrix.map { value =>
         value - math.log(1.0 - math.exp(value))
       }
@@ -82,6 +86,7 @@ class NaiveBayesModel private[spark] (
       throw new UnknownError(s"Invalid modelType: $modelType.")
   }
 
+  @Since("1.0.0")
   override def predict(testData: RDD[Vector]): RDD[Double] = {
     val bcModel = testData.context.broadcast(this)
     testData.mapPartitions { iter =>
@@ -90,6 +95,7 @@ class NaiveBayesModel private[spark] (
     }
   }
 
+  @Since("1.0.0")
   override def predict(testData: Vector): Double = {
     modelType match {
       case Multinomial =>
@@ -106,6 +112,7 @@ class NaiveBayesModel private[spark] (
    * @return an RDD[Vector] where each entry contains the predicted posterior class probabilities,
    *         in the same order as class labels
    */
+  @Since("1.5.0")
   def predictProbabilities(testData: RDD[Vector]): RDD[Vector] = {
     val bcModel = testData.context.broadcast(this)
     testData.mapPartitions { iter =>
@@ -121,6 +128,7 @@ class NaiveBayesModel private[spark] (
    * @return predicted posterior class probabilities from the trained model,
    *         in the same order as class labels
    */
+  @Since("1.5.0")
   def predictProbabilities(testData: Vector): Vector = {
     modelType match {
       case Multinomial =>
@@ -157,6 +165,7 @@ class NaiveBayesModel private[spark] (
     new DenseVector(scaledProbs.map(_ / probSum))
   }
 
+  @Since("1.3.0")
   override def save(sc: SparkContext, path: String): Unit = {
     val data = NaiveBayesModel.SaveLoadV2_0.Data(labels, pi, theta, modelType)
     NaiveBayesModel.SaveLoadV2_0.save(sc, path, data)
@@ -165,6 +174,7 @@ class NaiveBayesModel private[spark] (
   override protected def formatVersion: String = "2.0"
 }
 
+@Since("1.3.0")
 object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
   import org.apache.spark.mllib.util.Loader._
@@ -184,8 +194,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
         modelType: String)
 
     def save(sc: SparkContext, path: String, data: Data): Unit = {
-      val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -194,14 +203,14 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      dataRDD.write.parquet(dataPath(path))
+      spark.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath(path))
     }
 
+    @Since("1.3.0")
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
-      val sqlContext = new SQLContext(sc)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       // Load Parquet data.
-      val dataRDD = sqlContext.read.parquet(dataPath(path))
+      val dataRDD = spark.read.parquet(dataPath(path))
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       checkSchema[Data](dataRDD.schema)
       val dataArray = dataRDD.select("labels", "pi", "theta", "modelType").take(1)
@@ -230,8 +239,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
         theta: Array[Array[Double]])
 
     def save(sc: SparkContext, path: String, data: Data): Unit = {
-      val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -240,14 +248,13 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      dataRDD.write.parquet(dataPath(path))
+      spark.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
-      val sqlContext = new SQLContext(sc)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       // Load Parquet data.
-      val dataRDD = sqlContext.read.parquet(dataPath(path))
+      val dataRDD = spark.read.parquet(dataPath(path))
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       checkSchema[Data](dataRDD.schema)
       val dataArray = dataRDD.select("labels", "pi", "theta").take(1)
@@ -295,35 +302,41 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
 /**
  * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
  *
- * This is the Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
- * discrete data.  For example, by converting documents into TF-IDF vectors, it can be used for
- * document classification.  By making every vector a 0-1 vector, it can also be used as
- * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]). The input feature values must be nonnegative.
+ * This is the Multinomial NB (see <a href="http://tinyurl.com/lsdw6p">here</a>) which can
+ * handle all kinds of discrete data. For example, by converting documents into TF-IDF
+ * vectors, it can be used for document classification. By making every vector a 0-1 vector,
+ * it can also be used as Bernoulli NB (see <a href="http://tinyurl.com/p7c96j6">here</a>).
+ * The input feature values must be nonnegative.
  */
-
+@Since("0.9.0")
 class NaiveBayes private (
     private var lambda: Double,
     private var modelType: String) extends Serializable with Logging {
 
-  import NaiveBayes.{Bernoulli, Multinomial}
-
+  @Since("1.4.0")
   def this(lambda: Double) = this(lambda, NaiveBayes.Multinomial)
 
+  @Since("0.9.0")
   def this() = this(1.0, NaiveBayes.Multinomial)
 
   /** Set the smoothing parameter. Default: 1.0. */
+  @Since("0.9.0")
   def setLambda(lambda: Double): NaiveBayes = {
+    require(lambda >= 0,
+      s"Smoothing parameter must be nonnegative but got $lambda")
     this.lambda = lambda
     this
   }
 
   /** Get the smoothing parameter. */
+  @Since("1.4.0")
   def getLambda: Double = lambda
 
   /**
    * Set the model type using a string (case-sensitive).
    * Supported options: "multinomial" (default) and "bernoulli".
    */
+  @Since("1.4.0")
   def setModelType(modelType: String): NaiveBayes = {
     require(NaiveBayes.supportedModelTypes.contains(modelType),
       s"NaiveBayes was created with an unknown modelType: $modelType.")
@@ -332,6 +345,7 @@ class NaiveBayes private (
   }
 
   /** Get the model type. */
+  @Since("1.4.0")
   def getModelType: String = this.modelType
 
   /**
@@ -339,113 +353,66 @@ class NaiveBayes private (
    *
    * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    */
+  @Since("0.9.0")
   def run(data: RDD[LabeledPoint]): NaiveBayesModel = {
-    val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
-      val values = v match {
-        case sv: SparseVector => sv.values
-        case dv: DenseVector => dv.values
-      }
-      if (!values.forall(_ >= 0.0)) {
-        throw new SparkException(s"Naive Bayes requires nonnegative feature values but found $v.")
-      }
+    val spark = SparkSession
+      .builder()
+      .sparkContext(data.context)
+      .getOrCreate()
+
+    import spark.implicits._
+
+    val nb = new NewNaiveBayes()
+      .setModelType(modelType)
+      .setSmoothing(lambda)
+
+    val dataset = data.map { case LabeledPoint(label, features) => (label, features.asML) }
+      .toDF("label", "features")
+
+    // mllib NaiveBayes allows input labels like {-1, +1}, so set `positiveLabel` as false.
+    val newModel = nb.trainWithLabelCheck(dataset, positiveLabel = false)
+
+    val pi = newModel.pi.toArray
+    val theta = Array.fill[Double](newModel.numClasses, newModel.numFeatures)(0.0)
+    newModel.theta.foreachActive {
+      case (i, j, v) =>
+        theta(i)(j) = v
     }
 
-    val requireZeroOneBernoulliValues: Vector => Unit = (v: Vector) => {
-      val values = v match {
-        case sv: SparseVector => sv.values
-        case dv: DenseVector => dv.values
-      }
-      if (!values.forall(v => v == 0.0 || v == 1.0)) {
-        throw new SparkException(
-          s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
-      }
-    }
-
-    // Aggregates term frequencies per label.
-    // TODO: Calling combineByKey and collect creates two stages, we can implement something
-    // TODO: similar to reduceByKeyLocally to save one stage.
-    val aggregated = data.map(p => (p.label, p.features)).combineByKey[(Long, DenseVector)](
-      createCombiner = (v: Vector) => {
-        if (modelType == Bernoulli) {
-          requireZeroOneBernoulliValues(v)
-        } else {
-          requireNonnegativeValues(v)
-        }
-        (1L, v.copy.toDense)
-      },
-      mergeValue = (c: (Long, DenseVector), v: Vector) => {
-        requireNonnegativeValues(v)
-        BLAS.axpy(1.0, v, c._2)
-        (c._1 + 1L, c._2)
-      },
-      mergeCombiners = (c1: (Long, DenseVector), c2: (Long, DenseVector)) => {
-        BLAS.axpy(1.0, c2._2, c1._2)
-        (c1._1 + c2._1, c1._2)
-      }
-    ).collect().sortBy(_._1)
-
-    val numLabels = aggregated.length
-    var numDocuments = 0L
-    aggregated.foreach { case (_, (n, _)) =>
-      numDocuments += n
-    }
-    val numFeatures = aggregated.head match { case (_, (_, v)) => v.size }
-
-    val labels = new Array[Double](numLabels)
-    val pi = new Array[Double](numLabels)
-    val theta = Array.fill(numLabels)(new Array[Double](numFeatures))
-
-    val piLogDenom = math.log(numDocuments + numLabels * lambda)
-    var i = 0
-    aggregated.foreach { case (label, (n, sumTermFreqs)) =>
-      labels(i) = label
-      pi(i) = math.log(n + lambda) - piLogDenom
-      val thetaLogDenom = modelType match {
-        case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
-        case Bernoulli => math.log(n + 2.0 * lambda)
-        case _ =>
-          // This should never happen.
-          throw new UnknownError(s"Invalid modelType: $modelType.")
-      }
-      var j = 0
-      while (j < numFeatures) {
-        theta(i)(j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
-        j += 1
-      }
-      i += 1
-    }
-
-    new NaiveBayesModel(labels, pi, theta, modelType)
+    assert(newModel.oldLabels != null,
+      "The underlying ML NaiveBayes training does not produce labels.")
+    new NaiveBayesModel(newModel.oldLabels, pi, theta, modelType)
   }
 }
 
 /**
  * Top-level methods for calling naive Bayes.
  */
+@Since("0.9.0")
 object NaiveBayes {
 
   /** String name for multinomial model type. */
-  private[spark] val Multinomial: String = "multinomial"
+  private[classification] val Multinomial: String = "multinomial"
 
   /** String name for Bernoulli model type. */
-  private[spark] val Bernoulli: String = "bernoulli"
+  private[classification] val Bernoulli: String = "bernoulli"
 
   /* Set of modelTypes that NaiveBayes supports */
-  private[spark] val supportedModelTypes = Set(Multinomial, Bernoulli)
+  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
 
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
    *
-   * This is the default Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all
-   * kinds of discrete data.  For example, by converting documents into TF-IDF vectors, it
-   * can be used for document classification.
+   * This is the default Multinomial NB (see <a href="http://tinyurl.com/lsdw6p">here</a>)
+   * which can handle all kinds of discrete data. For example, by converting documents into
+   * TF-IDF vectors, it can be used for document classification.
    *
    * This version of the method uses a default smoothing parameter of 1.0.
    *
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
-   * @since 0.9.0
    */
+  @Since("0.9.0")
   def train(input: RDD[LabeledPoint]): NaiveBayesModel = {
     new NaiveBayes().run(input)
   }
@@ -453,15 +420,15 @@ object NaiveBayes {
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
    *
-   * This is the default Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all
-   * kinds of discrete data.  For example, by converting documents into TF-IDF vectors, it
-   * can be used for document classification.
+   * This is the default Multinomial NB (see <a href="http://tinyurl.com/lsdw6p">here</a>)
+   * which can handle all kinds of discrete data. For example, by converting documents
+   * into TF-IDF vectors, it can be used for document classification.
    *
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
    * @param lambda The smoothing parameter
-   * @since 0.9.0
    */
+  @Since("0.9.0")
   def train(input: RDD[LabeledPoint], lambda: Double): NaiveBayesModel = {
     new NaiveBayes(lambda, Multinomial).run(input)
   }
@@ -469,9 +436,10 @@ object NaiveBayes {
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
    *
-   * The model type can be set to either Multinomial NB ([[http://tinyurl.com/lsdw6p]])
-   * or Bernoulli NB ([[http://tinyurl.com/p7c96j6]]). The Multinomial NB can handle
-   * discrete count data and can be called by setting the model type to "multinomial".
+   * The model type can be set to either Multinomial NB (see <a href="http://tinyurl.com/lsdw6p">
+   * here</a>) or Bernoulli NB (see <a href="http://tinyurl.com/p7c96j6">here</a>).
+   * The Multinomial NB can handle discrete count data and can be called by setting the model
+   * type to "multinomial".
    * For example, it can be used with word counts or TF_IDF vectors of documents.
    * The Bernoulli model fits presence or absence (0-1) counts. By making every vector a
    * 0-1 vector and setting the model type to "bernoulli", the  fits and predicts as
@@ -483,8 +451,8 @@ object NaiveBayes {
    *
    * @param modelType The type of NB model to fit from the enumeration NaiveBayesModels, can be
    *              multinomial or bernoulli
-   * @since 0.9.0
    */
+  @Since("1.4.0")
   def train(input: RDD[LabeledPoint], lambda: Double, modelType: String): NaiveBayesModel = {
     require(supportedModelTypes.contains(modelType),
       s"NaiveBayes was created with an unknown modelType: $modelType.")

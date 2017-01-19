@@ -23,7 +23,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.Loader
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 
 /**
  * Helper methods for import/export of GLM regression models.
@@ -47,8 +47,7 @@ private[regression] object GLMRegressionModel {
         modelClass: String,
         weights: Vector,
         intercept: Double): Unit = {
-      val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -58,9 +57,7 @@ private[regression] object GLMRegressionModel {
 
       // Create Parquet data.
       val data = Data(weights, intercept)
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      // TODO: repartition with 1 partition after SPARK-5532 gets fixed
-      dataRDD.write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(Seq(data)).repartition(1).write.parquet(Loader.dataPath(path))
     }
 
     /**
@@ -70,17 +67,17 @@ private[regression] object GLMRegressionModel {
      *                     The length of the weights vector should equal numFeatures.
      */
     def loadData(sc: SparkContext, path: String, modelClass: String, numFeatures: Int): Data = {
-      val datapath = Loader.dataPath(path)
-      val sqlContext = new SQLContext(sc)
-      val dataRDD = sqlContext.read.parquet(datapath)
+      val dataPath = Loader.dataPath(path)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      val dataRDD = spark.read.parquet(dataPath)
       val dataArray = dataRDD.select("weights", "intercept").take(1)
-      assert(dataArray.size == 1, s"Unable to load $modelClass data from: $datapath")
+      assert(dataArray.length == 1, s"Unable to load $modelClass data from: $dataPath")
       val data = dataArray(0)
-      assert(data.size == 2, s"Unable to load $modelClass data from: $datapath")
+      assert(data.size == 2, s"Unable to load $modelClass data from: $dataPath")
       data match {
         case Row(weights: Vector, intercept: Double) =>
           assert(weights.size == numFeatures, s"Expected $numFeatures features, but" +
-            s" found ${weights.size} features when loading $modelClass weights from $datapath")
+            s" found ${weights.size} features when loading $modelClass weights from $dataPath")
           Data(weights, intercept)
       }
     }

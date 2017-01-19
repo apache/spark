@@ -17,11 +17,8 @@
 
 package org.apache.spark.mllib.tree.loss
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.model.TreeEnsembleModel
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.util.MLUtils
-
 
 /**
  * :: DeveloperApi ::
@@ -32,8 +29,9 @@ import org.apache.spark.mllib.util.MLUtils
  *   2 log(1 + exp(-2 y F(x)))
  * where y is a label in {-1, 1} and F(x) is the model prediction for features x.
  */
+@Since("1.2.0")
 @DeveloperApi
-object LogLoss extends Loss {
+object LogLoss extends ClassificationLoss {
 
   /**
    * Method to calculate the loss gradients for the gradient boosting calculation for binary
@@ -43,13 +41,21 @@ object LogLoss extends Loss {
    * @param label True label.
    * @return Loss gradient
    */
+  @Since("1.2.0")
   override def gradient(prediction: Double, label: Double): Double = {
     - 4.0 * label / (1.0 + math.exp(2.0 * label * prediction))
   }
 
-  override private[mllib] def computeError(prediction: Double, label: Double): Double = {
+  override private[spark] def computeError(prediction: Double, label: Double): Double = {
     val margin = 2.0 * label * prediction
     // The following is equivalent to 2.0 * log(1 + exp(-margin)) but more numerically stable.
     2.0 * MLUtils.log1pExp(-margin)
+  }
+
+  /**
+   * Returns the estimated probability of a label of 1.0.
+   */
+  override private[spark] def computeProbability(margin: Double): Double = {
+    1.0 / (1.0 + math.exp(-2.0 * margin))
   }
 }

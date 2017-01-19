@@ -1,1 +1,0 @@
-SELECT std(*) FROM src;

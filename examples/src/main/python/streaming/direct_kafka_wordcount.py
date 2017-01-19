@@ -23,11 +23,12 @@
  http://kafka.apache.org/documentation.html#quickstart
 
  and then run the example
-    `$ bin/spark-submit --jars external/kafka-assembly/target/scala-*/\
-      spark-streaming-kafka-assembly-*.jar \
+    `$ bin/spark-submit --jars \
+      external/kafka-assembly/target/scala-*/spark-streaming-kafka-assembly-*.jar \
       examples/src/main/python/streaming/direct_kafka_wordcount.py \
       localhost:9092 test`
 """
+from __future__ import print_function
 
 import sys
 
@@ -37,7 +38,7 @@ from pyspark.streaming.kafka import KafkaUtils
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print >> sys.stderr, "Usage: direct_kafka_wordcount.py <broker_list> <topic>"
+        print("Usage: direct_kafka_wordcount.py <broker_list> <topic>", file=sys.stderr)
         exit(-1)
 
     sc = SparkContext(appName="PythonStreamingDirectKafkaWordCount")

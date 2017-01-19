@@ -20,8 +20,6 @@ package org.apache.spark
 import java.io.File
 import java.net.Socket
 
-import akka.actor.ActorSystem
-
 import scala.collection.mutable
 import scala.util.Properties
 
@@ -30,24 +28,24 @@ import com.google.common.collect.MapMaker
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
+import org.apache.spark.memory.{MemoryManager, StaticMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
-import org.apache.spark.network.nio.NioBlockTransferService
-import org.apache.spark.rpc.{RpcEndpointRef, RpcEndpoint, RpcEnv}
-import org.apache.spark.rpc.akka.AkkaRpcEnv
-import org.apache.spark.scheduler.{OutputCommitCoordinator, LiveListenerBus}
+import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
+import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
-import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
+import org.apache.spark.security.CryptoStreamUtils
+import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
+import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
-import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator}
 import org.apache.spark.util.{RpcUtils, Utils}
 
 /**
  * :: DeveloperApi ::
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
- * including the serializer, Akka actor system, block manager, map output tracker, etc. Currently
+ * including the serializer, RpcEnv, block manager, map output tracker, etc. Currently
  * Spark code finds the SparkEnv through a global variable, so all the threads can access the same
  * SparkEnv. It can be accessed by SparkEnv.get (e.g. after creating a SparkContext).
  *
@@ -60,24 +58,16 @@ class SparkEnv (
     private[spark] val rpcEnv: RpcEnv,
     val serializer: Serializer,
     val closureSerializer: Serializer,
-    val cacheManager: CacheManager,
+    val serializerManager: SerializerManager,
     val mapOutputTracker: MapOutputTracker,
     val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
-    val blockTransferService: BlockTransferService,
     val blockManager: BlockManager,
     val securityManager: SecurityManager,
-    val httpFileServer: HttpFileServer,
-    val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
-    val shuffleMemoryManager: ShuffleMemoryManager,
-    val executorMemoryManager: ExecutorMemoryManager,
+    val memoryManager: MemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
-
-  // TODO Remove actorSystem
-  @deprecated("Actor system is no longer supported as of 1.4.0", "1.4.0")
-  val actorSystem: ActorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
 
   private[spark] var isStopped = false
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
@@ -86,14 +76,13 @@ class SparkEnv (
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
   private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
 
-  private var driverTmpDirToDelete: Option[String] = None
+  private[spark] var driverTmpDir: Option[String] = None
 
   private[spark] def stop() {
 
     if (!isStopped) {
       isStopped = true
       pythonWorkers.values.foreach(_.stop())
-      Option(httpFileServer).foreach(_.stop())
       mapOutputTracker.stop()
       shuffleManager.stop()
       broadcastManager.stop()
@@ -102,27 +91,19 @@ class SparkEnv (
       metricsSystem.stop()
       outputCommitCoordinator.stop()
       rpcEnv.shutdown()
-
-      // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
-      // down, but let's call it anyway in case it gets fixed in a later release
-      // UPDATE: In Akka 2.1.x, this hangs if there are remote actors, so we can't call it.
-      // actorSystem.awaitTermination()
-
-      // Note that blockTransferService is stopped by BlockManager since it is started by it.
+      rpcEnv.awaitTermination()
 
       // If we only stop sc, but the driver process still run as a services then we need to delete
       // the tmp dir, if not, it will create too many tmp dirs.
-      // We only need to delete the tmp dir create by driver, because sparkFilesDir is point to the
-      // current working dir in executor which we do not need to delete.
-      driverTmpDirToDelete match {
-        case Some(path) => {
+      // We only need to delete the tmp dir create by driver
+      driverTmpDir match {
+        case Some(path) =>
           try {
             Utils.deleteRecursively(new File(path))
           } catch {
             case e: Exception =>
               logWarning(s"Exception while deleting Spark temp dir: $path", e)
           }
-        }
         case None => // We just need to delete tmp dir created by driver, so do nothing on executor
       }
     }
@@ -156,8 +137,8 @@ class SparkEnv (
 object SparkEnv extends Logging {
   @volatile private var env: SparkEnv = _
 
-  private[spark] val driverActorSystemName = "sparkDriver"
-  private[spark] val executorActorSystemName = "sparkExecutor"
+  private[spark] val driverSystemName = "sparkDriver"
+  private[spark] val executorSystemName = "sparkExecutor"
 
   def set(e: SparkEnv) {
     env = e
@@ -171,32 +152,34 @@ object SparkEnv extends Logging {
   }
 
   /**
-   * Returns the ThreadLocal SparkEnv.
-   */
-  @deprecated("Use SparkEnv.get instead", "1.2.0")
-  def getThreadLocal: SparkEnv = {
-    env
-  }
-
-  /**
    * Create a SparkEnv for the driver.
    */
   private[spark] def createDriverEnv(
       conf: SparkConf,
       isLocal: Boolean,
       listenerBus: LiveListenerBus,
+      numCores: Int,
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
-    assert(conf.contains("spark.driver.host"), "spark.driver.host is not set on the driver!")
+    assert(conf.contains(DRIVER_HOST_ADDRESS),
+      s"${DRIVER_HOST_ADDRESS.key} is not set on the driver!")
     assert(conf.contains("spark.driver.port"), "spark.driver.port is not set on the driver!")
-    val hostname = conf.get("spark.driver.host")
+    val bindAddress = conf.get(DRIVER_BIND_ADDRESS)
+    val advertiseAddress = conf.get(DRIVER_HOST_ADDRESS)
     val port = conf.get("spark.driver.port").toInt
+    val ioEncryptionKey = if (conf.get(IO_ENCRYPTION_ENABLED)) {
+      Some(CryptoStreamUtils.createKey(conf))
+    } else {
+      None
+    }
     create(
       conf,
       SparkContext.DRIVER_IDENTIFIER,
-      hostname,
+      bindAddress,
+      advertiseAddress,
       port,
-      isDriver = true,
-      isLocal = isLocal,
+      isLocal,
+      numCores,
+      ioEncryptionKey,
       listenerBus = listenerBus,
       mockOutputCommitCoordinator = mockOutputCommitCoordinator
     )
@@ -204,7 +187,7 @@ object SparkEnv extends Logging {
 
   /**
    * Create a SparkEnv for an executor.
-   * In coarse-grained mode, the executor provides an actor system that is already instantiated.
+   * In coarse-grained mode, the executor provides an RpcEnv that is already instantiated.
    */
   private[spark] def createExecutorEnv(
       conf: SparkConf,
@@ -212,15 +195,17 @@ object SparkEnv extends Logging {
       hostname: String,
       port: Int,
       numCores: Int,
+      ioEncryptionKey: Option[Array[Byte]],
       isLocal: Boolean): SparkEnv = {
     val env = create(
       conf,
       executorId,
       hostname,
+      hostname,
       port,
-      isDriver = false,
-      isLocal = isLocal,
-      numUsableCores = numCores
+      isLocal,
+      numCores,
+      ioEncryptionKey
     )
     SparkEnv.set(env)
     env
@@ -232,31 +217,42 @@ object SparkEnv extends Logging {
   private def create(
       conf: SparkConf,
       executorId: String,
-      hostname: String,
+      bindAddress: String,
+      advertiseAddress: String,
       port: Int,
-      isDriver: Boolean,
       isLocal: Boolean,
+      numUsableCores: Int,
+      ioEncryptionKey: Option[Array[Byte]],
       listenerBus: LiveListenerBus = null,
-      numUsableCores: Int = 0,
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
+
+    val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
 
     // Listener bus is only used on the driver
     if (isDriver) {
       assert(listenerBus != null, "Attempted to create driver SparkEnv with null listener bus!")
     }
 
-    val securityManager = new SecurityManager(conf)
+    val securityManager = new SecurityManager(conf, ioEncryptionKey)
+    ioEncryptionKey.foreach { _ =>
+      if (!securityManager.isSaslEncryptionEnabled()) {
+        logWarning("I/O encryption enabled without RPC encryption: keys will be visible on the " +
+          "wire.")
+      }
+    }
 
-    // Create the ActorSystem for Akka and get the port it binds to.
-    val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
-    val rpcEnv = RpcEnv.create(actorSystemName, hostname, port, conf, securityManager)
-    val actorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
+    val systemName = if (isDriver) driverSystemName else executorSystemName
+    val rpcEnv = RpcEnv.create(systemName, bindAddress, advertiseAddress, port, conf,
+      securityManager, clientMode = !isDriver)
 
-    // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
+    // Figure out which port RpcEnv actually bound to in case the original port is 0 or occupied.
+    // In the non-driver case, the RPC env's address may be null since it may not be listening
+    // for incoming connections.
     if (isDriver) {
       conf.set("spark.driver.port", rpcEnv.address.port.toString)
-    } else {
+    } else if (rpcEnv.address != null) {
       conf.set("spark.executor.port", rpcEnv.address.port.toString)
+      logInfo(s"Setting spark.executor.port to: ${rpcEnv.address.port.toString}")
     }
 
     // Create an instance of the class with the given name, possibly initializing it with our conf
@@ -289,8 +285,9 @@ object SparkEnv extends Logging {
       "spark.serializer", "org.apache.spark.serializer.JavaSerializer")
     logDebug(s"Using serializer: ${serializer.getClass}")
 
-    val closureSerializer = instantiateClassFromConf[Serializer](
-      "spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer")
+    val serializerManager = new SerializerManager(serializer, conf, ioEncryptionKey)
+
+    val closureSerializer = new JavaSerializer(conf)
 
     def registerOrLookupEndpoint(
         name: String, endpointCreator: => RpcEndpoint):
@@ -303,13 +300,15 @@ object SparkEnv extends Logging {
       }
     }
 
+    val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
+
     val mapOutputTracker = if (isDriver) {
-      new MapOutputTrackerMaster(conf)
+      new MapOutputTrackerMaster(conf, broadcastManager, isLocal)
     } else {
       new MapOutputTrackerWorker(conf)
     }
 
-    // Have to assign trackerActor after initialization as MapOutputTrackerActor
+    // Have to assign trackerEndpoint after initialization as MapOutputTrackerEndpoint
     // requires the MapOutputTracker itself
     mapOutputTracker.trackerEndpoint = registerOrLookupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(
@@ -317,22 +316,29 @@ object SparkEnv extends Logging {
 
     // Let the user specify short names for shuffle managers
     val shortShuffleMgrNames = Map(
-      "hash" -> "org.apache.spark.shuffle.hash.HashShuffleManager",
-      "sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager",
-      "tungsten-sort" -> "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager")
+      "sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName,
+      "tungsten-sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName)
     val shuffleMgrName = conf.get("spark.shuffle.manager", "sort")
     val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
 
-    val shuffleMemoryManager = new ShuffleMemoryManager(conf)
+    val useLegacyMemoryManager = conf.getBoolean("spark.memory.useLegacyMode", false)
+    val memoryManager: MemoryManager =
+      if (useLegacyMemoryManager) {
+        new StaticMemoryManager(conf, numUsableCores)
+      } else {
+        UnifiedMemoryManager(conf, numUsableCores)
+      }
+
+    val blockManagerPort = if (isDriver) {
+      conf.get(DRIVER_BLOCK_MANAGER_PORT)
+    } else {
+      conf.get(BLOCK_MANAGER_PORT)
+    }
 
     val blockTransferService =
-      conf.get("spark.shuffle.blockTransferService", "netty").toLowerCase match {
-        case "netty" =>
-          new NettyBlockTransferService(conf, securityManager, numUsableCores)
-        case "nio" =>
-          new NioBlockTransferService(conf, securityManager)
-      }
+      new NettyBlockTransferService(conf, securityManager, bindAddress, advertiseAddress,
+        blockManagerPort, numUsableCores)
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
       BlockManagerMaster.DRIVER_ENDPOINT_NAME,
@@ -341,23 +347,8 @@ object SparkEnv extends Logging {
 
     // NB: blockManager is not valid until initialize() is called later.
     val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
-      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
-      numUsableCores)
-
-    val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
-
-    val cacheManager = new CacheManager(blockManager)
-
-    val httpFileServer =
-      if (isDriver) {
-        val fileServerPort = conf.getInt("spark.fileserver.port", 0)
-        val server = new HttpFileServer(conf, securityManager, fileServerPort)
-        server.initialize()
-        conf.set("spark.fileserver.uri", server.serverUri)
-        server
-      } else {
-        null
-      }
+      serializerManager, conf, memoryManager, mapOutputTracker, shuffleManager,
+      blockTransferService, securityManager, numUsableCores)
 
     val metricsSystem = if (isDriver) {
       // Don't start metrics system right now for Driver.
@@ -374,15 +365,6 @@ object SparkEnv extends Logging {
       ms
     }
 
-    // Set the sparkFiles directory, used when downloading dependencies.  In local mode,
-    // this is a temporary directory; in distributed mode, this is the executor's current working
-    // directory.
-    val sparkFilesDir: String = if (isDriver) {
-      Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
-    } else {
-      "."
-    }
-
     val outputCommitCoordinator = mockOutputCommitCoordinator.getOrElse {
       new OutputCommitCoordinator(conf, isDriver)
     }
@@ -390,32 +372,19 @@ object SparkEnv extends Logging {
       new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator))
     outputCommitCoordinator.coordinatorRef = Some(outputCommitCoordinatorRef)
 
-    val executorMemoryManager: ExecutorMemoryManager = {
-      val allocator = if (conf.getBoolean("spark.unsafe.offHeap", false)) {
-        MemoryAllocator.UNSAFE
-      } else {
-        MemoryAllocator.HEAP
-      }
-      new ExecutorMemoryManager(allocator)
-    }
-
     val envInstance = new SparkEnv(
       executorId,
       rpcEnv,
       serializer,
       closureSerializer,
-      cacheManager,
+      serializerManager,
       mapOutputTracker,
       shuffleManager,
       broadcastManager,
-      blockTransferService,
       blockManager,
       securityManager,
-      httpFileServer,
-      sparkFilesDir,
       metricsSystem,
-      shuffleMemoryManager,
-      executorMemoryManager,
+      memoryManager,
       outputCommitCoordinator,
       conf)
 
@@ -423,7 +392,8 @@ object SparkEnv extends Logging {
     // called, and we only need to do it for driver. Because driver may run as a service, and if we
     // don't delete this tmp dir when sc is stopped, then will create too many tmp dirs.
     if (isDriver) {
-      envInstance.driverTmpDirToDelete = Some(sparkFilesDir)
+      val sparkFilesDir = Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
+      envInstance.driverTmpDir = Some(sparkFilesDir)
     }
 
     envInstance

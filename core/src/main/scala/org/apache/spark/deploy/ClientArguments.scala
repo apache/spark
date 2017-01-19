@@ -19,9 +19,11 @@ package org.apache.spark.deploy
 
 import java.net.{URI, URISyntaxException}
 
+import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
 
 import org.apache.log4j.Level
+
 import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
 /**
@@ -48,6 +50,7 @@ private[deploy] class ClientArguments(args: Array[String]) {
 
   parse(args.toList)
 
+  @tailrec
   private def parse(args: List[String]): Unit = args match {
     case ("--cores" | "-c") :: IntParam(value) :: tail =>
       cores = value

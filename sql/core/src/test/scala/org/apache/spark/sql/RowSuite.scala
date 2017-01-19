@@ -18,20 +18,18 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.SparkSqlSerializer
-
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, SpecificInternalRow}
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
-class RowSuite extends SparkFunSuite {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+class RowSuite extends SparkFunSuite with SharedSQLContext {
+  import testImplicits._
 
   test("create row") {
-    val expected = new GenericMutableRow(4)
+    val expected = new GenericInternalRow(4)
     expected.setInt(0, 2147483647)
-    expected.setString(1, "this is a string")
+    expected.update(1, UTF8String.fromString("this is a string"))
     expected.setBoolean(2, false)
     expected.setNullAt(3)
 
@@ -51,18 +49,9 @@ class RowSuite extends SparkFunSuite {
   }
 
   test("SpecificMutableRow.update with null") {
-    val row = new SpecificMutableRow(Seq(IntegerType))
+    val row = new SpecificInternalRow(Seq(IntegerType))
     row(0) = null
     assert(row.isNullAt(0))
-  }
-
-  test("serialize w/ kryo") {
-    val row = Seq((1, Seq(1), Map(1 -> 1), BigDecimal(1))).toDF().first()
-    val serializer = new SparkSqlSerializer(ctx.sparkContext.getConf)
-    val instance = serializer.newInstance()
-    val ser = instance.serialize(row)
-    val de = instance.deserialize(ser).asInstanceOf[Row]
-    assert(de === row)
   }
 
   test("get values by field name on Row created via .toDF") {
@@ -85,5 +74,14 @@ class RowSuite extends SparkFunSuite {
     val r1 = Row(Double.NaN)
     val r2 = Row(Double.NaN)
     assert(r1 === r2)
+  }
+
+  test("equals and hashCode") {
+    val r1 = Row("Hello")
+    val r2 = Row("Hello")
+    assert(r1 === r2)
+    assert(r1.hashCode() === r2.hashCode())
+    val r3 = Row("World")
+    assert(r3.hashCode() != r1.hashCode())
   }
 }

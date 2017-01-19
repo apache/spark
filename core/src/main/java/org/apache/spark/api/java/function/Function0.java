@@ -23,5 +23,5 @@ import java.io.Serializable;
  * A zero-argument function that returns an R.
  */
 public interface Function0<R> extends Serializable {
-  public R call() throws Exception;
+  R call() throws Exception;
 }

@@ -29,24 +29,26 @@ private[ui] class StagesTab(parent: SparkUI) extends SparkUITab(parent, "stages"
   val killEnabled = parent.killEnabled
   val progressListener = parent.jobProgressListener
   val operationGraphListener = parent.operationGraphListener
+  val executorsListener = parent.executorsListener
 
   attachPage(new AllStagesPage(this))
   attachPage(new StagePage(this))
   attachPage(new PoolPage(this))
 
-  def isFairScheduler: Boolean = progressListener.schedulingMode.exists(_ == SchedulingMode.FAIR)
+  def isFairScheduler: Boolean = progressListener.schedulingMode == Some(SchedulingMode.FAIR)
 
   def handleKillRequest(request: HttpServletRequest): Unit = {
     if (killEnabled && parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {
-      val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
-      val stageId = Option(request.getParameter("id")).getOrElse("-1").toInt
-      if (stageId >= 0 && killFlag && progressListener.activeStages.contains(stageId)) {
-        sc.get.cancelStage(stageId)
+      val stageId = Option(request.getParameter("id")).map(_.toInt)
+      stageId.foreach { id =>
+        if (progressListener.activeStages.contains(id)) {
+          sc.foreach(_.cancelStage(id))
+          // Do a quick pause here to give Spark time to kill the stage so it shows up as
+          // killed after the refresh. Note that this will block the serving thread so the
+          // time should be limited in duration.
+          Thread.sleep(100)
+        }
       }
-      // Do a quick pause here to give Spark time to kill the stage so it shows up as
-      // killed after the refresh. Note that this will block the serving thread so the
-      // time should be limited in duration.
-      Thread.sleep(100)
     }
   }
 

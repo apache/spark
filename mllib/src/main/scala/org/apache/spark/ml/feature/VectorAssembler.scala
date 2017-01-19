@@ -20,37 +20,41 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute, UnresolvedAttribute}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.ml.util._
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
- * :: Experimental ::
  * A feature transformer that merges multiple columns into a vector column.
  */
-@Experimental
-class VectorAssembler(override val uid: String)
-  extends Transformer with HasInputCols with HasOutputCol {
+@Since("1.4.0")
+class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
+  extends Transformer with HasInputCols with HasOutputCol with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("vecAssembler"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     // Schema transformation.
     val schema = dataset.schema
-    lazy val first = dataset.first()
+    lazy val first = dataset.toDF.first()
     val attrs = $(inputCols).flatMap { c =>
       val field = schema(c)
       val index = schema.fieldIndex(c)
@@ -70,20 +74,22 @@ class VectorAssembler(override val uid: String)
           val group = AttributeGroup.fromStructField(field)
           if (group.attributes.isDefined) {
             // If attributes are defined, copy them with updated names.
-            group.attributes.get.map { attr =>
+            group.attributes.get.zipWithIndex.map { case (attr, i) =>
               if (attr.name.isDefined) {
                 // TODO: Define a rigorous naming scheme.
                 attr.withName(c + "_" + attr.name.get)
               } else {
-                attr
+                attr.withName(c + "_" + i)
               }
             }
           } else {
             // Otherwise, treat all attributes as numeric. If we cannot get the number of attributes
             // from metadata, check the first row.
             val numAttrs = group.numAttributes.getOrElse(first.getAs[Vector](index).size)
-            Array.fill(numAttrs)(NumericAttribute.defaultAttr)
+            Array.tabulate(numAttrs)(i => NumericAttribute.defaultAttr.withName(c + "_" + i))
           }
+        case otherType =>
+          throw new SparkException(s"VectorAssembler does not support the $otherType type")
       }
     }
     val metadata = new AttributeGroup($(outputCol), attrs).toMetadata()
@@ -100,9 +106,10 @@ class VectorAssembler(override val uid: String)
       }
     }
 
-    dataset.select(col("*"), assembleFunc(struct(args : _*)).as($(outputCol), metadata))
+    dataset.select(col("*"), assembleFunc(struct(args: _*)).as($(outputCol), metadata))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
@@ -119,10 +126,15 @@ class VectorAssembler(override val uid: String)
     StructType(schema.fields :+ new StructField(outputColName, new VectorUDT, true))
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
 }
 
-private object VectorAssembler {
+@Since("1.6.0")
+object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
+
+  @Since("1.6.0")
+  override def load(path: String): VectorAssembler = super.load(path)
 
   private[feature] def assemble(vv: Any*): Vector = {
     val indices = ArrayBuilder.make[Int]

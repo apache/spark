@@ -17,16 +17,15 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
- * :: Experimental ::
  * Trait for calculating information gain.
  * This trait is used for
  *  (a) setting the impurity parameter in [[org.apache.spark.mllib.tree.configuration.Strategy]]
  *  (b) calculating impurity values from sufficient statistics.
  */
-@Experimental
+@Since("1.0.0")
 trait Impurity extends Serializable {
 
   /**
@@ -36,6 +35,7 @@ trait Impurity extends Serializable {
    * @param totalCount sum of counts for all labels
    * @return information value, or 0 if totalCount = 0
    */
+  @Since("1.1.0")
   @DeveloperApi
   def calculate(counts: Array[Double], totalCount: Double): Double
 
@@ -47,6 +47,7 @@ trait Impurity extends Serializable {
    * @param sumSquares summation of squares of the labels
    * @return information value, or 0 if count = 0
    */
+  @Since("1.0.0")
   @DeveloperApi
   def calculate(count: Double, sum: Double, sumSquares: Double): Double
 }
@@ -86,7 +87,6 @@ private[spark] abstract class ImpurityAggregator(val statsSize: Int) extends Ser
    * @param offset    Start index of stats for this (node, feature, bin).
    */
   def getCalculator(allStats: Array[Double], offset: Int): ImpurityCalculator
-
 }
 
 /**
@@ -95,7 +95,7 @@ private[spark] abstract class ImpurityAggregator(val statsSize: Int) extends Ser
  * (node, feature, bin).
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
  */
-private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) {
+private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) extends Serializable {
 
   /**
    * Make a deep copy of this [[ImpurityCalculator]].
@@ -175,4 +175,22 @@ private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) {
     result._1
   }
 
+}
+
+private[spark] object ImpurityCalculator {
+
+  /**
+   * Create an [[ImpurityCalculator]] instance of the given impurity type and with
+   * the given stats.
+   */
+  def getCalculator(impurity: String, stats: Array[Double]): ImpurityCalculator = {
+    impurity match {
+      case "gini" => new GiniCalculator(stats)
+      case "entropy" => new EntropyCalculator(stats)
+      case "variance" => new VarianceCalculator(stats)
+      case _ =>
+        throw new IllegalArgumentException(
+          s"ImpurityCalculator builder did not recognize impurity type: $impurity")
+    }
+  }
 }

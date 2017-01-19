@@ -23,8 +23,10 @@ import com.fasterxml.jackson.annotation.{JsonIgnore, JsonInclude, JsonPropertyOr
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import com.google.common.base.Objects
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
 
 /**
  * A general, named code block representing an operation that instantiates RDDs.
@@ -66,6 +68,8 @@ private[spark] class RDDOperationScope(
       case _ => false
     }
   }
+
+  override def hashCode(): Int = Objects.hashCode(id, name, parent)
 
   override def toString: String = toJson
 }
