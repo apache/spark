@@ -126,7 +126,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
 
   test("SPARK-19276: Handle Fetch Failed for all intervening user code") {
     val conf = new SparkConf().setMaster("local").setAppName("executor suite test")
-    val sc = new SparkContext(conf)
+    sc = new SparkContext(conf)
 
     val serializer = SparkEnv.get.closureSerializer.newInstance()
     val resultFunc = (context: TaskContext, itr: Iterator[Int]) => itr.size
