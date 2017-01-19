@@ -75,8 +75,6 @@ case class CreateHiveTableAsSelectCommand(
           compressed = tableDesc.storage.compressed)
 
       val withSchema = if (withFormat.schema.isEmpty) {
-        // Hive doesn't support specifying the column list for target table in CTAS
-        // However we don't think SparkSQL should follow that.
         tableDesc.copy(schema = reorderedOutputQuery.schema)
       } else {
         withFormat
