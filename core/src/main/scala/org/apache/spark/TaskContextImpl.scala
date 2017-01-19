@@ -57,7 +57,9 @@ private[spark] class TaskContextImpl(
   // Whether the task has failed.
   @volatile private var failed: Boolean = false
 
-  var fetchFailed: Option[FetchFailedException] = None
+  // If there was a fetch failure in the task, we store it here, to make sure user-code doesn't
+  // hide the exception.  See SPARK-19276
+  @volatile private var _fetchFailed: Option[FetchFailedException] = None
 
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     onCompleteCallbacks += listener
@@ -130,7 +132,9 @@ private[spark] class TaskContextImpl(
   }
 
   private[spark] override def setFetchFailed(fetchFailed: FetchFailedException): Unit = {
-    this.fetchFailed = Some(fetchFailed)
+    this._fetchFailed = Some(fetchFailed)
   }
+
+  private[spark] def fetchFailed: Option[FetchFailedException] = _fetchFailed
 
 }

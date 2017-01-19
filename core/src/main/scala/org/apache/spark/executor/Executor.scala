@@ -415,7 +415,7 @@ private[spark] class Executor(
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
-        case t: Throwable if task.context.fetchFailed.isDefined =>
+        case t: Throwable if hasFetchFailure =>
           // tbere was a fetch failure in the task, but some user code wrapped that exception
           // and threw something else.  Regardless, we treat it as a fetch failure.
           val reason = task.context.fetchFailed.get.toTaskFailedReason
@@ -476,6 +476,10 @@ private[spark] class Executor(
       } finally {
         runningTasks.remove(taskId)
       }
+    }
+
+    private def hasFetchFailure: Boolean = {
+      task != null && task.context != null && task.context.fetchFailed.isDefined
     }
   }
 

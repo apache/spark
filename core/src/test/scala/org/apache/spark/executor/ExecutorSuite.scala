@@ -17,9 +17,10 @@
 
 package org.apache.spark.executor
 
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.nio.ByteBuffer
 import java.util.Properties
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.Map
 
@@ -47,19 +48,8 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     // mock some objects to make Executor.launchTask() happy
     val conf = new SparkConf
     val serializer = new JavaSerializer(conf)
-    val mockEnv = mock[SparkEnv]
-    val mockRpcEnv = mock[RpcEnv]
-    val mockMetricsSystem = mock[MetricsSystem]
-    val mockMemoryManager = mock[MemoryManager]
-    when(mockEnv.conf).thenReturn(conf)
-    when(mockEnv.serializer).thenReturn(serializer)
-    when(mockEnv.rpcEnv).thenReturn(mockRpcEnv)
-    when(mockEnv.metricsSystem).thenReturn(mockMetricsSystem)
-    when(mockEnv.memoryManager).thenReturn(mockMemoryManager)
-    when(mockEnv.closureSerializer).thenReturn(serializer)
-    val fakeTaskMetrics = serializer.newInstance().serialize(TaskMetrics.registered).array()
-    val serializedTask = serializer.newInstance().serialize(
-      new FakeTask(0, 0, Nil, fakeTaskMetrics))
+    val env = mockEnv(conf, serializer)
+    val serializedTask = serializer.newInstance().serialize(new FakeTask(0, 0))
     val taskDescription = fakeTaskDescription(serializedTask)
 
     // we use latches to force the program to run in this order:
@@ -98,8 +88,8 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
             val taskState = invocationOnMock.getArguments()(1).asInstanceOf[TaskState]
             executorSuiteHelper.taskState = taskState
             val taskEndReason = invocationOnMock.getArguments()(2).asInstanceOf[ByteBuffer]
-            executorSuiteHelper.testFailedReason
-              = serializer.newInstance().deserialize(taskEndReason)
+            executorSuiteHelper.testFailedReason =
+              serializer.newInstance().deserialize(taskEndReason)
             // let the main test thread check `taskState` and `testFailedReason`
             executorSuiteHelper.latch3.countDown()
           }
@@ -108,16 +98,20 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
 
     var executor: Executor = null
     try {
-      executor = new Executor("id", "localhost", mockEnv, userClassPath = Nil, isLocal = true)
+      executor = new Executor("id", "localhost", env, userClassPath = Nil, isLocal = true)
       // the task will be launched in a dedicated worker thread
       executor.launchTask(mockExecutorBackend, taskDescription)
 
-      executorSuiteHelper.latch1.await()
+      if (!executorSuiteHelper.latch1.await(5, TimeUnit.SECONDS)) {
+        fail("executor did not send first status update in time")
+      }
       // we know the task will be started, but not yet deserialized, because of the latches we
       // use in mockExecutorBackend.
       executor.killAllTasks(true)
       executorSuiteHelper.latch2.countDown()
-      executorSuiteHelper.latch3.await()
+      if (!executorSuiteHelper.latch3.await(5, TimeUnit.SECONDS)) {
+        fail("executor did not send second status update in time")
+      }
 
       // `testFailedReason` should be `TaskKilled`; `taskState` should be `KILLED`
       assert(executorSuiteHelper.testFailedReason === TaskKilled)
@@ -155,33 +149,40 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     val taskDescription = fakeTaskDescription(serTask)
 
 
-    val mockBackend = mock[ExecutorBackend]
-    var executor: Executor = null
-    try {
-      executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true)
-      executor.launchTask(mockBackend, taskDescription)
-      val startTime = System.currentTimeMillis()
-      val maxTime = startTime + 5000
-      while (executor.numRunningTasks > 0 && System.currentTimeMillis() < maxTime) {
-        Thread.sleep(10)
-      }
-      val orderedMock = inOrder(mockBackend)
-      val statusCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
-      orderedMock.verify(mockBackend)
-        .statusUpdate(meq(0L), meq(TaskState.RUNNING), statusCaptor.capture())
-      orderedMock.verify(mockBackend)
-        .statusUpdate(meq(0L), meq(TaskState.FAILED), statusCaptor.capture())
-      // first statusUpdate for RUNNING has empty data
-      assert(statusCaptor.getAllValues().get(0).remaining() === 0)
-      // second update is more interesting
-      val failureData = statusCaptor.getAllValues.get(1)
-      val failReason = serializer.deserialize[TaskFailedReason](failureData)
-      assert(failReason.isInstanceOf[FetchFailed])
-    } finally {
-      if (executor != null) {
-        executor.stop()
-      }
+    val failReason = runTaskAndGetFailReason(taskDescription)
+    assert(failReason.isInstanceOf[FetchFailed])
+  }
+
+  test("Gracefully handle error in task deserialization") {
+    val conf = new SparkConf
+    val serializer = new JavaSerializer(conf)
+    val env = mockEnv(conf, serializer)
+    val serializedTask = serializer.newInstance().serialize(new NonDeserializableTask)
+    val taskDescription = fakeTaskDescription(serializedTask)
+
+    val failReason = runTaskAndGetFailReason(taskDescription)
+    failReason match {
+      case ef: ExceptionFailure =>
+        assert(ef.exception.isDefined)
+        assert(ef.exception.get.getMessage() === "failure in deserialization")
+      case _ =>
+        fail("unexpected failure type: $failReason")
     }
+  }
+
+  private def mockEnv(conf: SparkConf, serializer: JavaSerializer): SparkEnv = {
+    val mockEnv = mock[SparkEnv]
+    val mockRpcEnv = mock[RpcEnv]
+    val mockMetricsSystem = mock[MetricsSystem]
+    val mockMemoryManager = mock[MemoryManager]
+    when(mockEnv.conf).thenReturn(conf)
+    when(mockEnv.serializer).thenReturn(serializer)
+    when(mockEnv.rpcEnv).thenReturn(mockRpcEnv)
+    when(mockEnv.metricsSystem).thenReturn(mockMetricsSystem)
+    when(mockEnv.memoryManager).thenReturn(mockMemoryManager)
+    when(mockEnv.closureSerializer).thenReturn(serializer)
+    SparkEnv.set(mockEnv)
+    mockEnv
   }
 
   private def fakeTaskDescription(serializedTask: ByteBuffer): TaskDescription = {
@@ -197,6 +198,36 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
       serializedTask)
   }
 
+  private def runTaskAndGetFailReason(taskDescription: TaskDescription): TaskFailedReason = {
+    val mockBackend = mock[ExecutorBackend]
+    var executor: Executor = null
+    try {
+      executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true)
+      // the task will be launched in a dedicated worker thread
+      executor.launchTask(mockBackend, taskDescription)
+      val startTime = System.currentTimeMillis()
+      val maxTime = startTime + 5000
+      while (executor.numRunningTasks > 0 && System.currentTimeMillis() < maxTime) {
+        Thread.sleep(10)
+      }
+      assert(executor.numRunningTasks === 0)
+    } finally {
+      if (executor != null) {
+        executor.stop()
+      }
+    }
+    val orderedMock = inOrder(mockBackend)
+    val statusCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
+    orderedMock.verify(mockBackend)
+      .statusUpdate(meq(0L), meq(TaskState.RUNNING), statusCaptor.capture())
+    orderedMock.verify(mockBackend)
+      .statusUpdate(meq(0L), meq(TaskState.FAILED), statusCaptor.capture())
+    // first statusUpdate for RUNNING has empty data
+    assert(statusCaptor.getAllValues().get(0).remaining() === 0)
+    // second update is more interesting
+    val failureData = statusCaptor.getAllValues.get(1)
+    SparkEnv.get.closureSerializer.newInstance().deserialize[TaskFailedReason](failureData)
+  }
 }
 
 class FakeShuffleRDD(sc: SparkContext) extends RDD[Int](sc, Nil) {
@@ -250,4 +281,11 @@ private class ExecutorSuiteHelper {
 
   @volatile var taskState: TaskState = _
   @volatile var testFailedReason: TaskFailedReason = _
+}
+
+private class NonDeserializableTask extends FakeTask(0, 0) with Externalizable {
+  def writeExternal(out: ObjectOutput): Unit = {}
+  def readExternal(in: ObjectInput): Unit = {
+    throw new RuntimeException("failure in deserialization")
+  }
 }
