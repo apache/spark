@@ -21,7 +21,7 @@ import java.io.IOException
 
 import scala.collection.mutable
 
-import org.apache.spark.{Partition => RDDPartition, TaskContext}
+import org.apache.spark.{Partition => RDDPartition, TaskContext, TaskKilledException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
@@ -99,7 +99,15 @@ class FileScanRDD(
       private[this] var currentFile: PartitionedFile = null
       private[this] var currentIterator: Iterator[Object] = null
 
-      def hasNext: Boolean = (currentIterator != null && currentIterator.hasNext) || nextIterator()
+      def hasNext: Boolean = {
+        // Kill the task in case it has been marked as killed. This logic is from
+        // InterruptibleIterator, but we inline it here instead of wrapping the iterator in order
+        // to avoid performance overhead.
+        if (context.isInterrupted()) {
+          throw new TaskKilledException
+        }
+        (currentIterator != null && currentIterator.hasNext) || nextIterator()
+      }
       def next(): Object = {
         val nextElement = currentIterator.next()
         // TODO: we should have a better separation of row based and batch based scan, so that we
@@ -127,7 +135,17 @@ class FileScanRDD(
           try {
             if (ignoreCorruptFiles) {
               currentIterator = new NextIterator[Object] {
-                private val internalIter = readFunction(currentFile)
+                private val internalIter = {
+                  try {
+                    // The readFunction may read files before consuming the iterator.
+                    // E.g., vectorized Parquet reader.
+                    readFunction(currentFile)
+                  } catch {
+                    case e @(_: RuntimeException | _: IOException) =>
+                      logWarning(s"Skipped the rest content in the corrupted file: $currentFile", e)
+                      Iterator.empty
+                  }
+                }
 
                 override def getNext(): AnyRef = {
                   try {

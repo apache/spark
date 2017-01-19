@@ -699,8 +699,10 @@ private[spark] object SparkConf extends Logging {
     "spark.rpc.message.maxSize" -> Seq(
       AlternateConfig("spark.akka.frameSize", "1.6")),
     "spark.yarn.jars" -> Seq(
-      AlternateConfig("spark.yarn.jar", "2.0"))
-    )
+      AlternateConfig("spark.yarn.jar", "2.0")),
+    "spark.yarn.access.hadoopFileSystems" -> Seq(
+      AlternateConfig("spark.yarn.access.namenodes", "2.2"))
+  )
 
   /**
    * A view of `configsWithAlternatives` that makes it more efficient to look up deprecated

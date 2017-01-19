@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -237,7 +238,7 @@ class StreamSuite extends StreamTest {
     }
   }
 
-  testQuietly("fatal errors from a source should be sent to the user") {
+  testQuietly("handle fatal errors thrown from the stream thread") {
     for (e <- Seq(
       new VirtualMachineError {},
       new ThreadDeath,
@@ -259,16 +260,19 @@ class StreamSuite extends StreamTest {
       }
       val df = Dataset[Int](sqlContext.sparkSession, StreamingExecutionRelation(source))
       testStream(df)(
-        ExpectFailure()(ClassTag(e.getClass))
+        // `ExpectFailure(isFatalError = true)` verifies two things:
+        // - Fatal errors can be propagated to `StreamingQuery.exception` and
+        //   `StreamingQuery.awaitTermination` like non fatal errors.
+        // - Fatal errors can be caught by UncaughtExceptionHandler.
+        ExpectFailure(isFatalError = true)(ClassTag(e.getClass))
       )
     }
   }
 
   test("output mode API in Scala") {
-    val o1 = OutputMode.Append
-    assert(o1 === InternalOutputModes.Append)
-    val o2 = OutputMode.Complete
-    assert(o2 === InternalOutputModes.Complete)
+    assert(OutputMode.Append === InternalOutputModes.Append)
+    assert(OutputMode.Complete === InternalOutputModes.Complete)
+    assert(OutputMode.Update === InternalOutputModes.Update)
   }
 
   test("explain") {
@@ -298,6 +302,32 @@ class StreamSuite extends StreamTest {
       assert("LocalTableScan".r.findAllMatchIn(explainWithExtended).size === 1)
     } finally {
       q.stop()
+    }
+  }
+
+  test("SPARK-19065: dropDuplicates should not create expressions using the same id") {
+    withTempPath { testPath =>
+      val data = Seq((1, 2), (2, 3), (3, 4))
+      data.toDS.write.mode("overwrite").json(testPath.getCanonicalPath)
+      val schema = spark.read.json(testPath.getCanonicalPath).schema
+      val query = spark
+        .readStream
+        .schema(schema)
+        .json(testPath.getCanonicalPath)
+        .dropDuplicates("_1")
+        .writeStream
+        .format("memory")
+        .queryName("testquery")
+        .outputMode("complete")
+        .start()
+      try {
+        query.processAllAvailable()
+        if (query.exception.isDefined) {
+          throw query.exception.get
+        }
+      } finally {
+        query.stop()
+      }
     }
   }
 }

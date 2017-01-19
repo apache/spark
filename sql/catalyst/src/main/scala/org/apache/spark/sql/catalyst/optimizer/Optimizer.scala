@@ -52,6 +52,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     // we do not eliminate subqueries or compute current time in the analyzer.
     Batch("Finish Analysis", Once,
       EliminateSubqueryAliases,
+      EliminateView,
       ReplaceExpressions,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
@@ -82,7 +83,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       EliminateOuterJoin,
       PushPredicateThroughJoin,
       PushDownPredicate,
-      LimitPushDown,
+      LimitPushDown(conf),
       ColumnPruning,
       InferFiltersFromConstraints,
       // Operator combine
@@ -209,7 +210,7 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
 /**
  * Pushes down [[LocalLimit]] beneath UNION ALL and beneath the streamed inputs of outer joins.
  */
-object LimitPushDown extends Rule[LogicalPlan] {
+case class LimitPushDown(conf: CatalystConf) extends Rule[LogicalPlan] {
 
   private def stripGlobalLimitIfPresent(plan: LogicalPlan): LogicalPlan = {
     plan match {
@@ -253,7 +254,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
         case FullOuter =>
           (left.maxRows, right.maxRows) match {
             case (None, None) =>
-              if (left.statistics.sizeInBytes >= right.statistics.sizeInBytes) {
+              if (left.stats(conf).sizeInBytes >= right.stats(conf).sizeInBytes) {
                 join.copy(left = maybePushLimit(exp, left))
               } else {
                 join.copy(right = maybePushLimit(exp, right))
@@ -796,7 +797,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     case _: Distinct => true
     case _: Generate => true
     case _: Pivot => true
-    case _: RedistributeData => true
+    case _: RepartitionByExpression => true
     case _: Repartition => true
     case _: ScriptTransformation => true
     case _: Sort => true
