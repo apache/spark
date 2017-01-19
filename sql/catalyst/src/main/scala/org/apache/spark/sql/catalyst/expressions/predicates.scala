@@ -93,6 +93,7 @@ trait PredicateHelper {
     case e: SubqueryExpression =>
       // non-correlated subquery will be replaced as literal
       e.children.isEmpty
+    case a: AttributeReference => true
     case e: Unevaluable => false
     case e => e.children.forall(canEvaluateWithinJoin)
   }
