@@ -141,7 +141,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
   test("linearSVC comparison with R e1071 and scikit-learn") {
     val trainer1 = new LinearSVC()
-      .setRegParam(0.00002)
+      .setRegParam(0.00002) // set regParam = 2.0 / datasize / c
       .setMaxIter(200)
       .setTol(1e-4)
     val model1 = trainer1.fit(binaryDataset)
