@@ -48,13 +48,12 @@ case class CreateHiveTableAsSelectCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // the CTAS's SELECT partition-outputs order should be consistent with
     // tableDesc.partitionColumnNames
-    val partitionAttrs = tableDesc.partitionColumnNames.map {
-            p =>
-              query.output.find(_.name == p).getOrElse(
-                new AnalysisException(s"Partition column[$p] does not exist " +
-                  s"in query output partition").asInstanceOf[NamedExpression]
-              )
-          }
+    val partitionAttrs = tableDesc.partitionColumnNames.map { p =>
+      query.output.find(_.name == p).getOrElse(
+        new AnalysisException(s"Partition column[$p] does not exist " +
+          s"in query output partition").asInstanceOf[NamedExpression]
+      )
+    }
     val partitionSet = AttributeSet(partitionAttrs)
     val dataAttrs = query.output.filterNot(partitionSet.contains)
     val reorderedOutputQuery = Project(dataAttrs ++ partitionAttrs, query)
