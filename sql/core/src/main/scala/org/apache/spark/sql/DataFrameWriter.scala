@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
 import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource, HadoopFsRelation}
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
@@ -399,6 +399,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertNotPartitioned("jdbc")
     assertNotBucketed("jdbc")
 
+    // to add required options like URL and dbtable
+    val params = extraOptions.toMap ++ Map("url" -> url, "dbtable" -> table)
+    val jdbcOptions = new JDBCOptions(params)
+    val jdbcUrl = jdbcOptions.url
+    val jdbcTable = jdbcOptions.table
+
     val props = new Properties()
     extraOptions.foreach { case (key, value) =>
       props.put(key, value)
@@ -408,25 +414,29 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val conn = JdbcUtils.createConnectionFactory(url, props)()
 
     try {
-      var tableExists = JdbcUtils.tableExists(conn, url, table)
+      var tableExists = JdbcUtils.tableExists(conn, jdbcUrl, jdbcTable)
 
       if (mode == SaveMode.Ignore && tableExists) {
         return
       }
 
       if (mode == SaveMode.ErrorIfExists && tableExists) {
-        sys.error(s"Table $table already exists.")
+        sys.error(s"Table $jdbcTable already exists.")
       }
 
       if (mode == SaveMode.Overwrite && tableExists) {
-        JdbcUtils.dropTable(conn, table)
+        JdbcUtils.dropTable(conn, jdbcTable)
         tableExists = false
       }
 
       // Create the table if the table didn't exist.
       if (!tableExists) {
-        val schema = JdbcUtils.schemaString(df, url)
-        val sql = s"CREATE TABLE $table ($schema)"
+        val schema = JdbcUtils.schemaString(df, jdbcUrl)
+        // To allow certain options to append when create a new table, which can be
+        // table_options or partition_options.
+        // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
+        val createtblOptions = jdbcOptions.createTableOptions
+        val sql = s"CREATE TABLE $jdbcTable ($schema) $createtblOptions"
         val statement = conn.createStatement
         try {
           statement.executeUpdate(sql)
@@ -438,7 +448,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       conn.close()
     }
 
-    JdbcUtils.saveTable(df, url, table, props)
+    JdbcUtils.saveTable(df, jdbcUrl, jdbcTable, props)
   }
 
   /**

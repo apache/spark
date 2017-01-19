@@ -1023,6 +1023,13 @@ the Data Sources API. The following options are supported:
       The JDBC fetch size, which determines how many rows to fetch per round trip. This can help performance on JDBC drivers which default to low fetch size (eg. Oracle with 10 rows).
     </td>
   </tr>
+
+  <tr>
+    <td><code>createTableOptions</code></td>
+    <td>
+      This is a JDBC writer related option. If specified, this option allows setting of database-specific table and partition options when creating a table. For example: <code>CREATE TABLE t (name string) ENGINE=InnoDB.</code>
+   </td>
+  </tr>
 </table>
 
 <div class="codetabs">
