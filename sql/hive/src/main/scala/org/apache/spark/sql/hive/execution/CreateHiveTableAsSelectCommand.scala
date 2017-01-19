@@ -46,8 +46,8 @@ case class CreateHiveTableAsSelectCommand(
   override def innerChildren: Seq[LogicalPlan] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // the CTAS's SELECT partition-outputs order should be consistent with
-    // tableDesc.partitionColumnNames
+    // when create a partitioned table, we should reorder the columns
+    // to put the partition columns at the end
     val partitionAttrs = tableDesc.partitionColumnNames.map { p =>
       query.output.find(_.name == p).getOrElse(
         new AnalysisException(s"Partition column[$p] does not exist " +
