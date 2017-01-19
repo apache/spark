@@ -363,7 +363,11 @@ function resizeSvg(svg) {
      .attr("height", height);
 }
 
-
+/*
+ * Helper function to interprete line break for tag 'tspan'.
+ * For tag 'tspan', line break '/n' is display in UI as raw for both stage page and job page,
+ * here this function is to enable line break.
+ */
 function intepreteLineBreak(svg) {
   var allTSpan = svg.selectAll("tspan").each(function() {
     node = d3.select(this);
@@ -504,7 +508,7 @@ function addTooltipsForRDDs(svgContainer) {
       node.select("circle")
         .attr("data-toggle", "tooltip")
         .attr("data-placement", "bottom")
-        .attr("data-html", "true")
+        .attr("data-html", "true") // to interpret line break, tooltipText is showing <circle> title
         .attr("title", tooltipText);
     }
     // Link tooltips for all nodes that belong to the same RDD
