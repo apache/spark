@@ -608,11 +608,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   /**
    * Request that the cluster manager kill all executors on a given host.
-   * @return whether the kill request is acknowledged
+   * @return whether the kill request is acknowledged.
    */
-  final override def killExecutorsOnHost(host: String): Unit = {
+  final override def killExecutorsOnHost(host: String): Boolean = {
     logInfo(s"Requesting to kill any and all executors on host ${host}")
     driverEndpoint.send(KillExecutorsOnHost(host))
+    true
   }
 }
 

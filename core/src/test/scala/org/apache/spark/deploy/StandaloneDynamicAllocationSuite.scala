@@ -478,7 +478,7 @@ class StandaloneDynamicAllocationSuite
       assert(apps.head.getExecutorLimit === Int.MaxValue)
     }
     // kill all executors
-    assert(killExecutorsOnHost(sc, "localhost").size == 2)
+    assert(killExecutorsOnHost(sc, "localhost").equals(true))
     var apps = getApplications()
     assert(apps.head.executors.size === 0)
     assert(apps.head.getExecutorLimit === 0)
@@ -546,7 +546,7 @@ class StandaloneDynamicAllocationSuite
   }
 
   /** Kill the executors on a given host. */
-  private def killExecutorsOnHost(sc: SparkContext, host: String): Seq[String] = {
+  private def killExecutorsOnHost(sc: SparkContext, host: String): Unit = {
     syncExecutors(sc)
     sc.schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
