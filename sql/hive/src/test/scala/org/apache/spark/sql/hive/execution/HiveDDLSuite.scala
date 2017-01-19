@@ -1355,7 +1355,7 @@ class HiveDDLSuite
     }
   }
 
-  test("create hive serde table as select") {
+  test("create partitioned hive serde table as select") {
     withTable("t", "t1") {
       withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
         Seq(10 -> "y").toDF("i", "j").write.format("hive").partitionBy("i").saveAsTable("t")
