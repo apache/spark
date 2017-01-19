@@ -40,7 +40,8 @@ case class AnalyzeColumnCommand(
     val sessionState = sparkSession.sessionState
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
-    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdentWithDB))
+    val relation =
+      EliminateSubqueryAliases(sparkSession.table(tableIdentWithDB).queryExecution.analyzed)
 
     // Compute total size
     val (catalogTable: CatalogTable, sizeInBytes: Long) = relation match {

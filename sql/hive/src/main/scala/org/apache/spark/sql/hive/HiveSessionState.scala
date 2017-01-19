@@ -67,6 +67,8 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
         DataSourceAnalysis(conf) ::
         new DetermineHiveSerde(conf) ::
         new HiveAnalysis(sparkSession) ::
+        new FindDataSourceTable(sparkSession) ::
+        new FindHiveSerdeTable(sparkSession) ::
         new ResolveDataSource(sparkSession) :: Nil
 
       override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
