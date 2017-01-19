@@ -97,7 +97,7 @@ class HiveAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
       CreateHiveTableAsSelectCommand(
         tableDesc.copy(identifier = tableDesc.identifier.copy(database = Some(dbName))),
         query,
-        mode == SaveMode.Ignore | mode == SaveMode.Append)
+        mode)
   }
 
   /**
