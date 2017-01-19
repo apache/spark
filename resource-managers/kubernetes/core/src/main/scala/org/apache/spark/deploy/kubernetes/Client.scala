@@ -77,6 +77,8 @@ private[spark] class Client(
   private val serviceAccount = sparkConf.get("spark.kubernetes.submit.serviceAccountName",
     "default")
 
+  private val customLabels = sparkConf.get("spark.kubernetes.driver.labels", "")
+
   private implicit val retryableExecutionContext = ExecutionContext
     .fromExecutorService(
       Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
@@ -85,6 +87,7 @@ private[spark] class Client(
         .build()))
 
   def run(): Unit = {
+    val parsedCustomLabels = parseCustomLabels(customLabels)
     var k8ConfBuilder = new ConfigBuilder()
       .withApiVersion("v1")
       .withMasterUrl(master)
@@ -109,14 +112,15 @@ private[spark] class Client(
         .withType("Opaque")
         .done()
       try {
-        val selectors = Map(DRIVER_LAUNCHER_SELECTOR_LABEL -> driverLauncherSelectorValue).asJava
+        val resolvedSelectors = (Map(DRIVER_LAUNCHER_SELECTOR_LABEL -> driverLauncherSelectorValue)
+          ++ parsedCustomLabels).asJava
         val (servicePorts, containerPorts) = configurePorts()
         val service = kubernetesClient.services().createNew()
           .withNewMetadata()
             .withName(kubernetesAppId)
             .endMetadata()
           .withNewSpec()
-            .withSelector(selectors)
+            .withSelector(resolvedSelectors)
             .withPorts(servicePorts.asJava)
             .endSpec()
           .done()
@@ -137,7 +141,7 @@ private[spark] class Client(
                 .asScala
                 .find(status =>
                   status.getName == DRIVER_LAUNCHER_CONTAINER_NAME && status.getReady) match {
-                case Some(status) =>
+                case Some(_) =>
                   try {
                     val driverLauncher = getDriverLauncherService(
                       k8ClientConfig, master)
@@ -184,7 +188,7 @@ private[spark] class Client(
           kubernetesClient.pods().createNew()
             .withNewMetadata()
               .withName(kubernetesAppId)
-              .withLabels(selectors)
+              .withLabels(resolvedSelectors)
               .endMetadata()
             .withNewSpec()
               .withRestartPolicy("OnFailure")
@@ -291,7 +295,7 @@ private[spark] class Client(
 
         Utils.tryWithResource(kubernetesClient
           .pods()
-          .withLabels(selectors)
+          .withLabels(resolvedSelectors)
           .watch(podWatcher)) { createDriverPod }
       } finally {
         kubernetesClient.secrets().delete(secret)
@@ -336,7 +340,7 @@ private[spark] class Client(
         .getOption("spark.ui.port")
         .map(_.toInt)
         .getOrElse(DEFAULT_UI_PORT))
-    (servicePorts.toSeq, containerPorts.toSeq)
+    (servicePorts, containerPorts)
   }
 
   private def buildSubmissionRequest(): KubernetesCreateSubmissionRequest = {
@@ -366,7 +370,7 @@ private[spark] class Client(
       uploadedJarsBase64Contents = uploadJarsBase64Contents)
   }
 
-  def compressJars(maybeFilePaths: Option[String]): Option[TarGzippedData] = {
+  private def compressJars(maybeFilePaths: Option[String]): Option[TarGzippedData] = {
     maybeFilePaths
       .map(_.split(","))
       .map(CompressionUtils.createTarGzip(_))
@@ -390,6 +394,23 @@ private[spark] class Client(
       uri = url,
       sslSocketFactory = sslContext.getSocketFactory,
       trustContext = trustManager)
+  }
+
+  private def parseCustomLabels(labels: String): Map[String, String] = {
+    labels.split(",").map(_.trim).filterNot(_.isEmpty).map(label => {
+      label.split("=", 2).toSeq match {
+        case Seq(k, v) =>
+          require(k != DRIVER_LAUNCHER_SELECTOR_LABEL, "Label with key" +
+            s" $DRIVER_LAUNCHER_SELECTOR_LABEL cannot be used in" +
+            " spark.kubernetes.driver.labels, as it is reserved for Spark's" +
+            " internal configuration.")
+          (k, v)
+        case _ =>
+          throw new SparkException("Custom labels set by spark.kubernetes.driver.labels" +
+            " must be a comma-separated list of key-value pairs, with format <key>=<value>." +
+            s" Got label: $label. All labels: $labels")
+      }
+    }).toMap
   }
 }
 
