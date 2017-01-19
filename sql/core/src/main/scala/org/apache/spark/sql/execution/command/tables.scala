@@ -58,6 +58,7 @@ import org.apache.spark.util.Utils
 case class CreateTableLikeCommand(
     targetTable: TableIdentifier,
     sourceTable: TableIdentifier,
+    location: Option[String],
     ifNotExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -70,12 +71,18 @@ case class CreateTableLikeCommand(
       sourceTableDesc.provider
     }
 
+    val tblType = if (location.isEmpty) {
+      CatalogTableType.MANAGED
+    } else {
+      CatalogTableType.EXTERNAL
+    }
+
     val newTableDesc =
       CatalogTable(
         identifier = targetTable,
-        tableType = CatalogTableType.MANAGED,
+        tableType = tblType,
         // We are creating a new managed table, which should not have custom table location.
-        storage = sourceTableDesc.storage.copy(locationUri = None),
+        storage = sourceTableDesc.storage.copy(locationUri = location),
         schema = sourceTableDesc.schema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
