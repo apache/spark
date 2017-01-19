@@ -321,11 +321,12 @@ object CaseKeyWhen {
 /**
  * A function that returns the index of expr in (expr1, expr2, ...) list or 0 if not found.
  * It takes at least 2 parameters, and all parameters should be subtype of AtomicType or NullType.
- * If the search expression is NULL, the return value is 0 because NULL fails equality comparison with any value.
- * It's also acceptable to give parameters of different types.
- * When the parameters have different types, comparing will be done based on type firstly,
- * for example, ''999'' 's type is StringType, while 999's type is IntegerType,
- * so that no further comparison need to be done since they have different types.
+ * It's also acceptable to give parameters of different types. When the parameters have different
+ * types, comparing will be done based on type firstly. For example, ''999'' 's type is StringType,
+ * while 999's type is IntegerType, so that no further comparison need to be done since they have
+ * different types.
+ * If the search expression is NULL, the return value is 0 because NULL fails equality comparison
+ * with any value.
  * To also point out, no implicit cast will be done in this expression.
  */
 @ExpressionDescription(
