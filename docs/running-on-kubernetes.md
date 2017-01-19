@@ -213,6 +213,14 @@ from the other deployment modes. See the [configuration page](configuration.html
     (typically 6-10%).
   </td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.driver.labels</code></td>
+  <td>(none)</td>
+  <td>
+    Custom labels that will be added to the driver pod. This should be a comma-separated list of label key-value pairs,
+    where each label is in the format <code>key=value</code>.
+  </td>
+</tr>
 </table>
 
 ## Current Limitations
