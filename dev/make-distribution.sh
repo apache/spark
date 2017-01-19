@@ -116,6 +116,14 @@ if [ -z "$JAVA_HOME" ]; then
   exit -1
 fi
 
+if [ -z "$BUILD_PYTHON" ]; then
+  if [ `command -v python` ]; then
+    BUILD_PYTHON="$(which python)"
+  else
+    BUILD_PYTHON="python"
+  fi
+fi
+
 if [ $(command -v git) ]; then
     GITREV=$(git rev-parse --short HEAD 2>/dev/null || :)
     if [ ! -z "$GITREV" ]; then
@@ -220,7 +228,7 @@ cp -r "$SPARK_HOME/data" "$DISTDIR"
 if [ "$MAKE_PIP" == "true" ]; then
   echo "Building python distribution package"
   pushd "$SPARK_HOME/python" > /dev/null
-  python setup.py sdist
+  $BUILD_PYTHON setup.py sdist
   popd > /dev/null
 else
   echo "Skipping building python distribution package"
