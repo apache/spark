@@ -174,7 +174,6 @@ function renderDagViz(forJob) {
 
   resizeSvg(svg);
   intepreteLineBreak(svg);
-//  enableDataHtml();
 }
 
 /* Render the RDD DAG visualization on the stage page. */
@@ -371,40 +370,15 @@ function intepreteLineBreak(svg) {
     var original = node[0][0].innerHTML;
     if (original.indexOf("\\n") != -1) {
       var arr = original.split("\\n");
-      var parent = this.parentNode;
-//      parent.remove(); // remove all children
-
-//      var newNode = document.createElement("tspan");
-//      newNode.dy = "1em";
-//      newNode.x = "1";
-//      newNode.space = "preserve";
-
-//        .attr("dy", "1em")
-//        .attr("x", "1")
-//        .attr("space", "preserve");
-      var newNode = node[0][0].clone();
+      var newNode = this.cloneNode(this);
 
       node[0][0].innerHTML = arr[0];
-      node[0][0].text = arr[0];
-//      newNode.attr("innerHTML", arr[1]);
-
-      newNode.attributes = node[0][0].attributes
       newNode.innerHTML = arr[1];
-      newNode.text = arr[1];
 
-      parent.appendChild(newNode);
-
-//    var text = replaceLineBreak(original);
-//    node.text(text);
-//    d3.select(this).attr("data-html", "true");
+      this.parentNode.appendChild(newNode);
     }
   });
 }
-
-//
-//function enableDataHtml() {
-//
-//}
 
 /*
  * (Job page only) Helper function to draw edges that cross stage boundaries.
@@ -514,18 +488,18 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
   edgesContainer.append("path").datum(points).attr("d", line);
 }
 
-/* replace /n with <br/> */
+/*
+ * Replace `/n` with `<br/>`
+ */
 function replaceLineBreak(str) {
     return str.replace("\\n", "<br/>");
 }
-
 
 /* (Job page only) Helper function to add tooltips for RDDs. */
 function addTooltipsForRDDs(svgContainer) {
   svgContainer.selectAll("g.node").each(function() {
     var node = d3.select(this);
     var tooltipText = replaceLineBreak(node.attr("name"));
-//    var tooltipText = node.attr("name").replace("\\n", "<br/>");
     if (tooltipText) {
       node.select("circle")
         .attr("data-toggle", "tooltip")
