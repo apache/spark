@@ -690,8 +690,8 @@ class HiveDDLSuite
       }
       sql(s"CREATE DATABASE $dbName Location '${tmpDir.toURI.getPath.stripSuffix("/")}'")
       val db1 = catalog.getDatabaseMetadata(dbName)
-      val dbPath = tmpDir.toURI.toString.stripSuffix("/")
-      assert(db1 == CatalogDatabase(dbName, "", dbPath, Map.empty))
+      val uriStr = tmpDir.toURI.toString.stripSuffix("/")
+      assert(db1 == CatalogDatabase(dbName, "", new java.net.URI(uriStr), Map.empty))
       sql("USE db1")
 
       sql(s"CREATE TABLE $tabName as SELECT 1")
@@ -731,7 +731,7 @@ class HiveDDLSuite
     assert(db1 == CatalogDatabase(
       dbName,
       "",
-      expectedDBLocation,
+      new Path(expectedDBLocation).toUri,
       Map.empty))
     // the database directory was created
     assert(fs.exists(dbPath) && fs.isDirectory(dbPath))

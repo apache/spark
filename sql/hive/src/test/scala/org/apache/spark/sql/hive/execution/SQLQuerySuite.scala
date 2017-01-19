@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.File
+import java.io.{File, PrintWriter}
+import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
@@ -526,7 +527,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
         userSpecifiedLocation match {
           case Some(location) =>
-            assert(r.options("path") === location)
+            assert(r.options("path").toString === location)
           case None => // OK.
         }
         assert(catalogTable.provider.get === format)
@@ -539,7 +540,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
         userSpecifiedLocation match {
           case Some(location) =>
-            assert(r.catalogTable.location === location)
+            assert(r.catalogTable.location === new URI(location))
           case None => // OK.
         }
         // Also make sure that the format and serde are as desired.

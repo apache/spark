@@ -22,7 +22,7 @@ import java.io.IOException
 import scala.collection.JavaConverters._
 
 import com.google.common.base.Objects
-import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.FieldSchema
@@ -97,7 +97,7 @@ private[hive] case class MetastoreRelation(
     sd.setCols(schema.asJava)
     tTable.setPartitionKeys(partCols.asJava)
 
-    catalogTable.storage.locationUri.foreach(sd.setLocation)
+    catalogTable.storage.locationUri.map(_.toString).foreach(sd.setLocation)
     catalogTable.storage.inputFormat.foreach(sd.setInputFormat)
     catalogTable.storage.outputFormat.foreach(sd.setOutputFormat)
 
@@ -181,7 +181,7 @@ private[hive] case class MetastoreRelation(
       }
       sd.setCols(schema.asJava)
 
-      p.storage.locationUri.foreach(sd.setLocation)
+      p.storage.locationUri.map(uri => new Path(uri).toString).foreach(sd.setLocation)
       p.storage.inputFormat.foreach(sd.setInputFormat)
       p.storage.outputFormat.foreach(sd.setOutputFormat)
 
@@ -246,13 +246,13 @@ private[hive] case class MetastoreRelation(
 
   override def inputFiles: Array[String] = {
     val partLocations = allPartitions
-      .flatMap(_.storage.locationUri)
+      .flatMap(_.storage.locationUri.map(_.toString))
       .toArray
     if (partLocations.nonEmpty) {
       partLocations
     } else {
       Array(
-        catalogTable.storage.locationUri.getOrElse(
+        catalogTable.storage.locationUri.map(_.toString).getOrElse(
           sys.error(s"Could not get the location of ${catalogTable.qualifiedName}.")))
     }
   }

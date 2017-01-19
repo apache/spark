@@ -223,7 +223,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       sparkSession: SparkSession,
       simpleCatalogRelation: SimpleCatalogRelation): LogicalPlan = {
     val table = simpleCatalogRelation.catalogTable
-    val pathOption = table.storage.locationUri.map("path" -> _)
+    val pathOption = table.storage.locationUri.map("path" -> new Path(_).toString)
     val dataSource =
       DataSource(
         sparkSession,

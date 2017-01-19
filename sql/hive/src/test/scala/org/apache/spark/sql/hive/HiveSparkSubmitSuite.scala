@@ -486,7 +486,7 @@ object SetWarehouseLocationTest extends Logging {
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("default")))
       val expectedLocation =
         "file:" + expectedWarehouseLocation.toString + "/testlocation"
-      val actualLocation = tableMetadata.location
+      val actualLocation = tableMetadata.location.toString
       if (actualLocation != expectedLocation) {
         throw new Exception(
           s"Expected table location is $expectedLocation. But, it is actually $actualLocation")
@@ -502,7 +502,7 @@ object SetWarehouseLocationTest extends Logging {
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("testLocationDB")))
       val expectedLocation =
         "file:" + expectedWarehouseLocation.toString + "/testlocationdb.db/testlocation"
-      val actualLocation = tableMetadata.location
+      val actualLocation = tableMetadata.location.toString
       if (actualLocation != expectedLocation) {
         throw new Exception(
           s"Expected table location is $expectedLocation. But, it is actually $actualLocation")
@@ -868,14 +868,14 @@ object SPARK_18360 {
       val rawTable = hiveClient.getTable("default", "test_tbl")
       // Hive will use the value of `hive.metastore.warehouse.dir` to generate default table
       // location for tables in default database.
-      assert(rawTable.storage.locationUri.get.contains(newWarehousePath))
+      assert(rawTable.storage.locationUri.get.toString.contains(newWarehousePath))
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = false, purge = false)
 
       spark.sharedState.externalCatalog.createTable(tableMeta, ignoreIfExists = false)
       val readBack = spark.sharedState.externalCatalog.getTable("default", "test_tbl")
       // Spark SQL will use the location of default database to generate default table
       // location for tables in default database.
-      assert(readBack.storage.locationUri.get.contains(defaultDbLocation))
+      assert(readBack.storage.locationUri.get.toString.contains(defaultDbLocation))
     } finally {
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = true, purge = false)
       hiveClient.runSqlHive(s"SET hive.metastore.warehouse.dir=$defaultDbLocation")

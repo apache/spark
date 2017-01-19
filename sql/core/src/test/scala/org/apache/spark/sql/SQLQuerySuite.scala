@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.math.MathContext
+import java.net.URI
 import java.sql.Timestamp
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
