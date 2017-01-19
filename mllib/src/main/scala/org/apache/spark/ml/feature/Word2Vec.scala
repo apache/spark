@@ -320,9 +320,9 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
         .parquet(dataPath)
     }
 
-    val FloatSize = 4
-    val AverageWordSize = 15
     def calculateNumberOfPartitions(): Int = {
+      val floatSize = 4
+      val averageWordSize = 15
       // [SPARK-11994] - We want to partition the model in partitions smaller than
       // spark.kryoserializer.buffer.max
       val bufferSizeInBytes = Utils.byteStringAsBytes(
@@ -331,7 +331,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       // Assuming an average word size of 15 bytes, the formula is:
       // (floatSize * vectorSize + 15) * numWords
       val numWords = instance.wordVectors.wordIndex.size
-      val approximateSizeInBytes = (FloatSize * instance.getVectorSize + AverageWordSize) * numWords
+      val approximateSizeInBytes = (floatSize * instance.getVectorSize + averageWordSize) * numWords
       ((approximateSizeInBytes / bufferSizeInBytes) + 1).toInt
     }
   }
