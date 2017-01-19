@@ -416,7 +416,7 @@ class GaussianMixture @Since("2.0.0") (
 
     val model = copyValues(new GaussianMixtureModel(uid, weights, gaussianDists)).setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
-      $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
+      $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood)
     model.setSummary(Some(summary))
     instr.logSuccess(model)
     model
@@ -674,6 +674,7 @@ private class ExpectationAggregator(
  *                        in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
+ * @param logLikelihood  Total log-likelihood for this model on the given data.
  */
 @Since("2.0.0")
 @Experimental
@@ -682,7 +683,9 @@ class GaussianMixtureSummary private[clustering] (
     predictionCol: String,
     @Since("2.0.0") val probabilityCol: String,
     featuresCol: String,
-    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
+    k: Int,
+    @Since("2.2.0") val logLikelihood: Double)
+  extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
 
   /**
    * Probability of each cluster.
