@@ -18,7 +18,7 @@
 package org.apache.spark.ml.fpm
 
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, Params}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules}
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
@@ -30,15 +30,15 @@ import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
  * Generates association rules from frequent itemsets ("items", "freq"). This method only generates
  * association rules which have a single item as the consequent.
  */
-@Since("2.1.0")
+@Since("2.2.0")
 @Experimental
 class AssociationRules(override val uid: String) extends Params {
 
-  @Since("2.1.0")
+  @Since("2.2.0")
   def this() = this(Identifiable.randomUID("AssociationRules"))
 
   /**
-   * Param for items column name. Items must be array of Integers.
+   * Param for items column name. Items must be array of Strings.
    * Default: "items"
    * @group param
    */
@@ -46,11 +46,11 @@ class AssociationRules(override val uid: String) extends Params {
 
 
   /** @group getParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   final def getItemsCol: String = $(itemsCol)
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setItemsCol(value: String): this.type = set(itemsCol, value)
 
   /**
@@ -62,25 +62,26 @@ class AssociationRules(override val uid: String) extends Params {
 
 
   /** @group getParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   final def getFreqCol: String = $(freqCol)
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setFreqCol(value: String): this.type = set(freqCol, value)
 
   /**
    * Param for minimum confidence, range [0.0, 1.0].
    * @group param
    */
-  final val minConfidence: DoubleParam = new DoubleParam(this, "minConfidence", "min confidence")
+  final val minConfidence: DoubleParam = new DoubleParam(this, "minConfidence", "min confidence",
+    ParamValidators.inRange(0.0, 1.0))
 
   /** @group getParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   final def getMinConfidence: Double = $(minConfidence)
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setMinConfidence(value: Double): this.type = set(minConfidence, value)
 
   setDefault(itemsCol -> "items", freqCol -> "freq", minConfidence -> 0.8)
@@ -94,13 +95,13 @@ class AssociationRules(override val uid: String) extends Params {
     *         rules.
    *
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def run(freqItemsets: Dataset[_]): DataFrame = {
     val freqItemSetRdd = freqItemsets.select($(itemsCol), $(freqCol)).rdd
       .map(row => new FreqItemset(row.getSeq[String](0).toArray, row.getLong(1)))
 
-    val sqlContext = SparkSession.builder().getOrCreate()
-    import sqlContext.implicits._
+    val spark = SparkSession.builder().getOrCreate()
+    import spark.implicits._
     new MLlibAssociationRules()
       .setMinConfidence($(minConfidence))
       .run(freqItemSetRdd)

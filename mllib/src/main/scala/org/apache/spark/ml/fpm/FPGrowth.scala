@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.fpm.{FPGrowth => MLlibFPGrowth, FPGrowthModel => MLlibFPGrowthModel}
@@ -45,17 +45,32 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
   }
 
   /**
-   * the minimal support level of the frequent pattern
+   * Minimal support level of the frequent pattern. [0.0, 1.0]. Any pattern that appears
+   * more than (minSupport * size-of-the-dataset) times will be output
    * Default: 0.3
    * @group param
    */
   @Since("2.2.0")
   val minSupport: DoubleParam = new DoubleParam(this, "minSupport",
-    "the minimal support level of the frequent pattern (Default: 0.3)")
+    "the minimal support level of the frequent pattern (Default: 0.3)",
+    ParamValidators.inRange(0.0, 1.0))
+  setDefault(minSupport -> 0.3)
 
   /** @group getParam */
   @Since("2.2.0")
   def getMinSupport: Double = $(minSupport)
+
+  /**
+   * Number of partitions used by parallel FP-growth
+   * @group param
+   */
+  @Since("2.2.0")
+  val numPartitions: IntParam = new IntParam(this, "numPartitions",
+    "Number of partitions used by parallel FP-growth", ParamValidators.gtEq[Int](1))
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getNumPartitions: Int = $(numPartitions)
 
 }
 
@@ -78,7 +93,10 @@ class FPGrowth @Since("2.2.0") (
   /** @group setParam */
   @Since("2.2.0")
   def setMinSupport(value: Double): this.type = set(minSupport, value)
-  setDefault(minSupport -> 0.3)
+
+  /** @group setParam */
+  @Since("2.2.0")
+  def setNumPartitions(value: Int): this.type = set(numPartitions, value)
 
   /** @group setParam */
   @Since("2.2.0")
@@ -130,7 +148,8 @@ class FPGrowthModel private[ml] (
    */
   @Since("2.2.0")
   val minConfidence: DoubleParam = new DoubleParam(this, "minConfidence",
-    "minimal confidence for generating Association Rule (Default: 0.8)")
+    "minimal confidence for generating Association Rule (Default: 0.8)",
+    ParamValidators.inRange(0.0, 1.0))
   setDefault(minConfidence -> 0.8)
 
   /** @group getParam */
