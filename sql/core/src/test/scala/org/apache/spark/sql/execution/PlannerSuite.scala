@@ -216,7 +216,7 @@ class PlannerSuite extends SharedSQLContext {
           ).queryExecution.executedPlan.collect {
             case exchange: ShuffleExchange => exchange
           }.length
-          assert(numExchanges === 5)
+          assert(numExchanges === 3)
         }
 
         {
@@ -231,7 +231,7 @@ class PlannerSuite extends SharedSQLContext {
           ).queryExecution.executedPlan.collect {
             case exchange: ShuffleExchange => exchange
           }.length
-          assert(numExchanges === 5)
+          assert(numExchanges === 3)
         }
 
       }
