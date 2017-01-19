@@ -126,6 +126,18 @@ function formatLogsCells(execLogs, type) {
     return result;
 }
 
+function formatWorkersCells(worker, type) {
+    if ((!worker) || (worker['ui_url'] === undefined)) return "";
+    if (type !== 'display') return worker['ui_url'];
+    return '<td><a href=' + worker['ui_url'] + '>Worker</a></td>'
+}
+
+function workersExist(execs) {
+    return execs.some(function(exec) {
+        return !($.isEmptyObject(exec["worker"]));
+    });
+}
+
 function logsExist(execs) {
     return execs.some(function(exec) {
         return !($.isEmptyObject(exec["executorLogs"]));
@@ -408,7 +420,8 @@ $(document).ready(function () {
                             data: 'id', render: function (data, type) {
                                 return type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
                             }
-                        }
+                        },
+                        {data: 'worker', render: formatWorkersCells}
                     ],
                     "columnDefs": [
                         {
@@ -421,6 +434,7 @@ $(document).ready(function () {
     
                 var dt = $(selector).DataTable(conf);
                 dt.column(15).visible(logsExist(response));
+                dt.column(17).visible(workersExist(response));
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
     
                 var sumSelector = "#summary-execs-table";

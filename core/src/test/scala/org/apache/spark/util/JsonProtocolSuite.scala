@@ -74,13 +74,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
+    val workerUrlMap = Map("url" -> "spark://Worker@someHost:8080",
+      "ui_url" -> "http://someHost:1234").toMap
     val applicationStart = SparkListenerApplicationStart("The winner of all", Some("appId"),
       42L, "Garfield", Some("appAttempt"))
     val applicationStartWithLogs = SparkListenerApplicationStart("The winner of all", Some("appId"),
       42L, "Garfield", Some("appAttempt"), Some(logUrlMap))
     val applicationEnd = SparkListenerApplicationEnd(42L)
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
-      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, workerUrlMap))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
     val executorMetricsUpdate = {
       // Use custom accum ID for determinism
@@ -364,6 +366,16 @@ class JsonProtocolSuite extends SparkFunSuite {
     assertEquals(expectedDenied, JsonProtocol.taskEndReasonFromJson(oldDenied))
   }
 
+  test("ExecutorInfo backward compatibility") {
+    // "workerUrl" property of ExecutorInfo was added in 2.1.0
+    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
+    val executorInfo = new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap)
+    val oldExecutorInfoJson = JsonProtocol.executorInfoToJson(executorInfo)
+      .removeField({ _._1 == "Worker" })
+    val oldExecutorInfo = JsonProtocol.executorInfoFromJson(oldExecutorInfoJson)
+    assertEquals(executorInfo, oldExecutorInfo)
+  }
+
   test("AccumulableInfo backward compatibility") {
     // "Internal" property of AccumulableInfo was added in 1.5.1
     val accumulableInfo = makeAccumulableInfo(1, internal = true, countFailedValues = true)
@@ -602,6 +614,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private def assertEquals(info1: ExecutorInfo, info2: ExecutorInfo) {
     assert(info1.executorHost == info2.executorHost)
     assert(info1.totalCores == info2.totalCores)
+    assertEquals(info1.logUrlMap, info2.logUrlMap)
+    assertEquals(info1.workerUrl, info2.workerUrl)
   }
 
   private def assertEquals(metrics1: TaskMetrics, metrics2: TaskMetrics) {
@@ -685,6 +699,17 @@ private[spark] object JsonProtocolSuite extends Assertions {
       case ((key1, values1: Seq[(String, String)]), (key2, values2: Seq[(String, String)])) =>
         assert(key1 === key2)
         values1.zip(values2).foreach { case (v1, v2) => assert(v1 === v2) }
+    }
+  }
+
+  case class MapStringToString(m: Map[String, String])
+  implicit private def mapStringtoString(m: Map[String, String]): MapStringToString =
+    MapStringToString(m)
+  private def assertEquals(details1: MapStringToString, details2: MapStringToString) {
+    details1.m.zip(details2.m).foreach {
+      case ((key1, values1), (key2, values2)) =>
+        assert(key1 === key2)
+        assert(values1 === values2)
     }
   }
 
@@ -1759,6 +1784,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Log Urls" : {
       |      "stderr" : "mystderr",
       |      "stdout" : "mystdout"
+      |    },
+      |    "Worker" : {
+      |      "url" : "spark://Worker@someHost:8080",
+      |      "ui_url" : "http://someHost:1234"
       |    }
       |  }
       |}

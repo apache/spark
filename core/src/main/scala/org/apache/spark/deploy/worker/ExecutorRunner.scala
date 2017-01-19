@@ -164,6 +164,10 @@ private[deploy] class ExecutorRunner(
       builder.environment.put("SPARK_LOG_URL_STDERR", s"${baseUrl}stderr")
       builder.environment.put("SPARK_LOG_URL_STDOUT", s"${baseUrl}stdout")
 
+      // Add webUI worker urls and worker webUI urls
+      builder.environment.put("SPARK_WORKER_URL", workerUrl)
+      builder.environment.put("SPARK_WORKER_UI_URL", s"http://$publicAddress:$webUiPort")
+
       process = builder.start()
       val header = "Spark Executor Command: %s\n%s\n\n".format(
         formattedCommand, "=" * 40)

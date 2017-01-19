@@ -102,7 +102,8 @@ private[spark] object ExecutorsPage {
       taskSummary.shuffleRead,
       taskSummary.shuffleWrite,
       maxMem,
-      taskSummary.executorLogs
+      taskSummary.executorLogs,
+      taskSummary.workerUrls
     )
   }
 }

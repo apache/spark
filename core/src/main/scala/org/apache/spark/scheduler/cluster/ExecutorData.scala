@@ -34,5 +34,18 @@ private[cluster] class ExecutorData(
    override val executorHost: String,
    var freeCores: Int,
    override val totalCores: Int,
-   override val logUrlMap: Map[String, String]
-) extends ExecutorInfo(executorHost, totalCores, logUrlMap)
+   override val logUrlMap: Map[String, String],
+   override val workerUrl: Map[String, String]
+) extends ExecutorInfo(executorHost, totalCores, logUrlMap, workerUrl) {
+
+  def this(
+      executorEndpoint: RpcEndpointRef,
+      executorAddress: RpcAddress,
+      executorHost: String,
+      freeCores: Int,
+      totalCores: Int,
+      logUrlMap: Map[String, String]) {
+    this(executorEndpoint, executorAddress, executorHost, freeCores, totalCores, logUrlMap,
+      Map[String, String]()    )
+  }
+}

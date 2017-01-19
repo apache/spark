@@ -53,6 +53,7 @@ private[ui] case class ExecutorTaskSummary(
     var shuffleRead: Long = 0L,
     var shuffleWrite: Long = 0L,
     var executorLogs: Map[String, String] = Map.empty,
+    var workerUrls: Map[String, String] = Map.empty,
     var isAlive: Boolean = true
 )
 
@@ -77,6 +78,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     val eid = executorAdded.executorId
     val taskSummary = executorToTaskSummary.getOrElseUpdate(eid, ExecutorTaskSummary(eid))
     taskSummary.executorLogs = executorAdded.executorInfo.logUrlMap
+    taskSummary.workerUrls = executorAdded.executorInfo.workerUrl
     taskSummary.totalCores = executorAdded.executorInfo.totalCores
     taskSummary.tasksMax = taskSummary.totalCores / conf.getInt("spark.task.cpus", 1)
     executorEvents += executorAdded
