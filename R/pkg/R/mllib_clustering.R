@@ -61,7 +61,7 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #' @param seed the random seed.
 #' @param minDivisibleClusterSize The minimum number of points (if greater than or equal to 1.0)
 #'                                or the minimum proportion of points (if less than 1.0) of a divisible cluster.
-#'                                Note that it is an advanced. The default value should be enough
+#'                                Note that it is an expert parameter. The default value should be good enough
 #'                                for most cases.
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.bisectingKmeans} returns a fitted bisecting k-means model.
