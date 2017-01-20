@@ -28,7 +28,7 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.streaming.Source
-import org.apache.spark.sql.kafka010.KafkaSource._
+import org.apache.spark.sql.kafka010.KafkaReader._
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
 import org.apache.spark.sql.types.StructType
 
@@ -53,7 +53,7 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
       parameters: Map[String, String]): (String, StructType) = {
     require(schema.isEmpty, "Kafka source has a fixed schema and cannot be set with a custom one")
     validateOptions(parameters)
-    ("kafka", KafkaSource.kafkaSchema)
+    ("kafka", KafkaReader.kafkaSchema)
   }
 
   override def createSource(
@@ -139,17 +139,17 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
 
     val failOnDataLoss =
       caseInsensitiveParams.getOrElse(FAIL_ON_DATA_LOSS_OPTION_KEY, "true").toBoolean
+    val kafkaReader = new KafkaReader(strategy, kafkaParamsForDriver, parameters,
+      driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
     new KafkaSource(
       sqlContext,
-      strategy,
-      kafkaParamsForDriver,
+      kafkaReader,
       kafkaParamsForExecutors,
       parameters,
       metadataPath,
       startingOffsets,
-      failOnDataLoss,
-      driverGroupIdPrefix = s"$uniqueGroupId-driver")
+      failOnDataLoss)
   }
 
   private def validateOptions(parameters: Map[String, String]): Unit = {

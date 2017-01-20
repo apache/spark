@@ -22,11 +22,11 @@ import org.apache.kafka.common.TopicPartition
 /*
  * Values that can be specified for config startingOffsets
  */
-private[kafka010] sealed trait StartingOffsets
+private[kafka010] sealed trait KafkaOffsets
 
-private[kafka010] case object EarliestOffsets extends StartingOffsets
+private[kafka010] case object EarliestOffsets extends KafkaOffsets
 
-private[kafka010] case object LatestOffsets extends StartingOffsets
+private[kafka010] case object LatestOffsets extends KafkaOffsets
 
 private[kafka010] case class SpecificOffsets(
-  partitionOffsets: Map[TopicPartition, Long]) extends StartingOffsets
+  partitionOffsets: Map[TopicPartition, Long]) extends KafkaOffsets
