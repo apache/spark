@@ -25,6 +25,17 @@ import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  test("gmm fails on high dimensional data") {
+    val rdd = sc.parallelize(Seq(
+      Vectors.sparse(GaussianMixture.MAX_NUM_FEATURES + 1, Array(0, 4), Array(3.0, 8.0)),
+      Vectors.sparse(GaussianMixture.MAX_NUM_FEATURES + 1, Array(1, 5), Array(4.0, 9.0))))
+    val gm = new GaussianMixture()
+    intercept[IllegalArgumentException] {
+      gm.run(rdd)
+    }
+  }
+
   test("single cluster") {
     val data = sc.parallelize(Array(
       Vectors.dense(6.0, 9.0),
