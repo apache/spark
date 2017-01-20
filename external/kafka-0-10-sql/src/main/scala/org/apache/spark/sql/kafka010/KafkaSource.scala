@@ -68,13 +68,13 @@ import org.apache.spark.unsafe.types.UTF8String
  * and not use wrong broker addresses.
  */
 private[kafka010] class KafkaSource(
-                                     sqlContext: SQLContext,
-                                     kafkaReader: KafkaReader,
-                                     executorKafkaParams: ju.Map[String, Object],
-                                     sourceOptions: Map[String, String],
-                                     metadataPath: String,
-                                     startingOffsets: KafkaOffsets,
-                                     failOnDataLoss: Boolean)
+    sqlContext: SQLContext,
+    kafkaReader: KafkaReader,
+    executorKafkaParams: ju.Map[String, Object],
+    sourceOptions: Map[String, String],
+    metadataPath: String,
+    startingOffsets: KafkaOffsets,
+    failOnDataLoss: Boolean)
   extends Source with Logging {
 
   private val sc = sqlContext.sparkContext

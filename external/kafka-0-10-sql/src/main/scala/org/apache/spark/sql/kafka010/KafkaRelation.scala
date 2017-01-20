@@ -34,12 +34,13 @@ private[kafka010] class KafkaRelation(
     kafkaReader: KafkaReader,
     executorKafkaParams: ju.Map[String, Object],
     sourceOptions: Map[String, String],
+    failOnDataLoss: Boolean,
     startingOffsets: Option[KafkaOffsets] = Some(EarliestOffsets),
-    endingOffsets: Option[KafkaOffsets] = Some(LatestOffsets),
-    failOnDataLoss: Boolean)
-  extends BaseRelation
-  with TableScan
-  with Logging {
+    endingOffsets: Option[KafkaOffsets] = Some(LatestOffsets))
+  extends BaseRelation with TableScan with Logging {
+
+  require(startingOffsets.get != LatestOffsets,
+    "Start offset not allowed to be set to latests offsets.")
 
   private val pollTimeoutMs = sourceOptions.getOrElse(
     "kafkaConsumer.pollTimeoutMs",
