@@ -157,6 +157,17 @@ class BisectingKMeansModel private[ml] (
     throw new SparkException(
       s"No training summary available for the ${this.getClass.getSimpleName}")
   }
+
+  /**
+   * Evaluates the model on a test dataset.
+   *
+   * @param dataset Test dataset to evaluate model on.
+   */
+  @Since("2.2.0")
+  def evaluate(dataset: Dataset[_]): BisectingKMeansSummary = {
+    val wssse = computeCost(dataset)
+    new BisectingKMeansSummary(transform(dataset), $(predictionCol), $(featuresCol), $(k), wssse)
+  }
 }
 
 object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
@@ -265,8 +276,9 @@ class BisectingKMeans @Since("2.0.0") (
       .setSeed($(seed))
     val parentModel = bkm.run(rdd)
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
+    val wssse = model.computeCost(dataset)
     val summary = new BisectingKMeansSummary(
-      model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
+      model.transform(dataset), $(predictionCol), $(featuresCol), $(k), wssse)
     model.setSummary(Some(summary))
     instr.logSuccess(model)
     model
@@ -295,6 +307,7 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
+ * @param wssse  Within Set Sum of Squared Error.
  */
 @Since("2.1.0")
 @Experimental
@@ -302,4 +315,6 @@ class BisectingKMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,
     featuresCol: String,
-    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k)
+    k: Int,
+    @Since("2.2.0") val wssse: Double)
+  extends ClusteringSummary(predictions, predictionCol, featuresCol, k)

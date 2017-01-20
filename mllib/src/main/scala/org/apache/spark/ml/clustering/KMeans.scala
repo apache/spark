@@ -183,6 +183,17 @@ class KMeansModel private[ml] (
     throw new SparkException(
       s"No training summary available for the ${this.getClass.getSimpleName}")
   }
+
+  /**
+   * Evaluates the model on a test dataset.
+   *
+   * @param dataset Test dataset to evaluate model on.
+   */
+  @Since("2.2.0")
+  def evaluate(dataset: Dataset[_]): KMeansSummary = {
+    val wssse = computeCost(dataset)
+    new KMeansSummary(transform(dataset), $(predictionCol), $(featuresCol), $(k), wssse)
+  }
 }
 
 @Since("1.6.0")
@@ -324,8 +335,9 @@ class KMeans @Since("1.5.0") (
       .setEpsilon($(tol))
     val parentModel = algo.run(instances, Option(instr))
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
+    val wssse = model.computeCost(dataset)
     val summary = new KMeansSummary(
-      model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
+      model.transform(dataset), $(predictionCol), $(featuresCol), $(k), wssse)
 
     model.setSummary(Some(summary))
     instr.logSuccess(model)
@@ -356,6 +368,7 @@ object KMeans extends DefaultParamsReadable[KMeans] {
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
+ * @param wssse  Within Set Sum of Squared Error.
  */
 @Since("2.0.0")
 @Experimental
@@ -363,4 +376,6 @@ class KMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,
     featuresCol: String,
-    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k)
+    k: Int,
+    @Since("2.2.0") val wssse: Double)
+  extends ClusteringSummary(predictions, predictionCol, featuresCol, k)
