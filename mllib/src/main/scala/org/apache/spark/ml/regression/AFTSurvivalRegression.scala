@@ -644,4 +644,5 @@ private class AFTCostFun(
  */
 private[regression] case class AFTPoint(features: Vector, label: Double, censor: Double) {
   require(censor == 1.0 || censor == 0.0, "censor of class AFTPoint must be 1.0 or 0.0")
+  require(label > 0.0, "label of AFTPoint must be positive")
 }
