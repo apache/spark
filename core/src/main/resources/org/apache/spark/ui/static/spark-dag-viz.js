@@ -173,7 +173,7 @@ function renderDagViz(forJob) {
   });
 
   resizeSvg(svg);
-  intepretLineBreak(svg);
+  interpretLineBreak(svg);
 }
 
 /* Render the RDD DAG visualization on the stage page. */
@@ -368,7 +368,7 @@ function resizeSvg(svg) {
  * For tag 'tspan', line break '/n' is display in UI as raw for both stage page and job page,
  * here this function is to enable line break.
  */
-function intepretLineBreak(svg) {
+function interpretLineBreak(svg) {
   var allTSpan = svg.selectAll("tspan").each(function() {
     node = d3.select(this);
     var original = node[0][0].innerHTML;
