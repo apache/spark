@@ -44,11 +44,11 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * - The [[KafkaSource]] written to do the following.
  *
- *  - As soon as the source is created, the pre-configured [[KafkaReader]]
+ *  - As soon as the source is created, the pre-configured [[KafkaOffsetReader]]
  *    is used to query the initial offsets that this source should
  *    start reading from. This is used to create the first batch.
  *
- *   - `getOffset()` uses the [[KafkaReader]] to query the latest available offsets, which are
+ *   - `getOffset()` uses the [[KafkaOffsetReader]] to query the latest available offsets, which are
  *     returned as a [[KafkaSourceOffset]].
  *
  *   - `getBatch()` returns a DF that reads from the 'start offset' until the 'end offset' in
@@ -69,7 +69,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 private[kafka010] class KafkaSource(
     sqlContext: SQLContext,
-    kafkaReader: KafkaReader,
+    kafkaReader: KafkaOffsetReader,
     executorKafkaParams: ju.Map[String, Object],
     sourceOptions: Map[String, String],
     metadataPath: String,
@@ -137,7 +137,7 @@ private[kafka010] class KafkaSource(
 
   private var currentPartitionOffsets: Option[Map[TopicPartition, Long]] = None
 
-  override def schema: StructType = KafkaReader.kafkaSchema
+  override def schema: StructType = KafkaOffsetReader.kafkaSchema
 
   /** Returns the maximum available offset for this source. */
   override def getOffset: Option[Offset] = {

@@ -19,57 +19,42 @@ package org.apache.spark.sql.kafka010
 
 import java.util.UUID
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.execution.streaming.Source
-import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister, RelationProvider}
 
-/**
- * The provider class for the [[KafkaSource]]. This provider is designed such that it throws
- * IllegalArgumentException when the Kafka Dataset is created, so that it can catch
- * missing options even before the query is started.
- */
-private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
-  with DataSourceRegister with Logging {
+class KafkaRelationProvider extends RelationProvider with DataSourceRegister {
 
   /**
-   * Returns the name and schema of the source. In addition, it also verifies whether the options
-   * are correct and sufficient to create the [[KafkaSource]] when the query is started.
+   * The string that represents the format that this data source provider uses. This is
+   * overridden by children to provide a nice alias for the data source. For example:
    */
-  override def sourceSchema(
-      sqlContext: SQLContext,
-      schema: Option[StructType],
-      providerName: String,
-      parameters: Map[String, String]): (String, StructType) = {
-    require(schema.isEmpty, "Kafka source has a fixed schema and cannot be set with a custom one")
-    (shortName(), KafkaOffsetReader.kafkaSchema)
-  }
+  override def shortName(): String = "kafka"
 
-  override def createSource(
+  /**
+   * Returns a new base relation with the given parameters.
+   *
+   * @note The parameters' keywords are case insensitive and this insensitivity is enforced
+   *       by the Map that is passed to the function.
+   */
+  override def createRelation(
       sqlContext: SQLContext,
-      metadataPath: String,
-      schema: Option[StructType],
-      providerName: String,
-      parameters: Map[String, String]): Source = {
+      parameters: Map[String, String]): BaseRelation = {
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = s"spark-kafka-source-${UUID.randomUUID}-${metadataPath.hashCode}"
+    val uniqueGroupId = s"spark-kafka-relation-${UUID.randomUUID}"
     val kafkaConfigOptions = new KafkaConfigOptions(parameters, uniqueGroupId)
     val kafkaOffsetReader = new KafkaOffsetReader(kafkaConfigOptions.strategy,
       kafkaConfigOptions.kafkaParamsForDriver, parameters,
       driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
-    new KafkaSource(
+    new KafkaRelation(
       sqlContext,
       kafkaOffsetReader,
       kafkaConfigOptions.kafkaParamsForExecutors,
       parameters,
-      metadataPath,
-      kafkaConfigOptions.startingStreamOffsets,
-      kafkaConfigOptions.failOnDataLoss)
+      kafkaConfigOptions.failOnDataLoss,
+      kafkaConfigOptions.startingRelationOffsets,
+      kafkaConfigOptions.endingRelationOffsets)
   }
-
-  override def shortName(): String = "kafka"
 }

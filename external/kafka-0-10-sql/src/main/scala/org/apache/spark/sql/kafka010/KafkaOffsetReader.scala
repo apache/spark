@@ -27,7 +27,7 @@ import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.kafka010.KafkaReader.ConsumerStrategy
+import org.apache.spark.sql.kafka010.KafkaOffsetReader.ConsumerStrategy
 import org.apache.spark.sql.types._
 import org.apache.spark.util.UninterruptibleThread
 
@@ -38,9 +38,9 @@ import org.apache.spark.util.UninterruptibleThread
  *   by this source. These strategies directly correspond to the different consumption options
  *   in . This class is designed to return a configured [[KafkaConsumer]] that is used by the
  *   [[KafkaSource]] to query for the offsets. See the docs on
- *   [[org.apache.spark.sql.kafka010.KafkaReader.ConsumerStrategy]] for more details.
+ *   [[org.apache.spark.sql.kafka010.KafkaOffsetReader.ConsumerStrategy]] for more details.
  */
-private[kafka010] class KafkaReader(
+private[kafka010] class KafkaOffsetReader(
     consumerStrategy: ConsumerStrategy,
     driverKafkaParams: ju.Map[String, Object],
     readerOptions: Map[String, String],
@@ -232,7 +232,7 @@ private[kafka010] class KafkaReader(
   }
 }
 
-private[kafka010] object KafkaReader {
+private[kafka010] object KafkaOffsetReader {
 
   def kafkaSchema: StructType = StructType(Seq(
     StructField("key", BinaryType),

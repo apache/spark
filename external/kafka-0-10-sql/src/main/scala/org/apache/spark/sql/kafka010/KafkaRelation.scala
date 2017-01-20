@@ -21,9 +21,9 @@ import java.{util => ju}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
@@ -31,28 +31,30 @@ import org.apache.spark.unsafe.types.UTF8String
 
 private[kafka010] class KafkaRelation(
     override val sqlContext: SQLContext,
-    kafkaReader: KafkaReader,
+    kafkaReader: KafkaOffsetReader,
     executorKafkaParams: ju.Map[String, Object],
     sourceOptions: Map[String, String],
     failOnDataLoss: Boolean,
-    startingOffsets: Option[KafkaOffsets] = Some(EarliestOffsets),
-    endingOffsets: Option[KafkaOffsets] = Some(LatestOffsets))
+    startingOffsets: KafkaOffsets,
+    endingOffsets: KafkaOffsets)
   extends BaseRelation with TableScan with Logging {
 
-  require(startingOffsets.get != LatestOffsets,
-    "Start offset not allowed to be set to latests offsets.")
+  require(startingOffsets != LatestOffsets,
+    "Starting offset not allowed to be set to latest offsets.")
+  require(endingOffsets != EarliestOffsets,
+    "Ending offset not allowed to be set to earliest offsets.")
 
   private val pollTimeoutMs = sourceOptions.getOrElse(
     "kafkaConsumer.pollTimeoutMs",
     sqlContext.sparkContext.conf.getTimeAsMs("spark.network.timeout", "120s").toString
   ).toLong
 
-  override def schema: StructType = KafkaReader.kafkaSchema
+  override def schema: StructType = KafkaOffsetReader.kafkaSchema
 
   override def buildScan(): RDD[Row] = {
     // Leverage the KafkaReader to obtain the relevant partition offsets
-    val fromPartitionOffsets = getPartitionOffsets(startingOffsets.getOrElse(EarliestOffsets))
-    val untilPartitionOffsets = getPartitionOffsets(endingOffsets.getOrElse(LatestOffsets))
+    val fromPartitionOffsets = getPartitionOffsets(startingOffsets)
+    val untilPartitionOffsets = getPartitionOffsets(endingOffsets)
     // Obtain topicPartitions in both from and until partition offset, ignoring
     // topic partitions that were added and/or deleted between the two above calls.
     val topicPartitions = fromPartitionOffsets.keySet.intersect(untilPartitionOffsets.keySet)
@@ -83,7 +85,8 @@ private[kafka010] class KafkaRelation(
 
     // Create an RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD(
-      sqlContext.sparkContext, executorKafkaParams, offsetRanges, pollTimeoutMs, failOnDataLoss).map { cr =>
+      sqlContext.sparkContext, executorKafkaParams, offsetRanges,
+      pollTimeoutMs, failOnDataLoss).map { cr =>
       InternalRow(
         cr.key,
         cr.value,
