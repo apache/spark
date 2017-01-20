@@ -67,28 +67,28 @@ class EquivalentExpressions {
   /**
    * Adds the expression to this data structure recursively. Stops if a matching expression
    * is found. That is, if `expr` has already been added, its children are not added.
-   * If ignoreLeaf is true, leaf nodes are ignored.
    */
-  def addExprTree(
-      root: Expression,
-      ignoreLeaf: Boolean = true,
-      skipReferenceToExpressions: Boolean = true): Unit = {
-    val skip = (root.isInstanceOf[LeafExpression] && ignoreLeaf) ||
+  def addExprTree(expr: Expression): Unit = {
+    val skip = expr.isInstanceOf[LeafExpression] ||
       // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
       // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
-      root.find(_.isInstanceOf[LambdaVariable]).isDefined
+      expr.find(_.isInstanceOf[LambdaVariable]).isDefined
+
     // There are some special expressions that we should not recurse into children.
     //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
-    //   2. ReferenceToExpressions: it's kind of an explicit sub-expression elimination.
-    val shouldRecurse = root match {
-      // TODO: some expressions implements `CodegenFallback` but can still do codegen,
-      // e.g. `CaseWhen`, we should support them.
+    //   2. conditional expressions: common subexpressions will always be evaluated at the
+    //                               beginning, so we should not recurse into condition expressions,
+    //                               whole children may not get evaluated.
+    val shouldRecurse = expr match {
       case _: CodegenFallback => false
-      case _: ReferenceToExpressions if skipReferenceToExpressions => false
+      case _: If => false
+      case _: CaseWhenBase => false
+      case _: Coalesce => false
       case _ => true
     }
-    if (!skip && !addExpr(root) && shouldRecurse) {
-      root.children.foreach(addExprTree(_, ignoreLeaf))
+
+    if (!skip && !addExpr(expr) && shouldRecurse) {
+      expr.children.foreach(addExprTree)
     }
   }
 

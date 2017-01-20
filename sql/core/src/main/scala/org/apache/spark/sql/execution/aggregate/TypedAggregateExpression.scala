@@ -143,9 +143,15 @@ case class SimpleTypedAggregateExpression(
   override lazy val aggBufferAttributes: Seq[AttributeReference] =
     bufferSerializer.map(_.toAttribute.asInstanceOf[AttributeReference])
 
+  private def deserializeToBuffer(expr: Expression): Seq[Expression] = {
+    bufferDeserializer.map(_.transform {
+      case _: BoundReference => expr
+    })
+  }
+
   override lazy val initialValues: Seq[Expression] = {
     val zero = Literal.fromObject(aggregator.zero, bufferExternalType)
-    bufferSerializer.map(ReferenceToExpressions(_, zero :: Nil))
+    deserializeToBuffer(zero)
   }
 
   override lazy val updateExpressions: Seq[Expression] = {
@@ -154,8 +160,7 @@ case class SimpleTypedAggregateExpression(
       "reduce",
       bufferExternalType,
       bufferDeserializer :: inputDeserializer.get :: Nil)
-
-    bufferSerializer.map(ReferenceToExpressions(_, reduced :: Nil))
+    deserializeToBuffer(reduced)
   }
 
   override lazy val mergeExpressions: Seq[Expression] = {
@@ -170,8 +175,7 @@ case class SimpleTypedAggregateExpression(
       "merge",
       bufferExternalType,
       leftBuffer :: rightBuffer :: Nil)
-
-    bufferSerializer.map(ReferenceToExpressions(_, merged :: Nil))
+    deserializeToBuffer(merged)
   }
 
   override lazy val evaluateExpression: Expression = {
@@ -181,19 +185,17 @@ case class SimpleTypedAggregateExpression(
       outputExternalType,
       bufferDeserializer :: Nil)
 
+    val serializeExprs = outputSerializer.map(_.transform {
+      case _: BoundReference => resultObj
+    })
+
     dataType match {
-      case s: StructType =>
+      case _: StructType =>
         val objRef = outputSerializer.head.find(_.isInstanceOf[BoundReference]).get
-        val struct = If(
-          IsNull(objRef),
-          Literal.create(null, dataType),
-          CreateStruct(outputSerializer))
-        ReferenceToExpressions(struct, resultObj :: Nil)
+        If(IsNull(objRef), Literal.create(null, dataType), CreateStruct(serializeExprs))
       case _ =>
-        assert(outputSerializer.length == 1)
-        outputSerializer.head transform {
-          case b: BoundReference => resultObj
-        }
+        assert(serializeExprs.length == 1)
+        serializeExprs.head
     }
   }
 
