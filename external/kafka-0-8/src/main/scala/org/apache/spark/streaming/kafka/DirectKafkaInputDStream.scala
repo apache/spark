@@ -226,7 +226,7 @@ class DirectKafkaInputDStream[
           "offsets" -> offsetRanges.toList,
           StreamInputInfo.METADATA_KEY_DESCRIPTION -> description)
         val inputInfo = StreamInputInfo(id, rdd.count(), metadata)
-        context.scheduler.inputInfoTracker.reportInfo(t, inputInfo)
+        recoveredReports += t -> inputInfo
         generatedRDDs += t -> rdd
       }
     }

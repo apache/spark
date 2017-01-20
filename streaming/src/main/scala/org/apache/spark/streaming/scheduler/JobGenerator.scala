@@ -226,6 +226,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       .distinct.sorted(Time.ordering)
     logInfo("Batches to reschedule (" + timesToReschedule.length + " batches): " +
       timesToReschedule.mkString(", "))
+    graph.getInputStreams().foreach(is => {
+      is.recoveredReports.foreach(ts => jobScheduler.inputInfoTracker.reportInfo(ts._1, ts._2))
+    })
     timesToReschedule.foreach { time =>
       // Allocate the related blocks when recovering from failure, because some blocks that were
       // added but not allocated, are dangling in the queue after recovering, we have to allocate

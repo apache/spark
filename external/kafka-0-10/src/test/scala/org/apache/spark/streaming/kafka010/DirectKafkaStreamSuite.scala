@@ -34,7 +34,7 @@ import org.apache.kafka.common.serialization.StringDeserializer
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
@@ -402,6 +402,12 @@ class DirectKafkaStreamSuite
     // Restart context, give more data and verify the total at the end
     // If the total is write that means each records has been received only once
     ssc.start()
+    recoveredStream.checkpointData
+      .asInstanceOf[DirectKafkaInputDStream[String, String]#DirectKafkaInputDStreamCheckpointData]
+      .batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
+      assert(ssc.scheduler.inputInfoTracker.getInfo(t).size == 1, "No input infos recovered")
+    }
+
     for (i <- (11 to 20).grouped(4)) {
       sendData(i)
     }

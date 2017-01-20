@@ -32,7 +32,7 @@ import org.apache.spark.rdd.{BlockRDD, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext.rddToFileName
-import org.apache.spark.streaming.scheduler.Job
+import org.apache.spark.streaming.scheduler.{Job, StreamInputInfo}
 import org.apache.spark.streaming.ui.UIUtils
 import org.apache.spark.util.{CallSite, Utils}
 
@@ -85,6 +85,9 @@ abstract class DStream[T: ClassTag] (
   // RDDs generated, marked as private[streaming] so that testsuites can access it
   @transient
   private[streaming] var generatedRDDs = new HashMap[Time, RDD[T]]()
+
+  @transient
+  private[streaming] var recoveredReports = new HashMap[Time, StreamInputInfo]()
 
   // Time zero for the DStream
   private[streaming] var zeroTime: Time = null
@@ -536,6 +539,7 @@ abstract class DStream[T: ClassTag] (
     logDebug(s"${this.getClass().getSimpleName}.readObject used")
     ois.defaultReadObject()
     generatedRDDs = new HashMap[Time, RDD[T]]()
+    recoveredReports = new HashMap[Time, StreamInputInfo]()
   }
 
   // =======================================================================

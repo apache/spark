@@ -349,7 +349,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
             "files" -> f.toList,
             StreamInputInfo.METADATA_KEY_DESCRIPTION -> f.mkString("\n"))
           val inputInfo = StreamInputInfo(id, 0, metadata)
-          context.scheduler.inputInfoTracker.reportInfo(t, inputInfo)
+          recoveredReports += t -> inputInfo
           generatedRDDs += ((t, filesToRDD(f)))
       }
     }
