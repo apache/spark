@@ -2603,6 +2603,12 @@ test_that("Window functions on a DataFrame", {
   expect_equal(result, expected)
 })
 
+test_that("storageName on DataFrame", {
+  df <- createDataFrame(list(list(1)))
+  storageName(df) <- "foobar"
+  expect_equal(storageName(df), "foobar")
+})
+
 test_that("createDataFrame sqlContext parameter backward compatibility", {
   sqlContext <- suppressWarnings(sparkRSQL.init(sc))
   a <- 1:3
