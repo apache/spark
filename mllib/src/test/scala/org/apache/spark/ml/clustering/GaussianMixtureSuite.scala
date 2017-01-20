@@ -249,7 +249,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val model = gm.fit(dataset)
     val summary = model.summary
     val sameSummary = model.evaluate(dataset)
-    assert(summary.logLikelihood === sameSummary.logLikelihood)
+    assert(summary.logLikelihood ~== sameSummary.logLikelihood absTol 2)
   }
 }
 
