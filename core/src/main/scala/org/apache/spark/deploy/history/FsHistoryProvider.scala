@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.history
 
 import java.io.{FileNotFoundException, IOException, OutputStream}
-import java.net.URLDecoder
 import java.util.UUID
 import java.util.concurrent.{Executors, ExecutorService, Future, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
@@ -94,11 +93,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val NUM_PROCESSING_THREADS = conf.getInt(SPARK_HISTORY_FS_NUM_REPLAY_THREADS,
     Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
 
-  private val logURIString = conf.getOption("spark.history.fs.logDirectory")
-    .map { d => Utils.resolveURI(d).toString }
+  private val logDir = conf.getOption("spark.history.fs.logDirectory")
     .getOrElse(DEFAULT_LOG_DIR)
-
-  private val logDir = URLDecoder.decode(logURIString, "UTF-8")
 
   private val HISTORY_UI_ACLS_ENABLE = conf.getBoolean("spark.history.ui.acls.enable", false)
   private val HISTORY_UI_ADMIN_ACLS = conf.get("spark.history.ui.admin.acls", "")
@@ -108,7 +104,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     "; groups with admin permissions" + HISTORY_UI_ADMIN_ACLS_GROUPS.toString)
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-  private val fs = Utils.getHadoopFileSystem(logDir, hadoopConf)
+  private val fs = new Path(logDir).getFileSystem(hadoopConf)
 
   // Used by check event thread and clean log thread.
   // Scheduled thread pool size must be one, otherwise it will have concurrent issues about fs
