@@ -85,6 +85,11 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
           <th>Shuffle Spill (Memory)</th>
           <th>Shuffle Spill (Disk)</th>
         }}
+        <th>
+          <span data-toggle="tooltip" title={ToolTips.BLACKLISTED}>
+          Blacklisted
+          </span>
+        </th>
       </thead>
       <tbody>
         {createExecutorTable()}
@@ -160,6 +165,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
                 {Utils.bytesToString(v.diskBytesSpilled)}
               </td>
             }}
+            <td>{v.isBlacklisted}</td>
           </tr>
         }
       case None =>

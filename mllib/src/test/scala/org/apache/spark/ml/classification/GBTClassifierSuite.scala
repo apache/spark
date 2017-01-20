@@ -17,20 +17,24 @@
 
 package org.apache.spark.ml.classification
 
+import com.github.fommil.netlib.BLAS
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.loss.LogLoss
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.util.Utils
 
 /**
@@ -49,6 +53,8 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   private var data: RDD[LabeledPoint] = _
   private var trainData: RDD[LabeledPoint] = _
   private var validationData: RDD[LabeledPoint] = _
+  private val eps: Double = 1e-5
+  private val absEps: Double = 1e-8
 
   override def beforeAll() {
     super.beforeAll()
@@ -66,8 +72,154 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     ParamsSuite.checkParams(new GBTClassifier)
     val model = new GBTClassificationModel("gbtc",
       Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0, null), 1)),
-      Array(1.0), 1)
+      Array(1.0), 1, 2)
     ParamsSuite.checkParams(model)
+  }
+
+  test("GBTClassifier: default params") {
+    val gbt = new GBTClassifier
+    assert(gbt.getLabelCol === "label")
+    assert(gbt.getFeaturesCol === "features")
+    assert(gbt.getPredictionCol === "prediction")
+    assert(gbt.getRawPredictionCol === "rawPrediction")
+    assert(gbt.getProbabilityCol === "probability")
+    val df = trainData.toDF()
+    val model = gbt.fit(df)
+    model.transform(df)
+      .select("label", "probability", "prediction", "rawPrediction")
+      .collect()
+    intercept[NoSuchElementException] {
+      model.getThresholds
+    }
+    assert(model.getFeaturesCol === "features")
+    assert(model.getPredictionCol === "prediction")
+    assert(model.getRawPredictionCol === "rawPrediction")
+    assert(model.getProbabilityCol === "probability")
+    assert(model.hasParent)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
+  }
+
+  test("setThreshold, getThreshold") {
+    val gbt = new GBTClassifier
+
+    // default
+    withClue("GBTClassifier should not have thresholds set by default.") {
+      intercept[NoSuchElementException] {
+        gbt.getThresholds
+      }
+    }
+
+    // Set via thresholds
+    val gbt2 = new GBTClassifier
+    val threshold = Array(0.3, 0.7)
+    gbt2.setThresholds(threshold)
+    assert(gbt2.getThresholds === threshold)
+  }
+
+  test("thresholds prediction") {
+    val gbt = new GBTClassifier
+    val df = trainData.toDF()
+    val binaryModel = gbt.fit(df)
+
+    // should predict all zeros
+    binaryModel.setThresholds(Array(0.0, 1.0))
+    val binaryZeroPredictions = binaryModel.transform(df).select("prediction").collect()
+    assert(binaryZeroPredictions.forall(_.getDouble(0) === 0.0))
+
+    // should predict all ones
+    binaryModel.setThresholds(Array(1.0, 0.0))
+    val binaryOnePredictions = binaryModel.transform(df).select("prediction").collect()
+    assert(binaryOnePredictions.forall(_.getDouble(0) === 1.0))
+
+
+    val gbtBase = new GBTClassifier
+    val model = gbtBase.fit(df)
+    val basePredictions = model.transform(df).select("prediction").collect()
+
+    // constant threshold scaling is the same as no thresholds
+    binaryModel.setThresholds(Array(1.0, 1.0))
+    val scaledPredictions = binaryModel.transform(df).select("prediction").collect()
+    assert(scaledPredictions.zip(basePredictions).forall { case (scaled, base) =>
+      scaled.getDouble(0) === base.getDouble(0)
+    })
+
+    // force it to use the predict method
+    model.setRawPredictionCol("").setProbabilityCol("").setThresholds(Array(0, 1))
+    val predictionsWithPredict = model.transform(df).select("prediction").collect()
+    assert(predictionsWithPredict.forall(_.getDouble(0) === 0.0))
+  }
+
+  test("GBTClassifier: Predictor, Classifier methods") {
+    val rawPredictionCol = "rawPrediction"
+    val predictionCol = "prediction"
+    val labelCol = "label"
+    val featuresCol = "features"
+    val probabilityCol = "probability"
+
+    val gbt = new GBTClassifier().setSeed(123)
+    val trainingDataset = trainData.toDF(labelCol, featuresCol)
+    val gbtModel = gbt.fit(trainingDataset)
+    assert(gbtModel.numClasses === 2)
+    val numFeatures = trainingDataset.select(featuresCol).first().getAs[Vector](0).size
+    assert(gbtModel.numFeatures === numFeatures)
+
+    val blas = BLAS.getInstance()
+
+    val validationDataset = validationData.toDF(labelCol, featuresCol)
+    val results = gbtModel.transform(validationDataset)
+    // check that raw prediction is tree predictions dot tree weights
+    results.select(rawPredictionCol, featuresCol).collect().foreach {
+      case Row(raw: Vector, features: Vector) =>
+        assert(raw.size === 2)
+        val treePredictions = gbtModel.trees.map(_.rootNode.predictImpl(features).prediction)
+        val prediction = blas.ddot(gbtModel.numTrees, treePredictions, 1, gbtModel.treeWeights, 1)
+        assert(raw ~== Vectors.dense(-prediction, prediction) relTol eps)
+    }
+
+    // Compare rawPrediction with probability
+    results.select(rawPredictionCol, probabilityCol).collect().foreach {
+      case Row(raw: Vector, prob: Vector) =>
+        assert(raw.size === 2)
+        assert(prob.size === 2)
+        // Note: we should check other loss types for classification if they are added
+        val predFromRaw = raw.toDense.values.map(value => LogLoss.computeProbability(value))
+        assert(prob(0) ~== predFromRaw(0) relTol eps)
+        assert(prob(1) ~== predFromRaw(1) relTol eps)
+        assert(prob(0) + prob(1) ~== 1.0 absTol absEps)
+    }
+
+    // Compare prediction with probability
+    results.select(predictionCol, probabilityCol).collect().foreach {
+      case Row(pred: Double, prob: Vector) =>
+        val predFromProb = prob.toArray.zipWithIndex.maxBy(_._1)._2
+        assert(pred == predFromProb)
+    }
+
+    // force it to use raw2prediction
+    gbtModel.setRawPredictionCol(rawPredictionCol).setProbabilityCol("")
+    val resultsUsingRaw2Predict =
+      gbtModel.transform(validationDataset).select(predictionCol).as[Double].collect()
+    resultsUsingRaw2Predict.zip(results.select(predictionCol).as[Double].collect()).foreach {
+      case (pred1, pred2) => assert(pred1 === pred2)
+    }
+
+    // force it to use probability2prediction
+    gbtModel.setRawPredictionCol("").setProbabilityCol(probabilityCol)
+    val resultsUsingProb2Predict =
+      gbtModel.transform(validationDataset).select(predictionCol).as[Double].collect()
+    resultsUsingProb2Predict.zip(results.select(predictionCol).as[Double].collect()).foreach {
+      case (pred1, pred2) => assert(pred1 === pred2)
+    }
+
+    // force it to use predict
+    gbtModel.setRawPredictionCol("").setProbabilityCol("")
+    val resultsUsingPredict =
+      gbtModel.transform(validationDataset).select(predictionCol).as[Double].collect()
+    resultsUsingPredict.zip(results.select(predictionCol).as[Double].collect()).foreach {
+      case (pred1, pred2) => assert(pred1 === pred2)
+    }
   }
 
   test("GBT parameter stepSize should be in interval (0, 1]") {
@@ -246,7 +398,8 @@ private object GBTClassifierSuite extends SparkFunSuite {
     val newModel = gbt.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = GBTClassificationModel.fromOld(
-      oldModel, newModel.parent.asInstanceOf[GBTClassifier], categoricalFeatures, numFeatures)
+      oldModel, newModel.parent.asInstanceOf[GBTClassifier], categoricalFeatures,
+      numFeatures, numClasses = 2)
     TreeTests.checkEqual(oldModelAsNew, newModel)
     assert(newModel.numFeatures === numFeatures)
     assert(oldModelAsNew.numFeatures === numFeatures)
