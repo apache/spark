@@ -125,6 +125,7 @@ object StateStore extends Logging {
   val MAINTENANCE_INTERVAL_CONFIG = "spark.sql.streaming.stateStore.maintenanceInterval"
   val MAINTENANCE_INTERVAL_DEFAULT_SECS = 60
 
+  @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreId, StateStoreProvider]()
 
   class MaintenanceTask(periodMs: Long, task: => Unit, onError: => Unit) {
@@ -138,8 +139,8 @@ object StateStore extends Logging {
         } catch {
           case NonFatal(e) =>
             logWarning("Error running maintenance thread", e)
-            future.cancel(false)  // do interrupt active run, as this is being called from the run
             onError
+            throw e
         }
       }
     }
@@ -147,16 +148,19 @@ object StateStore extends Logging {
     private val future: ScheduledFuture[_] = executor.scheduleAtFixedRate(
       runnable, periodMs, periodMs, TimeUnit.MILLISECONDS)
 
-    def stop(): Unit = { future.cancel(false) }
+    def stop(): Unit = {
+      future.cancel(false)
+      executor.shutdown()
+    }
 
-    def isRunning: Boolean = !future.isCancelled
+    def isRunning: Boolean = !future.isDone
   }
 
   @GuardedBy("loadedProviders")
-  @volatile private var maintenanceTask: MaintenanceTask = null
+  private var maintenanceTask: MaintenanceTask = null
 
   @GuardedBy("loadedProviders")
-  @volatile private var _coordRef: StateStoreCoordinatorRef = null
+  private var _coordRef: StateStoreCoordinatorRef = null
 
   /** Get or create a store associated with the id. */
   def get(
@@ -238,6 +242,7 @@ object StateStore extends Logging {
       } catch {
         case NonFatal(e) =>
           logWarning(s"Error managing $provider, stopping management thread")
+          throw e
       }
     }
   }
@@ -263,7 +268,7 @@ object StateStore extends Logging {
     }
   }
 
-  private def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {
+  private def coordinatorRef: Option[StateStoreCoordinatorRef] = loadedProviders.synchronized {
     val env = SparkEnv.get
     if (env != null) {
       if (_coordRef == null) {
