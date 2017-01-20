@@ -128,6 +128,10 @@ object StateStore extends Logging {
   @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreId, StateStoreProvider]()
 
+  /**
+   * Runs the `task` periodically and automatically cancels it if there is an exception. `onError`
+   * will be called when an exception happens.
+   */
   class MaintenanceTask(periodMs: Long, task: => Unit, onError: => Unit) {
     private val executor =
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("state-store-maintenance-task")
@@ -210,7 +214,7 @@ object StateStore extends Logging {
   /** Start the periodic maintenance task if not already started and if Spark active */
   private def startMaintenanceIfNeeded(): Unit = loadedProviders.synchronized {
     val env = SparkEnv.get
-    if (env != null && (maintenanceTask == null || !maintenanceTask.isRunning)) {
+    if (env != null && !isMaintenanceRunning) {
       val periodMs = env.conf.getTimeAsMs(
         MAINTENANCE_INTERVAL_CONFIG, s"${MAINTENANCE_INTERVAL_DEFAULT_SECS}s")
       maintenanceTask = new MaintenanceTask(
