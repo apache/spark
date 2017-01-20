@@ -277,7 +277,6 @@ private[spark] object JettyUtils extends Logging {
       conf: SparkConf,
       serverName: String = ""): ServerInfo = {
 
-    val collection = new ContextHandlerCollection
     addFilters(handlers, conf)
 
     val gzipHandlers = handlers.map { h =>
@@ -297,7 +296,9 @@ private[spark] object JettyUtils extends Logging {
       pool.setDaemon(true)
 
       val server = new Server(pool)
-      val connectors = new ArrayBuffer[ServerConnector]
+      val connectors = new ArrayBuffer[ServerConnector]()
+      val collection = new ContextHandlerCollection
+
       // Create a connector on port currentPort to listen for HTTP requests
       val httpConnector = new ServerConnector(
         server,
@@ -338,7 +339,6 @@ private[spark] object JettyUtils extends Logging {
           None
       }
 
-      gzipHandlers.foreach(collection.addHandler)
       // As each acceptor and each selector will use one thread, the number of threads should at
       // least be the number of acceptors and selectors plus 1. (See SPARK-13776)
       var minThreads = 1
@@ -350,14 +350,17 @@ private[spark] object JettyUtils extends Logging {
         // The number of selectors always equals to the number of acceptors
         minThreads += connector.getAcceptors * 2
       }
-      server.setConnectors(connectors.toArray)
       pool.setMaxThreads(math.max(pool.getMaxThreads, minThreads))
 
       val errorHandler = new ErrorHandler()
       errorHandler.setShowStacks(true)
       errorHandler.setServer(server)
       server.addBean(errorHandler)
+
+      gzipHandlers.foreach(collection.addHandler)
       server.setHandler(collection)
+
+      server.setConnectors(connectors.toArray)
       try {
         server.start()
         ((server, httpsConnector.map(_.getLocalPort())), httpConnector.getLocalPort)
@@ -371,7 +374,8 @@ private[spark] object JettyUtils extends Logging {
 
     val ((server, securePort), boundPort) = Utils.startServiceOnPort(port, connect, conf,
       serverName)
-    ServerInfo(server, boundPort, securePort, collection)
+    ServerInfo(server, boundPort, securePort,
+      server.getHandler().asInstanceOf[ContextHandlerCollection])
   }
 
   private def createRedirectHttpsHandler(securePort: Int, scheme: String): ContextHandler = {
