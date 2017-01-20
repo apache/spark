@@ -43,7 +43,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       // drop all databases, tables and functions after each test
       spark.sessionState.catalog.reset()
     } finally {
-      Utils.deleteRecursively(new File("spark-warehouse"))
+      Utils.deleteRecursively(new File(spark.sessionState.conf.warehousePath))
       super.afterEach()
     }
   }
@@ -201,40 +201,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   private val escapedIdentifier = "`(.+)`".r
 
-  def normalizeCatalogTable(table: CatalogTable): CatalogTable = {
-    val nondeterministicProps = Set(
-      "CreateTime",
-      "transient_lastDdlTime",
-      "grantTime",
-      "lastUpdateTime",
-      "last_modified_by",
-      "last_modified_time",
-      "Owner:",
-      "COLUMN_STATS_ACCURATE",
-      // The following are hive specific schema parameters which we do not need to match exactly.
-      "numFiles",
-      "numRows",
-      "rawDataSize",
-      "totalSize",
-      "totalNumberFiles",
-      "maxFileSize",
-      "minFileSize",
-      // EXTERNAL is not non-deterministic, but it is filtered out for external tables.
-      "EXTERNAL"
-    )
+  protected def normalizeCatalogTable(table: CatalogTable): CatalogTable = table
 
-    table.copy(
-      createTime = 0L,
-      lastAccessTime = 0L,
-      owner = "",
-      properties = table.properties.filterKeys(!nondeterministicProps.contains(_)),
-      // View texts are checked separately
-      viewOriginalText = None,
-      viewText = None
-    )
-  }
-
-  def normalizeSerdeProp(props: Map[String, String]): Map[String, String] = {
+  private def normalizeSerdeProp(props: Map[String, String]): Map[String, String] = {
     props.filterNot(p => Seq("serialization.format", "path").contains(p._1))
   }
 
@@ -283,12 +252,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   private def getDatabaseLocation(dbName: String): String = {
-    val expectedLocation = if (isUsingHiveMetastore) {
-      val dbPath = new Path(spark.sessionState.conf.warehousePath)
-      s"${dbPath.toUri.getPath.stripSuffix("/")}/$dbName.db"
-    } else {
-      s"spark-warehouse/$dbName.db"
-    }
+    val dbPath = new Path(spark.sessionState.conf.warehousePath)
+    val expectedLocation = s"${dbPath.toUri.getPath.stripSuffix("/")}/$dbName.db"
     makeQualifiedPath(expectedLocation)
   }
 
@@ -374,16 +339,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           getDatabaseLocation(dbNameWithoutBackTicks),
           Map.empty))
 
-        if (isUsingHiveMetastore) {
-          val e = intercept[AnalysisException] {
-            sql(s"CREATE DATABASE $dbName")
-          }.getMessage
-          assert(e.contains(s"Database $dbNameWithoutBackTicks already exists"))
-        } else {
-          intercept[DatabaseAlreadyExistsException] {
-            sql(s"CREATE DATABASE $dbName")
-          }
-        }
+        // TODO: HiveExternalCatalog should throw DatabaseAlreadyExistsException
+        val e = intercept[AnalysisException] {
+          sql(s"CREATE DATABASE $dbName")
+        }.getMessage
+        assert(e.contains(s"already exists"))
       } finally {
         catalog.reset()
       }

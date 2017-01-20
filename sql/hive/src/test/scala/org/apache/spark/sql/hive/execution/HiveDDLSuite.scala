@@ -75,6 +75,39 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       tracksPartitionsInCatalog = true)
   }
 
+  protected override def normalizeCatalogTable(table: CatalogTable): CatalogTable = {
+    val nondeterministicProps = Set(
+      "CreateTime",
+      "transient_lastDdlTime",
+      "grantTime",
+      "lastUpdateTime",
+      "last_modified_by",
+      "last_modified_time",
+      "Owner:",
+      "COLUMN_STATS_ACCURATE",
+      // The following are hive specific schema parameters which we do not need to match exactly.
+      "numFiles",
+      "numRows",
+      "rawDataSize",
+      "totalSize",
+      "totalNumberFiles",
+      "maxFileSize",
+      "minFileSize",
+      // EXTERNAL is not non-deterministic, but it is filtered out for external tables.
+      "EXTERNAL"
+    )
+
+    table.copy(
+      createTime = 0L,
+      lastAccessTime = 0L,
+      owner = "",
+      properties = table.properties.filterKeys(!nondeterministicProps.contains(_)),
+      // View texts are checked separately
+      viewOriginalText = None,
+      viewText = None
+    )
+  }
+
 }
 
 class HiveDDLSuite
