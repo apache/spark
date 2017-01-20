@@ -624,6 +624,14 @@ setGeneric("saveAsTable", function(df, tableName, source = NULL, mode = "error",
   standardGeneric("saveAsTable")
 })
 
+#' @rdname storageName
+#' @export
+setGeneric("storageName", function(x) { standardGeneric("storageName") })
+
+#' @rdname storageName
+#' @export
+setGeneric("storageName<-", function(x, name) { standardGeneric("storageName<-") })
+
 #' @export
 setGeneric("str")
 
