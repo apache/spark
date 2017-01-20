@@ -56,7 +56,7 @@ object CatalystTypeConverters {
   private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
     val converter = dataType match {
       case udt: UserDefinedType[_] => UDTConverter(udt)
-      case arrayType: ArrayType => ArrayConverter(arrayType.elementType, arrayType.containsNull)
+      case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
       case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
       case structType: StructType => StructConverter(structType)
       case StringType => StringConverter
@@ -151,8 +151,8 @@ object CatalystTypeConverters {
   }
 
   /** Converter for arrays, sequences, and Java iterables. */
-  private case class ArrayConverter(elementType: DataType, nullable: Boolean = true)
-    extends CatalystTypeConverter[Any, Seq[Any], ArrayData] {
+  private case class ArrayConverter(
+      elementType: DataType) extends CatalystTypeConverter[Any, Seq[Any], ArrayData] {
 
     private[this] val elementConverter = getConverterForType(elementType)
 
@@ -176,24 +176,14 @@ object CatalystTypeConverters {
     override def toScala(catalystValue: ArrayData): Seq[Any] = {
       if (catalystValue == null) {
         null
+      } else if (isPrimitive(elementType)) {
+        catalystValue.toArray[Any](elementType)
       } else {
-        if (!nullable && isPrimitive(elementType)) {
-          elementType match {
-            case BooleanType => catalystValue.toBooleanArray()
-            case ByteType => catalystValue.toByteArray()
-            case ShortType => catalystValue.toShortArray()
-            case IntegerType => catalystValue.toIntArray()
-            case LongType => catalystValue.toLongArray()
-            case FloatType => catalystValue.toFloatArray()
-            case DoubleType => catalystValue.toDoubleArray()
-          }
-        } else {
-          val result = new Array[Any](catalystValue.numElements())
-          catalystValue.foreach(elementType, (i, e) => {
-            result(i) = elementConverter.toScala(e)
-          })
-          result
-        }
+        val result = new Array[Any](catalystValue.numElements())
+        catalystValue.foreach(elementType, (i, e) => {
+          result(i) = elementConverter.toScala(e)
+        })
+        result
       }
     }
 
