@@ -344,7 +344,8 @@ abstract class UnaryNode extends LogicalPlan {
       sizeInBytes = 1
     }
 
-    child.stats(conf).copy(sizeInBytes = sizeInBytes)
+    // Don't propagate rowCount and attributeStats, since they are not estimated here.
+    Statistics(sizeInBytes = sizeInBytes, isBroadcastable = child.stats(conf).isBroadcastable)
   }
 }
 

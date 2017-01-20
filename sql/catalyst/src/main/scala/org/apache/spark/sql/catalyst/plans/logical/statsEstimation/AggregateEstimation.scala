@@ -53,7 +53,7 @@ object AggregateEstimation {
 
       val outputAttrStats = getOutputMap(childStats.attributeStats, agg.output)
       Some(Statistics(
-        sizeInBytes = getOutputSize(agg.output, outputAttrStats, outputRows),
+        sizeInBytes = getOutputSize(agg.output, outputRows, outputAttrStats),
         rowCount = Some(outputRows),
         attributeStats = outputAttrStats,
         isBroadcastable = childStats.isBroadcastable))

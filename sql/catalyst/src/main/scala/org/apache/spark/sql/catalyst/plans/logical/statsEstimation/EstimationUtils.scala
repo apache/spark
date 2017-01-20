@@ -37,8 +37,8 @@ object EstimationUtils {
 
   def getOutputSize(
       attributes: Seq[Attribute],
-      attrStats: AttributeMap[ColumnStat],
-      outputRowCount: BigInt): BigInt = {
+      outputRowCount: BigInt,
+      attrStats: AttributeMap[ColumnStat] = AttributeMap(Nil)): BigInt = {
     // We assign a generic overhead for a Row object, the actual overhead is different for different
     // Row format.
     val sizePerRow = 8 + attributes.map { attr =>
