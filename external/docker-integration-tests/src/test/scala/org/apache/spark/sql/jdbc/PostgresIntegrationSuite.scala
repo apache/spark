@@ -61,6 +61,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val df = sqlContext.read.jdbc(jdbcUrl, "bar", new Properties)
     val rows = df.collect().sortBy(_.toString())
     assert(rows.length == 2)
+    // Test the types, and values using the first row.
     val types = rows(0).toSeq.map(x => x.getClass)
     assert(types.length == 17)
     assert(classOf[String].isAssignableFrom(types(0)))
@@ -101,7 +102,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getFloat(15) == 1.01f)
     assert(rows(0).getShort(16) == 1)
 
-    // Test reading null values.
+    // Test reading null values using the second row.
     assert(0.until(16).forall(rows(1).isNullAt(_)))
   }
 

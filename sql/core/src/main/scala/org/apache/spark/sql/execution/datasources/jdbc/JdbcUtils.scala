@@ -466,7 +466,7 @@ object JdbcUtils extends Logging {
 
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val array = nullSafeConvert[java.sql.Array](
-          rs.getArray(pos + 1),
+          input = rs.getArray(pos + 1),
           array => new GenericArrayData(elementConversion.apply(array.getArray)))
         row.update(pos, array)
 
