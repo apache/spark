@@ -174,6 +174,14 @@ case class AlterTableRenameCommand(
 
 }
 
+/**
+ * A command that add columns to a table
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   ALTER TABLE table_identifier
+ *   ADD COLUMNS (col_name data_type [COMMENT col_comment], ...);
+ * }}}
+*/
 case class AlterTableAddColumnsCommand(
     table: TableIdentifier,
     columns: Seq[StructField]) extends RunnableCommand {
