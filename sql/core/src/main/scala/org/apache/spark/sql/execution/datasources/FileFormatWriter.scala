@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution, UnsafeKVExternalSorter}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
@@ -66,6 +66,7 @@ object FileFormatWriter extends Logging {
       val partitionColumns: Seq[Attribute],
       val dataColumns: Seq[Attribute],
       val bucketSpec: Option[BucketSpec],
+      val stableSort: Boolean,
       val path: String,
       val customPartitionLocations: Map[TablePartitionSpec, String],
       val maxRecordsPerFile: Long)
@@ -122,6 +123,7 @@ object FileFormatWriter extends Logging {
       partitionColumns = partitionColumns,
       dataColumns = dataColumns,
       bucketSpec = bucketSpec,
+      stableSort = queryExecution.sparkPlan.outputOrdering.nonEmpty,
       path = outputSpec.outputPath,
       customPartitionLocations = outputSpec.customPartitionLocations,
       maxRecordsPerFile = options.get("maxRecordsPerFile").map(_.toLong)
@@ -371,7 +373,23 @@ object FileFormatWriter extends Logging {
       // We should first sort by partition columns, then bucket id, and finally sorting columns.
       val sortingExpressions: Seq[Expression] =
         description.partitionColumns ++ bucketIdExpression ++ sortColumns
-      val getSortingKey = UnsafeProjection.create(sortingExpressions, description.allColumns)
+      val projectSortingExpressions =
+        UnsafeProjection.create(sortingExpressions, description.allColumns)
+      val getSortingKey: InternalRow => UnsafeRow = if (description.stableSort) {
+        // Attaches a numeric index to the key so that the order within the partition is
+        // preserved in case of spills
+        var index: Long = 0
+        val types = sortingExpressions.map(_.dataType)
+        val toUnsafeRow = UnsafeProjection.create((types :+ LongType).toArray)
+        row => {
+          val prefix = projectSortingExpressions(row)
+          val sortingKey = InternalRow.fromSeq(prefix.toSeq(types) :+ index)
+          index += 1
+          toUnsafeRow(sortingKey)
+        }
+      } else {
+        row => projectSortingExpressions(row)
+      }
 
       val sortingKeySchema = StructType(sortingExpressions.map {
         case a: Attribute => StructField(a.name, a.dataType, a.nullable)
@@ -389,7 +407,11 @@ object FileFormatWriter extends Logging {
 
       // Sorts the data before write, so that we only need one writer at the same time.
       val sorter = new UnsafeKVExternalSorter(
-        sortingKeySchema,
+        if (description.stableSort) {
+          sortingKeySchema.add("indexWithinPartition", LongType, nullable = false)
+        } else {
+          sortingKeySchema
+        },
         StructType.fromAttributes(description.dataColumns),
         SparkEnv.get.blockManager,
         SparkEnv.get.serializerManager,
@@ -402,7 +424,8 @@ object FileFormatWriter extends Logging {
         sorter.insertKV(getSortingKey(currentRow), getOutputRow(currentRow))
       }
 
-      val getBucketingKey: InternalRow => InternalRow = if (sortColumns.isEmpty) {
+      val hasExtraColumns = sortColumns.nonEmpty || description.stableSort
+      val getBucketingKey: InternalRow => InternalRow = if (!hasExtraColumns) {
         identity
       } else {
         UnsafeProjection.create(sortingExpressions.dropRight(sortColumns.length).zipWithIndex.map {
