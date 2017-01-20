@@ -78,49 +78,49 @@ dataFrame <- function(sdf, isCached = FALSE) {
 
 ############################ SparkDataFrame Methods ##############################################
 
-#' name
+#' storageName
 #'
 #' Return a SparkDataFrame's name.
 #'
 #' @param x The SparkDataFrame whose name is returned.
 #' @family SparkDataFrame functions
-#' @rdname name
+#' @rdname storageName
 #' @examples
 #'\dontrun{
 #' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' name(df)
+#' storageName(df)
 #'}
-#' @aliases name,SparkDataFrame-method
+#' @aliases storageName,SparkDataFrame-method
 #' @export
-#' @note name since 2.2.0
-setMethod("name",
+#' @note storageName since 2.2.0
+setMethod("storageName",
           signature(x = "SparkDataFrame"),
           function(x) {
             callJMethod(x@sdf, "name")
           })
 
-#' name
+#' storageName
 #'
-#' Set a SparkDataFrame's name.
+#' Set a SparkDataFrame's name. This will be displayed on the Storage tab in the UI if cached.
 #'
 #' @param x The SparkDataFrame whose name is to be set.
 #' @param name The SparkDataFrame name to be set.
 #' @family SparkDataFrame functions
 #' @return the SparkDataFrame renamed.
-#' @rdname name
+#' @rdname storageName
 #' @examples
 #'\dontrun{
 #' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' name(df) <- "foo"
+#' storageName(df) <- "foo"
 #'}
-#' @aliases name<-,SparkDataFrame-method
+#' @aliases storageName<-,SparkDataFrame-method
 #' @export
-#' @note name<- since 2.2.0
-setMethod("name<-",
+#' @note storageName<- since 2.2.0
+setMethod("storageName<-",
           signature(x = "SparkDataFrame", name = "character"),
           function(x, name) {
             callJMethod(x@sdf, "setName", name)
