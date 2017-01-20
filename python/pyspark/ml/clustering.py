@@ -185,7 +185,7 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> summary.logLikelihood
     8.14636...
     >>> same_summary = model.evaluate(df)
-    >>> summary.logLikelihood == same_summary.logLikelihood
+    >>> abs(summary.logLikelihood - same_summary.logLikelihood) < 1e-3
     True
     >>> weights = model.weights
     >>> len(weights)
@@ -400,9 +400,9 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     >>> summary.clusterSizes
     [2, 2]
     >>> summary.wssse
-    8.14636...
+    2.000...
     >>> same_summary = model.evaluate(df)
-    >>> summary.wssse == same_summary.wssse
+    >>> abs(summary.wssse - same_summary.wssse) < 1e-3
     True
     >>> kmeans_path = temp_path + "/kmeans"
     >>> kmeans.save(kmeans_path)
@@ -585,9 +585,9 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> summary.clusterSizes
     [2, 2]
     >>> summary.wssse
-    8.14636...
+    2.000...
     >>> same_summary = model.evaluate(df)
-    >>> summary.wssse == same_summary.wssse
+    >>> abs(summary.wssse - same_summary.wssse) < 1e-3
     True
     >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
