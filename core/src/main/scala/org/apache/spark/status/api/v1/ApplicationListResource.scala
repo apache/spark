@@ -56,11 +56,13 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
       maxStartDate: SimpleDateParam,
       minEndDate: SimpleDateParam,
       maxEndDate: SimpleDateParam,
-      skipEndTimeValidation: Boolean): Boolean = {
+      anyRunning: Boolean): Boolean = {
     val startTimeOk = attempt.startTime.getTime >= minStartDate.timestamp &&
       attempt.startTime.getTime <= maxStartDate.timestamp
-    val endTimeOk = skipEndTimeValidation || (attempt.endTime.getTime >= minEndDate.timestamp &&
+    val endTimeOkForRunning = anyRunning && (maxEndDate.timestamp > System.currentTimeMillis())
+    val endTimeOkForCompleted = !anyRunning && (attempt.endTime.getTime >= minEndDate.timestamp &&
       attempt.endTime.getTime <= maxEndDate.timestamp)
+    val endTimeOk = endTimeOkForRunning || endTimeOkForCompleted
     startTimeOk && endTimeOk
   }
 }
