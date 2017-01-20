@@ -364,7 +364,7 @@ function resizeSvg(svg) {
 }
 
 /*
- * Helper function to interprete line break for tag 'tspan'.
+ * Helper function to interpret line break for tag 'tspan'.
  * For tag 'tspan', line break '/n' is display in UI as raw for both stage page and job page,
  * here this function is to enable line break.
  */
