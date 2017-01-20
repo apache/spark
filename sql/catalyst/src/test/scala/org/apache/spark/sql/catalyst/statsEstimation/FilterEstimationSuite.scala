@@ -415,7 +415,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
 
     val expectedRowCount: BigInt = rowCount.getOrElse(0L)
     val expectedAttrStats = toAttributeMap(Seq(ar.name -> expectedColStats), filterNode)
-    val expectedSizeInBytes = getOutputSize(filterNode.output, expectedAttrStats, expectedRowCount)
+    val expectedSizeInBytes = getOutputSize(filterNode.output, expectedRowCount, expectedAttrStats)
 
     val filteredStats = filterNode.stats(conf)
     assert(filteredStats.sizeInBytes == expectedSizeInBytes)

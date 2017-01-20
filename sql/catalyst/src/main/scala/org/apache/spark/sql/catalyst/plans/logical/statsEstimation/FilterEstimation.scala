@@ -78,7 +78,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     val filteredRowCount: BigInt =
       EstimationUtils.ceil(BigDecimal(stats.rowCount.get) * filterSelectivity)
     val filteredSizeInBytes: BigInt = EstimationUtils.ceil(BigDecimal(
-        EstimationUtils.getOutputSize(plan.output, newColStats, filteredRowCount)
+        EstimationUtils.getOutputSize(plan.output, filteredRowCount, newColStats)
     ))
 
     Some(stats.copy(sizeInBytes = filteredSizeInBytes, rowCount = Some(filteredRowCount),
