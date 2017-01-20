@@ -210,7 +210,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         tableDefinition.storage.locationUri.isEmpty
 
       val tableLocation = if (needDefaultTableLocation) {
-        Some(new URI(defaultTablePath(tableDefinition.identifier)))
+        Some(new Path(defaultTablePath(tableDefinition.identifier)).toUri)
       } else {
         tableDefinition.storage.locationUri
       }
@@ -260,7 +260,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // However, in older version of Spark we already store table location in storage properties
     // with key "path". Here we keep this behaviour for backward compatibility.
     val storagePropsWithLocation = table.storage.properties ++
-      table.storage.locationUri.map("path" -> _.toString)
+      table.storage.locationUri.map("path" -> _.getPath)
 
     // converts the table metadata to Spark SQL specific format, i.e. set data schema, names and
     // bucket specification to empty. Note that partition columns are retained, so that we can
@@ -438,7 +438,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
       try {
         client.createTable(
-          tableDefinition.withNewStorage(locationUri = Some(tempPath.toUri)),
+          tableDefinition.withNewStorage(locationUri = Some(new URI(tempPath.toString))),
           ignoreIfExists)
       } finally {
         FileSystem.get(tempPath.toUri, hadoopConf).delete(tempPath, true)
@@ -565,7 +565,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
         val newLocation = tableDefinition.storage.locationUri
         val storageWithPathOption = tableDefinition.storage.copy(
-          properties = tableDefinition.storage.properties ++ newLocation.map("path" -> _.toString))
+          properties = tableDefinition.storage.properties ++ newLocation.map("path" -> _.getPath))
 
         val oldLocation = getLocationFromStorageProps(oldTableDef)
         if (oldLocation == newLocation) {
@@ -903,7 +903,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           case e: IOException => throw new SparkException(
             s"Unable to rename partition path from $wrongPath to $rightPath", e)
         }
-        partition.copy(storage = partition.storage.copy(locationUri = Some(rightPath.toUri)))
+        partition.copy(storage = partition.storage.copy(
+          locationUri = Some(new URI(rightPath.toString)))
+        )
       }
       alterPartitions(db, table, newParts)
     }

@@ -102,7 +102,7 @@ case class CatalogTablePartition(
   }
 
   /** Return the partition location, assuming it is specified. */
-  def location: String = storage.locationUri.map(_.toString).getOrElse {
+  def location: String = storage.locationUri.map(_.getPath).getOrElse {
     val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
     throw new AnalysisException(s"Partition [$specString] did not specify locationUri")
   }
@@ -192,7 +192,7 @@ case class CatalogTable(
   }
 
   /** Return the table location, assuming it is specified. */
-  def location: String = storage.locationUri.map(_.toString).getOrElse {
+  def location: String = storage.locationUri.map(_.getPath).getOrElse {
     throw new AnalysisException(s"table $identifier did not specify locationUri")
   }
 

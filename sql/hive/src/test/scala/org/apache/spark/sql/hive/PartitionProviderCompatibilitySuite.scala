@@ -265,6 +265,7 @@ class PartitionProviderCompatibilitySuite
           spark.sql(s"""
             |alter table test partition (A=5, B='%')
             |rename to partition (A=100, B='%')""".stripMargin)
+          val x = spark.sql("show partitions test").collect()
           assert(spark.sql("select * from test where a = 5 and b = '%'").count() == 0)
           assert(spark.sql("select * from test where a = 100 and b = '%'").count() == 1)
 

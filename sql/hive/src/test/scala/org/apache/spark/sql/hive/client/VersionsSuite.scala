@@ -353,7 +353,7 @@ class VersionsSuite extends SparkFunSuite with SQLTestUtils with TestHiveSinglet
       val partition = CatalogTablePartition(spec, storage)
       client.alterPartitions("default", "src_part", Seq(partition))
       assert(client.getPartition("default", "src_part", spec)
-        .storage.locationUri == Some(newLocation))
+        .storage.locationUri.get.getPath == newLocation)
     }
 
     test(s"$version: dropPartitions") {

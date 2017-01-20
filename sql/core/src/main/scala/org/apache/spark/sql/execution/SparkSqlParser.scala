@@ -20,10 +20,9 @@ package org.apache.spark.sql.execution
 import java.net.URI
 
 import scala.collection.JavaConverters._
-
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
-
+import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
@@ -375,7 +374,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         .getOrElse(Array.empty[String])
     val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
 
-    val location = Option(ctx.locationSpec).map(visitLocationSpec).map(new URI(_))
+    val location = Option(ctx.locationSpec).map(visitLocationSpec).map(new Path(_).toUri)
     val storage = DataSource.buildStorageFormatFromOptions(options)
 
     if (location.isDefined && storage.locationUri.isDefined) {
@@ -1070,7 +1069,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       .getOrElse(CatalogStorageFormat.empty)
     val rowStorage = Option(ctx.rowFormat).map(visitRowFormat)
       .getOrElse(CatalogStorageFormat.empty)
-    val location = Option(ctx.locationSpec).map(visitLocationSpec).map(new URI(_))
+    val location = Option(ctx.locationSpec).map(visitLocationSpec).map(new Path(_).toUri)
     // If we are creating an EXTERNAL table, then the LOCATION field is required
     if (external && location.isEmpty) {
       operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)

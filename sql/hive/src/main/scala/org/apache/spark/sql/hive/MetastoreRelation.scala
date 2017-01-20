@@ -97,7 +97,7 @@ private[hive] case class MetastoreRelation(
     sd.setCols(schema.asJava)
     tTable.setPartitionKeys(partCols.asJava)
 
-    catalogTable.storage.locationUri.foreach(u => sd.setLocation(u.toString))
+    catalogTable.storage.locationUri.foreach(u => sd.setLocation(u.getPath))
     catalogTable.storage.inputFormat.foreach(sd.setInputFormat)
     catalogTable.storage.outputFormat.foreach(sd.setOutputFormat)
 
@@ -181,7 +181,7 @@ private[hive] case class MetastoreRelation(
       }
       sd.setCols(schema.asJava)
 
-      p.storage.locationUri.foreach(u => sd.setLocation(u.toString))
+      p.storage.locationUri.foreach(u => sd.setLocation(u.getPath))
       p.storage.inputFormat.foreach(sd.setInputFormat)
       p.storage.outputFormat.foreach(sd.setOutputFormat)
 
@@ -249,10 +249,10 @@ private[hive] case class MetastoreRelation(
       .flatMap(_.storage.locationUri)
       .toArray
     if (partLocations.nonEmpty) {
-      partLocations.map(_.toString)
+      partLocations.map(_.getPath)
     } else {
       Array(
-        catalogTable.storage.locationUri.map(_.toString).getOrElse(
+        catalogTable.storage.locationUri.map(_.getPath).getOrElse(
           sys.error(s"Could not get the location of ${catalogTable.qualifiedName}.")))
     }
   }

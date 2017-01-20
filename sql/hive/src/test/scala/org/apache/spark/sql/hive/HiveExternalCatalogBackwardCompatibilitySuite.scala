@@ -167,7 +167,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
     identifier = TableIdentifier("tbl7", Some("test_db")),
     tableType = CatalogTableType.EXTERNAL,
     storage = CatalogStorageFormat.empty.copy(
-      locationUri = Some(new URI(defaultTableURI("tbl7").toString + "-__PLACEHOLDER__")),
+      locationUri = Some(new URI(defaultTableURI("tbl7").getPath + "-__PLACEHOLDER__")),
       properties = Map("path" -> tempDirUri)),
     schema = new StructType(),
     properties = Map(
@@ -191,7 +191,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
     identifier = TableIdentifier("tbl9", Some("test_db")),
     tableType = CatalogTableType.EXTERNAL,
     storage = CatalogStorageFormat.empty.copy(
-      locationUri = Some(new URI(defaultTableURI("tbl9").toString + "-__PLACEHOLDER__")),
+      locationUri = Some(new URI(defaultTableURI("tbl9").getPath + "-__PLACEHOLDER__")),
       properties = Map("path" -> tempDirUri)),
     schema = new StructType(),
     properties = Map("spark.sql.sources.provider" -> "json"))
