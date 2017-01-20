@@ -73,9 +73,7 @@ private[csv] class UnivocityGenerator(
   }
 
   /**
-   * Writes a single InternalRow to CSV using Univocity
-   *
-   * @param row The row to convert
+   * Writes a single InternalRow to CSV using Univocity.
    */
   def write(row: InternalRow): Unit = {
     if (printHeader) {
