@@ -40,12 +40,12 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
-import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListener}
 import org.apache.spark.util.Utils
 
 
@@ -876,6 +876,9 @@ object SparkSession {
         }
         session = new SparkSession(sparkContext)
         options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
+        for (qeListener <- createQueryExecutionListeners(session.sparkContext.getConf)) {
+          session.listenerManager.register(qeListener)
+        }
         defaultSession.set(session)
 
         // Register a successfully instantiated context to the singleton. This should be at the
@@ -891,6 +894,12 @@ object SparkSession {
 
       return session
     }
+  }
+
+  private def createQueryExecutionListeners(conf: SparkConf): Seq[QueryExecutionListener] = {
+    conf.get(SQLConf.QUERY_EXECUTION_LISTENERS)
+      .map(Utils.classForName(_))
+      .map(_.newInstance().asInstanceOf[QueryExecutionListener])
   }
 
   /**

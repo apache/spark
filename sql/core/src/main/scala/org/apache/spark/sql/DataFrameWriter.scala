@@ -26,10 +26,12 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogRelation, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.{OutputParams, QueryExecutionListener}
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
@@ -190,6 +192,33 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
+   * Executes the query and calls the {@link org.apache.spark.sql.util.QueryExecutionListener}
+   * methods.
+   *
+   * @param funcName A identifier for the method executing the query
+   * @param qe the @see [[QueryExecution]] object associated with the
+   *        query
+   * @param outputParams The output parameters useful for query analysis
+   * @param action the function that executes the query after which the listener methods gets
+   *               called.
+   */
+  private def executeAndCallQEListener(
+                                        funcName: String,
+                                        qe: QueryExecution,
+                                        outputParams: OutputParams)(action: => Unit) = {
+    try {
+      val start = System.nanoTime()
+      action
+      val end = System.nanoTime()
+      df.sparkSession.listenerManager.onSuccess(funcName, qe, end - start, Some(outputParams))
+    } catch {
+      case e: Exception =>
+        df.sparkSession.listenerManager.onFailure(funcName, qe, e, Some(outputParams))
+        throw e
+    }
+  }
+
+  /**
    * Saves the content of the `DataFrame` at the specified path.
    *
    * @since 1.4.0
@@ -218,7 +247,17 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       bucketSpec = getBucketSpec,
       options = extraOptions.toMap)
 
-    dataSource.write(mode, df)
+    val destination = source match {
+      case "jdbc" => extraOptions.get("dbtable")
+      case _ => extraOptions.get("path")
+    }
+
+    executeAndCallQEListener(
+      "save",
+      df.queryExecution,
+      OutputParams(source, destination, extraOptions.toMap)) {
+      dataSource.write(mode, df)
+    }
   }
 
   /**
@@ -244,6 +283,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *
    * Because it inserts data to an existing table, format or options will be ignored.
    *
+   * Calls the callback methods of @see[[QueryExecutionListener]] after query execution with
+   * @see[[OutputParams]] having datasourceType set as the string parameter passed to the
+   * @see[[DataFrameWriter#format]] method and destination set as the name of the table into which
+   * data is being inserted into.
+   *
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
@@ -261,13 +305,19 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       )
     }
 
-    df.sparkSession.sessionState.executePlan(
+    val qe = df.sparkSession.sessionState.executePlan(
       InsertIntoTable(
         table = UnresolvedRelation(tableIdent),
         partition = Map.empty[String, Option[String]],
         child = df.logicalPlan,
         overwrite = mode == SaveMode.Overwrite,
-        ifNotExists = false)).toRdd
+        ifNotExists = false))
+    executeAndCallQEListener(
+      "insertInto",
+      qe,
+      new OutputParams(source, Some(tableIdent.unquotedString), extraOptions.toMap)) {
+        qe.toRdd
+    }
   }
 
   private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
@@ -324,7 +374,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def assertNotPartitioned(operation: String): Unit = {
     if (partitioningColumns.isDefined) {
-      throw new AnalysisException( s"'$operation' does not support partitioning")
+      throw new AnalysisException(s"'$operation' does not support partitioning")
     }
   }
 
@@ -359,6 +409,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
    * specific format.
    *
+   * Calls the callback methods of @see[[QueryExecutionListener]] after query execution with a
+   * @see[[OutputParams]] object having datasourceType set as the string parameter passed to the
+   * @see[[DataFrameWriter#format]] and destination set as the name of the table being
+   * written to
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
@@ -428,8 +482,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       partitionColumnNames = partitioningColumns.getOrElse(Nil),
       bucketSpec = getBucketSpec
     )
-    df.sparkSession.sessionState.executePlan(
-      CreateTable(tableDesc, mode, Some(df.logicalPlan))).toRdd
+    val qe = df.sparkSession.sessionState.executePlan(
+      CreateTable(tableDesc, mode, Some(df.logicalPlan)))
+    executeAndCallQEListener(
+      "saveAsTable",
+      qe,
+      new OutputParams(source, Some(tableIdent.unquotedString), extraOptions.toMap)) {
+      qe.toRdd
+    }
   }
 
   /**
@@ -493,6 +553,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * </ul>
+   * Calls the callback methods in @see[[QueryExecutionListener]] methods after query execution with
+   * @see[[OutputParams]] having datasourceType set as string constant "json" and
+   * destination set as the path to which the data is written
    *
    * @since 1.4.0
    */
@@ -514,6 +577,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * shorten names(none, `snappy`, `gzip`, and `lzo`). This will override
    * `spark.sql.parquet.compression.codec`.</li>
    * </ul>
+   * Calls the callback methods in @see[[QueryExecutionListener]] methods after query execution with
+   * @see[[OutputParams]] having datasourceType set as string constant "parquet" and
+   * destination set as the path to which the data is written
    *
    * @since 1.4.0
    */
@@ -534,6 +600,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).
    * This will override `orc.compress`.</li>
    * </ul>
+   * Calls the callback methods in @see[[QueryExecutionListener]] methods after query execution with
+   * @see[[OutputParams]] having datasourceType set as string constant "orc" and
+   * destination set as the path to which the data is written
    *
    * @since 1.5.0
    * @note Currently, this method can only be used after enabling Hive support
@@ -560,6 +629,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
    * </ul>
+   * Calls the callback methods in e@see[[QueryExecutionListener]] methods after query execution
+   * with @see[[OutputParams]] having datasourceType set as string constant "text" and
+   * destination set as the path to which the data is written
    *
    * @since 1.6.0
    */
@@ -599,6 +671,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * </ul>
+   * Calls the callback methods in @see[[QueryExecutionListener]] methods after query execution with
+   * @see[[OutputParams]] having datasourceType set as string constant "csv" and
+   * destination set as the path to which the data is written
    *
    * @since 2.0.0
    */

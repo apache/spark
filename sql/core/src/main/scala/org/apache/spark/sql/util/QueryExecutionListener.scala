@@ -44,12 +44,15 @@ trait QueryExecutionListener {
    * @param qe the QueryExecution object that carries detail information like logical plan,
    *           physical plan, etc.
    * @param durationNs the execution time for this query in nanoseconds.
-   *
-   * @note This can be invoked by multiple different threads.
+   * @param outputParams The output parameters in case the method is invoked as a result of a
+   *                     write operation. In case of a read will be @see[[None]]
    */
   @DeveloperApi
-  def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit
-
+  def onSuccess(
+      funcName: String,
+      qe: QueryExecution,
+      durationNs: Long,
+      outputParams: Option[OutputParams]): Unit
   /**
    * A callback function that will be called when a query execution failed.
    *
@@ -57,14 +60,33 @@ trait QueryExecutionListener {
    * @param qe the QueryExecution object that carries detail information like logical plan,
    *           physical plan, etc.
    * @param exception the exception that failed this query.
+   * @param outputParams The output parameters in case the method is invoked as a result of a
+   *                     write operation. In case of a read will be @see[[None]]
    *
    * @note This can be invoked by multiple different threads.
    */
   @DeveloperApi
-  def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit
+  def onFailure(
+      funcName: String,
+      qe: QueryExecution,
+      exception: Exception,
+      outputParams: Option[OutputParams]): Unit
 }
 
-
+/**
+ * Contains extra information useful for query analysis passed on from the methods in
+ * @see[[org.apache.spark.sql.DataFrameWriter]] while writing to a datasource
+ * @param datasourceType type of data source written to like csv, parquet, json, hive, jdbc etc.
+ * @param destination path or table name written to
+ * @param options the map containing the output options for the underlying datasource
+ *                specified by using the @see [[org.apache.spark.sql.DataFrameWriter#option]] method
+ * @param writeParams will contain any extra information that the write method wants to provide
+ */
+case class OutputParams(
+    datasourceType: String,
+    destination: Option[String],
+    options: Map[String, String],
+    writeParams: Map[String, String] = Map.empty)
 /**
  * :: Experimental ::
  *
@@ -98,18 +120,26 @@ class ExecutionListenerManager private[sql] () extends Logging {
     listeners.clear()
   }
 
-  private[sql] def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+  private[sql] def onSuccess(
+      funcName: String,
+      qe: QueryExecution,
+      duration: Long,
+      outputParams: Option[OutputParams] = None): Unit = {
     readLock {
       withErrorHandling { listener =>
-        listener.onSuccess(funcName, qe, duration)
+        listener.onSuccess(funcName, qe, duration, outputParams)
       }
     }
   }
 
-  private[sql] def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+  private[sql] def onFailure(
+      funcName: String,
+      qe: QueryExecution,
+      exception: Exception,
+      outputParams: Option[OutputParams] = None): Unit = {
     readLock {
       withErrorHandling { listener =>
-        listener.onFailure(funcName, qe, exception)
+        listener.onFailure(funcName, qe, exception, outputParams)
       }
     }
   }

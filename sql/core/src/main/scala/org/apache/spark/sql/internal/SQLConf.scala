@@ -655,6 +655,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val QUERY_EXECUTION_LISTENERS =
+    ConfigBuilder("spark.sql.queryExecutionListeners")
+      .doc("QueryExecutionListeners to be attached to the SparkSession")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }

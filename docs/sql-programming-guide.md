@@ -1256,8 +1256,9 @@ Configuration of in-memory caching can be done using the `setConf` method on `Sp
 
 ## Other Configuration Options
 
-The following options can also be used to tune the performance of query execution. It is possible
-that these options will be deprecated in future release as more optimizations are performed automatically.
+The following options can also be used to tune the performance of query execution and attaching
+query execution listeners. It is possible that these options will be deprecated in future release as
+more optimizations are performed automatically.
 
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -1304,6 +1305,16 @@ that these options will be deprecated in future release as more optimizations ar
       Configures the number of partitions to use when shuffling data for joins or aggregations.
     </td>
   </tr>
+  <tr>
+      <td><code>spark.sql.queryExecutionListeners</code></td>
+      <td></td>
+      <td>
+        A comma-separated list of classes that implement QueryExecutionListener. When creating a SparkSession,
+        instances of these listeners will be added to it. These classes needs to have a zero-argument
+        constructor. If the specified class can't be found or the class specified doesn't have a valid
+        constructor the SparkSession creation will fail with an exception.
+      </td>
+    </tr>
 </table>
 
 # Distributed SQL Engine
