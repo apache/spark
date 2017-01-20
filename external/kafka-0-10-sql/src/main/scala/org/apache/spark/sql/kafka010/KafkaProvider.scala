@@ -18,6 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.util.UUID
 
 import scala.collection.JavaConverters._
 
@@ -25,49 +26,140 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.execution.streaming.Source
 import org.apache.spark.sql.kafka010.KafkaOffsetReader.{AssignStrategy, SubscribePatternStrategy, SubscribeStrategy}
+import org.apache.spark.sql.sources._
+import org.apache.spark.sql.types.StructType
 
-private[kafka010] class KafkaConfigOptions(parameters: Map[String, String], uniqueGroupId: String)
-  extends Logging {
-  import KafkaConfigOptions._
-  validateOptions(parameters)
+/**
+ * The provider class for the [[KafkaSource]]. This provider is designed such that it throws
+ * IllegalArgumentException when the Kafka Dataset is created, so that it can catch
+ * missing options even before the query is started.
+ */
+private[kafka010] class KafkaProvider extends DataSourceRegister with StreamSourceProvider
+  with RelationProvider with Logging {
+  import KafkaProvider._
+
   private val deserClassName = classOf[ByteArrayDeserializer].getName
 
-  private val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
-  private val specifiedKafkaParams =
-    parameters
-      .keySet
-      .filter(_.toLowerCase.startsWith("kafka."))
-      .map { k => k.drop(6).toString -> parameters(k) }
-      .toMap
+  override def shortName(): String = "kafka"
 
-  val startingStreamOffsets =
-    caseInsensitiveParams.get(STARTING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
-      case Some("latest") => LatestOffsets
-      case Some("earliest") => EarliestOffsets
-      case Some(json) => SpecificOffsets(JsonUtils.partitionOffsets(json))
-      case None => LatestOffsets
-    }
+  /**
+   * Returns the name and schema of the source. In addition, it also verifies whether the options
+   * are correct and sufficient to create the [[KafkaSource]] when the query is started.
+   */
+  override def sourceSchema(
+      sqlContext: SQLContext,
+      schema: Option[StructType],
+      providerName: String,
+      parameters: Map[String, String]): (String, StructType) = {
+    validateOptions(parameters)
+    require(schema.isEmpty, "Kafka source has a fixed schema and cannot be set with a custom one")
+    (shortName(), KafkaOffsetReader.kafkaSchema)
+  }
 
-  val startingRelationOffsets =
-    caseInsensitiveParams.get(STARTING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
-      case Some("latest") =>
-        throw new IllegalArgumentException("Starting relation offset can't be latest.")
-      case Some("earliest") => EarliestOffsets
-      case Some(json) => SpecificOffsets(JsonUtils.partitionOffsets(json))
-      case None => EarliestOffsets
-    }
+  override def createSource(
+      sqlContext: SQLContext,
+      metadataPath: String,
+      schema: Option[StructType],
+      providerName: String,
+      parameters: Map[String, String]): Source = {
+    validateOptions(parameters)
+    // Each running query should use its own group id. Otherwise, the query may be only assigned
+    // partial data since Kafka will assign partitions to multiple consumers having the same group
+    // id. Hence, we should generate a unique id for each query.
+    val uniqueGroupId = s"spark-kafka-source-${UUID.randomUUID}-${metadataPath.hashCode}"
 
-  val endingRelationOffsets =
-    caseInsensitiveParams.get(ENDING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
-      case Some("latest") => LatestOffsets
-      case Some("earliest") =>
-        throw new IllegalArgumentException("Ending relation offset can't be earliest.")
-      case Some(json) => SpecificOffsets(JsonUtils.partitionOffsets(json))
-      case None => LatestOffsets
-    }
+    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
+    val specifiedKafkaParams =
+      parameters
+        .keySet
+        .filter(_.toLowerCase.startsWith("kafka."))
+        .map { k => k.drop(6).toString -> parameters(k) }
+        .toMap
 
-  val kafkaParamsForDriver =
+    val startingStreamOffsets =
+      caseInsensitiveParams.get(STARTING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
+        case Some("latest") => LatestOffsets
+        case Some("earliest") => EarliestOffsets
+        case Some(json) => SpecificOffsets(JsonUtils.partitionOffsets(json))
+        case None => LatestOffsets
+      }
+
+    val kafkaOffsetReader = new KafkaOffsetReader(
+      strategy(caseInsensitiveParams),
+      kafkaParamsForDriver(specifiedKafkaParams),
+      parameters,
+      driverGroupIdPrefix = s"$uniqueGroupId-driver")
+
+    new KafkaSource(
+      sqlContext,
+      kafkaOffsetReader,
+      kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
+      parameters,
+      metadataPath,
+      startingStreamOffsets,
+      failOnDataLoss(caseInsensitiveParams))
+  }
+
+  /**
+   * Returns a new base relation with the given parameters.
+   *
+   * @note The parameters' keywords are case insensitive and this insensitivity is enforced
+   *       by the Map that is passed to the function.
+   */
+  override def createRelation(
+    sqlContext: SQLContext,
+    parameters: Map[String, String]): BaseRelation = {
+    validateOptions(parameters)
+    // Each running query should use its own group id. Otherwise, the query may be only assigned
+    // partial data since Kafka will assign partitions to multiple consumers having the same group
+    // id. Hence, we should generate a unique id for each query.
+    val uniqueGroupId = s"spark-kafka-relation-${UUID.randomUUID}"
+    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
+    val specifiedKafkaParams =
+      parameters
+        .keySet
+        .filter(_.toLowerCase.startsWith("kafka."))
+        .map { k => k.drop(6).toString -> parameters(k) }
+        .toMap
+
+    val startingRelationOffsets =
+      caseInsensitiveParams.get(STARTING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
+        case Some("latest") =>
+          throw new IllegalArgumentException("Starting relation offset can't be latest.")
+        case Some("earliest") => EarliestOffsets
+        case Some(json) => SpecificOffsets(JsonUtils.partitionOffsets(json))
+        case None => EarliestOffsets
+      }
+
+    val endingRelationOffsets =
+      caseInsensitiveParams.get(ENDING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
+        case Some("latest") => LatestOffsets
+        case Some("earliest") =>
+          throw new IllegalArgumentException("Ending relation offset can't be earliest.")
+        case Some(json) => SpecificOffsets(JsonUtils.partitionOffsets(json))
+        case None => LatestOffsets
+      }
+
+    val kafkaOffsetReader = new KafkaOffsetReader(
+      strategy(caseInsensitiveParams),
+      kafkaParamsForDriver(specifiedKafkaParams),
+      parameters,
+      driverGroupIdPrefix = s"$uniqueGroupId-driver")
+
+    new KafkaRelation(
+      sqlContext,
+      kafkaOffsetReader,
+      kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
+      parameters,
+      failOnDataLoss(caseInsensitiveParams),
+      startingRelationOffsets,
+      endingRelationOffsets)
+  }
+
+  private def kafkaParamsForDriver(specifiedKafkaParams: Map[String, String]) =
     ConfigUpdater("source", specifiedKafkaParams)
       .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
       .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
@@ -87,7 +179,8 @@ private[kafka010] class KafkaConfigOptions(parameters: Map[String, String], uniq
       .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
       .build()
 
-  val kafkaParamsForExecutors =
+  private def kafkaParamsForExecutors(
+    specifiedKafkaParams: Map[String, String], uniqueGroupId: String) =
     ConfigUpdater("executor", specifiedKafkaParams)
       .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
       .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
@@ -106,7 +199,8 @@ private[kafka010] class KafkaConfigOptions(parameters: Map[String, String], uniq
       .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
       .build()
 
-  val strategy = caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
+  private def strategy(caseInsensitiveParams: Map[String, String]) =
+    caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
     case ("assign", value) =>
       AssignStrategy(JsonUtils.partitions(value))
     case ("subscribe", value) =>
@@ -119,8 +213,10 @@ private[kafka010] class KafkaConfigOptions(parameters: Map[String, String], uniq
       throw new IllegalArgumentException("Unknown option")
   }
 
-  val failOnDataLoss =
+  private def failOnDataLoss(caseInsensitiveParams: Map[String, String]) =
     caseInsensitiveParams.getOrElse(FAIL_ON_DATA_LOSS_OPTION_KEY, "true").toBoolean
+
+
   private def validateOptions(parameters: Map[String, String]): Unit = {
     // Validate source options
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
@@ -240,7 +336,7 @@ private[kafka010] class KafkaConfigOptions(parameters: Map[String, String], uniq
   }
 }
 
-private[kafka010] object KafkaConfigOptions {
+private[kafka010] object KafkaProvider {
   private val STRATEGY_OPTION_KEYS = Set("subscribe", "subscribepattern", "assign")
   private val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
   private val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
