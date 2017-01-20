@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{PhysicalOptimizer, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.streaming.OutputMode
 
@@ -61,7 +61,7 @@ class IncrementalExecution(
    * with the desired literal
    */
   override lazy val optimizedPlan: LogicalPlan = {
-    sparkSession.sessionState.optimizer.execute(withCachedData) transformAllExpressions {
+    sparkSession.sessionState.logicalOptimizer.execute(withCachedData) transformAllExpressions {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
         logInfo(s"Current batch timestamp = $timestamp")
         ts.toLiteral
@@ -112,10 +112,12 @@ class IncrementalExecution(
     }
   }
 
-  override lazy val optimizer: RuleExecutor[SparkPlan] = new PhysicalOptimizer(sparkSession) {
+  private val streamOptimizer = new PhysicalOptimizer(sparkSession) {
 
     override def batches: Seq[Batch] = Batch("AddState", Once, state) +: super.batches
   }
+
+  override lazy val executedPlan: SparkPlan = streamOptimizer.execute(sparkPlan)
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }

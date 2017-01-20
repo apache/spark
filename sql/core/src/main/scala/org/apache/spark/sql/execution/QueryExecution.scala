@@ -26,7 +26,6 @@ import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
@@ -75,7 +74,8 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     sparkSession.sharedState.cacheManager.useCachedData(analyzed)
   }
 
-  lazy val optimizedPlan: LogicalPlan = sparkSession.sessionState.optimizer.execute(withCachedData)
+  lazy val optimizedPlan: LogicalPlan =
+    sparkSession.sessionState.logicalOptimizer.execute(withCachedData)
 
   lazy val sparkPlan: SparkPlan = {
     SparkSession.setActiveSession(sparkSession)
@@ -84,14 +84,9 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     planner.plan(ReturnAnswer(optimizedPlan)).next()
   }
 
-  /**
-   * Physical query plan optimizer.
-   */
-  lazy val optimizer: RuleExecutor[SparkPlan] = new PhysicalOptimizer(sparkSession)
-
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = optimizer.execute(sparkPlan)
+  lazy val executedPlan: SparkPlan = sparkSession.sessionState.physicalOptimizer.execute(sparkPlan)
 
   /** Internal version of the RDD. Avoids copies and has no schema */
   lazy val toRdd: RDD[InternalRow] = executedPlan.execute()

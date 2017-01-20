@@ -79,7 +79,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
   test("Catalyst optimization passes are modifiable at runtime") {
     val sqlContext = SQLContext.getOrCreate(sc)
     sqlContext.experimental.extraOptimizations = Seq(DummyRule)
-    assert(sqlContext.sessionState.optimizer.batches.flatMap(_.rules).contains(DummyRule))
+    assert(sqlContext.sessionState.logicalOptimizer.batches.flatMap(_.rules).contains(DummyRule))
   }
 
   test("get all tables") {
