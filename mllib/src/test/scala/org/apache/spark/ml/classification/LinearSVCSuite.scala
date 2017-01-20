@@ -154,19 +154,19 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       label <- factor(data$V1)
       features <- as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
       svm_model <- svm(features, label, type='C', kernel='linear', cost=10, scale=F, tolerance=1e-4)
-      w <- t(svm_model$coefs) %*% svm_model$SV
+      w <- -t(svm_model$coefs) %*% svm_model$SV
       w
-      -svm_model$rho
+      svm_model$rho
 
       > w
-             data.V2   data.V3   data.V4   data.V5
-      [1,] -7.310338 -14.89741 -22.21005 -29.83508
-      > -svm_model$rho
-      [1] -7.440177
+            data.V2  data.V3  data.V4  data.V5
+      [1,] 7.310338 14.89741 22.21005 29.83508
+      > svm_model$rho
+      [1] 7.440177
 
      */
-    val coefficientsR = Vectors.dense(7.310475, 14.89742, 22.21019, 29.83495)
-    val interceptR = 7.440296
+    val coefficientsR = Vectors.dense(7.310338, 14.89741, 22.21005, 29.83508)
+    val interceptR = 7.440177
     assert(model1.intercept ~== interceptR relTol 1E-2)
     assert(model1.coefficients ~== coefficientsR relTol 1E-2)
 
