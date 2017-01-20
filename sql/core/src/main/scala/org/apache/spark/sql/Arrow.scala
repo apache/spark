@@ -41,7 +41,7 @@ object Arrow {
       case LongType => new ArrowType.Int(8 * LongType.defaultSize, true)
       case FloatType => new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE)
       case DoubleType => new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)
-      case ByteType => new ArrowType.Int(8, false)
+      case ByteType => new ArrowType.Int(8, true)
       case StringType => ArrowType.Utf8.INSTANCE
       case _ => throw new UnsupportedOperationException(s"Unsupported data type: ${dataType}")
     }

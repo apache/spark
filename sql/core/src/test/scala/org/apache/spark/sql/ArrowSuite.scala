@@ -17,6 +17,9 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.sql.{Date, Timestamp}
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
@@ -62,9 +65,19 @@ class ArrowSuite extends SharedSQLContext {
     collectAndValidate(doubleData, "test-data/arrow/doubleData-double_precision-nullable.json")
   }
 
+  test("boolean type conversion") {
+    val boolData = Seq(true, true, false, true).toDF("a_bool")
+    collectAndValidate(boolData, "test-data/arrow/boolData.json")
+  }
+
+  test("byte type conversion") {
+    val byteData = Seq(1.toByte, (-1).toByte, 64.toByte, Byte.MaxValue).toDF("a_byte")
+    collectAndValidate(byteData, "test-data/arrow/byteData.json")
+  }
+
   test("mixed standard type nullable conversion") {
-    val mixedData = shortData.join(intData, "i").join(longData, "i").join(floatData, "i")
-      .join(doubleData, "i").sort("i")
+    val mixedData = Seq(shortData, intData, longData, floatData, doubleData)
+      .reduce((a, b) => a.join(b, "i")).sort("i")
     collectAndValidate(mixedData, "test-data/arrow/mixedData-standard-nullable.json")
   }
 
@@ -77,7 +90,16 @@ class ArrowSuite extends SharedSQLContext {
     collectAndValidate(lowerCaseData, "test-data/arrow/lowercase-strings.json")
   }
 
-  test("time and date conversion") { }
+  ignore("time and date conversion") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+    val d1 = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val d2 = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15").getTime)
+    val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10").getTime)
+    val dateTimeData = Seq((d1, sdf.format(d1), ts1), (d2, sdf.format(d2), ts2))
+      .toDF("a_date", "b_string", "c_timestamp")
+    collectAndValidate(dateTimeData, "test-data/arrow/datetimeData-strings.json")
+  }
 
   test("nested type conversion") { }
 
@@ -92,11 +114,6 @@ class ArrowSuite extends SharedSQLContext {
   }
 
   test("floating-point NaN") { }
-
-  // Arrow currently supports single or double precision
-  ignore("arbitrary precision floating point") {
-    collectAndValidate(decimalData, "test-data/arrow/decimalData-BigDecimal.json")
-  }
 
   test("other null conversion") { }
 
@@ -115,7 +132,13 @@ class ArrowSuite extends SharedSQLContext {
     assert(emptyBatch.getLength == 0)
   }
 
-  test("negative tests") {
+  test("unsupported types") {
+    intercept[UnsupportedOperationException] {
+      collectAndValidate(decimalData, "test-data/arrow/decimalData-BigDecimal.json")
+    }
+  }
+
+  test("test Arrow Validator") {
 
     // Missing test file
     intercept[NullPointerException] {

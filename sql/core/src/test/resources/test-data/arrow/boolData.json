@@ -1,0 +1,32 @@
+{
+    "schema": {
+        "fields": [
+            {
+                "name": "a_bool",
+                "type": {"name": "bool"},
+                "nullable": false,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 8}
+                    ]
+                }
+            }
+        ]
+    },
+
+    "batches": [
+        {
+            "count": 4,
+            "columns": [
+                {
+                    "name": "a_bool",
+                    "count": 4,
+                    "VALIDITY": [1, 1, 1, 1],
+                    "DATA": [true, true, false, true]
+                }
+            ]
+        }
+    ]
+}
