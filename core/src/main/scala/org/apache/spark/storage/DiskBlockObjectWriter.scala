@@ -128,16 +128,19 @@ private[spark] class DiskBlockObjectWriter(
    */
   private def closeResources(): Unit = {
     if (initialized) {
-      mcs.manualClose()
-      channel = null
-      mcs = null
-      bs = null
-      fos = null
-      ts = null
-      objOut = null
-      initialized = false
-      streamOpen = false
-      hasBeenClosed = true
+      Utils.tryWithSafeFinally {
+        mcs.manualClose()
+      } {
+        channel = null
+        mcs = null
+        bs = null
+        fos = null
+        ts = null
+        objOut = null
+        initialized = false
+        streamOpen = false
+        hasBeenClosed = true
+      }
     }
   }
 
@@ -206,18 +209,22 @@ private[spark] class DiskBlockObjectWriter(
         streamOpen = false
         closeResources()
       }
+   } catch {
+      case e: Exception =>
+        logError("Uncaught exception while closing file " + file, e)
+    }
 
-      val truncateStream = new FileOutputStream(file, true)
-      try {
-        truncateStream.getChannel.truncate(committedPosition)
-        file
-      } finally {
-        truncateStream.close()
-      }
+    var truncateStream: FileOutputStream = null
+    try {
+      truncateStream = new FileOutputStream(file, true)
+      truncateStream.getChannel.truncate(committedPosition)
+      file
     } catch {
       case e: Exception =>
         logError("Uncaught exception while reverting partial writes to file " + file, e)
         file
+    } finally {
+      truncateStream.close()
     }
   }
 
