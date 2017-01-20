@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTypes}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{AggregateEstimation, ProjectEstimation}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{AggregateEstimation, EstimationUtils, ProjectEstimation}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -541,7 +541,10 @@ case class Aggregate(
   override def computeStats(conf: CatalystConf): Statistics = {
     def simpleEstimation: Statistics = {
       if (groupingExpressions.isEmpty) {
-        super.computeStats(conf).copy(sizeInBytes = 1)
+        Statistics(
+          sizeInBytes = EstimationUtils.getOutputSize(output, outputRowCount = 1),
+          rowCount = Some(1),
+          isBroadcastable = child.stats(conf).isBroadcastable)
       } else {
         super.computeStats(conf)
       }
