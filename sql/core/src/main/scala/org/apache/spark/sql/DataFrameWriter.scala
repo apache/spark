@@ -598,6 +598,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * <li>`encoding` (default `UTF-8`): encodes the CSV files by the given encoding
+   * type.</li>
    * </ul>
    *
    * @since 2.0.0

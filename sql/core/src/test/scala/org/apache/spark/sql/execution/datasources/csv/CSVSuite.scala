@@ -905,4 +905,23 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       checkAnswer(df, Row(1, null))
     }
   }
+
+  test("save data with gb18030") {
+    withTempPath { path =>
+      // scalastyle:off
+      val df = Seq(("1", "中文")).toDF("num", "lanaguage")
+      // scalastyle:on
+      df.write
+        .option("header", "true")
+        .option("encoding", "GB18030")
+        .csv(path.getAbsolutePath)
+
+      val readBack = spark.read
+        .option("header", "true")
+        .option("encoding", "GB18030")
+        .csv(path.getAbsolutePath)
+
+      checkAnswer(df, readBack)
+    }
+  }
 }
