@@ -71,15 +71,6 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         options = table.storage.properties ++ pathOption,
         catalogTable = Some(tableWithDefaultOptions)).resolveRelation()
 
-    dataSource match {
-      case fs: HadoopFsRelation =>
-        if (table.tableType == CatalogTableType.EXTERNAL && fs.location.rootPaths.isEmpty) {
-          throw new AnalysisException(
-            "Cannot create a file-based external data source table without path")
-        }
-      case _ =>
-    }
-
     val partitionColumnNames = if (table.schema.nonEmpty) {
       table.partitionColumnNames
     } else {
@@ -199,7 +190,7 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.write(mode, Dataset.ofRows(session, query))
+      dataSource.writeAndRead(mode, Dataset.ofRows(session, query))
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)

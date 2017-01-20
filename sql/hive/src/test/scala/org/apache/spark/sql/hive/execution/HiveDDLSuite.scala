@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
@@ -247,6 +248,16 @@ class HiveDDLSuite
     }
   }
 
+  test("SPARK-19129: drop partition with a empty string will drop the whole table") {
+    val df = spark.createDataFrame(Seq((0, "a"), (1, "b"))).toDF("partCol1", "name")
+    df.write.mode("overwrite").partitionBy("partCol1").saveAsTable("partitionedTable")
+    val e = intercept[AnalysisException] {
+      spark.sql("alter table partitionedTable drop partition(partCol1='')")
+    }.getMessage
+    assert(e.contains("Partition spec is invalid. The spec ([partCol1=]) contains an empty " +
+      "partition column value"))
+  }
+
   test("add/drop partitions - external table") {
     val catalog = spark.sessionState.catalog
     withTempDir { tmpDir =>
@@ -370,28 +381,30 @@ class HiveDDLSuite
       spark.range(10).write.saveAsTable(tabName)
       val viewName = "view1"
       withView(viewName) {
-        val catalog = spark.sessionState.catalog
+        def checkProperties(expected: Map[String, String]): Boolean = {
+          val properties = spark.sessionState.catalog.getTableMetadata(TableIdentifier(viewName))
+            .properties
+          properties.filterNot { case (key, value) =>
+            Seq("transient_lastDdlTime", CatalogTable.VIEW_DEFAULT_DATABASE).contains(key) ||
+              key.startsWith(CatalogTable.VIEW_QUERY_OUTPUT_PREFIX)
+          } == expected
+        }
         sql(s"CREATE VIEW $viewName AS SELECT * FROM $tabName")
 
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map())
+        checkProperties(Map())
         sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "an"))
+        checkProperties(Map("p" -> "an"))
 
         // no exception or message will be issued if we set it again
         sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "an"))
+        checkProperties(Map("p" -> "an"))
 
         // the value will be updated if we set the same key to a different value
         sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'b')")
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "b"))
+        checkProperties(Map("p" -> "b"))
 
         sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
-        assert(catalog.getTableMetadata(TableIdentifier(viewName))
-          .properties.filter(_._1 != "transient_lastDdlTime") == Map())
+        checkProperties(Map())
 
         val message = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
@@ -644,10 +657,7 @@ class HiveDDLSuite
           Seq(
             Row("# View Information", "", ""),
             Row("View Original Text:", "SELECT * FROM tbl", ""),
-            Row("View Expanded Text:",
-              "SELECT `gen_attr_0` AS `a` FROM (SELECT `gen_attr_0` FROM " +
-              "(SELECT `a` AS `gen_attr_0` FROM `default`.`tbl`) AS gen_subquery_0) AS tbl",
-              "")
+            Row("View Expanded Text:", "SELECT * FROM tbl", "")
           )
         ))
       }
@@ -789,7 +799,7 @@ class HiveDDLSuite
 
   test("Create Cataloged Table As Select - Drop Table After Runtime Exception") {
     withTable("tab") {
-      intercept[RuntimeException] {
+      intercept[SparkException] {
         sql(
           """
             |CREATE TABLE tab
@@ -1263,7 +1273,7 @@ class HiveDDLSuite
         sql("INSERT INTO t SELECT 1")
         checkAnswer(spark.table("t"), Row(1))
         // Check if this is compressed as ZLIB.
-        val maybeOrcFile = path.listFiles().find(_.getName.endsWith("part-00000"))
+        val maybeOrcFile = path.listFiles().find(!_.getName.endsWith(".crc"))
         assert(maybeOrcFile.isDefined)
         val orcFilePath = maybeOrcFile.get.toPath.toString
         val expectedCompressionKind =
@@ -1314,7 +1324,24 @@ class HiveDDLSuite
         .write.format("hive").option("fileFormat", "avro").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a"))
 
-      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      Seq("c" -> 1).toDF("i", "j").write.format("hive")
+        .mode(SaveMode.Overwrite).option("fileFormat", "parquet").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row("c", 1))
+
+      var table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      assert(DDLUtils.isHiveTable(table))
+      assert(table.storage.inputFormat ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
+      assert(table.storage.outputFormat ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+      assert(table.storage.serde ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+
+      Seq(9 -> "x").toDF("i", "j")
+        .write.format("hive").mode(SaveMode.Overwrite).option("fileFormat", "avro").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row(9, "x"))
+
+      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
       assert(DDLUtils.isHiveTable(table))
       assert(table.storage.inputFormat ==
         Some("org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat"))
@@ -1324,7 +1351,7 @@ class HiveDDLSuite
         Some("org.apache.hadoop.hive.serde2.avro.AvroSerDe"))
 
       sql("INSERT INTO t SELECT 2, 'b'")
-      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Nil)
+      checkAnswer(spark.table("t"), Row(9, "x") :: Row(2, "b") :: Nil)
 
       val e = intercept[AnalysisException] {
         Seq(1 -> "a").toDF("i", "j").write.format("hive").partitionBy("i").saveAsTable("t2")
@@ -1340,8 +1367,7 @@ class HiveDDLSuite
       val e3 = intercept[AnalysisException] {
         spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
       }
-      assert(e3.message.contains(
-        "CTAS for hive serde tables does not support append or overwrite semantics"))
+      assert(e3.message.contains("Cannot overwrite table default.t that is also being read from"))
     }
   }
 

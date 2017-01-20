@@ -132,6 +132,26 @@ test_that("spark.kmeans", {
   expect_true(summary2$is.loaded)
 
   unlink(modelPath)
+
+  # Test Kmeans on dataset that is sensitive to seed value
+  col1 <- c(1, 2, 3, 4, 0, 1, 2, 3, 4, 0)
+  col2 <- c(1, 2, 3, 4, 0, 1, 2, 3, 4, 0)
+  col3 <- c(1, 2, 3, 4, 0, 1, 2, 3, 4, 0)
+  cols <- as.data.frame(cbind(col1, col2, col3))
+  df <- createDataFrame(cols)
+
+  model1 <- spark.kmeans(data = df, ~ ., k = 5, maxIter = 10,
+                         initMode = "random", seed = 1, tol = 1E-5)
+  model2 <- spark.kmeans(data = df, ~ ., k = 5, maxIter = 10,
+                         initMode = "random", seed = 22222, tol = 1E-5)
+
+  fitted.model1 <- fitted(model1)
+  fitted.model2 <- fitted(model2)
+  # The predicted clusters are different
+  expect_equal(sort(collect(distinct(select(fitted.model1, "prediction")))$prediction),
+             c(0, 1, 2, 3))
+  expect_equal(sort(collect(distinct(select(fitted.model2, "prediction")))$prediction),
+             c(0, 1, 2))
 })
 
 test_that("spark.lda with libsvm", {
@@ -146,12 +166,16 @@ test_that("spark.lda with libsvm", {
   topics <- stats$topicTopTerms
   weights <- stats$topicTopTermsWeights
   vocabulary <- stats$vocabulary
+  trainingLogLikelihood <- stats$trainingLogLikelihood
+  logPrior <- stats$logPrior
 
-  expect_false(isDistributed)
+  expect_true(isDistributed)
   expect_true(logLikelihood <= 0 & is.finite(logLikelihood))
   expect_true(logPerplexity >= 0 & is.finite(logPerplexity))
   expect_equal(vocabSize, 11)
   expect_true(is.null(vocabulary))
+  expect_true(trainingLogLikelihood <= 0 & !is.na(trainingLogLikelihood))
+  expect_true(logPrior <= 0 & !is.na(logPrior))
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-lda", fileext = ".tmp")
@@ -161,11 +185,13 @@ test_that("spark.lda with libsvm", {
   model2 <- read.ml(modelPath)
   stats2 <- summary(model2)
 
-  expect_false(stats2$isDistributed)
+  expect_true(stats2$isDistributed)
   expect_equal(logLikelihood, stats2$logLikelihood)
   expect_equal(logPerplexity, stats2$logPerplexity)
   expect_equal(vocabSize, stats2$vocabSize)
   expect_equal(vocabulary, stats2$vocabulary)
+  expect_equal(trainingLogLikelihood, stats2$trainingLogLikelihood)
+  expect_equal(logPrior, stats2$logPrior)
 
   unlink(modelPath)
 })
@@ -182,12 +208,16 @@ test_that("spark.lda with text input", {
   topics <- stats$topicTopTerms
   weights <- stats$topicTopTermsWeights
   vocabulary <- stats$vocabulary
+  trainingLogLikelihood <- stats$trainingLogLikelihood
+  logPrior <- stats$logPrior
 
   expect_false(isDistributed)
   expect_true(logLikelihood <= 0 & is.finite(logLikelihood))
   expect_true(logPerplexity >= 0 & is.finite(logPerplexity))
   expect_equal(vocabSize, 10)
   expect_true(setequal(stats$vocabulary, c("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")))
+  expect_true(is.na(trainingLogLikelihood))
+  expect_true(is.na(logPrior))
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-lda-text", fileext = ".tmp")
@@ -202,6 +232,8 @@ test_that("spark.lda with text input", {
   expect_equal(logPerplexity, stats2$logPerplexity)
   expect_equal(vocabSize, stats2$vocabSize)
   expect_true(all.equal(vocabulary, stats2$vocabulary))
+  expect_true(is.na(stats2$trainingLogLikelihood))
+  expect_true(is.na(stats2$logPrior))
 
   unlink(modelPath)
 })
