@@ -64,7 +64,7 @@ object MLTestingUtils extends SparkFunSuite {
     actuals.foreach(actual => check(expected, actual))
 
     val dfWithStringLabels = spark.createDataFrame(Seq(
-      ("0", 1, Vectors.dense(0, 2, 3), 0.0)
+      ("1", 1, Vectors.dense(0, 2, 3), 0.0)
     )).toDF("label", "weight", "features", "censor")
     val thrown = intercept[IllegalArgumentException] {
       estimator.fit(dfWithStringLabels)
@@ -156,7 +156,6 @@ object MLTestingUtils extends SparkFunSuite {
       featuresColName: String = "features",
       censorColName: String = "censor"): Map[NumericType, DataFrame] = {
     val df = spark.createDataFrame(Seq(
-      (0, Vectors.dense(0)),
       (1, Vectors.dense(1)),
       (2, Vectors.dense(2)),
       (3, Vectors.dense(3)),
