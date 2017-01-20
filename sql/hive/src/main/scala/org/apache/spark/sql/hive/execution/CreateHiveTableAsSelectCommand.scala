@@ -20,8 +20,8 @@ package org.apache.spark.sql.hive.execution
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SimpleCatalogRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.hive.MetastoreRelation
 
@@ -73,7 +73,9 @@ case class CreateHiveTableAsSelectCommand(
 
       // Get the Metastore Relation
       sparkSession.sessionState.catalog.lookupRelation(tableIdentifier) match {
-        case r: MetastoreRelation => r
+        case SubqueryAlias(_, r: SimpleCatalogRelation, _) =>
+          val tableMeta = r.metadata
+          MetastoreRelation(tableMeta.database, tableMeta.identifier.table)(tableMeta, sparkSession)
       }
     }
     // TODO ideally, we should get the output data ready first and then
