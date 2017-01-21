@@ -431,6 +431,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     }
   }
 
+  /**
+   * Remove at least (maxRetained / 10) items to reduce friction.
+   */
   def removedCount(dataSize: Int, retainedSize: Int): Int = {
     math.max(retainedSize / 10, dataSize - retainedSize)
   }
