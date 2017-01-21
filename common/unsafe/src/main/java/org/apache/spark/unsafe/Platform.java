@@ -49,8 +49,6 @@ public final class Platform {
 
   private static final boolean unaligned;
 
-  private static final DoubleAccessFunctor doubleAccessFunc;
-
   static {
     boolean _unaligned;
     // use reflection to access unaligned field
@@ -126,11 +124,11 @@ public final class Platform {
   }
 
   public static double getDouble(Object object, long offset) {
-    return doubleAccessFunc.getDouble(_UNSAFE, object, offset);
+    return Double.longBitsToDouble(_UNSAFE.getLong(object, offset));
   }
 
   public static void putDouble(Object object, long offset, double value) {
-    doubleAccessFunc.putDouble(_UNSAFE, object, offset, value);
+    _UNSAFE.putLong(object, offset, Double.doubleToRawLongBits(value));
   }
 
   public static Object getObjectVolatile(Object object, long offset) {
@@ -251,18 +249,6 @@ public final class Platform {
       LONG_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(long[].class);
       FLOAT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(float[].class);
       DOUBLE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(double[].class);
-
-      // determine whether double access should be aligned.
-      String arch = System.getProperty("os.arch", "");
-      if (arch.matches("^(arm|arm32)")) {
-        logger.info(
-            "Host platform '{}' requires aligned double access. "+
-            "Using aligned double access method.",
-            arch);
-        doubleAccessFunc = new DoubleAccessBuffered();
-      } else {
-        doubleAccessFunc = new DoubleAccessDirect();
-      }
     } else {
       BOOLEAN_ARRAY_OFFSET = 0;
       BYTE_ARRAY_OFFSET = 0;
