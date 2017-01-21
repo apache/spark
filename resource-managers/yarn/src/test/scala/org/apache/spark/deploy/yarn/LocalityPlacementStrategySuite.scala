@@ -19,9 +19,11 @@ package org.apache.spark.deploy.yarn
 
 import scala.collection.mutable.{HashMap, HashSet, Set}
 
-import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic
+import org.apache.hadoop.net.DNSToSwitchMapping
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -49,18 +51,22 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
   }
 
   private def runTest(): Unit = {
+    val yarnConf = new YarnConfiguration()
+    yarnConf.setClass(
+      CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
+      classOf[MockResolver], classOf[DNSToSwitchMapping])
+
     val resource = Resource.newInstance(8 * 1024, 4)
     val strategy = new LocalityPreferredContainerPlacementStrategy(new SparkConf(),
-      new Configuration(), resource)
+      yarnConf, resource)
 
     val totalTasks = 32 * 1024
     val totalContainers = totalTasks / 16
     val totalHosts = totalContainers / 16
 
+    val mockId = mock(classOf[ContainerId])
     val hosts = (1 to totalHosts).map { i => (s"host_$i", totalTasks % i) }.toMap
-    val containers = (1 to totalContainers).map { i =>
-      ContainerId.fromString(s"container_12345678_0001_01_$i")
-    }
+    val containers = (1 to totalContainers).map { i => mockId }
     val count = containers.size / hosts.size / 2
 
     val hostToContainerMap = new HashMap[String, Set[ContainerId]]()
