@@ -1045,7 +1045,7 @@ test_that("select operators", {
   expect_equal(count(where(df, df$age2 == 24)), 3)
 
   df[[3]] <- df$age
-  expect_equal(count(where(df, df$age2 == df$age)), 3)
+  expect_equal(count(where(df, df$age2 == df$age)), 2)
 
   df[["age2"]] <- df[["name"]]
   expect_equal(count(where(df, df$age2 == df$name)), 3)
