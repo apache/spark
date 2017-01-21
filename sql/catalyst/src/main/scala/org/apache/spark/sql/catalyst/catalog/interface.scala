@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.catalog
 import java.net.URI
 import java.util.Date
 
-import scala.collection.mutable
+import org.apache.hadoop.fs.Path
 
+import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Cast, Literal}
@@ -54,6 +55,9 @@ case class CatalogStorageFormat(
     serde: Option[String],
     compressed: Boolean,
     properties: Map[String, String]) {
+  private[this] lazy val uriString = locationUri.map(_.toString)
+
+  def locationUriString: Option[String] = uriString
 
   override def toString: String = {
     val serdePropsToString = CatalogUtils.maskCredentials(properties) match {
@@ -102,7 +106,7 @@ case class CatalogTablePartition(
   }
 
   /** Return the partition location, assuming it is specified. */
-  def location: String = storage.locationUri.map(_.getPath).getOrElse {
+  def location: String = storage.locationUriString.getOrElse {
     val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
     throw new AnalysisException(s"Partition [$specString] did not specify locationUri")
   }
@@ -192,7 +196,7 @@ case class CatalogTable(
   }
 
   /** Return the table location, assuming it is specified. */
-  def location: String = storage.locationUri.map(_.getPath).getOrElse {
+  def location: String = storage.locationUriString.getOrElse {
     throw new AnalysisException(s"table $identifier did not specify locationUri")
   }
 
