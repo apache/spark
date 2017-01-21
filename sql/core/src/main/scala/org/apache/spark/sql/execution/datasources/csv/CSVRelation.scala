@@ -17,19 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import scala.util.control.NonFatal
-
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter, OutputWriterFactory, PartitionedFile}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.execution.datasources.PartitionedFile
 
 object CSVRelation extends Logging {
 
@@ -40,7 +33,7 @@ object CSVRelation extends Logging {
     // If header is set, make sure firstLine is materialized before sending to executors.
     val commentPrefix = params.comment.toString
     file.rdd.mapPartitions { iter =>
-      val parser = new CsvReader(params)
+      val parser = new CsvParser(params.asParserSettings)
       val filteredIter = iter.filter { line =>
         line.trim.nonEmpty && !line.startsWith(commentPrefix)
       }
@@ -51,91 +44,6 @@ object CSVRelation extends Logging {
       } else {
         filteredIter.map { item =>
           parser.parseLine(item)
-        }
-      }
-    }
-  }
-
-  /**
-   * Returns a function that parses a single CSV record (in the form of an array of strings in which
-   * each element represents a column) and turns it into either one resulting row or no row (if the
-   * the record is malformed).
-   *
-   * The 2nd argument in the returned function represents the total number of malformed rows
-   * observed so far.
-   */
-  // This is pretty convoluted and we should probably rewrite the entire CSV parsing soon.
-  def csvParser(
-      schema: StructType,
-      requiredColumns: Array[String],
-      params: CSVOptions): (Array[String], Int) => Option[InternalRow] = {
-    val requiredFields = StructType(requiredColumns.map(schema(_))).fields
-    val safeRequiredFields = if (params.dropMalformed) {
-      // If `dropMalformed` is enabled, then it needs to parse all the values
-      // so that we can decide which row is malformed.
-      requiredFields ++ schema.filterNot(requiredFields.contains(_))
-    } else {
-      requiredFields
-    }
-    val safeRequiredIndices = new Array[Int](safeRequiredFields.length)
-    schema.zipWithIndex.filter { case (field, _) =>
-      safeRequiredFields.contains(field)
-    }.foreach { case (field, index) =>
-      safeRequiredIndices(safeRequiredFields.indexOf(field)) = index
-    }
-    val requiredSize = requiredFields.length
-    val row = new GenericInternalRow(requiredSize)
-    val converters = CSVTypeCast.makeConverters(schema, params)
-
-    (tokens: Array[String], numMalformedRows) => {
-      if (params.dropMalformed && schema.length != tokens.length) {
-        if (numMalformedRows < params.maxMalformedLogPerPartition) {
-          logWarning(s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
-        }
-        if (numMalformedRows == params.maxMalformedLogPerPartition - 1) {
-          logWarning(
-            s"More than ${params.maxMalformedLogPerPartition} malformed records have been " +
-            "found on this partition. Malformed records from now on will not be logged.")
-        }
-        None
-      } else if (params.failFast && schema.length != tokens.length) {
-        throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
-          s"${tokens.mkString(params.delimiter.toString)}")
-      } else {
-        val indexSafeTokens = if (params.permissive && schema.length > tokens.length) {
-          tokens ++ new Array[String](schema.length - tokens.length)
-        } else if (params.permissive && schema.length < tokens.length) {
-          tokens.take(schema.length)
-        } else {
-          tokens
-        }
-        try {
-          var index: Int = 0
-          var subIndex: Int = 0
-          while (subIndex < safeRequiredIndices.length) {
-            index = safeRequiredIndices(subIndex)
-            // It anyway needs to try to parse since it decides if this row is malformed
-            // or not after trying to cast in `DROPMALFORMED` mode even if the casted
-            // value is not stored in the row.
-            val value = converters(index).apply(indexSafeTokens(index))
-            if (subIndex < requiredSize) {
-              row(subIndex) = value
-            }
-            subIndex += 1
-          }
-          Some(row)
-        } catch {
-          case NonFatal(e) if params.dropMalformed =>
-            if (numMalformedRows < params.maxMalformedLogPerPartition) {
-              logWarning("Parse exception. " +
-                s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
-            }
-            if (numMalformedRows == params.maxMalformedLogPerPartition - 1) {
-              logWarning(
-                s"More than ${params.maxMalformedLogPerPartition} malformed records have been " +
-                "found on this partition. Malformed records from now on will not be logged.")
-            }
-            None
         }
       }
     }
