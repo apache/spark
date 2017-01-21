@@ -78,7 +78,7 @@ class EquivalentExpressions {
     //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
     //   2. conditional expressions: common subexpressions will always be evaluated at the
     //                               beginning, so we should not recurse into condition expressions,
-    //                               whole children may not get evaluated.
+    //                               whole children may not get accessed according to the condition.
     val shouldRecurse = expr match {
       case _: CodegenFallback => false
       case _: If => false

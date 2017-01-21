@@ -143,15 +143,15 @@ case class SimpleTypedAggregateExpression(
   override lazy val aggBufferAttributes: Seq[AttributeReference] =
     bufferSerializer.map(_.toAttribute.asInstanceOf[AttributeReference])
 
-  private def deserializeToBuffer(expr: Expression): Seq[Expression] = {
-    bufferDeserializer.map(_.transform {
+  private def serializeToBuffer(expr: Expression): Seq[Expression] = {
+    bufferSerializer.map(_.transform {
       case _: BoundReference => expr
     })
   }
 
   override lazy val initialValues: Seq[Expression] = {
     val zero = Literal.fromObject(aggregator.zero, bufferExternalType)
-    deserializeToBuffer(zero)
+    serializeToBuffer(zero)
   }
 
   override lazy val updateExpressions: Seq[Expression] = {
@@ -160,7 +160,7 @@ case class SimpleTypedAggregateExpression(
       "reduce",
       bufferExternalType,
       bufferDeserializer :: inputDeserializer.get :: Nil)
-    deserializeToBuffer(reduced)
+    serializeToBuffer(reduced)
   }
 
   override lazy val mergeExpressions: Seq[Expression] = {
@@ -175,7 +175,7 @@ case class SimpleTypedAggregateExpression(
       "merge",
       bufferExternalType,
       leftBuffer :: rightBuffer :: Nil)
-    deserializeToBuffer(merged)
+    serializeToBuffer(merged)
   }
 
   override lazy val evaluateExpression: Expression = {
@@ -185,17 +185,17 @@ case class SimpleTypedAggregateExpression(
       outputExternalType,
       bufferDeserializer :: Nil)
 
-    val serializeExprs = outputSerializer.map(_.transform {
+    val outputSerializeExprs = outputSerializer.map(_.transform {
       case _: BoundReference => resultObj
     })
 
     dataType match {
       case _: StructType =>
         val objRef = outputSerializer.head.find(_.isInstanceOf[BoundReference]).get
-        If(IsNull(objRef), Literal.create(null, dataType), CreateStruct(serializeExprs))
+        If(IsNull(objRef), Literal.create(null, dataType), CreateStruct(outputSerializeExprs))
       case _ =>
-        assert(serializeExprs.length == 1)
-        serializeExprs.head
+        assert(outputSerializeExprs.length == 1)
+        outputSerializeExprs.head
     }
   }
 
