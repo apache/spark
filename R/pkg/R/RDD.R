@@ -313,7 +313,7 @@ setMethod("checkpoint",
 #' @rdname getNumPartitions
 #' @aliases getNumPartitions,RDD-method
 #' @noRd
-setMethod("getNumPartitions",
+setMethod("getNumPartitionsRDD",
           signature(x = "RDD"),
           function(x) {
             callJMethod(getJRDD(x), "getNumPartitions")

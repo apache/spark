@@ -3429,5 +3429,5 @@ setMethod("randomSplit",
 setMethod("getNumPartitions",
           signature(x = "SparkDataFrame"),
           function(x) {
-            getNumPartitions(toRDD(x))
+            getNumPartitionsRDD(toRDD(x))
           })
