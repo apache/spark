@@ -993,10 +993,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("`SET -v` show") {
+    sql("RESET")
     sql("SET -v").show(200, false)
   }
 
   test("`SET -v` collect") {
+    sql("RESET")
     sql("SET -v").collect()
   }
 
