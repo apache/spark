@@ -74,21 +74,26 @@ class EquivalentExpressions {
       // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
       expr.find(_.isInstanceOf[LambdaVariable]).isDefined
 
-    // There are some special expressions that we should not recurse into children.
+    // There are some special expressions that we should not recurse into all of its children.
     //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
-    //   2. conditional expressions: common subexpressions will always be evaluated at the
-    //                               beginning, so we should not recurse into condition expressions,
-    //                               whole children may not get accessed according to the condition.
-    val shouldRecurse = expr match {
-      case _: CodegenFallback => false
-      case _: If => false
-      case _: CaseWhenBase => false
-      case _: Coalesce => false
-      case _ => true
+    //   2. If: common subexpressions will always be evaluated at the beginning, but the true and
+    //          false expressions in `If` may not get accessed, according to the predicate
+    //          expression. We should only recurse into the predicate expression.
+    //   3. CaseWhen: like `If`, the children of `CaseWhen` only get accessed in a certain
+    //                condition. We should only recurse into the first condition expression as it
+    //                will always get accessed.
+    //   4. Coalesce: it's also a conditional expression, we should only recurse into the first
+    //                children, because others may not get accessed.
+    def childrenToRecurse: Seq[Expression] = expr match {
+      case _: CodegenFallback => Nil
+      case i: If => i.predicate :: Nil
+      case c: CaseWhenBase => c.children.head :: Nil
+      case c: Coalesce => c.children.head :: Nil
+      case other => other.children
     }
 
-    if (!skip && !addExpr(expr) && shouldRecurse) {
-      expr.children.foreach(addExprTree)
+    if (!skip && !addExpr(expr)) {
+      childrenToRecurse.foreach(addExprTree)
     }
   }
 

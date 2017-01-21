@@ -158,7 +158,8 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     equivalence.addExprTree(ifExpr)
     // the `add` inside `If` should not be added
     assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 0)
-    assert(equivalence.getAllEquivalentExprs.count(_.size == 1) == 1)  // only ifExpr
+    // only ifExpr and its predicate expression
+    assert(equivalence.getAllEquivalentExprs.count(_.size == 1) == 2)
   }
 }
 
