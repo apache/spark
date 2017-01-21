@@ -20,14 +20,15 @@ package org.apache.spark.sql.execution.datasources.csv
 import java.nio.charset.{Charset, StandardCharsets}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce._
 
 import org.apache.spark.TaskContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
+import org.apache.spark.sql.{Dataset, Encoders, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
@@ -130,7 +131,18 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
 
-    new CSVOutputWriterFactory(csvOptions)
+    new OutputWriterFactory {
+      override def newInstance(
+          path: String,
+          dataSchema: StructType,
+          context: TaskAttemptContext): OutputWriter = {
+        new CsvOutputWriter(path, dataSchema, context, csvOptions)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        ".csv" + CodecStreams.getCompressionExtension(context)
+      }
+    }
   }
 
   override def buildReader(
@@ -227,4 +239,19 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     schema.foreach(field => verifyType(field.dataType))
   }
+}
+
+private[csv] class CsvOutputWriter(
+    path: String,
+    dataSchema: StructType,
+    context: TaskAttemptContext,
+    params: CSVOptions) extends OutputWriter with Logging {
+
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
+
+  private val gen = new UnivocityGenerator(dataSchema, writer, params)
+
+  override def write(row: InternalRow): Unit = gen.write(row)
+
+  override def close(): Unit = gen.close()
 }
