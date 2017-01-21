@@ -33,22 +33,27 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-
 private[csv] class UnivocityParser(
     schema: StructType,
     requiredSchema: StructType,
     options: CSVOptions) extends Logging {
-  def this(schema: StructType, options: CSVOptions) = this(schema, schema, options)
+  require(requiredSchema.toSet.subsetOf(schema.toSet),
+    "requiredSchema should be the subset of schema.")
 
-  private val valueConverters =
-    schema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
-  private val parser = new CsvParser(options.asParserSettings)
+  def this(schema: StructType, options: CSVOptions) = this(schema, schema, options)
 
   // A `ValueConverter` is responsible for converting the given value to a desired type.
   private type ValueConverter = String => Any
 
+  private val valueConverters =
+    schema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
+
+  private val parser = new CsvParser(options.asParserSettings)
+
   private var numMalformedRecords = 0
+
   private val row = new GenericInternalRow(requiredSchema.length)
+
   private val indexArr: Array[Int] = {
     val fields = if (options.dropMalformed) {
       // If `dropMalformed` is enabled, then it needs to parse all the values
@@ -57,7 +62,7 @@ private[csv] class UnivocityParser(
     } else {
       requiredSchema
     }
-    fields.filter(schema.contains).map(schema.indexOf).toArray
+    fields.map(schema.indexOf).toArray
   }
 
   /**
@@ -167,7 +172,7 @@ private[csv] class UnivocityParser(
    * the record is malformed).
    */
   def parse(input: String): Option[InternalRow] = {
-    tokenizeWithParseMode(input) { tokens =>
+    convertWithParseMode(parser.parseLine(input)) { tokens =>
       var i: Int = 0
       while (i < indexArr.length) {
         val pos = indexArr(i)
@@ -184,12 +189,8 @@ private[csv] class UnivocityParser(
     }
   }
 
-  /**
-   * Tokenize the input string into the array of strings with the given parse mode.
-   */
-  private def tokenizeWithParseMode(
-      input: String)(convert: Array[String] => InternalRow): Option[InternalRow] = {
-    val tokens = parser.parseLine(input)
+  private def convertWithParseMode(
+      tokens: Array[String])(convert: Array[String] => InternalRow): Option[InternalRow] = {
     if (options.dropMalformed && schema.length != tokens.length) {
       if (numMalformedRecords < options.maxMalformedLogPerPartition) {
         logWarning(s"Dropping malformed line: ${tokens.mkString(options.delimiter.toString)}")

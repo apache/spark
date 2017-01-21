@@ -170,14 +170,15 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         }
       }
 
+      // Consumes the header in the iterator.
       CSVRelation.dropHeaderLine(file, lineIterator, csvOptions)
 
-      val linesWithoutHeader = lineIterator.filter { line =>
+      val filteredIter = lineIterator.filter { line =>
         line.trim.nonEmpty && !line.startsWith(commentPrefix)
       }
 
       val parser = new UnivocityParser(dataSchema, requiredSchema, csvOptions)
-      linesWithoutHeader.flatMap(parser.parse)
+      filteredIter.flatMap(parser.parse)
     }
   }
 
