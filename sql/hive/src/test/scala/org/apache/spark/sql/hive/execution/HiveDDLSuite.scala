@@ -222,8 +222,8 @@ class HiveDDLSuite
         sql(
           s"""
              |ALTER TABLE $tab ADD
-             |PARTITION (ds='2008-04-08', hr=11) LOCATION '$part1Path'
-             |PARTITION (ds='2008-04-08', hr=12) LOCATION '$part2Path'
+             |PARTITION (ds='2008-04-08', hr=11) LOCATION '${part1Path.toURI}'
+             |PARTITION (ds='2008-04-08', hr=12) LOCATION '${part2Path.toURI}'
            """.stripMargin)
         assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
 
@@ -1262,7 +1262,7 @@ class HiveDDLSuite
           s"""
             |CREATE TABLE t(id int) USING hive
             |OPTIONS(fileFormat 'orc', compression 'Zlib')
-            |LOCATION '${path.getCanonicalPath}'
+            |LOCATION '${path.toURI}'
           """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(DDLUtils.isHiveTable(table))
