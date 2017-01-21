@@ -1384,4 +1384,34 @@ class HiveDDLSuite
       assert(e2.message.contains("Hive data source can only be used with tables"))
     }
   }
+
+  test("partitioned table should always put partition columns at the end of table schema") {
+    def getTableColumns(tblName: String): Seq[String] = {
+      spark.sessionState.catalog.getTableMetadata(TableIdentifier(tblName)).schema.map(_.name)
+    }
+
+    withTable("t", "t1", "t2", "t3", "t4") {
+      sql("CREATE TABLE t(a int, b int, c int, d int) USING parquet PARTITIONED BY (d, b)")
+      assert(getTableColumns("t") == Seq("a", "c", "d", "b"))
+
+      sql("CREATE TABLE t1 USING parquet PARTITIONED BY (d, b) AS SELECT 1 a, 1 b, 1 c, 1 d")
+      assert(getTableColumns("t1") == Seq("a", "c", "d", "b"))
+
+      Seq((1, 1, 1, 1)).toDF("a", "b", "c", "d").write.partitionBy("d", "b").saveAsTable("t2")
+      assert(getTableColumns("t2") == Seq("a", "c", "d", "b"))
+
+      withTempPath { path =>
+        val dataPath = new File(new File(path, "d=1"), "b=1").getCanonicalPath
+        Seq(1 -> 1).toDF("a", "c").write.save(dataPath)
+
+        sql(s"CREATE TABLE t3 USING parquet LOCATION '${path.getCanonicalPath}'")
+        assert(getTableColumns("t3") == Seq("a", "c", "d", "b"))
+      }
+
+      sql("CREATE TABLE t4(a int, b int, c int, d int) USING hive PARTITIONED BY (d, b)")
+      assert(getTableColumns("t4") == Seq("a", "c", "d", "b"))
+
+      // TODO: add test for creating partitioned hive serde table as select, once we support it.
+    }
+  }
 }
