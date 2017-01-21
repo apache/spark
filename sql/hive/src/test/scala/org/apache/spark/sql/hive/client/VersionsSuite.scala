@@ -345,15 +345,15 @@ class VersionsSuite extends SparkFunSuite with SQLTestUtils with TestHiveSinglet
 
     test(s"$version: alterPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "2")
-      val newLocation = Utils.createTempDir().getPath()
+      val newLocation = Some(Utils.createTempDir().toURI)
       val storage = storageFormat.copy(
-        locationUri = Some(new URI(newLocation)),
+        locationUri = newLocation,
         // needed for 0.12 alter partitions
         serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
       val partition = CatalogTablePartition(spec, storage)
       client.alterPartitions("default", "src_part", Seq(partition))
       assert(client.getPartition("default", "src_part", spec)
-        .storage.locationUri.get.getPath == newLocation)
+        .storage.locationUri === newLocation)
     }
 
     test(s"$version: dropPartitions") {

@@ -752,12 +752,12 @@ case class AlterTableSetLocationCommand(
         // Partition spec is specified, so we set the location only for this partition
         val part = catalog.getPartition(table.identifier, spec)
         val newPart = part.copy(storage = part.storage.copy(
-          locationUri = Some(new Path(location).toUri))
+          locationUri = Some(new URI(location)))
         )
         catalog.alterPartitions(table.identifier, Seq(newPart))
       case None =>
         // No partition spec is specified, so we set the location for the table itself
-        catalog.alterTable(table.withNewStorage(locationUri = Some(new Path(location).toUri)))
+        catalog.alterTable(table.withNewStorage(locationUri = Some(new URI(location))))
     }
     Seq.empty[Row]
   }

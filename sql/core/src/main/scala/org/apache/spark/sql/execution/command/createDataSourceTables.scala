@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.net.URI
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
@@ -56,7 +56,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     // Create the relation to validate the arguments before writing the metadata to the metastore,
     // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
-    val pathOption = table.storage.locationUri.map("path" -> _.getPath)
+    val pathOption = table.storage.locationUriString.map("path" -> _)
     // Fill in some default table options from the session conf
     val tableWithDefaultOptions = table.copy(
       identifier = table.identifier.copy(
@@ -144,16 +144,15 @@ case class CreateDataSourceTableAsSelectCommand(
       }
 
       saveDataIntoTable(
-        sparkSession, table, table.storage.locationUri.map(_.getPath),
-        query, mode, tableExists = true)
+        sparkSession, table, table.storage.locationUriString, query, mode, tableExists = true)
     } else {
       val tableLocation = if (table.tableType == CatalogTableType.MANAGED) {
-        Some(new URI(sessionState.catalog.defaultTablePath(table.identifier)))
+        Some(new Path(sessionState.catalog.defaultTablePath(table.identifier)).toUri)
       } else {
         table.storage.locationUri
       }
       val result = saveDataIntoTable(
-        sparkSession, table, tableLocation.map(_.getPath), query, mode, tableExists = false)
+        sparkSession, table, tableLocation.map(_.toString), query, mode, tableExists = false)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of

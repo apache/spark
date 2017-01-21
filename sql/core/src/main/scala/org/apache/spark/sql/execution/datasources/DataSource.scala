@@ -613,7 +613,7 @@ object DataSource {
   def buildStorageFormatFromOptions(options: Map[String, String]): CatalogStorageFormat = {
     val path = new CaseInsensitiveMap(options).get("path")
     val optionsWithoutPath = options.filterKeys(_.toLowerCase != "path")
-    CatalogStorageFormat.empty.copy(locationUri = path.map(new Path(_).toUri),
+    CatalogStorageFormat.empty.copy(locationUri = path.map(new URI(_)),
       properties = optionsWithoutPath)
   }
 }

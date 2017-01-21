@@ -868,14 +868,14 @@ object SPARK_18360 {
       val rawTable = hiveClient.getTable("default", "test_tbl")
       // Hive will use the value of `hive.metastore.warehouse.dir` to generate default table
       // location for tables in default database.
-      assert(rawTable.storage.locationUri.map(_.getPath).get.contains(newWarehousePath))
+      assert(rawTable.storage.locationUriString.get.contains(newWarehousePath))
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = false, purge = false)
 
       spark.sharedState.externalCatalog.createTable(tableMeta, ignoreIfExists = false)
       val readBack = spark.sharedState.externalCatalog.getTable("default", "test_tbl")
       // Spark SQL will use the location of default database to generate default table
       // location for tables in default database.
-      assert(readBack.storage.locationUri.map(_.getPath).get.contains(defaultDbLocation))
+      assert(readBack.storage.locationUriString.get.contains(defaultDbLocation))
     } finally {
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = true, purge = false)
       hiveClient.runSqlHive(s"SET hive.metastore.warehouse.dir=$defaultDbLocation")

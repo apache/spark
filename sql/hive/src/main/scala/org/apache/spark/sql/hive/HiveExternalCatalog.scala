@@ -260,7 +260,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // However, in older version of Spark we already store table location in storage properties
     // with key "path". Here we keep this behaviour for backward compatibility.
     val storagePropsWithLocation = table.storage.properties ++
-      table.storage.locationUri.map("path" -> _.getPath)
+      table.storage.locationUriString.map("path" -> _)
 
     // converts the table metadata to Spark SQL specific format, i.e. set data schema, names and
     // bucket specification to empty. Note that partition columns are retained, so that we can
@@ -482,8 +482,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.alterTable(oldName, newTable)
   }
 
-  private def getLocationFromStorageProps(table: CatalogTable): Option[URI] = {
-    new CaseInsensitiveMap(table.storage.properties).get("path").map(new URI(_))
+  private def getLocationFromStorageProps(table: CatalogTable): Option[String] = {
+    new CaseInsensitiveMap(table.storage.properties).get("path")
   }
 
   private def updateLocationInStorageProps(
@@ -563,9 +563,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         //       want to alter the table location to a file path, we will fail. This should be fixed
         //       in the future.
 
-        val newLocation = tableDefinition.storage.locationUri
+        val newLocation = tableDefinition.storage.locationUriString
         val storageWithPathOption = tableDefinition.storage.copy(
-          properties = tableDefinition.storage.properties ++ newLocation.map("path" -> _.getPath))
+          properties = tableDefinition.storage.properties ++ newLocation.map("path" -> _))
 
         val oldLocation = getLocationFromStorageProps(oldTableDef)
         if (oldLocation == newLocation) {
@@ -704,7 +704,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val storageWithLocation = {
       val tableLocation = getLocationFromStorageProps(table)
       // We pass None as `newPath` here, to remove the path option in storage properties.
-      updateLocationInStorageProps(table, newPath = None).copy(locationUri = tableLocation)
+      updateLocationInStorageProps(table, newPath = None).copy(
+        locationUri = tableLocation.map(new Path(_).toUri)
+      )
     }
     val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
 

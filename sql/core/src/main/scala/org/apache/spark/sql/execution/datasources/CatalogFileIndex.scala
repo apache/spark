@@ -46,7 +46,7 @@ class CatalogFileIndex(
   assert(table.identifier.database.isDefined,
     "The table identifier must be qualified in CatalogFileIndex")
 
-  private val baseLocation: Option[String] = table.storage.locationUri.map(_.getPath)
+  private val baseLocation: Option[String] = table.storage.locationUriString
 
   override def partitionSchema: StructType = table.partitionSchema
 
