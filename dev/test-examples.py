@@ -29,6 +29,7 @@ if sys.version < '3':
     import Queue
 else:
     import queue as Queue
+import yaml
 
 EXAMPLES_DIR = os.path.join(SPARK_HOME, "examples/src/main/")
 examples_failed = []
@@ -38,6 +39,8 @@ LOGGER = logging.getLogger()
 
 FAILURE_REPORTING_LOCK = Lock()
 
+with open('examples/example-args.yml') as args_file:
+    EXAMPLES_ARGS = yaml.load(args_file)['src']['main']
 
 def put_python_examples(task_queue):
     python_examples = os.path.join(EXAMPLES_DIR, "python/")
@@ -52,7 +55,7 @@ def run_example(example):
     else:
         _bin = "bin/spark-submit"
     spark_submit = os.path.join(SPARK_HOME, _bin)
-    cmd = [spark_submit, "--master", "local[4]", example]
+    cmd = [spark_submit, "--master", "local[4]", example] + lookup_args(example)
     LOGGER.info("Will run {}".format(example))
     try:
         per_test_output = tempfile.TemporaryFile()
@@ -95,7 +98,7 @@ def parse_opts():
     parser.add_option(
         "--languages",
         type="string",
-        default="r,python,java,scala".split(','),
+        default="r,python,java,scala",
         help="A comma-separated list of Python modules to test (default: %default)")
 
     (opts, args) = parser.parse_args()
@@ -104,6 +107,17 @@ def parse_opts():
     if opts.parallelism < 1:
         parser.error("Parallelism cannot be less than 1")
     return opts
+
+
+def lookup_args(file_path):
+    path = os.path.split(file_path)
+    args = EXAMPLES_ARGS
+    try:
+        for p in path:
+            args = args[p]
+        return args
+    except (KeyError):
+        return []
 
 
 def process_queue(task_queue):
