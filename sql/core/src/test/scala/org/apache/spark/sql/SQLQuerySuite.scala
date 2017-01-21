@@ -994,10 +994,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row("test.key2", "2"),
         Row("test.key3", "1"))).sortBy(_.getString(0))
     )
-
-    val result2 = sql("SET -v").collect()
-    assert(result2 === result2.sortBy(_.getString(0)))
-    spark.sessionState.conf.clear()
   }
 
   test("SET commands with illegal or inappropriate argument") {
