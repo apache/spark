@@ -239,7 +239,8 @@ trait ProgressReporter extends Logging {
 
     // Extract statistics about stateful operators in the query plan.
     val stateNodes = lastExecution.executedPlan.collect {
-      case p if (p.isInstanceOf[StateStoreSaveExec] || p.isInstanceOf[MapGroupsWithStateExec]) => p
+      case p if
+        (p.isInstanceOf[StateStoreSaveExec] || p.isInstanceOf[MapGroupsWithStateExec]) => p
     }
     val stateOperators = stateNodes.map { node =>
       new StateOperatorProgress(

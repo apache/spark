@@ -110,18 +110,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
     mapValues { (v: V) => func.call(v) }
   }
 
-  def mapGroupsWithState[STATE: Encoder, OUT: Encoder](
-      func: (V, State[STATE]) => OUT): Dataset[OUT] = {
-    Dataset[OUT](
-      sparkSession,
-      MapGroupsWithState[K, V, STATE, OUT](
-        func.asInstanceOf[(V, InternalState[STATE]) => OUT],
-        groupingAttributes,
-        dataAttributes,
-        logicalPlan))
-  }
-
-
   /**
    * Returns a [[Dataset]] that contains each unique key. This is equivalent to doing mapping
    * over the Dataset to extract the keys and then running a distinct operation on those.
@@ -230,6 +218,24 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   def mapGroups[U](f: MapGroupsFunction[K, V, U], encoder: Encoder[U]): Dataset[U] = {
     mapGroups((key, data) => f.call(key, data.asJava))(encoder)
+  }
+
+  def mapGroupsWithState[STATE: Encoder, OUT: Encoder](
+    f: (K, Iterator[V], State[STATE]) => OUT): Dataset[OUT] = {
+    val func = (key: K, it: Iterator[V], s: State[STATE]) => Iterator(f(key, it, s))
+    flatMapGroupsWithState[STATE, OUT](func)
+  }
+
+
+  def flatMapGroupsWithState[STATE: Encoder, OUT: Encoder](
+      func: (K, Iterator[V], State[STATE]) => Iterator[OUT]): Dataset[OUT] = {
+    Dataset[OUT](
+      sparkSession,
+      MapGroupsWithState[K, V, STATE, OUT](
+        func.asInstanceOf[(Any, Iterator[Any], InternalState[Any]) => Iterator[Any]],
+        groupingAttributes,
+        dataAttributes,
+        logicalPlan))
   }
 
   /**

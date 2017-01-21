@@ -32,27 +32,69 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     StateStore.stop()
   }
 
-  test("basics") {
+  test("mapGroupWithState") {
     val inputData = MemoryStream[String]
 
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
-    val stateFunc = (data: String, state: State[Int]) => {
-      val oldCount = state.getOption().getOrElse(0)
-      if (oldCount == 2) {
+    val stateFunc = (key: String, values: Iterator[String], state: State[Int]) => {
+
+      var count = state.getOption().getOrElse(0) + values.size
+      if (count == 3) {
         state.remove()
-        (data, "-1")
+        (key, "-1")
       } else {
-        val newCount = oldCount + 1
-        state.update(newCount)
-        (data, newCount.toString)
+        state.update(count)
+        (key, count.toString)
       }
     }
 
     val result =
       inputData.toDS()
         .groupByKey(x => x)
-        .mapGroupsWithState[Int, (String, String)](stateFunc)  // Int => State, (Str, Str) => Out
+        .mapGroupsWithState[Int, (String, String)](stateFunc) // Int => State, (Str, Str) => Out
+
+    testStream(result, Append)(
+      AddData(inputData, "a"),
+      CheckLastBatch(("a", "1")),
+      assertNumStateRows(1),
+      AddData(inputData, "a", "b"),
+      CheckLastBatch(("a", "2"), ("b", "1")),
+      assertNumStateRows(2),
+      StopStream,
+      StartStream(),
+      AddData(inputData, "a", "b"), // should remove state for "a" and return count as -1
+      CheckLastBatch(("a", "-1"), ("b", "2")),
+      assertNumStateRows(1),
+      StopStream,
+      StartStream(),
+      AddData(inputData, "a", "b", "c"), // should recreate state for "a" and return count as 1
+      CheckLastBatch(("a", "1"), ("b", "-1"), ("c", "1")),
+      assertNumStateRows(2)
+    )
+  }
+
+  test("flatMapGroupWithState") {
+    val inputData = MemoryStream[String]
+
+    // Function to maintain running count up to 2, and then remove the count
+    // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
+    val stateFunc = (key: String, values: Iterator[String], state: State[Int]) => {
+
+      var count = state.getOption().getOrElse(0) + values.size
+      if (count == 3) {
+        state.remove()
+        Iterator((key, "-1"))
+      } else {
+        state.update(count)
+        Iterator((key, count.toString))
+      }
+    }
+
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState[Int, (String, String)](stateFunc) // Int => State, (Str, Str) => Out
 
     testStream(result, Append)(
       AddData(inputData, "a"),

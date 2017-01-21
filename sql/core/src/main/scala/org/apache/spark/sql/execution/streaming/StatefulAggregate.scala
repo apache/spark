@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjecti
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.catalyst.streaming.InternalState
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -230,7 +231,7 @@ case class StateStoreSaveExec(
 }
 
 case class MapGroupsWithStateExec(
-    func: (Any, State[Any]) => Any,
+    func: (Any, Iterator[Any], InternalState[Any]) => Iterator[Any],
     keyDeserializer: Expression,   // probably not needed
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
@@ -270,23 +271,24 @@ case class MapGroupsWithStateExec(
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
         try {
+          val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
 
+          val getKeyObj = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
           val getKey = GenerateUnsafeProjection.generate(groupingAttributes, child.output)
           val getValueObj = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
           val outputMappedObj = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
-
           val getStateObj =
             ObjectOperator.deserializeRowToObject(stateDeserializer)
           val outputStateObj = ObjectOperator.serializeObjectToRow(stateSerializer)
 
-          val mappedIter = iter.map { row =>
-            val key = getKey(row)
-            val valueObj = getValueObj(row)
+          val finalIterator = groupedIter.flatMap { case (keyRow, valueRowIter) =>
+            val key = keyRow.asInstanceOf[UnsafeRow]
+            val keyObj = getKeyObj(keyRow)
+            val valueObjIter = valueRowIter.map(getValueObj.apply)
             val stateObjOption = store.get(key).map(getStateObj)
             val wrappedState = new StateImpl[Any]()
             wrappedState.wrap(stateObjOption)
-
-            val mapped = func(valueObj, wrappedState)
+            val mappedIterator = func(keyObj, valueObjIter, wrappedState)
             if (wrappedState.isRemoved) {
               store.remove(key)
               numRemovedStateRows += 1
@@ -294,9 +296,10 @@ case class MapGroupsWithStateExec(
               store.put(key, outputStateObj(wrappedState.get()))
               numUpdatedStateRows += 1
             }
-            outputMappedObj(mapped)
+
+            mappedIterator.map(outputMappedObj.apply)
           }
-          CompletionIterator[InternalRow, Iterator[InternalRow]](mappedIter, {
+          CompletionIterator[InternalRow, Iterator[InternalRow]](finalIterator, {
             store.commit()
             numTotalStateRows += store.numKeys()
           })

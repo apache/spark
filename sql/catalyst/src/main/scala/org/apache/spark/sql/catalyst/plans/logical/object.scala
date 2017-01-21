@@ -316,15 +316,15 @@ case class MapGroups(
 
 /** Factory for constructing new `MapGroups` nodes. */
 object MapGroupsWithState {
-  def apply[K: Encoder, T: Encoder, S: Encoder, U: Encoder](
-      func: (T, InternalState[S]) => U,
+  def apply[K: Encoder, V: Encoder, S: Encoder, U: Encoder](
+      func: (Any, Iterator[Any], InternalState[Any]) => Iterator[Any],
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       child: LogicalPlan): LogicalPlan = {
     val mapped = new MapGroupsWithState(
-      func.asInstanceOf[(Any, InternalState[Any]) => Any],
+      func,
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
-      UnresolvedDeserializer(encoderFor[T].deserializer, dataAttributes),
+      UnresolvedDeserializer(encoderFor[V].deserializer, dataAttributes),
       groupingAttributes,
       dataAttributes,
       CatalystSerde.generateObjAttr[U],
@@ -336,7 +336,7 @@ object MapGroupsWithState {
 }
 
 case class MapGroupsWithState(
-    func: (Any, InternalState[Any]) => Any,
+    func: (Any, Iterator[Any], InternalState[Any]) => Iterator[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
