@@ -992,7 +992,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     spark.sessionState.conf.clear()
   }
 
-  test("`SET -v` collect test") {
+  test("`SET -v` show") {
+    sql("SET -v").show(200, false)
+  }
+
+  test("`SET -v` collect") {
     sql("SET -v").collect()
   }
 
