@@ -1834,6 +1834,8 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' @param j,select expression for the single Column or a list of columns to select from the SparkDataFrame.
 #' @param drop if TRUE, a Column will be returned if the resulting dataset has only one column.
 #'             Otherwise, a SparkDataFrame will always be returned.
+#' @param value a Column or an atomic vector in the length of 1 as literal value, or \code{NULL}.
+#'              If \code{NULL}, the specified Column is dropped.
 #' @param ... currently not used.
 #' @return A new SparkDataFrame containing only the rows that meet the condition with selected columns.
 #' @export
