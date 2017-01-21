@@ -630,7 +630,7 @@ setGeneric("storageName", function(x) { standardGeneric("storageName") })
 
 #' @rdname storageName
 #' @export
-setGeneric("storageName<-", function(x, name) { standardGeneric("storageName<-") })
+setGeneric("storageName<-", function(x, value) { standardGeneric("storageName<-") })
 
 #' @export
 setGeneric("str")

@@ -85,13 +85,6 @@ dataFrame <- function(sdf, isCached = FALSE) {
 #' @param x The SparkDataFrame whose name is returned.
 #' @family SparkDataFrame functions
 #' @rdname storageName
-#' @examples
-#'\dontrun{
-#' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' storageName(df)
-#'}
 #' @aliases storageName,SparkDataFrame-method
 #' @export
 #' @note storageName since 2.2.0
@@ -106,7 +99,7 @@ setMethod("storageName",
 #' Set a SparkDataFrame's name. This will be displayed on the Storage tab in the UI if cached.
 #'
 #' @param x The SparkDataFrame whose name is to be set.
-#' @param name The SparkDataFrame name to be set.
+#' @param value The SparkDataFrame name to be set.
 #' @family SparkDataFrame functions
 #' @return the SparkDataFrame renamed.
 #' @rdname storageName
@@ -116,14 +109,16 @@ setMethod("storageName",
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' storageName(df) <- "foo"
+#' cache(df)
+#' storageName(df)
 #'}
 #' @aliases storageName<-,SparkDataFrame-method
 #' @export
 #' @note storageName<- since 2.2.0
 setMethod("storageName<-",
-          signature(x = "SparkDataFrame", name = "character"),
-          function(x, name) {
-            callJMethod(x@sdf, "setName", name)
+          signature(x = "SparkDataFrame", value = "character"),
+          function(x, value) {
+            callJMethod(x@sdf, "setName", value)
             x
           })
 
