@@ -948,9 +948,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
    * definition contains key, defaultValue and doc.
    */
   def getAllDefinedConfs: Seq[(String, String, String)] = sqlConfEntries.synchronized {
-    sqlConfEntries.asScala.toMap.values.filter(_.isPublic).map { entry =>
+    sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
       (entry.key, getConfString(entry.key, entry.defaultValueString), entry.doc)
-    }.toArray.toSeq
+    }.toSeq
   }
 
   /**
