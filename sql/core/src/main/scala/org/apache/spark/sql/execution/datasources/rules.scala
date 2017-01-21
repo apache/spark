@@ -202,6 +202,9 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
     //   * reorder table schema or output of query plan, to put partition columns at the end.
     case c @ CreateTable(tableDesc, _, query) =>
       if (query.isDefined) {
+        assert(tableDesc.schema.isEmpty,
+          "Schema may not be specified in a Create Table As Select (CTAS) statement")
+
         val qe = sparkSession.sessionState.executePlan(query.get)
         qe.assertAnalyzed()
         val analyzedQuery = qe.analyzed
