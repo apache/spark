@@ -3406,3 +3406,28 @@ setMethod("randomSplit",
             }
             sapply(sdfs, dataFrame)
           })
+
+#' getNumPartitions
+#'
+#' Return the number of partitions
+#' Note: in order to compute the number of partition the SparkDataFrame has to be converted into a
+#' RDD temporarily internally.
+#'
+#' @param x A SparkDataFrame
+#' @family SparkDataFrame functions
+#' @aliases getNumPartitions,SparkDataFrame-method
+#' @rdname getNumPartitions
+#' @name getNumPartitions
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df <- createDataFrame(cars, numPartitions = 2)
+#' getNumPartitions(df)
+#' }
+#' @note getNumPartitions since 2.1.1
+setMethod("getNumPartitions",
+          signature(x = "SparkDataFrame"),
+          function(x) {
+            getNumPartitions(toRDD(x))
+          })

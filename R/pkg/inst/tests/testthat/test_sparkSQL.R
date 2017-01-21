@@ -196,18 +196,18 @@ test_that("create DataFrame from RDD", {
   expect_equal(dtypes(df), list(c("name", "string"), c("age", "int"), c("height", "float")))
   expect_equal(as.list(collect(where(df, df$name == "John"))),
                list(name = "John", age = 19L, height = 176.5))
-  expect_equal(getNumPartitions(toRDD(df)), 1)
+  expect_equal(getNumPartitions(df), 1)
 
   df <- as.DataFrame(cars, numPartitions = 2)
-  expect_equal(getNumPartitions(toRDD(df)), 2)
+  expect_equal(getNumPartitions(df), 2)
   df <- createDataFrame(cars, numPartitions = 3)
-  expect_equal(getNumPartitions(toRDD(df)), 3)
+  expect_equal(getNumPartitions(df), 3)
   # validate limit by num of rows
   df <- createDataFrame(cars, numPartitions = 60)
-  expect_equal(getNumPartitions(toRDD(df)), 50)
+  expect_equal(getNumPartitions(df), 50)
   # validate when 1 < (length(coll) / numSlices) << length(coll)
   df <- createDataFrame(cars, numPartitions = 20)
-  expect_equal(getNumPartitions(toRDD(df)), 20)
+  expect_equal(getNumPartitions(df), 20)
 
   df <- as.DataFrame(data.frame(0))
   expect_is(df, "SparkDataFrame")
