@@ -1431,4 +1431,27 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("insert data to a table which has altered the table location " +
+    "to a not exist location should success") {
+    withTable("t", "t1") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""create table t(a string, b int)
+            |using parquet
+            |options(path "${dir.getAbsolutePath}")
+           """.stripMargin)
+        var table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == dir.getAbsolutePath)
+
+        var newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
+        spark.sql(s"alter table t set location '$newDir'")
+        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == newDir)
+
+        spark.sql("insert into table t select 'c', 1")
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+      }
+    }
+  }
 }
