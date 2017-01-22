@@ -105,6 +105,7 @@ case class OptimizeMetadataOnlyQuery(
             val partAttrs = getPartitionAttrs(relation.catalogTable.partitionColumnNames, relation)
             val partitionData = catalog.listPartitions(relation.catalogTable.identifier).map { p =>
               InternalRow.fromSeq(partAttrs.map { attr =>
+                // TODO: use correct timezone for partition values.
                 Cast(Literal(p.spec(attr.name)), attr.dataType,
                   Option(DateTimeUtils.defaultTimeZone().getID)).eval()
               })

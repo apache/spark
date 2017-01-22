@@ -136,6 +136,7 @@ abstract class PartitioningAwareFileIndex(
         // we need to cast into the data type that user specified.
         def castPartitionValuesToUserSchema(row: InternalRow) = {
           InternalRow((0 until row.numFields).map { i =>
+            // TODO: use correct timezone for partition values.
             Cast(
               Literal.create(row.getUTF8String(i), StringType),
               userProvidedSchema.fields(i).dataType,

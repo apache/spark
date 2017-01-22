@@ -312,6 +312,7 @@ object FileFormatWriter extends Logging {
     /** Expressions that given a partition key build a string like: col1=val/col2=val/... */
     private def partitionStringExpression: Seq[Expression] = {
       description.partitionColumns.zipWithIndex.flatMap { case (c, i) =>
+        // TODO: use correct timezone for partition values.
         val escaped = ScalaUDF(
           ExternalCatalogUtils.escapePathName _,
           StringType,
