@@ -657,6 +657,7 @@ object SQLConf {
 
   val SESSION_LOCAL_TIMEZONE =
     SQLConfigBuilder("spark.sql.session.timeZone")
+      .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
       .stringConf
       .createWithDefault(TimeZone.getDefault().getID())
 
