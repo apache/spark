@@ -308,46 +308,86 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("time_add") {
-    checkEvaluation(
-      TimeAdd(Literal(Timestamp.valueOf("2016-01-29 10:00:00")),
-        Literal(new CalendarInterval(1, 123000L))),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-29 10:00:00.123")))
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+      val timeZoneId = Option(tz.getID)
+      sdf.setTimeZone(tz)
 
-    checkEvaluation(
-      TimeAdd(Literal.create(null, TimestampType), Literal(new CalendarInterval(1, 123000L))),
-      null)
-    checkEvaluation(
-      TimeAdd(Literal(Timestamp.valueOf("2016-01-29 10:00:00")),
-        Literal.create(null, CalendarIntervalType)),
-      null)
-    checkEvaluation(
-      TimeAdd(Literal.create(null, TimestampType), Literal.create(null, CalendarIntervalType)),
-      null)
-    checkConsistencyBetweenInterpretedAndCodegen(TimeAdd, TimestampType, CalendarIntervalType)
+      checkEvaluation(
+        TimeAdd(
+          Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
+          Literal(new CalendarInterval(1, 123000L)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2016-02-29 10:00:00.123").getTime)))
+
+      checkEvaluation(
+        TimeAdd(
+          Literal.create(null, TimestampType),
+          Literal(new CalendarInterval(1, 123000L)),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimeAdd(
+          Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
+          Literal.create(null, CalendarIntervalType),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimeAdd(
+          Literal.create(null, TimestampType),
+          Literal.create(null, CalendarIntervalType),
+          timeZoneId),
+        null)
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (start: Expression, interval: Expression) => TimeAdd(start, interval, timeZoneId),
+        TimestampType, CalendarIntervalType)
+    }
   }
 
   test("time_sub") {
-    checkEvaluation(
-      TimeSub(Literal(Timestamp.valueOf("2016-03-31 10:00:00")),
-        Literal(new CalendarInterval(1, 0))),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-29 10:00:00")))
-    checkEvaluation(
-      TimeSub(
-        Literal(Timestamp.valueOf("2016-03-30 00:00:01")),
-        Literal(new CalendarInterval(1, 2000000.toLong))),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-28 23:59:59")))
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+      val timeZoneId = Option(tz.getID)
+      sdf.setTimeZone(tz)
 
-    checkEvaluation(
-      TimeSub(Literal.create(null, TimestampType), Literal(new CalendarInterval(1, 123000L))),
-      null)
-    checkEvaluation(
-      TimeSub(Literal(Timestamp.valueOf("2016-01-29 10:00:00")),
-        Literal.create(null, CalendarIntervalType)),
-      null)
-    checkEvaluation(
-      TimeSub(Literal.create(null, TimestampType), Literal.create(null, CalendarIntervalType)),
-      null)
-    checkConsistencyBetweenInterpretedAndCodegen(TimeSub, TimestampType, CalendarIntervalType)
+      checkEvaluation(
+        TimeSub(
+          Literal(new Timestamp(sdf.parse("2016-03-31 10:00:00.000").getTime)),
+          Literal(new CalendarInterval(1, 0)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2016-02-29 10:00:00.000").getTime)))
+      checkEvaluation(
+        TimeSub(
+          Literal(new Timestamp(sdf.parse("2016-03-30 00:00:01.000").getTime)),
+          Literal(new CalendarInterval(1, 2000000.toLong)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2016-02-28 23:59:59.000").getTime)))
+
+      checkEvaluation(
+        TimeSub(
+          Literal.create(null, TimestampType),
+          Literal(new CalendarInterval(1, 123000L)),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimeSub(
+          Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
+          Literal.create(null, CalendarIntervalType),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimeSub(
+          Literal.create(null, TimestampType),
+          Literal.create(null, CalendarIntervalType),
+          timeZoneId),
+        null)
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (start: Expression, interval: Expression) => TimeSub(start, interval, timeZoneId),
+        TimestampType, CalendarIntervalType)
+    }
   }
 
   test("add_months") {
@@ -371,28 +411,44 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("months_between") {
-    checkEvaluation(
-      MonthsBetween(Literal(Timestamp.valueOf("1997-02-28 10:30:00")),
-        Literal(Timestamp.valueOf("1996-10-30 00:00:00"))),
-      3.94959677)
-    checkEvaluation(
-      MonthsBetween(Literal(Timestamp.valueOf("2015-01-30 11:52:00")),
-        Literal(Timestamp.valueOf("2015-01-30 11:50:00"))),
-      0.0)
-    checkEvaluation(
-      MonthsBetween(Literal(Timestamp.valueOf("2015-01-31 00:00:00")),
-        Literal(Timestamp.valueOf("2015-03-31 22:00:00"))),
-      -2.0)
-    checkEvaluation(
-      MonthsBetween(Literal(Timestamp.valueOf("2015-03-31 22:00:00")),
-        Literal(Timestamp.valueOf("2015-02-28 00:00:00"))),
-      1.0)
-    val t = Literal(Timestamp.valueOf("2015-03-31 22:00:00"))
-    val tnull = Literal.create(null, TimestampType)
-    checkEvaluation(MonthsBetween(t, tnull), null)
-    checkEvaluation(MonthsBetween(tnull, t), null)
-    checkEvaluation(MonthsBetween(tnull, tnull), null)
-    checkConsistencyBetweenInterpretedAndCodegen(MonthsBetween, TimestampType, TimestampType)
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+    for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+      val timeZoneId = Option(tz.getID)
+      sdf.setTimeZone(tz)
+
+      checkEvaluation(
+        MonthsBetween(
+          Literal(new Timestamp(sdf.parse("1997-02-28 10:30:00").getTime)),
+          Literal(new Timestamp(sdf.parse("1996-10-30 00:00:00").getTime)),
+          timeZoneId),
+        3.94959677)
+      checkEvaluation(
+        MonthsBetween(
+          Literal(new Timestamp(sdf.parse("2015-01-30 11:52:00").getTime)),
+          Literal(new Timestamp(sdf.parse("2015-01-30 11:50:00").getTime)),
+          timeZoneId),
+        0.0)
+      checkEvaluation(
+        MonthsBetween(
+          Literal(new Timestamp(sdf.parse("2015-01-31 00:00:00").getTime)),
+          Literal(new Timestamp(sdf.parse("2015-03-31 22:00:00").getTime)),
+          timeZoneId),
+        -2.0)
+      checkEvaluation(
+        MonthsBetween(
+          Literal(new Timestamp(sdf.parse("2015-03-31 22:00:00").getTime)),
+          Literal(new Timestamp(sdf.parse("2015-02-28 00:00:00").getTime)),
+          timeZoneId),
+        1.0)
+      val t = Literal(Timestamp.valueOf("2015-03-31 22:00:00"))
+      val tnull = Literal.create(null, TimestampType)
+      checkEvaluation(MonthsBetween(t, tnull, timeZoneId), null)
+      checkEvaluation(MonthsBetween(tnull, t, timeZoneId), null)
+      checkEvaluation(MonthsBetween(tnull, tnull, timeZoneId), null)
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (time1: Expression, time2: Expression) => MonthsBetween(time1, time2, timeZoneId),
+        TimestampType, TimestampType)
+    }
   }
 
   test("last_day") {
