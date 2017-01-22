@@ -139,7 +139,7 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         Evaluates the model on a test dataset.
         """
-        return self._call_java("evaluate", dataset)
+        return GaussianMixtureSummary(self._call_java("evaluate", dataset))
 
 
 @inherit_doc
@@ -365,7 +365,7 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         Evaluates the model on a test dataset.
         """
-        return self._call_java("evaluate", dataset)
+        return KMeansSummary(self._call_java("evaluate", dataset))
 
 
 @inherit_doc
@@ -550,7 +550,7 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         Evaluates the model on a test dataset.
         """
-        return self._call_java("evaluate", dataset)
+        return BisectingKMeansSummary(self._call_java("evaluate", dataset))
 
 
 @inherit_doc
