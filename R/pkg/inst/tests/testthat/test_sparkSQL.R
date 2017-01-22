@@ -1177,6 +1177,9 @@ test_that("column functions", {
   c17 <- cov(c, c1) + cov("c", "c1") + covar_samp(c, c1) + covar_samp("c", "c1")
   c18 <- covar_pop(c, c1) + covar_pop("c", "c1")
   c19 <- spark_partition_id()
+  c20 <- to_timestamp(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
+  c21 <- to_timestamp(c, "yyyy") + trim(c) + unbase64(c) + unhex(c) + upper(c)
+  c22 <- to_date(c, "yyyy") + trim(c) + unbase64(c) + unhex(c) + upper(c)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))

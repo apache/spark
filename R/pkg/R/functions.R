@@ -1748,7 +1748,7 @@ setMethod("toRadians",
 # }
 #' @note to_date(Column, format) since 2.2.0
 setMethod("to_date",
-          signature(x = "Column", format = "character"),
+          signature(x = "Column"),
           function(x, format) {
             jc <- callJStatic("org.apache.spark.sql.functions",
             "to_date", x@jc, format)
@@ -1763,7 +1763,7 @@ setMethod("to_date",
 #' @note to_date(Column) since 1.5.0
 setMethod("to_date",
 signature(x = "Column"),
-function(x, format) {
+function(x) {
     jc <- callJStatic("org.apache.spark.sql.functions",
     "to_date", x@jci)
     column(jc)
@@ -1790,7 +1790,7 @@ function(x, format) {
 # }
 #' @note to_timestamp(Column, format) since 2.2.0
 setMethod("to_timestamp",
-signature(x = "Column", format = "character"),
+signature(x = "Column"),
 function(x, format) {
     jc <- callJStatic("org.apache.spark.sql.functions",
     "to_timestamp", x@jc, format)
@@ -1805,7 +1805,7 @@ function(x, format) {
 #' @note to_timestamp(Column) since 2.2.0
 setMethod("to_timestamp",
 signature(x = "Column"),
-function(x, format) {
+function(x) {
     jc <- callJStatic("org.apache.spark.sql.functions",
     "to_timestamp", x@jci)
     column(jc)
