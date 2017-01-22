@@ -159,6 +159,28 @@ private[spark] class TaskSetManager(
     addPendingTask(i)
   }
 
+  sortPendingTasksForHosts(pendingTasksForHost)
+
+  // Improve tasks preferrd locality by sorting tasks partial ordering.
+  private def sortPendingTasksForHosts(tasksMap: HashMap[String, ArrayBuffer[Int]]) {
+    tasksMap.foreach(pair => {
+      val host = pair._1
+      var v = pair._2
+      var map = new HashMap[Int, ArrayBuffer[Int]]()
+      v.foreach(index => {
+        for (loc <- tasks(index).preferredLocations) {
+          var i = 0
+          if (loc.host == host) {
+            map.getOrElseUpdate(i, new ArrayBuffer) += index
+          }
+          i += 1
+        }
+      })
+      v.clear
+      map.foreach(kv => v ++= kv._2)
+    })
+  }
+
   // Figure out which locality levels we have in our TaskSet, so we can do delay scheduling
   var myLocalityLevels = computeValidLocalityLevels()
   var localityWaits = myLocalityLevels.map(getLocalityWait) // Time to wait at each level
