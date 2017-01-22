@@ -42,7 +42,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
- * A command to create a MANAGED table with the same definition of the given existing table.
+ * A command to create a table with the same definition of the given existing table.
  * In the target table definition, the table comment is always empty but the column comments
  * are identical to the ones defined in the source table.
  *
@@ -51,8 +51,8 @@ import org.apache.spark.util.Utils
  *
  * The syntax of using this command in SQL is:
  * {{{
- *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
- *   LIKE [other_db_name.]existing_table_name
+ *   CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
+ *   LIKE [other_db_name.]existing_table_name [locationSpec]
  * }}}
  */
 case class CreateTableLikeCommand(
@@ -81,7 +81,8 @@ case class CreateTableLikeCommand(
       CatalogTable(
         identifier = targetTable,
         tableType = tblType,
-        // We are creating a new managed table, which should not have custom table location.
+        // If location is not empty the table we are creating is a new external table
+        // otherwise managed table.
         storage = sourceTableDesc.storage.copy(locationUri = location),
         schema = sourceTableDesc.schema,
         provider = newProvider,
