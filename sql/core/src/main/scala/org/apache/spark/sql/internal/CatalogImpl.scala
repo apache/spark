@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.internal
 
-import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.Experimental
@@ -257,101 +256,74 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * :: Experimental ::
-   * Creates an external table from the given path and returns the corresponding DataFrame.
+   * Creates a table from the given path and returns the corresponding DataFrame.
    * It will use the default data source configured by spark.sql.sources.default.
    *
    * @group ddl_ops
-   * @since 2.0.0
+   * @since 2.2.0
    */
   @Experimental
-  override def createExternalTable(tableName: String, path: String): DataFrame = {
+  override def createTable(tableName: String, path: String): DataFrame = {
     val dataSourceName = sparkSession.sessionState.conf.defaultDataSourceName
-    createExternalTable(tableName, path, dataSourceName)
+    createTable(tableName, path, dataSourceName)
   }
 
   /**
    * :: Experimental ::
-   * Creates an external table from the given path based on a data source
-   * and returns the corresponding DataFrame.
+   * Creates a table from the given path based on a data source and returns the corresponding
+   * DataFrame.
    *
    * @group ddl_ops
-   * @since 2.0.0
+   * @since 2.2.0
    */
   @Experimental
-  override def createExternalTable(tableName: String, path: String, source: String): DataFrame = {
-    createExternalTable(tableName, source, Map("path" -> path))
-  }
-
-  /**
-   * :: Experimental ::
-   * Creates an external table from the given path based on a data source and a set of options.
-   * Then, returns the corresponding DataFrame.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  @Experimental
-  override def createExternalTable(
-      tableName: String,
-      source: String,
-      options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, options.asScala.toMap)
+  override def createTable(tableName: String, path: String, source: String): DataFrame = {
+    createTable(tableName, source, Map("path" -> path))
   }
 
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Creates an external table from the given path based on a data source and a set of options.
+   * Creates a table from the given path based on a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
-   * @since 2.0.0
+   * @since 2.2.0
    */
   @Experimental
-  override def createExternalTable(
+  override def createTable(
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, new StructType, options)
-  }
-
-  /**
-   * :: Experimental ::
-   * Create an external table from the given path based on a data source, a schema and
-   * a set of options. Then, returns the corresponding DataFrame.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  @Experimental
-  override def createExternalTable(
-      tableName: String,
-      source: String,
-      schema: StructType,
-      options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, schema, options.asScala.toMap)
+    createTable(tableName, source, new StructType, options)
   }
 
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Create an external table from the given path based on a data source, a schema and
-   * a set of options. Then, returns the corresponding DataFrame.
+   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
-   * @since 2.0.0
+   * @since 2.2.0
    */
   @Experimental
-  override def createExternalTable(
+  override def createTable(
       tableName: String,
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    val storage = DataSource.buildStorageFormatFromOptions(options)
+    val tableType = if (storage.locationUri.isDefined) {
+      CatalogTableType.EXTERNAL
+    } else {
+      CatalogTableType.MANAGED
+    }
     val tableDesc = CatalogTable(
       identifier = tableIdent,
-      tableType = CatalogTableType.EXTERNAL,
-      storage = DataSource.buildStorageFormatFromOptions(options),
+      tableType = tableType,
+      storage = storage,
       schema = schema,
       provider = Some(source)
     )
@@ -468,7 +440,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     // If this table is cached as an InMemoryRelation, drop the original
     // cached version and make the new version cached lazily.
-    val logicalPlan = sparkSession.sessionState.catalog.lookupRelation(tableIdent)
+    val logicalPlan = sparkSession.table(tableIdent).queryExecution.analyzed
     // Use lookupCachedData directly since RefreshTable also takes databaseName.
     val isCached = sparkSession.sharedState.cacheManager.lookupCachedData(logicalPlan).nonEmpty
     if (isCached) {

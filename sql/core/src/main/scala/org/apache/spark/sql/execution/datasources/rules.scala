@@ -199,31 +199,55 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
     //   * can't use all table columns as partition columns.
     //   * partition columns' type must be AtomicType.
     //   * sort columns' type must be orderable.
+    //   * reorder table schema or output of query plan, to put partition columns at the end.
     case c @ CreateTable(tableDesc, _, query) =>
-      val analyzedQuery = query.map { q =>
-        // Analyze the query in CTAS and then we can do the normalization and checking.
-        val qe = sparkSession.sessionState.executePlan(q)
+      if (query.isDefined) {
+        assert(tableDesc.schema.isEmpty,
+          "Schema may not be specified in a Create Table As Select (CTAS) statement")
+
+        val qe = sparkSession.sessionState.executePlan(query.get)
         qe.assertAnalyzed()
-        qe.analyzed
-      }
-      val schema = if (analyzedQuery.isDefined) {
-        analyzedQuery.get.schema
+        val analyzedQuery = qe.analyzed
+
+        val normalizedTable = normalizeCatalogTable(analyzedQuery.schema, tableDesc)
+
+        val output = analyzedQuery.output
+        val partitionAttrs = normalizedTable.partitionColumnNames.map { partCol =>
+          output.find(_.name == partCol).get
+        }
+        val newOutput = output.filterNot(partitionAttrs.contains) ++ partitionAttrs
+        val reorderedQuery = if (newOutput == output) {
+          analyzedQuery
+        } else {
+          Project(newOutput, analyzedQuery)
+        }
+
+        c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
-        tableDesc.schema
+        val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
+
+        val partitionSchema = normalizedTable.partitionColumnNames.map { partCol =>
+          normalizedTable.schema.find(_.name == partCol).get
+        }
+
+        val reorderedSchema =
+          StructType(normalizedTable.schema.filterNot(partitionSchema.contains) ++ partitionSchema)
+
+        c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
       }
+  }
 
-      val columnNames = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
-        schema.map(_.name)
-      } else {
-        schema.map(_.name.toLowerCase)
-      }
-      checkDuplication(columnNames, "table definition of " + tableDesc.identifier)
+  private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
+    val columnNames = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
+      schema.map(_.name)
+    } else {
+      schema.map(_.name.toLowerCase)
+    }
+    checkDuplication(columnNames, "table definition of " + table.identifier)
 
-      val normalizedTable = tableDesc.copy(
-        partitionColumnNames = normalizePartitionColumns(schema, tableDesc),
-        bucketSpec = normalizeBucketSpec(schema, tableDesc))
-
-      c.copy(tableDesc = normalizedTable, query = analyzedQuery)
+    table.copy(
+      partitionColumnNames = normalizePartitionColumns(schema, table),
+      bucketSpec = normalizeBucketSpec(schema, table))
   }
 
   private def normalizePartitionColumns(schema: StructType, table: CatalogTable): Seq[String] = {

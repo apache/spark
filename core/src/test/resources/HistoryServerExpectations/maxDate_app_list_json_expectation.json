@@ -8,8 +8,8 @@
     "duration" : 9011,
     "sparkUser" : "irashid",
     "completed" : true,
-    "startTimeEpoch" : 1422981779720,
     "endTimeEpoch" : 1422981788731,
+    "startTimeEpoch" : 1422981779720,
     "lastUpdatedEpoch" : 0
   } ]
 }, {
@@ -22,8 +22,8 @@
     "duration" : 8635,
     "sparkUser" : "irashid",
     "completed" : true,
-    "startTimeEpoch" : 1422981758277,
     "endTimeEpoch" : 1422981766912,
+    "startTimeEpoch" : 1422981758277,
     "lastUpdatedEpoch" : 0
   } ]
 } ]

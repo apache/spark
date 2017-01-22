@@ -166,10 +166,7 @@ class Column(val expr: Expression) extends Logging {
 
     // Leave an unaliased generator with an empty list of names since the analyzer will generate
     // the correct defaults after the nested expression's type has been resolved.
-    case explode: Explode => MultiAlias(explode, Nil)
-    case explode: PosExplode => MultiAlias(explode, Nil)
-
-    case jt: JsonTuple => MultiAlias(jt, Nil)
+    case g: Generator => MultiAlias(g, Nil)
 
     case func: UnresolvedFunction => UnresolvedAlias(func, Some(Column.generateAlias))
 
