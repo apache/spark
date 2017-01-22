@@ -144,9 +144,9 @@ _functions_2_1 = {
 }
 
 _functions_2_2 = {
-    'to_date': 'Converts a string date into a date type using the specified format.',
+    'to_date': 'Converts a string date into a DateType using the (optionally) specified format.',
     'to_timestamp': 'Converts a string timestamp into a timestamp type using the ' +
-                    'specified format.',
+                    '(optionally) specified format.',
 }
 
 # math functions that take two arguments as input
@@ -982,7 +982,9 @@ def months_between(date1, date2):
 def to_date(col, format=None):
     """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
     :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`
-    using the specified format if necessary.
+    using the optionally specified format. Formats are according to
+    Specify formats according to
+    `SimpleDateFormats <http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html>`_.
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_date(df.t).alias('date')).collect()
     [Row(date=datetime.date(1997, 2, 28))]
@@ -1002,7 +1004,9 @@ def to_date(col, format=None):
 def to_timestamp(col, format=None):
     """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
     :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`
-    using the specified format if necessary.
+    using the optionally specified format. Default format is 'yyyy-MM-dd HH:mm:ss'.
+    Specify formats according to
+    `SimpleDateFormats <http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html>`_.
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_timestamp(df.t).alias('dt')).collect()
     [Row(dt=datetime.date(1997, 2, 28, 10, 30))]
