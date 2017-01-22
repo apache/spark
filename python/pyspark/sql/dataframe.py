@@ -85,7 +85,7 @@ class DataFrame(object):
             self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
         return self._lazy_rdd
 
-    @since(2.1)
+    @since(2.2)
     def name(self):
         """
         Return the name of this Dataset.
@@ -93,9 +93,12 @@ class DataFrame(object):
         return self._jdf.name()
 
     @ignore_unicode_prefix
-    @since(2.1)
+    @since(2.2)
     def setName(self, name):
-        """
+        """Sets the name of this Dataset.
+
+        The name will be displayed on the storage tab of the UI if the DataFrame is cached.
+
         >>> df = sc.parallelize(["bar"]).toDF()
         >>> df.setName("DF1").name()
         u'DF1'

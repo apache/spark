@@ -172,11 +172,23 @@ class Dataset[T] private[sql](
     this(sqlContext.sparkSession, logicalPlan, encoder)
   }
 
-  /** A friendly name for this Dataset */
+  /**
+   * A friendly name for this Dataset.
+   *
+   * @group basic
+   * @since 2.2.0
+   */
   @Since("2.2.0")
   var name: String = null
 
-  /** Assign a name to this Dataset */
+  /**
+   * Assign a name to this Dataset to display in the UI storage tab when cached.
+   *
+   * @param _name A friendly name for this Dataset
+   *
+   * @group basic
+   * @since 2.2.0
+   */
   @Since("2.2.0")
   def setName(_name: String): this.type = {
     name = _name
