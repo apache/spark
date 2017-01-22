@@ -135,10 +135,6 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t"))
   }
 
-  @transient
-  private lazy val sessionLocalTimeZone =
-    TimeZone.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone)
-
   /** Formats a datum (based on the given data type) and returns the string representation. */
   private def toHiveString(a: (Any, DataType)): String = {
     val primitiveTypes = Seq(StringType, IntegerType, LongType, DoubleType, FloatType,
@@ -187,7 +183,8 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       case (d: Date, DateType) =>
         DateTimeUtils.dateToString(DateTimeUtils.fromJavaDate(d))
       case (t: Timestamp, TimestampType) =>
-        DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(t), sessionLocalTimeZone)
+        DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(t),
+          TimeZone.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone))
       case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
       case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
       case (other, tpe) if primitiveTypes.contains(tpe) => other.toString
