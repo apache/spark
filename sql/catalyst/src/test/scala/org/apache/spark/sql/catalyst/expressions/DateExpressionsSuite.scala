@@ -277,8 +277,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(-365)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2015-02-28")))
     checkEvaluation(DateAdd(Literal.create(null, DateType), Literal(1)), null)
-    checkEvaluation(
-      DateAdd(Literal(Date.valueOf("2016-02-28")), Literal.create(null, IntegerType)),
+    checkEvaluation(DateAdd(Literal(Date.valueOf("2016-02-28")), Literal.create(null, IntegerType)),
       null)
     checkEvaluation(DateAdd(Literal.create(null, DateType), Literal.create(null, IntegerType)),
       null)
@@ -297,8 +296,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DateSub(Literal(Date.valueOf("2015-01-01")), Literal(-1)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2015-01-02")))
     checkEvaluation(DateSub(Literal.create(null, DateType), Literal(1)), null)
-    checkEvaluation(
-      DateSub(Literal(Date.valueOf("2016-02-28")), Literal.create(null, IntegerType)),
+    checkEvaluation(DateSub(Literal(Date.valueOf("2016-02-28")), Literal.create(null, IntegerType)),
       null)
     checkEvaluation(DateSub(Literal.create(null, DateType), Literal.create(null, IntegerType)),
       null)
