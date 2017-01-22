@@ -215,7 +215,7 @@ test_that("create DataFrame from RDD", {
   expect_is(df, "SparkDataFrame")
   df <- as.DataFrame(data.frame(0), numPartitions = 2)
   # no data to partition, goes to 1
-  expect_equal(getNumPartitions(toRDD(df)), 1)
+  expect_equal(getNumPartitions(df), 1)
 
   setHiveContext(sc)
   sql("CREATE TABLE people (name string, age double, height float)")
@@ -234,7 +234,7 @@ test_that("createDataFrame uses files for large objects", {
   conf <- callJMethod(sparkSession, "conf")
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
   df <- suppressWarnings(createDataFrame(iris, numPartitions = 3))
-  expect_equal(getNumPartitions(toRDD(df)), 3)
+  expect_equal(getNumPartitions(df), 3)
 
   # Resetting the conf back to default value
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", toString(.Machine$integer.max / 10))
