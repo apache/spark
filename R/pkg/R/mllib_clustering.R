@@ -98,7 +98,7 @@ setMethod("spark.gaussianMixture", signature(data = "SparkDataFrame", formula = 
 #' @param object a fitted gaussian mixture model.
 #' @return \code{summary} returns summary of the fitted model, which is a list.
 #'         The list includes the model's \code{lambda} (lambda), \code{mu} (mu),
-#'         \code{sigma} (sigma), and \code{posterior} (posterior).
+#'         \code{sigma} (sigma), \code{loglik} (loglik), and \code{posterior} (posterior).
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @rdname spark.gaussianMixture
 #' @export
@@ -112,6 +112,7 @@ setMethod("summary", signature(object = "GaussianMixtureModel"),
             sigmaList <- callJMethod(jobj, "sigma")
             k <- callJMethod(jobj, "k")
             dim <- callJMethod(jobj, "dim")
+            loglik <- callJMethod(jobj, "logLikelihood")
             mu <- c()
             for (i in 1 : k) {
               start <- (i - 1) * dim + 1
@@ -129,7 +130,7 @@ setMethod("summary", signature(object = "GaussianMixtureModel"),
             } else {
               dataFrame(callJMethod(jobj, "posterior"))
             }
-            list(lambda = lambda, mu = mu, sigma = sigma,
+            list(lambda = lambda, mu = mu, sigma = sigma, loglik = loglik,
                  posterior = posterior, is.loaded = is.loaded)
           })
 
