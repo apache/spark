@@ -210,6 +210,8 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       assert(stringToTimestamp(UTF8String.fromString("2015-03-18T12:03:17"), tz).get ===
         c.getTimeInMillis * 1000)
 
+      // If the string value includes timezone string, it represents the timestamp string
+      // in the timezone regardless of the tz parameter.
       c = Calendar.getInstance(TimeZone.getTimeZone("GMT-13:53"))
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 0)
@@ -244,6 +246,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       assert(stringToTimestamp(
         UTF8String.fromString("2015-03-18T12:03:17+07:03"), tz).get === c.getTimeInMillis * 1000)
 
+      // tests for the string including milliseconds.
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 123)
@@ -252,6 +255,8 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       assert(stringToTimestamp(
         UTF8String.fromString("2015-03-18T12:03:17.123"), tz).get === c.getTimeInMillis * 1000)
 
+      // If the string value includes timezone string, it represents the timestamp string
+      // in the timezone regardless of the tz parameter.
       c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 456)
