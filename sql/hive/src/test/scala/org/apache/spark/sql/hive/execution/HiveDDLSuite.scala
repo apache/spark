@@ -1433,7 +1433,7 @@ class HiveDDLSuite
   }
 
   test("insert data to a table which has altered the table location " +
-    "to a not exist location should success") {
+    "to an not exist location should success") {
     withTable("t", "t1") {
       withTempDir { dir =>
         spark.sql(
