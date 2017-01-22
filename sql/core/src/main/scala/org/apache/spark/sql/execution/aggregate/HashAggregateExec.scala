@@ -253,7 +253,7 @@ case class HashAggregateExec(
     ctx.currentVars = bufVars ++ input
     val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttrs))
     val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
-    val effectiveCodes = subExprs.codes.mkString("\n")
+    val resetSubExprEvaluation = subExprs.codes.mkString("\n")
     val aggVals = ctx.withSubExprEliminationExprs(subExprs.states) {
       boundUpdateExpr.map(_.genCode(ctx))
     }
@@ -266,8 +266,8 @@ case class HashAggregateExec(
     }
     s"""
        | // do aggregate
-       | // common sub-expressions
-       | $effectiveCodes
+       | // reset the initialization status for common sub-expressions
+       | $resetSubExprEvaluation
        | // evaluate aggregate function
        | ${evaluateVariables(aggVals)}
        | // update aggregation buffer
@@ -758,7 +758,7 @@ case class HashAggregateExec(
       ctx.INPUT_ROW = fastRowBuffer
       val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
-      val effectiveCodes = subExprs.codes.mkString("\n")
+      val resetSubExprEvaluation = subExprs.codes.mkString("\n")
       val fastRowEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
         boundUpdateExpr.map(_.genCode(ctx))
       }
@@ -768,8 +768,8 @@ case class HashAggregateExec(
       }
       Option(
         s"""
-           |// common sub-expressions
-           |$effectiveCodes
+           |// reset the initialization status for common sub-expressions
+           |$resetSubExprEvaluation
            |// evaluate aggregate function
            |${evaluateVariables(fastRowEvals)}
            |// update fast row
@@ -814,7 +814,7 @@ case class HashAggregateExec(
       ctx.INPUT_ROW = unsafeRowBuffer
       val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
-      val effectiveCodes = subExprs.codes.mkString("\n")
+      val resetSubExprEvaluation = subExprs.codes.mkString("\n")
       val unsafeRowBufferEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
         boundUpdateExpr.map(_.genCode(ctx))
       }
@@ -823,8 +823,8 @@ case class HashAggregateExec(
         ctx.updateColumn(unsafeRowBuffer, dt, i, ev, updateExpr(i).nullable)
       }
       s"""
-         |// common sub-expressions
-         |$effectiveCodes
+         |// reset the initialization status for common sub-expressions
+         |$resetSubExprEvaluation
          |// evaluate aggregate function
          |${evaluateVariables(unsafeRowBufferEvals)}
          |// update unsafe row buffer

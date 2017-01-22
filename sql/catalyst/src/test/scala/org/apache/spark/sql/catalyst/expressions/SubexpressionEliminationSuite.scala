@@ -17,8 +17,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, GenerateMutableProjection}
+import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
+import org.apache.spark.sql.types.{DataType, IntegerType, StructField, StructType}
 
 class SubexpressionEliminationSuite extends SparkFunSuite {
   test("Semantic equals and hash") {
@@ -171,6 +172,21 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     // the `two` inside `fallback` should not be added
     assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 0)
     assert(equivalence.getAllEquivalentExprs.count(_.size == 1) == 3)  // add, two, explode
+  }
+
+  test("SPARK-18395: evaluate subexpressions like lazy variables") {
+    val row = new GenericInternalRow(Seq(null, new java.lang.Integer(10)).toArray[Any])
+    val bound = BoundReference(0, IntegerType, true)
+    val add = Add(bound, Literal(1))
+    val assertNotNull = AssertNotNull(bound, Seq.empty[String])
+    val expr = If(
+      IsNull(bound),
+      Literal(1),
+      Add(assertNotNull, Add(assertNotNull, Literal(1))))
+    val schema = StructType(Seq(StructField("int", IntegerType))).toAttributes
+    val projection =
+      GenerateMutableProjection.generate(Seq(expr), schema, useSubexprElimination = true)
+    projection(row).getInt(0)
   }
 }
 
