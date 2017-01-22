@@ -2671,7 +2671,7 @@ object functions {
   }
 
   /**
-   * Convert time string  to a Unix timestamp (in seconds) with a specified format
+   * Convert time string to a Unix timestamp (in seconds) with a specified format
    * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
    * to Unix timestamp (in seconds), return null if fail.
    * @group datetime_funcs

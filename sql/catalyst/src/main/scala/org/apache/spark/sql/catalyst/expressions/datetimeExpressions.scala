@@ -1050,21 +1050,25 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
 /**
  * Parses a column to a date based on the given format.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(date_str, fmt) - Parses the `left` expression with the `fmt` expression.",
+  usage = "_FUNC_(date_str, fmt) - Parses the `left` expression with the `fmt` expression. Returns null with invalid input.",
   extended = """
     Examples:
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31
   """)
+// scalastyle:on line.size.limit
 case class ParseToDate(left: Expression, format: Expression, child: Expression)
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-    this(left, format, Cast(new ParseToTimestamp(left, format), DateType))
+    this(left, format, Cast(new UnixTimestamp(left, format), DateType))
   }
 
   def this(left: Expression) = {
+    // RuntimeReplaceable forces the signature, the second value
+    // is ignored completely
     this(left, Literal(""), ToDate(left))
   }
 
@@ -1080,7 +1084,7 @@ case class ParseToDate(left: Expression, format: Expression, child: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, fmt) - Parses the `left` expression with the `format` expression to a timestamp.",
+  usage = "_FUNC_(timestamp, fmt) - Parses the `left` expression with the `format` expression to a timestamp. Returns null with invalid input.",
   extended = """
     Examples:
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
