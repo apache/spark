@@ -72,7 +72,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Timestamp.valueOf("2014-01-01 00:00:00")) :: Nil)
   }
 
-  test("timestamp comparison with date strings with session local timezone") {
+  test("timestamp comparison with timestamp strings with session local timezone") {
     val df = Seq(
       (1, Timestamp.valueOf("2015-12-31 16:00:00")),
       (2, Timestamp.valueOf("2016-01-01 00:00:00"))).toDF("i", "t")
@@ -87,8 +87,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
       checkAnswer(
         df.select("t").filter($"t" <= "2016-01-01 00:00:00"),
-        Seq(
-          Row(Timestamp.valueOf("2015-12-31 16:00:00"))))
+        Row(Timestamp.valueOf("2015-12-31 16:00:00")))
     }
   }
 
@@ -120,8 +119,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select("t").filter($"t" >= "2016"),
-      Seq(
-        Row(Date.valueOf("2016-01-01"))))
+      Row(Date.valueOf("2016-01-01")))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
@@ -133,8 +131,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
       checkAnswer(
         df.select("t").filter($"t" >= "2016"),
-        Seq(
-          Row(Date.valueOf("2016-01-01"))))
+        Row(Date.valueOf("2016-01-01")))
     }
   }
 
@@ -807,8 +804,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
         unix_timestamp(col("ts")),
         unix_timestamp(col("s"), fmt),
         unix_timestamp(col("ss"))),
-      Seq(
-        Row(date.getTime / 1000L, ts.getTime / 1000L, ts.getTime / 1000L, ts.getTime / 1000L)))
+      Row(date.getTime / 1000L, ts.getTime / 1000L, ts.getTime / 1000L, ts.getTime / 1000L))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
       val sdf1 = new SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -824,12 +820,11 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
           unix_timestamp(col("ts")),
           unix_timestamp(col("s"), fmt),
           unix_timestamp(col("ss"))),
-        Seq(
-          Row(
-            sdf1.parse("2015-12-31").getTime / 1000L,
-            ts.getTime / 1000L,
-            sdf2.parse(s).getTime / 1000L,
-            sdf3.parse(ss).getTime / 1000L)))
+        Row(
+          sdf1.parse("2015-12-31").getTime / 1000L,
+          ts.getTime / 1000L,
+          sdf2.parse(s).getTime / 1000L,
+          sdf3.parse(ss).getTime / 1000L))
     }
   }
 
@@ -869,8 +864,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
         "to_unix_timestamp(ts)",
         s"to_unix_timestamp(s, '$fmt')",
         "to_unix_timestamp(ss)"),
-      Seq(
-        Row(date.getTime / 1000L, ts.getTime / 1000L, ts.getTime / 1000L, ts.getTime / 1000L)))
+      Row(date.getTime / 1000L, ts.getTime / 1000L, ts.getTime / 1000L, ts.getTime / 1000L))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
       val sdf1 = new SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -886,12 +880,11 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
           "to_unix_timestamp(ts)",
           s"to_unix_timestamp(s, '$fmt')",
           "to_unix_timestamp(ss)"),
-        Seq(
-          Row(
-            sdf1.parse("2015-12-31").getTime / 1000L,
-            ts.getTime / 1000L,
-            sdf2.parse(s).getTime / 1000L,
-            sdf3.parse(ss).getTime / 1000L)))
+        Row(
+          sdf1.parse("2015-12-31").getTime / 1000L,
+          ts.getTime / 1000L,
+          sdf2.parse(s).getTime / 1000L,
+          sdf3.parse(ss).getTime / 1000L))
     }
   }
 
