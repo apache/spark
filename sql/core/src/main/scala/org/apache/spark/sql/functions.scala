@@ -2677,8 +2677,8 @@ object functions {
    * @group datetime_funcs
    * @since 2.2.0
    */
-  def to_timestamp(s: Column, p: String): Column = withExpr {
-    new ParseToTimestamp(s.expr, Literal(p))
+  def to_timestamp(s: Column, fmt: String): Column = withExpr {
+    new ParseToTimestamp(s.expr, Literal(fmt))
   }
 
   /**
