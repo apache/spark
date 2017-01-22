@@ -183,16 +183,25 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("error handling: fail if the view sql itself is invalid") {
+    // A database that does not exist
+    assertInvalidReference("CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM db_not_exist234.jt")
+
     // A table that does not exist
-    intercept[AnalysisException] {
-      sql("CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM table_not_exist1345").collect()
-    }
+    assertInvalidReference("CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM table_not_exist345")
 
     // A column that does not exist
     intercept[AnalysisException] {
       sql("CREATE OR REPLACE VIEW myabcdview AS SELECT random1234 FROM jt").collect()
     }
   }
+
+  private def assertInvalidReference(query: String): Unit = {
+    val e = intercept[AnalysisException] {
+      sql(query)
+    }.getMessage
+    assert(e.contains("Table or view not found"))
+  }
+
 
   test("error handling: fail if the temp view name contains the database prefix") {
     // Fully qualified table name like "database.table" is not allowed for temporary view
@@ -210,10 +219,13 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("error handling: fail if the temp view sql itself is invalid") {
-     // A table that does not exist for temporary view
-    intercept[AnalysisException] {
-      sql("CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM table_not_exist1345")
-    }
+    // A database that does not exist
+    assertInvalidReference(
+      "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM db_not_exist234.jt")
+
+    // A table that does not exist
+    assertInvalidReference(
+      "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM table_not_exist1345")
 
     // A column that does not exist, for temporary view
     intercept[AnalysisException] {
@@ -230,6 +242,42 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           |AS SELECT * FROM jt
           |""".stripMargin)
       checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))
+    }
+  }
+
+  test("correctly parse a nested view") {
+    withTempDatabase { db =>
+      withView("view1", "view2", s"$db.view3") {
+        sql("CREATE VIEW view1(x, y) AS SELECT * FROM jt")
+
+        // Create a nested view in the same database.
+        sql("CREATE VIEW view2(id, id1) AS SELECT * FROM view1")
+        checkAnswer(sql("SELECT * FROM view2 ORDER BY id"), (1 to 9).map(i => Row(i, i)))
+
+        // Create a nested view in a different database.
+        activateDatabase(db) {
+          sql(s"CREATE VIEW $db.view3(id, id1) AS SELECT * FROM default.view1")
+          checkAnswer(sql("SELECT * FROM view3 ORDER BY id"), (1 to 9).map(i => Row(i, i)))
+        }
+      }
+    }
+  }
+
+  test("correctly parse a view with custom column names") {
+    withTable("testTable") {
+      spark.range(1, 10).selectExpr("id", "id + 1 id1").write.saveAsTable("testTable")
+      withView("testView1", "testView2") {
+        // Correctly create a view with custom column names
+        sql("CREATE VIEW testView1(x, y) AS SELECT * FROM testTable")
+        checkAnswer(sql("SELECT * FROM testView1 ORDER BY x"), (1 to 9).map(i => Row(i, i + 1)))
+
+        // Throw an AnalysisException if the number of columns don't match up.
+        val e = intercept[AnalysisException] {
+          sql("CREATE VIEW testView2(x, y, z) AS SELECT * FROM testTable")
+        }.getMessage
+        assert(e.contains("The number of columns produced by the SELECT clause (num: `2`) does " +
+          "not match the number of column names specified by CREATE VIEW (num: `3`)."))
+      }
     }
   }
 
@@ -330,6 +378,25 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("ALTER VIEW testView AS SELECT * FROM jt2")
         // make sure the view has been changed.
         checkAnswer(sql("SELECT * FROM testView ORDER BY i"), (1 to 9).map(i => Row(i, i)))
+      }
+    }
+  }
+
+  test("correctly handle ALTER VIEW on a referenced view") {
+    withTable("jt2") {
+      val df = (1 until 10).map(i => (i, i + 1)).toDF("i", "j")
+      df.write.format("json").saveAsTable("jt2")
+
+      withView("view1", "view2") {
+        sql("CREATE VIEW view1(x, y) AS SELECT * FROM jt")
+
+        // Create a nested view.
+        sql("CREATE VIEW view2(id, id1) AS SELECT * FROM view1")
+        checkAnswer(sql("SELECT * FROM view2 ORDER BY id"), (1 to 9).map(i => Row(i, i)))
+
+        // Alter the referenced view.
+        sql("ALTER VIEW view1 AS SELECT i AS x, j AS y FROM jt2")
+        checkAnswer(sql("SELECT * FROM view2 ORDER BY id"), (1 to 9).map(i => Row(i, i + 1)))
       }
     }
   }
@@ -457,14 +524,14 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withTable("jt1", "jt2") {
       spark.range(1, 10).toDF("id1").write.format("json").saveAsTable("jt1")
       spark.range(1, 10).toDF("id2").write.format("json").saveAsTable("jt2")
-      sql("CREATE VIEW testView AS SELECT * FROM jt1 JOIN jt2 ON id1 == id2")
-      checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
+      withView("testView") {
+        sql("CREATE VIEW testView AS SELECT * FROM jt1 JOIN jt2 ON id1 == id2")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
 
-      val df = (1 until 10).map(i => i -> i).toDF("id1", "newCol")
-      df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("jt1")
-      checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
-
-      sql("DROP VIEW testView")
+        val df = (1 until 10).map(i => i -> i).toDF("id1", "newCol")
+        df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("jt1")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
+      }
     }
   }
 
@@ -548,122 +615,31 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("correctly resolve a nested view") {
-    withTempDatabase { db =>
-      withView(s"$db.view1", s"$db.view2") {
-        val view1 = CatalogTable(
-          identifier = TableIdentifier("view1", Some(db)),
-          tableType = CatalogTableType.VIEW,
-          storage = CatalogStorageFormat.empty,
-          schema = new StructType().add("x", "long").add("y", "long"),
-          viewText = Some("SELECT * FROM jt"),
-          properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-            CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
-            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
-            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
-        val view2 = CatalogTable(
-          identifier = TableIdentifier("view2", Some(db)),
-          tableType = CatalogTableType.VIEW,
-          storage = CatalogStorageFormat.empty,
-          schema = new StructType().add("id", "long").add("id1", "long"),
-          viewText = Some("SELECT * FROM view1"),
-          properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> db,
-            CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
-            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "x",
-            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "y"))
-        activateDatabase(db) {
-          hiveContext.sessionState.catalog.createTable(view1, ignoreIfExists = false)
-          hiveContext.sessionState.catalog.createTable(view2, ignoreIfExists = false)
-          checkAnswer(sql("SELECT * FROM view2 ORDER BY id"), (1 to 9).map(i => Row(i, i)))
-        }
-      }
-    }
-  }
-
-  test("correctly resolve a view with CTE") {
-    withView("cte_view") {
-      val cte_view = CatalogTable(
-        identifier = TableIdentifier("cte_view"),
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = new StructType().add("n", "int"),
-        viewText = Some("WITH w AS (SELECT 1 AS n) SELECT n FROM w"),
-        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "1",
-          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "n"))
-      hiveContext.sessionState.catalog.createTable(cte_view, ignoreIfExists = false)
-      checkAnswer(sql("SELECT * FROM cte_view"), Row(1))
-    }
-  }
-
-  test("correctly resolve a view in a self join") {
-    withView("join_view") {
-      val join_view = CatalogTable(
-        identifier = TableIdentifier("join_view"),
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = new StructType().add("id", "long").add("id1", "long"),
-        viewText = Some("SELECT * FROM jt"),
-        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
-          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
-          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
-      hiveContext.sessionState.catalog.createTable(join_view, ignoreIfExists = false)
-      checkAnswer(
-        sql("SELECT * FROM join_view t1 JOIN join_view t2 ON t1.id = t2.id ORDER BY t1.id"),
-        (1 to 9).map(i => Row(i, i, i, i)))
-    }
-  }
-
-  private def assertInvalidReference(query: String): Unit = {
-    val e = intercept[AnalysisException] {
-      sql(query)
-    }.getMessage
-    assert(e.contains("Table or view not found"))
-  }
-
   test("error handling: fail if the referenced table or view is invalid") {
     withView("view1", "view2", "view3") {
       // Fail if the referenced table is defined in a invalid database.
-      val view1 = CatalogTable(
-        identifier = TableIdentifier("view1"),
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = new StructType().add("id", "long").add("id1", "long"),
-        viewText = Some("SELECT * FROM invalid_db.jt"),
-        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
-          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
-          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
-      hiveContext.sessionState.catalog.createTable(view1, ignoreIfExists = false)
+      withTempDatabase { db =>
+        withTable(s"$db.table1") {
+          activateDatabase(db) {
+            sql("CREATE TABLE table1(a int, b string)")
+            sql("CREATE VIEW default.view1 AS SELECT * FROM table1")
+          }
+        }
+      }
       assertInvalidReference("SELECT * FROM view1")
 
       // Fail if the referenced table is invalid.
-      val view2 = CatalogTable(
-        identifier = TableIdentifier("view2"),
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = new StructType().add("id", "long").add("id1", "long"),
-        viewText = Some("SELECT * FROM invalid_table"),
-        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
-          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
-          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
-      hiveContext.sessionState.catalog.createTable(view2, ignoreIfExists = false)
+      withTable("table2") {
+        sql("CREATE TABLE table2(a int, b string)")
+        sql("CREATE VIEW view2 AS SELECT * FROM table2")
+      }
       assertInvalidReference("SELECT * FROM view2")
 
       // Fail if the referenced view is invalid.
-      val view3 = CatalogTable(
-        identifier = TableIdentifier("view3"),
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = new StructType().add("id", "long").add("id1", "long"),
-        viewText = Some("SELECT * FROM view2"),
-        properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-          CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
-          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
-          s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
-      hiveContext.sessionState.catalog.createTable(view3, ignoreIfExists = false)
+      withView("testView") {
+        sql("CREATE VIEW testView AS SELECT * FROM jt")
+        sql("CREATE VIEW view3 AS SELECT * FROM testView")
+      }
       assertInvalidReference("SELECT * FROM view3")
     }
   }
@@ -694,21 +670,20 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("correctly resolve a view in a self join") {
+    withView("testView") {
+      sql("CREATE VIEW testView AS SELECT * FROM jt")
+      checkAnswer(
+        sql("SELECT * FROM testView t1 JOIN testView t2 ON t1.id = t2.id ORDER BY t1.id"),
+        (1 to 9).map(i => Row(i, i, i, i)))
+    }
+  }
+
   test("resolve a view with custom column names") {
     withTable("testTable") {
       spark.range(1, 10).selectExpr("id", "id + 1 id1").write.saveAsTable("testTable")
       withView("testView") {
-        val testView = CatalogTable(
-          identifier = TableIdentifier("testView"),
-          tableType = CatalogTableType.VIEW,
-          storage = CatalogStorageFormat.empty,
-          schema = new StructType().add("x", "long").add("y", "long"),
-          viewText = Some("SELECT * FROM testTable"),
-          properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-            CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
-            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
-            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
-        hiveContext.sessionState.catalog.createTable(testView, ignoreIfExists = false)
+        sql("CREATE VIEW testView(x, y) AS SELECT * FROM testTable")
 
         // Correctly resolve a view with custom column names.
         checkAnswer(sql("SELECT * FROM testView ORDER BY x"), (1 to 9).map(i => Row(i, i + 1)))
@@ -730,17 +705,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withTable("testTable") {
       spark.range(1, 10).selectExpr("id", "id + 1 id1").write.saveAsTable("testTable")
       withView("testView") {
-        val testView = CatalogTable(
-          identifier = TableIdentifier("testView"),
-          tableType = CatalogTableType.VIEW,
-          storage = CatalogStorageFormat.empty,
-          schema = new StructType().add("id", "long").add("id1", "long"),
-          viewText = Some("SELECT * FROM testTable"),
-          properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
-            CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
-            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}0" -> "id",
-            s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}1" -> "id1"))
-        hiveContext.sessionState.catalog.createTable(testView, ignoreIfExists = false)
+        sql("CREATE VIEW testView AS SELECT * FROM testTable")
 
         // Allow casting from IntegerType to LongType
         val df = (1 until 10).map(i => (i, i + 1)).toDF("id", "id1")
@@ -757,6 +722,15 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         df3.write.format("json").mode(SaveMode.Overwrite).saveAsTable("testTable")
         intercept[AnalysisException](sql("SELECT * FROM testView"))
       }
+    }
+  }
+
+  // TODO: Check for cyclic view references on ALTER VIEW.
+  ignore("correctly handle a cyclic view reference") {
+    withView("view1", "view2") {
+      sql("CREATE VIEW view1 AS SELECT * FROM jt")
+      sql("CREATE VIEW view2 AS SELECT * FROM view1")
+      intercept[AnalysisException](sql("ALTER VIEW view1 AS SELECT * FROM view2"))
     }
   }
 }
