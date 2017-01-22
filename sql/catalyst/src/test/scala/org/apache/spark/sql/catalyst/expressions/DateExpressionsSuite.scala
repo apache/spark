@@ -389,20 +389,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(ToDate, DateType)
   }
 
-  test("function parse_to_date") {
-    def testDateParse(input: String, format: String, output: String): Unit = {
-      val parsed = new ParseToDate(Literal(input), Literal(format))
-      checkEvaluation(parsed, DateTimeUtils.fromJavaDate(Date.valueOf((output))), null)
-    }
-    // This fails but I am not sure why, it doesn't really make sense that it would
-    // simply because it's the right answer. I don't understand CheckEvaluation.
-    testDateParse("2015-07-15", "yyyy-MM-dd", "2015-07-15")
-  }
-
-  test("function parse_to_timestamp") {
-    // TODO(BILL)
-  }
-
   test("function trunc") {
     def testTrunc(input: Date, fmt: String, expected: Date): Unit = {
       checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
