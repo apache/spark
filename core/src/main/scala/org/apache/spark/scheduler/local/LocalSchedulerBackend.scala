@@ -62,7 +62,6 @@ private[spark] class LocalEndpoint(
 
   private val executor = new Executor(
     localExecutorId, localExecutorHostname, SparkEnv.get, userClassPath, isLocal = true)
-  private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(SparkEnv.get.conf)
 
   override def receive: PartialFunction[Any, Unit] = {
     case ReviveOffers =>
