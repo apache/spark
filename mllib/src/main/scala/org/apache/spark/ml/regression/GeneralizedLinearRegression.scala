@@ -57,7 +57,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   final val family: Param[String] = new Param(this, "family",
     "The name of family which is a description of the error distribution to be used in the " +
       s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
-    ParamValidators.inArray[String](supportedFamilyNames.toArray))
+    (value: String) => supportedFamilyNames.contains(value.toLowerCase))
 
   /** @group getParam */
   @Since("2.0.0")
@@ -74,7 +74,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   final val link: Param[String] = new Param(this, "link", "The name of link function " +
     "which provides the relationship between the linear predictor and the mean of the " +
     s"distribution function. Supported options: ${supportedLinkNames.mkString(", ")}",
-    ParamValidators.inArray[String](supportedLinkNames.toArray))
+    (value: String) => supportedLinkNames.contains(value.toLowerCase))
 
   /** @group getParam */
   @Since("2.0.0")
@@ -405,7 +405,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
      * @param name family name: "gaussian", "binomial", "poisson" or "gamma".
      */
     def fromName(name: String): Family = {
-      name match {
+      name.toLowerCase match {
         case Gaussian.name => Gaussian
         case Binomial.name => Binomial
         case Poisson.name => Poisson
@@ -609,7 +609,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
      *             "inverse", "probit", "cloglog" or "sqrt".
      */
     def fromName(name: String): Link = {
-      name match {
+      name.toLowerCase match {
         case Identity.name => Identity
         case Logit.name => Logit
         case Log.name => Log

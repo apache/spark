@@ -553,7 +553,7 @@ class GeneralizedLinearRegressionSuite
     for ((link, dataset) <- Seq(("inverse", datasetGammaInverse),
       ("identity", datasetGammaIdentity), ("log", datasetGammaLog))) {
       for (fitIntercept <- Seq(false, true)) {
-        val trainer = new GeneralizedLinearRegression().setFamily("gamma").setLink(link)
+        val trainer = new GeneralizedLinearRegression().setFamily("Gamma").setLink(link)
           .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
@@ -989,7 +989,7 @@ class GeneralizedLinearRegressionSuite
        -0.6344390  0.3172195  0.2114797 -0.1586097
      */
     val trainer = new GeneralizedLinearRegression()
-      .setFamily("gamma")
+      .setFamily("Gamma")
       .setWeightCol("weight")
 
     val model = trainer.fit(datasetWithWeight)
