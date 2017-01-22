@@ -88,7 +88,8 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     case Some(("-v", None)) =>
       val runFunc = (sparkSession: SparkSession) => {
         sparkSession.sessionState.conf.getAllDefinedConfs.sorted.map {
-          case (key, defaultValue, doc) => Row(key, defaultValue, doc)
+          case (key, defaultValue, doc) =>
+            Row(key, if (defaultValue == null) "null" else defaultValue, doc)
         }
       }
       val schema = StructType(
