@@ -1400,7 +1400,7 @@ class HiveDDLSuite
       spark.sessionState.catalog.getTableMetadata(TableIdentifier(tblName)).schema.map(_.name)
     }
 
-    withTable("t", "t1", "t2", "t3", "t4", "t5") {
+    withTable("t", "t1", "t2", "t3", "t4", "t5", "t6") {
       sql("CREATE TABLE t(a int, b int, c int, d int) USING parquet PARTITIONED BY (d, b)")
       assert(getTableColumns("t") == Seq("a", "c", "d", "b"))
 
@@ -1421,9 +1421,13 @@ class HiveDDLSuite
       sql("CREATE TABLE t4(a int, b int, c int, d int) USING hive PARTITIONED BY (d, b)")
       assert(getTableColumns("t4") == Seq("a", "c", "d", "b"))
 
-      withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
         sql("CREATE TABLE t5 USING hive PARTITIONED BY (d, b) AS SELECT 1 a, 1 b, 1 c, 1 d")
         assert(getTableColumns("t5") == Seq("a", "c", "d", "b"))
+
+        Seq((1, 1, 1, 1)).toDF("a", "b", "c", "d").write.format("hive")
+          .partitionBy("d", "b").saveAsTable("t6")
+        assert(getTableColumns("t6") == Seq("a", "c", "d", "b"))
       }
     }
   }
