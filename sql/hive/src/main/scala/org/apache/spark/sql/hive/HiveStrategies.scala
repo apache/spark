@@ -119,42 +119,9 @@ private[hive] trait HiveStrategies {
 
   object HiveScripts extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-<<<<<<< 0d4a4987f0bce2b4f9f2574eea02dcd82ca033b1
       case ScriptTransformation(input, script, output, child, ioschema) =>
         val hiveIoSchema = HiveScriptIOSchema(ioschema)
         ScriptTransformationExec(input, script, output, planLater(child), hiveIoSchema) :: Nil
-=======
-      case logical.ScriptTransformation(input, script, output, child, ioschema) =>
-        val hiveIoSchema = HiveScriptIOSchema(ioschema)
-        HiveScriptTransformationExec(input, script, output, planLater(child), hiveIoSchema) :: Nil
-      case _ => Nil
-    }
-  }
-
-  object DataSinks extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.InsertIntoTable(
-          table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
-        InsertIntoHiveTable(
-          table, partition, planLater(child), overwrite, ifNotExists) :: Nil
-
-      case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
-        // Currently we will never hit this branch, as SQL string API can only use `Ignore` or
-        // `ErrorIfExists` mode, and `DataFrameWriter.saveAsTable` doesn't support hive serde
-        // tables yet.
-        if (mode == SaveMode.Append || mode == SaveMode.Overwrite) {
-          throw new AnalysisException(
-            "CTAS for hive serde tables does not support append or overwrite semantics.")
-        }
-
-        val dbName = tableDesc.identifier.database.getOrElse(sparkSession.catalog.currentDatabase)
-        val cmd = CreateHiveTableAsSelectCommand(
-          tableDesc.copy(identifier = tableDesc.identifier.copy(database = Some(dbName))),
-          query,
-          mode == SaveMode.Ignore)
-        ExecutedCommandExec(cmd) :: Nil
-
->>>>>>> remove exrta change
       case _ => Nil
     }
   }
