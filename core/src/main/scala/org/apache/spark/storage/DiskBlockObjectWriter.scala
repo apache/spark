@@ -202,30 +202,29 @@ private[spark] class DiskBlockObjectWriter(
   def revertPartialWritesAndClose(): File = {
     // Discard current writes. We do this by flushing the outstanding writes and then
     // truncating the file to its initial position.
-    try {
+    Utils.tryWithSafeFinally {
       if (initialized) {
         writeMetrics.decBytesWritten(reportedPosition - committedPosition)
         writeMetrics.decRecordsWritten(numRecordsWritten)
         streamOpen = false
         closeResources()
       }
-   } catch {
-      case e: Exception =>
-        logError("Uncaught exception while closing file " + file, e)
+    } {
+      var truncateStream: FileOutputStream = null
+      try {
+        truncateStream = new FileOutputStream(file, true)
+        truncateStream.getChannel.truncate(committedPosition)
+      } catch {
+        case e: Exception =>
+          logError("Uncaught exception while reverting partial writes to file " + file, e)
+      } finally {
+        if (truncateStream != null) {
+          truncateStream.close()
+          truncateStream = null
+        }
+      }
     }
-
-    var truncateStream: FileOutputStream = null
-    try {
-      truncateStream = new FileOutputStream(file, true)
-      truncateStream.getChannel.truncate(committedPosition)
-      file
-    } catch {
-      case e: Exception =>
-        logError("Uncaught exception while reverting partial writes to file " + file, e)
-        file
-    } finally {
-      truncateStream.close()
-    }
+    file
   }
 
   /**
