@@ -640,13 +640,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
 private[spark] object CoarseGrainedSchedulerBackend extends Logging {
   val ENDPOINT_NAME = "CoarseGrainedScheduler"
+
   // abort TaskSetManager without exception
-  def abortTaskSetManager(
+  private[scheduler] def abortTaskSetManager(
       scheduler: TaskSchedulerImpl,
       taskId: Long,
       msg: => String,
       exception: Option[Throwable] = None): Unit = {
-      scheduler.taskIdToTaskSetManager.get(taskId).foreach { taskSetMgr =>
+    scheduler.taskIdToTaskSetManager.get(taskId).foreach { taskSetMgr =>
       try {
         taskSetMgr.abort(msg, exception)
       } catch {
