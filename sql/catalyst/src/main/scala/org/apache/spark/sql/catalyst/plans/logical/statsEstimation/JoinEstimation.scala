@@ -118,7 +118,7 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
       val outputAttrStats = AttributeMap(outputStats.toSeq)
 
       Some(Statistics(
-        sizeInBytes = getOutputSize(join.output, outputAttrStats, outputRows),
+        sizeInBytes = getOutputSize(join.output, outputRows, outputAttrStats),
         rowCount = Some(outputRows),
         attributeStats = outputAttrStats,
         isBroadcastable = false))
@@ -131,7 +131,7 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
       val outputAttrStats = getOutputMap(inputAttrStats, join.output)
       val outputRows = leftStats.rowCount.get * rightStats.rowCount.get
       Some(Statistics(
-        sizeInBytes = getOutputSize(join.output, outputAttrStats, outputRows),
+        sizeInBytes = getOutputSize(join.output, outputRows, outputAttrStats),
         rowCount = Some(outputRows),
         attributeStats = outputAttrStats,
         isBroadcastable = false))
@@ -303,7 +303,7 @@ case class LeftSemiAntiEstimation(conf: CatalystConf, join: Join) {
       val outputAttrStats = getOutputMap(leftStats.attributeStats, join.output)
       val outputRows = leftStats.rowCount.get
       Some(Statistics(
-        sizeInBytes = getOutputSize(join.output, outputAttrStats, outputRows),
+        sizeInBytes = getOutputSize(join.output, outputRows, outputAttrStats),
         rowCount = Some(outputRows),
         attributeStats = outputAttrStats,
         isBroadcastable = false))
