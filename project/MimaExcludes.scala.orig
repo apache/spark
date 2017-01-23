@@ -58,16 +58,18 @@ object MimaExcludes {
     // [SPARK-19069] [CORE] Expose task 'status' and 'duration' in spark history server REST API.
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.this"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.<init>$default$10"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.<init>$default$11"),
 <<<<<<< HEAD
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.<init>$default$11"),
 
     // [SPARK-17161] Removing Python-friendly constructors not needed
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.OneVsRestModel.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.OneVsRestModel.this")
 =======
->>>>>>> Fixed merge with latest
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.<init>$default$11")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.createTable"),
 
     // [SPARK-18693] Added weightSum to trait MultivariateStatisticalSummary
     ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.stat.MultivariateStatisticalSummary.weightSum")
+>>>>>>> [SPARK-18693][ML] Evaluators should use weight column
   )
 
   // Exclude rules for 2.1.x
