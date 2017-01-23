@@ -115,12 +115,12 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
       val existingProvider = DataSource.lookupDataSource(existingTable.provider.get)
       val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get)
 
-      // Check if the specified data source match the data source of the existing table.
       // TODO: Check that options from the resolved relation match the relation that we are
       // inserting into (i.e. using the same compression).
       if (existingProvider != specifiedProvider) {
         throw new AnalysisException(s"The format of the existing table $tableName is " +
-          s"`$existingProvider`. It doesn't match the specified format `$specifiedProvider`.")
+          s"`${existingProvider.getSimpleName}`. It doesn't match the specified format " +
+          s"`${specifiedProvider.getSimpleName}`.")
       }
 
       if (analyzedQuery.schema.length != existingTable.schema.length) {
