@@ -167,8 +167,11 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val strategy = new OldStrategy(OldAlgo.Regression, Gini, maxDepth = 2,
       maxBins = 5)
-    intercept[IllegalArgumentException] {
-      RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
+    withClue("DecisionTree requires number of features > 0," +
+      " but was given an empty features vector") {
+      intercept[IllegalArgumentException] {
+        RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
+      }
     }
   }
 

@@ -836,8 +836,7 @@ private[spark] object RandomForest extends Logging {
         // return invalid information gain stats.  Take any split and continue.
         // Splits is empty, so arbitrarily choose to split on any threshold
         val dummyFeatureIndex = featuresForNode.map(_.head).getOrElse(0)
-        val parentImpurityCalculator = binAggregates.getImpurityCalculator(
-          binAggregates.getFeatureOffset(dummyFeatureIndex), 0)
+        val parentImpurityCalculator = binAggregates.getParentImpurityCalculator()
         if (binAggregates.metadata.isContinuous(dummyFeatureIndex)) {
           (new ContinuousSplit(dummyFeatureIndex, 0),
             ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator))
