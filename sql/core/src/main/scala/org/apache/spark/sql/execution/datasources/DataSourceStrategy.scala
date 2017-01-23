@@ -130,6 +130,17 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
+      CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
+
+    case CreateTable(tableDesc, mode, Some(query))
+        if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
+      CreateDataSourceTableAsSelectCommand(tableDesc, mode, query)
+
+    case InsertIntoTable(l @ LogicalRelation(_: InsertableRelation, _, _),
+        parts, query, overwrite, false) if parts.isEmpty =>
+      InsertIntoDataSourceCommand(l, query, overwrite)
+
     case InsertIntoTable(
         l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, false) =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
@@ -199,40 +210,33 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
  * Replaces [[SimpleCatalogRelation]] with data source table if its table provider is not hive.
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private def readDataSourceTable(table: CatalogTable): LogicalPlan = {
-    val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
-    val cache = sparkSession.sessionState.catalog.tableRelationCache
-    val withHiveSupport =
-      sparkSession.sparkContext.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive"
-
-    cache.get(qualifiedTableName, new Callable[LogicalPlan]() {
-      override def call(): LogicalPlan = {
-        val pathOption = table.storage.locationUri.map("path" -> _)
-        val dataSource =
-          DataSource(
-            sparkSession,
-            // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
-            // inferred at runtime. We should still support it.
-            userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
-            partitionColumns = table.partitionColumnNames,
-            bucketSpec = table.bucketSpec,
-            className = table.provider.get,
-            options = table.storage.properties ++ pathOption,
-            // TODO: improve `InMemoryCatalog` and remove this limitation.
-            catalogTable = if (withHiveSupport) Some(table) else None)
-
-        LogicalRelation(dataSource.resolveRelation(), catalogTable = Some(table))
-      }
-    })
-  }
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _)
-        if DDLUtils.isDatasourceTable(s.metadata) =>
-      i.copy(table = readDataSourceTable(s.metadata))
-
     case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
-      readDataSourceTable(s.metadata)
+      val table = s.metadata
+      val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
+      val cache = sparkSession.sessionState.catalog.tableRelationCache
+      val withHiveSupport =
+        sparkSession.sparkContext.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive"
+
+      cache.get(qualifiedTableName, new Callable[LogicalPlan]() {
+        override def call(): LogicalPlan = {
+          val pathOption = table.storage.locationUri.map("path" -> _)
+          val dataSource =
+            DataSource(
+              sparkSession,
+              // In older version(prior to 2.1) of Spark, the table schema can be empty and should
+              // be inferred at runtime. We should still support it.
+              userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
+              partitionColumns = table.partitionColumnNames,
+              bucketSpec = table.bucketSpec,
+              className = table.provider.get,
+              options = table.storage.properties ++ pathOption,
+              // TODO: improve `InMemoryCatalog` and remove this limitation.
+              catalogTable = if (withHiveSupport) Some(table) else None)
+
+          LogicalRelation(dataSource.resolveRelation(), catalogTable = Some(table))
+        }
+      })
   }
 }
 
@@ -272,10 +276,6 @@ object DataSourceStrategy extends Strategy with Logging {
         UnknownPartitioning(0),
         Map.empty,
         None) :: Nil
-
-    case InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
-      part, query, overwrite, false) if part.isEmpty =>
-      ExecutedCommandExec(InsertIntoDataSourceCommand(l, query, overwrite)) :: Nil
 
     case _ => Nil
   }

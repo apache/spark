@@ -68,12 +68,12 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
         new ResolveDataSource(sparkSession) :: Nil
 
       override val postHocResolutionRules =
-        AnalyzeCreateTable(sparkSession) ::
+        PreprocessTableCreation(sparkSession) ::
         PreprocessTableInsertion(conf) ::
         DataSourceAnalysis(conf) ::
         new HiveAnalysis(sparkSession) :: Nil
 
-      override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
+      override val extendedCheckRules = Seq(PreWriteCheck)
     }
   }
 
@@ -86,18 +86,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       override val sparkSession: SparkSession = self.sparkSession
 
       override def strategies: Seq[Strategy] = {
-        experimentalMethods.extraStrategies ++ Seq(
-          FileSourceStrategy,
-          DataSourceStrategy,
-          DDLStrategy,
-          SpecialLimits,
-          InMemoryScans,
-          HiveTableScans,
-          Scripts,
-          Aggregation,
-          JoinSelection,
-          BasicOperators
-        )
+        super.strategies ++ Seq(HiveTableScans, Scripts)
       }
     }
   }
