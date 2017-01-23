@@ -2036,24 +2036,25 @@ class SparkSubmitTests(unittest.TestCase):
         self.assertIn("[2, 4, 6]", out.decode('utf-8'))
 
     def test_user_configuration(self):
-      """Make sure user configuration is respected (SPARK-19307)"""
-      script = self.createTempFile("test.py", """
-          |from pyspark import SparkConf, SparkContext
-          |
-          |conf = SparkConf().set("spark.test_config", "1")
-          |sc = SparkContext(conf = conf)
-          |try:
-          |    if sc._conf.get("spark.test_config") != "1":
-          |        raise Exception("Cannot find spark.test_config in SparkContext's conf.")
-          |finally:
-          |    sc.stop()
-          """)
-      try:
-          subprocess.check_output([self.sparkSubmit, "--master", "local", script],
-              stderr=subprocess.STDOUT)
-      except subprocess.CalledProcessError as e:
-          # This gives us a better error message for debugging.
-          self.fail("Test exited with {0}, output:\n{1}".format(e.returncode, e.output))
+        """Make sure user configuration is respected (SPARK-19307)"""
+        script = self.createTempFile("test.py", """
+            |from pyspark import SparkConf, SparkContext
+            |
+            |conf = SparkConf().set("spark.test_config", "1")
+            |sc = SparkContext(conf = conf)
+            |try:
+            |    if sc._conf.get("spark.test_config") != "1":
+            |        raise Exception("Cannot find spark.test_config in SparkContext's conf.")
+            |finally:
+            |    sc.stop()
+            """)
+        try:
+            subprocess.check_output(
+                [self.sparkSubmit, "--master", "local", script],
+                stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            # This gives us a better error message for debugging.
+            self.fail("Test exited with {0}, output:\n{1}".format(e.returncode, e.output))
 
 
 class ContextTests(unittest.TestCase):
