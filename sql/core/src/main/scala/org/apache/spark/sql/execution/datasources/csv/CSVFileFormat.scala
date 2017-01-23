@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.{Charset, StandardCharsets}
 
+import com.univocity.parsers.csv.CsvParser
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -28,7 +29,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Encoders, Row, SparkSession}
+import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
@@ -61,7 +62,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val paths = files.map(_.getPath.toString)
     val lines: Dataset[String] = readText(sparkSession, csvOptions, paths)
     val firstLine: String = findFirstLine(csvOptions, lines)
-    val firstRow = new CsvReader(csvOptions).parseLine(firstLine)
+    val firstRow = new CsvParser(csvOptions.asParserSettings).parseLine(firstLine)
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     val header = makeSafeHeader(firstRow, csvOptions, caseSensitive)
 
@@ -155,7 +156,6 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     val csvOptions = new CSVOptions(options)
     val commentPrefix = csvOptions.comment.toString
-    val headers = requiredSchema.fields.map(_.name)
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -170,23 +170,15 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         }
       }
 
+      // Consumes the header in the iterator.
       CSVRelation.dropHeaderLine(file, lineIterator, csvOptions)
 
-      val csvParser = new CsvReader(csvOptions)
-      val tokenizedIterator = lineIterator.filter { line =>
+      val filteredIter = lineIterator.filter { line =>
         line.trim.nonEmpty && !line.startsWith(commentPrefix)
-      }.map { line =>
-        csvParser.parseLine(line)
       }
-      val parser = CSVRelation.csvParser(dataSchema, requiredSchema.fieldNames, csvOptions)
-      var numMalformedRecords = 0
-      tokenizedIterator.flatMap { recordTokens =>
-        val row = parser(recordTokens, numMalformedRecords)
-        if (row.isEmpty) {
-          numMalformedRecords += 1
-        }
-        row
-      }
+
+      val parser = new UnivocityParser(dataSchema, requiredSchema, csvOptions)
+      filteredIter.flatMap(parser.parse)
     }
   }
 
