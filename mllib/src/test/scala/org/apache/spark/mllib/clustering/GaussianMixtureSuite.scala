@@ -31,8 +31,11 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.sparse(GaussianMixture.MAX_NUM_FEATURES + 1, Array(0, 4), Array(3.0, 8.0)),
       Vectors.sparse(GaussianMixture.MAX_NUM_FEATURES + 1, Array(1, 5), Array(4.0, 9.0))))
     val gm = new GaussianMixture()
-    intercept[IllegalArgumentException] {
-      gm.run(rdd)
+    withClue(s"GMM should restrict the maximum number of features to be < " +
+      s"${GaussianMixture.MAX_NUM_FEATURES}") {
+      intercept[IllegalArgumentException] {
+        gm.run(rdd)
+      }
     }
   }
 

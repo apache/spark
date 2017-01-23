@@ -54,15 +54,16 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("gmm fails on high dimensional data") {
-    val ctx = spark.sqlContext
-    import ctx.implicits._
     val df = Seq(
       Vectors.sparse(GaussianMixture.MAX_NUM_FEATURES + 1, Array(0, 4), Array(3.0, 8.0)),
       Vectors.sparse(GaussianMixture.MAX_NUM_FEATURES + 1, Array(1, 5), Array(4.0, 9.0)))
       .map(Tuple1.apply).toDF("features")
     val gm = new GaussianMixture()
-    intercept[IllegalArgumentException] {
-      gm.fit(df)
+    withClue(s"GMM should restrict the maximum number of features to be < " +
+      s"${GaussianMixture.MAX_NUM_FEATURES}") {
+      intercept[IllegalArgumentException] {
+        gm.fit(df)
+      }
     }
   }
 
