@@ -50,6 +50,11 @@ object SQLConf {
     sqlConfEntries.put(entry.key, entry)
   }
 
+  // For testing only
+  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntries.synchronized {
+    sqlConfEntries.remove(entry.key)
+  }
+
   private[sql] object SQLConfigBuilder {
 
     def apply(key: String): ConfigBuilder = new ConfigBuilder(key).onCreate(register)
@@ -308,6 +313,13 @@ object SQLConf {
     .doc("Set a Fair Scheduler pool for a JDBC client session.")
     .stringConf
     .createOptional
+
+  val THRIFTSERVER_INCREMENTAL_COLLECT =
+    SQLConfigBuilder("spark.sql.thriftServer.incrementalCollect")
+      .internal()
+      .doc("When true, enable incremental collection for execution in Thrift Server.")
+      .booleanConf
+      .createWithDefault(false)
 
   val THRIFTSERVER_UI_STATEMENT_LIMIT =
     SQLConfigBuilder("spark.sql.thriftserver.ui.retainedStatements")

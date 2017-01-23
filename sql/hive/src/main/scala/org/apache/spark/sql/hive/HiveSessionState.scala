@@ -50,7 +50,8 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       functionResourceLoader,
       functionRegistry,
       conf,
-      newHadoopConf())
+      newHadoopConf(),
+      sqlParser)
   }
 
   /**
@@ -65,7 +66,10 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
         PreprocessTableInsertion(conf) ::
         DataSourceAnalysis(conf) ::
         new DetermineHiveSerde(conf) ::
-        (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
+        new HiveAnalysis(sparkSession) ::
+        new FindDataSourceTable(sparkSession) ::
+        new FindHiveSerdeTable(sparkSession) ::
+        new ResolveDataSource(sparkSession) :: Nil
 
       override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
@@ -87,7 +91,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
           SpecialLimits,
           InMemoryScans,
           HiveTableScans,
-          DataSinks,
           Scripts,
           Aggregation,
           JoinSelection,
