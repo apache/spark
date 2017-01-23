@@ -61,7 +61,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
 
   /** @group getParam */
   @Since("2.0.0")
-  def getFamily: String = $(family)
+  def getFamily: String = $(family).toLowerCase
 
   /**
    * Param for the name of link function which provides the relationship
