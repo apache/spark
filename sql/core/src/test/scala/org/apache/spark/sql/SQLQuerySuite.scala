@@ -1003,7 +1003,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     try {
       val result = sql("SET -v").collect()
       assert(result === result.sortBy(_.getString(0)))
-      spark.sessionState.conf.clear()
     } finally {
       SQLConf.unregister(confEntry)
     }
