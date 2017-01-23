@@ -76,6 +76,10 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #' model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
 #' summary(model)
 #'
+#' # get fitted result from a bisecting k-means model
+#' fitted.model <- fitted(model, "centers")
+#' showDF(fitted.model)
+#'
 #' # fitted values on training data
 #' fitted <- predict(model, df)
 #' head(select(fitted, "Sepal_Length", "prediction"))
@@ -108,8 +112,9 @@ setMethod("spark.bisectingKmeans", signature(data = "SparkDataFrame", formula = 
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list includes the model's \code{k} (number of cluster centers),
 #'         \code{coefficients} (model cluster centers),
-#'         \code{size} (number of data points in each cluster), and \code{cluster}
-#'         (cluster centers of the transformed data).
+#'         \code{size} (number of data points in each cluster), \code{cluster}
+#'         (cluster centers of the transformed data; cluster is NULL if is.loaded is TRUE),
+#'         and \code{is.loaded} (whether the model is loaded from a saved file).
 #' @rdname spark.bisectingKmeans
 #' @export
 #' @note summary(BisectingKMeansModel) since 2.2.0
@@ -155,12 +160,6 @@ setMethod("predict", signature(object = "BisectingKMeansModel"),
 #' @return \code{fitted} returns a SparkDataFrame containing fitted values.
 #' @rdname spark.bisectingKmeans
 #' @export
-#' @examples
-#' \dontrun{
-#' model <- spark.bisectingKmeans(trainingData, ~ ., 2)
-#' fitted.model <- fitted(model, "centers")
-#' showDF(fitted.model)
-#'}
 #' @note fitted since 2.2.0
 setMethod("fitted", signature(object = "BisectingKMeansModel"),
           function(object, method = c("centers", "classes")) {

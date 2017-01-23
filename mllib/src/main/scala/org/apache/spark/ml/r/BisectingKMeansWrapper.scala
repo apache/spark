@@ -41,6 +41,7 @@ private[r] class BisectingKMeansWrapper private (
 
   lazy val k: Int = bisectingKmeansModel.getK
 
+  // If the model is loaded from a saved model, cluster is NULL. It is checked on R side
   lazy val cluster: DataFrame = bisectingKmeansModel.summary.cluster
 
   def fitted(method: String): DataFrame = {
@@ -97,7 +98,7 @@ private[r] object BisectingKMeansWrapper extends MLReadable[BisectingKMeansWrapp
       .fit(data)
 
     val bisectingKmeansModel: BisectingKMeansModel =
-      pipeline.stages(1).asInstanceOf[BisectingKMeansModel]
+      pipeline.stages.last.asInstanceOf[BisectingKMeansModel]
     val size: Array[Long] = bisectingKmeansModel.summary.clusterSizes
 
     new BisectingKMeansWrapper(pipeline, features, size)
