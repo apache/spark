@@ -19,10 +19,29 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
+import org.apache.hadoop.mapreduce.TaskAttemptContext
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
+
+private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String, isAppend: Boolean)
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, isAppend)
+    with Serializable with Logging {
+
+  override def newTaskTempFileAbsPath(
+      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
+    if (isAppend) {
+      throw new Exception("append data to an existed partitioned table, " +
+        "there should be no custom partition path sent to Task")
+    }
+
+    super.newTaskTempFileAbsPath(taskContext, absoluteDir, ext)
+  }
+}
 
 class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -89,6 +108,16 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
         .mode("overwrite")
         .parquet(f.getAbsolutePath)
       assert(recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 4)
+    }
+  }
+
+  test("append data to an existed partitioned table without custom partition path") {
+    withTable("t") {
+      withSQLConf("spark.sql.sources.commitProtocolClass" ->
+        "org.apache.spark.sql.sources.OnlyDetectCustomPathFileCommitProtocol") {
+        Seq((1, 2)).toDF("a", "b").write.partitionBy("b").saveAsTable("t")
+        Seq((3, 2)).toDF("a", "b").write.mode("append").partitionBy("b").saveAsTable("t")
+      }
     }
   }
 
