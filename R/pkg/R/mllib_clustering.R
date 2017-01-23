@@ -228,7 +228,8 @@ setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"
 #'         The list includes the model's \code{k} (the configured number of cluster centers),
 #'         \code{coefficients} (model cluster centers),
 #'         \code{size} (number of data points in each cluster), \code{cluster}
-#'         (cluster centers of the transformed data), and \code{clusterSize}
+#'         (cluster centers of the transformed data), {is.loaded} (whether the model is loaded
+#'         from a saved file), and \code{clusterSize}
 #'         (the actual number of cluster centers. When using initMode = "random",
 #'         \code{clusterSize} may not equal to \code{k}).
 #' @rdname spark.kmeans
