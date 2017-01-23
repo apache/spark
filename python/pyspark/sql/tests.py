@@ -2072,7 +2072,6 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         parse_result = df.select(functions.to_date(functions.col("dateCol")))
         self.assertEquals(date(2017, 1, 22), parse_result)
 
-
     @unittest.skipIf(sys.version_info < (3, 3), "Unittest < 3.3 doesn't support mocking")
     def test_unbounded_frames(self):
         from unittest.mock import patch
