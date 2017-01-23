@@ -22,7 +22,6 @@ import scala.collection.mutable.{HashMap, HashSet, Set}
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic
 import org.apache.hadoop.net.DNSToSwitchMapping
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Mockito._
 
@@ -55,6 +54,11 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
     yarnConf.setClass(
       CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
       classOf[MockResolver], classOf[DNSToSwitchMapping])
+
+    // The numbers below have been chosen to balance being large enough to replicate the
+    // original issue while not taking too long to run when the issue is fixed. The main
+    // goal is to create enough requests for localized containers (so there should be many
+    // tasks on several hosts that have no allocated containers).
 
     val resource = Resource.newInstance(8 * 1024, 4)
     val strategy = new LocalityPreferredContainerPlacementStrategy(new SparkConf(),
