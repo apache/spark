@@ -19,7 +19,7 @@ package org.apache.spark.sql
 import java.io.File
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.util.Locale
+import java.util.{Locale, TimeZone}
 
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
@@ -90,15 +90,28 @@ class ArrowSuite extends SharedSQLContext {
     collectAndValidate(lowerCaseData, "test-data/arrow/lowercase-strings.json")
   }
 
-  ignore("time and date conversion") {
-    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-    val d1 = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
-    val d2 = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
-    val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15").getTime)
-    val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10").getTime)
+  ignore("date conversion") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    val d1 = new Date(sdf.parse("2015-04-08 13:10:15.000").getTime)
+    val d2 = new Date(sdf.parse("2015-04-08 13:10:15.000").getTime)
+    val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567").getTime)
+    val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789").getTime)
     val dateTimeData = Seq((d1, sdf.format(d1), ts1), (d2, sdf.format(d2), ts2))
-      .toDF("a_date", "b_string", "c_timestamp")
+        .toDF("a_date", "b_string", "c_timestamp")
     collectAndValidate(dateTimeData, "test-data/arrow/datetimeData-strings.json")
+  }
+
+  test("timestamp conversion") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
+    val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
+    val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789 UTC").getTime)
+    val dateTimeData = Seq((ts1), (ts2)).toDF("a_timestamp")
+    collectAndValidate(dateTimeData, "test-data/arrow/timestampData.json")
+  }
+
+  // Arrow json reader doesn't support binary data
+  ignore("binary type conversion") {
+    collectAndValidate(binaryData, "test-data/arrow/binaryData.json")
   }
 
   test("nested type conversion") { }

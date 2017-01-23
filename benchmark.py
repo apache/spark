@@ -1,16 +1,45 @@
 import pyspark
 import timeit
 import random
+import sys
 from pyspark.sql import SparkSession
+import numpy as np
+import pandas as pd
 
 numPartition = 8
 
-def time(df, repeat, number):
+def scala_object(jpkg, obj):
+    return jpkg.__getattr__(obj + "$").__getattr__("MODULE$")
+
+def time(spark, df, repeat, number):
+    print("collect as internal rows")
+    time = timeit.repeat(lambda: df._jdf.queryExecution().executedPlan().executeCollect(), repeat=repeat, number=number)
+    time_df = pd.Series(time)
+    print(time_df.describe())
+
+    print("internal rows to arrow record batch")
+    arrow = scala_object(spark._jvm.org.apache.spark.sql, "Arrow")
+    root_allocator = spark._jvm.org.apache.arrow.memory.RootAllocator(sys.maxsize)
+    internal_rows = df._jdf.queryExecution().executedPlan().executeCollect()
+    jschema = df._jdf.schema()
+    def internalRowsToArrowRecordBatch():
+        rb = arrow.internalRowsToArrowRecordBatch(internal_rows, jschema, root_allocator)
+        rb.close()
+
+    time = timeit.repeat(internalRowsToArrowRecordBatch, repeat=repeat, number=number)
+    root_allocator.close()
+    time_df = pd.Series(time)
+    print(time_df.describe())
+
     print("toPandas with arrow")
-    print(timeit.repeat(lambda: df.toPandas(True), repeat=repeat, number=number))
+    time = timeit.repeat(lambda: df.toPandas(True), repeat=repeat, number=number)
+    time_df = pd.Series(time)
+    print(time_df.describe())
 
     print("toPandas without arrow")
-    print(timeit.repeat(lambda: df.toPandas(False), repeat=repeat, number=number))
+    time = timeit.repeat(lambda: df.toPandas(False), repeat=repeat, number=number)
+    time_df = pd.Series(time)
+    print(time_df.describe())
 
 def long():
     return random.randint(0, 10000)
@@ -32,10 +61,10 @@ def genData(spark, size, columns):
 
 if __name__ == "__main__":
     spark = SparkSession.builder.appName("ArrowBenchmark").getOrCreate()
-    df = genData(spark, 1000 * 1000, [long, double])
+    df = genData(spark, 1000 * 1000, [double])
     df.cache()
     df.count()
+    df.collect()
 
-    time(df, 10, 1)
-
+    time(spark, df, 50, 1)
     df.unpersist()

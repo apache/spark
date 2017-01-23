@@ -1,0 +1,32 @@
+{
+    "schema": {
+        "fields": [
+            {
+                "name": "a_timestamp",
+                "type": {"name": "timestamp", "unit": "MILLISECOND"},
+                "nullable": true,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 64}
+                    ]
+                }
+            }
+        ]
+    },
+
+    "batches": [
+        {
+            "count": 2,
+            "columns": [
+                {
+                    "name": "a_timestamp",
+                    "count": 2,
+                    "VALIDITY": [1, 1],
+                    "DATA": [1365383415567, 1365426610789]
+                }
+            ]
+        }
+    ]
+}

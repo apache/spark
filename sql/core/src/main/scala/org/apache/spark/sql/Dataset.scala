@@ -2787,6 +2787,8 @@ class Dataset[T] private[sql](
     } catch {
       case e: Exception =>
         throw e
+    } finally {
+      recordBatch.close()
     }
 
     withNewExecutionId {
