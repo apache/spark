@@ -18,9 +18,9 @@
 package org.apache.spark.sql
 
 import scala.beans.{BeanInfo, BeanProperty}
-
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
@@ -70,6 +70,94 @@ object UDT {
   }
 
 }
+
+// object and classes to test SPARK-19311
+
+  // Trait/Interface for base type
+  @SQLUserDefinedType(udt = classOf[ExampleBaseTypeUDT])
+  sealed trait IExampleBaseType extends Serializable {
+    def field: Int
+  }
+
+  // Trait/Interface for derived type
+  @SQLUserDefinedType(udt = classOf[ExampleSubTypeUDT])
+  sealed trait IExampleSubType extends IExampleBaseType
+
+  // a base class
+  class ExampleBaseClass(override val field: Int) extends IExampleBaseType {
+    override def toString: String = field.toString
+
+  }
+
+  // a derived class
+  class ExampleSubClass(override val field: Int)
+    extends ExampleBaseClass(field) with IExampleSubType
+
+  // UDT for base class
+  private[spark] class ExampleBaseTypeUDT extends UserDefinedType[IExampleBaseType] {
+
+    override def sqlType: StructType = {
+      StructType(Seq(
+        StructField("intfield", IntegerType, nullable = false)))
+    }
+
+    override def serialize(obj: IExampleBaseType): InternalRow = {
+      val row = new GenericInternalRow(1)
+      row.setInt(0, obj.field)
+      row
+    }
+
+    override def deserialize(datum: Any): IExampleBaseType = {
+      datum match {
+        case row: InternalRow =>
+          require(row.numFields == 1,
+            s"VectorUDT.deserialize given row with length " +
+              s"${row.numFields} but requires length == 1")
+          val field = row.getInt(0)
+          new ExampleBaseClass(field)
+      }
+    }
+
+    override def userClass: Class[IExampleBaseType] = classOf[IExampleBaseType]
+    override def hashCode(): Int = classOf[ExampleBaseTypeUDT].getName.hashCode()
+    override def equals(other: Any): Boolean = other.isInstanceOf[IExampleBaseType]
+    override def typeName: String = "exampleBaseType"
+    private[spark] override def asNullable: ExampleBaseTypeUDT = this
+  }
+
+  // UDT for derived class
+  private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] {
+
+    override def sqlType: StructType = {
+      StructType(Seq(
+        StructField("intfield", IntegerType, nullable = false)))
+    }
+
+    override def serialize(obj: IExampleSubType): InternalRow = {
+
+      val row = new GenericInternalRow(1)
+      row.setInt(0, obj.field)
+      row
+    }
+
+    override def deserialize(datum: Any): IExampleSubType = {
+      datum match {
+        case row: InternalRow =>
+          require(row.numFields == 1,
+            s"VectorUDT.deserialize given row with length " +
+              s"${row.numFields} but requires length == 1")
+          val field = row.getInt(0)
+          new ExampleSubClass(field)
+      }
+    }
+
+    override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
+    override def hashCode(): Int = classOf[ExampleSubTypeUDT].getName.hashCode()
+    override def equals(other: Any): Boolean = other.isInstanceOf[IExampleSubType]
+    override def typeName: String = "exampleFirstSubType"
+    private[spark] override def asNullable: ExampleSubTypeUDT = this
+  }
+
 
 class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetTest {
   import testImplicits._
@@ -194,4 +282,35 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     // call `collect` to make sure this query can pass analysis.
     pointsRDD.as[MyLabeledPoint].map(_.copy(label = 2.0)).collect()
   }
+
+  test("SPARK-19311: UDFs disregard UDT type hierarchy") {
+    UDTRegistration.register(classOf[IExampleBaseType].getName,
+      classOf[ExampleBaseTypeUDT].getName)
+    UDTRegistration.register(classOf[IExampleSubType].getName,
+      classOf[ExampleSubTypeUDT].getName)
+
+    // UDF that returns a base class object
+    sqlContext.udf.register("doUDF", (param: Int) => {
+      new ExampleBaseClass(param)
+    }: IExampleBaseType)
+
+    // UDF that returns a derived class object
+    sqlContext.udf.register("doSubTypeUDF", (param: Int) => {
+      new ExampleSubClass(param)
+    }: IExampleSubType)
+
+    // UDF that takes a base class object as parameter
+    sqlContext.udf.register("doOtherUDF", (obj: IExampleBaseType) => {
+      obj.field
+    }: Int)
+
+    // this worked already before the fix SPARK-19311:
+    // return type of doFirstUDF equals parameter type of doOtherUDF
+    sql("SELECT doOtherUDF(doUDF(41))")
+
+    // this one passes only with the fix SPARK-19311:
+    // return type of doFirstSubUDF is a subtype of the parameter type of doOtherUDF
+    sql("SELECT doOtherUDF(ddSubTypeUDF(42))")
+  }
+
 }
