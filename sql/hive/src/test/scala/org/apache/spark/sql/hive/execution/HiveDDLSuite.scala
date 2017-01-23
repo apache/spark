@@ -656,7 +656,7 @@ class HiveDDLSuite
         assert(sql("DESC FORMATTED view1").collect().containsSlice(
           Seq(
             Row("# View Information", "", ""),
-            Row("View Expanded Text:", "SELECT * FROM tbl", ""),
+            Row("View Text:", "SELECT * FROM tbl", ""),
             Row("View Default Database:", "default", ""),
             Row("View Query Output Columns:", "[a]", "")
           )

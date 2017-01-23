@@ -528,7 +528,7 @@ case class DescribeTableCommand(
   private def describeViewInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# View Information", "", "")
-    append(buffer, "View Expanded Text:", metadata.viewText.getOrElse(""), "")
+    append(buffer, "View Text:", metadata.viewText.getOrElse(""), "")
     append(buffer, "View Default Database:", metadata.viewDefaultDatabase.getOrElse(""), "")
     append(buffer, "View Query Output Columns:",
       metadata.viewQueryColumnNames.mkString("[", ", ", "]"), "")
