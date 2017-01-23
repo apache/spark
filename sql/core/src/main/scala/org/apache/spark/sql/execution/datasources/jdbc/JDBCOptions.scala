@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, DriverManager}
+import java.sql.Connection
 import java.util.Properties
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -73,17 +73,7 @@ class JDBCOptions(
   // ------------------------------------------------------------
   // Optional parameters
   // ------------------------------------------------------------
-  val driverClass = {
-    val userSpecifiedDriverClass = parameters.get(JDBC_DRIVER_CLASS)
-    userSpecifiedDriverClass.foreach(DriverRegistry.register)
-
-    // Performing this part of the logic on the driver guards against the corner-case where the
-    // driver returned for a URL is different on the driver and executors due to classpath
-    // differences.
-    userSpecifiedDriverClass.getOrElse {
-      DriverManager.getDriver(url).getClass.getCanonicalName
-    }
-  }
+  val driverClass = parameters.get(JDBC_DRIVER_CLASS)
 
   // the number of partitions
   val numPartitions = parameters.get(JDBC_NUM_PARTITIONS).map(_.toInt)
