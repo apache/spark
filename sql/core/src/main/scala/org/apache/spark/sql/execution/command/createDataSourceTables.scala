@@ -60,7 +60,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       identifier = table.identifier.copy(
         database = Some(
           table.identifier.database.getOrElse(sessionState.catalog.getCurrentDatabase))),
-      tracksPartitionsInCatalog = sparkSession.sessionState.conf.manageFilesourcePartitions)
+      tracksPartitionsInCatalog = sessionState.conf.manageFilesourcePartitions)
     val dataSource: BaseRelation =
       DataSource(
         sparkSession = sparkSession,
@@ -89,7 +89,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       // partition provider hive, but no partitions in the metastore. The user has to call
       // `msck repair table` to populate the table partitions.
       tracksPartitionsInCatalog = partitionColumnNames.nonEmpty &&
-        sparkSession.sessionState.conf.manageFilesourcePartitions)
+        sessionState.conf.manageFilesourcePartitions)
     // We will return Nil or throw exception at the beginning if the table already exists, so when
     // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
     sessionState.catalog.createTable(newTable, ignoreIfExists = false)
@@ -163,8 +163,7 @@ case class CreateDataSourceTableAsSelectCommand(
         case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
             sparkSession.sqlContext.conf.manageFilesourcePartitions =>
           // Need to recover partitions into the metastore so our saved data is visible.
-          sparkSession.sessionState.executePlan(
-            AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
+          sessionState.executePlan(AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
         case _ =>
       }
     }

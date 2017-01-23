@@ -19,7 +19,7 @@ struct<>
 
 
 -- !query 2
-CREATE TABLE showcolumn1 (col1 int, `col 2` int)
+CREATE TABLE showcolumn1 (col1 int, `col 2` int) USING parquet
 -- !query 2 schema
 struct<>
 -- !query 2 output
@@ -27,7 +27,7 @@ struct<>
 
 
 -- !query 3
-CREATE TABLE showcolumn2 (price int, qty int) partitioned by (year int, month int)
+CREATE TABLE showcolumn2 (price int, qty int, year int, month int) USING parquet partitioned by (year, month)
 -- !query 3 schema
 struct<>
 -- !query 3 output
