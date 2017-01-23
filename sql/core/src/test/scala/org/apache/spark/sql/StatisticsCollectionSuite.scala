@@ -170,6 +170,25 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
     checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
   }
+
+  test("number format in statistics") {
+    val numbers = Seq(
+      "0" -> ("0 B", "0"),
+      "100" -> ("100 B", "100"),
+      "2222" -> ("2.170 KB", "2222"),
+      "3333333" -> ("3.179 MB", "3.333E+6"),
+      "4444444444" -> ("4.139 GB", "4.444E+9"),
+      "5555555555555" -> ("5.053 TB", "5.556E+12"),
+      "6666666666666666" -> ("5.921 PB", "6.667E+15"),
+      "7777777777777777777" -> ("7.778E+18", "7.778E+18")
+    )
+    numbers.foreach { case (input, (expectedSize, expectedRows)) =>
+      val stats = Statistics(sizeInBytes = BigInt(input), rowCount = Some(BigInt(input)))
+      val expectedString = s"sizeInBytes=$expectedSize, rowCount=$expectedRows," +
+        s" isBroadcastable=${stats.isBroadcastable}"
+      assert(stats.simpleString == expectedString)
+    }
+  }
 }
 
 

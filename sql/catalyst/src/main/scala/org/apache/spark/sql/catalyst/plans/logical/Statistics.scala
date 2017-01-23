@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import java.text.DecimalFormat
+import java.math.{MathContext, RoundingMode}
 
 import scala.util.control.NonFatal
 
@@ -56,12 +56,31 @@ case class Statistics(
 
   /** Readable string representation for the Statistics. */
   def simpleString: String = {
-    // Show numbers in thousands
-    val form = new DecimalFormat(",###")
-    Seq(s"sizeInBytes=${form.format(sizeInBytes)}",
-      if (rowCount.isDefined) s"rowCount=${form.format(rowCount.get)}" else "",
+    Seq(s"sizeInBytes=${format(sizeInBytes, isSize = true)}",
+      if (rowCount.isDefined) s"rowCount=${format(rowCount.get, isSize = false)}" else "",
       s"isBroadcastable=$isBroadcastable"
     ).filter(_.nonEmpty).mkString(", ")
+  }
+
+  /** Print the given number in a readable format. */
+  def format(number: BigInt, isSize: Boolean): String = {
+    // Units of size
+    val units = Seq("B", "KB", "MB", "GB", "TB", "PB").zipWithIndex.toIterator
+    val decimalValue = BigDecimal(number, new MathContext(4, RoundingMode.HALF_UP))
+    if (isSize) {
+      while (units.hasNext) {
+        val (unit, index) = units.next()
+        if (decimalValue / math.pow(1024, index + 1) < 1) {
+          if (index == 0) {
+            return decimalValue.toString() + " " + unit
+          } else {
+            return (decimalValue / math.pow(1024, index)).toString() + " " + unit
+          }
+        }
+      }
+    }
+    // If the number doesn't represent size, or it's too large, print it in scientific notation
+    decimalValue.toString()
   }
 }
 
