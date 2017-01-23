@@ -25,6 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
@@ -113,9 +114,11 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
 
   test("append data to an existed partitioned table without custom partition path") {
     withTable("t") {
-      withSQLConf("spark.sql.sources.commitProtocolClass" ->
-        "org.apache.spark.sql.sources.OnlyDetectCustomPathFileCommitProtocol") {
+      withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[OnlyDetectCustomPathFileCommitProtocol].getName) {
         Seq((1, 2)).toDF("a", "b").write.partitionBy("b").saveAsTable("t")
+        // if custom partition path is detected by the task, it will throw an Exception
+        // from OnlyDetectCustomPathFileCommitProtocol above.
         Seq((3, 2)).toDF("a", "b").write.mode("append").partitionBy("b").saveAsTable("t")
       }
     }
