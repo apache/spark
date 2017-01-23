@@ -36,7 +36,7 @@ object ProjectEstimation {
       val outputAttrStats =
         getOutputMap(AttributeMap(inputAttrStats.toSeq ++ aliasStats), project.output)
       Some(childStats.copy(
-        sizeInBytes = getOutputSize(project.output, outputAttrStats, childStats.rowCount.get),
+        sizeInBytes = getOutputSize(project.output, childStats.rowCount.get, outputAttrStats),
         attributeStats = outputAttrStats))
     } else {
       None
