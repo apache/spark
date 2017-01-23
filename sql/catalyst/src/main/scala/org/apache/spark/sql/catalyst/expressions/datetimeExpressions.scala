@@ -1063,7 +1063,7 @@ case class ParseToDate(left: Expression, format: Expression, child: Expression)
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-    this(left, format, Cast(new UnixTimestamp(left, format), DateType))
+    this(left, format, Cast(Cast(new UnixTimestamp(left, format), TimestampType), DateType))
   }
 
   def this(left: Expression) = {
