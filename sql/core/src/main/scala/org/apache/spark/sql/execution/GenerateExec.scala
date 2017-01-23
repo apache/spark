@@ -187,7 +187,8 @@ case class GenerateExec(
             s"st_col${i}",
             i.toString,
             f.dataType,
-            f.nullable, fieldChecks)
+            f.nullable,
+            fieldChecks)
         }
         ("", row.code, columns)
 
