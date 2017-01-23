@@ -338,14 +338,14 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         return self.getOrDefault(self.finalStorageLevel)
 
-    @since("2.1.0")
+    @since("2.2.0")
     def setColdStartStrategy(self, value):
         """
         Sets the value of :py:attr:`coldStartStrategy`.
         """
         return self._set(coldStartStrategy=value)
 
-    @since("2.1.0")
+    @since("2.2.0")
     def getColdStartStrategy(self):
         """
         Gets the value of coldStartStrategy or its default value.

@@ -271,7 +271,7 @@ class ALSModel private[ml] (
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group expertSetParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setColdStartStrategy(value: String): this.type = set(coldStartStrategy, value)
 
   @Since("2.0.0")
@@ -469,7 +469,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   def setFinalStorageLevel(value: String): this.type = set(finalStorageLevel, value)
 
   /** @group expertSetParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setColdStartStrategy(value: String): this.type = set(coldStartStrategy, value)
 
   /**
