@@ -131,10 +131,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   test("binary records stream") {
-    var testDir: File = null
-    try {
+    withTempDir { testDir =>
       val batchDuration = Seconds(2)
-      testDir = Utils.createTempDir()
       // Create a file that exists before the StreamingContext is created:
       val existingFile = new File(testDir, "0")
       Files.write("0\n", existingFile, StandardCharsets.UTF_8)
@@ -177,8 +175,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
           assert(obtainedOutput(i) === input.map(b => (b + i).toByte))
         }
       }
-    } finally {
-      if (testDir != null) Utils.deleteRecursively(testDir)
     }
   }
 
@@ -191,10 +187,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   test("file input stream - wildcard") {
-    var testDir: File = null
-    try {
+    withTempDir { testDir =>
       val batchDuration = Seconds(2)
-      testDir = Utils.createTempDir()
       val testSubDir1 = Utils.createDirectory(testDir.toString, "tmp1")
       val testSubDir2 = Utils.createDirectory(testDir.toString, "tmp2")
 
@@ -247,10 +241,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         val expectedOutput = (input1 ++ input2).map(_.toString).toSet
         assert(outputQueue.asScala.flatten.toSet === expectedOutput)
       }
-    } finally {
-      if (testDir != null) {
-        Utils.deleteRecursively(testDir)
-      }
     }
   }
 
@@ -260,15 +250,14 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
    * Uses the Hadoop APIs to verify consistent behavior with the operations used internally.
    */
   test("renamed directories are scanned") {
-    val testDir = Utils.createTempDir()
-    try {
+    withTempDir { testDir =>
       val batchDuration = Seconds(2)
       val durationMs = batchDuration.milliseconds
       val testPath = new Path(testDir.toURI)
       val streamDir = new Path(testPath, "streaming")
       val streamGlobPath = new Path(streamDir, "sub*")
-      val generatedDir = new Path(testPath, "generated");
-      val generatedSubDir = new Path(generatedDir, "subdir");
+      val generatedDir = new Path(testPath, "generated")
+      val generatedSubDir = new Path(generatedDir, "subdir")
       val renamedSubDir = new Path(streamDir, "subdir")
 
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
@@ -288,7 +277,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         }
 
         val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-        val existingFile = new Path(generatedSubDir, "existing");
+        val existingFile = new Path(generatedSubDir, "existing")
         write(existingFile, "existing\n")
         val status = fs.getFileStatus(existingFile)
         clock.setTime(status.getModificationTime + durationMs)
@@ -326,8 +315,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         // the window
         assert(Set("renamed") === outputQueue.asScala.flatten.toSet)
       }
-    } finally {
-      Utils.deleteRecursively(testDir)
     }
   }
 
@@ -496,10 +483,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   def testFileStream(newFilesOnly: Boolean) {
-    var testDir: File = null
-    try {
+    withTempDir { testDir =>
       val batchDuration = Seconds(2)
-      testDir = Utils.createTempDir()
       // Create a file that exists before the StreamingContext is created:
       val existingFile = new File(testDir, "0")
       Files.write("0\n", existingFile, StandardCharsets.UTF_8)
@@ -546,8 +531,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         }
         assert(outputQueue.asScala.flatten.toSet === expectedOutput)
       }
-    } finally {
-      if (testDir != null) Utils.deleteRecursively(testDir)
     }
   }
 }

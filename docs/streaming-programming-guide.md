@@ -691,7 +691,7 @@ Spark Streaming will monitor the directory `dataDirectory` and process any files
 "Full" Filesystems such as HDFS tend to set the modification time on their files as soon
 as the output stream is created.
 When a file is opened, even before data has been completely written,
-it may be included in the `DStream` &mdash;after which updates to the file within the same window
+it may be included in the `DStream` - after which updates to the file within the same window
 will be ignored. That is: changes may be missed, and data omitted from the stream.
 
 To guarantee that changes are picked up in a window, write the file
@@ -700,10 +700,12 @@ rename it into the destination directory.
 Provided the renamed file appears in the scanned destination directory during the window
 of its creation, the new data will be picked up.
 
-In contrast, Object Stores have very slow rename operations (the data is usually copied).
-and `FileSystem.setTimes()` is usually a no-op. 
-However as objects are not visible until the writing operation has completed,
-applications may write directly to the monitored directory.
+In contrast, Object Stores have very slow rename operations (the data is usually copied),
+and the renamed object may have the time of the copy operation as its modification time.
+Careful testing is needed against the target object store to verify that the timestamp behavior
+of the store is consistent with that expected by Spark Streaming. For more details on this topic,
+consult the [Hadoop Filesystem Specification](https://hadoop.apache.org/docs/stable2/hadoop-project-dist/hadoop-common/filesystem/introduction.html).
+
 
 #### Streams based on Custom Receivers
 {:.no_toc}
