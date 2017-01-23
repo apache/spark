@@ -89,7 +89,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       val runFunc = (sparkSession: SparkSession) => {
         sparkSession.sessionState.conf.getAllDefinedConfs.sorted.map {
           case (key, defaultValue, doc) =>
-            Row(key, if (defaultValue == null) "<undefined>" else defaultValue, doc)
+            Row(key, Option(defaultValue).getOrElse("<undefined>"), doc)
         }
       }
       val schema = StructType(
