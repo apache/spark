@@ -59,6 +59,7 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
       anyRunning: Boolean): Boolean = {
     val startTimeOk = attempt.startTime.getTime >= minStartDate.timestamp &&
       attempt.startTime.getTime <= maxStartDate.timestamp
+    // If the maxEndDate is in the past, exclude all running apps.
     val endTimeOkForRunning = anyRunning && (maxEndDate.timestamp > System.currentTimeMillis())
     val endTimeOkForCompleted = !anyRunning && (attempt.endTime.getTime >= minEndDate.timestamp &&
       attempt.endTime.getTime <= maxEndDate.timestamp)

@@ -269,11 +269,11 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <br>
     <code>?minDate=[date]</code> earliest start date/time to list.
     <br>
-    <code>?maxDate=[date]</code> latest start date/time to list; uses same format as <code>minDate</code>.
+    <code>?maxDate=[date]</code> latest start date/time to list.
     <br>
     <code>?minEndDate=[date]</code> earliest end date/time to list.
     <br>
-    <code>?maxEndDate=[date]</code> latest end date/time to list; uses same format as <code>minEndDate</code>.
+    <code>?maxEndDate=[date]</code> latest end date/time to list.
     <br>
     <code>?limit=[limit]</code> limits the number of applications listed.
     <br>Examples:
