@@ -95,7 +95,7 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
     case c @ CreateTable(tableDesc, SaveMode.Append, Some(query))
         if sparkSession.sessionState.catalog.tableExists(tableDesc.identifier) =>
       // This is guaranteed by the parser and `DataFrameWriter`
-      assert(tableDesc.schema.isEmpty && tableDesc.provider.isDefined)
+      assert(tableDesc.provider.isDefined)
 
       // Analyze the query in CTAS and then we can do the normalization and checking.
       val qe = sparkSession.sessionState.executePlan(query)
@@ -112,21 +112,13 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
         throw new AnalysisException("Saving data into a view is not allowed.")
       }
 
-      val (isProviderMatch, existingProvider, specifiedProvider) =
-        DDLUtils.isHiveTable(existingTable) match {
-        case false =>
-          val existing = DataSource.lookupDataSource(existingTable.provider.get)
-          val specified = DataSource.lookupDataSource(tableDesc.provider.get)
-          (existing == specified, existing.getSimpleName, specified.getSimpleName)
-        case true =>
-          val existing = existingTable.provider.get
-          val specified = tableDesc.provider.get
-          (existing == specified, existing, specified)
-      }
+      val existingProvider = DataSource.lookupDataSource(existingTable.provider.get)
+      val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get)
+
       // Check if the specified data source match the data source of the existing table.
       // TODO: Check that options from the resolved relation match the relation that we are
       // inserting into (i.e. using the same compression).
-      if (!isProviderMatch) {
+      if (existingProvider != specifiedProvider) {
         throw new AnalysisException(s"The format of the existing table $tableName is " +
           s"`$existingProvider`. It doesn't match the specified format `$specifiedProvider`.")
       }
@@ -189,9 +181,7 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
       }
 
       c.copy(
-        // trust everything from the existing table, except schema as we assume it's empty in a lot
-        // of places, when we do CTAS.
-        tableDesc = existingTable.copy(schema = new StructType()),
+        tableDesc = existingTable,
         query = Some(newQuery))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
@@ -412,7 +402,8 @@ object HiveOnlyCheck extends (LogicalPlan => Unit) {
     plan.foreach {
       case CreateTable(tableDesc, _, Some(_)) if DDLUtils.isHiveTable(tableDesc) =>
         throw new AnalysisException("Hive support is required to use CREATE Hive TABLE AS SELECT")
-
+      case CreateTable(tableDesc, _, _) if DDLUtils.isHiveTable(tableDesc) =>
+        throw new AnalysisException("Hive support is required to CREATE Hive TABLE")
       case _ => // OK
     }
   }
