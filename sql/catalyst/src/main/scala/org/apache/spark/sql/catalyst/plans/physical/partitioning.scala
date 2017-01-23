@@ -230,6 +230,21 @@ case object SinglePartition extends Partitioning {
 }
 
 /**
+ * Represents a partitioning where rows are only serialized/deserialized locally. The number
+ * of partitions are not changed and also the distribution of rows. This is mainly used to
+ * obtain some statistics of map tasks such as number of outputs.
+ */
+case class LocalPartitioning(orgPartition: Partitioning, numPartitions: Int) extends Partitioning {
+  // We will perform this partitioning no matter what the data distribution is.
+  override def satisfies(required: Distribution): Boolean = false
+
+  override def compatibleWith(other: Partitioning): Boolean =
+    orgPartition.compatibleWith(other)
+
+  override def guarantees(other: Partitioning): Boolean = orgPartition.guarantees(other)
+}
+
+/**
  * Represents a partitioning where rows are split up across partitions based on the hash
  * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
  * in the same partition.

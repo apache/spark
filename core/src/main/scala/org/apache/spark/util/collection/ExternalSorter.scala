@@ -176,9 +176,11 @@ private[spark] class ExternalSorter[K, V, C](
    */
   private[spark] def numSpills: Int = spills.size
 
-  def insertAll(records: Iterator[Product2[K, V]]): Unit = {
+  def insertAll(records: Iterator[Product2[K, V]]): Int = {
     // TODO: stop combining if we find that the reduction factor isn't high
     val shouldCombine = aggregator.isDefined
+
+    var numOfRecords: Int = 0
 
     if (shouldCombine) {
       // Combine values in-memory first using our AppendOnlyMap
@@ -193,6 +195,7 @@ private[spark] class ExternalSorter[K, V, C](
         kv = records.next()
         map.changeValue((getPartition(kv._1), kv._1), update)
         maybeSpillCollection(usingMap = true)
+        numOfRecords += 1
       }
     } else {
       // Stick values into our buffer
@@ -201,8 +204,10 @@ private[spark] class ExternalSorter[K, V, C](
         val kv = records.next()
         buffer.insert(getPartition(kv._1), kv._1, kv._2.asInstanceOf[C])
         maybeSpillCollection(usingMap = false)
+        numOfRecords += 1
       }
     }
+    numOfRecords
   }
 
   /**

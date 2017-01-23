@@ -122,6 +122,15 @@ object SQLConf {
     .intConf
     .createWithDefault(4)
 
+  val ENABLE_PARALLEL_GLOBAL_LIMIT = SQLConfigBuilder("spark.sql.limit.globalparallel")
+    .internal()
+    .doc("Not to shuffle the results of local limit to one single partition in global limit " +
+      "so that the limit operation doesn't downgrade parallelism. The config is mainly used " +
+      "in tests especially Hive compatibility test cases which assume there is an order in " +
+      "the returned rows of limit operation.")
+    .booleanConf
+    .createWithDefault(true)
+
   val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS =
     SQLConfigBuilder("spark.sql.statistics.fallBackToHdfs")
     .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
@@ -779,6 +788,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
+
+  def enableParallelGlobalLimit: Boolean = getConf(ENABLE_PARALLEL_GLOBAL_LIMIT)
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
 

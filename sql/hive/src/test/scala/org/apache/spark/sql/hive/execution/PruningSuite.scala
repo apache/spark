@@ -22,20 +22,28 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A set of test cases that validate partition and column pruning.
  */
 class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
 
+  private val originalParallelGlobalLimit = TestHive.conf.enableParallelGlobalLimit
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     TestHive.setCacheTables(false)
+    TestHive.setConf(SQLConf.ENABLE_PARALLEL_GLOBAL_LIMIT, false)
     // Column/partition pruning is not implemented for `InMemoryColumnarTableScan` yet,
     // need to reset the environment to ensure all referenced tables in this suites are
     // not cached in-memory. Refer to https://issues.apache.org/jira/browse/SPARK-2283
     // for details.
     TestHive.reset()
+  }
+   override def afterAll() {
+    TestHive.setConf(SQLConf.ENABLE_PARALLEL_GLOBAL_LIMIT, originalParallelGlobalLimit)
+    super.afterAll()
   }
 
   // Column pruning tests

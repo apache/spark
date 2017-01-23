@@ -82,6 +82,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Nullable private ShuffleExternalSorter sorter;
   private long peakMemoryUsedBytes = 0;
 
+  private int numOfRecords = 0;
+
   /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
   private static final class MyByteArrayOutputStream extends ByteArrayOutputStream {
     MyByteArrayOutputStream(int size) { super(size); }
@@ -165,6 +167,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     try {
       while (records.hasNext()) {
         insertRecordIntoSorter(records.next());
+        numOfRecords += 1;
       }
       closeAndWriteOutput();
       success = true;
@@ -227,7 +230,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         logger.error("Error while deleting temp file {}", tmp.getAbsolutePath());
       }
     }
-    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+    mapStatus = MapStatus$.MODULE$.apply(
+      blockManager.shuffleServerId(), partitionLengths, numOfRecords);
   }
 
   @VisibleForTesting

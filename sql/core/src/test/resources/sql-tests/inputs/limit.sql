@@ -20,4 +20,4 @@ select * from testdata limit true;
 select * from testdata limit 'a';
 
 -- limit within a subquery
-select * from (select * from range(10) limit 5) where id > 3;
+select * from (select * from range(10) order by id limit 5) where id > 3;

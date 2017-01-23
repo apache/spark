@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.mutable
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
@@ -47,12 +49,15 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
 }
 
 /**
- * Helper trait which defines methods that are shared by both
- * [[LocalLimitExec]] and [[GlobalLimitExec]].
+ * Take the first `limit` elements of each child partition, but do not collect or shuffle them.
  */
-trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
-  val limit: Int
+case class LocalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+
   override def output: Seq[Attribute] = child.output
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.take(limit)
@@ -90,25 +95,101 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
 }
 
 /**
- * Take the first `limit` elements of each child partition, but do not collect or shuffle them.
+ * Take the `limit` elements of the child output.
  */
-case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
+case class GlobalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
 
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
-}
-
-/**
- * Take the first `limit` elements of the child's single output partition.
- */
-case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
-
-  override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
+  override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val childRDD = child.execute()
+    val partitioner = LocalPartitioning(child.outputPartitioning,
+      childRDD.getNumPartitions)
+    val shuffleDependency = ShuffleExchange.prepareShuffleDependency(
+      childRDD, child.output, partitioner, serializer)
+    val numberOfOutput: Seq[Int] = if (shuffleDependency.rdd.getNumPartitions != 0) {
+      // submitMapStage does not accept RDD with 0 partition.
+      // So, we will not submit this dependency.
+      val submittedStageFuture = sparkContext.submitMapStage(shuffleDependency)
+      submittedStageFuture.get().numberOfOutput.toSeq
+    } else {
+      Nil
+    }
+
+    // Try to keep child plan's original data parallelism or not. It is enabled by default.
+    val respectChildParallelism = sqlContext.conf.enableParallelGlobalLimit
+
+    val shuffled = new ShuffledRowRDD(shuffleDependency)
+
+    val sumOfOutput = numberOfOutput.sum
+    if (sumOfOutput <= limit) {
+      shuffled
+    } else if (!respectChildParallelism) {
+      // This is mainly for tests.
+      // We take the rows of each partition until we reach the required limit number.
+      var countForRows = 0
+      val takeAmounts = new mutable.HashMap[Int, Int]()
+      numberOfOutput.zipWithIndex.foreach { case (num, index) =>
+        if (countForRows + num < limit) {
+          countForRows += num
+          takeAmounts += ((index, num))
+        } else {
+          val toTake = limit - countForRows
+          countForRows += toTake
+          takeAmounts += ((index, toTake))
+        }
+      }
+      val broadMap = sparkContext.broadcast(takeAmounts)
+      shuffled.mapPartitionsWithIndexInternal { case (index, iter) =>
+        broadMap.value.get(index).map { size =>
+          iter.take(size)
+        }.get
+      }
+    } else {
+      // We try to distribute the required limit number of rows across all child rdd's partitions.
+      var numToReduce = (sumOfOutput - limit)
+      val reduceAmounts = new mutable.HashMap[Int, Int]()
+      val nonEmptyParts = numberOfOutput.filter(_ > 0).size
+      val reducePerPart = numToReduce / nonEmptyParts
+      numberOfOutput.zipWithIndex.foreach { case (num, index) =>
+        if (num >= reducePerPart) {
+          numToReduce -= reducePerPart
+          reduceAmounts += ((index, reducePerPart))
+        } else {
+          numToReduce -= num
+          reduceAmounts += ((index, num))
+        }
+      }
+      while (numToReduce > 0) {
+        numberOfOutput.zipWithIndex.foreach { case (num, index) =>
+          val toReduce = if (numToReduce / nonEmptyParts > 0) {
+            numToReduce / nonEmptyParts
+          } else {
+            numToReduce
+          }
+          if (num - reduceAmounts(index) >= toReduce) {
+            reduceAmounts(index) = reduceAmounts(index) + toReduce
+            numToReduce -= toReduce
+          } else if (num - reduceAmounts(index) > 0) {
+            reduceAmounts(index) = reduceAmounts(index) + 1
+            numToReduce -= 1
+          }
+        }
+      }
+      val broadMap = sparkContext.broadcast(reduceAmounts)
+      shuffled.mapPartitionsWithIndexInternal { case (index, iter) =>
+        broadMap.value.get(index).map { size =>
+          iter.drop(size)
+        }.get
+      }
+    }
+  }
 }
 
 /**
