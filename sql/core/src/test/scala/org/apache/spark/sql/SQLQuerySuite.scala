@@ -982,7 +982,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     spark.sessionState.conf.clear()
   }
 
-  test("SPARK-19218 Fix SET command to show a result correctly and in a sorted order") {
+  test("SPARK-19218 SET command should show a result in a sorted order") {
     val overrideConfs = sql("SET").collect()
     sql(s"SET test.key3=1")
     sql(s"SET test.key2=2")
@@ -994,14 +994,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row("test.key2", "2"),
         Row("test.key3", "1"))).sortBy(_.getString(0))
     )
+  }
 
-    // Previsouly, `SET -v` fails with NPE during decoding for null value.
+  test("SPARK-19218 `SET -v` should not fail with null value configuration") {
     import SQLConf._
-    SQLConfigBuilder("spark.test").doc("doc").stringConf.createWithDefault(null)
+    val confEntry = SQLConfigBuilder("spark.test").doc("doc").stringConf.createWithDefault(null)
 
-    val result2 = sql("SET -v").collect()
-    assert(result2 === result2.sortBy(_.getString(0)))
-    spark.sessionState.conf.clear()
+    try {
+      val result = sql("SET -v").collect()
+      assert(result === result.sortBy(_.getString(0)))
+      spark.sessionState.conf.clear()
+    } finally {
+      SQLConf.unregister(confEntry)
+    }
   }
 
   test("SET commands with illegal or inappropriate argument") {

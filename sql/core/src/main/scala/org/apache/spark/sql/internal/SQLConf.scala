@@ -50,6 +50,11 @@ object SQLConf {
     sqlConfEntries.put(entry.key, entry)
   }
 
+  // For testing only
+  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntries.synchronized {
+    sqlConfEntries.remove(entry.key)
+  }
+
   private[sql] object SQLConfigBuilder {
 
     def apply(key: String): ConfigBuilder = new ConfigBuilder(key).onCreate(register)
