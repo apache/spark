@@ -73,24 +73,26 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("timestamp comparison with timestamp strings with session local timezone") {
+    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
     val df = Seq(
-      (1, Timestamp.valueOf("2015-12-31 16:00:00")),
-      (2, Timestamp.valueOf("2016-01-01 00:00:00"))).toDF("i", "t")
+      (1, new Timestamp(sdf1.parse("2015-12-31 16:00:00").getTime)),
+      (2, new Timestamp(sdf1.parse("2016-01-01 00:00:00").getTime))).toDF("i", "t")
 
     checkAnswer(
       df.select("t").filter($"t" <= "2016-01-01 00:00:00"),
       Seq(
-        Row(Timestamp.valueOf("2015-12-31 16:00:00")),
-        Row(Timestamp.valueOf("2016-01-01 00:00:00"))))
+        Row(new Timestamp(sdf1.parse("2015-12-31 16:00:00").getTime)),
+        Row(new Timestamp(sdf1.parse("2016-01-01 00:00:00").getTime))))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+      sdf1.setTimeZone(DateTimeUtils.TimeZoneGMT)
 
       // $"t" string in GMT would be as follows respectively:
       // "2016-01-01 00:00:00"
       // "2016-01-01 08:00:00"
       checkAnswer(
         df.select("t").filter($"t" <= "2016-01-01 00:00:00"),
-        Row(Timestamp.valueOf("2015-12-31 16:00:00")))
+        Row(new Timestamp(sdf1.parse("2016-01-01 00:00:00").getTime)))
     }
   }
 
