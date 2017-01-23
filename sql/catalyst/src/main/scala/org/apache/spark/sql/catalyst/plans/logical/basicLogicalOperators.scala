@@ -389,7 +389,8 @@ case class InsertIntoTable(
   assert(overwrite || !ifNotExists)
   assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
 
-  override def children: Seq[LogicalPlan] = table :: query :: Nil
+  // We don't want `table` in children as sometimes we don't want to transform it.
+  override def children: Seq[LogicalPlan] = query :: Nil
   override def output: Seq[Attribute] = Seq.empty
   override lazy val resolved: Boolean = false
 }

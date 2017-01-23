@@ -319,7 +319,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
 
     if (expectedColumns.length != insert.query.schema.length) {
-      failAnalysis(
+      throw new AnalysisException(
         s"$tblName requires that the data to be inserted have the same number of columns as the " +
           s"target table: target table has ${insert.table.output.size} column(s) but the " +
           s"inserted data has ${insert.query.output.length + staticPartCols.size} column(s), " +
@@ -328,7 +328,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
 
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
-        failAnalysis(
+        throw new AnalysisException(
           s"""
              |Requested partitioning does not match the table $tblName:
              |Requested partitions: ${normalizedPartSpec.keys.mkString(",")}
@@ -369,8 +369,6 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
       insert.copy(query = Project(newChildOutput, insert.query))
     }
   }
-
-  private def failAnalysis(msg: String) = throw new AnalysisException(msg)
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case i @ InsertIntoTable(table, _, query, _, _) if i.childrenResolved =>
