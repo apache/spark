@@ -3,7 +3,7 @@
 
 
 -- !query 0
-CREATE TABLE test_change(a INT, b STRING, c INT)
+CREATE TABLE test_change(a INT, b STRING, c INT) using parquet
 -- !query 0 schema
 struct<>
 -- !query 0 output
@@ -269,7 +269,7 @@ Database 'global_temp' not found;
 
 
 -- !query 28
-CREATE TABLE partition_table(a INT, b STRING) PARTITIONED BY (c INT, d STRING)
+CREATE TABLE partition_table(a INT, b STRING, c INT, d STRING) USING parquet PARTITIONED BY (c, d)
 -- !query 28 schema
 struct<>
 -- !query 28 output

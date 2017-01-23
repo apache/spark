@@ -37,6 +37,7 @@ class SessionCatalogSuite extends PlanTest {
   private val utils = new CatalogTestUtils {
     override val tableInputFormat: String = "com.fruit.eyephone.CameraInputFormat"
     override val tableOutputFormat: String = "com.fruit.eyephone.CameraOutputFormat"
+    override val defaultProvider: String = "parquet"
     override def newEmptyCatalog(): ExternalCatalog = new InMemoryCatalog
   }
 

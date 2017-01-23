@@ -409,7 +409,8 @@ object HiveOnlyCheck extends (LogicalPlan => Unit) {
     plan.foreach {
       case CreateTable(tableDesc, _, Some(_)) if DDLUtils.isHiveTable(tableDesc) =>
         throw new AnalysisException("Hive support is required to use CREATE Hive TABLE AS SELECT")
-
+      case CreateTable(tableDesc, _, _) if DDLUtils.isHiveTable(tableDesc) =>
+        throw new AnalysisException("Hive support is required to CREATE Hive TABLE")
       case _ => // OK
     }
   }
