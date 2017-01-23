@@ -1001,6 +1001,7 @@ def to_date(col, format=None):
         jc = sc._jvm.functions.to_date(_to_java_column(col), format)
     return Column(jc)
 
+
 @since(2.2)
 def to_timestamp(col, format=None):
     """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
@@ -1023,6 +1024,7 @@ def to_timestamp(col, format=None):
     else:
         jc = sc._jvm.functions.to_timestamp(_to_java_column(col), format)
     return Column(jc)
+
 
 @since(1.5)
 def trunc(date, format):
