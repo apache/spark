@@ -114,7 +114,6 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
 
       val existingProvider = DataSource.lookupDataSource(existingTable.provider.get)
       val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get)
-
       // TODO: Check that options from the resolved relation match the relation that we are
       // inserting into (i.e. using the same compression).
       if (existingProvider != specifiedProvider) {
