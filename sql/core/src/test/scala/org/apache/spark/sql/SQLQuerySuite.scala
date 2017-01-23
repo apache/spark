@@ -992,6 +992,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     spark.sessionState.conf.clear()
   }
 
+  test("`SET -v` collect") {
+    sql("SET -v").collect()
+  }
+
   test("apply schema") {
     val schema1 = StructType(
       StructField("f1", IntegerType, false) ::
