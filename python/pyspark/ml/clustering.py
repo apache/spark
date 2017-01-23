@@ -175,6 +175,8 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     3
     >>> summary.clusterSizes
     [2, 2, 2]
+    >>> summary.logLikelihood
+    8.14636...
     >>> weights = model.weights
     >>> len(weights)
     3
@@ -280,6 +282,14 @@ class GaussianMixtureSummary(ClusteringSummary):
         DataFrame of probabilities of each cluster for each training data point.
         """
         return self._call_java("probability")
+
+    @property
+    @since("2.2.0")
+    def logLikelihood(self):
+        """
+        Total log-likelihood for this model on the given data.
+        """
+        return self._call_java("logLikelihood")
 
 
 class KMeansSummary(ClusteringSummary):

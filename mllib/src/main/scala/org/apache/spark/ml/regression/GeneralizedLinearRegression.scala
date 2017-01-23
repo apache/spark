@@ -57,7 +57,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   final val family: Param[String] = new Param(this, "family",
     "The name of family which is a description of the error distribution to be used in the " +
       s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
-    ParamValidators.inArray[String](supportedFamilyNames))
+    (value: String) => supportedFamilyNames.contains(value.toLowerCase))
 
   /** @group getParam */
   @Since("2.0.0")
@@ -99,7 +99,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   final val link: Param[String] = new Param(this, "link", "The name of link function " +
     "which provides the relationship between the linear predictor and the mean of the " +
     s"distribution function. Supported options: ${supportedLinkNames.mkString(", ")}",
-    ParamValidators.inArray[String](supportedLinkNames))
+    (value: String) => supportedLinkNames.contains(value.toLowerCase))
 
   /** @group getParam */
   @Since("2.0.0")
@@ -510,11 +510,11 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
      * @param params the parameter map containing family name and variance power
      */
     def fromParams(params: GeneralizedLinearRegressionBase): Family = {
-      params.getFamily match {
-        case "gaussian" => Gaussian
-        case "binomial" => Binomial
-        case "poisson" => Poisson
-        case "gamma" => Gamma
+      params.getFamily.toLowerCase match {
+        case Gaussian.name => Gaussian
+        case Binomial.name => Binomial
+        case Poisson.name => Poisson
+        case Gamma.name => Gamma
         case "tweedie" =>
           params.getVariancePower match {
             case 0.0 => Gaussian
@@ -786,7 +786,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
      * @param params the parameter map containing link and link power
      */
     def fromParams(params: GeneralizedLinearRegressionBase): Link = {
-      if (params.getFamily == "tweedie") {
+      if (params.getFamily.toLowerCase == "tweedie") {
         params.getLinkPower match {
           case 0.0 => Log
           case 1.0 => Identity
@@ -795,7 +795,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
           case others => new Power(others)
         }
       } else {
-        params.getLink match {
+        params.getLink.toLowerCase match {
           case Identity.name => Identity
           case Logit.name => Logit
           case Log.name => Log
