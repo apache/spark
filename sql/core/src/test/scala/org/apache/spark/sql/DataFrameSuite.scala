@@ -1518,14 +1518,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-12982: Add table name validation in temp table registration") {
     val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
-    // invalid table name test as below
-    intercept[AnalysisException](df.createOrReplaceTempView("t~"))
-    // valid table name test as below
-    df.createOrReplaceTempView("table1")
-    // another invalid table name test as below
-    intercept[AnalysisException](df.createOrReplaceTempView("#$@sum"))
-    // another invalid table name test as below
-    intercept[AnalysisException](df.createOrReplaceTempView("table!#"))
+    // invalid table names
+    Seq("11111", "t~", "#$@sum", "table!#").foreach { name =>
+      val m = intercept[AnalysisException](df.createOrReplaceTempView(name)).getMessage
+      assert(m.contains(s"Invalid view name: $name"))
+    }
+
+    // valid table names
+    Seq("table1", "`11111`", "`t~`", "`#$@sum`", "`table!#`").foreach { name =>
+      df.createOrReplaceTempView(name)
+    }
   }
 
   test("assertAnalyzed shouldn't replace original stack trace") {
@@ -1622,17 +1624,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val sampleDf = df.sample(true, 2.00)
     val d = sampleDf.withColumn("c", monotonically_increasing_id).select($"c").collect
     assert(d.size == d.distinct.size)
-  }
-
-  test("SPARK-17625: data source table in InMemoryCatalog should guarantee output consistency") {
-    val tableName = "tbl"
-    withTable(tableName) {
-      spark.range(10).select('id as 'i, 'id as 'j).write.saveAsTable(tableName)
-      val relation = spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName))
-      val expr = relation.resolve("i")
-      val qe = spark.sessionState.executePlan(Project(Seq(expr), relation))
-      qe.assertAnalyzed()
-    }
   }
 
   private def verifyNullabilityInFilterExec(

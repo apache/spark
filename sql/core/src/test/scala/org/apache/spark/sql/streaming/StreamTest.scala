@@ -167,10 +167,17 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
   /** Advance the trigger clock's time manually. */
   case class AdvanceManualClock(timeToAdd: Long) extends StreamAction
 
-  /** Signals that a failure is expected and should not kill the test. */
-  case class ExpectFailure[T <: Throwable : ClassTag]() extends StreamAction {
+  /**
+   * Signals that a failure is expected and should not kill the test.
+   *
+   * @param isFatalError if this is a fatal error. If so, the error should also be caught by
+   *                     UncaughtExceptionHandler.
+   */
+  case class ExpectFailure[T <: Throwable : ClassTag](
+      isFatalError: Boolean = false) extends StreamAction {
     val causeClass: Class[T] = implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]]
-    override def toString(): String = s"ExpectFailure[${causeClass.getName}]"
+    override def toString(): String =
+      s"ExpectFailure[${causeClass.getName}, isFatalError: $isFatalError]"
   }
 
   /** Assert that a body is true */
@@ -228,11 +235,14 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
    */
   def testStream(
       _stream: Dataset[_],
-      outputMode: OutputMode = OutputMode.Append)(actions: StreamAction*): Unit = {
+      outputMode: OutputMode = OutputMode.Append)(actions: StreamAction*): Unit = synchronized {
+    // `synchronized` is added to prevent the user from calling multiple `testStream`s concurrently
+    // because this method assumes there is only one active query in its `StreamingQueryListener`
+    // and it may not work correctly when multiple `testStream`s run concurrently.
 
     val stream = _stream.toDF()
+    val sparkSession = stream.sparkSession  // use the session in DF, not the default session
     var pos = 0
-    var currentPlan: LogicalPlan = stream.logicalPlan
     var currentStream: StreamExecution = null
     var lastStream: StreamExecution = null
     val awaiting = new mutable.HashMap[Int, Offset]() // source index -> offset to wait for
@@ -240,7 +250,23 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     val resetConfValues = mutable.Map[String, Option[String]]()
 
     @volatile
-    var streamDeathCause: Throwable = null
+    var streamThreadDeathCause: Throwable = null
+    // Set UncaughtExceptionHandler in `onQueryStarted` so that we can ensure catching fatal errors
+    // during query initialization.
+    val listener = new StreamingQueryListener {
+      override def onQueryStarted(event: QueryStartedEvent): Unit = {
+        // Note: this assumes there is only one query active in the `testStream` method.
+        Thread.currentThread.setUncaughtExceptionHandler(new UncaughtExceptionHandler {
+          override def uncaughtException(t: Thread, e: Throwable): Unit = {
+            streamThreadDeathCause = e
+          }
+        })
+      }
+
+      override def onQueryProgress(event: QueryProgressEvent): Unit = {}
+      override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
+    }
+    sparkSession.streams.addListener(listener)
 
     // If the test doesn't manually start the stream, we do it automatically at the beginning.
     val startedManually =
@@ -271,7 +297,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
          |Output Mode: $outputMode
          |Stream state: $currentOffsets
          |Thread state: $threadState
-         |${if (streamDeathCause != null) stackTraceToString(streamDeathCause) else ""}
+         |${if (streamThreadDeathCause != null) stackTraceToString(streamThreadDeathCause) else ""}
          |
          |== Sink ==
          |${sink.toDebugString}
@@ -319,7 +345,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
          """.stripMargin)
     }
 
-    val testThread = Thread.currentThread()
     val metadataRoot = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     var manualClockExpectedTime = -1L
     try {
@@ -337,14 +362,16 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
             additionalConfs.foreach(pair => {
               val value =
-                if (spark.conf.contains(pair._1)) Some(spark.conf.get(pair._1)) else None
+                if (sparkSession.conf.contains(pair._1)) {
+                  Some(sparkSession.conf.get(pair._1))
+                } else None
               resetConfValues(pair._1) = value
-              spark.conf.set(pair._1, pair._2)
+              sparkSession.conf.set(pair._1, pair._2)
             })
 
             lastStream = currentStream
             currentStream =
-              spark
+              sparkSession
                 .streams
                 .startQuery(
                   None,
@@ -354,13 +381,16 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                   outputMode,
                   trigger = trigger,
                   triggerClock = triggerClock)
-                .asInstanceOf[StreamExecution]
-            currentStream.microBatchThread.setUncaughtExceptionHandler(
-              new UncaughtExceptionHandler {
-                override def uncaughtException(t: Thread, e: Throwable): Unit = {
-                  streamDeathCause = e
-                }
-              })
+                .asInstanceOf[StreamingQueryWrapper]
+                .streamingQuery
+            // Wait until the initialization finishes, because some tests need to use `logicalPlan`
+            // after starting the query.
+            try {
+              currentStream.awaitInitialization(streamingTimeout.toMillis)
+            } catch {
+              case _: StreamingQueryException =>
+                // Ignore the exception. `StopStream` or `ExpectFailure` will catch it as well.
+            }
 
           case AdvanceManualClock(timeToAdd) =>
             verify(currentStream != null,
@@ -394,8 +424,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                   currentStream.exception.map(_.toString()).getOrElse(""))
             } catch {
               case _: InterruptedException =>
-              case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
-                failTest("Timed out while stopping and waiting for microbatchthread to terminate.")
+              case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
+                failTest(
+                  "Timed out while stopping and waiting for microbatchthread to terminate.", e)
               case t: Throwable =>
                 failTest("Error while stopping stream", t)
             } finally {
@@ -412,8 +443,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
               eventually("microbatch thread not stopped after termination with failure") {
                 assert(!currentStream.microBatchThread.isAlive)
               }
-              verify(thrownException.query.eq(currentStream),
-                s"incorrect query reference in exception")
               verify(currentStream.exception === Some(thrownException),
                 s"incorrect exception returned by query.exception()")
 
@@ -421,16 +450,24 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
               verify(exception.cause.getClass === ef.causeClass,
                 "incorrect cause in exception returned by query.exception()\n" +
                   s"\tExpected: ${ef.causeClass}\n\tReturned: ${exception.cause.getClass}")
+              if (ef.isFatalError) {
+                // This is a fatal error, `streamThreadDeathCause` should be set to this error in
+                // UncaughtExceptionHandler.
+                verify(streamThreadDeathCause != null &&
+                  streamThreadDeathCause.getClass === ef.causeClass,
+                  "UncaughtExceptionHandler didn't receive the correct error\n" +
+                    s"\tExpected: ${ef.causeClass}\n\tReturned: $streamThreadDeathCause")
+                streamThreadDeathCause = null
+              }
             } catch {
               case _: InterruptedException =>
-              case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
-                failTest("Timed out while waiting for failure")
+              case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
+                failTest("Timed out while waiting for failure", e)
               case t: Throwable =>
                 failTest("Error while checking stream failure", t)
             } finally {
               lastStream = currentStream
               currentStream = null
-              streamDeathCause = null
             }
 
           case a: AssertOnQuery =>
@@ -508,11 +545,14 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
         }
         pos += 1
       }
+      if (streamThreadDeathCause != null) {
+        failTest("Stream Thread Died", streamThreadDeathCause)
+      }
     } catch {
-      case _: InterruptedException if streamDeathCause != null =>
-        failTest("Stream Thread Died")
-      case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
-        failTest("Timed out waiting for stream")
+      case _: InterruptedException if streamThreadDeathCause != null =>
+        failTest("Stream Thread Died", streamThreadDeathCause)
+      case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
+        failTest("Timed out waiting for stream", e)
     } finally {
       if (currentStream != null && currentStream.microBatchThread.isAlive) {
         currentStream.stop()
@@ -520,9 +560,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
       // Rollback prev configuration values
       resetConfValues.foreach {
-        case (key, Some(value)) => spark.conf.set(key, value)
-        case (key, None) => spark.conf.unset(key)
+        case (key, Some(value)) => sparkSession.conf.set(key, value)
+        case (key, None) => sparkSession.conf.unset(key)
       }
+      sparkSession.streams.removeListener(listener)
     }
   }
 

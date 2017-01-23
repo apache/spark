@@ -75,7 +75,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set("spark.testing", "true")
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
-    val securityManager = new SecurityManager(conf)
+    val securityManager = HistoryServer.createSecurityManager(conf)
 
     server = new HistoryServer(conf, provider, securityManager, 18080)
     server.initialize()
@@ -143,7 +143,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "stage task list from multi-attempt app json(2)" ->
       "applications/local-1426533911241/2/stages/0/0/taskList",
 
-    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd"
+    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
+    "executor node blacklisting" -> "applications/app-20161116163331-0000/executors",
+    "executor node blacklisting unblacklisting" -> "applications/app-20161115172038-0000/executors"
     // Todo: enable this test when logging the even of onBlockUpdated. See: SPARK-13845
     // "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
   )
@@ -288,7 +290,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
-    val securityManager = new SecurityManager(conf)
+    val securityManager = HistoryServer.createSecurityManager(conf)
 
     server = new HistoryServer(conf, provider, securityManager, 18080)
     server.initialize()
@@ -349,6 +351,17 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
   }
 
+  /**
+   * Verify that the security manager needed for the history server can be instantiated
+   * when `spark.authenticate` is `true`, rather than raise an `IllegalArgumentException`.
+   */
+  test("security manager starts with spark.authenticate set") {
+    val conf = new SparkConf()
+      .set("spark.testing", "true")
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+    HistoryServer.createSecurityManager(conf)
+  }
+
   test("incomplete apps get refreshed") {
 
     implicit val webDriver: WebDriver = new HtmlUnitDriver
@@ -368,7 +381,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set("spark.history.cache.window", "250ms")
       .remove("spark.testing")
     val provider = new FsHistoryProvider(myConf)
-    val securityManager = new SecurityManager(myConf)
+    val securityManager = HistoryServer.createSecurityManager(myConf)
 
     sc = new SparkContext("local", "test", myConf)
     val logDirUri = logDir.toURI

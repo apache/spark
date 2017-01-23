@@ -203,7 +203,7 @@ private[state] class HDFSBackedStateStoreProvider(
     /**
      * Whether all updates have been committed
      */
-    override private[state] def hasCommitted: Boolean = {
+    override private[streaming] def hasCommitted: Boolean = {
       state == COMMITTED
     }
 
@@ -303,7 +303,6 @@ private[state] class HDFSBackedStateStoreProvider(
       val mapFromFile = readSnapshotFile(version).getOrElse {
         val prevMap = loadMap(version - 1)
         val newMap = new MapType(prevMap)
-        newMap.putAll(prevMap)
         updateFromDeltaFile(version, newMap)
         newMap
       }

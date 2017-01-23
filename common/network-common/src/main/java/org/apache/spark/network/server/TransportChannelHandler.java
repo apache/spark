@@ -88,14 +88,14 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
     try {
       requestHandler.channelActive();
     } catch (RuntimeException e) {
-      logger.error("Exception from request handler while registering channel", e);
+      logger.error("Exception from request handler while channel is active", e);
     }
     try {
       responseHandler.channelActive();
     } catch (RuntimeException e) {
-      logger.error("Exception from response handler while registering channel", e);
+      logger.error("Exception from response handler while channel is active", e);
     }
-    super.channelRegistered(ctx);
+    super.channelActive(ctx);
   }
 
   @Override
@@ -103,14 +103,14 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
     try {
       requestHandler.channelInactive();
     } catch (RuntimeException e) {
-      logger.error("Exception from request handler while unregistering channel", e);
+      logger.error("Exception from request handler while channel is inactive", e);
     }
     try {
       responseHandler.channelInactive();
     } catch (RuntimeException e) {
-      logger.error("Exception from response handler while unregistering channel", e);
+      logger.error("Exception from response handler while channel is inactive", e);
     }
-    super.channelUnregistered(ctx);
+    super.channelInactive(ctx);
   }
 
   @Override
