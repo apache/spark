@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql
 
-import scala.beans.{BeanInfo, BeanProperty}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+
+import scala.beans.{BeanInfo, BeanProperty}
 
 @BeanInfo
 private[sql] case class MyLabeledPoint(
