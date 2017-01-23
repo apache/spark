@@ -93,7 +93,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     case c @ CreateTable(tableDesc, SaveMode.Append, Some(query))
         if query.resolved && catalog.tableExists(tableDesc.identifier) =>
       // This is guaranteed by the parser and `DataFrameWriter`
-      assert(tableDesc.schema.isEmpty && tableDesc.provider.isDefined)
+      assert(tableDesc.provider.isDefined)
 
       val db = tableDesc.identifier.database.getOrElse(catalog.getCurrentDatabase)
       val tableIdentWithDB = tableDesc.identifier.copy(database = Some(db))
@@ -178,9 +178,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       }
 
       c.copy(
-        // trust everything from the existing table, except schema as we assume it's empty in a lot
-        // of places, when we do CTAS.
-        tableDesc = existingTable.copy(schema = new StructType()),
+        tableDesc = existingTable,
         query = Some(newQuery))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity

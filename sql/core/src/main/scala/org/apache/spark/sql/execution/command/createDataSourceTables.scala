@@ -122,7 +122,6 @@ case class CreateDataSourceTableAsSelectCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
     assert(table.provider.isDefined)
-    assert(table.schema.isEmpty)
 
     val sessionState = sparkSession.sessionState
     val db = table.identifier.database.getOrElse(sessionState.catalog.getCurrentDatabase)
@@ -144,6 +143,8 @@ case class CreateDataSourceTableAsSelectCommand(
       saveDataIntoTable(
         sparkSession, table, table.storage.locationUri, query, mode, tableExists = true)
     } else {
+      assert(table.schema.isEmpty)
+
       val tableLocation = if (table.tableType == CatalogTableType.MANAGED) {
         Some(sessionState.catalog.defaultTablePath(table.identifier))
       } else {
