@@ -637,33 +637,33 @@ class GeneralizedLinearRegressionSuite
     import GeneralizedLinearRegression._
 
     var idx = 0
-    for (fitIntercept <- Seq(false, true); linkPower <- Seq(0.0, 1.0, -1.0)) {
-      for (variancePower <- Seq(1.6, 2.5)) {
-        val trainer = new GeneralizedLinearRegression().setFamily("tweedie")
-          .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
-          .setVariancePower(variancePower).setLinkPower(linkPower)
-        val model = trainer.fit(datasetTweedie)
-        val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
-        assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with tweedie family, " +
-          s"linkPower = $linkPower, fitIntercept = $fitIntercept " +
-          s"and variancePower = $variancePower.")
+    for (fitIntercept <- Seq(false, true);
+         linkPower <- Seq(0.0, 1.0, -1.0);
+         variancePower <- Seq(1.6, 2.5)) {
+      val trainer = new GeneralizedLinearRegression().setFamily("tweedie")
+        .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
+        .setVariancePower(variancePower).setLinkPower(linkPower)
+      val model = trainer.fit(datasetTweedie)
+      val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
+      assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with tweedie family, " +
+        s"linkPower = $linkPower, fitIntercept = $fitIntercept " +
+        s"and variancePower = $variancePower.")
 
-        val familyLink = FamilyAndLink(trainer)
-        model.transform(datasetTweedie).select("features", "prediction", "linkPrediction").collect()
-          .foreach {
-            case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
-              val eta = BLAS.dot(features, model.coefficients) + model.intercept
-              val prediction2 = familyLink.fitted(eta)
-              val linkPrediction2 = eta
-              assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
-                s"tweedie family, linkPower = $linkPower, fitIntercept = $fitIntercept " +
-                s"and variancePower = $variancePower.")
-              assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
-                s"GLM with tweedie family, linkPower = $linkPower, fitIntercept = $fitIntercept " +
-                s"and variancePower = $variancePower.")
-          }
-        idx += 1
-      }
+      val familyLink = FamilyAndLink(trainer)
+      model.transform(datasetTweedie).select("features", "prediction", "linkPrediction").collect()
+        .foreach {
+          case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
+            val eta = BLAS.dot(features, model.coefficients) + model.intercept
+            val prediction2 = familyLink.fitted(eta)
+            val linkPrediction2 = eta
+            assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
+              s"tweedie family, linkPower = $linkPower, fitIntercept = $fitIntercept " +
+              s"and variancePower = $variancePower.")
+            assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
+              s"GLM with tweedie family, linkPower = $linkPower, fitIntercept = $fitIntercept " +
+              s"and variancePower = $variancePower.")
+        }
+      idx += 1
     }
   }
 
@@ -1228,8 +1228,9 @@ class GeneralizedLinearRegressionSuite
         1.0, 3.0, 2.0, 1.0,
         0.0, 4.0, 3.0, 3.0), 4, 4, byrow = TRUE))
 
-      f <- glm(V1 ~ -1 + V3 + V4, data = df, weights = V2,
+      model <- glm(V1 ~ -1 + V3 + V4, data = df, weights = V2,
           family = tweedie(var.power = 1.6, link.power = 0))
+      summary(model)
 
       Deviance Residuals:
             1        2        3        4
@@ -1249,14 +1250,14 @@ class GeneralizedLinearRegressionSuite
       Number of Fisher Scoring iterations: 11
 
       residuals(model, type="pearson")
-                1           2           3           4
-      0.01873881 -0.01312994  0.04190280 -0.10332690
+           1           2           3           4
+      0.7383616 -0.0509458  2.2348337 -1.4552090
       residuals(model, type="working")
-                 1            2            3            4
-      0.018067789 -0.003326304  0.038720616 -0.824070943
+           1            2            3            4
+      0.83354150 -0.04103552  1.55676369 -1.00000000
       residuals(model, type="response")
-                 1            2            3            4
-      0.018067789 -0.003326304  0.038720616 -0.824070943
+           1            2            3            4
+      0.45460738 -0.02139574  0.60888055 -0.20392801
      */
     val datasetWithWeight = Seq(
       Instance(1.0, 1.0, Vectors.dense(0.0, 5.0)),
