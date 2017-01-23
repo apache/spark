@@ -1027,7 +1027,8 @@ class GeneralizedLinearRegressionSummary private[regression] (
    */
   @Since("2.0.0")
   lazy val dispersion: Double = if (
-    model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
+    model.getFamily.toLowerCase == Binomial.name ||
+      model.getFamily.toLowerCase == Poisson.name) {
     1.0
   } else {
     val rss = pearsonResiduals.agg(sum(pow(col("pearsonResiduals"), 2.0))).first().getDouble(0)
@@ -1130,7 +1131,8 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   @Since("2.0.0")
   lazy val pValues: Array[Double] = {
     if (isNormalSolver) {
-      if (model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
+      if (model.getFamily.toLowerCase == Binomial.name ||
+        model.getFamily.toLowerCase == Poisson.name) {
         tValues.map { x => 2.0 * (1.0 - dist.Gaussian(0.0, 1.0).cdf(math.abs(x))) }
       } else {
         tValues.map { x =>

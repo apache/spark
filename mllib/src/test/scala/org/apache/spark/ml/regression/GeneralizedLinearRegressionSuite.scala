@@ -757,7 +757,7 @@ class GeneralizedLinearRegressionSuite
        0.5554219 -0.4034267  0.6567520 -0.2611382
      */
     val trainer = new GeneralizedLinearRegression()
-      .setFamily("binomial")
+      .setFamily("Binomial")
       .setWeightCol("weight")
       .setFitIntercept(false)
 
@@ -874,7 +874,7 @@ class GeneralizedLinearRegressionSuite
        -0.4378554  0.2189277  0.1459518 -0.1094638
      */
     val trainer = new GeneralizedLinearRegression()
-      .setFamily("poisson")
+      .setFamily("Poisson")
       .setWeightCol("weight")
       .setFitIntercept(true)
 
