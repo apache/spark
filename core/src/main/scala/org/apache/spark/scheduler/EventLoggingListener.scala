@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io._
-import java.net.{URI, URLDecoder}
+import java.net.URI
 import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable
@@ -84,21 +84,19 @@ private[spark] class EventLoggingListener(
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
   // Visible for tests only.
-  private[scheduler] val logURIString = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
-
-  private[scheduler] val logPath = URLDecoder.decode(logURIString, "UTF-8")
+  private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
 
   /**
    * Creates the log file in the configured log directory.
    */
   def start() {
-    val logDir = URLDecoder.decode(logBaseDir.toString, "UTF-8")
-    if (!fileSystem.getFileStatus(new Path(logDir)).isDirectory) {
-      throw new IllegalArgumentException(s"Log directory $logDir is not a directory.")
+    if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
+      throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
     }
 
-    val uri = new URI(logURIString + IN_PROGRESS)
-    val path = new Path(logPath + IN_PROGRESS)
+    val workingPath = logPath + IN_PROGRESS
+    val uri = new URI(workingPath)
+    val path = new Path(workingPath)
     val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
     val isDefaultLocal = defaultFs == null || defaultFs == "file"
 
