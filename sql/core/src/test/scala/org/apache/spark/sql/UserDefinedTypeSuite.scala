@@ -120,7 +120,7 @@ object UDT {
 
     override def userClass: Class[IExampleBaseType] = classOf[IExampleBaseType]
     override def hashCode(): Int = classOf[ExampleBaseTypeUDT].getName.hashCode()
-    override def equals(other: Any): Boolean = other.isInstanceOf[IExampleBaseType]
+    override def equals(other: Any): Boolean = other.isInstanceOf[ExampleBaseTypeUDT]
     override def typeName: String = "exampleBaseType"
     private[spark] override def asNullable: ExampleBaseTypeUDT = this
   }
@@ -153,8 +153,8 @@ object UDT {
 
     override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
     override def hashCode(): Int = classOf[ExampleSubTypeUDT].getName.hashCode()
-    override def equals(other: Any): Boolean = other.isInstanceOf[IExampleSubType]
-    override def typeName: String = "exampleFirstSubType"
+    override def equals(other: Any): Boolean = other.isInstanceOf[ExampleSubTypeUDT]
+    override def typeName: String = "exampleSubType"
     private[spark] override def asNullable: ExampleSubTypeUDT = this
   }
 
@@ -305,12 +305,12 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     }: Int)
 
     // this worked already before the fix SPARK-19311:
-    // return type of doFirstUDF equals parameter type of doOtherUDF
+    // return type of doUDF equals parameter type of doOtherUDF
     sql("SELECT doOtherUDF(doUDF(41))")
 
     // this one passes only with the fix SPARK-19311:
-    // return type of doFirstSubUDF is a subtype of the parameter type of doOtherUDF
-    sql("SELECT doOtherUDF(ddSubTypeUDF(42))")
+    // return type of doSubUDF is a subtype of the parameter type of doOtherUDF
+    sql("SELECT doOtherUDF(doSubTypeUDF(42))")
   }
 
 }
