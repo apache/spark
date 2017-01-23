@@ -32,8 +32,6 @@ class AFTSurvivalRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import testImplicits._
-  import AFTSurvivalRegressionSuite._
-
 
   @transient var datasetUnivariate: DataFrame = _
   @transient var datasetMultivariate: DataFrame = _
@@ -401,6 +399,17 @@ class AFTSurvivalRegressionSuite
       1, Array(5.5), Array(0.8), 2, 42, 1.0, 2.0, 2.0), numSlices = 3).toDF()
     val trainer = new AFTSurvivalRegression()
     trainer.fit(dataset)
+  }
+
+  test("SPARK-19234: Fail fast on zero-valued labels") {
+    val dataset = spark.createDataFrame(Seq(
+         (1.218, 1.0, Vectors.dense(1.560, -0.605)),
+         (0.000, 0.0, Vectors.dense(0.346, 2.158)), // ← generates error; zero labels invalid
+         (4.199, 0.0, Vectors.dense(0.795, -0.226)))).toDF("label", "censor", "features")
+    val aft = new AFTSurvivalRegression()
+    intercept[SparkException] {
+      aft.fit(dataset)
+    }
   }
 }
 
