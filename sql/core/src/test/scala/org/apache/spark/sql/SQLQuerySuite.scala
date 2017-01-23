@@ -994,6 +994,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row("test.key2", "2"),
         Row("test.key3", "1"))).sortBy(_.getString(0))
     )
+    spark.sessionState.conf.clear()
   }
 
   test("SPARK-19218 `SET -v` should not fail with null value configuration") {
