@@ -85,6 +85,9 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // $"t" string in GMT would be as follows respectively:
+      // "2016-01-01 00:00:00"
+      // "2016-01-01 08:00:00"
       checkAnswer(
         df.select("t").filter($"t" <= "2016-01-01 00:00:00"),
         Row(Timestamp.valueOf("2015-12-31 16:00:00")))
@@ -123,6 +126,9 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // $"t" would be as follows respectively:
+      // "2015-12-31"
+      // "2016-01-01"
       checkAnswer(
         df.select("t").filter($"t" <= "2016-01-01"),
         Seq(
@@ -150,6 +156,19 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
   test("date format with session local timezone") {
     val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
+    // The child of date_format is implicitly casted to TimestampType with session local timezone.
+    //
+    // +---+---------------------+-------------+---------------------+
+    // |   | df                  | timestamp   | date_format         |
+    // +---+---------------------+-------------+---------------------+
+    // | a |                16533|1428476400000|"2015-04-08 00:00:00"|
+    // | b |"2015-04-08 13:10:15"|1428523815000|"2015-04-08 13:10:15"|
+    // | c |        1365451815000|1365451815000|"2013-04-08 13:10:15"|
+    // +---+---------------------+-------------+---------------------+
+    // Notice:
+    // - a: casted timestamp 1428476400000 is 2015-04-08 00:00:00 in America/Los_Angeles
+    // - b: parsed timestamp 1428523815000 is 2015-04-08 13:10:15 in America/Los_Angeles
+    // - c: timestamp 1428523815000 is 2015-04-08 13:10:15 in America/Los_Angeles
     checkAnswer(
       df.select(
         date_format($"a", "yyyy-MM-dd HH:mm:ss"),
@@ -159,6 +178,17 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // +---+---------------------+-------------+---------------------+
+      // |   | df                  | timestamp   | date_format         |
+      // +---+---------------------+-------------+---------------------+
+      // | a |                16533|1428451200000|"2015-04-08 00:00:00"|
+      // | b |"2015-04-08 13:10:15"|1428498615000|"2015-04-08 13:10:15"|
+      // | c |        1365451815000|1365451815000|"2013-04-08 20:10:15"|
+      // +---+---------------------+-------------+---------------------+
+      // Notice:
+      // - a: casted timestamp 1428451200000 is 2015-04-08 00:00:00 in GMT
+      // - b: parsed timestamp 1428498615000 is 2015-04-08 13:10:15 in GMT
+      // - c: timestamp 1365451815000 is 2013-04-08 20:10:15 in GMT
       checkAnswer(
         df.select(
           date_format($"a", "yyyy-MM-dd HH:mm:ss"),
@@ -186,12 +216,32 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
+    // The child of year is implicitly casted to DateType with session local timezone.
+    //
+    // +---+-------------+------+------+
+    // |   | df          | date | year |
+    // +---+-------------+------+------+
+    // | a |        16800| 16800|  2015|
+    // | b | "2015-12-31"| 16800|  2015|
+    // | c |1451606400000| 16800|  2015|
+    // +---+-------------+------+------+
+    // Notice:
+    // - c: timestamp 1451606400000 is 2015-12-31 16:00:00 in America/Los_Angeles
     checkAnswer(
       df.select(year($"a"), year($"b"), year($"c")),
       Row(2015, 2015, 2015))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // +---+-------------+------+------+
+      // |   | df          | date | year |
+      // +---+-------------+------+------+
+      // | a |         6800| 16800|  2015|
+      // | b | "2015-12-31"| 16800|  2015|
+      // | c |1451606400000| 16801|  2016|
+      // +---+-------------+------+------+
+      // Notice:
+      // - c: timestamp 1451606400000 is 2016-01-01 00:00:00 in GMT
       checkAnswer(
         df.select(year($"a"), year($"b"), year($"c")),
         Row(2015, 2015, 2016))
@@ -218,12 +268,32 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
+    // The child of quarter is implicitly casted to DateType with session local timezone.
+    //
+    // +---+-------------+------+---------+
+    // |   | df          | date | quarter |
+    // +---+-------------+------+---------+
+    // | a |        16800| 16800|        4|
+    // | b | "2015-12-31"| 16800|        4|
+    // | c |1451606400000| 16800|        4|
+    // +---+-------------+------+---------+
+    // Notice:
+    // - c: timestamp 1451606400000 is 2015-12-31 16:00:00 in America/Los_Angeles
     checkAnswer(
       df.select(quarter($"a"), quarter($"b"), quarter($"c")),
       Row(4, 4, 4))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // +---+-------------+------+---------+
+      // |   | df          | date | quarter |
+      // +---+-------------+------+---------+
+      // | a |        16800| 16800|        4|
+      // | b | "2015-12-31"| 16800|        4|
+      // | c |1451606400000| 16801|        1|
+      // +---+-------------+------+---------+
+      // Notice:
+      // - c: timestamp 1451606400000 is 2016-01-01 00:00:00 in GMT
       checkAnswer(
         df.select(quarter($"a"), quarter($"b"), quarter($"c")),
         Row(4, 4, 1))
@@ -248,12 +318,32 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
+    // The child of month is implicitly casted to DateType with session local timezone.
+    //
+    // +---+-------------+------+-------+
+    // |   | df          | date | month |
+    // +---+-------------+------+-------+
+    // | a |        16800| 16800|     12|
+    // | b | "2015-12-31"| 16800|     12|
+    // | c |1451606400000| 16800|     12|
+    // +---+-------------+------+-------+
+    // Notice:
+    // - c: timestamp 1451606400000 is 2015-12-31 16:00:00 in America/Los_Angeles
     checkAnswer(
       df.select(month($"a"), month($"b"), month($"c")),
       Row(12, 12, 12))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // +---+-------------+------+-------+
+      // |   | df          | date | month |
+      // +---+-------------+------+-------+
+      // | a |        16800| 16800|     12|
+      // | b | "2015-12-31"| 16800|     12|
+      // | c |1451606400000| 16801|      1|
+      // +---+-------------+------+-------+
+      // Notice:
+      // - c: timestamp 1451606400000 is 2016-01-01 00:00:00 in GMT
       checkAnswer(
         df.select(month($"a"), month($"b"), month($"c")),
         Row(12, 12, 1))
@@ -278,12 +368,32 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
+    // The child of datyofmonth is implicitly casted to DateType with session local timezone.
+    //
+    // +---+-------------+------+------------+
+    // |   | df          | date | dayofmonth |
+    // +---+-------------+------+------------+
+    // | a |        16800| 16800|          31|
+    // | b | "2015-12-31"| 16800|          31|
+    // | c |1451606400000| 16800|          31|
+    // +---+-------------+------+------------+
+    // Notice:
+    // - c: timestamp 1451606400000 is 2015-12-31 16:00:00 in America/Los_Angeles
     checkAnswer(
       df.select(dayofmonth($"a"), dayofmonth($"b"), dayofmonth($"c")),
       Row(31, 31, 31))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // +---+-------------+------+------------+
+      // |   | df          | date | dayofmonth |
+      // +---+-------------+------+------------+
+      // | a |        16800| 16800|          31|
+      // | b | "2015-12-31"| 16800|          31|
+      // | c |1451606400000| 16801|           1|
+      // +---+-------------+------+------------+
+      // Notice:
+      // - c: timestamp 1451606400000 is 2016-01-01 00:00:00 in GMT
       checkAnswer(
         df.select(dayofmonth($"a"), dayofmonth($"b"), dayofmonth($"c")),
         Row(31, 31, 1))
@@ -308,12 +418,32 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
+    // The child of dayofyear is implicitly casted to DateType with session local timezone.
+    //
+    // +---+-------------+------+-----------+
+    // |   | df          | date | dayofyear |
+    // +---+-------------+------+-----------+
+    // | a |        16800| 16800|        365|
+    // | b | "2015-12-31"| 16800|        365|
+    // | c |1451606400000| 16800|        365|
+    // +---+-------------+------+-----------+
+    // Notice:
+    // - c: timestamp 1451606400000 is 2015-12-31 16:00:00 in America/Los_Angeles
     checkAnswer(
       df.select(dayofyear($"a"), dayofyear($"b"), dayofyear($"c")),
       Row(365, 365, 365))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // +---+-------------+------+-----------+
+      // |   | df          | date | dayofyear |
+      // +---+-------------+------+-----------+
+      // | a |        16800| 16800|        365|
+      // | b | "2015-12-31"| 16800|        365|
+      // | c |1451606400000| 16801|          1|
+      // +---+-------------+------+-----------+
+      // Notice:
+      // - c: timestamp 1451606400000 is 2016-01-01 00:00:00 in GMT
       checkAnswer(
         df.select(dayofyear($"a"), dayofyear($"b"), dayofyear($"c")),
         Row(365, 365, 1))
@@ -338,12 +468,36 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
+    // The child of hour is implicitly casted to TimestampType with session local timezone.
+    //
+    // +---+---------------------+-------------+------+
+    // |   | df                  | timestamp   | hour |
+    // +---+---------------------+-------------+------+
+    // | a |                16800|1451548800000|     0|
+    // | b |"2015-12-31 16:00:00"|1451606400000|    16|
+    // | c |        1451606400000|1451606400000|    16|
+    // +---+---------------------+-------------+------+
+    // Notice:
+    // - a: casted timestamp 1451548800000 is 2015-12-31 00:00:00 in America/Los_Angeles
+    // - b: parsed timestamp 1451606400000 is 2015-12-31 16:00:00 in America/Los_Angeles
+    // - c: timestamp 1451606400000 is 2015-12-31 16:00:00 in America/Los_Angeles
     checkAnswer(
       df.select(hour($"a"), hour($"b"), hour($"c")),
       Row(0, 16, 16))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // +---+---------------------+-------------+------+
+      // |   | df                  | timestamp   | hour |
+      // +---+---------------------+-------------+------+
+      // | a |                16800|1451520000000|     0|
+      // | b |"2015-12-31 16:00:00"|1451577600000|    16|
+      // | c |        1451606400000|1451606400000|     0|
+      // +---+---------------------+-------------+------+
+      // Notice:
+      // - a: casted timestamp 1428451200000 is 2015-12-31 00:00:00 in GMT
+      // - b: parsed timestamp 1451577600000 is 2015-12-31 16:00:00 in GMT
+      // - c: timestamp 1451606400000 is 2016-01-01 00:00:00 in GMT
       checkAnswer(
         df.select(hour($"a"), hour($"b"), hour($"c")),
         Row(0, 16, 0))
@@ -365,12 +519,36 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
   test("minute with session local timezone") {
     val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
+    // The child of minute is implicitly casted to TimestampType with session local timezone.
+    //
+    // +---+---------------------+-------------+--------+
+    // |   | df                  | timestamp   | minute |
+    // +---+---------------------+-------------+--------+
+    // | a |                16533|1428476400000|       0|
+    // | b |"2015-04-08 13:10:15"|1428523815000|      10|
+    // | c |        1365451815000|1365451815000|      10|
+    // +---+---------------------+-------------+--------+
+    // Notice:
+    // - a: casted timestamp 1428476400000 is 2015-04-08 00:00:00 in America/Los_Angeles
+    // - b: parsed timestamp 1428523815000 is 2015-04-08 13:10:15 in America/Los_Angeles
+    // - c: timestamp 1365451815000 is 2015-04-08 13:10:15 in America/Los_Angeles
     checkAnswer(
       df.select(minute($"a"), minute($"b"), minute($"c")),
       Row(0, 10, 10))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // +---+---------------------+-------------+--------+
+      // |   | df                  | timestamp   | minute |
+      // +---+---------------------+-------------+--------+
+      // | a |                16533|1428451200000|       0|
+      // | b |"2015-04-08 13:10:15"|1428498615000|      10|
+      // | c |        1365451815000|1365451815000|      10|
+      // +---+---------------------+-------------+--------+
+      // Notice:
+      // - a: casted timestamp 1428451200000 is 2015-04-08 00:00:00 in GMT
+      // - b: parsed timestamp 1428498615000 is 2015-04-08 13:10:15 in GMT
+      // - c: timestamp 1365451815000 is 2013-04-08 20:10:15 in GMT
       checkAnswer(
         df.select(minute($"a"), minute($"b"), minute($"c")),
         Row(0, 10, 10))
@@ -378,6 +556,17 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "ACT") {
 
+      // +---+---------------------+-------------+--------+
+      // |   | df                  | timestamp   | minute |
+      // +---+---------------------+-------------+--------+
+      // | a |                16533|1428417000000|       0|
+      // | b |"2015-04-08 13:10:15"|1428464415000|      10|
+      // | c |        1365451815000|1365451815000|      40|
+      // +---+---------------------+-------------+--------+
+      // Notice:
+      // - a: casted timestamp 1428451200000 is 2015-04-08 00:00:00 in ACT
+      // - b: parsed timestamp 1428498615000 is 2015-04-08 13:10:15 in ACT
+      // - c: timestamp 1365451815000 is 2013-04-09 05:40:15 in ACT
       checkAnswer(
         df.select(minute($"a"), minute($"b"), minute($"c")),
         Row(0, 10, 40))
@@ -403,12 +592,36 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
   test("second with session local timezone") {
     val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
+    // The child of second is implicitly casted to TimestampType with session local timezone.
+    //
+    // +---+---------------------+-------------+--------+
+    // |   | df                  | timestamp   | second |
+    // +---+---------------------+-------------+--------+
+    // | a |                16533|1428476400000|       0|
+    // | b |"2015-04-08 13:10:15"|1428523815000|      15|
+    // | c |        1365451815000|1365451815000|      15|
+    // +---+---------------------+-------------+--------+
+    // Notice:
+    // - a: casted timestamp 1428476400000 is 2015-04-08 00:00:00 in America/Los_Angeles
+    // - b: parsed timestamp 1428523815000 is 2015-04-08 13:10:15 in America/Los_Angeles
+    // - c: timestamp 1365451815000 is 2015-04-08 13:10:15 in America/Los_Angeles
     checkAnswer(
       df.select(second($"a"), second($"b"), second($"c")),
       Row(0, 15, 15))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // +---+---------------------+-------------+--------+
+      // |   | df                  | timestamp   | second |
+      // +---+---------------------+-------------+--------+
+      // | a |                16533|1428451200000|       0|
+      // | b |"2015-04-08 13:10:15"|1428498615000|      15|
+      // | c |        1365451815000|1365451815000|      15|
+      // +---+---------------------+-------------+--------+
+      // Notice:
+      // - a: casted timestamp 1428451200000 is 2015-04-08 00:00:00 in GMT
+      // - b: parsed timestamp 1428498615000 is 2015-04-08 13:10:15 in GMT
+      // - c: timestamp 1365451815000 is 2013-04-08 20:10:15 in GMT
       checkAnswer(
         df.select(second($"a"), second($"b"), second($"c")),
         Row(0, 15, 15))
@@ -433,12 +646,32 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
+    // The child of weekofyear is implicitly casted to DateType with session local timezone.
+    //
+    // +---+-------------+------+------------+
+    // |   | df          | date | weekofyear |
+    // +---+-------------+------+------------+
+    // | a |        16803| 16803|          53|
+    // | b | "2016-01-03"| 16803|          53|
+    // | c |1451865600000| 16803|          53|
+    // +---+-------------+------+------------+
+    // Notice:
+    // - c: timestamp 1451865600000 is 2016-01-03 16:00:00 in America/Los_Angeles
     checkAnswer(
       df.select(weekofyear($"a"), weekofyear($"b"), weekofyear($"c")),
       Row(53, 53, 53))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // +---+-------------+------+------------+
+      // |   | df          | date | weekofyear |
+      // +---+-------------+------+------------+
+      // | a |        16803| 16803|          53|
+      // | b | "2016-01-03"| 16803|          53|
+      // | c |1451865600000| 16804|           1|
+      // +---+-------------+------+------------+
+      // Notice:
+      // - c: timestamp 1451865600000 is 2016-01-04 00:00:00 in GMT
       checkAnswer(
         df.select(weekofyear($"a"), weekofyear($"b"), weekofyear($"c")),
         Row(53, 53, 1))
@@ -578,12 +811,32 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq((1, ts1), (2, ts2)).toDF("i", "t")
 
+    // The child of last_day is implicitly casted to DateType with session local timezone.
+    //
+    // +-------------+------+----------+
+    // | t           | date | last_day |
+    // +-------------+------+----------+
+    // |1451520000000| 16799|     16800|
+    // |1451606400000| 16800|     16800|
+    // +-------------+------+----------+
+    // Notice:
+    // - timestamp 1451520000000 is 2015-12-30 16:00:00 in America/Los_Angeles
+    // - timestamp 1451606400000 is 2015-12-31 16:00:00 in America/Los_Angeles
     checkAnswer(
       df.select(last_day(col("t"))),
       Seq(Row(Date.valueOf("2015-12-31")), Row(Date.valueOf("2015-12-31"))))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // +-------------+------+----------+
+      // | t           | date | last_day |
+      // +-------------+------+----------+
+      // |1451520000000| 16800|     16800|
+      // |1451606400000| 16801|     16831|
+      // +-------------+------+----------+
+      // Notice:
+      // - timestamp 1451520000000 is 2015-12-31 00:00:00 in GMT
+      // - timestamp 1451606400000 is 2016-01-01 00:00:00 in GMT
       checkAnswer(
         df.select(last_day(col("t"))),
         Seq(Row(Date.valueOf("2015-12-31")), Row(Date.valueOf("2016-01-31"))))
@@ -607,12 +860,32 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq(("mon", ts1), ("tuesday", ts2)).toDF("dow", "t")
 
+    // The child of next_day is implicitly casted to DateType with session local timezone.
+    //
+    // +-------------+------+----------+
+    // | t           | date | next_day |
+    // +-------------+------+----------+
+    // |1481500800000| 17146|     17147|
+    // |1481587200000| 17147|     17154|
+    // +-------------+------+----------+
+    // Notice:
+    // - timestamp 1481500800000 is 2016-12-11 16:00:00 in America/Los_Angeles
+    // - timestamp 1481587200000 is 2016-12-12 16:00:00 in America/Los_Angeles
     checkAnswer(
       df.select(next_day(col("t"), "MONDAY")),
       Seq(Row(Date.valueOf("2016-12-12")), Row(Date.valueOf("2016-12-19"))))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // +-------------+------+----------+
+      // | t           | date | next_day |
+      // +-------------+------+----------+
+      // |1481500800000| 17147|     17154|
+      // |1481587200000| 17148|     17154|
+      // +-------------+------+----------+
+      // Notice:
+      // - timestamp 1481500800000 is 2016-12-12 00:00:00 in GMT
+      // - timestamp 1481587200000 is 2016-12-13 00:00:00 in GMT
       checkAnswer(
         df.select(next_day(col("t"), "MONDAY")),
         Seq(Row(Date.valueOf("2016-12-19")), Row(Date.valueOf("2016-12-19"))))
@@ -656,12 +929,32 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq((d, t, s)).toDF("d", "t", "s")
 
+    // The child of to_date is implicitly casted to DateType with session local timezone.
+    //
+    // +---+---------------------+------+---------+
+    // |   | df                  | date | to_date |
+    // +---+---------------------+------+---------+
+    // | d |                16800| 16800|    16800|
+    // | t |        1451606400000| 16800|    16800|
+    // | s |"2015-12-31 16:00:00"| 16800|    16800|
+    // +---+---------------------+------+---------+
+    // Notice:
+    // - t: timestamp 1451606400000 is 2015-12-31 16:00:00 in America/Los_Angeles
     checkAnswer(
       df.select(to_date(col("d")), to_date(col("t")), to_date(col("s"))),
       Seq(Row(Date.valueOf("2015-12-31"), Date.valueOf("2015-12-31"), Date.valueOf("2015-12-31"))))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // +---+---------------------+------+---------+
+      // |   | df                  | date | to_date |
+      // +---+---------------------+------+---------+
+      // | d |                16800| 16800|    16800|
+      // | t |        1451606400000| 16801|    16801|
+      // | s |"2015-12-31 16:00:00"| 16800|    16800|
+      // +---+---------------------+------+---------+
+      // Notice:
+      // - t: timestamp 1451606400000 is 2016-01-01 00:00:00 in GMT
       checkAnswer(
         df.select(to_date(col("d")), to_date(col("t")), to_date(col("s"))),
         Seq(
@@ -688,12 +981,32 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       (1, Timestamp.valueOf("2015-12-30 16:00:00")),
       (2, Timestamp.valueOf("2015-12-31 16:00:00"))).toDF("i", "t")
 
+    // The child of trunc is implicitly casted to DateType with session local timezone.
+    //
+    // +-------------+------+-------+
+    // | t           | date | trunc |
+    // +-------------+------+-------+
+    // |1451520000000| 16799|  16436|
+    // |1451606400000| 16800|  16436|
+    // +-------------+------+-------+
+    // Notice:
+    // - timestamp 1451520000000 is 2015-12-30 16:00:00 in America/Los_Angeles
+    // - timestamp 1451606400000 is 2015-12-31 16:00:00 in America/Los_Angeles
     checkAnswer(
       df.select(trunc(col("t"), "YY")),
       Seq(Row(Date.valueOf("2015-01-01")), Row(Date.valueOf("2015-01-01"))))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
 
+      // +-------------+------+-------+
+      // | t           | date | trunc |
+      // +-------------+------+-------+
+      // |1451520000000| 16800|  16436|
+      // |1451606400000| 16801|  16801|
+      // +-------------+------+-------+
+      // Notice:
+      // - timestamp 1451520000000 is 2015-12-31 00:00:00 in GMT
+      // - timestamp 1451606400000 is 2016-01-01 00:00:00 in GMT
       checkAnswer(
         df.select(trunc(col("t"), "YY")),
         Seq(Row(Date.valueOf("2015-01-01")), Row(Date.valueOf("2016-01-01"))))
