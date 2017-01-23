@@ -60,7 +60,8 @@ class AuthRpcHandler extends RpcHandler {
    * RpcHandler we will delegate to for authenticated connections. When falling back to SASL
    * this will be replaced with the SASL RPC handler.
    */
-  private RpcHandler delegate;
+  @VisibleForTesting
+  RpcHandler delegate;
 
   /** Class which provides secret keys which are shared by server and client on a per-app basis. */
   private final SecretKeyHolder secretKeyHolder;
@@ -96,7 +97,7 @@ class AuthRpcHandler extends RpcHandler {
       LOG.debug("Received new auth challenge for client {}.", channel.remoteAddress());
     } catch (RuntimeException e) {
       if (conf.saslFallback()) {
-        LOG.debug("Failed to parse new auth challenge, reverting to SASL for client {}.",
+        LOG.warn("Failed to parse new auth challenge, reverting to SASL for client {}.",
           channel.remoteAddress());
         delegate = new SaslRpcHandler(conf, channel, delegate, secretKeyHolder);
         message.position(position);

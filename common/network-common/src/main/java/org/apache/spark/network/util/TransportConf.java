@@ -165,7 +165,7 @@ public class TransportConf {
   /**
    * Enables strong encryption. Also enables the new auth protocol, used to negotiate keys.
    */
-  public boolean aesEncryptionEnabled() {
+  public boolean encryptionEnabled() {
     return conf.getBoolean("spark.network.crypto.enabled", false);
   }
 

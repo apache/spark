@@ -44,7 +44,7 @@ public class AuthServerBootstrap implements TransportServerBootstrap {
   }
 
   public RpcHandler doBootstrap(Channel channel, RpcHandler rpcHandler) {
-    if (!conf.aesEncryptionEnabled()) {
+    if (!conf.encryptionEnabled()) {
       TransportServerBootstrap sasl = new SaslServerBootstrap(conf, secretKeyHolder);
       return sasl.doBootstrap(channel, rpcHandler);
     }

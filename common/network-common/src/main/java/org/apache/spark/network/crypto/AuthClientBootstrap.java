@@ -77,7 +77,7 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
 
   @Override
   public void doBootstrap(TransportClient client, Channel channel) {
-    if (!conf.aesEncryptionEnabled()) {
+    if (!conf.encryptionEnabled()) {
       LOG.debug("AES encryption disabled, using old auth protocol.");
       doSaslAuth(client, channel);
       return;
@@ -92,7 +92,7 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
       // OK to switch back to SASL (because the server doesn't speak the new protocol). So
       // try it anyway, and in the worst case things will fail again.
       if (conf.saslFallback()) {
-        LOG.debug("New auth protocol failed, trying SASL.", e);
+        LOG.warn("New auth protocol failed, trying SASL.", e);
         doSaslAuth(client, channel);
       } else {
         throw e;

@@ -34,6 +34,7 @@ import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
+import org.apache.spark.network.sasl.SaslRpcHandler;
 import org.apache.spark.network.sasl.SaslServerBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.RpcHandler;
@@ -65,6 +66,7 @@ public class AuthIntegrationSuite {
     ByteBuffer reply = ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000);
     assertEquals("Pong", JavaUtils.bytesToString(reply));
     assertTrue(ctx.authRpcHandler.doDelegate);
+    assertFalse(ctx.authRpcHandler.delegate instanceof SaslRpcHandler);
   }
 
   @Test
@@ -130,8 +132,8 @@ public class AuthIntegrationSuite {
 
     TransportClient client;
     TransportServer server;
-    Channel serverChannel;
-    AuthRpcHandler authRpcHandler;
+    volatile Channel serverChannel;
+    volatile AuthRpcHandler authRpcHandler;
 
     AuthTestCtx() throws Exception {
       Map<String, String> testConf = ImmutableMap.of("spark.network.crypto.enabled", "true");

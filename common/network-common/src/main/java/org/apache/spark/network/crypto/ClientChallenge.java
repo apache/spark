@@ -36,7 +36,7 @@ public class ClientChallenge implements Encodable {
 
   public final String appId;
   public final String kdf;
-  public int iterations;
+  public final int iterations;
   public final String cipher;
   public final int keyLength;
   public final byte[] nonce;

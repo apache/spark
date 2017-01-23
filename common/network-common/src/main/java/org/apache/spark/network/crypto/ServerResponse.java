@@ -72,7 +72,7 @@ public class ServerResponse implements Encodable {
     ByteBuf buf = Unpooled.wrappedBuffer(buffer);
 
     if (buf.readByte() != TAG_BYTE) {
-      throw new IllegalArgumentException("Expected ServerChallenge, received something else.");
+      throw new IllegalArgumentException("Expected ServerResponse, received something else.");
     }
 
     return new ServerResponse(
