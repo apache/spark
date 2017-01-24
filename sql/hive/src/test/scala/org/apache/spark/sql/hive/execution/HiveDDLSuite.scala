@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.StructType
 
 class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
-  import spark.implicits._
+  import testImplicits._
 
   override def afterEach(): Unit = {
     try {
@@ -1425,6 +1425,17 @@ class HiveDDLSuite
         Seq(1 -> "a").toDF("i", "j").write.format("hive").save(dir.getAbsolutePath)
       }
       assert(e2.message.contains("Hive data source can only be used with tables"))
+
+      val e3 = intercept[AnalysisException] {
+        spark.readStream.format("hive").load(dir.getAbsolutePath)
+      }
+      assert(e3.message.contains("Hive data source can only be used with tables"))
+
+      val e4 = intercept[AnalysisException] {
+        spark.readStream.schema(new StructType()).parquet(dir.getAbsolutePath)
+          .writeStream.format("hive").start(dir.getAbsolutePath)
+      }
+      assert(e4.message.contains("Hive data source can only be used with tables"))
     }
   }
 
