@@ -491,7 +491,7 @@ class BlockMatrix @Since("1.3.0") (
       s"of B must be equal. A.numCols: ${numCols()}, B.numRows: ${other.numRows()}. If you " +
       "think they should be equal, try setting the dimensions of A and B explicitly while " +
       "initializing them.")
-    require(numMidDimSplits > 0, "numMidDimSplits should be positive value.")
+    require(numMidDimSplits > 0, "numMidDimSplits should be a positive integer.")
     if (colsPerBlock == other.rowsPerBlock) {
       val resultPartitioner = GridPartitioner(numRowBlocks, other.numColBlocks,
         math.max(blocks.partitions.length, other.blocks.partitions.length))
