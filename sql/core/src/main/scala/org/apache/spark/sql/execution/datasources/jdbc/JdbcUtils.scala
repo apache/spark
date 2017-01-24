@@ -764,6 +764,8 @@ object JdbcUtils extends Logging {
                                 statements: DataFrame,
                                 batchSize: Int = DEFAULT_BATCH_SIZE,
                                 maxConnections: Int = DEFAULT_MAX_CONNECTIONS): Unit = {
+    import statements.sparkSession.implicits._
+
     // To avoid overloading database coalesce to a set number of partitions if necessary
     val coalesced = if (statements.rdd.getNumPartitions > maxConnections) {
       statements.coalesce(maxConnections)
