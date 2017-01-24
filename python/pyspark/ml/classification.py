@@ -68,6 +68,43 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
     Linear SVM Classifier (https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM)
     This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
 
+    >>> from pyspark.sql import Row
+    >>> from pyspark.ml.linalg import Vectors
+    >>> bdf = sc.parallelize([
+    ...     Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
+    ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], []))]).toDF()
+    >>> svm = LinearSVC(maxIter=5, regParam=0.01, weightCol="weight")
+    >>> model = svm.fit(bdf)
+    >>> model.coefficients
+    DenseVector([1.909])
+    >>> model.intercept
+    -1.0045358384178
+    >>> model.numClasses
+    2
+    >>> model.numFeatures
+    1
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
+    0.0
+    >>> result.rawPrediction
+    DenseVector([2.9135, -2.9135])
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
+    >>> model.transform(test1).head().prediction
+    1.0
+    >>> svm_path = temp_path + "/svm"
+    >>> svm.save(svm_path)
+    >>> svm2 = LinearSVC.load(svm_path)
+    >>> svm2.getMaxIter()
+    5
+    >>> model_path = temp_path + "/svm_model"
+    >>> model.save(model_path)
+    >>> model2 = LinearSVCModel.load(model_path)
+    >>> model.coefficients[0] == model2.coefficients[0]
+    True
+    >>> model.intercept == model2.intercept
+    True
+
     .. versionadded:: 2.2.0
     """
 
