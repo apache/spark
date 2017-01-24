@@ -175,7 +175,6 @@ case class CatalogTable(
     lastAccessTime: Long = -1,
     properties: Map[String, String] = Map.empty,
     stats: Option[CatalogStatistics] = None,
-    viewOriginalText: Option[String] = None,
     viewText: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
@@ -261,7 +260,6 @@ case class CatalogTable(
         if (provider.isDefined) s"Provider: ${provider.get}" else "",
         if (partitionColumnNames.nonEmpty) s"Partition Columns: $partitionColumns" else ""
       ) ++ bucketStrings ++ Seq(
-        viewOriginalText.map("Original View: " + _).getOrElse(""),
         viewText.map("View: " + _).getOrElse(""),
         comment.map("Comment: " + _).getOrElse(""),
         if (properties.nonEmpty) s"Properties: $tableProperties" else "",
