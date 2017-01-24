@@ -189,8 +189,8 @@ case class CatalogTable(
   def partitionSchema: StructType = {
     assert(schema.takeRight(partitionColumnNames.length).map(_.name) == partitionColumnNames)
 
-    StructType(schema.filter { c =>
-      partitionColumnNames.contains(c.name)
+    StructType(schema.filter {
+      c => partitionColumnNames.contains(c.name)
     })
   }
 
