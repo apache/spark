@@ -31,7 +31,7 @@ from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
 
-__all__ = ['LinearSVC', 'LinearSVCModel'
+__all__ = ['LinearSVC', 'LinearSVCModel',
            'LogisticRegression', 'LogisticRegressionModel',
            'LogisticRegressionSummary', 'LogisticRegressionTrainingSummary',
            'BinaryLogisticRegressionSummary', 'BinaryLogisticRegressionTrainingSummary',
