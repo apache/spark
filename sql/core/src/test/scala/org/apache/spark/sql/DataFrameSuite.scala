@@ -1725,4 +1725,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
     assert(df.filter($"array1" === $"array2").count() == 1)
   }
+
+  test("SPARK-17913: compare long and string type column may return confusing result") {
+    val df = Seq(123L -> "123", 19157170390056973L -> "19157170390056971").toDF("i", "j")
+    checkAnswer(df.select($"i" === $"j"), Row(true) :: Row(false) :: Nil)
+  }
 }
