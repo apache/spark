@@ -349,7 +349,8 @@ abstract class DStream[T: ClassTag] (
             newRDD.persist(storageLevel)
             logDebug(s"Persisting RDD ${newRDD.id} for time $time to $storageLevel")
           }
-          if (checkpointDuration != null && (time - zeroTime).isMultipleOf(checkpointDuration)) {
+          if (checkpointDuration != null && ((time - zeroTime).isMultipleOf(checkpointDuration)
+              || ssc.scheduler.jobGenerator.stopTime == time.milliseconds)) {
             newRDD.checkpoint()
             logInfo(s"Marking RDD ${newRDD.id} for time $time for checkpointing")
           }
