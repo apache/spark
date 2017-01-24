@@ -26,9 +26,8 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.tree.{DecisionTreeSuite => OldDTSuite, EnsembleTestHelper}
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, QuantileStrategy,
-  Strategy => OldStrategy}
-import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, GiniCalculator}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, QuantileStrategy, Strategy => OldStrategy}
+import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, GiniCalculator, Variance}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -161,6 +160,21 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("train with empty arrays") {
+    val lp = LabeledPoint(1.0, Vectors.dense(Array.empty[Double]))
+    val data = Array.fill(5)(lp)
+    val rdd = sc.parallelize(data)
+
+    val strategy = new OldStrategy(OldAlgo.Regression, Gini, maxDepth = 2,
+      maxBins = 5)
+    withClue("DecisionTree requires number of features > 0," +
+      " but was given an empty features vector") {
+      intercept[IllegalArgumentException] {
+        RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
+      }
+    }
+  }
+
   test("train with constant features") {
     val lp = LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0))
     val data = Array.fill(5)(lp)
@@ -170,12 +184,23 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
           Gini,
           maxDepth = 2,
           numClasses = 2,
-          maxBins = 100,
+          maxBins = 5,
           categoricalFeaturesInfo = Map(0 -> 1, 1 -> 5))
     val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
     assert(tree.rootNode.impurity === -1.0)
     assert(tree.depth === 0)
     assert(tree.rootNode.prediction === lp.label)
+
+    // Test with no categorical features
+    val strategy2 = new OldStrategy(
+      OldAlgo.Regression,
+      Variance,
+      maxDepth = 2,
+      maxBins = 5)
+    val Array(tree2) = RandomForest.run(rdd, strategy2, 1, "all", 42L, instr = None)
+    assert(tree2.rootNode.impurity === -1.0)
+    assert(tree2.depth === 0)
+    assert(tree2.rootNode.prediction === lp.label)
   }
 
   test("Multiclass classification with unordered categorical features: split calculations") {

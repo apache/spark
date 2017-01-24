@@ -113,6 +113,8 @@ private[spark] object DecisionTreeMetadata extends Logging {
       throw new IllegalArgumentException(s"DecisionTree requires size of input RDD > 0, " +
         s"but was given by empty one.")
     }
+    require(numFeatures > 0, s"DecisionTree requires number of features > 0, " +
+      s"but was given an empty features vector")
     val numExamples = input.count()
     val numClasses = strategy.algo match {
       case Classification => strategy.numClasses
