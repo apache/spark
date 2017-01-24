@@ -42,11 +42,12 @@ are set up as described above:
       --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
       examples/jars/spark_examples_2.11-2.2.0.jar
 
-<!-- TODO master should default to https if no scheme is specified -->
 The Spark master, specified either via passing the `--master` command line argument to `spark-submit` or by setting
 `spark.master` in the application's configuration, must be a URL with the format `k8s://<api_server_url>`. Prefixing the
 master string with `k8s://` will cause the Spark application to launch on the Kubernetes cluster, with the API server
-being contacted at `api_server_url`. The HTTP protocol must also be specified.
+being contacted at `api_server_url`. If no HTTP protocol is specified in the URL, it defaults to `https`. For example,
+setting the master to `k8s://example.com:443` is equivalent to setting it to `k8s://https://example.com:443`, but to
+connect without SSL on a different port, the master would be set to `k8s://http://example.com:8443`.
 
 Note that applications can currently only be executed in cluster mode, where the driver and its executors are running on
 the cluster.
@@ -58,17 +59,18 @@ disk of the submitter's machine. These two types of dependencies are specified v
 `spark-submit`:
  
 * Local jars provided by specifying the `--jars` command line argument to `spark-submit`, or by setting `spark.jars` in
-  the application's configuration, will be treated as jars that are located on the *disk of the driver Docker
-  container*. This only applies to jar paths that do not specify a scheme or that have the scheme `file://`. Paths with
-  other schemes are fetched from their appropriate locations.
+  the application's configuration, will be treated as jars that are located on the *disk of the driver container*. This
+  only applies to jar paths that do not specify a scheme or that have the scheme `file://`. Paths with other schemes are
+  fetched from their appropriate locations.
 * Local jars provided by specifying the `--upload-jars` command line argument to `spark-submit`, or by setting
   `spark.kubernetes.driver.uploads.jars` in the application's configuration, will be treated as jars that are located on
   the *disk of the submitting machine*. These jars are uploaded to the driver docker container before executing the
   application.
-  <!-- TODO support main resource bundled in the Docker image -->
 * A main application resource path that does not have a scheme or that has the scheme `file://` is assumed to be on the
   *disk of the submitting machine*. This resource is uploaded to the driver docker container before executing the
   application. A remote path can still be specified and the resource will be fetched from the appropriate location.
+* A main application resource path that has the scheme `container://` is assumed to be on the *disk of the driver
+  container*.
   
 In all of these cases, the jars are placed on the driver's classpath, and are also sent to the executors. Below are some
 examples of providing application dependencies.
@@ -78,8 +80,7 @@ To submit an application with both the main resource and two other jars living o
     bin/spark-submit \
       --deploy-mode cluster \
       --class com.example.applications.SampleApplication \
-      --master k8s://https://192.168.99.100 \
-      --kubernetes-namespace default \
+      --master k8s://192.168.99.100 \
       --upload-jars /home/exampleuser/exampleapplication/dep1.jar,/home/exampleuser/exampleapplication/dep2.jar \
       --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver:latest \
       --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
@@ -91,8 +92,7 @@ Note that since passing the jars through the `--upload-jars` command line argume
     bin/spark-submit \
       --deploy-mode cluster \
       --class com.example.applications.SampleApplication \
-      --master k8s://https://192.168.99.100 \
-      --kubernetes-namespace default \
+      --master k8s://192.168.99.100 \
       --conf spark.kubernetes.driver.uploads.jars=/home/exampleuser/exampleapplication/dep1.jar,/home/exampleuser/exampleapplication/dep2.jar \
       --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver:latest \
       --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
@@ -104,8 +104,7 @@ is located in the jar `/opt/spark-plugins/app-plugin.jar` on the docker image's 
     bin/spark-submit \
       --deploy-mode cluster \
       --class com.example.applications.PluggableApplication \
-      --master k8s://https://192.168.99.100 \
-      --kubernetes-namespace default \
+      --master k8s://192.168.99.100 \
       --jars /opt/spark-plugins/app-plugin.jar \
       --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver-custom:latest \
       --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
@@ -117,13 +116,22 @@ Spark property, the above will behave identically to this command:
     bin/spark-submit \
       --deploy-mode cluster \
       --class com.example.applications.PluggableApplication \
-      --master k8s://https://192.168.99.100 \
-      --kubernetes-namespace default \
+      --master k8s://192.168.99.100 \
       --conf spark.jars=file:///opt/spark-plugins/app-plugin.jar \
       --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver-custom:latest \
       --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
       http://example.com:8080/applications/sparkpluggable/app.jar
       
+To specify a main application resource that is in the Docker image, and if it has no other dependencies:
+
+    bin/spark-submit \
+      --deploy-mode cluster \
+      --class com.example.applications.PluggableApplication \
+      --master k8s://192.168.99.100:8443 \
+      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver-custom:latest \
+      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
+      container:///home/applications/examples/example.jar
+
 ### Spark Properties
 
 Below are some other common properties that are specific to Kubernetes. Most of the other configurations are the same
@@ -133,10 +141,9 @@ from the other deployment modes. See the [configuration page](configuration.html
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.kubernetes.namespace</code></td>
-  <!-- TODO set default to "default" -->
-  <td>(none)</td>
+  <td><code>default</code></td>
   <td>
-    The namespace that will be used for running the driver and executor pods. Must be specified. When using
+    The namespace that will be used for running the driver and executor pods. When using
     <code>spark-submit</code> in cluster mode, this can also be passed to <code>spark-submit</code> via the
     <code>--kubernetes-namespace</code> command line argument.
   </td>
@@ -194,14 +201,6 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td>
     Comma-separated list of jars to sent to the driver and all executors when submitting the application in cluster
     mode. Refer to <a href="running-on-kubernetes.html#adding-other-jars">adding other jars</a> for more information.
-  </td>
-</tr>
-<tr>
-  <!-- TODO remove this functionality -->
-  <td><code>spark.kubernetes.driver.uploads.driverExtraClasspath</code></td>
-  <td>(none)</td>
-  <td>
-    Comma-separated list of jars to be sent to the driver only when submitting the application in cluster mode. 
   </td>
 </tr>
 <tr>

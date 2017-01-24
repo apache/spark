@@ -24,15 +24,6 @@
   <fileSets>
     <fileSet>
       <directory>
-        ${project.parent.basedir}/core/src/main/resources/org/apache/spark/ui/static/
-      </directory>
-      <outputDirectory>ui-resources/org/apache/spark/ui/static</outputDirectory>
-      <includes>
-        <include>**/*</include>
-      </includes>
-    </fileSet>
-    <fileSet>
-      <directory>
         ${project.parent.basedir}/sbin/
       </directory>
       <outputDirectory>sbin</outputDirectory>
@@ -78,7 +69,18 @@
       <excludes>
         <exclude>org.apache.spark:spark-assembly_${scala.binary.version}:pom</exclude>
         <exclude>org.spark-project.spark:unused</exclude>
+        <exclude>org.apache.spark:spark-examples_${scala.binary.version}</exclude>
       </excludes>
+    </dependencySet>
+    <dependencySet>
+      <outputDirectory>examples/jars</outputDirectory>
+      <useTransitiveDependencies>true</useTransitiveDependencies>
+      <unpack>false</unpack>
+      <scope>provided</scope>
+      <useProjectArtifact>false</useProjectArtifact>
+      <includes>
+        <include>org.apache.spark:spark-examples_${scala.binary.version}:jar</include>
+      </includes>
     </dependencySet>
   </dependencySets>
 </assembly>

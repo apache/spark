@@ -8,6 +8,7 @@ RUN mkdir -p /opt/spark
 RUN touch /opt/spark/RELEASE
 
 ADD jars /opt/spark/jars
+ADD examples /opt/spark/examples
 ADD bin /opt/spark/bin
 ADD sbin /opt/spark/sbin
 ADD conf /opt/spark/conf
