@@ -1626,17 +1626,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(d.size == d.distinct.size)
   }
 
-  test("SPARK-17625: data source table in InMemoryCatalog should guarantee output consistency") {
-    val tableName = "tbl"
-    withTable(tableName) {
-      spark.range(10).select('id as 'i, 'id as 'j).write.saveAsTable(tableName)
-      val relation = spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName))
-      val expr = relation.resolve("i")
-      val qe = spark.sessionState.executePlan(Project(Seq(expr), relation))
-      qe.assertAnalyzed()
-    }
-  }
-
   private def verifyNullabilityInFilterExec(
       df: DataFrame,
       expr: String,

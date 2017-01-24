@@ -229,7 +229,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     }
 
     val numSlices = 16
-    val d = sc.parallelize(0 to 1e3.toInt, numSlices).map(w)
+    val d = sc.parallelize(0 to 10000, numSlices).map(w)
     d.count()
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     listener.stageInfos.size should be (1)

@@ -219,6 +219,9 @@ class SQLBuilder private (
     case OneRowRelation =>
       ""
 
+    case p: View =>
+      toSQL(p.child)
+
     case _ =>
       throw new UnsupportedOperationException(s"unsupported plan $node")
   }

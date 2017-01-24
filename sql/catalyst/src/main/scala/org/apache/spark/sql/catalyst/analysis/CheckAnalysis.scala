@@ -370,22 +370,6 @@ trait CheckAnalysis extends PredicateHelper {
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                """.stripMargin)
 
-          case s: SimpleCatalogRelation =>
-            failAnalysis(
-              s"""
-                 |Hive support is required to select over the following tables:
-                 |${s.catalogTable.identifier}
-               """.stripMargin)
-
-          // TODO: We need to consolidate this kind of checks for InsertIntoTable
-          // with the rule of PreWriteCheck defined in extendedCheckRules.
-          case InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _) =>
-            failAnalysis(
-              s"""
-                 |Hive support is required to insert into the following tables:
-                 |${s.catalogTable.identifier}
-               """.stripMargin)
-
           case InsertIntoTable(t, _, _, _, _)
             if !t.isInstanceOf[LeafNode] ||
               t.isInstanceOf[Range] ||
