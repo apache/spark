@@ -141,9 +141,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
         }
 
-      case KillExecutorsOnHost(host) =>
+      case KillExecutorsOnHost(host, replace) =>
         scheduler.getExecutorsAliveOnHost(host).foreach(exec =>
-          killExecutors(exec.toSeq, replace = true, force = true)
+          killExecutors(exec.toSeq, replace, force = true)
         )
     }
 
@@ -616,9 +616,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Request that the cluster manager kill all executors on a given host.
    * @return whether the kill request is acknowledged.
    */
-  final override def killExecutorsOnHost(host: String): Boolean = {
+  final override def killExecutorsOnHost(host: String, replace: Boolean): Boolean = {
     logInfo(s"Requesting to kill any and all executors on host ${host}")
-    driverEndpoint.send(KillExecutorsOnHost(host))
+    driverEndpoint.send(KillExecutorsOnHost(host, replace))
     true
   }
 }

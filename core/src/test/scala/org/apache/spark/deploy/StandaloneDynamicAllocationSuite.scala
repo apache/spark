@@ -477,11 +477,14 @@ class StandaloneDynamicAllocationSuite
       assert(apps.head.executors.size === 2)
       assert(apps.head.getExecutorLimit === Int.MaxValue)
     }
-    // kill all executors
+    // kill all executors without replacement
     assert(killExecutorsOnHost(sc, "localhost").equals(true))
-    var apps = getApplications()
-    assert(apps.head.executors.size === 0)
-    assert(apps.head.getExecutorLimit === 0)
+
+    eventually(timeout(10.seconds), interval(100.millis)) {
+      val apps = getApplications()
+      assert(apps.head.executors.size === 0)
+      assert(apps.head.getExecutorLimit === 0)
+    }
   }
 
   // ===============================
@@ -546,11 +549,11 @@ class StandaloneDynamicAllocationSuite
   }
 
   /** Kill the executors on a given host. */
-  private def killExecutorsOnHost(sc: SparkContext, host: String): Unit = {
+  private def killExecutorsOnHost(sc: SparkContext, host: String): Boolean = {
     syncExecutors(sc)
     sc.schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutorsOnHost(host)
+        b.killExecutorsOnHost(host, false)
       case _ => fail("expected coarse grained scheduler")
     }
   }
