@@ -28,7 +28,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-
 @BeanInfo
 private[sql] case class MyLabeledPoint(
   @BeanProperty label: Double,
@@ -76,19 +75,16 @@ object UDT {
 // object and classes to test SPARK-19311
 
 // Trait/Interface for base type
-@SQLUserDefinedType(udt = classOf[ExampleBaseTypeUDT])
 sealed trait IExampleBaseType extends Serializable {
   def field: Int
 }
 
 // Trait/Interface for derived type
-@SQLUserDefinedType(udt = classOf[ExampleSubTypeUDT])
 sealed trait IExampleSubType extends IExampleBaseType
 
 // a base class
 class ExampleBaseClass(override val field: Int) extends IExampleBaseType {
   override def toString: String = field.toString
-
 }
 
 // a derived class
@@ -96,7 +92,7 @@ class ExampleSubClass(override val field: Int)
   extends ExampleBaseClass(field) with IExampleSubType
 
 // UDT for base class
-private[spark] class ExampleBaseTypeUDT extends UserDefinedType[IExampleBaseType] {
+class ExampleBaseTypeUDT extends UserDefinedType[IExampleBaseType] {
 
   override def sqlType: StructType = {
     StructType(Seq(
@@ -113,22 +109,13 @@ private[spark] class ExampleBaseTypeUDT extends UserDefinedType[IExampleBaseType
     datum match {
       case row: InternalRow =>
         require(row.numFields == 1,
-          s"VectorUDT.deserialize given row with length " +
-            s"${row.numFields} but requires length == 1")
+          "ExampleBaseTypeUDT requires row with length == 1")
         val field = row.getInt(0)
         new ExampleBaseClass(field)
     }
   }
 
   override def userClass: Class[IExampleBaseType] = classOf[IExampleBaseType]
-
-  override def hashCode(): Int = classOf[ExampleBaseTypeUDT].getName.hashCode()
-
-  override def equals(other: Any): Boolean = other.isInstanceOf[ExampleBaseTypeUDT]
-
-  override def typeName: String = "exampleBaseType"
-
-  private[spark] override def asNullable: ExampleBaseTypeUDT = this
 }
 
 // UDT for derived class
@@ -140,7 +127,6 @@ private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] 
   }
 
   override def serialize(obj: IExampleSubType): InternalRow = {
-
     val row = new GenericInternalRow(1)
     row.setInt(0, obj.field)
     row
@@ -150,27 +136,16 @@ private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] 
     datum match {
       case row: InternalRow =>
         require(row.numFields == 1,
-          s"VectorUDT.deserialize given row with length " +
-            s"${row.numFields} but requires length == 1")
+          "ExampleSubTypeUDT requires row with length == 1")
         val field = row.getInt(0)
         new ExampleSubClass(field)
     }
   }
 
   override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
-
-  override def hashCode(): Int = classOf[ExampleSubTypeUDT].getName.hashCode()
-
-  override def equals(other: Any): Boolean = other.isInstanceOf[ExampleSubTypeUDT]
-
-  override def typeName: String = "exampleSubType"
-
-  private[spark] override def asNullable: ExampleSubTypeUDT = this
 }
 
-
 class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetTest {
-
   import testImplicits._
 
   private lazy val pointsRDD = Seq(
