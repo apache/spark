@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -383,7 +381,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ InsertIntoTable(table, partition, child, _, _) if table.resolved && child.resolved =>
+    case i @ InsertIntoTable(table, _, child, _, _) if table.resolved && child.resolved =>
       table match {
         case relation: CatalogRelation =>
           val metadata = relation.catalogTable
