@@ -27,7 +27,6 @@ case class KubernetesCreateSubmissionRequest(
   val appArgs: Array[String],
   val sparkProperties: Map[String, String],
   val secret: String,
-  val uploadedDriverExtraClasspathBase64Contents: Option[TarGzippedData],
   val uploadedJarsBase64Contents: Option[TarGzippedData]) extends SubmitRestProtocolRequest {
   message = "create"
   clientSparkVersion = SPARK_VERSION
@@ -46,12 +45,15 @@ case class TarGzippedData(
   property = "type")
 @JsonSubTypes(value = Array(
   new JsonSubTypes.Type(value = classOf[UploadedAppResource], name = "UploadedAppResource"),
+  new JsonSubTypes.Type(value = classOf[ContainerAppResource], name = "ContainerLocalAppResource"),
   new JsonSubTypes.Type(value = classOf[RemoteAppResource], name = "RemoteAppResource")))
 abstract class AppResource
 
 case class UploadedAppResource(
   resourceBase64Contents: String,
   name: String = "spark-app-resource") extends AppResource
+
+case class ContainerAppResource(resourcePath: String) extends AppResource
 
 case class RemoteAppResource(resource: String) extends AppResource
 

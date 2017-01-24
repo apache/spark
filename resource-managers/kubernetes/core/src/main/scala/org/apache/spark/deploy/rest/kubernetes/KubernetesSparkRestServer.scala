@@ -18,7 +18,6 @@ package org.apache.spark.deploy.rest.kubernetes
 
 import java.io.File
 import java.net.URI
-import java.nio.file.Paths
 import java.util.concurrent.CountDownLatch
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
@@ -30,12 +29,12 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{SecurityManager, SPARK_VERSION, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.rest._
-import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.{ShutdownHookManager, ThreadUtils, Utils}
 
 private case class KubernetesSparkRestServerArguments(
-  val host: Option[String] = None,
-  val port: Option[Int] = None,
-  val secretFile: Option[String] = None) {
+    val host: Option[String] = None,
+    val port: Option[Int] = None,
+    val secretFile: Option[String] = None) {
   def validate(): KubernetesSparkRestServerArguments = {
     require(host.isDefined, "Hostname not set via --hostname.")
     require(port.isDefined, "Port not set via --port")
@@ -68,13 +67,21 @@ private object KubernetesSparkRestServerArguments {
   }
 }
 
+/**
+ * Runs in the driver pod and receives a request to run an application. Note that
+ * unlike the submission rest server in standalone mode, this server is expected
+ * to be used to run one application only, and then shut down once that application
+ * is complete.
+ */
 private[spark] class KubernetesSparkRestServer(
     host: String,
     port: Int,
     conf: SparkConf,
-    expectedApplicationSecret: Array[Byte])
+    expectedApplicationSecret: Array[Byte],
+    shutdownLock: CountDownLatch)
   extends RestSubmissionServer(host, port, conf) {
 
+  private val SERVLET_LOCK = new Object
   private val javaExecutable = s"${System.getenv("JAVA_HOME")}/bin/java"
   private val sparkHome = System.getenv("SPARK_HOME")
   private val securityManager = new SecurityManager(conf)
@@ -99,87 +106,105 @@ private[spark] class KubernetesSparkRestServer(
 
   private class KubernetesSubmitRequestServlet extends SubmitRequestServlet {
 
+    private val waitForProcessCompleteExecutor = ThreadUtils
+        .newDaemonSingleThreadExecutor("wait-for-spark-app-complete")
+    private var startedApplication = false
+
     // TODO validating the secret should be done as part of a header of the request.
     // Instead here we have to specify the secret in the body.
     override protected def handleSubmit(
-      requestMessageJson: String,
-      requestMessage: SubmitRestProtocolMessage,
-      responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
-      requestMessage match {
-        case KubernetesCreateSubmissionRequest(
+        requestMessageJson: String,
+        requestMessage: SubmitRestProtocolMessage,
+        responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
+      SERVLET_LOCK.synchronized {
+        if (startedApplication) {
+          throw new IllegalStateException("Application has already been submitted.")
+        } else {
+          requestMessage match {
+            case KubernetesCreateSubmissionRequest(
             appResource,
             mainClass,
             appArgs,
             sparkProperties,
             secret,
-            uploadedDriverExtraClasspath,
             uploadedJars) =>
-          val decodedSecret = Base64.decodeBase64(secret)
-          if (!expectedApplicationSecret.sameElements(decodedSecret)) {
-            responseServlet.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
-            handleError("Unauthorized to submit application.")
-          } else {
-            val tempDir = Utils.createTempDir()
-            val appResourcePath = resolvedAppResource(appResource, tempDir)
-            val driverClasspathDirectory = new File(tempDir, "driver-extra-classpath")
-            if (!driverClasspathDirectory.mkdir) {
-              throw new IllegalStateException("Failed to create driver extra classpath" +
-                s" dir at ${driverClasspathDirectory.getAbsolutePath}")
-            }
-            val jarsDirectory = new File(tempDir, "jars")
-            if (!jarsDirectory.mkdir) {
-              throw new IllegalStateException("Failed to create jars dir at" +
-                 s"${jarsDirectory.getAbsolutePath}")
-            }
-            val writtenDriverExtraClasspath = writeBase64ContentsToFiles(
-              uploadedDriverExtraClasspath, driverClasspathDirectory)
-            val writtenJars = writeBase64ContentsToFiles(uploadedJars, jarsDirectory)
-            val originalDriverExtraClasspath = sparkProperties.get("spark.driver.extraClassPath")
-              .map(_.split(","))
-              .getOrElse(Array.empty[String])
-            val resolvedDriverExtraClasspath = writtenDriverExtraClasspath ++
-              originalDriverExtraClasspath
-            val originalJars = sparkProperties.get("spark.jars")
-              .map(_.split(","))
-              .getOrElse(Array.empty[String])
-            val resolvedJars = writtenJars ++ originalJars ++ Array(appResourcePath)
-            val sparkJars = new File(sparkHome, "jars").listFiles().map(_.getAbsolutePath)
-            val driverClasspath = resolvedDriverExtraClasspath ++
-              resolvedJars ++
-              sparkJars ++
-              Array(appResourcePath)
-            val resolvedSparkProperties = new mutable.HashMap[String, String]
-            resolvedSparkProperties ++= sparkProperties
-            resolvedSparkProperties("spark.jars") = resolvedJars.mkString(",")
+              val decodedSecret = Base64.decodeBase64(secret)
+              if (!expectedApplicationSecret.sameElements(decodedSecret)) {
+                responseServlet.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
+                handleError("Unauthorized to submit application.")
+              } else {
+                val tempDir = Utils.createTempDir()
+                val appResourcePath = resolvedAppResource(appResource, tempDir)
+                val driverClasspathDirectory = new File(tempDir, "driver-extra-classpath")
+                if (!driverClasspathDirectory.mkdir) {
+                  throw new IllegalStateException("Failed to create driver extra classpath" +
+                    s" dir at ${driverClasspathDirectory.getAbsolutePath}")
+                }
+                val jarsDirectory = new File(tempDir, "jars")
+                if (!jarsDirectory.mkdir) {
+                  throw new IllegalStateException("Failed to create jars dir at" +
+                    s"${jarsDirectory.getAbsolutePath}")
+                }
+                val writtenJars = writeBase64ContentsToFiles(uploadedJars, jarsDirectory)
+                val driverExtraClasspath = sparkProperties
+                  .get("spark.driver.extraClassPath")
+                  .map(_.split(","))
+                  .getOrElse(Array.empty[String])
+                val originalJars = sparkProperties.get("spark.jars")
+                  .map(_.split(","))
+                  .getOrElse(Array.empty[String])
+                val resolvedJars = writtenJars ++ originalJars ++ Array(appResourcePath)
+                val sparkJars = new File(sparkHome, "jars").listFiles().map(_.getAbsolutePath)
+                val driverClasspath = driverExtraClasspath ++
+                  resolvedJars ++
+                  sparkJars ++
+                  Array(appResourcePath)
+                val resolvedSparkProperties = new mutable.HashMap[String, String]
+                resolvedSparkProperties ++= sparkProperties
+                resolvedSparkProperties("spark.jars") = resolvedJars.mkString(",")
 
-            val command = new ArrayBuffer[String]
-            command += javaExecutable
-            command += "-cp"
-            command += s"${driverClasspath.mkString(":")}"
-            for (prop <- resolvedSparkProperties) {
-              command += s"-D${prop._1}=${prop._2}"
-            }
-            val driverMemory = resolvedSparkProperties.getOrElse("spark.driver.memory", "1g")
-            command += s"-Xms$driverMemory"
-            command += s"-Xmx$driverMemory"
-            command += mainClass
-            command ++= appArgs
-            val pb = new ProcessBuilder(command: _*).inheritIO()
-            val process = pb.start()
-            ShutdownHookManager.addShutdownHook(() => {
-              logInfo("Received stop command, shutting down the running Spark application...")
-              process.destroy()
-            })
-            val response = new CreateSubmissionResponse
-            response.success = true
-            response.submissionId = null
-            response.message = "success"
-            response.serverSparkVersion = SPARK_VERSION
-            response
+                val command = new ArrayBuffer[String]
+                command += javaExecutable
+                command += "-cp"
+                command += s"${driverClasspath.mkString(":")}"
+                for (prop <- resolvedSparkProperties) {
+                  command += s"-D${prop._1}=${prop._2}"
+                }
+                val driverMemory = resolvedSparkProperties.getOrElse("spark.driver.memory", "1g")
+                command += s"-Xms$driverMemory"
+                command += s"-Xmx$driverMemory"
+                command += mainClass
+                command ++= appArgs
+                val pb = new ProcessBuilder(command: _*).inheritIO()
+                val process = pb.start()
+                ShutdownHookManager.addShutdownHook(() => {
+                  logInfo("Received stop command, shutting down the running Spark application...")
+                  process.destroy()
+                  shutdownLock.countDown()
+                })
+                waitForProcessCompleteExecutor.submit(new Runnable {
+                  override def run(): Unit = {
+                    process.waitFor
+                    SERVLET_LOCK.synchronized {
+                      logInfo("Spark application complete. Shutting down submission server...")
+                      KubernetesSparkRestServer.this.stop
+                      shutdownLock.countDown()
+                    }
+                  }
+                })
+                startedApplication = true
+                val response = new CreateSubmissionResponse
+                response.success = true
+                response.submissionId = null
+                response.message = "success"
+                response.serverSparkVersion = SPARK_VERSION
+                response
+              }
+            case unexpected =>
+              responseServlet.setStatus(HttpServletResponse.SC_BAD_REQUEST)
+              handleError(s"Received message of unexpected type ${unexpected.messageType}.")
           }
-        case unexpected =>
-          responseServlet.setStatus(HttpServletResponse.SC_BAD_REQUEST)
-          handleError(s"Received message of unexpected type ${unexpected.messageType}.")
+        }
       }
     }
 
@@ -196,6 +221,7 @@ private[spark] class KubernetesSparkRestServer(
             throw new IllegalStateException(s"Failed to write main app resource file" +
               s" to $resourceFilePath")
           }
+        case ContainerAppResource(resource) => resource
         case RemoteAppResource(resource) =>
           Utils.fetchFile(resource, tempDir, conf,
             securityManager, SparkHadoopUtil.get.newConfiguration(conf),
@@ -237,7 +263,8 @@ private[spark] object KubernetesSparkRestServer {
       parsedArguments.host.get,
       parsedArguments.port.get,
       sparkConf,
-      secretBytes)
+      secretBytes,
+      barrier)
     server.start()
     ShutdownHookManager.addShutdownHook(() => {
       try {

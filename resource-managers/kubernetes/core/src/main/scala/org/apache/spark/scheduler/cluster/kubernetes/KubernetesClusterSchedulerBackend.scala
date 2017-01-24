@@ -27,7 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.deploy.kubernetes.KubernetesClientBuilder
+import org.apache.spark.deploy.kubernetes.{Client, KubernetesClientBuilder}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -43,15 +43,12 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val EXECUTOR_MODIFICATION_LOCK = new Object
   private val runningExecutorPods = new scala.collection.mutable.HashMap[String, Pod]
 
-  private val kubernetesMaster = sc.master.replaceFirst("k8s://", "")
+  private val kubernetesMaster = Client.resolveK8sMaster(sc.master)
 
   private val executorDockerImage = conf
     .get("spark.kubernetes.executor.docker.image", s"spark-executor:${sc.version}")
 
-  private val kubernetesNamespace = conf
-    .getOption("spark.kubernetes.namespace")
-    .getOrElse(
-      throw new SparkException("Kubernetes namespace must be specified in kubernetes mode."))
+  private val kubernetesNamespace = conf.get("spark.kubernetes.namespace", "default")
 
   private val executorPort = conf.getInt("spark.executor.port", DEFAULT_STATIC_PORT)
 
