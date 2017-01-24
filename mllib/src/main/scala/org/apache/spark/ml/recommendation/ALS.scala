@@ -1038,14 +1038,12 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       uniqueSrcIdsBuilder += preSrcId
       var curCount = 1
       var i = 1
-      var j = 0
       while (i < sz) {
         val srcId = srcIds(i)
         if (srcId != preSrcId) {
           uniqueSrcIdsBuilder += srcId
           dstCountsBuilder += curCount
           preSrcId = srcId
-          j += 1
           curCount = 0
         }
         curCount += 1
