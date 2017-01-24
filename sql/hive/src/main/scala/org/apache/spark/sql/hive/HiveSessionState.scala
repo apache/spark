@@ -60,14 +60,14 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   override lazy val analyzer: Analyzer = {
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
-        catalog.ParquetConversions ::
-        catalog.OrcConversions ::
         new DetermineHiveSerde(conf) ::
         new FindDataSourceTable(sparkSession) ::
         new FindHiveSerdeTable(sparkSession) ::
         new ResolveDataSource(sparkSession) :: Nil
 
       override val postHocResolutionRules =
+        catalog.ParquetConversions ::
+        catalog.OrcConversions ::
         PreprocessTableCreation(sparkSession) ::
         PreprocessTableInsertion(conf) ::
         DataSourceAnalysis(conf) ::

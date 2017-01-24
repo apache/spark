@@ -45,7 +45,8 @@ import org.apache.spark.unsafe.types.UTF8String
  * Replaces generic operations with specific variants that are designed to work with Spark
  * SQL Data Sources.
  *
- * Note that, this rule must be run after [[PreprocessTableInsertion]].
+ * Note that, this rule must be run after [[PreprocessTableCreation]] and
+ * [[PreprocessTableInsertion]].
  */
 case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
