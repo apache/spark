@@ -153,7 +153,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (executorDataMap.contains(executorId)) {
           executorRef.send(RegisterExecutorFailed("Duplicate executor ID: " + executorId))
           context.reply(true)
-        } else if (scheduler.nodeBlacklist.contains(executorId)) {
+        } else if (scheduler.nodeBlacklist != null &&
+                   scheduler.nodeBlacklist.contains(executorId)) {
           // Handle a race where the cluster manager finishes creating an executor, just after
           // the executor is blacklisted and just before it is possibly killed.
           executorRef.send(RegisterExecutorFailed("Executor is blacklisted: " + executorId))
