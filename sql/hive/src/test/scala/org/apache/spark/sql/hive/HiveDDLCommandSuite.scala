@@ -518,8 +518,8 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
 
   test("create table like") {
     val v1 = "CREATE TABLE table1 LIKE table2"
-    val (target, source, exists) = parser.parsePlan(v1).collect {
-      case CreateTableLikeCommand(t, s, allowExisting) => (t, s, allowExisting)
+    val (target, source, location, exists) = parser.parsePlan(v1).collect {
+      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
     }.head
     assert(exists == false)
     assert(target.database.isEmpty)
@@ -528,8 +528,8 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(source.table == "table2")
 
     val v2 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2"
-    val (target2, source2, exists2) = parser.parsePlan(v2).collect {
-      case CreateTableLikeCommand(t, s, allowExisting) => (t, s, allowExisting)
+    val (target2, source2, location2, exists2) = parser.parsePlan(v2).collect {
+      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
     }.head
     assert(exists2)
     assert(target2.database.isEmpty)
