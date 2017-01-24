@@ -53,14 +53,15 @@ class KafkaRelationSuite extends SparkFunSuite with BeforeAndAfter with SharedSQ
     }
   }
 
-  test("Test batch processing earliest to latest") {
+  test("batch processing earliest to latest") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
     testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
     testUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(1))
     testUtils.sendMessages(topic, Array("20"), Some(2))
 
-    val reader = spark
+    // Specify explicit earliest and latest offset values
+    var reader = spark
       .read
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
@@ -68,10 +69,18 @@ class KafkaRelationSuite extends SparkFunSuite with BeforeAndAfter with SharedSQ
       .option("startingOffsets", "earliest")
       .option("endingOffsets", "latest")
       .load()
-
     assert(reader.count() === 21)
-
     testUtils.sendMessages(topic, (21 to 29).map(_.toString).toArray, Some(2))
+    assert(reader.count() === 30)
+
+
+    // Implicit offset values, should default to earliest and latest
+    reader = spark
+      .read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .load()
     assert(reader.count() === 30)
   }
 
