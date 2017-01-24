@@ -169,6 +169,14 @@ private[scheduler] class BlacklistTracker (
       if (newTotal >= MAX_FAILURES_PER_EXEC && !executorIdToBlacklistStatus.contains(exec)) {
         logInfo(s"Blacklisting executor id: $exec because it has $newTotal" +
           s" task failures in successful task sets")
+        val node = failuresInTaskSet.node
+        executorIdToBlacklistStatus.put(exec, BlacklistedExecutor(node, expiryTimeForNewBlacklists))
+        listenerBus.post(SparkListenerExecutorBlacklisted(now, exec, newTotal))
+        executorIdToFailureList.remove(exec)
+        updateNextExpiryTime()
+        // Add executor to blacklist before attempting to kill it. This allows a scheduler backend
+        // to immediately fail to allocate resources on this executor, since killing could be
+        // asynchronous.
         conf.get(config.BLACKLIST_ENABLED) match {
           case Some(enabled) =>
             if (enabled) {
@@ -184,11 +192,6 @@ private[scheduler] class BlacklistTracker (
             }
           case None =>
         }
-        val node = failuresInTaskSet.node
-        executorIdToBlacklistStatus.put(exec, BlacklistedExecutor(node, expiryTimeForNewBlacklists))
-        listenerBus.post(SparkListenerExecutorBlacklisted(now, exec, newTotal))
-        executorIdToFailureList.remove(exec)
-        updateNextExpiryTime()
 
         // In addition to blacklisting the executor, we also update the data for failures on the
         // node, and potentially put the entire node into a blacklist as well.
@@ -200,6 +203,10 @@ private[scheduler] class BlacklistTracker (
             !nodeIdToBlacklistExpiryTime.contains(node)) {
           logInfo(s"Blacklisting node $node because it has ${blacklistedExecsOnNode.size} " +
             s"executors blacklisted: ${blacklistedExecsOnNode}")
+          nodeIdToBlacklistExpiryTime.put(node, expiryTimeForNewBlacklists)
+          listenerBus.post(SparkListenerNodeBlacklisted(now, node, blacklistedExecsOnNode.size))
+          _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
+          // As before, blacklist this node before killing all its executors.
           conf.get(config.BLACKLIST_ENABLED) match {
             case Some(enabled) =>
               if (enabled) {
@@ -215,9 +222,6 @@ private[scheduler] class BlacklistTracker (
               }
             case None =>
           }
-          nodeIdToBlacklistExpiryTime.put(node, expiryTimeForNewBlacklists)
-          listenerBus.post(SparkListenerNodeBlacklisted(now, node, blacklistedExecsOnNode.size))
-          _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
         }
       }
     }
