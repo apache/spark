@@ -21,7 +21,6 @@ import java.{util => ju}
 import java.io._
 import java.nio.charset.StandardCharsets
 
-import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
@@ -316,7 +315,6 @@ private[kafka010] class KafkaSource(
 
 /** Companion object for the [[KafkaSource]]. */
 private[kafka010] object KafkaSource {
-
   val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE =
     """
       |Some data may have been lost because they are not available in Kafka any more; either the

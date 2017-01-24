@@ -21,7 +21,6 @@ import java.nio.ByteBuffer
 
 import com.google.common.primitives.{Doubles, Ints, Longs}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}

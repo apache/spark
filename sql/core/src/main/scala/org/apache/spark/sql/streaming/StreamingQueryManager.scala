@@ -230,6 +230,12 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
     }
 
+    if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
+      throw new AnalysisException(
+        s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} " +
+          "is not supported in streaming DataFrames/Datasets")
+    }
+
     new StreamingQueryWrapper(new StreamExecution(
       sparkSession,
       userSpecifiedName.orNull,

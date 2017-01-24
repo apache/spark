@@ -21,7 +21,7 @@ import java.math.{BigDecimal => JavaBigDecimal}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
@@ -87,6 +87,25 @@ object Cast {
       true
 
     case _ => false
+  }
+
+  /**
+   * Return true iff we may truncate during casting `from` type to `to` type. e.g. long -> int,
+   * timestamp -> date.
+   */
+  def mayTruncate(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) => true
+    case (from: DecimalType, to: NumericType) if !from.isTighterThan(to) => true
+    case (from, to) if illegalNumericPrecedence(from, to) => true
+    case (TimestampType, DateType) => true
+    case (StringType, to: NumericType) => true
+    case _ => false
+  }
+
+  private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
+    val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
+    val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
+    toPrecedence > 0 && fromPrecedence > toPrecedence
   }
 
   def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {

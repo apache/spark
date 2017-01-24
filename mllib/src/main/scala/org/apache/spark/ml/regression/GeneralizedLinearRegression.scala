@@ -57,7 +57,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   final val family: Param[String] = new Param(this, "family",
     "The name of family which is a description of the error distribution to be used in the " +
       s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
-    ParamValidators.inArray[String](supportedFamilyNames.toArray))
+    (value: String) => supportedFamilyNames.contains(value.toLowerCase))
 
   /** @group getParam */
   @Since("2.0.0")
@@ -74,7 +74,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   final val link: Param[String] = new Param(this, "link", "The name of link function " +
     "which provides the relationship between the linear predictor and the mean of the " +
     s"distribution function. Supported options: ${supportedLinkNames.mkString(", ")}",
-    ParamValidators.inArray[String](supportedLinkNames.toArray))
+    (value: String) => supportedLinkNames.contains(value.toLowerCase))
 
   /** @group getParam */
   @Since("2.0.0")
@@ -251,6 +251,11 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     val familyAndLink = new FamilyAndLink(familyObj, linkObj)
 
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, linkPredictionCol,
+      family, solver, fitIntercept, link, maxIter, regParam, tol)
+    instr.logNumFeatures(numFeatures)
+
     if (numFeatures > WeightedLeastSquares.MAX_NUM_FEATURES) {
       val msg = "Currently, GeneralizedLinearRegression only supports number of features" +
         s" <= ${WeightedLeastSquares.MAX_NUM_FEATURES}. Found $numFeatures in the input dataset."
@@ -264,7 +269,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
           Instance(label, weight, features)
       }
 
-    if (familyObj == Gaussian && linkObj == Identity) {
+    val model = if (familyObj == Gaussian && linkObj == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
@@ -274,21 +279,23 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
           .setParent(this))
       val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
         wlsModel.diagInvAtWA.toArray, 1, getSolver)
-      return model.setSummary(Some(trainingSummary))
+      model.setSummary(Some(trainingSummary))
+    } else {
+      // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
+      val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
+      val optimizer = new IterativelyReweightedLeastSquares(initialModel,
+        familyAndLink.reweightFunc, $(fitIntercept), $(regParam), $(maxIter), $(tol))
+      val irlsModel = optimizer.fit(instances)
+      val model = copyValues(
+        new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
+          .setParent(this))
+      val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
+        irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
+      model.setSummary(Some(trainingSummary))
     }
 
-    // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
-    val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
-    val optimizer = new IterativelyReweightedLeastSquares(initialModel, familyAndLink.reweightFunc,
-      $(fitIntercept), $(regParam), $(maxIter), $(tol))
-    val irlsModel = optimizer.fit(instances)
-
-    val model = copyValues(
-      new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
-        .setParent(this))
-    val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
-      irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
-    model.setSummary(Some(trainingSummary))
+    instr.logSuccess(model)
+    model
   }
 
   @Since("2.0.0")
@@ -407,7 +414,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
      * @param name family name: "gaussian", "binomial", "poisson" or "gamma".
      */
     def fromName(name: String): Family = {
-      name match {
+      name.toLowerCase match {
         case Gaussian.name => Gaussian
         case Binomial.name => Binomial
         case Poisson.name => Poisson
@@ -619,7 +626,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
      *             "inverse", "probit", "cloglog" or "sqrt".
      */
     def fromName(name: String): Link = {
-      name match {
+      name.toLowerCase match {
         case Identity.name => Identity
         case Logit.name => Logit
         case Log.name => Log
@@ -1037,7 +1044,8 @@ class GeneralizedLinearRegressionSummary private[regression] (
    */
   @Since("2.0.0")
   lazy val dispersion: Double = if (
-    model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
+    model.getFamily.toLowerCase == Binomial.name ||
+      model.getFamily.toLowerCase == Poisson.name) {
     1.0
   } else {
     val rss = pearsonResiduals.agg(sum(pow(col("pearsonResiduals"), 2.0))).first().getDouble(0)
@@ -1140,7 +1148,8 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   @Since("2.0.0")
   lazy val pValues: Array[Double] = {
     if (isNormalSolver) {
-      if (model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
+      if (model.getFamily.toLowerCase == Binomial.name ||
+        model.getFamily.toLowerCase == Poisson.name) {
         tValues.map { x => 2.0 * (1.0 - dist.Gaussian(0.0, 1.0).cdf(math.abs(x))) }
       } else {
         tValues.map { x =>
