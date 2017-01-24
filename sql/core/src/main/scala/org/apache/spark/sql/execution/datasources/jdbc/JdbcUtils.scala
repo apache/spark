@@ -858,6 +858,7 @@ object JdbcUtils extends Logging {
                  batchSize: Int = DEFAULT_BATCH_SIZE,
                  maxConnections: Int = DEFAULT_MAX_CONNECTIONS,
                  idColumn: String = DEFAULT_ID_COLUMN): Unit = {
+    import df.sparkSession.implicits._
     val schema = df.schema
     val tableExists = checkTableExists(targetDb, tableName)
 
@@ -886,6 +887,7 @@ object JdbcUtils extends Logging {
              tableName: String,
              batchSize: Int = 200,
              maxConnections: Int = DEFAULT_MAX_CONNECTIONS): Unit = {
+    import df.sparkSession.implicits._
     val schema = df.schema
     val tableExists = checkTableExists(targetDb, tableName)
 
@@ -934,6 +936,7 @@ object JdbcUtils extends Logging {
              batchSize: Int = DEFAULT_BATCH_SIZE,
              maxConnections: Int = DEFAULT_MAX_CONNECTIONS,
              idColumn: String = "id"): Unit = {
+    import df.sparkSession.implicits._
     val storedDb = sqlContext.read.jdbc(targetDb, tableName, properties)
 
     // Determine rows to upsert based on a key match in the database
