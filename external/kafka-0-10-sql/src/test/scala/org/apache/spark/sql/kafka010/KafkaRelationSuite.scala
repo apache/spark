@@ -71,6 +71,7 @@ class KafkaRelationSuite extends SparkFunSuite with BeforeAndAfter with SharedSQ
       .load()
     assert(reader.count() === 21)
     testUtils.sendMessages(topic, (21 to 29).map(_.toString).toArray, Some(2))
+    // "latest" should late bind to the current (latest) offset
     assert(reader.count() === 30)
 
 
@@ -81,20 +82,21 @@ class KafkaRelationSuite extends SparkFunSuite with BeforeAndAfter with SharedSQ
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("subscribe", topic)
       .load()
+    // Test that we default to "earliest" and "latest"
     assert(reader.count() === 30)
 
     // Test explicitly specified offsets
     val startPartitionOffsets = Map(
-      new TopicPartition(topic, 0) -> -2L,
+      new TopicPartition(topic, 0) -> -2L, // -2 => earliest
       new TopicPartition(topic, 1) -> -2L,
-      new TopicPartition(topic, 2) -> 0L
+      new TopicPartition(topic, 2) -> 0L   // explicit earliest
     )
     val startingOffsets = JsonUtils.partitionOffsets(startPartitionOffsets)
 
     val endPartitionOffsets = Map(
-      new TopicPartition(topic, 0) -> -1L,
+      new TopicPartition(topic, 0) -> -1L, // -1 => latest
       new TopicPartition(topic, 1) -> -1L,
-      new TopicPartition(topic, 2) -> 10L
+      new TopicPartition(topic, 2) -> 10L  // explicit offset happens to = the latest
     )
     val endingOffsets = JsonUtils.partitionOffsets(endPartitionOffsets)
     reader = spark
