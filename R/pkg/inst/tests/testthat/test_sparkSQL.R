@@ -1021,6 +1021,9 @@ test_that("select operators", {
   df$age2 <- df$age * 2
   expect_equal(columns(df), c("name", "age", "age2"))
   expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
+  df$age2 <- df[["age"]] * 3
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == df$age * 3)), 2)
 
   df$age2 <- 21
   expect_equal(columns(df), c("name", "age", "age2"))
@@ -1031,6 +1034,23 @@ test_that("select operators", {
   expect_equal(count(where(df, df$age2 == 22)), 3)
 
   expect_error(df$age3 <- c(22, NA),
+              "value must be a Column, literal value as atomic in length of 1, or NULL")
+
+  df[["age2"]] <- 23
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 23)), 3)
+
+  df[[3]] <- 24
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 24)), 3)
+
+  df[[3]] <- df$age
+  expect_equal(count(where(df, df$age2 == df$age)), 2)
+
+  df[["age2"]] <- df[["name"]]
+  expect_equal(count(where(df, df$age2 == df$name)), 3)
+
+  expect_error(df[["age3"]] <- c(22, 23),
               "value must be a Column, literal value as atomic in length of 1, or NULL")
 
   # Test parameter drop
