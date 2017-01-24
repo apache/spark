@@ -919,7 +919,6 @@ abstract class CatalogTestUtils {
         .add("col2", "string")
         .add("a", "int")
         .add("b", "string"),
-      viewOriginalText = Some("SELECT * FROM tbl1"),
       viewText = Some("SELECT * FROM tbl1"),
       properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> viewDefaultDatabase))
   }

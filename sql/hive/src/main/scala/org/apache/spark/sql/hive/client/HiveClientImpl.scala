@@ -426,7 +426,9 @@ private[hive] class HiveClientImpl(
         // in the function toHiveTable.
         properties = properties.filter(kv => kv._1 != "comment" && kv._1 != "EXTERNAL"),
         comment = properties.get("comment"),
-        viewOriginalText = Option(h.getViewOriginalText),
+        // In older versions of Spark(before 2.2.0), we expand the view original text and store
+        // that into `viewExpandedText`, and that should be used in view resolution. So we get
+        // `viewExpandedText` instead of `viewOriginalText` for viewText here.
         viewText = Option(h.getViewExpandedText),
         unsupportedFeatures = unsupportedFeatures)
     }
@@ -854,8 +856,13 @@ private[hive] class HiveClientImpl(
     table.storage.properties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
     table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
     table.comment.foreach { c => hiveTable.setProperty("comment", c) }
-    table.viewOriginalText.foreach { t => hiveTable.setViewOriginalText(t) }
-    table.viewText.foreach { t => hiveTable.setViewExpandedText(t) }
+    // Hive will expand the view text, so it needs 2 fields: viewOriginalText and viewExpandedText.
+    // Since we don't expand the view text, but only add table properties, we map the `viewText` to
+    // the both fields in hive table.
+    table.viewText.foreach { t =>
+      hiveTable.setViewOriginalText(t)
+      hiveTable.setViewExpandedText(t)
+    }
     hiveTable
   }
 
