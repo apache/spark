@@ -185,7 +185,7 @@ In the Spark shell, a special interpreter-aware SparkContext is already created 
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
 context connects to using the `--master` argument, and you can add JARs to the classpath
 by passing a comma-separated list to the `--jars` argument. You can also add dependencies
-(e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
+(e.g. Spark Packages) to your shell session by supplying a comma-separated list of Maven coordinates
 to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. Sonatype)
 can be passed to the `--repositories` argument. For example, to run `bin/spark-shell` on exactly
 four cores, use:
@@ -200,7 +200,7 @@ Or, to also add `code.jar` to its classpath, use:
 $ ./bin/spark-shell --master local[4] --jars code.jar
 {% endhighlight %}
 
-To include a dependency using maven coordinates:
+To include a dependency using Maven coordinates:
 
 {% highlight bash %}
 $ ./bin/spark-shell --master local[4] --packages "org.example:example:0.1"
@@ -217,7 +217,7 @@ In the PySpark shell, a special interpreter-aware SparkContext is already create
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
 context connects to using the `--master` argument, and you can add Python .zip, .egg or .py files
 to the runtime path by passing a comma-separated list to `--py-files`. You can also add dependencies
-(e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
+(e.g. Spark Packages) to your shell session by supplying a comma-separated list of Maven coordinates
 to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. Sonatype)
 can be passed to the `--repositories` argument. Any Python dependencies a Spark package has (listed in
 the requirements.txt of that package) must be manually installed using `pip` when necessary.
