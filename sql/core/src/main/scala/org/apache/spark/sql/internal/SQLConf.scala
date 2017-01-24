@@ -1038,5 +1038,5 @@ object StaticSQLConf {
       "All the JDBC/ODBC connections share the temporary views, function registries, " +
       "SQL configuration and the current database.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 }
