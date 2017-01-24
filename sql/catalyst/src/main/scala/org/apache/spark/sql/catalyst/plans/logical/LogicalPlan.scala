@@ -123,7 +123,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   }
 
   override def verboseStringWithSuffix: String = {
-    super.verboseString + statsCache.map(": " + _.simpleString).getOrElse("")
+    super.verboseString + statsCache.map(", " + _.toString).getOrElse("")
   }
 
   /**

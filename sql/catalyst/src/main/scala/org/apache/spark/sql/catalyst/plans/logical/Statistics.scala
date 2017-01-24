@@ -80,7 +80,7 @@ case class Statistics(
       }
     }
     // If the number doesn't represent size, or it's too large, print it in scientific notation
-    decimalValue.toString()
+    if (isSize) decimalValue.toString() + " B" else decimalValue.toString()
   }
 }
 
