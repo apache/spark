@@ -33,14 +33,6 @@ public enum SaveMode {
    */
   Append,
   /**
-   * Update mode means that when saving a DataFrame to a data source, if data/table already exists,
-   * contents of the DataFrame are inserted where there is no conflict on an identifying key. In
-   * the case where a conflict exists, the additional columns associated with that key are updated.
-   *
-   * @since 1.3.0
-   */
-  Update,
-  /**
    * Overwrite mode means that when saving a DataFrame to a data source,
    * if data/table already exists, existing data is expected to be overwritten by the contents of
    * the DataFrame.
