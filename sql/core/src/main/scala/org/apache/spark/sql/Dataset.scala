@@ -2389,7 +2389,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Return an iterator that contains all of [[Row]]s in this Dataset.
+   * Return an iterator that contains all rows in this Dataset.
    *
    * The iterator will consume as much memory as the largest partition in this Dataset.
    *
