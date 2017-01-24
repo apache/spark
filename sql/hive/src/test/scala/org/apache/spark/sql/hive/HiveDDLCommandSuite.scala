@@ -75,7 +75,8 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.comment == Some("This is the staging page view table"))
     // TODO will be SQLText
     assert(desc.viewText.isEmpty)
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.partitionColumnNames.isEmpty)
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
@@ -106,7 +107,8 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     // TODO will be SQLText
     assert(desc.comment == Some("This is the staging page view table"))
     assert(desc.viewText.isEmpty)
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.partitionColumnNames.isEmpty)
     assert(desc.storage.properties == Map())
     assert(desc.storage.inputFormat == Some("parquet.hive.DeprecatedParquetInputFormat"))
@@ -125,7 +127,8 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.storage.locationUri == None)
     assert(desc.schema.isEmpty)
     assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.properties == Map())
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
@@ -161,7 +164,8 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.storage.locationUri == None)
     assert(desc.schema.isEmpty)
     assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.properties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
@@ -304,7 +308,8 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.partitionColumnNames.isEmpty)
     assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.locationUri.isEmpty)
     assert(desc.storage.inputFormat ==
       Some("org.apache.hadoop.mapred.TextInputFormat"))
@@ -462,7 +467,8 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.partitionColumnNames == Seq("month"))
     assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.locationUri == Some("/path/to/mercury"))
     assert(desc.storage.inputFormat == Some("winput"))
     assert(desc.storage.outputFormat == Some("wowput"))

@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveTableUtil}
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
+import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableJobConf
 
@@ -43,7 +44,13 @@ import org.apache.spark.util.SerializableJobConf
  *
  * TODO: implement the read logic.
  */
-class HiveFileFormat(fileSinkConf: FileSinkDesc) extends FileFormat with Logging {
+class HiveFileFormat(fileSinkConf: FileSinkDesc)
+  extends FileFormat with DataSourceRegister with Logging {
+
+  def this() = this(null)
+
+  override def shortName(): String = "hive"
+
   override def inferSchema(
       sparkSession: SparkSession,
       options: Map[String, String],

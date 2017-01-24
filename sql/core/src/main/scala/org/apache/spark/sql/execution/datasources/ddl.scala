@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.execution.command.{DDLUtils, RunnableCommand}
 import org.apache.spark.sql.types._
 
 /**
@@ -75,6 +75,11 @@ case class CreateTempViewUsing(
   }
 
   def run(sparkSession: SparkSession): Seq[Row] = {
+    if (provider.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+      throw new AnalysisException("Hive data source can only be used with tables, " +
+        "you can't use it with CREATE TEMP VIEW USING")
+    }
+
     val dataSource = DataSource(
       sparkSession,
       userSpecifiedSchema = userSpecifiedSchema,

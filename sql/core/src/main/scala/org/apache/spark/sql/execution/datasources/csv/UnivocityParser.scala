@@ -62,7 +62,7 @@ private[csv] class UnivocityParser(
     } else {
       requiredSchema
     }
-    fields.map(schema.indexOf).toArray
+    fields.map(schema.indexOf(_: StructField)).toArray
   }
 
   /**
