@@ -82,6 +82,34 @@ class KafkaRelationSuite extends SparkFunSuite with BeforeAndAfter with SharedSQ
       .option("subscribe", topic)
       .load()
     assert(reader.count() === 30)
+
+    // Test explicitly specified offsets
+    val startPartitionOffsets = Map(
+      new TopicPartition(topic, 0) -> -2L,
+      new TopicPartition(topic, 1) -> -2L,
+      new TopicPartition(topic, 2) -> 0L
+    )
+    val startingOffsets = JsonUtils.partitionOffsets(startPartitionOffsets)
+
+    val endPartitionOffsets = Map(
+      new TopicPartition(topic, 0) -> -1L,
+      new TopicPartition(topic, 1) -> -1L,
+      new TopicPartition(topic, 2) -> 10L
+    )
+    val endingOffsets = JsonUtils.partitionOffsets(endPartitionOffsets)
+    reader = spark
+      .read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option("startingOffsets", startingOffsets)
+      .option("endingOffsets", endingOffsets)
+      .load()
+    assert(reader.count() === 30)
+    testUtils.sendMessages(topic, (30 to 39).map(_.toString).toArray, Some(2))
+    assert(reader.count() === 30) // static offset partition 2, nothing should change
+    testUtils.sendMessages(topic, (30 to 39).map(_.toString).toArray, Some(1))
+    assert(reader.count() === 40) // latest offset partition 1, should change
   }
 
   test("bad source options") {
@@ -98,8 +126,27 @@ class KafkaRelationSuite extends SparkFunSuite with BeforeAndAfter with SharedSQ
       }
     }
 
-    // Specifying an ending offset
-    testBadOptions("startingOffsets" -> "latest")("Starting relation offset can't be latest")
+    // Specifying an ending offset as the starting point
+    testBadOptions("startingOffsets" -> "latest")("starting relation offset can't be latest")
+
+    // Now do it with an explicit json offset
+    val startPartitionOffsets = Map(
+      new TopicPartition("t", 0) -> -1L // specify latest
+    )
+    val startingOffsets = JsonUtils.partitionOffsets(startPartitionOffsets)
+    testBadOptions("subscribe" -> "t", "startingOffsets" -> startingOffsets)(
+      "startingoffsets for t-0 can't be latest")
+
+
+    // Make sure we catch ending offsets that indicate earliest
+    testBadOptions("endingOffsets" -> "earliest")("ending relation offset can't be earliest")
+
+    val endPartitionOffsets = Map(
+      new TopicPartition("t", 0) -> -2L // specify earliest
+    )
+    val endingOffsets = JsonUtils.partitionOffsets(endPartitionOffsets)
+    testBadOptions("subscribe" -> "t", "endingOffsets" -> endingOffsets)(
+      "ending offset for t-0 can't be earliest")
 
     // No strategy specified
     testBadOptions()("options must be specified", "subscribe", "subscribePattern")

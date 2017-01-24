@@ -324,30 +324,32 @@ private[kafka010] class KafkaProvider extends DataSourceRegister with StreamSour
 
   private def validateStream(caseInsensitiveParams: Map[String, String]) = {
     caseInsensitiveParams.get(ENDING_OFFSETS_OPTION_KEY).map(_ =>
-      throw new IllegalArgumentException("Ending offset not valid in stream mode"))
+      throw new IllegalArgumentException("ending offset not valid in stream mode"))
   }
 
   private def validateBatch(caseInsensitiveParams: Map[String, String]) = {
     caseInsensitiveParams.get(STARTING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
       case Some("earliest") => // good to go
       case Some("latest") =>
-        throw new IllegalArgumentException("Starting relation offset can't be latest")
+        throw new IllegalArgumentException("starting relation offset can't be latest")
       case Some(json) => (SpecificOffsets(JsonUtils.partitionOffsets(json)))
         .partitionOffsets.foreach {
           case (tp, off) if off == -1 =>
             throw new IllegalArgumentException(s"startingOffsets for $tp can't be latest")
+          case _ => // ignore
         }
       case _ => // default to earliest
     }
 
     caseInsensitiveParams.get(ENDING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
       case Some("earliest") =>
-        throw new IllegalArgumentException("Ending relation offset can't be earliest")
+        throw new IllegalArgumentException("ending relation offset can't be earliest")
       case Some("latest") => // good to go
       case Some(json) => (SpecificOffsets(JsonUtils.partitionOffsets(json)))
         .partitionOffsets.foreach {
           case (tp, off) if off == -2 =>
             throw new IllegalArgumentException(s"ending offset for $tp can't be earliest")
+          case _ => // ignore
         }
       case _ => // default to latest
     }
