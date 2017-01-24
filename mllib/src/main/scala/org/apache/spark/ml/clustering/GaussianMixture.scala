@@ -491,8 +491,8 @@ class GaussianMixture @Since("2.0.0") (
 @Since("2.0.0")
 object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
 
-  /** Limit number of features such that numFeatures^2^ < Integer.MaxValue */
-  private[clustering] val MAX_NUM_FEATURES = 46000
+  /** Limit number of features such that numFeatures^2^ < Int.MaxValue */
+  private[clustering] val MAX_NUM_FEATURES = math.sqrt(Int.MaxValue).toInt
 
   @Since("2.0.0")
   override def load(path: String): GaussianMixture = super.load(path)
