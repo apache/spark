@@ -182,10 +182,15 @@ case class CatalogTable(
 
   import CatalogTable._
 
-  /** schema of this table's partition columns */
-  def partitionSchema: StructType = StructType(schema.filter {
-    c => partitionColumnNames.contains(c.name)
-  })
+  /**
+   * schema of this table's partition columns
+   */
+  def partitionSchema: StructType = {
+    val partitionFields = schema.takeRight(partitionColumnNames.length)
+    assert(partitionFields.map(_.name) == partitionColumnNames)
+
+    StructType(partitionFields)
+  }
 
   /** Return the database this table was specified to belong to, assuming it exists. */
   def database: String = identifier.database.getOrElse {
