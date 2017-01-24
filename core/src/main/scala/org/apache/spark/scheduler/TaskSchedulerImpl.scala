@@ -720,7 +720,7 @@ private[spark] object TaskSchedulerImpl {
   private def maybeCreateBlacklistTracker(sc: SparkContext): Option[BlacklistTracker] = {
     if (BlacklistTracker.isBlacklistEnabled(sc.conf)) {
       val executorAllocClient: Option[ExecutorAllocationClient] = sc.schedulerBackend match {
-        case b: ExecutorAllocationClient => Some(b.asInstanceOf[ExecutorAllocationClient])
+        case b: ExecutorAllocationClient => Some(b)
         case _ => None
       }
       Some(new BlacklistTracker(sc, executorAllocClient))
