@@ -18,8 +18,11 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.util.concurrent.{Executor, LinkedBlockingQueue}
 
 import scala.collection.JavaConverters._
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsumer}
@@ -29,7 +32,23 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.kafka010.KafkaOffsetReader.ConsumerStrategy
 import org.apache.spark.sql.types._
-import org.apache.spark.util.UninterruptibleThread
+import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
+
+
+private[kafka010] trait KafkaOffsetReader {
+
+  def close()
+
+  def fetchSpecificStartingOffsets(
+    partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long]
+
+  def fetchEarliestOffsets(): Map[TopicPartition, Long]
+
+  def fetchLatestOffsets(): Map[TopicPartition, Long]
+
+  def fetchNewPartitionEarliestOffsets(
+    newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long]
+}
 
 /**
  * This class uses Kafka's own [[KafkaConsumer]] API to read data offsets from Kafka.
@@ -40,12 +59,12 @@ import org.apache.spark.util.UninterruptibleThread
  *   [[KafkaSource]] to query for the offsets. See the docs on
  *   [[org.apache.spark.sql.kafka010.KafkaOffsetReader.ConsumerStrategy]] for more details.
  */
-private[kafka010] class KafkaOffsetReader(
+private[kafka010] class KafkaOffsetReaderImpl(
     consumerStrategy: ConsumerStrategy,
     driverKafkaParams: ju.Map[String, Object],
     readerOptions: Map[String, String],
     driverGroupIdPrefix: String)
-  extends Logging {
+  extends KafkaOffsetReader with Logging {
 
   /**
    * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the
@@ -229,6 +248,77 @@ private[kafka010] class KafkaOffsetReader(
   private def resetConsumer(): Unit = synchronized {
     consumer.close()
     consumer = createConsumer()
+  }
+}
+
+/**
+ * The Kafka Consumer must be called in an UninterruptibleThread. This naturally occurs
+ * in Spark Streaming, but not in Spark SQL, which will use this call to communicate
+ * with Kafak for obtaining offsets.
+ *
+ * @param kafkaOffsetReader Basically in instance of [[KafkaOffsetReaderImpl]] that
+ *                          this class wraps and executes in an [[UninterruptibleThread]]
+ */
+private[kafka010] class UninterruptibleKafkaOffsetReader(kafkaOffsetReader: KafkaOffsetReader)
+  extends KafkaOffsetReader with Logging {
+
+  private class KafkaOffsetReaderThread extends UninterruptibleThread("Kafka Offset Reader") {
+    override def run(): Unit = {
+      while (this.isInterrupted == false) {
+        val runnable = queue.take()
+        runnable.run()
+      }
+    }
+  }
+  private val readerThread = new KafkaOffsetReaderThread
+
+  private val queue = new LinkedBlockingQueue[Runnable]()
+
+  private val execContext = ExecutionContext.fromExecutor(new Executor {
+    override def execute(runnable: Runnable): Unit = {
+      if (readerThread.isAlive == false) readerThread.start()
+      queue.add(runnable)
+    }
+  })
+
+
+  override def close(): Unit = {
+    kafkaOffsetReader.close()
+    readerThread.interrupt()
+    queue.add(new Runnable() {
+      override def run(): Unit = { }
+    })
+  }
+
+  override def fetchSpecificStartingOffsets(
+    partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
+    val future = Future {
+      kafkaOffsetReader.fetchSpecificStartingOffsets(partitionOffsets)
+    }(execContext)
+    ThreadUtils.awaitResult(future, Duration.Inf)
+  }
+
+  override def fetchEarliestOffsets(): Map[TopicPartition, Long] = {
+      val future = Future {
+        kafkaOffsetReader.fetchEarliestOffsets()
+      }(execContext)
+      ThreadUtils.awaitResult(future, Duration.Inf)
+  }
+
+  override def fetchLatestOffsets(): Map[TopicPartition, Long] = {
+    val future = Future {
+      kafkaOffsetReader.fetchLatestOffsets()
+    }(execContext)
+    ThreadUtils.awaitResult(future, Duration.Inf)
+  }
+
+  override def fetchNewPartitionEarliestOffsets(
+    newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = {
+    val future = Future {
+      kafkaOffsetReader.fetchNewPartitionEarliestOffsets(newPartitions)
+    }(execContext)
+    ThreadUtils.awaitResult(future, Duration.Inf)
+
   }
 }
 

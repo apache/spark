@@ -44,9 +44,6 @@ private[kafka010] class KafkaRelation(
   require(endingOffsets != EarliestOffsets,
     "Ending offset not allowed to be set to earliest offsets.")
 
-  if (sourceOptions.get("maxOffsetsPerTrigger").isDefined)
-    logWarning("maxOffsetsPerTrigger option ignored in batch mode.")
-
   private val pollTimeoutMs = sourceOptions.getOrElse(
     "kafkaConsumer.pollTimeoutMs",
     sqlContext.sparkContext.conf.getTimeAsMs("spark.network.timeout", "120s").toString

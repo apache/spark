@@ -53,12 +53,12 @@ class KafkaRelationSuite extends SparkFunSuite with BeforeAndAfter with SharedSQ
     }
   }
 
-  test("maxOffsetsPerTrigger") {
+  test("Test batch processing earliest to latest") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
-    testUtils.sendMessages(topic, (100 to 200).map(_.toString).toArray, Some(0))
-    testUtils.sendMessages(topic, (10 to 20).map(_.toString).toArray, Some(1))
-    testUtils.sendMessages(topic, Array("1"), Some(2))
+    testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, Array("20"), Some(2))
 
     val reader = spark
       .read
@@ -67,11 +67,43 @@ class KafkaRelationSuite extends SparkFunSuite with BeforeAndAfter with SharedSQ
       .option("subscribe", topic)
       .option("startingOffsets", "earliest")
       .option("endingOffsets", "latest")
+      .load()
 
-    val kafka = reader.load()
-      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-      .as[(String, String)]
-    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
-    mapped.collect().foreach(println)
+    assert(reader.count() === 21)
+
+    testUtils.sendMessages(topic, (21 to 29).map(_.toString).toArray, Some(2))
+    assert(reader.count() === 30)
+  }
+
+  test("bad source options") {
+    def testBadOptions(options: (String, String)*)(expectedMsgs: String*): Unit = {
+      val ex = intercept[IllegalArgumentException] {
+        val reader = spark
+          .read
+          .format("kafka")
+        options.foreach { case (k, v) => reader.option(k, v) }
+        reader.load()
+      }
+      expectedMsgs.foreach { m =>
+        assert(ex.getMessage.toLowerCase.contains(m.toLowerCase))
+      }
+    }
+
+    // Specifying an ending offset
+    testBadOptions("startingOffsets" -> "latest")("Starting relation offset can't be latest")
+
+    // No strategy specified
+    testBadOptions()("options must be specified", "subscribe", "subscribePattern")
+
+    // Multiple strategies specified
+    testBadOptions("subscribe" -> "t", "subscribePattern" -> "t.*")(
+      "only one", "options can be specified")
+
+    testBadOptions("subscribe" -> "t", "assign" -> """{"a":[0]}""")(
+      "only one", "options can be specified")
+
+    testBadOptions("assign" -> "")("no topicpartitions to assign")
+    testBadOptions("subscribe" -> "")("no topics to subscribe")
+    testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
   }
 }
