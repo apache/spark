@@ -656,8 +656,9 @@ class HiveDDLSuite
         assert(sql("DESC FORMATTED view1").collect().containsSlice(
           Seq(
             Row("# View Information", "", ""),
-            Row("View Original Text:", "SELECT * FROM tbl", ""),
-            Row("View Expanded Text:", "SELECT * FROM tbl", "")
+            Row("View Text:", "SELECT * FROM tbl", ""),
+            Row("View Default Database:", "default", ""),
+            Row("View Query Output Columns:", "[a]", "")
           )
         ))
       }
@@ -943,7 +944,9 @@ class HiveDDLSuite
           TableIdentifier(sourceViewName, Some("default")))
         // The original source should be a VIEW with an empty path
         assert(sourceView.tableType == CatalogTableType.VIEW)
-        assert(sourceView.viewText.nonEmpty && sourceView.viewOriginalText.nonEmpty)
+        assert(sourceView.viewText.nonEmpty)
+        assert(sourceView.viewDefaultDatabase == Some("default"))
+        assert(sourceView.viewQueryColumnNames == Seq("a", "b", "c", "d"))
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
 
@@ -956,8 +959,12 @@ class HiveDDLSuite
     // The created table should be a MANAGED table with empty view text and original text.
     assert(targetTable.tableType == CatalogTableType.MANAGED,
       "the created table must be a Hive managed table")
-    assert(targetTable.viewText.isEmpty && targetTable.viewOriginalText.isEmpty,
-      "the view text and original text in the created table must be empty")
+    assert(targetTable.viewText.isEmpty,
+      "the view text in the created table must be empty")
+    assert(targetTable.viewDefaultDatabase.isEmpty,
+      "the view default database in the created table must be empty")
+    assert(targetTable.viewQueryColumnNames.isEmpty,
+      "the view query output columns in the created table must be empty")
     assert(targetTable.comment.isEmpty,
       "the comment in the created table must be empty")
     assert(targetTable.unsupportedFeatures.isEmpty,
