@@ -718,7 +718,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> td = si_model.transform(df)
     >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed")
     >>> model = dt.fit(td)
-    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction") \
+            .setProbabilityCol("probability").setRawPredictionCol("rawPrediction")
     >>> model.numNodes
     3
     >>> model.depth
@@ -999,7 +1000,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> td = si_model.transform(df)
     >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed", seed=42)
     >>> model = gbt.fit(td)
-    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction") \
+            .setProbabilityCol("probability").setRawPredictionCol("rawPrediction")
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
@@ -1091,8 +1093,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         return self.getOrDefault(self.lossType)
 
 
-class GBTClassificationModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
-                             JavaMLReadable):
+class GBTClassificationModel(TreeEnsembleModel, JavaProbabilisticClassificationModel,
+                             JavaMLWritable, JavaMLReadable):
     """
     Model fitted by GBTClassifier.
 
@@ -1143,7 +1145,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     >>> nb = NaiveBayes(smoothing=1.0, modelType="multinomial", weightCol="weight")
     >>> model = nb.fit(df)
     >>> model = model.setFeaturesCol("features").setPredictionCol("prediction") \
-        .setProbabilityCol("probability").setRawPredictionCol("rawPrediction")
+            .setProbabilityCol("probability").setRawPredictionCol("rawPrediction")
     >>> model.pi
     DenseVector([-0.81..., -0.58...])
     >>> model.theta

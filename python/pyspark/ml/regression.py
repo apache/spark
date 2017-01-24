@@ -435,7 +435,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> ir = IsotonicRegression()
     >>> model = ir.fit(df)
-    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction").setFeatureIndex(0)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -543,21 +543,6 @@ class IsotonicRegressionModel(JavaModel, HasFeaturesCol, HasPredictionCol,
         regression.
         """
         return self._call_java("predictions")
-
-    @since("2.2.0")
-    def setFeatureIndex(self, value):
-        """
-        Sets the index of the feature if featuresCol is a vector column.
-        """
-        self._call_java("setFeatureIndex", value)
-        return self
-
-    @since("2.2.0")
-    def getFeatureIndex(self):
-        """
-        Gets the index of the feature if featuresCol is a vector column.
-        """
-        return self._call_java("getFeatureIndex")
 
 
 class TreeEnsembleParams(DecisionTreeParams):
@@ -1142,18 +1127,19 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (0.0, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
     >>> aftsr = AFTSurvivalRegression()
     >>> model = aftsr.fit(df)
-    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction") \
+            .setQuantilesCol("quantiles")
     >>> model.predict(Vectors.dense(6.3))
     1.0
     >>> model.predictQuantiles(Vectors.dense(6.3))
     DenseVector([0.0101, 0.0513, 0.1054, 0.2877, 0.6931, 1.3863, 2.3026, 2.9957, 4.6052])
     >>> model.transform(df).show()
-    +-----+---------+------+----------+
-    |label| features|censor|prediction|
-    +-----+---------+------+----------+
-    |  1.0|    [1.0]|   1.0|       1.0|
-    |  0.0|(1,[],[])|   0.0|       1.0|
-    +-----+---------+------+----------+
+    +-----+---------+------+----------+--------------------+
+    |label| features|censor|prediction|           quantiles|
+    +-----+---------+------+----------+--------------------+
+    |  1.0|    [1.0]|   1.0|       1.0|[0.01005033585350...|
+    |  0.0|(1,[],[])|   0.0|       1.0|[0.01005033585350...|
+    +-----+---------+------+----------+--------------------+
     ...
     >>> aftsr_path = temp_path + "/aftsr"
     >>> aftsr.save(aftsr_path)
