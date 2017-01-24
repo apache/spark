@@ -263,12 +263,12 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(1, 2.0) :: Row(1, 2.0) :: Nil)
 
     checkAnswer(
-      sql("select * from l where a not in (select c from t where b < d)"),
-      Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) :: Nil)
+      sql("select * from l where (a, b) not in (select c, d from t) and a < 4"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Nil)
 
     // Empty sub-query
     checkAnswer(
-      sql("select * from l where a not in (select c from r where c > 10 and b < d)"),
+      sql("select * from l where (a, b) not in (select c, d from r where c > 10)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) ::
       Row(3, 3.0) :: Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
 

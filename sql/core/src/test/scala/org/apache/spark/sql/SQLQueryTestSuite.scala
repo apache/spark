@@ -163,7 +163,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         s"-- Number of queries: ${outputs.size}\n\n\n" +
         outputs.zipWithIndex.map{case (qr, i) => qr.toString(i)}.mkString("\n\n\n") + "\n"
       }
-      stringToFile(new File(testCase.resultFile), goldenOutput)
+      val resultFile = new File(testCase.resultFile);
+      val parent = resultFile.getParentFile();
+      if (!parent.exists()) {
+        assert(parent.mkdirs(), "Could not create directory: " + parent)
+      }
+      stringToFile(resultFile, goldenOutput)
     }
 
     // Read back the golden file.
