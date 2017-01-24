@@ -26,6 +26,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 /**
@@ -62,25 +63,22 @@ case class Statistics(
     ).filter(_.nonEmpty).mkString(", ")
   }
 
-  /** Print the given number in a readable format. */
+  /** Show the given number in a readable format. */
   def format(number: BigInt, isSize: Boolean): String = {
-    // Units of size
-    val units = Seq("B", "KB", "MB", "GB", "TB", "PB").zipWithIndex.toIterator
-    val decimalValue = BigDecimal(number, new MathContext(4, RoundingMode.HALF_UP))
+    val decimalValue = BigDecimal(number, new MathContext(3, RoundingMode.HALF_UP))
     if (isSize) {
-      while (units.hasNext) {
-        val (unit, index) = units.next()
-        if (decimalValue / math.pow(1024, index + 1) < 1) {
-          if (index == 0) {
-            return decimalValue.toString() + " " + unit
-          } else {
-            return (decimalValue / math.pow(1024, index)).toString() + " " + unit
-          }
-        }
+      // The largest unit in Utils.bytesToString is TB
+      val PB = 1L << 50
+      if (number < 2 * PB) {
+        // The number is not very large, so we can use Utils.bytesToString to show it.
+        Utils.bytesToString(number.toLong)
+      } else {
+        // The number is too large, show it in scientific notation.
+        decimalValue.toString() + " B"
       }
+    } else {
+      decimalValue.toString()
     }
-    // If the number doesn't represent size, or it's too large, print it in scientific notation
-    if (isSize) decimalValue.toString() + " B" else decimalValue.toString()
   }
 }
 

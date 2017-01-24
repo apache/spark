@@ -173,14 +173,14 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("number format in statistics") {
     val numbers = Seq(
-      "0" -> ("0 B", "0"),
-      "100" -> ("100 B", "100"),
-      "2222" -> ("2.170 KB", "2222"),
-      "3333333" -> ("3.179 MB", "3.333E+6"),
-      "4444444444" -> ("4.139 GB", "4.444E+9"),
-      "5555555555555" -> ("5.053 TB", "5.556E+12"),
-      "6666666666666666" -> ("5.921 PB", "6.667E+15"),
-      "7777777777777777777" -> ("7.778E+18", "7.778E+18")
+      "0" -> ("0.0 B", "0"),
+      "100" -> ("100.0 B", "100"),
+      "2047" -> ("2047.0 B", "2.05E+3"),
+      "2048" -> ("2.0 KB", "2.05E+3"),
+      "3333333" -> ("3.2 MB", "3.33E+6"),
+      "4444444444" -> ("4.1 GB", "4.44E+9"),
+      "5555555555555" -> ("5.1 TB", "5.56E+12"),
+      "6666666666666666" -> ("6.67E+15 B", "6.67E+15")
     )
     numbers.foreach { case (input, (expectedSize, expectedRows)) =>
       val stats = Statistics(sizeInBytes = BigInt(input), rowCount = Some(BigInt(input)))
