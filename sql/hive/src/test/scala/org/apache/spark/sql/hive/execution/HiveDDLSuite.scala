@@ -842,7 +842,7 @@ class HiveDDLSuite
             spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
               .createTempView(sourceViewName)
             val tblType = if (i == 0) "" else "EXTERNAL"
-            sql(s"CREATE $tblType TABLE $targetTabName LIKE $sourceViewName LOCATION $basePath")
+            sql(s"CREATE $tblType TABLE $targetTabName LIKE $sourceViewName LOCATION '$basePath'")
 
             val sourceTable = spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(
               TableIdentifier(sourceViewName))
@@ -886,7 +886,7 @@ class HiveDDLSuite
           spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
             .write.format("json").saveAsTable(sourceTabName)
           val tblType = if (i == 0) "" else "EXTERNAL"
-          sql(s"CREATE $tblType TABLE $targetTabName LIKE $sourceTabName LOCATION $basePath")
+          sql(s"CREATE $tblType TABLE $targetTabName LIKE $sourceTabName LOCATION '$basePath'")
 
           val sourceTable =
             spark.sessionState.catalog.getTableMetadata(
@@ -942,7 +942,7 @@ class HiveDDLSuite
               .write.format("parquet").save(path)
             sql(s"CREATE TABLE $sourceTabName USING parquet OPTIONS (PATH '${dir.toURI}')")
             val tblType = if (i == 0) "" else "EXTERNAL"
-            sql(s"CREATE $tblType TABLE $targetTabName LIKE $sourceTabName LOCATION $basePath")
+            sql(s"CREATE $tblType TABLE $targetTabName LIKE $sourceTabName LOCATION '$basePath'")
 
             // The source table should be an external data source table
             val sourceTable = spark.sessionState.catalog.getTableMetadata(
@@ -987,7 +987,7 @@ class HiveDDLSuite
         withTable(sourceTabName, targetTabName) {
           sql(s"CREATE TABLE $sourceTabName TBLPROPERTIES('prop1'='value1') AS SELECT 1 key, 'a'")
           val tblType = if (i == 0) "" else "EXTERNAL"
-          sql(s"CREATE $tblType TABLE $targetTabName LIKE $sourceTabName LOCATION $basePath")
+          sql(s"CREATE $tblType TABLE $targetTabName LIKE $sourceTabName LOCATION '$basePath'")
 
           val sourceTable = catalog.getTableMetadata(
             TableIdentifier(sourceTabName, Some("default")))
@@ -1064,7 +1064,7 @@ class HiveDDLSuite
                """.stripMargin)
             }
             val tblType = if (i == 0) "" else "EXTERNAL"
-            sql(s"CREATE $tblType TABLE $targetTabName LIKE $sourceTabName LOCATION $basePath1")
+            sql(s"CREATE $tblType TABLE $targetTabName LIKE $sourceTabName LOCATION '$basePath1'")
 
             val sourceTable = catalog.getTableMetadata(
               TableIdentifier(sourceTabName, Some("default")))
@@ -1118,7 +1118,7 @@ class HiveDDLSuite
               .write.format("json").saveAsTable(sourceTabName)
             sql(s"CREATE VIEW $sourceViewName AS SELECT * FROM $sourceTabName")
             val tblType = if (i == 0) "" else "EXTERNAL"
-            sql(s"CREATE $tblType TABLE $targetTabName LIKE $sourceViewName LOCATION $basePath")
+            sql(s"CREATE $tblType TABLE $targetTabName LIKE $sourceViewName LOCATION '$basePath'")
 
             val sourceView = spark.sessionState.catalog.getTableMetadata(
               TableIdentifier(sourceViewName, Some("default")))

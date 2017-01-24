@@ -1149,6 +1149,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val sourceTable = visitTableIdentifier(ctx.source)
     val location = Option(ctx.locationSpec).map(visitLocationSpec)
     if (ctx.EXTERNAL != null && location.isEmpty) {
+      // If we are creating an EXTERNAL table, then the LOCATION field is required
       operationNotAllowed("CREATE EXTERNAL TABLE LIKE must be accompanied by LOCATION", ctx)
     }
     CreateTableLikeCommand(targetTable, sourceTable, location, ctx.EXISTS != null)
