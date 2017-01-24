@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  */
 private[regression] trait GeneralizedLinearRegressionBase extends PredictorParams
   with HasFitIntercept with HasMaxIter with HasTol with HasRegParam with HasWeightCol
-  with HasSolver with Logging {
+  with HasSolver with HasOffsetCol with Logging {
 
   import GeneralizedLinearRegression._
 
@@ -222,6 +222,16 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
+
+  /**
+    * Sets the value of param [[offsetCol]].
+    * If this is not set or empty, we treat all instance offsets as 0.0.
+    * Default is not set, so all instances have offset 0.0.
+    *
+    * @group setParam
+    */
+  @Since("2.2.0")
+  def setOffsetCol(value: String): this.type = set(offsetCol, value)
 
   /**
    * Sets the solver algorithm used for optimization.
