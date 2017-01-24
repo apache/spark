@@ -44,6 +44,8 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Replaces generic operations with specific variants that are designed to work with Spark
  * SQL Data Sources.
+ *
+ * Note that, this rule must be run after [[PreprocessTableInsertion]].
  */
 case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
@@ -127,30 +129,9 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
     projectList
   }
 
-  /**
-   * Returns true if the [[InsertIntoTable]] plan has already been preprocessed by analyzer rule
-   * [[PreprocessTableInsertion]]. It is important that this rule([[DataSourceAnalysis]]) has to
-   * be run after [[PreprocessTableInsertion]], to normalize the column names in partition spec and
-   * fix the schema mismatch by adding Cast.
-   */
-  private def hasBeenPreprocessed(
-      tableOutput: Seq[Attribute],
-      partSchema: StructType,
-      partSpec: Map[String, Option[String]],
-      query: LogicalPlan): Boolean = {
-    val partColNames = partSchema.map(_.name).toSet
-    query.resolved && partSpec.keys.forall(partColNames.contains) && {
-      val staticPartCols = partSpec.filter(_._2.isDefined).keySet
-      val expectedColumns = tableOutput.filterNot(a => staticPartCols.contains(a.name))
-      expectedColumns.toStructType.sameType(query.schema)
-    }
-  }
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case InsertIntoTable(
-        l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, false)
-        if hasBeenPreprocessed(l.output, t.partitionSchema, parts, query) =>
-
+        l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, false) =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
       // to include those constant column values in the query result.
