@@ -50,11 +50,11 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
 private[scheduler] class BlacklistTracker (
     private val listenerBus: LiveListenerBus,
     conf: SparkConf,
-    scheduler: Option[ExecutorAllocationClient],
+    allocationClient: Option[ExecutorAllocationClient],
     clock: Clock = new SystemClock()) extends Logging {
 
-  def this(sc: SparkContext, scheduler: Option[ExecutorAllocationClient]) = {
-    this(sc.listenerBus, sc.getConf, scheduler)
+  def this(sc: SparkContext, allocationClient: Option[ExecutorAllocationClient]) = {
+    this(sc.listenerBus, sc.getConf, allocationClient)
   }
 
   BlacklistTracker.validateBlacklistConfs(conf)
@@ -177,17 +177,17 @@ private[scheduler] class BlacklistTracker (
         // Add executor to blacklist before attempting to kill it. This allows a scheduler backend
         // to immediately fail to allocate resources on this executor, since killing could be
         // asynchronous.
-        conf.get(config.BLACKLIST_ENABLED) match {
+        conf.get(config.BLACKLIST_KILL_ENABLED) match {
           case Some(enabled) =>
             if (enabled) {
-              scheduler match {
-                case Some(scheduler) =>
+              allocationClient match {
+                case Some(allocationClient) =>
                   logInfo(s"Killing blacklisted executor id $exec" +
                           s"since spark.blacklist.kill is set.")
-                  scheduler.killExecutors(Seq(exec), true, true)
+                  allocationClient.killExecutors(Seq(exec), true, true)
                 case None =>
                   logWarning(s"Not attempting to kill blacklisted executor id $exec" +
-                             s"since scheduler is not defined.")
+                             s"since allocation client is not defined.")
               }
             }
           case None =>
@@ -207,17 +207,17 @@ private[scheduler] class BlacklistTracker (
           listenerBus.post(SparkListenerNodeBlacklisted(now, node, blacklistedExecsOnNode.size))
           _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
           // As before, blacklist this node before killing all its executors.
-          conf.get(config.BLACKLIST_ENABLED) match {
+          conf.get(config.BLACKLIST_KILL_ENABLED) match {
             case Some(enabled) =>
               if (enabled) {
-                scheduler match {
-                  case Some(scheduler) =>
+                allocationClient match {
+                  case Some(allocationClient) =>
                     logInfo(s"Killing all executors on blacklisted host $node" +
                       s"since spark.blacklist.kill is set.")
-                    scheduler.killExecutorsOnHost(node)
+                    allocationClient.killExecutorsOnHost(node)
                   case None =>
                     logWarning(s"Not attempting to kill executors on blacklisted host $node" +
-                      s"since scheduler is not defined.")
+                      s"since allocation client is not defined.")
                 }
               }
             case None =>
