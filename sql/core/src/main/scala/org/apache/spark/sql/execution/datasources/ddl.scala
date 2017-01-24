@@ -66,7 +66,8 @@ case class CreateTempViewUsing(
 
   def run(sparkSession: SparkSession): Seq[Row] = {
     if (provider.toLowerCase == DDLUtils.HIVE_PROVIDER) {
-      throw new AnalysisException("Currently Hive data source can not be created as a view")
+      throw new AnalysisException("Hive data source can not be used with tables," +
+        "you can't use it with CREATE TEMP VIEW USING")
     }
 
     val dataSource = DataSource(

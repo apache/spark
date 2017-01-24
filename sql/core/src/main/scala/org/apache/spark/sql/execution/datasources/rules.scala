@@ -112,6 +112,7 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
         throw new AnalysisException("Saving data into a view is not allowed.")
       }
 
+      // Check if the specified data source match the data source of the existing table.
       val existingProvider = DataSource.lookupDataSource(existingTable.provider.get)
       val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get)
       // TODO: Check that options from the resolved relation match the relation that we are

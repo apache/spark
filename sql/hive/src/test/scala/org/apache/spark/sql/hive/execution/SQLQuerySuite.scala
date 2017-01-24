@@ -1462,22 +1462,20 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("run sql directly on files - hive") {
-    withTable("t") {
-      val df = spark.range(100).toDF("id")
-      df.write.format("hive").saveAsTable("t")
-      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+    withTempPath(f => {
+      spark.range(100).toDF.write.parquet(f.getCanonicalPath)
 
       var e = intercept[AnalysisException] {
-        sql(s"select id from hive.`${table.location}`")
+        sql(s"select id from hive.`${f.getCanonicalPath}`")
       }
       assert(e.message.contains("Unsupported data source type for direct query on files: hive"))
 
       // data source type is case insensitive
       e = intercept[AnalysisException] {
-        sql(s"select id from HIVE.`${table.location}`")
+        sql(s"select id from HIVE.`${f.getCanonicalPath}`")
       }
       assert(e.message.contains("Unsupported data source type for direct query on files: HIVE"))
-    }
+    })
   }
 
   test("SPARK-8976 Wrong Result for Rollup #1") {
