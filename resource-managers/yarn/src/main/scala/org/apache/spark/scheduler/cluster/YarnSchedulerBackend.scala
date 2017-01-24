@@ -149,6 +149,10 @@ private[spark] abstract class YarnSchedulerBackend(
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
   }
 
+  override def allResourcesRegistered(): Boolean = {
+    totalRegisteredExecutors.get() == totalExpectedExecutors
+  }
+
   /**
    * Add filters to the SparkUI.
    */
