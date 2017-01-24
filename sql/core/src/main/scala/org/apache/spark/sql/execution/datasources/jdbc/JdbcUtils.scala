@@ -294,7 +294,7 @@ object JdbcUtils extends Logging {
   /**
    * Check whether a table exists in a given database
    *
-   * @return
+   * @return True if the table exists.
    */
   @transient
   def checkTableExists(targetDb: String, tableName: String): Boolean = {
@@ -469,7 +469,6 @@ object JdbcUtils extends Logging {
 
     executeStatements(targetDb, statements, batchSize, maxConnections)
   }
-
 
   /**
    * Perform an upsert of a DataFrame to a given table.
