@@ -63,7 +63,7 @@ class LinearSVC @Since("2.2.0") (
   def this() = this(Identifiable.randomUID("linearsvc"))
 
   /**
-   * Set the regularization parameter.
+   * Sets the regularization parameter.
    * Default is 0.0.
    *
    * @group setParam
@@ -73,7 +73,7 @@ class LinearSVC @Since("2.2.0") (
   setDefault(regParam -> 0.0)
 
   /**
-   * Set the maximum number of iterations.
+   * Sets the maximum number of iterations.
    * Default is 100.
    *
    * @group setParam
@@ -93,7 +93,7 @@ class LinearSVC @Since("2.2.0") (
   setDefault(fitIntercept -> true)
 
   /**
-   * Set the convergence tolerance of iterations.
+   * Sets the convergence tolerance of iterations.
    * Smaller values will lead to higher accuracy at the cost of more iterations.
    * Default is 1E-6.
    *
@@ -124,7 +124,7 @@ class LinearSVC @Since("2.2.0") (
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /**
-   * Set threshold in binary classification, in range [0, 1].
+   * Sets threshold in binary classification, in range [0, 1].
    *
    * @group setParam
    */
@@ -421,7 +421,7 @@ private class LinearSVCCostFun(
 
 /**
  * LinearSVCAggregator computes the gradient and loss for hinge loss function, as used
- * in binary classification for instances in sparse or dense vector in a online fashion.
+ * in binary classification for instances in sparse or dense vector in an online fashion.
  *
  * Two LinearSVCAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.

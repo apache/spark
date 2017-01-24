@@ -31,7 +31,8 @@ from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
 
-__all__ = ['LogisticRegression', 'LogisticRegressionModel',
+__all__ = ['LinearSVC', 'LinearSVCModel'
+           'LogisticRegression', 'LogisticRegressionModel',
            'LogisticRegressionSummary', 'LogisticRegressionTrainingSummary',
            'BinaryLogisticRegressionSummary', 'BinaryLogisticRegressionTrainingSummary',
            'DecisionTreeClassifier', 'DecisionTreeClassificationModel',
@@ -57,6 +58,96 @@ class JavaClassificationModel(JavaPredictionModel):
         Number of classes (values which the label can take).
         """
         return self._call_java("numClasses")
+
+
+@inherit_doc
+class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
+                HasRegParam, HasTol, HasRawPredictionCol, HasFitIntercept, HasStandardization,
+                HasThreshold, HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
+    """
+    Linear SVM Classifier (https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM)
+    This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
+
+    .. versionadded:: 2.2.0
+    """
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
+                 fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
+                 aggregationDepth=2):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
+                 fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
+                 aggregationDepth=2):
+        """
+        super(LinearSVC, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.LinearSVC", self.uid)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, fitIntercept=True,
+                         standardization=True, threshold=0.0, aggregationDepth=2)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.2.0")
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
+                 fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
+                 aggregationDepth=2):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
+                 fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
+                 aggregationDepth=2):
+        Sets params for Linear SVM Classifier.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return LinearSVCModel(java_model)
+
+
+class LinearSVCModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
+    """
+    Model fitted by LinearSVC.
+
+    .. versionadded:: 2.2.0
+    """
+
+    @property
+    @since("2.2.0")
+    def coefficients(self):
+        """
+        Model coefficients of Linear SVM Classifier.
+        """
+        return self._call_java("coefficients")
+
+    @property
+    @since("2.2.0")
+    def intercept(self):
+        """
+        Model intercept of Linear SVM Classifier.
+        """
+        return self._call_java("intercept")
+
+    @property
+    @since("2.2.0")
+    def numClasses(self):
+        """
+        Number of classes.
+        """
+        return self._call_java("numClasses")
+
+    @property
+    @since("2.2.0")
+    def numFeatures(self):
+        """
+        Number of features.
+        """
+        return self._call_java("numFeatures")
 
 
 @inherit_doc
