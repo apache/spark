@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
  * The Hive table scan operator.  Column and partition pruning are both handled.
  *
  * @param requestedAttributes Attributes to be fetched from the Hive table.
- * @param relation The Hive table be be scanned.
+ * @param relation The Hive table be scanned.
  * @param partitionPruningPred An optional partition pruning predicate for partitioned table.
  */
 private[hive]
@@ -54,7 +54,7 @@ case class HiveTableScanExec(
   require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
     "Partition pruning predicates only supported for partitioned tables.")
 
-  private[sql] override lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def producedAttributes: AttributeSet = outputSet ++
@@ -146,16 +146,27 @@ case class HiveTableScanExec(
         hadoopReader.makeRDDForTable(relation.hiveQlTable)
       }
     } else {
+      // The attribute name of predicate could be different than the one in schema in case of
+      // case insensitive, we should change them to match the one in schema, so we do not need to
+      // worry about case sensitivity anymore.
+      val normalizedFilters = partitionPruningPred.map { e =>
+        e transform {
+          case a: AttributeReference =>
+            a.withName(relation.output.find(_.semanticEquals(a)).get.name)
+        }
+      }
+
       Utils.withDummyCallSite(sqlContext.sparkContext) {
         hadoopReader.makeRDDForPartitionedTable(
-          prunePartitions(relation.getHiveQlPartitions(partitionPruningPred)))
+          prunePartitions(relation.getHiveQlPartitions(normalizedFilters)))
       }
     }
     val numOutputRows = longMetric("numOutputRows")
     // Avoid to serialize MetastoreRelation because schema is lazy. (see SPARK-15649)
     val outputSchema = schema
-    rdd.mapPartitionsInternal { iter =>
+    rdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val proj = UnsafeProjection.create(outputSchema)
+      proj.initialize(index)
       iter.map { r =>
         numOutputRows += 1
         proj(r)
@@ -164,4 +175,19 @@ case class HiveTableScanExec(
   }
 
   override def output: Seq[Attribute] = attributes
+
+  override def sameResult(plan: SparkPlan): Boolean = plan match {
+    case other: HiveTableScanExec =>
+      val thisPredicates = partitionPruningPred.map(cleanExpression)
+      val otherPredicates = other.partitionPruningPred.map(cleanExpression)
+
+      val result = relation.sameResult(other.relation) &&
+        output.length == other.output.length &&
+          output.zip(other.output)
+            .forall(p => p._1.name == p._2.name && p._1.dataType == p._2.dataType) &&
+              thisPredicates.length == otherPredicates.length &&
+                thisPredicates.zip(otherPredicates).forall(p => p._1.semanticEquals(p._2))
+      result
+    case _ => false
+  }
 }

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count, Max}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
@@ -278,6 +278,21 @@ class AnalysisErrorSuite extends AnalysisTest {
       testRelation.output.length.toString :: Nil)
 
   errorTest(
+    "union with incompatible column types",
+    testRelation.union(nestedRelation),
+    "union" :: "the compatible column types" :: Nil)
+
+  errorTest(
+    "intersect with incompatible column types",
+    testRelation.intersect(nestedRelation),
+    "intersect" :: "the compatible column types" :: Nil)
+
+  errorTest(
+    "except with incompatible column types",
+    testRelation.except(nestedRelation),
+    "except" :: "the compatible column types" :: Nil)
+
+  errorTest(
     "SPARK-9955: correct error message for aggregate",
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where('bad_column > 1).groupBy('a)(UnresolvedAlias(max('b))),
@@ -381,7 +396,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("error test for self-join") {
-    val join = Join(testRelation, testRelation, Inner, None)
+    val join = Join(testRelation, testRelation, Cross, None)
     val error = intercept[AnalysisException] {
       SimpleAnalyzer.checkAnalysis(join)
     }
@@ -399,11 +414,10 @@ class AnalysisErrorSuite extends AnalysisTest {
             AttributeReference("a", dataType)(exprId = ExprId(2)),
             AttributeReference("b", IntegerType)(exprId = ExprId(1))))
 
-      shouldSuccess match {
-        case true =>
-          assertAnalysisSuccess(plan, true)
-        case false =>
-          assertAnalysisError(plan, "expression `a` cannot be used as a grouping expression" :: Nil)
+      if (shouldSuccess) {
+        assertAnalysisSuccess(plan, true)
+      } else {
+        assertAnalysisError(plan, "expression `a` cannot be used as a grouping expression" :: Nil)
       }
     }
 
@@ -451,34 +465,22 @@ class AnalysisErrorSuite extends AnalysisTest {
         "another aggregate function." :: Nil)
   }
 
-  test("Join can't work on binary and map types") {
-    val plan =
-      Join(
-        LocalRelation(
-          AttributeReference("a", BinaryType)(exprId = ExprId(2)),
-          AttributeReference("b", IntegerType)(exprId = ExprId(1))),
-        LocalRelation(
-          AttributeReference("c", BinaryType)(exprId = ExprId(4)),
-          AttributeReference("d", IntegerType)(exprId = ExprId(3))),
-        Inner,
-        Some(EqualTo(AttributeReference("a", BinaryType)(exprId = ExprId(2)),
-          AttributeReference("c", BinaryType)(exprId = ExprId(4)))))
+  test("Join can work on binary types but can't work on map types") {
+    val left = LocalRelation('a.binary, 'b.map(StringType, StringType))
+    val right = LocalRelation('c.binary, 'd.map(StringType, StringType))
 
-    assertAnalysisError(plan, "binary type expression `a` cannot be used in join conditions" :: Nil)
+    val plan1 = left.join(
+      right,
+      joinType = Cross,
+      condition = Some('a === 'c))
 
-    val plan2 =
-      Join(
-        LocalRelation(
-          AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
-          AttributeReference("b", IntegerType)(exprId = ExprId(1))),
-        LocalRelation(
-          AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)),
-          AttributeReference("d", IntegerType)(exprId = ExprId(3))),
-        Inner,
-        Some(EqualTo(AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
-          AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)))))
+    assertAnalysisSuccess(plan1)
 
-    assertAnalysisError(plan2, "map type expression `a` cannot be used in join conditions" :: Nil)
+    val plan2 = left.join(
+      right,
+      joinType = Cross,
+      condition = Some('b === 'd))
+    assertAnalysisError(plan2, "Cannot use map type in EqualTo" :: Nil)
   }
 
   test("PredicateSubQuery is used outside of a filter") {
@@ -533,5 +535,22 @@ class AnalysisErrorSuite extends AnalysisTest {
       Exists(Union(LocalRelation(b), Filter(EqualTo(OuterReference(a), c), LocalRelation(c)))),
       LocalRelation(a))
     assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
+
+    val plan4 = Filter(
+      Exists(
+        Limit(1,
+          Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))
+      ),
+      LocalRelation(a))
+    assertAnalysisError(plan4, "Accessing outer query column is not allowed in" :: Nil)
+
+    val plan5 = Filter(
+      Exists(
+        Sample(0.0, 0.5, false, 1L,
+          Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))().select('b)
+      ),
+      LocalRelation(a))
+    assertAnalysisError(plan5,
+                        "Accessing outer query column is not allowed in" :: Nil)
   }
 }

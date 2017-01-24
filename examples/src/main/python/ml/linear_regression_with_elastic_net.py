@@ -39,8 +39,16 @@ if __name__ == "__main__":
     lrModel = lr.fit(training)
 
     # Print the coefficients and intercept for linear regression
-    print("Coefficients: " + str(lrModel.coefficients))
-    print("Intercept: " + str(lrModel.intercept))
+    print("Coefficients: %s" % str(lrModel.coefficients))
+    print("Intercept: %s" % str(lrModel.intercept))
+
+    # Summarize the model over the training set and print out some metrics
+    trainingSummary = lrModel.summary
+    print("numIterations: %d" % trainingSummary.totalIterations)
+    print("objectiveHistory: %s" % str(trainingSummary.objectiveHistory))
+    trainingSummary.residuals.show()
+    print("RMSE: %f" % trainingSummary.rootMeanSquaredError)
+    print("r2: %f" % trainingSummary.r2)
     # $example off$
 
     spark.stop()

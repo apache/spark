@@ -27,6 +27,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.bridge.SLF4JBridgeHandler;
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
+
+import org.apache.spark.internal.config.package$;
+import org.apache.spark.util.Utils;
 
 /**
  * These tests require the Spark assembly to be built before they can be run.
@@ -89,6 +93,12 @@ public class SparkLauncherSuite {
     launcher.setConf("spark.foo", "foo");
     launcher.addSparkArg(opts.CONF, "spark.foo=bar");
     assertEquals("bar", launcher.builder.conf.get("spark.foo"));
+
+    launcher.setConf(SparkLauncher.PYSPARK_DRIVER_PYTHON, "python3.4");
+    launcher.setConf(SparkLauncher.PYSPARK_PYTHON, "python3.5");
+    assertEquals("python3.4", launcher.builder.conf.get(
+      package$.MODULE$.PYSPARK_DRIVER_PYTHON().key()));
+    assertEquals("python3.5", launcher.builder.conf.get(package$.MODULE$.PYSPARK_PYTHON().key()));
   }
 
   @Test(expected=IllegalStateException.class)
@@ -147,6 +157,10 @@ public class SparkLauncherSuite {
 
   @Test
   public void testChildProcLauncher() throws Exception {
+    // This test is failed on Windows due to the failure of initiating executors
+    // by the path length limitation. See SPARK-18718.
+    assumeTrue(!Utils.isWindows());
+
     SparkSubmitOptionParser opts = new SparkSubmitOptionParser();
     Map<String, String> env = new HashMap<>();
     env.put("SPARK_PRINT_LAUNCH_COMMAND", "1");

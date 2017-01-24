@@ -56,12 +56,13 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
   final def getIsotonic: Boolean = $(isotonic)
 
   /**
-   * Param for the index of the feature if [[featuresCol]] is a vector column (default: `0`), no
+   * Param for the index of the feature if `featuresCol` is a vector column (default: `0`), no
    * effect otherwise.
    * @group param
    */
   final val featureIndex: IntParam = new IntParam(this, "featureIndex",
-    "The index of the feature if featuresCol is a vector column, no effect otherwise.")
+    "The index of the feature if featuresCol is a vector column, no effect otherwise (>= 0)",
+    ParamValidators.gtEq(0))
 
   /** @group getParam */
   final def getFeatureIndex: Int = $(featureIndex)
@@ -164,16 +165,22 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): IsotonicRegressionModel = {
-    validateAndTransformSchema(dataset.schema, fitting = true)
+    transformSchema(dataset.schema, logging = true)
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
     val instances = extractWeightedLabeledPoints(dataset)
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, featureIndex, isotonic)
+    instr.logNumFeatures(1)
+
     val isotonicRegression = new MLlibIsotonicRegression().setIsotonic($(isotonic))
     val oldModel = isotonicRegression.run(instances)
 
-    copyValues(new IsotonicRegressionModel(uid, oldModel).setParent(this))
+    val model = copyValues(new IsotonicRegressionModel(uid, oldModel).setParent(this))
+    instr.logSuccess(model)
+    model
   }
 
   @Since("1.5.0")
@@ -193,7 +200,7 @@ object IsotonicRegression extends DefaultParamsReadable[IsotonicRegression] {
  * Model fitted by IsotonicRegression.
  * Predicts using a piecewise linear function.
  *
- * For detailed rules see [[org.apache.spark.mllib.regression.IsotonicRegressionModel.predict()]].
+ * For detailed rules see `org.apache.spark.mllib.regression.IsotonicRegressionModel.predict()`.
  *
  * @param oldModel A [[org.apache.spark.mllib.regression.IsotonicRegressionModel]]
  *                 model trained by [[org.apache.spark.mllib.regression.IsotonicRegression]].
@@ -234,6 +241,7 @@ class IsotonicRegressionModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val predict = dataset.schema($(featuresCol)).dataType match {
       case DoubleType =>
         udf { feature: Double => oldModel.predict(feature) }

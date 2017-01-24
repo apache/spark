@@ -19,5 +19,5 @@
 
 while read line
 do
-  echo "$line" | sed 's/\t/_/'
+  echo "$line" | sed $'s/\t/_/'
 done < /dev/stdin

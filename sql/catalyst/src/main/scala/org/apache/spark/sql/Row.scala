@@ -20,9 +20,14 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 import scala.util.hashing.MurmurHash3
 
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
+/**
+ * @since 1.3.0
+ */
+@InterfaceStability.Stable
 object Row {
   /**
    * This method can be used to extract fields from a [[Row]] object in a pattern match. Example:
@@ -69,7 +74,7 @@ object Row {
  * It is invalid to use the native primitive interface to retrieve a value that is null, instead a
  * user must check `isNullAt` before attempting to retrieve a value that might be null.
  *
- * To create a new Row, use [[RowFactory.create()]] in Java or [[Row.apply()]] in Scala.
+ * To create a new Row, use `RowFactory.create()` in Java or `Row.apply()` in Scala.
  *
  * A [[Row]] object can be constructed by providing field values. Example:
  * {{{
@@ -117,8 +122,9 @@ object Row {
  * }
  * }}}
  *
- * @group row
+ * @since 1.3.0
  */
+@InterfaceStability.Stable
 trait Row extends Serializable {
   /** Number of elements in the Row. */
   def size: Int = length
@@ -337,7 +343,7 @@ trait Row extends Serializable {
   }
 
   /**
-   * Returns a Map(name -> value) for the requested fieldNames
+   * Returns a Map consisting of names and values for the requested fieldNames
    * For primitive types if value is null it returns 'zero value' specific for primitive
    * ie. 0 for Int - use isNullAt to ensure that value is not null
    *
@@ -351,7 +357,7 @@ trait Row extends Serializable {
     }.toMap
   }
 
-  override def toString(): String = s"[${this.mkString(",")}]"
+  override def toString: String = s"[${this.mkString(",")}]"
 
   /**
    * Make a copy of the current [[Row]] object.
@@ -456,13 +462,13 @@ trait Row extends Serializable {
   def mkString(start: String, sep: String, end: String): String = toSeq.mkString(start, sep, end)
 
   /**
-   * Returns the value of a given fieldName.
+   * Returns the value at position i.
    *
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
   private def getAnyValAs[T <: AnyVal](i: Int): T =
-    if (isNullAt(i)) throw new NullPointerException(s"Value at index $i in null")
+    if (isNullAt(i)) throw new NullPointerException(s"Value at index $i is null")
     else getAs[T](i)
 }

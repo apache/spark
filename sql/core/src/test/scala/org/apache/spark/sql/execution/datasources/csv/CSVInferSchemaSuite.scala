@@ -60,9 +60,9 @@ class CSVInferSchemaSuite extends SparkFunSuite {
   }
 
   test("Timestamp field types are inferred correctly via custom data format") {
-    var options = new CSVOptions(Map("dateFormat" -> "yyyy-mm"))
+    var options = new CSVOptions(Map("timestampFormat" -> "yyyy-mm"))
     assert(CSVInferSchema.inferField(TimestampType, "2015-08", options) == TimestampType)
-    options = new CSVOptions(Map("dateFormat" -> "yyyy"))
+    options = new CSVOptions(Map("timestampFormat" -> "yyyy"))
     assert(CSVInferSchema.inferField(TimestampType, "2015", options) == TimestampType)
   }
 
@@ -108,5 +108,27 @@ class CSVInferSchemaSuite extends SparkFunSuite {
   test("Merging Nulltypes should yield Nulltype.") {
     val mergedNullTypes = CSVInferSchema.mergeRowTypes(Array(NullType), Array(NullType))
     assert(mergedNullTypes.deep == Array(NullType).deep)
+  }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    val options = new CSVOptions(Map("TiMeStampFormat" -> "yyyy-mm"))
+    assert(CSVInferSchema.inferField(TimestampType, "2015-08", options) == TimestampType)
+  }
+
+  test("SPARK-18877: `inferField` on DecimalType should find a common type with `typeSoFar`") {
+    val options = new CSVOptions(Map.empty[String, String])
+
+    // 9.03E+12 is Decimal(3, -10) and 1.19E+11 is Decimal(3, -9).
+    assert(CSVInferSchema.inferField(DecimalType(3, -10), "1.19E+11", options) ==
+      DecimalType(4, -9))
+
+    // BigDecimal("12345678901234567890.01234567890123456789") is precision 40 and scale 20.
+    val value = "12345678901234567890.01234567890123456789"
+    assert(CSVInferSchema.inferField(DecimalType(3, -10), value, options) == DoubleType)
+
+    // Seq(s"${Long.MaxValue}1", "2015-12-01 00:00:00") should be StringType
+    assert(CSVInferSchema.inferField(NullType, s"${Long.MaxValue}1", options) == DecimalType(20, 0))
+    assert(CSVInferSchema.inferField(DecimalType(20, 0), "2015-12-01 00:00:00", options)
+      == StringType)
   }
 }

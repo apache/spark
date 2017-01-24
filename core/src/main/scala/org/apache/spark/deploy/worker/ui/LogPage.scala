@@ -138,7 +138,8 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       val files = RollingFileAppender.getSortedRolledOverFiles(logDirectory, logType)
       logDebug(s"Sorted log files of type $logType in $logDirectory:\n${files.mkString("\n")}")
 
-      val totalLength = files.map { _.length }.sum
+      val fileLengths: Seq[Long] = files.map(Utils.getFileLength(_, worker.conf))
+      val totalLength = fileLengths.sum
       val offset = offsetOption.getOrElse(totalLength - byteLength)
       val startIndex = {
         if (offset < 0) {
@@ -151,7 +152,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       }
       val endIndex = math.min(startIndex + byteLength, totalLength)
       logDebug(s"Getting log from $startIndex to $endIndex")
-      val logText = Utils.offsetBytes(files, startIndex, endIndex)
+      val logText = Utils.offsetBytes(files, fileLengths, startIndex, endIndex)
       logDebug(s"Got log of length ${logText.length} bytes")
       (logText, startIndex, endIndex, totalLength)
     } catch {

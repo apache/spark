@@ -17,6 +17,8 @@
 package org.apache.spark.examples.sql.hive
 
 // $example on:spark_hive$
+import java.io.File
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.SparkSession
 // $example off:spark_hive$
@@ -38,7 +40,7 @@ object SparkHiveExample {
 
     // $example on:spark_hive$
     // warehouseLocation points to the default location for managed databases and tables
-    val warehouseLocation = "file:${system:user.dir}/spark-warehouse"
+    val warehouseLocation = new File("spark-warehouse").getAbsolutePath
 
     val spark = SparkSession
       .builder()
@@ -50,7 +52,7 @@ object SparkHiveExample {
     import spark.implicits._
     import spark.sql
 
-    sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+    sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING) USING hive")
     sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
     // Queries are expressed in HiveQL
@@ -87,7 +89,7 @@ object SparkHiveExample {
     // |Key: 0, Value: val_0|
     // ...
 
-    // You can also use DataFrames to create temporary views within a HiveContext.
+    // You can also use DataFrames to create temporary views within a SparkSession.
     val recordsDF = spark.createDataFrame((1 to 100).map(i => Record(i, s"val_$i")))
     recordsDF.createOrReplaceTempView("records")
 
@@ -97,8 +99,8 @@ object SparkHiveExample {
     // |key| value|key| value|
     // +---+------+---+------+
     // |  2| val_2|  2| val_2|
-    // |  2| val_2|  2| val_2|
     // |  4| val_4|  4| val_4|
+    // |  5| val_5|  5| val_5|
     // ...
     // $example off:spark_hive$
 

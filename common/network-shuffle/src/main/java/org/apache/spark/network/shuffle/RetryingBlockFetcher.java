@@ -64,7 +64,7 @@ public class RetryingBlockFetcher {
   private static final ExecutorService executorService = Executors.newCachedThreadPool(
     NettyUtils.createThreadFactory("Block Fetch Retry"));
 
-  private final Logger logger = LoggerFactory.getLogger(RetryingBlockFetcher.class);
+  private static final Logger logger = LoggerFactory.getLogger(RetryingBlockFetcher.class);
 
   /** Used to initiate new Block Fetches on our remaining blocks. */
   private final BlockFetchStarter fetchStarter;

@@ -79,13 +79,15 @@ class ConstraintPropagationSuite extends SparkFunSuite {
     assert(tr.analyze.constraints.isEmpty)
 
     val aliasedRelation = tr.where('c.attr > 10 && 'a.attr < 5)
-      .groupBy('a, 'c, 'b)('a, 'c.as("c1"), count('a).as("a3")).select('c1, 'a).analyze
+      .groupBy('a, 'c, 'b)('a, 'c.as("c1"), count('a).as("a3")).select('c1, 'a, 'a3).analyze
 
+    // SPARK-16644: aggregate expression count(a) should not appear in the constraints.
     verifyConstraints(aliasedRelation.analyze.constraints,
       ExpressionSet(Seq(resolveColumn(aliasedRelation.analyze, "c1") > 10,
         IsNotNull(resolveColumn(aliasedRelation.analyze, "c1")),
         resolveColumn(aliasedRelation.analyze, "a") < 5,
-        IsNotNull(resolveColumn(aliasedRelation.analyze, "a")))))
+        IsNotNull(resolveColumn(aliasedRelation.analyze, "a")),
+        IsNotNull(resolveColumn(aliasedRelation.analyze, "a3")))))
   }
 
   test("propagating constraints in expand") {
@@ -126,8 +128,16 @@ class ConstraintPropagationSuite extends SparkFunSuite {
       ExpressionSet(Seq(resolveColumn(aliasedRelation.analyze, "x") > 10,
         IsNotNull(resolveColumn(aliasedRelation.analyze, "x")),
         resolveColumn(aliasedRelation.analyze, "b") <=> resolveColumn(aliasedRelation.analyze, "y"),
+        resolveColumn(aliasedRelation.analyze, "z") <=> resolveColumn(aliasedRelation.analyze, "x"),
         resolveColumn(aliasedRelation.analyze, "z") > 10,
         IsNotNull(resolveColumn(aliasedRelation.analyze, "z")))))
+
+    val multiAlias = tr.where('a === 'c + 10).select('a.as('x), 'c.as('y))
+    verifyConstraints(multiAlias.analyze.constraints,
+      ExpressionSet(Seq(IsNotNull(resolveColumn(multiAlias.analyze, "x")),
+        IsNotNull(resolveColumn(multiAlias.analyze, "y")),
+        resolveColumn(multiAlias.analyze, "x") === resolveColumn(multiAlias.analyze, "y") + 10))
+    )
   }
 
   test("propagating constraints in union") {
@@ -341,6 +351,15 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         IsNotNull(IsNotNull(resolveColumn(tr, "b"))),
         IsNotNull(resolveColumn(tr, "a")),
         IsNotNull(resolveColumn(tr, "c")))))
+
+    verifyConstraints(
+      tr.where('a.attr === 1 && IsNotNull(resolveColumn(tr, "b")) &&
+        IsNotNull(resolveColumn(tr, "c"))).analyze.constraints,
+      ExpressionSet(Seq(
+        resolveColumn(tr, "a") === 1,
+        IsNotNull(resolveColumn(tr, "c")),
+        IsNotNull(resolveColumn(tr, "a")),
+        IsNotNull(resolveColumn(tr, "b")))))
   }
 
   test("infer IsNotNull constraints from non-nullable attributes") {
@@ -349,5 +368,22 @@ class ConstraintPropagationSuite extends SparkFunSuite {
 
     verifyConstraints(tr.analyze.constraints,
       ExpressionSet(Seq(IsNotNull(resolveColumn(tr, "b")), IsNotNull(resolveColumn(tr, "c")))))
+  }
+
+  test("not infer non-deterministic constraints") {
+    val tr = LocalRelation('a.int, 'b.string, 'c.int)
+
+    verifyConstraints(tr
+      .where('a.attr === Rand(0))
+      .analyze.constraints,
+      ExpressionSet(Seq(IsNotNull(resolveColumn(tr, "a")))))
+
+    verifyConstraints(tr
+      .where('a.attr === InputFileName())
+      .where('a.attr =!= 'c.attr)
+      .analyze.constraints,
+      ExpressionSet(Seq(resolveColumn(tr, "a") =!= resolveColumn(tr, "c"),
+        IsNotNull(resolveColumn(tr, "a")),
+        IsNotNull(resolveColumn(tr, "c")))))
   }
 }

@@ -70,9 +70,9 @@ abstract class Expression extends TreeNode[Expression] {
    * children.
    *
    * Note that this means that an expression should be considered as non-deterministic if:
-   * - if it relies on some mutable internal state, or
-   * - if it relies on some implicit input that is not part of the children expression list.
-   * - if it has non-deterministic child or children.
+   * - it relies on some mutable internal state, or
+   * - it relies on some implicit input that is not part of the children expression list.
+   * - it has non-deterministic child or children.
    *
    * An example would be `SparkPartitionID` that relies on the partition id returned by TaskContext.
    * By default leaf expressions are deterministic as Nil.forall(_.deterministic) returns true.
@@ -186,7 +186,7 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def prettyName: String = nodeName.toLowerCase
 
-  protected def flatArguments = productIterator.flatMap {
+  protected def flatArguments: Iterator[Any] = productIterator.flatMap {
     case t: Traversable[_] => t
     case single => single :: Nil
   }
@@ -229,26 +229,16 @@ trait Unevaluable extends Expression {
  * An expression that gets replaced at runtime (currently by the optimizer) into a different
  * expression for evaluation. This is mainly used to provide compatibility with other databases.
  * For example, we use this to support "nvl" by replacing it with "coalesce".
+ *
+ * A RuntimeReplaceable should have the original parameters along with a "child" expression in the
+ * case class constructor, and define a normal constructor that accepts only the original
+ * parameters. For an example, see [[Nvl]]. To make sure the explain plan and expression SQL
+ * works correctly, the implementation should also override flatArguments method and sql method.
  */
-trait RuntimeReplaceable extends Unevaluable {
-  /**
-   * Method for concrete implementations to override that specifies how to construct the expression
-   * that should replace the current one.
-   */
-  def replaceForEvaluation(): Expression
-
-  /**
-   * Method for concrete implementations to override that specifies how to coerce the input types.
-   */
-  def replaceForTypeCoercion(): Expression
-
-  /** The expression that should be used during evaluation. */
-  lazy val replaced: Expression = replaceForEvaluation()
-
-  override def nullable: Boolean = replaced.nullable
-  override def foldable: Boolean = replaced.foldable
-  override def dataType: DataType = replaced.dataType
-  override def checkInputDataTypes(): TypeCheckResult = replaced.checkInputDataTypes()
+trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
+  override def nullable: Boolean = child.nullable
+  override def foldable: Boolean = child.foldable
+  override def dataType: DataType = child.dataType
 }
 
 
@@ -272,17 +262,28 @@ trait Nondeterministic extends Expression {
   final override def deterministic: Boolean = false
   final override def foldable: Boolean = false
 
+  @transient
   private[this] var initialized = false
 
-  final def setInitialValues(): Unit = {
-    initInternal()
+  /**
+   * Initializes internal states given the current partition index and mark this as initialized.
+   * Subclasses should override [[initializeInternal()]].
+   */
+  final def initialize(partitionIndex: Int): Unit = {
+    initializeInternal(partitionIndex)
     initialized = true
   }
 
-  protected def initInternal(): Unit
+  protected def initializeInternal(partitionIndex: Int): Unit
 
+  /**
+   * @inheritdoc
+   * Throws an exception if [[initialize()]] is not called yet.
+   * Subclasses should override [[evalInternal()]].
+   */
   final override def eval(input: InternalRow = null): Any = {
-    require(initialized, "nondeterministic expression should be initialized before evaluate")
+    require(initialized,
+      s"Nondeterministic expression ${this.getClass.getName} should be initialized before eval.")
     evalInternal(input)
   }
 
@@ -295,7 +296,7 @@ trait Nondeterministic extends Expression {
  */
 abstract class LeafExpression extends Expression {
 
-  def children: Seq[Expression] = Nil
+  override final def children: Seq[Expression] = Nil
 }
 
 
@@ -307,7 +308,7 @@ abstract class UnaryExpression extends Expression {
 
   def child: Expression
 
-  override def children: Seq[Expression] = child :: Nil
+  override final def children: Seq[Expression] = child :: Nil
 
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
@@ -394,7 +395,7 @@ abstract class BinaryExpression extends Expression {
   def left: Expression
   def right: Expression
 
-  override def children: Seq[Expression] = Seq(left, right)
+  override final def children: Seq[Expression] = Seq(left, right)
 
   override def foldable: Boolean = left.foldable && right.foldable
 
@@ -511,7 +512,7 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     // First check whether left and right have the same type, then check if the type is acceptable.
-    if (left.dataType != right.dataType) {
+    if (!left.dataType.sameType(right.dataType)) {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
         s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
     } else if (!inputType.acceptsType(left.dataType)) {
@@ -526,7 +527,7 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 }
 
 
-private[sql] object BinaryOperator {
+object BinaryOperator {
   def unapply(e: BinaryOperator): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 

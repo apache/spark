@@ -59,6 +59,8 @@ Spark {{site.SPARK_VERSION}} works with Java 7 and higher. If you are using Java
 for concisely writing functions, otherwise you can use the classes in the
 [org.apache.spark.api.java.function](api/java/index.html?org/apache/spark/api/java/function/package-summary.html) package.
 
+Note that support for Java 7 is deprecated as of Spark 2.0.0 and may be removed in Spark 2.2.0.
+
 To write a Spark application in Java, you need to add a dependency on Spark. Spark is available through Maven Central at:
 
     groupId = org.apache.spark
@@ -86,6 +88,8 @@ import org.apache.spark.SparkConf
 
 Spark {{site.SPARK_VERSION}} works with Python 2.6+ or Python 3.4+. It can use the standard CPython interpreter,
 so C libraries like NumPy can be used. It also works with PyPy 2.3+.
+
+Note that support for Python 2.6 is deprecated as of Spark 2.0.0, and may be removed in Spark 2.2.0.
 
 To run Spark applications in Python, use the `bin/spark-submit` script located in the Spark directory.
 This script will load Spark's Java/Scala libraries and allow you to submit applications to a cluster.
@@ -182,7 +186,7 @@ variable called `sc`. Making your own SparkContext will not work. You can set wh
 context connects to using the `--master` argument, and you can add JARs to the classpath
 by passing a comma-separated list to the `--jars` argument. You can also add dependencies
 (e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
-to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. SonaType)
+to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. Sonatype)
 can be passed to the `--repositories` argument. For example, to run `bin/spark-shell` on exactly
 four cores, use:
 
@@ -214,9 +218,9 @@ variable called `sc`. Making your own SparkContext will not work. You can set wh
 context connects to using the `--master` argument, and you can add Python .zip, .egg or .py files
 to the runtime path by passing a comma-separated list to `--py-files`. You can also add dependencies
 (e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
-to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. SonaType)
-can be passed to the `--repositories` argument. Any python dependencies a Spark Package has (listed in
-the requirements.txt of that package) must be manually installed using pip when necessary.
+to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. Sonatype)
+can be passed to the `--repositories` argument. Any Python dependencies a Spark package has (listed in
+the requirements.txt of that package) must be manually installed using `pip` when necessary.
 For example, to run `bin/pyspark` on exactly four cores, use:
 
 {% highlight bash %}
@@ -339,11 +343,11 @@ Some notes on reading files with Spark:
 
 * All of Spark's file-based input methods, including `textFile`, support running on directories, compressed files, and wildcards as well. For example, you can use `textFile("/my/directory")`, `textFile("/my/directory/*.txt")`, and `textFile("/my/directory/*.gz")`.
 
-* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 64MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
+* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 128MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
 
 Apart from text files, Spark's Scala API also supports several other data formats:
 
-* `SparkContext.wholeTextFiles` lets you read a directory containing multiple small text files, and returns each of them as (filename, content) pairs. This is in contrast with `textFile`, which would return one record per line in each file.
+* `SparkContext.wholeTextFiles` lets you read a directory containing multiple small text files, and returns each of them as (filename, content) pairs. This is in contrast with `textFile`, which would return one record per line in each file. Partitioning is determined by data locality which, in some cases, may result in too few partitions. For those cases, `wholeTextFiles` provides an optional second argument for controlling the minimal number of partitions.
 
 * For [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), use SparkContext's `sequenceFile[K, V]` method where `K` and `V` are the types of key and values in the file. These should be subclasses of Hadoop's [Writable](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/Writable.html) interface, like [IntWritable](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/IntWritable.html) and [Text](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/Text.html). In addition, Spark allows you to specify native types for a few common Writables; for example, `sequenceFile[Int, String]` will automatically read IntWritables and Texts.
 
@@ -371,7 +375,7 @@ Some notes on reading files with Spark:
 
 * All of Spark's file-based input methods, including `textFile`, support running on directories, compressed files, and wildcards as well. For example, you can use `textFile("/my/directory")`, `textFile("/my/directory/*.txt")`, and `textFile("/my/directory/*.gz")`.
 
-* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 64MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
+* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 128MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
 
 Apart from text files, Spark's Java API also supports several other data formats:
 
@@ -403,7 +407,7 @@ Some notes on reading files with Spark:
 
 * All of Spark's file-based input methods, including `textFile`, support running on directories, compressed files, and wildcards as well. For example, you can use `textFile("/my/directory")`, `textFile("/my/directory/*.txt")`, and `textFile("/my/directory/*.gz")`.
 
-* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 64MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
+* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 128MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
 
 Apart from text files, Spark's Python API also supports several other data formats:
 
@@ -445,7 +449,7 @@ Similarly to text files, SequenceFiles can be saved and loaded by specifying the
 classes can be specified, but for standard Writables this is not required.
 
 {% highlight python %}
->>> rdd = sc.parallelize(range(1, 4)).map(lambda x: (x, "a" * x ))
+>>> rdd = sc.parallelize(range(1, 4)).map(lambda x: (x, "a" * x))
 >>> rdd.saveAsSequenceFile("path/to/file")
 >>> sorted(sc.sequenceFile("path/to/file").collect())
 [(1, u'a'), (2, u'aa'), (3, u'aaa')]
@@ -459,10 +463,12 @@ Elasticsearch ESInputFormat:
 
 {% highlight python %}
 $ SPARK_CLASSPATH=/path/to/elasticsearch-hadoop.jar ./bin/pyspark
->>> conf = {"es.resource" : "index/type"}   # assume Elasticsearch is running on localhost defaults
->>> rdd = sc.newAPIHadoopRDD("org.elasticsearch.hadoop.mr.EsInputFormat",\
-    "org.apache.hadoop.io.NullWritable", "org.elasticsearch.hadoop.mr.LinkedMapWritable", conf=conf)
->>> rdd.first()         # the result is a MapWritable that is converted to a Python dict
+>>> conf = {"es.resource" : "index/type"}  # assume Elasticsearch is running on localhost defaults
+>>> rdd = sc.newAPIHadoopRDD("org.elasticsearch.hadoop.mr.EsInputFormat",
+                             "org.apache.hadoop.io.NullWritable",
+                             "org.elasticsearch.hadoop.mr.LinkedMapWritable",
+                             conf=conf)
+>>> rdd.first()  # the result is a MapWritable that is converted to a Python dict
 (u'Elasticsearch ID',
  {u'field1': True,
   u'field2': u'Some Text',
@@ -797,7 +803,6 @@ def increment_counter(x):
 rdd.foreach(increment_counter)
 
 print("Counter value: ", counter)
-
 {% endhighlight %}
 </div>
 
@@ -1097,7 +1102,7 @@ for details.
 <tr>
   <td> <b>foreach</b>(<i>func</i>) </td>
   <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an <a href="#accumulators">Accumulator</a> or interacting with external storage systems.
-  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#ClosuresLink">Understanding closures </a> for more details.</td>
+  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#understanding-closures-a-nameclosureslinka">Understanding closures </a> for more details.</td>
 </tr>
 </table>
 
@@ -1340,24 +1345,25 @@ therefore be efficiently supported in parallel. They can be used to implement co
 MapReduce) or sums. Spark natively supports accumulators of numeric types, and programmers
 can add support for new types.
 
-If accumulators are created with a name, they will be
-displayed in Spark's UI. This can be useful for understanding the progress of
-running stages (NOTE: this is not yet supported in Python).
+As a user, you can create named or unnamed accumulators. As seen in the image below, a named accumulator (in this instance `counter`) will display in the web UI for the stage that modifies that accumulator. Spark displays the value for each accumulator modified by a task in the "Tasks" table.
 
 <p style="text-align: center;">
   <img src="img/spark-webui-accumulators.png" title="Accumulators in the Spark UI" alt="Accumulators in the Spark UI" />
 </p>
 
-An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks
-running on a cluster can then add to it using the `add` method or the `+=` operator (in Scala and Python).
-However, they cannot read its value.
-Only the driver program can read the accumulator's value, using its `value` method.
-
-The code below shows an accumulator being used to add up the elements of an array:
+Tracking accumulators in the UI can be useful for understanding the progress of 
+running stages (NOTE: this is not yet supported in Python).
 
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
+
+A numeric accumulator can be created by calling `SparkContext.longAccumulator()` or `SparkContext.doubleAccumulator()`
+to accumulate values of type Long or Double, respectively. Tasks running on a cluster can then add to it using
+the `add` method.  However, they cannot read its value. Only the driver program can read the accumulator's value, 
+using its `value` method.
+
+The code below shows an accumulator being used to add up the elements of an array:
 
 {% highlight scala %}
 scala> val accum = sc.longAccumulator("My Accumulator")
@@ -1372,19 +1378,24 @@ res2: Long = 10
 {% endhighlight %}
 
 While this code used the built-in support for accumulators of type Long, programmers can also
-create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.AccumulatorV2).
-The AccumulatorV2 abstract class has several methods which need to override: 
-`reset` for resetting the accumulator to zero, and `add` for add anothor value into the accumulator, `merge` for merging another same-type accumulator into this one. Other methods need to override can refer to scala API document. For example, supposing we had a `MyVector` class
+create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.util.AccumulatorV2).
+The AccumulatorV2 abstract class has several methods which one has to override: `reset` for resetting
+the accumulator to zero, `add` for adding another value into the accumulator,
+`merge` for merging another same-type accumulator into this one. Other methods that must be overridden
+are contained in the [API documentation](api/scala/index.html#org.apache.spark.util.AccumulatorV2). For example, supposing we had a `MyVector` class
 representing mathematical vectors, we could write:
 
 {% highlight scala %}
-object VectorAccumulatorV2 extends AccumulatorV2[MyVector, MyVector] {
-  val vec_ : MyVector = MyVector.createZeroVector
-  def reset(): MyVector = {
-    vec_.reset()
+class VectorAccumulatorV2 extends AccumulatorV2[MyVector, MyVector] {
+
+  private val myVector: MyVector = MyVector.createZeroVector
+
+  def reset(): Unit = {
+    myVector.reset()
   }
-  def add(v1: MyVector, v2: MyVector): MyVector = {
-    vec_.add(v2)
+
+  def add(v: MyVector): Unit = {
+    myVector.add(v)
   }
   ...
 }
@@ -1395,14 +1406,21 @@ val myVectorAcc = new VectorAccumulatorV2
 sc.register(myVectorAcc, "MyVectorAcc1")
 {% endhighlight %}
 
-Note that, when programmers define their own type of AccumulatorV2, the resulting type can be same or not same with the elements added.
+Note that, when programmers define their own type of AccumulatorV2, the resulting type can be different than that of the elements added.
 
 </div>
 
 <div data-lang="java"  markdown="1">
 
+A numeric accumulator can be created by calling `SparkContext.longAccumulator()` or `SparkContext.doubleAccumulator()`
+to accumulate values of type Long or Double, respectively. Tasks running on a cluster can then add to it using
+the `add` method.  However, they cannot read its value. Only the driver program can read the accumulator's value, 
+using its `value` method.
+
+The code below shows an accumulator being used to add up the elements of an array:
+
 {% highlight java %}
-LongAccumulator accum = sc.sc().longAccumulator();
+LongAccumulator accum = jsc.sc().longAccumulator();
 
 sc.parallelize(Arrays.asList(1, 2, 3, 4)).foreach(x -> accum.add(x));
 // ...
@@ -1412,43 +1430,57 @@ accum.value();
 // returns 10
 {% endhighlight %}
 
-While this code used the built-in support for accumulators of type Integer, programmers can also
-create their own types by subclassing [AccumulatorParam](api/java/index.html?org/apache/spark/AccumulatorParam.html).
-The AccumulatorParam interface has two methods: `zero` for providing a "zero value" for your data
-type, and `addInPlace` for adding two values together. For example, supposing we had a `Vector` class
+While this code used the built-in support for accumulators of type Long, programmers can also
+create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.util.AccumulatorV2).
+The AccumulatorV2 abstract class has several methods which one has to override: `reset` for resetting
+the accumulator to zero, `add` for adding another value into the accumulator,
+`merge` for merging another same-type accumulator into this one. Other methods that must be overridden
+are contained in the [API documentation](api/scala/index.html#org.apache.spark.util.AccumulatorV2). For example, supposing we had a `MyVector` class
 representing mathematical vectors, we could write:
 
 {% highlight java %}
-class VectorAccumulatorParam implements AccumulatorParam<Vector> {
-  public Vector zero(Vector initialValue) {
-    return Vector.zeros(initialValue.size());
+class VectorAccumulatorV2 implements AccumulatorV2<MyVector, MyVector> {
+
+  private MyVector myVector = MyVector.createZeroVector();
+
+  public void reset() {
+    myVector.reset();
   }
-  public Vector addInPlace(Vector v1, Vector v2) {
-    v1.addInPlace(v2); return v1;
+
+  public void add(MyVector v) {
+    myVector.add(v);
   }
+  ...
 }
 
 // Then, create an Accumulator of this type:
-Accumulator<Vector> vecAccum = sc.accumulator(new Vector(...), new VectorAccumulatorParam());
+VectorAccumulatorV2 myVectorAcc = new VectorAccumulatorV2();
+// Then, register it into spark context:
+jsc.sc().register(myVectorAcc, "MyVectorAcc1");
 {% endhighlight %}
 
-In Java, Spark also supports the more general [Accumulable](api/java/index.html?org/apache/spark/Accumulable.html)
-interface to accumulate data where the resulting type is not the same as the elements added (e.g. build
-a list by collecting together elements).
+Note that, when programmers define their own type of AccumulatorV2, the resulting type can be different than that of the elements added.
 
 </div>
 
 <div data-lang="python"  markdown="1">
 
+An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks
+running on a cluster can then add to it using the `add` method or the `+=` operator. However, they cannot read its value.
+Only the driver program can read the accumulator's value, using its `value` method.
+
+The code below shows an accumulator being used to add up the elements of an array:
+
 {% highlight python %}
 >>> accum = sc.accumulator(0)
+>>> accum
 Accumulator<id=0, value=0>
 
 >>> sc.parallelize([1, 2, 3, 4]).foreach(lambda x: accum.add(x))
 ...
 10/09/29 18:41:08 INFO SparkContext: Tasks finished in 0.317106 s
 
-scala> accum.value
+>>> accum.value
 10
 {% endhighlight %}
 
@@ -1485,15 +1517,15 @@ Accumulators do not change the lazy evaluation model of Spark. If they are being
 
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
-val accum = sc.accumulator(0)
-data.map { x => accum += x; x }
+val accum = sc.longAccumulator
+data.map { x => accum.add(x); x }
 // Here, accum is still 0 because no actions have caused the map operation to be computed.
 {% endhighlight %}
 </div>
 
 <div data-lang="java"  markdown="1">
 {% highlight java %}
-LongAccumulator accum = sc.sc().longAccumulator();
+LongAccumulator accum = jsc.sc().longAccumulator();
 data.map(x -> { accum.add(x); return f(x); });
 // Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
@@ -1503,8 +1535,8 @@ data.map(x -> { accum.add(x); return f(x); });
 {% highlight python %}
 accum = sc.accumulator(0)
 def g(x):
-  accum.add(x)
-  return f(x)
+    accum.add(x)
+    return f(x)
 data.map(g)
 # Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
@@ -1530,49 +1562,6 @@ Simply create a `SparkContext` in your test with the master URL set to `local`, 
 and then call `SparkContext.stop()` to tear it down.
 Make sure you stop the context within a `finally` block or the test framework's `tearDown` method,
 as Spark does not support two contexts running concurrently in the same program.
-
-# Migrating from pre-1.0 Versions of Spark
-
-<div class="codetabs">
-
-<div data-lang="scala"  markdown="1">
-
-Spark 1.0 freezes the API of Spark Core for the 1.X series, in that any API available today that is
-not marked "experimental" or "developer API" will be supported in future versions.
-The only change for Scala users is that the grouping operations, e.g. `groupByKey`, `cogroup` and `join`,
-have changed from returning `(Key, Seq[Value])` pairs to `(Key, Iterable[Value])`.
-
-</div>
-
-<div data-lang="java"  markdown="1">
-
-Spark 1.0 freezes the API of Spark Core for the 1.X series, in that any API available today that is
-not marked "experimental" or "developer API" will be supported in future versions.
-Several changes were made to the Java API:
-
-* The Function classes in `org.apache.spark.api.java.function` became interfaces in 1.0, meaning that old
-  code that `extends Function` should `implement Function` instead.
-* New variants of the `map` transformations, like `mapToPair` and `mapToDouble`, were added to create RDDs
-  of special data types.
-* Grouping operations like `groupByKey`, `cogroup` and `join` have changed from returning
-  `(Key, List<Value>)` pairs to `(Key, Iterable<Value>)`.
-
-</div>
-
-<div data-lang="python"  markdown="1">
-
-Spark 1.0 freezes the API of Spark Core for the 1.X series, in that any API available today that is
-not marked "experimental" or "developer API" will be supported in future versions.
-The only change for Python users is that the grouping operations, e.g. `groupByKey`, `cogroup` and `join`,
-have changed from returning (key, list of values) pairs to (key, iterable of values).
-
-</div>
-
-</div>
-
-Migration guides are also available for [Spark Streaming](streaming-programming-guide.html#migration-guide-from-091-or-below-to-1x),
-[MLlib](ml-guide.html#migration-guide) and [GraphX](graphx-programming-guide.html#migrating-from-spark-091).
-
 
 # Where to Go from Here
 

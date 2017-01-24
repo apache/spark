@@ -36,7 +36,7 @@ import org.apache.spark.streaming.flume.sink._
 import org.apache.spark.streaming.receiver.Receiver
 
 /**
- * A [[ReceiverInputDStream]] that can be used to read data from several Flume agents running
+ * A `ReceiverInputDStream` that can be used to read data from several Flume agents running
  * [[org.apache.spark.streaming.flume.sink.SparkSink]]s.
  * @param _ssc Streaming context that will execute this input stream
  * @param addresses List of addresses at which SparkSinks are listening

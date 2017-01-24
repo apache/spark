@@ -42,7 +42,7 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
 import org.apache.spark.network.shuffle.protocol.*;
-import org.apache.spark.network.util.NettyUtils;
+import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
 
 
@@ -54,7 +54,7 @@ import org.apache.spark.network.util.TransportConf;
  * level shuffle block.
  */
 public class ExternalShuffleBlockHandler extends RpcHandler {
-  private final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockHandler.class);
 
   @VisibleForTesting
   final ExternalShuffleBlockResolver blockManager;
@@ -101,11 +101,13 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
           blocks.add(block);
         }
         long streamId = streamManager.registerStream(client.getClientId(), blocks.iterator());
-        logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
-                     streamId,
-                     msg.blockIds.length,
-                     client.getClientId(),
-                     NettyUtils.getRemoteAddress(client.getChannel()));
+        if (logger.isTraceEnabled()) {
+          logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
+                       streamId,
+                       msg.blockIds.length,
+                       client.getClientId(),
+                       getRemoteAddress(client.getChannel()));
+        }
         callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
         metrics.blockTransferRateBytes.mark(totalBlockSize);
       } finally {
