@@ -240,7 +240,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
             // TODO: improve `InMemoryCatalog` and remove this limitation.
             catalogTable = if (withHiveSupport) Some(table) else None)
 
-        LogicalRelation(dataSource.resolveRelation(false), catalogTable = Some(table))
+        LogicalRelation(dataSource.resolveRelation(checkFilesExist = false),
+          catalogTable = Some(table))
       }
     })
   }
