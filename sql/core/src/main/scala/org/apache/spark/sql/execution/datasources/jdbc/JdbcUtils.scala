@@ -20,6 +20,10 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Statement}
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+import scala.util.Try
+import scala.util.control.NonFatal
+
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
@@ -33,10 +37,6 @@ import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
-
-import scala.collection.JavaConverters._
-import scala.util.Try
-import scala.util.control.NonFatal
 
 /**
  * Util functions for JDBC tables.
@@ -764,7 +764,6 @@ object JdbcUtils extends Logging {
                                 statements: DataFrame,
                                 batchSize: Int = DEFAULT_BATCH_SIZE,
                                 maxConnections: Int = DEFAULT_MAX_CONNECTIONS): Unit = {
-    import statements.sparkSession.implicits._
     // To avoid overloading database coalesce to a set number of partitions if necessary
     val coalesced = if (statements.rdd.getNumPartitions > maxConnections) {
       statements.coalesce(maxConnections)
