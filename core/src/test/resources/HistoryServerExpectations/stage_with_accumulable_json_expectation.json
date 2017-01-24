@@ -29,167 +29,25 @@
     "value" : "5050"
   } ],
   "tasks" : {
-    "2" : {
-      "taskId" : 2,
-      "index" : 2,
+    "0" : {
+      "taskId" : 0,
+      "index" : 0,
       "attempt" : 0,
-      "launchTime" : "2015-03-16T19:25:36.522GMT",
+      "launchTime" : "2015-03-16T19:25:36.515GMT",
+      "duration" : 15,
       "executorId" : "<driver>",
       "host" : "localhost",
+      "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
       "accumulatorUpdates" : [ {
         "id" : 1,
         "name" : "my counter",
-        "update" : "378",
-        "value" : "378"
+        "update" : "78",
+        "value" : "5050"
       } ],
       "taskMetrics" : {
-        "executorDeserializeTime" : 13,
-        "executorDeserializeCpuTime" : 0,
-        "executorRunTime" : 15,
-        "executorCpuTime" : 0,
-        "resultSize" : 697,
-        "jvmGcTime" : 0,
-        "resultSerializationTime" : 2,
-        "memoryBytesSpilled" : 0,
-        "diskBytesSpilled" : 0,
-        "inputMetrics" : {
-          "bytesRead" : 0,
-          "recordsRead" : 0
-        },
-        "outputMetrics" : {
-          "bytesWritten" : 0,
-          "recordsWritten" : 0
-        },
-        "shuffleReadMetrics" : {
-          "remoteBlocksFetched" : 0,
-          "localBlocksFetched" : 0,
-          "fetchWaitTime" : 0,
-          "remoteBytesRead" : 0,
-          "localBytesRead" : 0,
-          "recordsRead" : 0
-        },
-        "shuffleWriteMetrics" : {
-          "bytesWritten" : 0,
-          "writeTime" : 0,
-          "recordsWritten" : 0
-        }
-      }
-    },
-    "5" : {
-      "taskId" : 5,
-      "index" : 5,
-      "attempt" : 0,
-      "launchTime" : "2015-03-16T19:25:36.523GMT",
-      "executorId" : "<driver>",
-      "host" : "localhost",
-      "taskLocality" : "PROCESS_LOCAL",
-      "speculative" : false,
-      "accumulatorUpdates" : [ {
-        "id" : 1,
-        "name" : "my counter",
-        "update" : "897",
-        "value" : "3750"
-      } ],
-      "taskMetrics" : {
-        "executorDeserializeTime" : 12,
-        "executorDeserializeCpuTime" : 0,
-        "executorRunTime" : 15,
-        "executorCpuTime" : 0,
-        "resultSize" : 697,
-        "jvmGcTime" : 0,
-        "resultSerializationTime" : 2,
-        "memoryBytesSpilled" : 0,
-        "diskBytesSpilled" : 0,
-        "inputMetrics" : {
-          "bytesRead" : 0,
-          "recordsRead" : 0
-        },
-        "outputMetrics" : {
-          "bytesWritten" : 0,
-          "recordsWritten" : 0
-        },
-        "shuffleReadMetrics" : {
-          "remoteBlocksFetched" : 0,
-          "localBlocksFetched" : 0,
-          "fetchWaitTime" : 0,
-          "remoteBytesRead" : 0,
-          "localBytesRead" : 0,
-          "recordsRead" : 0
-        },
-        "shuffleWriteMetrics" : {
-          "bytesWritten" : 0,
-          "writeTime" : 0,
-          "recordsWritten" : 0
-        }
-      }
-    },
-    "4" : {
-      "taskId" : 4,
-      "index" : 4,
-      "attempt" : 0,
-      "launchTime" : "2015-03-16T19:25:36.522GMT",
-      "executorId" : "<driver>",
-      "host" : "localhost",
-      "taskLocality" : "PROCESS_LOCAL",
-      "speculative" : false,
-      "accumulatorUpdates" : [ {
-        "id" : 1,
-        "name" : "my counter",
-        "update" : "678",
-        "value" : "2853"
-      } ],
-      "taskMetrics" : {
-        "executorDeserializeTime" : 12,
-        "executorDeserializeCpuTime" : 0,
-        "executorRunTime" : 15,
-        "executorCpuTime" : 0,
-        "resultSize" : 697,
-        "jvmGcTime" : 0,
-        "resultSerializationTime" : 1,
-        "memoryBytesSpilled" : 0,
-        "diskBytesSpilled" : 0,
-        "inputMetrics" : {
-          "bytesRead" : 0,
-          "recordsRead" : 0
-        },
-        "outputMetrics" : {
-          "bytesWritten" : 0,
-          "recordsWritten" : 0
-        },
-        "shuffleReadMetrics" : {
-          "remoteBlocksFetched" : 0,
-          "localBlocksFetched" : 0,
-          "fetchWaitTime" : 0,
-          "remoteBytesRead" : 0,
-          "localBytesRead" : 0,
-          "recordsRead" : 0
-        },
-        "shuffleWriteMetrics" : {
-          "bytesWritten" : 0,
-          "writeTime" : 0,
-          "recordsWritten" : 0
-        }
-      }
-    },
-    "7" : {
-      "taskId" : 7,
-      "index" : 7,
-      "attempt" : 0,
-      "launchTime" : "2015-03-16T19:25:36.524GMT",
-      "executorId" : "<driver>",
-      "host" : "localhost",
-      "taskLocality" : "PROCESS_LOCAL",
-      "speculative" : false,
-      "accumulatorUpdates" : [ {
-        "id" : 1,
-        "name" : "my counter",
-        "update" : "1222",
-        "value" : "4972"
-      } ],
-      "taskMetrics" : {
-        "executorDeserializeTime" : 12,
+        "executorDeserializeTime" : 14,
         "executorDeserializeCpuTime" : 0,
         "executorRunTime" : 15,
         "executorCpuTime" : 0,
@@ -226,8 +84,10 @@
       "index" : 1,
       "attempt" : 0,
       "launchTime" : "2015-03-16T19:25:36.521GMT",
+      "duration" : 15,
       "executorId" : "<driver>",
       "host" : "localhost",
+      "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
       "accumulatorUpdates" : [ {
@@ -269,13 +129,65 @@
         }
       }
     },
+    "2" : {
+      "taskId" : 2,
+      "index" : 2,
+      "attempt" : 0,
+      "launchTime" : "2015-03-16T19:25:36.522GMT",
+      "duration" : 15,
+      "executorId" : "<driver>",
+      "host" : "localhost",
+      "status" : "SUCCESS",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ {
+        "id" : 1,
+        "name" : "my counter",
+        "update" : "378",
+        "value" : "378"
+      } ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 13,
+        "executorDeserializeCpuTime" : 0,
+        "executorRunTime" : 15,
+        "executorCpuTime" : 0,
+        "resultSize" : 697,
+        "jvmGcTime" : 0,
+        "resultSerializationTime" : 2,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
+      }
+    },
     "3" : {
       "taskId" : 3,
       "index" : 3,
       "attempt" : 0,
       "launchTime" : "2015-03-16T19:25:36.522GMT",
+      "duration" : 15,
       "executorId" : "<driver>",
       "host" : "localhost",
+      "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
       "accumulatorUpdates" : [ {
@@ -317,13 +229,115 @@
         }
       }
     },
+    "4" : {
+      "taskId" : 4,
+      "index" : 4,
+      "attempt" : 0,
+      "launchTime" : "2015-03-16T19:25:36.522GMT",
+      "duration" : 15,
+      "executorId" : "<driver>",
+      "host" : "localhost",
+      "status" : "SUCCESS",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ {
+        "id" : 1,
+        "name" : "my counter",
+        "update" : "678",
+        "value" : "2853"
+      } ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 12,
+        "executorDeserializeCpuTime" : 0,
+        "executorRunTime" : 15,
+        "executorCpuTime" : 0,
+        "resultSize" : 697,
+        "jvmGcTime" : 0,
+        "resultSerializationTime" : 1,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
+      }
+    },
+    "5" : {
+      "taskId" : 5,
+      "index" : 5,
+      "attempt" : 0,
+      "launchTime" : "2015-03-16T19:25:36.523GMT",
+      "duration" : 15,
+      "executorId" : "<driver>",
+      "host" : "localhost",
+      "status" : "SUCCESS",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ {
+        "id" : 1,
+        "name" : "my counter",
+        "update" : "897",
+        "value" : "3750"
+      } ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 12,
+        "executorDeserializeCpuTime" : 0,
+        "executorRunTime" : 15,
+        "executorCpuTime" : 0,
+        "resultSize" : 697,
+        "jvmGcTime" : 0,
+        "resultSerializationTime" : 2,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
+      }
+    },
     "6" : {
       "taskId" : 6,
       "index" : 6,
       "attempt" : 0,
       "launchTime" : "2015-03-16T19:25:36.523GMT",
+      "duration" : 15,
       "executorId" : "<driver>",
       "host" : "localhost",
+      "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
       "accumulatorUpdates" : [ {
@@ -365,23 +379,25 @@
         }
       }
     },
-    "0" : {
-      "taskId" : 0,
-      "index" : 0,
+    "7" : {
+      "taskId" : 7,
+      "index" : 7,
       "attempt" : 0,
-      "launchTime" : "2015-03-16T19:25:36.515GMT",
+      "launchTime" : "2015-03-16T19:25:36.524GMT",
+      "duration" : 15,
       "executorId" : "<driver>",
       "host" : "localhost",
+      "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
       "accumulatorUpdates" : [ {
         "id" : 1,
         "name" : "my counter",
-        "update" : "78",
-        "value" : "5050"
+        "update" : "1222",
+        "value" : "4972"
       } ],
       "taskMetrics" : {
-        "executorDeserializeTime" : 14,
+        "executorDeserializeTime" : 12,
         "executorDeserializeCpuTime" : 0,
         "executorRunTime" : 15,
         "executorCpuTime" : 0,
