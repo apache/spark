@@ -186,12 +186,13 @@ case class CatalogTable(
   /**
    * schema of this table's partition columns
    */
-  def partitionSchema: StructType = StructType(partitionColumnNames.map {
-    p => schema.find(_.name == p).getOrElse(
-      throw new AnalysisException(s"Partition column [$p] " +
-        s"did not exist in schema ${schema.toString}")
-    )
-  })
+  def partitionSchema: StructType = {
+    assert(schema.takeRight(partitionColumnNames.length).map(_.name) == partitionColumnNames)
+
+    StructType(schema.filter { c =>
+      partitionColumnNames.contains(c.name)
+    })
+  }
 
   /** Return the database this table was specified to belong to, assuming it exists. */
   def database: String = identifier.database.getOrElse {
