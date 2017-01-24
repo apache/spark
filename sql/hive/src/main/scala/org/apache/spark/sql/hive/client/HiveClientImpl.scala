@@ -426,6 +426,9 @@ private[hive] class HiveClientImpl(
         // in the function toHiveTable.
         properties = properties.filter(kv => kv._1 != "comment" && kv._1 != "EXTERNAL"),
         comment = properties.get("comment"),
+        // In older versions of Spark(before 2.2.0), we expand the view original text and store
+        // that into `viewExpandedText`, and that should be used in view resolution. So we get
+        // `viewExpandedText` instead of `viewOriginalText` for viewText here.
         viewText = Option(h.getViewExpandedText),
         unsupportedFeatures = unsupportedFeatures)
     }
