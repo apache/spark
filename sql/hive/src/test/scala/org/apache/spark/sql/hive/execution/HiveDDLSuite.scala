@@ -1386,9 +1386,8 @@ class HiveDDLSuite
         Seq(5 -> "e").toDF("i", "j")
           .write.format("hive").mode("append").saveAsTable("t1")
       }
-      assert(e.message.contains("The format of the existing table default.t1 is `class " +
-        "org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat`. It doesn't " +
-        "match the specified format `class org.apache.spark.sql.hive.execution.HiveFileFormat`."))
+      assert(e.message.contains("The format of the existing table default.t1 is " +
+        "`ParquetFileFormat`. It doesn't match the specified format `HiveFileFormat`."))
     }
   }
 
