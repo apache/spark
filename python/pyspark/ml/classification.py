@@ -134,14 +134,14 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
     @keyword_only
     @since("2.2.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
-                 fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
-                 aggregationDepth=2):
+                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
+                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
+                  aggregationDepth=2):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
-                 fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
-                 aggregationDepth=2):
+                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
+                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
+                  aggregationDepth=2):
         Sets params for Linear SVM Classifier.
         """
         kwargs = self.setParams._input_kwargs
