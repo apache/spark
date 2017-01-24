@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
-import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.execution.command.{DDLUtils, RunnableCommand}
 import org.apache.spark.sql.types._
 
 case class CreateTable(
@@ -65,6 +65,10 @@ case class CreateTempViewUsing(
   }
 
   def run(sparkSession: SparkSession): Seq[Row] = {
+    if (provider.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+      throw new AnalysisException("Currently Hive data source can not be created as a view")
+    }
+
     val dataSource = DataSource(
       sparkSession,
       userSpecifiedSchema = userSpecifiedSchema,

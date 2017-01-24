@@ -1162,14 +1162,15 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("create a temp view using hive") {
     val tableName = "tab1"
     withTable(tableName) {
-      sql(
-        s"""
-           |CREATE TEMPORARY VIEW $tableName
-           |(col1 int)
-           |USING hive
-         """.stripMargin)
-      val tempView = spark.sessionState.catalog.getTempView(tableName)
-      assert(tempView.isDefined, "create a temp view using hive should success")
+      val e = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TEMPORARY VIEW $tableName
+             |(col1 int)
+             |USING hive
+           """.stripMargin)
+      }.getMessage
+      assert(e.contains("Currently Hive data source can not be created as a view"))
     }
   }
 
