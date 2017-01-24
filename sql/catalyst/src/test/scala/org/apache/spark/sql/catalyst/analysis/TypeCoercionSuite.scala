@@ -916,6 +916,18 @@ class TypeCoercionSuite extends PlanTest {
     ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
   }
+
+  test("binary comparison with string promotion") {
+    ruleTest(PromoteStrings,
+      GreaterThan(Literal("123"), Literal(1)),
+      GreaterThan(Cast(Literal("123"), IntegerType), Literal(1)))
+    ruleTest(PromoteStrings,
+      LessThan(Literal(true), Literal("123")),
+      LessThan(Literal(true), Cast(Literal("123"), BooleanType)))
+    ruleTest(PromoteStrings,
+      EqualTo(Literal(Array(1, 2)), Literal("123")),
+      EqualTo(Literal(Array(1, 2)), Literal("123")))
+  }
 }
 
 

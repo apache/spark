@@ -448,7 +448,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
-      sql("select num_str + 1.2 from jsonTable where num_str > 14"),
+      sql("select num_str + 1.2 from jsonTable where num_str > 14d"),
       Row(92233720368547758071.2)
     )
 
