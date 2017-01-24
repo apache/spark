@@ -88,18 +88,11 @@ class HiveAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
       InsertIntoHiveTable(table, partSpec, query, overwrite, ifNotExists)
 
     case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
-      // Currently `DataFrameWriter.saveAsTable` doesn't support the Append mode of hive serde
-      // tables yet.
-      if (mode == SaveMode.Append) {
-        throw new AnalysisException(
-          "CTAS for hive serde tables does not support append semantics.")
-      }
-
       val dbName = tableDesc.identifier.database.getOrElse(session.catalog.currentDatabase)
       CreateHiveTableAsSelectCommand(
         tableDesc.copy(identifier = tableDesc.identifier.copy(database = Some(dbName))),
         query,
-        mode == SaveMode.Ignore)
+        mode)
   }
 }
 
