@@ -33,7 +33,10 @@ import org.apache.spark.sql.types._
 
 object Arrow {
 
-  private def sparkTypeToArrowType(dataType: DataType): ArrowType = {
+  /**
+   * Map a Spark Dataset type to ArrowType.
+   */
+  private[sql] def sparkTypeToArrowType(dataType: DataType): ArrowType = {
     dataType match {
       case BooleanType => ArrowType.Bool.INSTANCE
       case ShortType => new ArrowType.Int(8 * ShortType.defaultSize, true)
@@ -50,24 +53,22 @@ object Arrow {
   /**
    * Transfer an array of InternalRow to an ArrowRecordBatch.
    */
-  def internalRowsToArrowRecordBatch(
+  private[sql] def internalRowsToArrowRecordBatch(
       rows: Array[InternalRow],
       schema: StructType,
       allocator: RootAllocator): ArrowRecordBatch = {
-    val bufAndField = schema.fields.zipWithIndex.map { case (field, ordinal) =>
+    val (fieldNodes, buffers) = schema.fields.zipWithIndex.map { case (field, ordinal) =>
       internalRowToArrowBuf(rows, ordinal, field, allocator)
-    }
+    }.unzip
 
-    val fieldNodes = bufAndField.flatMap(_._1).toList.asJava
-    val buffers = bufAndField.flatMap(_._2).toList.asJava
-
-    new ArrowRecordBatch(rows.length, fieldNodes, buffers)
+    new ArrowRecordBatch(rows.length,
+      fieldNodes.flatten.toList.asJava, buffers.flatten.toList.asJava)
   }
 
   /**
-   * Convert an array of InternalRow to an ArrowBuf.
+   * Write a Field from array of InternalRow to an ArrowBuf.
    */
-  def internalRowToArrowBuf(
+  private def internalRowToArrowBuf(
       rows: Array[InternalRow],
       ordinal: Int,
       field: StructField,
@@ -91,32 +92,14 @@ object Arrow {
     (arrowFieldNodes.toArray, arrowBufs.toArray)
   }
 
+  /**
+   * Convert a Spark Dataset schema to Arrow schema.
+   */
   private[sql] def schemaToArrowSchema(schema: StructType): Schema = {
-    val arrowFields = schema.fields.map(sparkFieldToArrowField)
-    new Schema(arrowFields.toList.asJava)
-  }
-
-  private[sql] def sparkFieldToArrowField(sparkField: StructField): Field = {
-    val name = sparkField.name
-    val dataType = sparkField.dataType
-    val nullable = sparkField.nullable
-    new Field(name, nullable, sparkTypeToArrowType(dataType), List.empty[Field].asJava)
-  }
-}
-
-object ColumnWriter {
-  def apply(allocator: BaseAllocator, dataType: DataType): ColumnWriter = {
-    dataType match {
-      case BooleanType => new BooleanColumnWriter(allocator)
-      case ShortType => new ShortColumnWriter(allocator)
-      case IntegerType => new IntegerColumnWriter(allocator)
-      case LongType => new LongColumnWriter(allocator)
-      case FloatType => new FloatColumnWriter(allocator)
-      case DoubleType => new DoubleColumnWriter(allocator)
-      case ByteType => new ByteColumnWriter(allocator)
-      case StringType => new UTF8StringColumnWriter(allocator)
-      case _ => throw new UnsupportedOperationException(s"Unsupported data type: ${dataType}")
+    val arrowFields = schema.fields.map { f =>
+      new Field(f.name, f.nullable, sparkTypeToArrowType(f.dataType), List.empty[Field].asJava)
     }
+    new Schema(arrowFields.toList.asJava)
   }
 }
 
@@ -132,15 +115,14 @@ private[sql] trait ColumnWriter {
  */
 private[sql] abstract class PrimitiveColumnWriter(protected val allocator: BaseAllocator)
     extends ColumnWriter {
-  protected val valueVector: BaseDataValueVector
-  protected val valueMutator: BaseMutator
-
-  protected var count = 0
-  protected var nullCount = 0
+  protected def valueVector: BaseDataValueVector
+  protected def valueMutator: BaseMutator
 
   protected def setNull(): Unit
   protected def setValue(row: InternalRow, ordinal: Int): Unit
-  protected def valueBuffers(): Seq[ArrowBuf] = valueVector.getBuffers(true) // TODO: check the flag
+
+  protected var count = 0
+  protected var nullCount = 0
 
   override def init(initialSize: Int): Unit = {
     valueVector.allocateNew()
@@ -160,6 +142,7 @@ private[sql] abstract class PrimitiveColumnWriter(protected val allocator: BaseA
   override def finish(): (Seq[ArrowFieldNode], Seq[ArrowBuf]) = {
     valueMutator.setValueCount(count)
     val fieldNode = new ArrowFieldNode(count, nullCount)
+    val valueBuffers: Seq[ArrowBuf] = valueVector.getBuffers(true) // TODO: check the flag
     (List(fieldNode), valueBuffers)
   }
 }
@@ -253,5 +236,21 @@ private[sql] class UTF8StringColumnWriter(allocator: BaseAllocator)
   override def setValue(row: InternalRow, ordinal: Int): Unit = {
     val bytes = row.getUTF8String(ordinal).getBytes
     valueMutator.setSafe(count, bytes, 0, bytes.length)
+  }
+}
+
+private[sql] object ColumnWriter {
+  def apply(allocator: BaseAllocator, dataType: DataType): ColumnWriter = {
+    dataType match {
+      case BooleanType => new BooleanColumnWriter(allocator)
+      case ShortType => new ShortColumnWriter(allocator)
+      case IntegerType => new IntegerColumnWriter(allocator)
+      case LongType => new LongColumnWriter(allocator)
+      case FloatType => new FloatColumnWriter(allocator)
+      case DoubleType => new DoubleColumnWriter(allocator)
+      case ByteType => new ByteColumnWriter(allocator)
+      case StringType => new UTF8StringColumnWriter(allocator)
+      case _ => throw new UnsupportedOperationException(s"Unsupported data type: ${dataType}")
+    }
   }
 }
