@@ -66,7 +66,7 @@ case class CreateTempViewUsing(
 
   def run(sparkSession: SparkSession): Seq[Row] = {
     if (provider.toLowerCase == DDLUtils.HIVE_PROVIDER) {
-      throw new AnalysisException("Hive data source can not be used with tables," +
+      throw new AnalysisException("Hive data source can only be used with tables, " +
         "you can't use it with CREATE TEMP VIEW USING")
     }
 

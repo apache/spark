@@ -1170,7 +1170,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
              |USING hive
            """.stripMargin)
       }.getMessage
-      assert(e.contains("Hive data source can not be used with tables,you can't use it with " +
+      assert(e.contains("Hive data source can only be used with tables, you can't use it with " +
         "CREATE TEMP VIEW USING"))
     }
   }
