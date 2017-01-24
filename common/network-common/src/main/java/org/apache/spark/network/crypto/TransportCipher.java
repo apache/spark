@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.sasl.aes;
+package org.apache.spark.network.crypto;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -25,115 +25,91 @@ import java.util.Properties;
 import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.spec.IvParameterSpec;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.util.AbstractReferenceCounted;
-import org.apache.commons.crypto.cipher.CryptoCipherFactory;
-import org.apache.commons.crypto.random.CryptoRandom;
-import org.apache.commons.crypto.random.CryptoRandomFactory;
 import org.apache.commons.crypto.stream.CryptoInputStream;
 import org.apache.commons.crypto.stream.CryptoOutputStream;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.util.ByteArrayReadableChannel;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
-import org.apache.spark.network.util.TransportConf;
 
 /**
- * AES cipher for encryption and decryption.
+ * Cipher for encryption and decryption.
  */
-public class AesCipher {
-  private static final Logger logger = LoggerFactory.getLogger(AesCipher.class);
-  public static final String ENCRYPTION_HANDLER_NAME = "AesEncryption";
-  public static final String DECRYPTION_HANDLER_NAME = "AesDecryption";
-  public static final int STREAM_BUFFER_SIZE = 1024 * 32;
-  public static final String TRANSFORM = "AES/CTR/NoPadding";
+public class TransportCipher {
+  @VisibleForTesting
+  static final String ENCRYPTION_HANDLER_NAME = "TransportEncryption";
+  private static final String DECRYPTION_HANDLER_NAME = "TransportDecryption";
+  private static final int STREAM_BUFFER_SIZE = 1024 * 32;
 
-  private final SecretKeySpec inKeySpec;
-  private final IvParameterSpec inIvSpec;
-  private final SecretKeySpec outKeySpec;
-  private final IvParameterSpec outIvSpec;
-  private final Properties properties;
+  private final Properties conf;
+  private final String cipher;
+  private final SecretKeySpec key;
+  private final byte[] inIv;
+  private final byte[] outIv;
 
-  public AesCipher(AesConfigMessage configMessage, TransportConf conf) throws IOException  {
-    this.properties = conf.cryptoConf();
-    this.inKeySpec = new SecretKeySpec(configMessage.inKey, "AES");
-    this.inIvSpec = new IvParameterSpec(configMessage.inIv);
-    this.outKeySpec = new SecretKeySpec(configMessage.outKey, "AES");
-    this.outIvSpec = new IvParameterSpec(configMessage.outIv);
+  public TransportCipher(
+      Properties conf,
+      String cipher,
+      SecretKeySpec key,
+      byte[] inIv,
+      byte[] outIv) {
+    this.conf = conf;
+    this.cipher = cipher;
+    this.key = key;
+    this.inIv = inIv;
+    this.outIv = outIv;
   }
 
-  /**
-   * Create AES crypto output stream
-   * @param ch The underlying channel to write out.
-   * @return Return output crypto stream for encryption.
-   * @throws IOException
-   */
+  public String getCipherTransformation() {
+    return cipher;
+  }
+
+  @VisibleForTesting
+  SecretKeySpec getKey() {
+    return key;
+  }
+
+  /** The IV for the input channel (i.e. output channel of the remote side). */
+  public byte[] getInputIv() {
+    return inIv;
+  }
+
+  /** The IV for the output channel (i.e. input channel of the remote side). */
+  public byte[] getOutputIv() {
+    return outIv;
+  }
+
   private CryptoOutputStream createOutputStream(WritableByteChannel ch) throws IOException {
-    return new CryptoOutputStream(TRANSFORM, properties, ch, outKeySpec, outIvSpec);
+    return new CryptoOutputStream(cipher, conf, ch, key, new IvParameterSpec(outIv));
   }
 
-  /**
-   * Create AES crypto input stream
-   * @param ch The underlying channel used to read data.
-   * @return Return input crypto stream for decryption.
-   * @throws IOException
-   */
   private CryptoInputStream createInputStream(ReadableByteChannel ch) throws IOException {
-    return new CryptoInputStream(TRANSFORM, properties, ch, inKeySpec, inIvSpec);
+    return new CryptoInputStream(cipher, conf, ch, key, new IvParameterSpec(inIv));
   }
 
   /**
-   * Add handlers to channel
+   * Add handlers to channel.
+   *
    * @param ch the channel for adding handlers
    * @throws IOException
    */
   public void addToChannel(Channel ch) throws IOException {
     ch.pipeline()
-      .addFirst(ENCRYPTION_HANDLER_NAME, new AesEncryptHandler(this))
-      .addFirst(DECRYPTION_HANDLER_NAME, new AesDecryptHandler(this));
+      .addFirst(ENCRYPTION_HANDLER_NAME, new EncryptionHandler(this))
+      .addFirst(DECRYPTION_HANDLER_NAME, new DecryptionHandler(this));
   }
 
-  /**
-   * Create the configuration message
-   * @param conf is the local transport configuration.
-   * @return Config message for sending.
-   */
-  public static AesConfigMessage createConfigMessage(TransportConf conf) {
-    int keySize = conf.aesCipherKeySize();
-    Properties properties = conf.cryptoConf();
-
-    try {
-      int paramLen = CryptoCipherFactory.getCryptoCipher(AesCipher.TRANSFORM, properties)
-        .getBlockSize();
-      byte[] inKey = new byte[keySize];
-      byte[] outKey = new byte[keySize];
-      byte[] inIv = new byte[paramLen];
-      byte[] outIv = new byte[paramLen];
-
-      CryptoRandom random = CryptoRandomFactory.getCryptoRandom(properties);
-      random.nextBytes(inKey);
-      random.nextBytes(outKey);
-      random.nextBytes(inIv);
-      random.nextBytes(outIv);
-
-      return new AesConfigMessage(inKey, inIv, outKey, outIv);
-    } catch (Exception e) {
-      logger.error("AES config error", e);
-      throw Throwables.propagate(e);
-    }
-  }
-
-  private static class AesEncryptHandler extends ChannelOutboundHandlerAdapter {
+  private static class EncryptionHandler extends ChannelOutboundHandlerAdapter {
     private final ByteArrayWritableChannel byteChannel;
     private final CryptoOutputStream cos;
 
-    AesEncryptHandler(AesCipher cipher) throws IOException {
-      byteChannel = new ByteArrayWritableChannel(AesCipher.STREAM_BUFFER_SIZE);
+    EncryptionHandler(TransportCipher cipher) throws IOException {
+      byteChannel = new ByteArrayWritableChannel(STREAM_BUFFER_SIZE);
       cos = cipher.createOutputStream(byteChannel);
     }
 
@@ -153,11 +129,11 @@ public class AesCipher {
     }
   }
 
-  private static class AesDecryptHandler extends ChannelInboundHandlerAdapter {
+  private static class DecryptionHandler extends ChannelInboundHandlerAdapter {
     private final CryptoInputStream cis;
     private final ByteArrayReadableChannel byteChannel;
 
-    AesDecryptHandler(AesCipher cipher) throws IOException {
+    DecryptionHandler(TransportCipher cipher) throws IOException {
       byteChannel = new ByteArrayReadableChannel();
       cis = cipher.createInputStream(byteChannel);
     }
@@ -207,7 +183,7 @@ public class AesCipher {
       this.buf = isByteBuf ? (ByteBuf) msg : null;
       this.region = isByteBuf ? null : (FileRegion) msg;
       this.transferred = 0;
-      this.byteRawChannel = new ByteArrayWritableChannel(AesCipher.STREAM_BUFFER_SIZE);
+      this.byteRawChannel = new ByteArrayWritableChannel(STREAM_BUFFER_SIZE);
       this.cos = cos;
       this.byteEncChannel = ch;
     }
