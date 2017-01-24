@@ -2048,13 +2048,12 @@ class SparkSubmitTests(unittest.TestCase):
             |finally:
             |    sc.stop()
             """)
-        try:
-            subprocess.check_output(
-                [self.sparkSubmit, "--master", "local", script],
-                stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError as e:
-            # This gives us a better error message for debugging.
-            self.fail("Test exited with {0}, output:\n{1}".format(e.returncode, e.output))
+        proc = subprocess.Popen(
+            [self.sparkSubmit, "--master", "local", script],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT)
+        out, err = proc.communicate()
+        self.assertEqual(0, proc.returncode, msg="Process failed with error:\n {0}".format(out))
 
 
 class ContextTests(unittest.TestCase):
