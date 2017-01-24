@@ -761,7 +761,7 @@ object JdbcUtils extends Logging {
    * @param maxConnections Maximum number of simultaneous connections to open to the database
    */
   private def executeStatements(targetDb: String,
-                                statements: Dataset[String],
+                                statements: DataFrame,
                                 batchSize: Int = DEFAULT_BATCH_SIZE,
                                 maxConnections: Int = DEFAULT_MAX_CONNECTIONS): Unit = {
     // To avoid overloading database coalesce to a set number of partitions if necessary
@@ -780,7 +780,7 @@ object JdbcUtils extends Logging {
       try {
         batch.grouped(batchSize).foreach { rowBatch =>
           rowBatch.foreach { statement =>
-            st.addBatch(statement)
+            st.addBatch(statement.getString(0))
           }
           st.executeBatch()
           dbc.commit()
@@ -865,9 +865,7 @@ object JdbcUtils extends Logging {
       throw new NotImplementedError("Adding data to a non-existing table is not yet supported.")
     }
 
-    val statements = df.map(row => {
-      genUpdateScript(row, schema, tableName, idColumn)
-    })
+    val statements = df.map(genUpdateScript(_, schema, tableName, idColumn)).toDF()
 
     executeStatements(targetDb, statements, batchSize, maxConnections)
   }
@@ -895,9 +893,7 @@ object JdbcUtils extends Logging {
       throw new NotImplementedError("Adding data to a non-existing table is not yet supported.")
     }
 
-    val statements = df.map(row => {
-      genInsertScript(row, schema, tableName)
-    })
+    val statements = df.map(genInsertScript(_, schema, tableName)).toDF()
 
     executeStatements(targetDb, statements, batchSize, maxConnections)
   }
