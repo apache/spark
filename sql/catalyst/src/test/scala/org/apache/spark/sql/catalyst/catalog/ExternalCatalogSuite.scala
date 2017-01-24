@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.net.URI
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -365,10 +367,10 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
     val partition1 =
       CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "2"),
-        storageFormat.copy(locationUri = Some(newLocationPart1)))
+        storageFormat.copy(locationUri = Some(new URI(newLocationPart1))))
     val partition2 =
       CatalogTablePartition(Map("partCol1" -> "3", "partCol2" -> "4"),
-        storageFormat.copy(locationUri = Some(newLocationPart2)))
+        storageFormat.copy(locationUri = Some(new URI(newLocationPart2))))
     catalog.createPartitions("db1", "tbl", Seq(partition1), ignoreIfExists = false)
     catalog.createPartitions("db1", "tbl", Seq(partition2), ignoreIfExists = false)
 
@@ -560,8 +562,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       val oldPart1 = catalog.getPartition("db2", "tbl2", part1.spec)
       val oldPart2 = catalog.getPartition("db2", "tbl2", part2.spec)
       catalog.alterPartitions("db2", "tbl2", Seq(
-        oldPart1.copy(storage = storageFormat.copy(locationUri = Some(newLocation))),
-        oldPart2.copy(storage = storageFormat.copy(locationUri = Some(newLocation)))))
+        oldPart1.copy(storage = storageFormat.copy(locationUri = Some(new URI(newLocation)))),
+        oldPart2.copy(storage = storageFormat.copy(locationUri = Some(new URI(newLocation))))))
       val newPart1 = catalog.getPartition("db2", "tbl2", part1.spec)
       val newPart2 = catalog.getPartition("db2", "tbl2", part2.spec)
       assert(newPart1.storage.locationUri == Some(newLocation))
@@ -742,7 +744,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       identifier = TableIdentifier("external_table", Some("db1")),
       tableType = CatalogTableType.EXTERNAL,
       storage = CatalogStorageFormat(
-        Some(Utils.createTempDir().getAbsolutePath),
+        Some(Utils.createTempDir().toURI),
         None, None, None, false, Map.empty),
       schema = new StructType().add("a", "int").add("b", "string"),
       provider = Some(defaultProvider)
@@ -790,7 +792,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val partWithExistingDir = CatalogTablePartition(
       Map("partCol1" -> "7", "partCol2" -> "8"),
       CatalogStorageFormat(
-        Some(tempPath.toURI.toString),
+        Some(tempPath.toURI),
         None, None, None, false, Map.empty))
     catalog.createPartitions("db1", "tbl", Seq(partWithExistingDir), ignoreIfExists = false)
 
@@ -799,7 +801,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val partWithNonExistingDir = CatalogTablePartition(
       Map("partCol1" -> "9", "partCol2" -> "10"),
       CatalogStorageFormat(
-        Some(tempPath.toURI.toString),
+        Some(tempPath.toURI),
         None, None, None, false, Map.empty))
     catalog.createPartitions("db1", "tbl", Seq(partWithNonExistingDir), ignoreIfExists = false)
     assert(tempPath.exists())
@@ -895,7 +897,7 @@ abstract class CatalogTestUtils {
     CatalogTable(
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
-      storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().getAbsolutePath)),
+      storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().toURI)),
       schema = new StructType()
         .add("col1", "int")
         .add("col2", "string")

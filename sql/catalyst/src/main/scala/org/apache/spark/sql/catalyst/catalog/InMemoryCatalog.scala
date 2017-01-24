@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.io.IOException
+import java.net.URI
 
 import scala.collection.mutable
 
@@ -211,7 +212,7 @@ class InMemoryCatalog(
             throw new SparkException(s"Unable to create table $table as failed " +
               s"to create its directory $defaultTableLocation", e)
         }
-        tableDefinition.withNewStorage(locationUri = Some(defaultTableLocation.toUri.toString))
+        tableDefinition.withNewStorage(locationUri = Some(defaultTableLocation.toUri))
       } else {
         tableDefinition
       }
@@ -283,7 +284,7 @@ class InMemoryCatalog(
           throw new SparkException(s"Unable to rename table $oldName to $newName as failed " +
             s"to rename its directory $oldDir", e)
       }
-      oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri.toString))
+      oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri))
     }
 
     catalog(db).tables.put(newName, oldDesc)
@@ -392,7 +393,7 @@ class InMemoryCatalog(
 
       existingParts.put(
         p.spec,
-        p.copy(storage = p.storage.copy(locationUri = Some(partitionPath.toString))))
+        p.copy(storage = p.storage.copy(locationUri = Some(partitionPath.toUri))))
     }
   }
 
@@ -465,7 +466,7 @@ class InMemoryCatalog(
         }
         oldPartition.copy(
           spec = newSpec,
-          storage = oldPartition.storage.copy(locationUri = Some(newPartPath.toString)))
+          storage = oldPartition.storage.copy(locationUri = Some(newPartPath.toUri)))
       } else {
         oldPartition.copy(spec = newSpec)
       }

@@ -79,7 +79,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   private def generateTable(catalog: SessionCatalog, name: TableIdentifier): CatalogTable = {
     val storage =
       CatalogStorageFormat(
-        locationUri = Some(catalog.defaultTablePath(name)),
+        locationUri = Some(new Path(catalog.defaultTablePath(name)).toUri),
         inputFormat = None,
         outputFormat = None,
         serde = None,
@@ -1786,7 +1786,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         sql("CREATE TABLE tbl(i INT) USING parquet")
         sql("INSERT INTO tbl SELECT 1")
         checkAnswer(spark.table("tbl"), Row(1))
-        val defaultTablePath = spark.sessionState.catalog
+        val defaultTableUri = spark.sessionState.catalog
           .getTableMetadata(TableIdentifier("tbl")).storage.locationUri.get
 
         sql(s"ALTER TABLE tbl SET LOCATION '${dir.getCanonicalPath}'")
@@ -1794,7 +1794,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         // SET LOCATION won't move data from previous table path to new table path.
         assert(spark.table("tbl").count() == 0)
         // the previous table path should be still there.
-        assert(new File(new URI(defaultTablePath)).exists())
+        assert(new File(defaultTableUri).exists())
 
         sql("INSERT INTO tbl SELECT 2")
         checkAnswer(spark.table("tbl"), Row(2))

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.net.URI
 import java.util.{ServiceConfigurationError, ServiceLoader}
 
 import scala.collection.JavaConverters._
@@ -612,6 +613,7 @@ object DataSource {
   def buildStorageFormatFromOptions(options: Map[String, String]): CatalogStorageFormat = {
     val path = new CaseInsensitiveMap(options).get("path")
     val optionsWithoutPath = options.filterKeys(_.toLowerCase != "path")
-    CatalogStorageFormat.empty.copy(locationUri = path, properties = optionsWithoutPath)
+    CatalogStorageFormat.empty.copy(locationUri = path.map(new URI(_)),
+      properties = optionsWithoutPath)
   }
 }

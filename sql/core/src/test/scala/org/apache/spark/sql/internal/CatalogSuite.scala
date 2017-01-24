@@ -481,7 +481,7 @@ class CatalogSuite
         options = Map.empty[String, String])
       val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
       assert(table.tableType == CatalogTableType.MANAGED)
-      val tablePath = new File(new URI(table.storage.locationUri.get))
+      val tablePath = new File(table.storage.locationUri.get)
       assert(tablePath.exists() && tablePath.listFiles().isEmpty)
 
       Seq((1)).toDF("i").write.insertInto("t")

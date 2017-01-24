@@ -226,7 +226,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
     cache.get(qualifiedTableName, new Callable[LogicalPlan]() {
       override def call(): LogicalPlan = {
-        val pathOption = table.storage.locationUri.map("path" -> _)
+        val pathOption = table.storage.locationUriString.map("path" -> _)
         val dataSource =
           DataSource(
             sparkSession,

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.net.URI
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -1015,7 +1016,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         identifier = TableIdentifier("not_skip_hive_metadata"),
         tableType = CatalogTableType.EXTERNAL,
         storage = CatalogStorageFormat.empty.copy(
-          locationUri = Some(tempPath.getCanonicalPath),
+          locationUri = Some(new URI(tempPath.getCanonicalPath)),
           properties = Map("skipHiveMetadata" -> "false")
         ),
         schema = schema,

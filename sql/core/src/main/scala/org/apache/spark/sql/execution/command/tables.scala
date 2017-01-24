@@ -491,7 +491,7 @@ case class DescribeTableCommand(
     append(buffer, "Owner:", table.owner, "")
     append(buffer, "Create Time:", new Date(table.createTime).toString, "")
     append(buffer, "Last Access Time:", new Date(table.lastAccessTime).toString, "")
-    append(buffer, "Location:", table.storage.locationUri.getOrElse(""), "")
+    append(buffer, "Location:", table.storage.locationUriString.getOrElse(""), "")
     append(buffer, "Table Type:", table.tableType.name, "")
     table.stats.foreach(s => append(buffer, "Statistics:", s.simpleString, ""))
 
@@ -581,7 +581,7 @@ case class DescribeTableCommand(
     append(buffer, "Partition Value:", s"[${partition.spec.values.mkString(", ")}]", "")
     append(buffer, "Database:", table.database, "")
     append(buffer, "Table:", tableIdentifier.table, "")
-    append(buffer, "Location:", partition.storage.locationUri.getOrElse(""), "")
+    append(buffer, "Location:", partition.storage.locationUriString.getOrElse(""), "")
     append(buffer, "Partition Parameters:", "", "")
     partition.parameters.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
@@ -941,7 +941,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
     val dataSourceOptions = metadata.storage.properties.map {
       case (key, value) => s"${quoteIdentifier(key)} '${escapeSingleQuotedString(value)}'"
-    } ++ metadata.storage.locationUri.flatMap { location =>
+    } ++ metadata.storage.locationUriString.flatMap { location =>
       if (metadata.tableType == MANAGED) {
         // If it's a managed table, omit PATH option. Spark SQL always creates external table
         // when the table creation DDL contains the PATH option.

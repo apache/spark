@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.net.URI
+
 import scala.collection.{GenMap, GenSeq}
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.concurrent.forkjoin.ForkJoinPool
@@ -426,7 +428,8 @@ case class AlterTableAddPartitionCommand(
         table.identifier.quotedString,
         sparkSession.sessionState.conf.resolver)
       // inherit table storage format (possibly except for location)
-      CatalogTablePartition(normalizedSpec, table.storage.copy(locationUri = location))
+      CatalogTablePartition(normalizedSpec, table.storage
+        .copy(locationUri = location.map(new URI(_))))
     }
     catalog.createPartitions(table.identifier, parts, ignoreIfExists = ifNotExists)
     Seq.empty[Row]
@@ -710,7 +713,7 @@ case class AlterTableRecoverPartitionsCommand(
         // inherit table storage format (possibly except for location)
         CatalogTablePartition(
           spec,
-          table.storage.copy(locationUri = Some(location.toUri.toString)),
+          table.storage.copy(locationUri = Some(location.toUri)),
           params)
       }
       spark.sessionState.catalog.createPartitions(tableName, parts, ignoreIfExists = true)
@@ -748,11 +751,13 @@ case class AlterTableSetLocationCommand(
           sparkSession, table, "ALTER TABLE ... SET LOCATION")
         // Partition spec is specified, so we set the location only for this partition
         val part = catalog.getPartition(table.identifier, spec)
-        val newPart = part.copy(storage = part.storage.copy(locationUri = Some(location)))
+        val newPart = part.copy(storage = part.storage.copy(
+          locationUri = Some(new URI(location)))
+        )
         catalog.alterPartitions(table.identifier, Seq(newPart))
       case None =>
         // No partition spec is specified, so we set the location for the table itself
-        catalog.alterTable(table.withNewStorage(locationUri = Some(location)))
+        catalog.alterTable(table.withNewStorage(locationUri = Some(new URI(location))))
     }
     Seq.empty[Row]
   }
