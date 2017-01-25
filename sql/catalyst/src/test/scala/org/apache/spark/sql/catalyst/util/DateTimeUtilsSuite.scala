@@ -27,6 +27,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class DateTimeUtilsSuite extends SparkFunSuite {
 
+  val TimeZonePST = TimeZone.getTimeZone("PST")
+
   private[this] def getInUTCDays(timestamp: Long): Int = {
     val tz = TimeZone.getDefault
     ((timestamp + tz.getOffset(timestamp)) / MILLIS_PER_DAY).toInt
@@ -384,27 +386,35 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("hours") {
-    val c = Calendar.getInstance()
+    val c = Calendar.getInstance(TimeZonePST)
     c.set(2015, 2, 18, 13, 2, 11)
-    assert(getHours(c.getTimeInMillis * 1000) === 13)
+    assert(getHours(c.getTimeInMillis * 1000, TimeZonePST) === 13)
+    assert(getHours(c.getTimeInMillis * 1000, TimeZoneGMT) === 20)
     c.set(2015, 12, 8, 2, 7, 9)
-    assert(getHours(c.getTimeInMillis * 1000) === 2)
+    assert(getHours(c.getTimeInMillis * 1000, TimeZonePST) === 2)
+    assert(getHours(c.getTimeInMillis * 1000, TimeZoneGMT) === 10)
   }
 
   test("minutes") {
-    val c = Calendar.getInstance()
+    val c = Calendar.getInstance(TimeZonePST)
     c.set(2015, 2, 18, 13, 2, 11)
-    assert(getMinutes(c.getTimeInMillis * 1000) === 2)
+    assert(getMinutes(c.getTimeInMillis * 1000, TimeZonePST) === 2)
+    assert(getMinutes(c.getTimeInMillis * 1000, TimeZoneGMT) === 2)
+    assert(getMinutes(c.getTimeInMillis * 1000, TimeZone.getTimeZone("Australia/North")) === 32)
     c.set(2015, 2, 8, 2, 7, 9)
-    assert(getMinutes(c.getTimeInMillis * 1000) === 7)
+    assert(getMinutes(c.getTimeInMillis * 1000, TimeZonePST) === 7)
+    assert(getMinutes(c.getTimeInMillis * 1000, TimeZoneGMT) === 7)
+    assert(getMinutes(c.getTimeInMillis * 1000, TimeZone.getTimeZone("Australia/North")) === 37)
   }
 
   test("seconds") {
-    val c = Calendar.getInstance()
+    val c = Calendar.getInstance(TimeZonePST)
     c.set(2015, 2, 18, 13, 2, 11)
-    assert(getSeconds(c.getTimeInMillis * 1000) === 11)
+    assert(getSeconds(c.getTimeInMillis * 1000, TimeZonePST) === 11)
+    assert(getSeconds(c.getTimeInMillis * 1000, TimeZoneGMT) === 11)
     c.set(2015, 2, 8, 2, 7, 9)
-    assert(getSeconds(c.getTimeInMillis * 1000) === 9)
+    assert(getSeconds(c.getTimeInMillis * 1000, TimeZonePST) === 9)
+    assert(getSeconds(c.getTimeInMillis * 1000, TimeZoneGMT) === 9)
   }
 
   test("hours / minutes / seconds") {
@@ -478,6 +488,21 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c2.set(Calendar.MILLISECOND, 123)
     val ts2 = c2.getTimeInMillis * 1000L
     assert(timestampAddInterval(ts1, 36, 123000) === ts2)
+
+    val c3 = Calendar.getInstance(TimeZonePST)
+    c3.set(1997, 1, 27, 16, 0, 0)
+    c3.set(Calendar.MILLISECOND, 0)
+    val ts3 = c3.getTimeInMillis * 1000L
+    val c4 = Calendar.getInstance(TimeZonePST)
+    c4.set(2000, 1, 27, 16, 0, 0)
+    c4.set(Calendar.MILLISECOND, 123)
+    val ts4 = c4.getTimeInMillis * 1000L
+    val c5 = Calendar.getInstance(TimeZoneGMT)
+    c5.set(2000, 1, 29, 0, 0, 0)
+    c5.set(Calendar.MILLISECOND, 123)
+    val ts5 = c5.getTimeInMillis * 1000L
+    assert(timestampAddInterval(ts3, 36, 123000, TimeZonePST) === ts4)
+    assert(timestampAddInterval(ts3, 36, 123000, TimeZoneGMT) === ts5)
   }
 
   test("monthsBetween") {
@@ -492,6 +517,17 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === -36)
     c2.set(1996, 2, 31, 0, 0, 0)
     assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === 11)
+
+    val c3 = Calendar.getInstance(TimeZonePST)
+    c3.set(2000, 1, 28, 16, 0, 0)
+    val c4 = Calendar.getInstance(TimeZonePST)
+    c4.set(1997, 1, 28, 16, 0, 0)
+    assert(
+      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, TimeZonePST)
+      === 36.0)
+    assert(
+      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, TimeZoneGMT)
+      === 35.90322581)
   }
 
   test("from UTC timestamp") {
@@ -548,6 +584,21 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("daysToMillis and millisToDays") {
+    val c = Calendar.getInstance(TimeZonePST)
+
+    c.set(2015, 11, 31, 16, 0, 0)
+    assert(millisToDays(c.getTimeInMillis, TimeZonePST) === 16800)
+    assert(millisToDays(c.getTimeInMillis, TimeZoneGMT) === 16801)
+
+    c.set(2015, 11, 31, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(daysToMillis(16800, TimeZonePST) === c.getTimeInMillis)
+
+    c.setTimeZone(TimeZoneGMT)
+    c.set(2015, 11, 31, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(daysToMillis(16800, TimeZoneGMT) === c.getTimeInMillis)
+
     // There are some days are skipped entirely in some timezone, skip them here.
     val skipped_days = Map[String, Int](
       "Kwajalein" -> 8632,
@@ -558,13 +609,11 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       "Pacific/Kwajalein" -> 8632,
       "MIT" -> 15338)
     for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
-      DateTimeTestUtils.withDefaultTimeZone(tz) {
-        val skipped = skipped_days.getOrElse(tz.getID, Int.MinValue)
-        (-20000 to 20000).foreach { d =>
-          if (d != skipped) {
-            assert(millisToDays(daysToMillis(d)) === d,
-              s"Round trip of ${d} did not work in tz ${tz}")
-          }
+      val skipped = skipped_days.getOrElse(tz.getID, Int.MinValue)
+      (-20000 to 20000).foreach { d =>
+        if (d != skipped) {
+          assert(millisToDays(daysToMillis(d, tz), tz) === d,
+            s"Round trip of ${d} did not work in tz ${tz}")
         }
       }
     }
