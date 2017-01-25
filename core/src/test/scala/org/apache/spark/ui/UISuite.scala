@@ -240,16 +240,17 @@ class UISuite extends SparkFunSuite {
       def newContext(path: String): ServletContextHandler = {
         val ctx = new ServletContextHandler()
         ctx.setContextPath(path)
-        ctx.addServlet(new ServletHolder(servlet), "/*")
+        ctx.addServlet(new ServletHolder(servlet), "/root")
         ctx
       }
 
       val (conf, sslOptions) = sslEnabledConf()
-      serverInfo = JettyUtils.startJettyServer(
-        "0.0.0.0", 0, sslOptions, Seq[ServletContextHandler](newContext("/")), conf)
+      serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions,
+        Seq[ServletContextHandler](newContext("/"), newContext("/test1")),
+        conf)
       assert(serverInfo.server.getState === "STARTED")
 
-      val testContext = newContext("/test")
+      val testContext = newContext("/test2")
       serverInfo.addHandler(testContext)
       testContext.start()
 
@@ -261,10 +262,9 @@ class UISuite extends SparkFunSuite {
 
       tests.foreach { case (scheme, port, expected) =>
         val urls = Seq(
-          s"$scheme://localhost:$port",
-          s"$scheme://localhost:$port/",
-          s"$scheme://localhost:$port/test",
-          s"$scheme://localhost:$port/test/foo")
+          s"$scheme://localhost:$port/root",
+          s"$scheme://localhost:$port/test1/root",
+          s"$scheme://localhost:$port/test2/root")
         urls.foreach { url =>
           val rc = TestUtils.httpResponseCode(new URL(url))
           assert(rc === expected, s"Unexpected status $rc for $url")
