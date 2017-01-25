@@ -17,18 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import scala.collection.mutable.ArrayBuffer
+import java.util.concurrent.Callable
 
-import org.apache.hadoop.fs.Path
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition, SimpleCatalogRelation}
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SimpleCatalogRelation}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -37,6 +36,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPa
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -44,6 +44,8 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Replaces generic operations with specific variants that are designed to work with Spark
  * SQL Data Sources.
+ *
+ * Note that, this rule must be run after [[PreprocessTableInsertion]].
  */
 case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
@@ -127,30 +129,9 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
     projectList
   }
 
-  /**
-   * Returns true if the [[InsertIntoTable]] plan has already been preprocessed by analyzer rule
-   * [[PreprocessTableInsertion]]. It is important that this rule([[DataSourceAnalysis]]) has to
-   * be run after [[PreprocessTableInsertion]], to normalize the column names in partition spec and
-   * fix the schema mismatch by adding Cast.
-   */
-  private def hasBeenPreprocessed(
-      tableOutput: Seq[Attribute],
-      partSchema: StructType,
-      partSpec: Map[String, Option[String]],
-      query: LogicalPlan): Boolean = {
-    val partColNames = partSchema.map(_.name).toSet
-    query.resolved && partSpec.keys.forall(partColNames.contains) && {
-      val staticPartCols = partSpec.filter(_._2.isDefined).keySet
-      val expectedColumns = tableOutput.filterNot(a => staticPartCols.contains(a.name))
-      expectedColumns.toStructType.sameType(query.schema)
-    }
-  }
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case InsertIntoTable(
-        l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, false)
-        if hasBeenPreprocessed(l.output, t.partitionSchema, parts, query) =>
-
+        l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, false) =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
       // to include those constant column values in the query result.
@@ -215,37 +196,43 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
 
 /**
- * Replaces [[SimpleCatalogRelation]] with data source table if its table property contains data
- * source information.
+ * Replaces [[SimpleCatalogRelation]] with data source table if its table provider is not hive.
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private def readDataSourceTable(
-      sparkSession: SparkSession,
-      simpleCatalogRelation: SimpleCatalogRelation): LogicalPlan = {
-    val table = simpleCatalogRelation.catalogTable
-    val pathOption = table.storage.locationUri.map("path" -> _)
-    val dataSource =
-      DataSource(
-        sparkSession,
-        userSpecifiedSchema = Some(table.schema),
-        partitionColumns = table.partitionColumnNames,
-        bucketSpec = table.bucketSpec,
-        className = table.provider.get,
-        options = table.storage.properties ++ pathOption)
+  private def readDataSourceTable(table: CatalogTable): LogicalPlan = {
+    val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
+    val cache = sparkSession.sessionState.catalog.tableRelationCache
+    val withHiveSupport =
+      sparkSession.sparkContext.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive"
 
-    LogicalRelation(
-      dataSource.resolveRelation(),
-      expectedOutputAttributes = Some(simpleCatalogRelation.output),
-      catalogTable = Some(table))
+    cache.get(qualifiedTableName, new Callable[LogicalPlan]() {
+      override def call(): LogicalPlan = {
+        val pathOption = table.storage.locationUri.map("path" -> _)
+        val dataSource =
+          DataSource(
+            sparkSession,
+            // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
+            // inferred at runtime. We should still support it.
+            userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
+            partitionColumns = table.partitionColumnNames,
+            bucketSpec = table.bucketSpec,
+            className = table.provider.get,
+            options = table.storage.properties ++ pathOption,
+            // TODO: improve `InMemoryCatalog` and remove this limitation.
+            catalogTable = if (withHiveSupport) Some(table) else None)
+
+        LogicalRelation(dataSource.resolveRelation(), catalogTable = Some(table))
+      }
+    })
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case i @ InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _)
         if DDLUtils.isDatasourceTable(s.metadata) =>
-      i.copy(table = readDataSourceTable(sparkSession, s))
+      i.copy(table = readDataSourceTable(s.metadata))
 
     case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
-      readDataSourceTable(sparkSession, s)
+      readDataSourceTable(s.metadata)
   }
 }
 

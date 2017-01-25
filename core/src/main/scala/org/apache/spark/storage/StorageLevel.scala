@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils
  * ExternalBlockStore, whether to keep the data in memory in a serialized format, and whether
  * to replicate the RDD partitions on multiple nodes.
  *
- * The [[org.apache.spark.storage.StorageLevel$]] singleton object contains some static constants
+ * The [[org.apache.spark.storage.StorageLevel]] singleton object contains some static constants
  * for commonly useful storage levels. To create your own storage level object, use the
  * factory method of the singleton object (`StorageLevel(...)`).
  */

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.internal
 
+import java.io.File
+import java.net.URI
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
@@ -27,7 +30,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -37,12 +40,14 @@ class CatalogSuite
   extends SparkFunSuite
   with BeforeAndAfterEach
   with SharedSQLContext {
+  import testImplicits._
 
   private def sessionCatalog: SessionCatalog = spark.sessionState.catalog
 
   private val utils = new CatalogTestUtils {
     override val tableInputFormat: String = "com.fruit.eyephone.CameraInputFormat"
     override val tableOutputFormat: String = "com.fruit.eyephone.CameraOutputFormat"
+    override val defaultProvider: String = "parquet"
     override def newEmptyCatalog(): ExternalCatalog = spark.sharedState.externalCatalog
   }
 
@@ -306,22 +311,6 @@ class CatalogSuite
     columnFields.foreach { f => assert(columnString.contains(f.toString)) }
   }
 
-  test("createExternalTable should fail if path is not given for file-based data source") {
-    val e = intercept[AnalysisException] {
-      spark.catalog.createExternalTable("tbl", "json", Map.empty[String, String])
-    }
-    assert(e.message.contains("Unable to infer schema"))
-
-    val e2 = intercept[AnalysisException] {
-      spark.catalog.createExternalTable(
-        "tbl",
-        "json",
-        new StructType().add("i", IntegerType),
-        Map.empty[String, String])
-    }
-    assert(e2.message == "Cannot create a file-based external data source table without path")
-  }
-
   test("dropTempView should not un-cache and drop metastore table if a same-name table exists") {
     withTable("same_name") {
       spark.range(10).write.saveAsTable("same_name")
@@ -457,6 +446,50 @@ class CatalogSuite
         spark.catalog.setCurrentDatabase(db)
         assert(spark.catalog.functionExists("fn2"))
       }
+    }
+  }
+
+  test("createTable with 'path' in options") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.catalog.createTable(
+          tableName = "t",
+          source = "json",
+          schema = new StructType().add("i", "int"),
+          options = Map("path" -> dir.getAbsolutePath))
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.tableType == CatalogTableType.EXTERNAL)
+        assert(table.storage.locationUri.get == dir.getAbsolutePath)
+
+        Seq((1)).toDF("i").write.insertInto("t")
+        assert(dir.exists() && dir.listFiles().nonEmpty)
+
+        sql("DROP TABLE t")
+        // the table path and data files are still there after DROP TABLE, if custom table path is
+        // specified.
+        assert(dir.exists() && dir.listFiles().nonEmpty)
+      }
+    }
+  }
+
+  test("createTable without 'path' in options") {
+    withTable("t") {
+      spark.catalog.createTable(
+        tableName = "t",
+        source = "json",
+        schema = new StructType().add("i", "int"),
+        options = Map.empty[String, String])
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      assert(table.tableType == CatalogTableType.MANAGED)
+      val tablePath = new File(new URI(table.storage.locationUri.get))
+      assert(tablePath.exists() && tablePath.listFiles().isEmpty)
+
+      Seq((1)).toDF("i").write.insertInto("t")
+      assert(tablePath.listFiles().nonEmpty)
+
+      sql("DROP TABLE t")
+      // the table path is removed after DROP TABLE, if custom table path is not specified.
+      assert(!tablePath.exists())
     }
   }
 
