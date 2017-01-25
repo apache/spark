@@ -120,6 +120,17 @@ object ExternalCatalogUtils {
       new Path(totalPath, nextPartPath)
     }
   }
+
+  def getUselessHivePartPathAfterRename(
+                             lowerCaseSpec: TablePartitionSpec,
+                             partitionColumnNames: Seq[String],
+                             tablePath: Path): Path = {
+    val partColumnNames = partitionColumnNames
+      .take(partitionColumnNames.indexWhere(col => col.toLowerCase != col) + 1)
+      .map(_.toLowerCase)
+
+    generatePartitionPath(lowerCaseSpec, partColumnNames, tablePath)
+  }
 }
 
 object CatalogUtils {

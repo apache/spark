@@ -899,6 +899,21 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           spec, partitionColumnNames, tablePath)
         try {
           tablePath.getFileSystem(hadoopConf).rename(wrongPath, rightPath)
+
+          // if the newSpec contains more than one depth partitoin, FileSystem.rename just delete
+          // only one path(wrongPath), we should check if wrongPath's parents need to be deleted.
+          // for example:
+          // newSpec is 'A=1/B=2', after renamePartitions by Hive, the location path in FileSystem
+          // changed to 'a=1/b=2', which is wrongPath, then we renamed to 'A=1/B=2', and 'a=1/b=2'
+          // in FileSystem is deleted, while 'a=1' is already exists, which should also be deleted
+          val delHivePartPathAfterRename = ExternalCatalogUtils.getUselessHivePartPathAfterRename(
+            lowerCasePartitionSpec(spec),
+            partitionColumnNames,
+            tablePath)
+
+          if (delHivePartPathAfterRename != wrongPath) {
+            tablePath.getFileSystem(hadoopConf).delete(delHivePartPathAfterRename, true)
+          }
         } catch {
           case e: IOException => throw new SparkException(
             s"Unable to rename partition path from $wrongPath to $rightPath", e)

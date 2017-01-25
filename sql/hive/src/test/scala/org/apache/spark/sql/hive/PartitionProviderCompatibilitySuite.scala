@@ -19,8 +19,11 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -264,7 +267,7 @@ class PartitionProviderCompatibilitySuite
           // rename partition sanity check
           spark.sql(s"""
             |alter table test partition (A=5, B='%')
-            |rename to partition (A=100, B='%')""".stripMargin)
+            |rename to partition (a=100, b='%')""".stripMargin)
           assert(spark.sql("select * from test where a = 5 and b = '%'").count() == 0)
           assert(spark.sql("select * from test where a = 100 and b = '%'").count() == 1)
 
@@ -479,6 +482,19 @@ class PartitionProviderCompatibilitySuite
       df2.write.partitionBy("P1", "P2").mode("append").saveAsTable("test")
       assert(spark.sql("select * from test").count() == 3)
       assert(spark.sql("show partitions test").count() == 5)
+    }
+  }
+
+  test("partition path created by Hive should be deleted after renamePartitions with upper-case") {
+    withTable("t") {
+      Seq((1, 2, 3)).toDF("id", "A", "B").write.partitionBy("A", "B").saveAsTable("t")
+      spark.sql("alter table t partition(a=2, B=3) rename to partition(a=4, B=5)")
+
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      val uselessHivePath = new Path(table.location + "/a=4")
+      assert(!uselessHivePath.getFileSystem(spark.sessionState.newHadoopConf())
+        .exists(uselessHivePath), "partition path created by Hive should be deleted " +
+        "after renamePartitions with upper-case")
     }
   }
 }
