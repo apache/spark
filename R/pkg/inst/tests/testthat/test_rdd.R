@@ -381,8 +381,8 @@ test_that("aggregateRDD() on RDDs", {
 test_that("zipWithUniqueId() on RDDs", {
   rdd <- parallelize(sc, list("a", "b", "c", "d", "e"), 3L)
   actual <- collectRDD(zipWithUniqueId(rdd))
-  expected <- list(list("a", 0), list("b", 3), list("c", 1),
-                   list("d", 4), list("e", 2))
+  expected <- list(list("a", 0), list("b", 1), list("c", 4),
+                   list("d", 2), list("e", 5))
   expect_equal(actual, expected)
 
   rdd <- parallelize(sc, list("a", "b", "c", "d", "e"), 1L)

@@ -21,7 +21,7 @@ import java.math.{BigDecimal => JavaBigDecimal}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
@@ -87,6 +87,25 @@ object Cast {
       true
 
     case _ => false
+  }
+
+  /**
+   * Return true iff we may truncate during casting `from` type to `to` type. e.g. long -> int,
+   * timestamp -> date.
+   */
+  def mayTruncate(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) => true
+    case (from: DecimalType, to: NumericType) if !from.isTighterThan(to) => true
+    case (from, to) if illegalNumericPrecedence(from, to) => true
+    case (TimestampType, DateType) => true
+    case (StringType, to: NumericType) => true
+    case _ => false
+  }
+
+  private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
+    val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
+    val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
+    toPrecedence > 0 && fromPrecedence > toPrecedence
   }
 
   def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {
@@ -247,7 +266,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try s.toString.toLong catch {
+      buildCast[UTF8String](_, s => try s.toLong catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -263,7 +282,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // IntConverter
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try s.toString.toInt catch {
+      buildCast[UTF8String](_, s => try s.toInt catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -279,7 +298,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // ShortConverter
   private[this] def castToShort(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try s.toString.toShort catch {
+      buildCast[UTF8String](_, s => try s.toShort catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -295,7 +314,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // ByteConverter
   private[this] def castToByte(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try s.toString.toByte catch {
+      buildCast[UTF8String](_, s => try s.toByte catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -498,7 +517,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     s"""
       boolean $resultNull = $childNull;
       ${ctx.javaType(resultType)} $resultPrim = ${ctx.defaultValue(resultType)};
-      if (!${childNull}) {
+      if (!$childNull) {
         ${cast(childPrim, resultPrim, resultNull)}
       }
     """
@@ -705,7 +724,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       (c, evPrim, evNull) =>
         s"""
           try {
-            $evPrim = Byte.valueOf($c.toString());
+            $evPrim = $c.toByte();
           } catch (java.lang.NumberFormatException e) {
             $evNull = true;
           }
@@ -727,7 +746,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       (c, evPrim, evNull) =>
         s"""
           try {
-            $evPrim = Short.valueOf($c.toString());
+            $evPrim = $c.toShort();
           } catch (java.lang.NumberFormatException e) {
             $evNull = true;
           }
@@ -749,7 +768,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       (c, evPrim, evNull) =>
         s"""
           try {
-            $evPrim = Integer.valueOf($c.toString());
+            $evPrim = $c.toInt();
           } catch (java.lang.NumberFormatException e) {
             $evNull = true;
           }
@@ -771,7 +790,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       (c, evPrim, evNull) =>
         s"""
           try {
-            $evPrim = Long.valueOf($c.toString());
+            $evPrim = $c.toLong();
           } catch (java.lang.NumberFormatException e) {
             $evNull = true;
           }
