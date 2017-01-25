@@ -578,6 +578,79 @@ class GeneralizedLinearRegressionSuite
     }
   }
 
+  test("generalized linear regression with offset") {
+    /*
+      R code:
+      df <- as.data.frame(matrix(c(
+        1.0, 1.0, 2.0, 0.0, 5.0,
+        2.0, 2.0, 0.5, 1.0, 2.0,
+        1.0, 3.0, 1.0, 2.0, 1.0,
+        2.0, 4.0, 0.0, 3.0, 3.0), 4, 5, byrow = TRUE))
+      families <- c(gaussian, poisson, Gamma)
+      f1 <- V1 ~ -1 + V4 + V5
+      f2 <- V1 ~ V4 + V5
+      for (f in c(f1, f2)) {
+        for (fam in families) {
+          model <- glm(f, df, family = fam, weights = V2, offset = V3)
+          print(as.vector(coef(model)))
+        }
+      }
+
+      [1] 0.535040431 0.005390836
+      [1]  0.1968355 -0.2061711
+      [1]  0.307996 -0.153579
+      [1] -0.8800000  0.7342857  0.1714286
+      [1] -1.9991044  0.7247511  0.1424392
+      [1] -0.27378146  0.31599396 -0.06204946
+     */
+    val dataset = Seq(
+      GLRInstance(1.0, 1.0, 2.0, Vectors.dense(0.0, 5.0)),
+      GLRInstance(2.0, 2.0, 0.5, Vectors.dense(1.0, 2.0)),
+      GLRInstance(1.0, 3.0, 1.0, Vectors.dense(2.0, 1.0)),
+      GLRInstance(2.0, 4.0, 0.0, Vectors.dense(3.0, 3.0))
+    ).toDF()
+
+    val expected = Seq(
+      Vectors.dense(0.0, 0.535040431, 0.005390836),
+      Vectors.dense(0.0, 0.1968355, -0.2061711),
+      Vectors.dense(0.0, 0.307996, -0.153579),
+      Vectors.dense(-0.88, 0.7342857, 0.1714286),
+      Vectors.dense(-1.9991044, 0.7247511, 0.1424392),
+      Vectors.dense(-0.27378146, 0.31599396, -0.06204946))
+
+    import GeneralizedLinearRegression._
+
+    var idx = 0
+    for (fitIntercept <- Seq(false, true)) {
+      for (family <- Seq("gaussian", "poisson", "gamma")) {
+      val trainer = new GeneralizedLinearRegression().setFamily(family)
+        .setFitIntercept(fitIntercept).setOffsetCol("offset")
+        .setWeightCol("weight").setLinkPredictionCol("linkPrediction")
+      val model = trainer.fit(dataset)
+      val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
+      assert(actual ~= expected(idx) absTol 1e-4, s"Model mismatch: GLM with family = $family," +
+        s" and fitIntercept = $fitIntercept.")
+
+      val familyObj = Family.fromName(family)
+      val familyLink = new FamilyAndLink(familyObj, familyObj.defaultLink)
+      model.transform(dataset).select("features", "offset", "prediction", "linkPrediction")
+        .collect().foreach {
+          case Row(features: DenseVector, offset: Double, prediction1: Double,
+          linkPrediction1: Double) =>
+            val eta = BLAS.dot(features, model.coefficients) + model.intercept + offset
+            val prediction2 = familyLink.fitted(eta)
+            val linkPrediction2 = eta
+            assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
+              s"family = $family, and fitIntercept = $fitIntercept.")
+            assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
+              s"GLM with family = $family, and fitIntercept = $fitIntercept.")
+        }
+
+        idx += 1
+      }
+    }
+  }
+
   test("glm summary: gaussian family with weight") {
     /*
        R code:

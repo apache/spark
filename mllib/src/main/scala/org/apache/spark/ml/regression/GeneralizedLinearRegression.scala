@@ -225,6 +225,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
   /**
     * Sets the value of param [[offsetCol]].
+    * The feature specified as offset has a constant coefficient of 1.0.
     * If this is not set or empty, we treat all instance offsets as 0.0.
     * Default is not set, so all instances have offset 0.0.
     *
@@ -1190,19 +1191,21 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   }
 }
 
-
-
 /**
- * Class that represents an instance of data point with
- * label, weight, features and offset.
+ * Case class that represents an instance of data point with
+ * label, weight, offset and features.
  */
-private[ml] class GLRInstance(val label: Double, val weight: Double, val offset: Double,
-                              val features: Vector) extends Serializable{
+private[ml] case class GLRInstance(label: Double, weight: Double, offset: Double,
+                                   features: Vector) {
 
   def this(instance: Instance, offset: Double = 0.0) = {
     this(instance.label, instance.weight, offset, instance.features)
   }
 
-  /** Converts to an Instance object by ignoring the offset */
+  /** Converts to an [[Instance]] object by leaving out the offset. */
   private[ml] def toInstance: Instance = Instance(label, weight, features)
+
 }
+
+
+
