@@ -273,17 +273,21 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     }
 
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          Instance(label, weight, features)
+    val off = if (!isDefined(offsetCol) || $(offsetCol).isEmpty) lit(0.0) else col($(offsetCol))
+    val instances: RDD[GLRInstance] =
+      dataset.select(col($(labelCol)), w, off, col($(featuresCol))).rdd.map {
+        case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
+          new GLRInstance(label, weight, offset, features)
       }
 
     val model = if (familyObj == Gaussian && linkObj == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
+      val wlsInstances: RDD[Instance] = instances.map { instance =>
+        new Instance(instance.label - instance.offset, instance.weight, instance.features)
+      }
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
-      val wlsModel = optimizer.fit(instances)
+      val wlsModel = optimizer.fit(wlsInstances)
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
           .setParent(this))
@@ -349,12 +353,12 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
      * Get the initial guess model for [[IterativelyReweightedLeastSquares]].
      */
     def initialize(
-        instances: RDD[Instance],
+        instances: RDD[GLRInstance],
         fitIntercept: Boolean,
         regParam: Double): WeightedLeastSquaresModel = {
       val newInstances = instances.map { instance =>
         val mu = family.initialize(instance.label, instance.weight)
-        val eta = predict(mu)
+        val eta = predict(mu) - instance.offset
         Instance(eta, instance.weight, instance.features)
       }
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
@@ -368,13 +372,13 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
      * The reweight function used to update offsets and weights
      * at each iteration of [[IterativelyReweightedLeastSquares]].
      */
-    val reweightFunc: (Instance, WeightedLeastSquaresModel) => (Double, Double) = {
-      (instance: Instance, model: WeightedLeastSquaresModel) => {
-        val eta = model.predict(instance.features)
+    val reweightFunc: (GLRInstance, WeightedLeastSquaresModel) => (Double, Double) = {
+      (instance: GLRInstance, model: WeightedLeastSquaresModel) => {
+        val eta = model.predict(instance.features) + instance.offset
         val mu = fitted(eta)
-        val offset = eta + (instance.label - mu) * link.deriv(mu)
-        val weight = instance.weight / (math.pow(this.link.deriv(mu), 2.0) * family.variance(mu))
-        (offset, weight)
+        val newLabel = eta - instance.offset + (instance.label - mu) * link.deriv(mu)
+        val newWeight = instance.weight / (math.pow(this.link.deriv(mu), 2.0) * family.variance(mu))
+        (newLabel, newWeight)
       }
     }
   }
@@ -746,15 +750,27 @@ class GeneralizedLinearRegressionModel private[ml] (
   private lazy val familyAndLink = new FamilyAndLink(familyObj, linkObj)
 
   override protected def predict(features: Vector): Double = {
-    val eta = predictLink(features)
+    if (!isSet(offsetCol) || $(offsetCol).isEmpty) {
+      val eta = BLAS.dot(features, coefficients) + intercept
+      familyAndLink.fitted(eta)
+    } else {
+      throw new SparkException("Must supply offset value when offset is set.")
+    }
+  }
+
+  /**
+   * Calculates the predicted value when offset is set.
+   */
+  protected def predict(features: Vector, offset: Double): Double = {
+    val eta = predictLink(features, offset)
     familyAndLink.fitted(eta)
   }
 
   /**
-   * Calculate the link prediction (linear predictor) of the given instance.
+   * Calculates the link prediction (linear predictor) of the given instance.
    */
-  private def predictLink(features: Vector): Double = {
-    BLAS.dot(features, coefficients) + intercept
+  private def predictLink(features: Vector, offset: Double): Double = {
+    BLAS.dot(features, coefficients) + intercept + offset
   }
 
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -763,14 +779,15 @@ class GeneralizedLinearRegressionModel private[ml] (
   }
 
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val predictUDF = udf { (features: Vector) => predict(features) }
-    val predictLinkUDF = udf { (features: Vector) => predictLink(features) }
+    val predictUDF = udf { (features: Vector, offset: Double) => predict(features, offset) }
+    val predictLinkUDF = udf { (features: Vector, offset: Double) => predictLink(features, offset) }
+    val off = if (!isSet(offsetCol) || $(offsetCol).isEmpty) lit(0.0) else col($(offsetCol))
     var output = dataset
     if ($(predictionCol).nonEmpty) {
-      output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+      output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol)), off))
     }
     if (hasLinkPredictionCol) {
-      output = output.withColumn($(linkPredictionCol), predictLinkUDF(col($(featuresCol))))
+      output = output.withColumn($(linkPredictionCol), predictLinkUDF(col($(featuresCol)), off))
     }
     output.toDF()
   }
@@ -1171,4 +1188,21 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
         "No p-value available for this GeneralizedLinearRegressionModel")
     }
   }
+}
+
+
+
+/**
+ * Class that represents an instance of data point with
+ * label, weight, features and offset.
+ */
+private[ml] class GLRInstance(val label: Double, val weight: Double, val offset: Double,
+                              val features: Vector) extends Serializable{
+
+  def this(instance: Instance, offset: Double = 0.0) = {
+    this(instance.label, instance.weight, offset, instance.features)
+  }
+
+  /** Converts to an Instance object by ignoring the offset */
+  private[ml] def toInstance: Instance = Instance(label, weight, features)
 }
