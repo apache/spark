@@ -83,9 +83,7 @@ sealed trait IExampleBaseType extends Serializable {
 sealed trait IExampleSubType extends IExampleBaseType
 
 // a base class
-class ExampleBaseClass(override val field: Int) extends IExampleBaseType {
-  override def toString: String = field.toString
-}
+class ExampleBaseClass(override val field: Int) extends IExampleBaseType
 
 // a derived class
 class ExampleSubClass(override val field: Int)
