@@ -95,11 +95,12 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   def getLinkPredictionCol: String = $(linkPredictionCol)
 
   /**
-   * Param for offset column name. If this is not set or empty, we treat all instance offsets as 0.0.
+   * Param for offset column name. If this is not set or empty, we treat all
+   * instance offsets as 0.0.
    * @group param
    */
-  final val offsetCol: Param[String] = new Param[String](this, "offsetCol", "offset column name. " +
-    "If this is not set or empty, we treat all instance offsets as 0.0")
+  final val offsetCol: Param[String] = new Param[String](this, "offsetCol", "The offset " +
+    "column name. If this is not set or empty, we treat all instance offsets as 0.0")
 
   /** @group getParam */
   def getOffsetCol: String = $(offsetCol)
