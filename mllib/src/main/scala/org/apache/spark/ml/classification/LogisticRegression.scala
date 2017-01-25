@@ -233,7 +233,7 @@ class LogisticRegression @Since("1.2.0") (
 
   /**
    * Set the convergence tolerance of iterations.
-   * Smaller value will lead to higher accuracy with the cost of more iterations.
+   * Smaller value will lead to higher accuracy at the cost of more iterations.
    * Default is 1E-6.
    *
    * @group setParam
@@ -1431,7 +1431,7 @@ private class LogisticAggregator(
   private var weightSum = 0.0
   private var lossSum = 0.0
 
-  private val gradientSumArray = Array.ofDim[Double](coefficientSize)
+  private val gradientSumArray = Array.fill[Double](coefficientSize)(0.0D)
 
   if (multinomial && numClasses <= 2) {
     logInfo(s"Multinomial logistic regression for binary classification yields separate " +

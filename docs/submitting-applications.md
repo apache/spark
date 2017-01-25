@@ -189,7 +189,7 @@ This can use up a significant amount of space over time and will need to be clea
 is handled automatically, and with Spark standalone, automatic cleanup can be configured with the
 `spark.worker.cleanup.appDataTtl` property.
 
-Users may also include any other dependencies by supplying a comma-delimited list of maven coordinates
+Users may also include any other dependencies by supplying a comma-delimited list of Maven coordinates
 with `--packages`. All transitive dependencies will be handled when using this command. Additional
 repositories (or resolvers in SBT) can be added in a comma-delimited fashion with the flag `--repositories`.
 (Note that credentials for password-protected repositories can be supplied in some cases in the repository URI,
