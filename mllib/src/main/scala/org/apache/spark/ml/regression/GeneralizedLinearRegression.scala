@@ -224,13 +224,13 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /**
-    * Sets the value of param [[offsetCol]].
-    * The feature specified as offset has a constant coefficient of 1.0.
-    * If this is not set or empty, we treat all instance offsets as 0.0.
-    * Default is not set, so all instances have offset 0.0.
-    *
-    * @group setParam
-    */
+   * Sets the value of param [[offsetCol]].
+   * The feature specified as offset has a constant coefficient of 1.0.
+   * If this is not set or empty, we treat all instance offsets as 0.0.
+   * Default is not set, so all instances have offset 0.0.
+   *
+   * @group setParam
+   */
   @Since("2.2.0")
   def setOffsetCol(value: String): this.type = set(offsetCol, value)
 
@@ -1206,6 +1206,3 @@ private[ml] case class GLRInstance(label: Double, weight: Double, offset: Double
   private[ml] def toInstance: Instance = Instance(label, weight, features)
 
 }
-
-
-

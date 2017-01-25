@@ -23,7 +23,6 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.regression.GLRInstance
 import org.apache.spark.rdd.RDD
 
-
 /**
  * Model fitted by [[IterativelyReweightedLeastSquares]].
  * @param coefficients model coefficients
