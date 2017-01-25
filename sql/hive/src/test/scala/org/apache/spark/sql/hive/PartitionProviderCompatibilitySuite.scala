@@ -267,7 +267,7 @@ class PartitionProviderCompatibilitySuite
           // rename partition sanity check
           spark.sql(s"""
             |alter table test partition (A=5, B='%')
-            |rename to partition (a=100, b='%')""".stripMargin)
+            |rename to partition (A=100, B='%')""".stripMargin)
           assert(spark.sql("select * from test where a = 5 and b = '%'").count() == 0)
           assert(spark.sql("select * from test where a = 100 and b = '%'").count() == 1)
 
