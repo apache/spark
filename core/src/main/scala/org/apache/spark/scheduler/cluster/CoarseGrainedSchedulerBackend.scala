@@ -646,7 +646,7 @@ private[spark] object CoarseGrainedSchedulerBackend extends Logging {
       scheduler: TaskSchedulerImpl,
       taskId: Long,
       msg: => String,
-      exception: Option[Throwable] = None): Unit = {
+      exception: Option[Throwable] = None): Unit = scheduler.synchronized {
     scheduler.taskIdToTaskSetManager.get(taskId).foreach { taskSetMgr =>
       try {
         taskSetMgr.abort(msg, exception)
