@@ -19,7 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.util.concurrent.TimeUnit
 
-import org.apache.hadoop.fs.CommonConfigurationKeysPublic._
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic
 
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
@@ -382,8 +382,16 @@ package object config {
    * Maps the original Hadoop configuration key to the Spark mirror config entry defined above.
    */
   private[spark] val TOPOLOGY_CONFIG_MAPPING = Map(
-    NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY -> TOPOLOGY_SCRIPT_FILE,
-    NET_DEPENDENCY_SCRIPT_FILE_NAME_KEY -> TOPOLOGY_DEPENDENCY_SCRIPT_FILE,
-    NET_TOPOLOGY_TABLE_MAPPING_FILE_KEY -> TOPOLOGY_TABLE_MAPPING_FILE)
+      "NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY" -> TOPOLOGY_SCRIPT_FILE,
+      "NET_DEPENDENCY_SCRIPT_FILE_NAME_KEY" -> TOPOLOGY_DEPENDENCY_SCRIPT_FILE,
+      "NET_TOPOLOGY_TABLE_MAPPING_FILE_KEY" -> TOPOLOGY_TABLE_MAPPING_FILE)
+    .flatMap { case (k, e) =>
+      try {
+        val field = classOf[CommonConfigurationKeysPublic].getField(k)
+        Some(field.get(null).asInstanceOf[String], e)
+      } catch {
+        case e: NoSuchFieldException => None
+      }
+    }.toMap
 
 }

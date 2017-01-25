@@ -386,6 +386,8 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   }
 
   test("localize topology scripts") {
+    assume(TOPOLOGY_CONFIG_MAPPING.nonEmpty)
+
     val confDir = Utils.createTempDir()
     val script = new File(confDir, "topologyScript")
     val scriptDep = new File(confDir, "topologyScript.dep")
