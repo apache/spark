@@ -223,11 +223,11 @@ private[ui] object RDDOperationGraph extends Logging {
   /** Return the dot representation of a node in an RDDOperationGraph. */
   private def makeDotNode(node: RDDOperationNode): String = {
     val isCached = if (node.cached) {
-      "[Cached]"
+      " [Cached]"
     } else {
       ""
     }
-    val label = s"${node.name} [${node.id}] $isCached\n${node.callsite}"
+    val label = s"${node.name} [${node.id}]$isCached\n${node.callsite}"
     s"""${node.id} [label="${StringEscapeUtils.escapeJava(label)}"]"""
   }
 
