@@ -23,7 +23,7 @@ To build a distribution of Spark with Kubernetes support, use the `dev/make-dist
 `kubernetes` profile as part of the build arguments. Any other build arguments can be specified as one would expect when
 building Spark normally. For example, to build Spark against Hadoop 2.7 and Kubernetes:
 
-    dev/make-distribution.sh --tgz -Phadoop2.7 -Pkubernetes
+    dev/make-distribution.sh --tgz -Phadoop-2.7 -Pkubernetes
 
 # Kubernetes Code Modules
 
