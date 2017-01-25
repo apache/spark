@@ -18,9 +18,8 @@
 package org.apache.spark.ml.optim
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.regression.GLRInstance
 import org.apache.spark.rdd.RDD
 
 /**
@@ -58,13 +57,13 @@ private[ml] class IterativelyReweightedLeastSquaresModel(
  */
 private[ml] class IterativelyReweightedLeastSquares(
     val initialModel: WeightedLeastSquaresModel,
-    val reweightFunc: (GLRInstance, WeightedLeastSquaresModel) => (Double, Double),
+    val reweightFunc: (OffsetInstance, WeightedLeastSquaresModel) => (Double, Double),
     val fitIntercept: Boolean,
     val regParam: Double,
     val maxIter: Int,
     val tol: Double) extends Logging with Serializable {
 
-  def fit(instances: RDD[GLRInstance]): IterativelyReweightedLeastSquaresModel = {
+  def fit(instances: RDD[OffsetInstance]): IterativelyReweightedLeastSquaresModel = {
 
     var converged = false
     var iter = 0

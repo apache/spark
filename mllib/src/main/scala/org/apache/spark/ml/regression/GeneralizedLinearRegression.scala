@@ -24,7 +24,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg.{BLAS, Vector}
 import org.apache.spark.ml.optim._
 import org.apache.spark.ml.param._
@@ -123,6 +123,9 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
         s"with ${$(family)} family does not support ${$(link)} link function.")
     }
     val newSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if (isSet(offsetCol) && $(offsetCol).nonEmpty) {
+      SchemaUtils.checkNumericType(schema, $(offsetCol))
+    }
     if (hasLinkPredictionCol) {
       SchemaUtils.appendColumn(newSchema, $(linkPredictionCol), DoubleType)
     } else {
@@ -286,16 +289,16 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val off = if (!isDefined(offsetCol) || $(offsetCol).isEmpty) lit(0.0) else col($(offsetCol))
-    val instances: RDD[GLRInstance] =
+    val instances: RDD[OffsetInstance] =
       dataset.select(col($(labelCol)), w, off, col($(featuresCol))).rdd.map {
         case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
-          new GLRInstance(label, weight, offset, features)
+          OffsetInstance(label, weight, offset, features)
       }
 
     val model = if (familyObj == Gaussian && linkObj == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
       val wlsInstances: RDD[Instance] = instances.map { instance =>
-        new Instance(instance.label - instance.offset, instance.weight, instance.features)
+        Instance(instance.label - instance.offset, instance.weight, instance.features)
       }
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
@@ -365,7 +368,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
      * Get the initial guess model for [[IterativelyReweightedLeastSquares]].
      */
     def initialize(
-        instances: RDD[GLRInstance],
+        instances: RDD[OffsetInstance],
         fitIntercept: Boolean,
         regParam: Double): WeightedLeastSquaresModel = {
       val newInstances = instances.map { instance =>
@@ -384,11 +387,11 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
      * The reweight function used to update offsets and weights
      * at each iteration of [[IterativelyReweightedLeastSquares]].
      */
-    val reweightFunc: (GLRInstance, WeightedLeastSquaresModel) => (Double, Double) = {
-      (instance: GLRInstance, model: WeightedLeastSquaresModel) => {
-        val eta = model.predict(instance.features) + instance.offset
-        val mu = fitted(eta)
-        val newLabel = eta - instance.offset + (instance.label - mu) * link.deriv(mu)
+    val reweightFunc: (OffsetInstance, WeightedLeastSquaresModel) => (Double, Double) = {
+      (instance: OffsetInstance, model: WeightedLeastSquaresModel) => {
+        val eta = model.predict(instance.features)
+        val mu = fitted(eta + instance.offset)
+        val newLabel = eta + (instance.label - mu) * link.deriv(mu)
         val newWeight = instance.weight / (math.pow(this.link.deriv(mu), 2.0) * family.variance(mu))
         (newLabel, newWeight)
       }
@@ -766,7 +769,7 @@ class GeneralizedLinearRegressionModel private[ml] (
       val eta = BLAS.dot(features, coefficients) + intercept
       familyAndLink.fitted(eta)
     } else {
-      throw new SparkException("Must supply offset value when offset is set.")
+      throw new SparkException("Must supply offset to predict when offset column is set.")
     }
   }
 
@@ -1200,26 +1203,4 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
         "No p-value available for this GeneralizedLinearRegressionModel")
     }
   }
-}
-
-/**
- * Case class that represents an instance of data point with
- * label, weight, offset and features.
- *
- * @param label Label for this data point.
- * @param weight The weight of this instance.
- * @param offset The offset used for this data point.
- * @param features The vector of features for this data point.
- */
-private[ml] case class GLRInstance(label: Double, weight: Double, offset: Double,
-                                   features: Vector) {
-
-  /** Constructs from an [[Instance]] object and offset */
-  def this(instance: Instance, offset: Double = 0.0) = {
-    this(instance.label, instance.weight, offset, instance.features)
-  }
-
-  /** Converts to an [[Instance]] object by leaving out the offset. */
-  private[ml] def toInstance: Instance = Instance(label, weight, features)
-
 }

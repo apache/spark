@@ -21,7 +21,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
@@ -604,10 +604,10 @@ class GeneralizedLinearRegressionSuite
       [1] -0.27378146  0.31599396 -0.06204946
      */
     val dataset = Seq(
-      GLRInstance(1.0, 1.0, 2.0, Vectors.dense(0.0, 5.0)),
-      GLRInstance(2.0, 2.0, 0.5, Vectors.dense(1.0, 2.0)),
-      GLRInstance(1.0, 3.0, 1.0, Vectors.dense(2.0, 1.0)),
-      GLRInstance(2.0, 4.0, 0.0, Vectors.dense(3.0, 3.0))
+      OffsetInstance(1.0, 1.0, 2.0, Vectors.dense(0.0, 5.0)),
+      OffsetInstance(2.0, 2.0, 0.5, Vectors.dense(1.0, 2.0)),
+      OffsetInstance(1.0, 3.0, 1.0, Vectors.dense(2.0, 1.0)),
+      OffsetInstance(2.0, 4.0, 0.0, Vectors.dense(3.0, 3.0))
     ).toDF()
 
     val expected = Seq(

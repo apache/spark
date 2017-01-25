@@ -18,17 +18,16 @@
 package org.apache.spark.ml.optim
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.regression.GLRInstance
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 
 class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  private var instances1: RDD[GLRInstance] = _
-  private var instances2: RDD[GLRInstance] = _
+  private var instances1: RDD[OffsetInstance] = _
+  private var instances2: RDD[OffsetInstance] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -44,7 +43,7 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
       Instance(0.0, 2.0, Vectors.dense(1.0, 2.0)),
       Instance(1.0, 3.0, Vectors.dense(2.0, 1.0)),
       Instance(0.0, 4.0, Vectors.dense(3.0, 3.0))
-    ), 2).map(new GLRInstance(_))
+    ), 2).map(new OffsetInstance(_))
     /*
        R code:
 
@@ -57,7 +56,7 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
       Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
       Instance(3.0, 3.0, Vectors.dense(2.0, 11.0)),
       Instance(9.0, 4.0, Vectors.dense(3.0, 13.0))
-    ), 2).map(new GLRInstance(_))
+    ), 2).map(new OffsetInstance(_))
   }
 
   test("IRLS against GLM with Binomial errors") {
@@ -170,7 +169,7 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
 object IterativelyReweightedLeastSquaresSuite {
 
   def BinomialReweightFunc(
-      instance: GLRInstance,
+      instance: OffsetInstance,
       model: WeightedLeastSquaresModel): (Double, Double) = {
     val eta = model.predict(instance.features) + instance.offset
     val mu = 1.0 / (1.0 + math.exp(-1.0 * eta))
@@ -180,7 +179,7 @@ object IterativelyReweightedLeastSquaresSuite {
   }
 
   def PoissonReweightFunc(
-      instance: GLRInstance,
+      instance: OffsetInstance,
       model: WeightedLeastSquaresModel): (Double, Double) = {
     val eta = model.predict(instance.features) + instance.offset
     val mu = math.exp(eta)
@@ -190,7 +189,7 @@ object IterativelyReweightedLeastSquaresSuite {
   }
 
   def L1RegressionReweightFunc(
-      instance: GLRInstance,
+      instance: OffsetInstance,
       model: WeightedLeastSquaresModel): (Double, Double) = {
     val eta = model.predict(instance.features) + instance.offset
     val e = math.max(math.abs(eta - instance.label), 1e-7)
