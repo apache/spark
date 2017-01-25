@@ -374,21 +374,6 @@ private[ml] trait HasWeightCol extends Params {
 }
 
 /**
- * Trait for shared param offsetCol.
- */
-private[ml] trait HasOffsetCol extends Params {
-
-  /**
-   * Param for offset column name. If this is not set or empty, we treat all instance offsets as 0.0.
-   * @group param
-   */
-  final val offsetCol: Param[String] = new Param[String](this, "offsetCol", "offset column name. If this is not set or empty, we treat all instance offsets as 0.0")
-
-  /** @group getParam */
-  final def getOffsetCol: String = $(offsetCol)
-}
-
-/**
  * Trait for shared param solver (default: "auto").
  */
 private[ml] trait HasSolver extends Params {

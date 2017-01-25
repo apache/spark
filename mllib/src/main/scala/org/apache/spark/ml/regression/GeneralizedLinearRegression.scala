@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  */
 private[regression] trait GeneralizedLinearRegressionBase extends PredictorParams
   with HasFitIntercept with HasMaxIter with HasTol with HasRegParam with HasWeightCol
-  with HasSolver with HasOffsetCol with Logging {
+  with HasSolver with Logging {
 
   import GeneralizedLinearRegression._
 
@@ -93,6 +93,16 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   /** @group getParam */
   @Since("2.0.0")
   def getLinkPredictionCol: String = $(linkPredictionCol)
+
+  /**
+   * Param for offset column name. If this is not set or empty, we treat all instance offsets as 0.0.
+   * @group param
+   */
+  final val offsetCol: Param[String] = new Param[String](this, "offsetCol", "offset column name. " +
+    "If this is not set or empty, we treat all instance offsets as 0.0")
+
+  /** @group getParam */
+  def getOffsetCol: String = $(offsetCol)
 
   /** Checks whether we should output link prediction. */
   private[regression] def hasLinkPredictionCol: Boolean = {
