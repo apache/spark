@@ -90,6 +90,28 @@ class AggregateEstimationSuite extends StatsEstimationTestBase {
       expectedOutputRowCount = 0)
   }
 
+  test("non-cbo estimation") {
+    val attributes = Seq("key12").map(nameToAttr)
+    val child = StatsTestPlan(
+      outputList = attributes,
+      rowCount = 4,
+      // rowCount * (overhead + column size)
+      size = Some(4 * (8 + 4)),
+      attributeStats = AttributeMap(Seq("key12").map(nameToColInfo)))
+
+    val noGroupAgg = Aggregate(groupingExpressions = Nil,
+      aggregateExpressions = Seq(Alias(Count(Literal(1)), "cnt")()), child)
+    assert(noGroupAgg.stats(conf.copy(cboEnabled = false)) ==
+      // overhead + count result size
+      Statistics(sizeInBytes = 8 + 8, rowCount = Some(1)))
+
+    val hasGroupAgg = Aggregate(groupingExpressions = attributes,
+      aggregateExpressions = attributes :+ Alias(Count(Literal(1)), "cnt")(), child)
+    assert(hasGroupAgg.stats(conf.copy(cboEnabled = false)) ==
+      // From UnaryNode.computeStats, childSize * outputRowSize / childRowSize
+      Statistics(sizeInBytes = 48 * (8 + 4 + 8) / (8 + 4)))
+  }
+
   private def checkAggStats(
       tableColumns: Seq[String],
       tableRowCount: BigInt,
@@ -107,7 +129,7 @@ class AggregateEstimationSuite extends StatsEstimationTestBase {
 
     val expectedAttrStats = AttributeMap(groupByColumns.map(nameToColInfo))
     val expectedStats = Statistics(
-      sizeInBytes = getOutputSize(testAgg.output, expectedAttrStats, expectedOutputRowCount),
+      sizeInBytes = getOutputSize(testAgg.output, expectedOutputRowCount, expectedAttrStats),
       rowCount = Some(expectedOutputRowCount),
       attributeStats = expectedAttrStats)
 

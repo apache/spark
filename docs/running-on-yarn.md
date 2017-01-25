@@ -276,15 +276,16 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.access.namenodes</code></td>
+  <td><code>spark.yarn.access.hadoopFileSystems</code></td>
   <td>(none)</td>
   <td>
-    A comma-separated list of secure HDFS namenodes your Spark application is going to access. For
-    example, <code>spark.yarn.access.namenodes=hdfs://nn1.com:8032,hdfs://nn2.com:8032,
-    webhdfs://nn3.com:50070</code>. The Spark application must have access to the namenodes listed
+    A comma-separated list of secure Hadoop filesystems your Spark application is going to access. For
+    example, <code>spark.yarn.access.hadoopFileSystems=hdfs://nn1.com:8032,hdfs://nn2.com:8032,
+    webhdfs://nn3.com:50070</code>. The Spark application must have access to the filesystems listed
     and Kerberos must be properly configured to be able to access them (either in the same realm
-    or in a trusted realm). Spark acquires security tokens for each of the namenodes so that
-    the Spark application can access those remote HDFS clusters.
+    or in a trusted realm). Spark acquires security tokens for each of the filesystems so that
+    the Spark application can access those remote Hadoop filesystems. <code>spark.yarn.access.namenodes</code>
+    is deprecated, please use this instead.
   </td>
 </tr>
 <tr>
@@ -496,10 +497,10 @@ includes a URI of the metadata store in `"hive.metastore.uris`, and
 
 If an application needs to interact with other secure Hadoop filesystems, then
 the tokens needed to access these clusters must be explicitly requested at
-launch time. This is done by listing them in the `spark.yarn.access.namenodes` property.
+launch time. This is done by listing them in the `spark.yarn.access.hadoopFileSystems` property.
 
 ```
-spark.yarn.access.namenodes hdfs://ireland.example.org:8020/,webhdfs://frankfurt.example.org:50070/
+spark.yarn.access.hadoopFileSystems hdfs://ireland.example.org:8020/,webhdfs://frankfurt.example.org:50070/
 ```
 
 Spark supports integrating with other security-aware services through Java Services mechanism (see
@@ -574,7 +575,7 @@ spark.yarn.security.credentials.hive.enabled   false
 spark.yarn.security.credentials.hbase.enabled  false
 ```
 
-The configuration option `spark.yarn.access.namenodes` must be unset.
+The configuration option `spark.yarn.access.hadoopFileSystems` must be unset.
 
 ## Troubleshooting Kerberos
 
