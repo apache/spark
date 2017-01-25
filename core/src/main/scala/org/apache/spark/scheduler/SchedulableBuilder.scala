@@ -20,7 +20,7 @@ package org.apache.spark.scheduler
 import java.io.{FileInputStream, InputStream}
 import java.util.{NoSuchElementException, Properties}
 
-import scala.xml.XML
+import scala.xml.{Node, XML}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
@@ -104,14 +104,9 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
 
       val poolName = (poolNode \ POOL_NAME_PROPERTY).text
 
-      val xmlSchedulingMode = (poolNode \ SCHEDULING_MODE_PROPERTY).text.trim.toUpperCase
-      val schedulingMode = getSchedulingModeValue(xmlSchedulingMode, DEFAULT_SCHEDULING_MODE)
-
-      val xmlMinShare = (poolNode \ MINIMUM_SHARES_PROPERTY).text.trim
-      val minShare = getIntValue(MINIMUM_SHARES_PROPERTY, xmlMinShare, DEFAULT_MINIMUM_SHARE)
-
-      val xmlWeight = (poolNode \ WEIGHT_PROPERTY).text.trim
-      val weight = getIntValue(WEIGHT_PROPERTY, xmlWeight, DEFAULT_WEIGHT)
+      val schedulingMode = getSchedulingModeValue(poolNode, poolName, DEFAULT_SCHEDULING_MODE)
+      val minShare = getIntValue(poolNode, poolName, MINIMUM_SHARES_PROPERTY, DEFAULT_MINIMUM_SHARE)
+      val weight = getIntValue(poolNode, poolName, WEIGHT_PROPERTY, DEFAULT_WEIGHT)
 
       rootPool.addSchedulable(new Pool(poolName, schedulingMode, minShare, weight))
 
@@ -120,12 +115,14 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     }
   }
 
-  private def getSchedulingModeValue(data: String, defaultValue: SchedulingMode): SchedulingMode = {
-    val warningMessage = s"Unsupported schedulingMode: $data, using the default schedulingMode: " +
-      s"$defaultValue"
+  private def getSchedulingModeValue(poolNode: Node, poolName: String, defaultValue: SchedulingMode)
+  : SchedulingMode = {
+    val xmlSchedulingMode = (poolNode \ SCHEDULING_MODE_PROPERTY).text.trim.toUpperCase
+    val warningMessage = s"Unsupported schedulingMode: $xmlSchedulingMode, using the default " +
+      s"schedulingMode: $defaultValue for pool: $poolName"
     try {
-      if (SchedulingMode.withName(data) != SchedulingMode.NONE) {
-        SchedulingMode.withName(data)
+      if (SchedulingMode.withName(xmlSchedulingMode) != SchedulingMode.NONE) {
+        SchedulingMode.withName(xmlSchedulingMode)
       } else {
         logWarning(warningMessage)
         defaultValue
@@ -137,14 +134,16 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     }
   }
 
-  private def getIntValue(propertyName: String, data: String, defaultValue: Int): Int = {
+  private def getIntValue(poolNode: Node, poolName: String, propertyName: String, defaultValue: Int)
+  : Int = {
+    val data = (poolNode \ propertyName).text.trim
     try {
       data.toInt
     } catch {
       case e: NumberFormatException =>
-        logWarning(s"Error while loading scheduler allocation file at $schedulerAllocFile. " +
+        logWarning(s"Error while loading scheduler allocation file. " +
           s"$propertyName is blank or invalid: $data, using the default $propertyName: " +
-          s"$defaultValue")
+          s"$defaultValue for pool: $poolName")
         defaultValue
     }
   }

@@ -72,19 +72,9 @@
         <weight>2</weight>
         <schedulingMode></schedulingMode>
     </pool>
-    <pool name="pool_with_min_share_surrounded_whitespace">
+    <pool name="pool_with_surrounded_whitespace">
         <minShare> 3 </minShare>
-        <weight>2</weight>
-        <schedulingMode>FAIR</schedulingMode>
-    </pool>
-    <pool name="pool_with_weight_surrounded_whitespace">
-        <minShare>1</minShare>
         <weight> 2 </weight>
-        <schedulingMode>FAIR</schedulingMode>
-    </pool>
-    <pool name="pool_with_scheduling_mode_surrounded_whitespace">
-        <minShare>3</minShare>
-        <weight>2</weight>
         <schedulingMode> FAIR </schedulingMode>
     </pool>
 </allocations>

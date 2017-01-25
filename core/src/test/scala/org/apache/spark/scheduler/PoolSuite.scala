@@ -198,9 +198,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     verifyPool(rootPool, "pool_with_empty_min_share", 0, 3, FAIR)
     verifyPool(rootPool, "pool_with_empty_weight", 2, 1, FAIR)
     verifyPool(rootPool, "pool_with_empty_scheduling_mode", 2, 2, FIFO)
-    verifyPool(rootPool, "pool_with_min_share_surrounded_whitespace", 3, 2, FAIR)
-    verifyPool(rootPool, "pool_with_weight_surrounded_whitespace", 1, 2, FAIR)
-    verifyPool(rootPool, "pool_with_scheduling_mode_surrounded_whitespace", 3, 2, FAIR)
+    verifyPool(rootPool, "pool_with_surrounded_whitespace", 3, 2, FAIR)
   }
 
   private def verifyPool(rootPool: Pool, poolName: String, expectedInitMinShare: Int,
