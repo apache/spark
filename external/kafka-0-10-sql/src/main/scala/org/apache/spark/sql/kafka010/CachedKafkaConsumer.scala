@@ -334,14 +334,15 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
   def getOrCreate(
       topic: String,
       partition: Int,
-      kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer = synchronized {
+      kafkaParams: ju.Map[String, Object],
+      reuse: Boolean): CachedKafkaConsumer = synchronized {
     val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
     val topicPartition = new TopicPartition(topic, partition)
     val key = CacheKey(groupId, topicPartition)
 
     // If this is reattempt at running the task, then invalidate cache and start with
     // a new consumer
-    if (TaskContext.get != null && TaskContext.get.attemptNumber > 1) {
+    if (!reuse || TaskContext.get != null && TaskContext.get.attemptNumber > 1) {
       val removedConsumer = cache.remove(key)
       if (removedConsumer != null) {
         removedConsumer.close()
