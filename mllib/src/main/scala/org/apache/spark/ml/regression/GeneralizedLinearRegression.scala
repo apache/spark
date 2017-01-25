@@ -1194,10 +1194,16 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
 /**
  * Case class that represents an instance of data point with
  * label, weight, offset and features.
+ *
+ * @param label Label for this data point.
+ * @param weight The weight of this instance.
+ * @param offset The offset used for this data point.
+ * @param features The vector of features for this data point.
  */
 private[ml] case class GLRInstance(label: Double, weight: Double, offset: Double,
                                    features: Vector) {
 
+  /** Constructs from an [[Instance]] object and offset */
   def this(instance: Instance, offset: Double = 0.0) = {
     this(instance.label, instance.weight, offset, instance.features)
   }
