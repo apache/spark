@@ -2,14 +2,14 @@
     "schema": {
         "fields": [
             {
-                "name": "c_timestamp",
-                "type": {"name": "timestamp", "unit": "MILLISECOND"},
+                "name": "a",
+                "type": {"name": "int", "isSigned": true, "bitWidth": 32},
                 "nullable": true,
                 "children": [],
                 "typeLayout": {
                     "vectors": [
                         {"type": "VALIDITY", "typeBitWidth": 1},
-                        {"type": "DATA", "typeBitWidth": 64}
+                        {"type": "DATA", "typeBitWidth": 32}
                     ]
                 }
             }
@@ -18,13 +18,13 @@
 
     "batches": [
         {
-            "count": 2,
+            "count": 4,
             "columns": [
                 {
-                    "name": "c_timestamp",
-                    "count": 2,
-                    "VALIDITY": [1, 1],
-                    "DATA": [1365383415567, 1365426610789]
+                    "name": "a",
+                    "count": 4,
+                    "VALIDITY": [0, 0, 0, 0],
+                    "DATA": [0, 0, 0, 0]
                 }
             ]
         }

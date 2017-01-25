@@ -27,6 +27,7 @@ import org.apache.arrow.vector.file.json.JsonFileReader
 import org.apache.arrow.vector.util.Validator
 
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.unsafe.types.CalendarInterval
 
 
 // NOTE - nullable type can be declared as Option[*] or java.lang.*
@@ -88,25 +89,16 @@ class ArrowSuite extends SharedSQLContext {
   test("string type conversion") {
     collectAndValidate(upperCaseData, "test-data/arrow/uppercase-strings.json")
     collectAndValidate(lowerCaseData, "test-data/arrow/lowercase-strings.json")
+    val nullStringsColOnly = nullStrings.select(nullStrings.columns(1))
+    collectAndValidate(nullStringsColOnly, "test-data/arrow/null-strings.json")
   }
 
   ignore("date conversion") {
-    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
-    val d1 = new Date(sdf.parse("2015-04-08 13:10:15.000").getTime)
-    val d2 = new Date(sdf.parse("2015-04-08 13:10:15.000").getTime)
-    val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567").getTime)
-    val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789").getTime)
-    val dateTimeData = Seq((d1, sdf.format(d1), ts1), (d2, sdf.format(d2), ts2))
-        .toDF("a_date", "b_string", "c_timestamp")
     collectAndValidate(dateTimeData, "test-data/arrow/datetimeData-strings.json")
   }
 
   test("timestamp conversion") {
-    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
-    val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
-    val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789 UTC").getTime)
-    val dateTimeData = Seq((ts1), (ts2)).toDF("a_timestamp")
-    collectAndValidate(dateTimeData, "test-data/arrow/timestampData.json")
+    collectAndValidate(dateTimeData.select($"c_timestamp"), "test-data/arrow/timestampData.json")
   }
 
   // Arrow json reader doesn't support binary data
@@ -120,24 +112,15 @@ class ArrowSuite extends SharedSQLContext {
 
   test("mapped type conversion") { }
 
-  test("other type conversion") {
-    // half-precision
-    // byte type, or binary
-    // allNulls
+  test("floating-point NaN") {
+    val nanData = Seq((1, 1.2F, Double.NaN), (2, Float.NaN, 1.23)).toDF("i", "NaN_f", "NaN_d")
+    collectAndValidate(nanData, "test-data/arrow/nanData-floating_point.json")
   }
-
-  test("floating-point NaN") { }
-
-  test("other null conversion") { }
 
   test("convert int column with null to arrow") {
     collectAndValidate(nullInts, "test-data/arrow/null-ints.json")
     collectAndValidate(testData3, "test-data/arrow/null-ints-mixed.json")
-  }
-
-  test("convert string column with null to arrow") {
-    val nullStringsColOnly = nullStrings.select(nullStrings.columns(1))
-    collectAndValidate(nullStringsColOnly, "test-data/arrow/null-strings.json")
+    collectAndValidate(allNulls, "test-data/arrow/allNulls-ints.json")
   }
 
   test("empty frame collect") {
@@ -146,7 +129,14 @@ class ArrowSuite extends SharedSQLContext {
   }
 
   test("unsupported types") {
-    intercept[UnsupportedOperationException] {
+    def runUnsupported(block: => Unit): Unit = {
+      val msg = intercept[UnsupportedOperationException] {
+        block
+      }
+      assert(msg.getMessage.contains("Unsupported data type"))
+    }
+
+    runUnsupported {
       collectAndValidate(decimalData, "test-data/arrow/decimalData-BigDecimal.json")
     }
   }
@@ -180,7 +170,7 @@ class ArrowSuite extends SharedSQLContext {
     val jsonSchema = jsonReader.start()
     Validator.compareSchemas(arrowSchema, jsonSchema)
 
-    val arrowRecordBatch = df.collectAsArrow(allocator)
+    val arrowRecordBatch = df.collectAsArrow(Some(allocator))
     val arrowRoot = new VectorSchemaRoot(arrowSchema, allocator)
     val vectorLoader = new VectorLoader(arrowRoot)
     vectorLoader.load(arrowRecordBatch)
@@ -239,5 +229,15 @@ class ArrowSuite extends SharedSQLContext {
       DoubleData(4, 200.0, Some(2.2)) ::
       DoubleData(5, 0.0001, None) ::
       DoubleData(6, 20000.0, Some(3.3)) :: Nil).toDF()
+  }
+
+  protected lazy val dateTimeData: DataFrame = {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
+    val d1 = new Date(sdf.parse("2015-04-08 13:10:15.000 UTC").getTime)
+    val d2 = new Date(sdf.parse("2015-04-08 13:10:15.000 UTC").getTime)
+    val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
+    val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789 UTC").getTime)
+    Seq((d1, sdf.format(d1), ts1), (d2, sdf.format(d2), ts2))
+      .toDF("a_date", "b_string", "c_timestamp")
   }
 }

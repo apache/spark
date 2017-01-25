@@ -1,0 +1,68 @@
+{
+    "schema": {
+        "fields": [
+            {
+                "name": "i",
+                "type": {"name": "int", "isSigned": true, "bitWidth": 32},
+                "nullable": false,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 8}
+                    ]
+                }
+            },
+            {
+                "name": "NaN_f",
+                "type": {"name": "floatingpoint", "precision": "SINGLE"},
+                "nullable": false,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 32}
+                    ]
+                }
+            },
+            {
+                "name": "NaN_d",
+                "type": {"name": "floatingpoint", "precision": "DOUBLE"},
+                "nullable": false,
+                "children": [],
+                "typeLayout": {
+                    "vectors": [
+                        {"type": "VALIDITY", "typeBitWidth": 1},
+                        {"type": "DATA", "typeBitWidth": 32}
+                    ]
+                }
+            }
+        ]
+    },
+
+    "batches": [
+        {
+            "count": 2,
+            "columns": [
+                {
+                    "name": "i",
+                    "count": 2,
+                    "VALIDITY": [1, 1],
+                    "DATA": [1, 2]
+                },
+                {
+                    "name": "NaN_f",
+                    "count": 2,
+                    "VALIDITY": [1, 1],
+                    "DATA": [1.2, "NaN"]
+                },
+                {
+                    "name": "NaN_d",
+                    "count": 2,
+                    "VALIDITY": [1, 1],
+                    "DATA": ["NaN", 1.23]
+                }
+            ]
+        }
+    ]
+}
