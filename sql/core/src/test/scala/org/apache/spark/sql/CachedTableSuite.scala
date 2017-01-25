@@ -39,7 +39,7 @@ private case class BigData(s: String)
 class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext {
   import testImplicits._
 
-  setupTestData
+  setupTestData()
 
   override def afterEach(): Unit = {
     try {
