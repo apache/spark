@@ -1478,10 +1478,9 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   }
 
   /**
-    * Summary table with feature name, coefficient, standard error,
-    * tValue and pValue.
-    *
-    */
+   * Summary table with feature name, coefficient, standard error,
+   * tValue and pValue.
+   */
   @Since("2.2.0")
   lazy val summaryTable: DataFrame = {
     if (isNormalSolver) {
@@ -1491,7 +1490,7 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
       if (model.getFitIntercept) {
         featureNames = featureNames :+ "Intercept"
         coefficients = coefficients :+ model.intercept
-        // reorder so that intercept comes first
+        // Reorder so that intercept comes first
         idx = (coefficients.length - 1) +: idx
       }
       val result = for (i <- idx.toSeq) yield
