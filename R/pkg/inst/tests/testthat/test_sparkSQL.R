@@ -2748,6 +2748,24 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
                  "Unnamed arguments ignored: 2, 3, a.")
 })
 
+test_that("Collect on DataFrame when NAs exists at the top of a timestamp column") {
+  ldf <- data.frame(col1 = c(0, 1, 2),
+                   col2 = c(as.POSIXct("2017-01-01 00:00:01"),
+                            NA,
+                            as.POSIXct("2017-01-01 12:00:01")))
+  sdf1 <- createDataFrame(ldf)
+  ldf1 <- collect(sdf1)
+  expect_equal(dtypes(sdf1), list(c("col1", "double"), c("col2", "timestamp")))
+  expect_equal(class(ldf1$col1), "numeric")
+  expect_equal(class(ldf1$col2), "POSIXct")
+  
+  sdf2 <- filter(sdf1, "col1 > 0")
+  ldf2 <- collect(sdf2)
+  expect_equal(dtypes(sdf2), list(c("col1", "double"), c("col2", "timestamp")))
+  expect_equal(class(ldf2$col1), "numeric")
+  expect_equal(class(ldf2$col2), "POSIXct")
+}
+
 unlink(parquetPath)
 unlink(orcPath)
 unlink(jsonPath)

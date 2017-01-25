@@ -1136,17 +1136,11 @@ setMethod("collect",
 
                   # Note that "binary" columns behave like complex types.
                   if (!is.null(PRIMITIVE_TYPES[[colType]]) && colType != "binary") {
-                    valueIndex <- which(!is.na(col))
-                    if (length(valueIndex) > 0 && valueIndex[1] > 1) {
-                      colTail <- col[-(1 : (valueIndex[1] - 1))]
-                      vec <- do.call(c, colTail)
-                      classVal <- class(vec)
-                      vec <- c(rep(NA, valueIndex[1] - 1), vec)
-                      class(vec) <- classVal
-                    } else {
-                      vec <- do.call(c, col)
-                    }
+                    vec <- do.call(c, col)
                     stopifnot(class(vec) != "list")
+                    # If vec is an vector with only NAs, the type is logical
+                    if (length(vec[!is.na(vec)]) > 0)
+                      class(vec) <- PRIMITIVE_TYPES[[colType]]
                     df[[colIndex]] <- vec
                   } else {
                     df[[colIndex]] <- col
