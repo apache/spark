@@ -22,10 +22,10 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
 
-class KafkaRelationSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
+class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLContext {
 
   import testImplicits._
 
@@ -53,7 +53,7 @@ class KafkaRelationSuite extends SparkFunSuite with BeforeAndAfter with SharedSQ
     }
   }
 
-  test("batch processing earliest to latest") {
+  test("explicit earliest to latest offsets") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
     testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
@@ -61,7 +61,7 @@ class KafkaRelationSuite extends SparkFunSuite with BeforeAndAfter with SharedSQ
     testUtils.sendMessages(topic, Array("20"), Some(2))
 
     // Specify explicit earliest and latest offset values
-    var reader = spark
+    val reader = spark
       .read
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
@@ -69,21 +69,40 @@ class KafkaRelationSuite extends SparkFunSuite with BeforeAndAfter with SharedSQ
       .option("startingOffsets", "earliest")
       .option("endingOffsets", "latest")
       .load()
-    assert(reader.count() === 21)
-    testUtils.sendMessages(topic, (21 to 29).map(_.toString).toArray, Some(2))
-    // "latest" should late bind to the current (latest) offset
-    assert(reader.count() === 30)
+    var df = reader.selectExpr("CAST(value AS STRING)")
+    checkAnswer(df, (0 to 20).map(_.toString).toDF)
 
+    // "latest" should late bind to the current (latest) offset in the reader
+    testUtils.sendMessages(topic, (21 to 29).map(_.toString).toArray, Some(2))
+    df = reader.selectExpr("CAST(value AS STRING)")
+    checkAnswer(df, (0 to 29).map(_.toString).toDF)
+  }
+
+  test("default starting and ending offsets") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, Array("20"), Some(2))
 
     // Implicit offset values, should default to earliest and latest
-    reader = spark
+    val df = spark
       .read
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("subscribe", topic)
       .load()
+      .selectExpr("CAST(value AS STRING)")
     // Test that we default to "earliest" and "latest"
-    assert(reader.count() === 30)
+    checkAnswer(df, (0 to 20).map(_.toString).toDF)
+  }
+
+  test("explicit offsets") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, Array("20"), Some(2))
 
     // Test explicitly specified offsets
     val startPartitionOffsets = Map(
@@ -96,10 +115,10 @@ class KafkaRelationSuite extends SparkFunSuite with BeforeAndAfter with SharedSQ
     val endPartitionOffsets = Map(
       new TopicPartition(topic, 0) -> -1L, // -1 => latest
       new TopicPartition(topic, 1) -> -1L,
-      new TopicPartition(topic, 2) -> 10L  // explicit offset happens to = the latest
+      new TopicPartition(topic, 2) -> 1L  // explicit offset happens to = the latest
     )
     val endingOffsets = JsonUtils.partitionOffsets(endPartitionOffsets)
-    reader = spark
+    val reader = spark
       .read
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
@@ -107,11 +126,40 @@ class KafkaRelationSuite extends SparkFunSuite with BeforeAndAfter with SharedSQ
       .option("startingOffsets", startingOffsets)
       .option("endingOffsets", endingOffsets)
       .load()
-    assert(reader.count() === 30)
-    testUtils.sendMessages(topic, (30 to 39).map(_.toString).toArray, Some(2))
-    assert(reader.count() === 30) // static offset partition 2, nothing should change
-    testUtils.sendMessages(topic, (30 to 39).map(_.toString).toArray, Some(1))
-    assert(reader.count() === 40) // latest offset partition 1, should change
+    var df = reader.selectExpr("CAST(value AS STRING)")
+    checkAnswer(df, (0 to 20).map(_.toString).toDF)
+
+    // static offset partition 2, nothing should change
+    testUtils.sendMessages(topic, (31 to 39).map(_.toString).toArray, Some(2))
+    df = reader.selectExpr("CAST(value AS STRING)")
+    checkAnswer(df, (0 to 20).map(_.toString).toDF)
+
+    // latest offset partition 1, should change
+    testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(1))
+    df = reader.selectExpr("CAST(value AS STRING)")
+    checkAnswer(df, (0 to 30).map(_.toString).toDF)
+  }
+
+  test("reuse same dataframe in query") {
+    // This test ensures that we do not cache the Kafka Consumer in KafkaRelation
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+    testUtils.sendMessages(topic, (0 to 10).map(_.toString).toArray, Some(0))
+
+    // Ensure local[2] so that two tasks will execute the query on one partition
+    val testSession = new TestSparkSession(sparkContext)
+    // Specify explicit earliest and latest offset values
+    val reader = testSession
+      .read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .option("endingOffsets", "latest")
+      .load()
+    var df = reader.selectExpr("CAST(value AS STRING)")
+    checkAnswer(df.union(df),
+      (0 to 10).map(_.toString).toDF.union((0 to 10).map(_.toString).toDF))
   }
 
   test("bad source options") {

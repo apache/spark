@@ -692,7 +692,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
 
     val reader = spark.readStream
     reader
-      .format(classOf[KafkaProvider].getCanonicalName.stripSuffix("$"))
+      .format(classOf[KafkaSourceProvider].getCanonicalName.stripSuffix("$"))
       .option("startingOffsets", s"earliest")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
@@ -754,7 +754,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
     // Create Kafka source that reads from latest offset
     val kafka =
       spark.readStream
-        .format(classOf[KafkaProvider].getCanonicalName.stripSuffix("$"))
+        .format(classOf[KafkaSourceProvider].getCanonicalName.stripSuffix("$"))
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
         .option("kafka.metadata.max.age.ms", "1")
         .option("subscribePattern", "stress.*")

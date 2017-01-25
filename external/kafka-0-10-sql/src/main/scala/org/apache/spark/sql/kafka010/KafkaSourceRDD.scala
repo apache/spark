@@ -63,7 +63,8 @@ private[kafka010] class KafkaSourceRDD(
     executorKafkaParams: ju.Map[String, Object],
     offsetRanges: Seq[KafkaSourceRDDOffsetRange],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean)
+    failOnDataLoss: Boolean,
+    cachedConsumer: Boolean)
   extends RDD[ConsumerRecord[Array[Byte], Array[Byte]]](sc, Nil) {
 
   override def persist(newLevel: StorageLevel): this.type = {
@@ -134,8 +135,12 @@ private[kafka010] class KafkaSourceRDD(
       Iterator.empty
     } else {
       new NextIterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
-        val consumer = CachedKafkaConsumer.getOrCreate(
-          range.topic, range.partition, executorKafkaParams)
+        val consumer = if (cachedConsumer) {
+          CachedKafkaConsumer.getOrCreate(
+            range.topic, range.partition, executorKafkaParams)
+        } else {
+          CachedKafkaConsumer(range.topicPartition, executorKafkaParams)
+        }
         var requestOffset = range.fromOffset
 
         override def getNext(): ConsumerRecord[Array[Byte], Array[Byte]] = {

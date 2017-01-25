@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.concurrent.{Executor, LinkedBlockingQueue}
+import java.util.concurrent.{Executors, ThreadFactory}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
@@ -37,15 +37,31 @@ import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
 
 private[kafka010] trait KafkaOffsetReader {
 
+  /**
+   * Closes the connection to Kafka, and cleans up state.
+   */
   def close()
 
+  /**
+   * Set consumer position to specified offsets, making sure all assignments are set.
+   */
   def fetchSpecificStartingOffsets(
     partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long]
 
+  /**
+   * Fetch the earliest offsets of partitions.
+   */
   def fetchEarliestOffsets(): Map[TopicPartition, Long]
 
+  /**
+   * Fetch the latest offsets of partitions.
+   */
   def fetchLatestOffsets(): Map[TopicPartition, Long]
 
+  /**
+   * Fetch the earliest offsets for newly discovered partitions. The return result may not contain
+   * some partitions if they are deleted.
+   */
   def fetchNewPartitionEarliestOffsets(
     newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long]
 }
@@ -92,9 +108,6 @@ private[kafka010] class KafkaOffsetReaderImpl(
 
   def close(): Unit = consumer.close()
 
-  /**
-   * Set consumer position to specified offsets, making sure all assignments are set.
-   */
   def fetchSpecificStartingOffsets(
       partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
     withRetriesWithoutInterrupt {
@@ -118,9 +131,6 @@ private[kafka010] class KafkaOffsetReaderImpl(
       }
     }
 
-  /**
-   * Fetch the earliest offsets of partitions.
-   */
   def fetchEarliestOffsets(): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
     // Poll to get the latest assigned partitions
     consumer.poll(0)
@@ -134,9 +144,6 @@ private[kafka010] class KafkaOffsetReaderImpl(
     partitionOffsets
   }
 
-  /**
-   * Fetch the latest offset of partitions.
-   */
   def fetchLatestOffsets(): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
     // Poll to get the latest assigned partitions
     consumer.poll(0)
@@ -150,10 +157,6 @@ private[kafka010] class KafkaOffsetReaderImpl(
     partitionOffsets
   }
 
-  /**
-   * Fetch the earliest offsets for newly discovered partitions. The return result may not contain
-   * some partitions if they are deleted.
-   */
   def fetchNewPartitionEarliestOffsets(
       newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = {
     if (newPartitions.isEmpty) {
@@ -253,7 +256,7 @@ private[kafka010] class KafkaOffsetReaderImpl(
 
 /**
  * The Kafka Consumer must be called in an UninterruptibleThread. This naturally occurs
- * in Spark Streaming, but not in Spark SQL, which will use this call to communicate
+ * in Structured Streaming, but not in Spark SQL, which will use this call to communicate
  * with Kafak for obtaining offsets.
  *
  * @param kafkaOffsetReader Basically in instance of [[KafkaOffsetReaderImpl]] that
@@ -262,32 +265,23 @@ private[kafka010] class KafkaOffsetReaderImpl(
 private[kafka010] class UninterruptibleKafkaOffsetReader(kafkaOffsetReader: KafkaOffsetReader)
   extends KafkaOffsetReader with Logging {
 
-  private class KafkaOffsetReaderThread extends UninterruptibleThread("Kafka Offset Reader") {
-    override def run(): Unit = {
-      while (this.isInterrupted == false) {
-        val runnable = queue.take()
-        runnable.run()
+  val kafkaReaderThread = Executors.newSingleThreadExecutor(new ThreadFactory {
+    override def newThread(r: Runnable): Thread = {
+      logInfo("NEW UNINTERRUPTIBLE THREAD KAFKA OFFSET")
+      val t = new UninterruptibleThread("Kafka Offset Reader") {
+        override def run(): Unit = {
+          r.run()
+        }
       }
-    }
-  }
-  private val readerThread = new KafkaOffsetReaderThread
-
-  private val queue = new LinkedBlockingQueue[Runnable]()
-
-  private val execContext = ExecutionContext.fromExecutor(new Executor {
-    override def execute(runnable: Runnable): Unit = {
-      if (readerThread.isAlive == false) readerThread.start()
-      queue.add(runnable)
+      t.setDaemon(true)
+      t
     }
   })
-
+  val execContext = ExecutionContext.fromExecutorService(kafkaReaderThread)
 
   override def close(): Unit = {
     kafkaOffsetReader.close()
-    readerThread.interrupt()
-    queue.add(new Runnable() {
-      override def run(): Unit = { }
-    })
+    kafkaReaderThread.shutdownNow()
   }
 
   override def fetchSpecificStartingOffsets(

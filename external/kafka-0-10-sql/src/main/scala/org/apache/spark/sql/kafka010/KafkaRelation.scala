@@ -38,10 +38,9 @@ private[kafka010] class KafkaRelation(
     startingOffsets: KafkaOffsets,
     endingOffsets: KafkaOffsets)
   extends BaseRelation with TableScan with Logging {
-
-  require(startingOffsets != LatestOffsets,
+  assert(startingOffsets != LatestOffsets,
     "Starting offset not allowed to be set to latest offsets.")
-  require(endingOffsets != EarliestOffsets,
+  assert(endingOffsets != EarliestOffsets,
     "Ending offset not allowed to be set to earliest offsets.")
 
   private val pollTimeoutMs = sourceOptions.getOrElse(
@@ -57,27 +56,24 @@ private[kafka010] class KafkaRelation(
     val untilPartitionOffsets = getPartitionOffsets(endingOffsets)
     // Obtain topicPartitions in both from and until partition offset, ignoring
     // topic partitions that were added and/or deleted between the two above calls.
-    val topicPartitions = fromPartitionOffsets.keySet.intersect(untilPartitionOffsets.keySet)
-
+    if (fromPartitionOffsets.keySet.size != untilPartitionOffsets.keySet.size) {
+      throw new IllegalStateException("Kafka return different topic partitions " +
+        "for starting and ending offsets")
+    }
 
     val sortedExecutors = KafkaUtils.getSortedExecutorList(sqlContext.sparkContext)
     val numExecutors = sortedExecutors.length
     logDebug("Sorted executors: " + sortedExecutors.mkString(", "))
 
     // Calculate offset ranges
-    val offsetRanges = topicPartitions.map { tp =>
+    val offsetRanges = untilPartitionOffsets.keySet.map { tp =>
       val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
           // This should not happen since topicPartitions contains all partitions not in
           // fromPartitionOffsets
           throw new IllegalStateException(s"$tp doesn't have a from offset")
       }
       val untilOffset = untilPartitionOffsets(tp)
-      val preferredLoc = if (numExecutors > 0) {
-        // This allows cached KafkaConsumers in the executors to be re-used to read the same
-        // partition in every batch.
-        Some(sortedExecutors(KafkaUtils.floorMod(tp.hashCode, numExecutors)))
-      } else None
-      KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
+      KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, None)
     }.toArray
 
     logInfo("GetBatch generating RDD of offset range: " +
@@ -86,7 +82,7 @@ private[kafka010] class KafkaRelation(
     // Create an RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD(
       sqlContext.sparkContext, executorKafkaParams, offsetRanges,
-      pollTimeoutMs, failOnDataLoss).map { cr =>
+      pollTimeoutMs, failOnDataLoss, false).map { cr =>
       InternalRow(
         cr.key,
         cr.value,

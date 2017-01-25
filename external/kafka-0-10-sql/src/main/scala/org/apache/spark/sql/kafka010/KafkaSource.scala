@@ -271,7 +271,7 @@ private[kafka010] class KafkaSource(
 
     // Create an RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD(
-      sc, executorKafkaParams, offsetRanges, pollTimeoutMs, failOnDataLoss).map { cr =>
+      sc, executorKafkaParams, offsetRanges, pollTimeoutMs, failOnDataLoss, true).map { cr =>
       InternalRow(
         cr.key,
         cr.value,
