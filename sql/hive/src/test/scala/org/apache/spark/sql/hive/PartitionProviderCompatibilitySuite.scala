@@ -488,7 +488,7 @@ class PartitionProviderCompatibilitySuite
   test("partition path created by Hive should be deleted after renamePartitions with upper-case") {
     withTable("t") {
       Seq((1, 2, 3)).toDF("id", "A", "B").write.partitionBy("A", "B").saveAsTable("t")
-      spark.sql("alter table t partition(a=2, B=3) rename to partition(a=4, B=5)")
+      spark.sql("alter table t partition(A=2, B=3) rename to partition(A=4, B=5)")
 
       val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
       val uselessHivePath = new Path(table.location + "/a=4")

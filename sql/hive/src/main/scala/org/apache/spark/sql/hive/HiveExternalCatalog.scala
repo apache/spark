@@ -906,7 +906,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           // newSpec is 'A=1/B=2', after renamePartitions by Hive, the location path in FileSystem
           // changed to 'a=1/b=2', which is wrongPath, then we renamed to 'A=1/B=2', and 'a=1/b=2'
           // in FileSystem is deleted, while 'a=1' is already exists, which should also be deleted
-          val delHivePartPathAfterRename = ExternalCatalogUtils.getUselessHivePartPathAfterRename(
+          val delHivePartPathAfterRename = ExternalCatalogUtils.getExtraPartPathCreatedByHive(
             lowerCasePartitionSpec(spec),
             partitionColumnNames,
             tablePath)

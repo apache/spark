@@ -121,7 +121,7 @@ object ExternalCatalogUtils {
     }
   }
 
-  def getUselessHivePartPathAfterRename(
+  def getExtraPartPathCreatedByHive(
                              lowerCaseSpec: TablePartitionSpec,
                              partitionColumnNames: Seq[String],
                              tablePath: Path): Path = {
