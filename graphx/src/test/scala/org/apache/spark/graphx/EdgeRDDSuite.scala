@@ -19,6 +19,7 @@ package org.apache.spark.graphx
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 class EdgeRDDSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -30,6 +31,31 @@ class EdgeRDDSuite extends SparkFunSuite with LocalSparkContext {
       assert(edges.getStorageLevel == StorageLevel.NONE)
       edges.cache()
       assert(edges.getStorageLevel == StorageLevel.MEMORY_ONLY)
+    }
+  }
+
+  test("checkpointing") {
+    withSpark { sc =>
+      val verts = sc.parallelize(List((0L, 0), (1L, 1), (1L, 2), (2L, 3), (2L, 3), (2L, 3)))
+      val edges = EdgeRDD.fromEdges(sc.parallelize(List.empty[Edge[Int]]))
+      sc.setCheckpointDir(Utils.createTempDir().getCanonicalPath)
+      edges.checkpoint()
+
+      // EdgeRDD and partitionsRDD are not checkpointed yet
+      assert(!edges.isCheckpointed)
+      assert(!edges.isCheckpointedAndMaterialized)
+      assert(!edges.partitionsRDD.isCheckpointed)
+      assert(!edges.partitionsRDD.isCheckpointedAndMaterialized)
+
+      val data = edges.collect().toSeq // force checkpointing
+
+      // EdgeRDD and partitionsRDD are checkpointed now
+      assert(edges.isCheckpointed)
+      assert(edges.isCheckpointedAndMaterialized)
+      assert(edges.partitionsRDD.isCheckpointed)
+      assert(edges.partitionsRDD.isCheckpointedAndMaterialized)
+
+      assert(edges.collect().toSeq ===  data) // test checkpointed RDD
     }
   }
 
