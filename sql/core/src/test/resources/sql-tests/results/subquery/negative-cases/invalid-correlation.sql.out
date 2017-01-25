@@ -63,4 +63,4 @@ where  t1a in (select   min(t2a)
 struct<>
 -- !query 4 output
 org.apache.spark.sql.AnalysisException
-resolved attribute(s) t2b### missing from min(t2a)###,t2c### in operator !Filter predicate-subquery### [(t2c### = max(t3c)###) && (t3b### > t2b###)];
+resolved attribute(s) t2b#x missing from min(t2a)#x,t2c#x in operator !Filter predicate-subquery#x [(t2c#x = max(t3c)#x) && (t3b#x > t2b#x)];

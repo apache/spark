@@ -231,7 +231,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         // Also implement a crude way of masking expression IDs in the error message
         // with a generic pattern "###".
         (StructType(Seq.empty),
-          Seq(a.getClass.getName, a.getSimpleMessage.replaceAll("#[0-9]+", "###")))
+          Seq(a.getClass.getName, a.getSimpleMessage.replaceAll("#\\d+", "#x")))
       case NonFatal(e) =>
         // If there is an exception, put the exception class followed by the message.
         (StructType(Seq.empty), Seq(e.getClass.getName, e.getMessage))

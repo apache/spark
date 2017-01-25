@@ -118,10 +118,6 @@ trait CheckAnalysis extends PredicateHelper {
               case None => w
             }
 
-          case e @ PredicateSubquery(query, _, _, _) =>
-            checkAnalysis(query)
-            e
-
           case s @ ScalarSubquery(query, conditions, _) =>
             // If no correlation, the output must be exactly one column
             if (conditions.isEmpty && query.output.size != 1) {
@@ -184,6 +180,11 @@ trait CheckAnalysis extends PredicateHelper {
             }
             checkAnalysis(query)
             s
+
+          case s: SubqueryExpression =>
+            checkAnalysis(s.plan)
+            s
+
         }
 
         operator match {
