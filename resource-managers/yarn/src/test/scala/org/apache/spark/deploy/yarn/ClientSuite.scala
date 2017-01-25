@@ -399,9 +399,10 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       hadoopConf.set(key, file.getAbsolutePath())
     }
 
+    val envVar = if (Utils.isWindows) "CD" else "PWD"
     val sparkConf = new SparkConfWithEnv(Map(
       "HADOOP_CONF_DIR" -> confDir.getAbsolutePath,
-      "PWD" -> "TEST_PATH"))
+      envVar -> "TEST_PATH"))
     sparkConf.set(SPARK_JARS, Seq("local:" + confDir.getAbsolutePath()))
 
     val client = createClient(sparkConf, conf = hadoopConf)
