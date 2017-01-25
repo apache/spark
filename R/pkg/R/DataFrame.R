@@ -1138,9 +1138,18 @@ setMethod("collect",
                   if (!is.null(PRIMITIVE_TYPES[[colType]]) && colType != "binary") {
                     vec <- do.call(c, col)
                     stopifnot(class(vec) != "list")
-                    # If vec is an vector with only NAs, the type is logical
                     if (length(vec[!is.na(vec)]) > 0)
-                      class(vec) <- PRIMITIVE_TYPES[[colType]]
+                    {
+                      class(vec) <- class(vec[!is.na(vec)])
+                    }
+                    else {
+                      # If vec is an vector with only NAs, the type will be cast to PRIMITIVE_TYPE
+                      class(vec) <-
+                        if (colType == "timestamp")
+                          c("POSIXct", "POSIXt")
+                        else
+                          PRIMITIVE_TYPES[[colType]]
+                    }
                     df[[colIndex]] <- vec
                   } else {
                     df[[colIndex]] <- col
