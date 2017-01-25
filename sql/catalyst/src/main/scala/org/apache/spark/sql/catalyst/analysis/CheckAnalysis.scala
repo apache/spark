@@ -184,7 +184,6 @@ trait CheckAnalysis extends PredicateHelper {
           case s: SubqueryExpression =>
             checkAnalysis(s.plan)
             s
-
         }
 
         operator match {
