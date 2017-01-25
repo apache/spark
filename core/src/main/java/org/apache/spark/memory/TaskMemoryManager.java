@@ -20,12 +20,10 @@ package org.apache.spark.memory;
 import javax.annotation.concurrent.GuardedBy;
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.ArrayList;
 import java.util.BitSet;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashSet;
-import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
@@ -56,22 +54,6 @@ import org.apache.spark.util.Utils;
  * approximately 35 terabytes of memory.
  */
 public class TaskMemoryManager {
-
-  /**
-   * A internal class used to sort MemoryConsumer based on their memory usage.
-   * Note: This sorts consumers by descending order, i.e., the consumers using more memory
-   *       are sorted ahead of the consumers using less.
-   */
-  private static final class ConsumerComparator implements Comparator<MemoryConsumer> {
-    @Override
-    public int compare(MemoryConsumer consumer1, MemoryConsumer consumer2) {
-      // We can only compare the consumers which use the same mode.
-      assert (consumer1.getMode() == consumer2.getMode()) :
-        "Try to compare two MemoryConsumers which are in different memory mode.";
-      return Long.compare(consumer2.getUsed(), consumer1.getUsed());
-    }
-  }
-
 
   private static final Logger logger = LoggerFactory.getLogger(TaskMemoryManager.class);
 
@@ -129,6 +111,11 @@ public class TaskMemoryManager {
   private final HashSet<MemoryConsumer> consumers;
 
   /**
+   * The map used to sort memory consumers when spilling.
+   */
+  private final TreeMap<Long, MemoryConsumer> sortedConsumers;
+
+  /**
    * The amount of memory that is acquired but not used.
    */
   private volatile long acquiredButNotUsed = 0L;
@@ -141,6 +128,7 @@ public class TaskMemoryManager {
     this.memoryManager = memoryManager;
     this.taskAttemptId = taskAttemptId;
     this.consumers = new HashSet<>();
+    this.sortedConsumers = new TreeMap<Long, MemoryConsumer>();
   }
 
   /**
@@ -167,36 +155,46 @@ public class TaskMemoryManager {
         // Sort the consumers according their memory usage. So we avoid spilling the same consumer
         // which is just spilled in last few times and re-spilling on it will produce many small
         // spill files.
-        List<MemoryConsumer> sortedList = new ArrayList<>(consumers.size());
+        sortedConsumers.clear();
         for (MemoryConsumer c: consumers) {
           if (c != consumer && c.getUsed() > 0 && c.getMode() == mode) {
-            sortedList.add(c);
+            Long key = c.getUsed();
+            // If there is existing consumer using the same amount of memory,
+            // increasing the key.
+            while (sortedConsumers.containsKey(key)) {
+              key += 1;
+            }
+            sortedConsumers.put(key, c);
           }
         }
-        Collections.sort(sortedList, new ConsumerComparator());
-        for (int listIndex = 0; listIndex < sortedList.size(); listIndex++) {
-          MemoryConsumer c = sortedList.get(listIndex);
-          // Try to only spill on the consumer which has the required size of memory.
-          // As the consumers are sorted in descending order, if the next consumer doesn't have
-          // the required memory, then we need to spill the current consumer at least.
-          boolean doSpill = (listIndex + 1) == sortedList.size() ||
-            sortedList.get(listIndex + 1).getUsed() < (required - got);
-          if (doSpill) {
-            try {
-              long released = c.spill(required - got, consumer);
-              if (released > 0) {
-                logger.debug("Task {} released {} from {} for {}", taskAttemptId,
-                  Utils.bytesToString(released), c, consumer);
-                got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
-                if (got >= required) {
-                  break;
-                }
+        // Get the consumer using the least memory more than the remaining required memory.
+        Map.Entry<Long, MemoryConsumer> currentEntry = sortedConsumers.ceilingEntry(required - got);
+        if (currentEntry == null) {
+          // No consumer has used memory more than the remaining required memory.
+          // Get the consumer of largest used memory.
+          currentEntry = sortedConsumers.lastEntry();
+        }
+        while (currentEntry != null) {
+          MemoryConsumer c = currentEntry.getValue();
+          try {
+            long released = c.spill(required - got, consumer);
+            if (released > 0) {
+              logger.debug("Task {} released {} from {} for {}", taskAttemptId,
+                Utils.bytesToString(released), c, consumer);
+              got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
+              if (got >= required) {
+                break;
               }
-            } catch (IOException e) {
-              logger.error("error while calling spill() on " + c, e);
-              throw new OutOfMemoryError("error while calling spill() on " + c + " : "
-                + e.getMessage());
             }
+            sortedConsumers.remove(currentEntry.getKey());
+            currentEntry = sortedConsumers.ceilingEntry(required - got);
+            if (currentEntry == null) {
+              currentEntry = sortedConsumers.lastEntry();
+            }
+          } catch (IOException e) {
+            logger.error("error while calling spill() on " + c, e);
+            throw new OutOfMemoryError("error while calling spill() on " + c + " : "
+              + e.getMessage());
           }
         }
       }
