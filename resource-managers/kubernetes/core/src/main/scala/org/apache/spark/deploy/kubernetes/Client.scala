@@ -54,7 +54,7 @@ private[spark] class Client(
   private val appName = sparkConf.getOption("spark.app.name")
     .orElse(sparkConf.getOption("spark.app.id"))
     .getOrElse("spark")
-  private val kubernetesAppId = s"$appName-$launchTime"
+  private val kubernetesAppId = s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
   private val secretName = s"spark-submission-server-secret-$kubernetesAppId"
   private val driverLauncherSelectorValue = s"driver-launcher-$launchTime"
   private val driverDockerImage = sparkConf.get(
