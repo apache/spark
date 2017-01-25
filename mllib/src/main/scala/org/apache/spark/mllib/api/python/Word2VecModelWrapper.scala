@@ -54,7 +54,7 @@ private[python] class Word2VecModelWrapper(model: Word2VecModel) {
   }
 
   /**
-   * Finds words similar to the the vector representation of a word without
+   * Finds words similar to the vector representation of a word without
    * filtering results.
    * @param vector a vector
    * @param num number of synonyms to find

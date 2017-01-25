@@ -266,33 +266,41 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def eval(input: InternalRow): Any = value
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = ctx.javaType(dataType)
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
       ev.isNull = "true"
-      ev.copy(s"final ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};")
+      ev.copy(s"final $javaType ${ev.value} = ${ctx.defaultValue(dataType)};")
     } else {
       ev.isNull = "false"
-      ev.value = dataType match {
-        case BooleanType | IntegerType | DateType => value.toString
+      dataType match {
+        case BooleanType | IntegerType | DateType =>
+          ev.copy(code = "", value = value.toString)
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
-            ctx.addReferenceMinorObj(v)
+            val boxedValue = ctx.addReferenceMinorObj(v)
+            val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
+            ev.copy(code = code)
           } else {
-            s"${value}f"
+            ev.copy(code = "", value = s"${value}f")
           }
         case DoubleType =>
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
-            ctx.addReferenceMinorObj(v)
+            val boxedValue = ctx.addReferenceMinorObj(v)
+            val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
+            ev.copy(code = code)
           } else {
-            s"${value}D"
+            ev.copy(code = "", value = s"${value}D")
           }
-        case ByteType | ShortType => s"(${ctx.javaType(dataType)})$value"
-        case TimestampType | LongType => s"${value}L"
-        case other => ctx.addReferenceMinorObj(value, ctx.javaType(dataType))
+        case ByteType | ShortType =>
+          ev.copy(code = "", value = s"($javaType)$value")
+        case TimestampType | LongType =>
+          ev.copy(code = "", value = s"${value}L")
+        case other =>
+          ev.copy(code = "", value = ctx.addReferenceMinorObj(value, ctx.javaType(dataType)))
       }
-      ev.copy("")
     }
   }
 
