@@ -17,8 +17,6 @@
 
 package org.apache.spark.rpc
 
-import javax.annotation.Nullable
-
 import org.apache.spark.SparkException
 
 /**
@@ -31,7 +29,7 @@ import org.apache.spark.SparkException
  *                   an endpoint in a client `NettyRpcEnv`.
  * @param name Name of the endpoint.
  */
-private[spark] case class RpcEndpointAddress(@Nullable rpcAddress: RpcAddress, name: String) {
+private[spark] case class RpcEndpointAddress(rpcAddress: RpcAddress, name: String) {
 
   require(name != null, "RpcEndpoint name must be provided.")
 

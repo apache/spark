@@ -529,7 +529,7 @@ private[netty] class NettyRpcEndpointRef(
  * @param content the message content.
  */
 private[netty] class RequestMessage(
-    @Nullable val senderAddress: RpcAddress,
+    val senderAddress: RpcAddress,
     val receiver: NettyRpcEndpointRef, val content: Any) {
 
   /** Manually serialize [[RequestMessage]] to minimize the size of bytes. */
@@ -549,7 +549,7 @@ private[netty] class RequestMessage(
     bos.toByteBuffer
   }
 
-  private def writeRpcAddress(out: DataOutputStream, @Nullable rpcAddress: RpcAddress): Unit = {
+  private def writeRpcAddress(out: DataOutputStream, rpcAddress: RpcAddress): Unit = {
     if (rpcAddress == null) {
       out.writeBoolean(false)
     } else {
