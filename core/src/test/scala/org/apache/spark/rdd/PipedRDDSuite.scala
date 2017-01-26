@@ -17,10 +17,9 @@
 
 package org.apache.spark.rdd
 
-import java.io.File
+import java.io.{DataInput, DataOutput, File}
 
 import scala.collection.Map
-import scala.io.Codec
 import scala.sys.process._
 import scala.util.Try
 
@@ -232,16 +231,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
         }
       }
       val hadoopPart1 = generateFakeHadoopPartition()
-      val pipedRdd =
-        new PipedRDD(
-          nums,
-          PipedRDD.tokenize("printenv " + varName),
-          Map(),
-          null,
-          null,
-          false,
-          4092,
-          Codec.defaultCharsetCodec.name)
+      val pipedRdd = nums.pipe("printenv " + varName)
       val tContext = TaskContext.empty()
       val rddIter = pipedRdd.compute(hadoopPart1, tContext)
       val arr = rddIter.toArray
@@ -257,4 +247,66 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
     new HadoopPartition(sc.newRddId(), 1, split)
   }
 
+  test("pipe works for non-default encoding") {
+    if (testCommandAvailable("cat")) {
+      val elems = sc.parallelize(Array("foobar"))
+          .pipe(Seq("cat"), encoding = "utf-32")
+          .collect()
+
+      assert(elems.size === 1)
+      assert(elems.head === "foobar")
+    }
+  }
+
+  test("pipe works for null") {
+    if (testCommandAvailable("cat")) {
+      val elems = sc.parallelize(Array(null))
+          .pipe(Seq("cat"))
+          .collect()
+
+      assert(elems.size === 1)
+      assert(elems.head === "null")
+    }
+  }
+
+  test("pipe works for rawbytes") {
+    if (testCommandAvailable("cat")) {
+      val kv = "foo".getBytes -> "bar".getBytes
+      val elems = sc.parallelize(Array(kv)).pipeFormatted(Seq("cat"),
+        inputWriter = new RawBytesInputWriter(),
+        outputReader = new RawBytesOutputReader()
+      ).collect()
+
+      assert(elems.size === 1)
+      val Array((key, value)) = elems
+      assert(key sameElements kv._1)
+      assert(value sameElements kv._2)
+    }
+  }
+}
+
+class RawBytesInputWriter extends InputWriter[(Array[Byte], Array[Byte])] {
+  override def write(dos: DataOutput, elem: (Array[Byte], Array[Byte])): Unit = {
+    val (key, value) = elem
+    dos.writeInt(key.length)
+    dos.write(key)
+    dos.writeInt(value.length)
+    dos.write(value)
+  }
+}
+
+class RawBytesOutputReader extends OutputReader[(Array[Byte], Array[Byte])] {
+  private def readLengthPrefixed(dis: DataInput): Array[Byte] = {
+    val length = dis.readInt()
+    assert(length >= 0)
+    val result = Array.ofDim[Byte](length)
+    dis.readFully(result)
+    result
+  }
+
+  override def read(dis: DataInput): (Array[Byte], Array[Byte]) = {
+    val key = readLengthPrefixed(dis)
+    val value = readLengthPrefixed(dis)
+    key -> value
+  }
 }
