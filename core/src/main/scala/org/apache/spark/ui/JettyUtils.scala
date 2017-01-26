@@ -279,14 +279,6 @@ private[spark] object JettyUtils extends Logging {
 
     addFilters(handlers, conf)
 
-    val gzipHandlers = handlers.map { h =>
-      h.setVirtualHosts(Array("@" + SPARK_CONNECTOR_NAME))
-
-      val gzipHandler = new GzipHandler
-      gzipHandler.setHandler(h)
-      gzipHandler
-    }
-
     // Start the server first, with no connectors.
     val pool = new QueuedThreadPool
     if (serverName.nonEmpty) {
@@ -301,6 +293,7 @@ private[spark] object JettyUtils extends Logging {
     errorHandler.setServer(server)
     server.addBean(errorHandler)
 
+    val collection = new ContextHandlerCollection
     server.setHandler(collection)
 
     // Executor used to create daemon threads for the Jetty connectors.
@@ -379,6 +372,7 @@ private[spark] object JettyUtils extends Logging {
 
       // Add all the known handlers now that connectors are configured.
       handlers.foreach { h =>
+        h.setVirtualHosts(toVirtualHosts(SPARK_CONNECTOR_NAME))
         val gzipHandler = new GzipHandler()
         gzipHandler.setHandler(h)
         collection.addHandler(gzipHandler)
@@ -403,7 +397,7 @@ private[spark] object JettyUtils extends Logging {
   private def createRedirectHttpsHandler(securePort: Int, scheme: String): ContextHandler = {
     val redirectHandler: ContextHandler = new ContextHandler
     redirectHandler.setContextPath("/")
-    redirectHandler.setVirtualHosts(Array("@" + REDIRECT_CONNECTOR_NAME))
+    redirectHandler.setVirtualHosts(toVirtualHosts(REDIRECT_CONNECTOR_NAME))
     redirectHandler.setHandler(new AbstractHandler {
       override def handle(
           target: String,
@@ -477,6 +471,8 @@ private[spark] object JettyUtils extends Logging {
     new URI(scheme, authority, path, query, null).toString
   }
 
+  def toVirtualHosts(connectors: String*): Array[String] = connectors.map("@" + _).toArray
+
 }
 
 private[spark] case class ServerInfo(
@@ -486,7 +482,7 @@ private[spark] case class ServerInfo(
     private val rootHandler: ContextHandlerCollection) {
 
   def addHandler(handler: ContextHandler): Unit = {
-    handler.setVirtualHosts(Array("@" + JettyUtils.SPARK_CONNECTOR_NAME))
+    handler.setVirtualHosts(JettyUtils.toVirtualHosts(JettyUtils.SPARK_CONNECTOR_NAME))
     rootHandler.addHandler(handler)
     if (!handler.isStarted()) {
       handler.start()
