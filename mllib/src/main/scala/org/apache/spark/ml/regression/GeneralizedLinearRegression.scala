@@ -289,20 +289,17 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val off = if (!isDefined(offsetCol) || $(offsetCol).isEmpty) lit(0.0) else col($(offsetCol))
-    val instances: RDD[OffsetInstance] =
-      dataset.select(col($(labelCol)), w, off, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
-          OffsetInstance(label, weight, offset, features)
-      }
 
     val model = if (familyObj == Gaussian && linkObj == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
-      val wlsInstances: RDD[Instance] = instances.map { instance =>
-        Instance(instance.label - instance.offset, instance.weight, instance.features)
-      }
+      val instances: RDD[Instance] =
+        dataset.select(col($(labelCol)), w, off, col($(featuresCol))).rdd.map {
+          case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
+            Instance(label - offset, weight, features)
+        }
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
-      val wlsModel = optimizer.fit(wlsInstances)
+      val wlsModel = optimizer.fit(instances)
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
           .setParent(this))
@@ -310,6 +307,11 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         wlsModel.diagInvAtWA.toArray, 1, getSolver)
       model.setSummary(Some(trainingSummary))
     } else {
+      val instances: RDD[OffsetInstance] =
+        dataset.select(col($(labelCol)), w, off, col($(featuresCol))).rdd.map {
+          case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
+            OffsetInstance(label, weight, offset, features)
+        }
       // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
       val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
       val optimizer = new IterativelyReweightedLeastSquares(initialModel,
