@@ -28,7 +28,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    sc = new SparkContext("local[2]", "test")
+    sc = new SparkContext("local[4]", "test")
   }
 
   test("transform storage level") {

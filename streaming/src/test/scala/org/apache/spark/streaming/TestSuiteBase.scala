@@ -217,7 +217,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
   def framework: String = this.getClass.getSimpleName
 
   // Master for Spark context
-  def master: String = "local[2]"
+  def master: String = "local[4]"
 
   // Batch duration
   def batchDuration: Duration = Seconds(1)

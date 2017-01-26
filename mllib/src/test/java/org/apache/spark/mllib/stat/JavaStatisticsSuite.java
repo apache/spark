@@ -49,6 +49,8 @@ public class JavaStatisticsSuite {
   @Before
   public void setUp() {
     SparkConf conf = new SparkConf()
+      .setMaster("local[4]")
+      .setAppName("JavaStatistics")
       .set("spark.streaming.clock", "org.apache.spark.util.ManualClock");
     spark = SparkSession.builder()
       .master("local[2]")

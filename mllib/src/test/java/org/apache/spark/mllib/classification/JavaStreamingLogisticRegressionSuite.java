@@ -43,7 +43,7 @@ public class JavaStreamingLogisticRegressionSuite {
   @Before
   public void setUp() {
     SparkConf conf = new SparkConf()
-      .setMaster("local[2]")
+      .setMaster("local[4]")
       .setAppName("test")
       .set("spark.streaming.clock", "org.apache.spark.util.ManualClock");
     ssc = new JavaStreamingContext(conf, new Duration(1000));

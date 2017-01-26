@@ -49,7 +49,7 @@ class ReceivedBlockTrackerSuite
   var conf: SparkConf = null
 
   before {
-    conf = new SparkConf().setMaster("local[2]").setAppName("ReceivedBlockTrackerSuite")
+    conf = new SparkConf().setMaster("local[4]").setAppName("ReceivedBlockTrackerSuite")
     checkpointDirectory = Utils.createTempDir()
   }
 

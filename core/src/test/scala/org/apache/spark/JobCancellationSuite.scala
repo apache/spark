@@ -47,7 +47,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
   test("local mode, FIFO scheduler") {
     val conf = new SparkConf().set("spark.scheduler.mode", "FIFO")
-    sc = new SparkContext("local[2]", "test", conf)
+    sc = new SparkContext("local[4]", "test", conf)
     testCount()
     testTake()
     // Make sure we can still launch tasks.
@@ -58,7 +58,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     val conf = new SparkConf().set("spark.scheduler.mode", "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     conf.set("spark.scheduler.allocation.file", xmlPath)
-    sc = new SparkContext("local[2]", "test", conf)
+    sc = new SparkContext("local[4]", "test", conf)
     testCount()
     testTake()
     // Make sure we can still launch tasks.
@@ -115,7 +115,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   }
 
   test("job group") {
-    sc = new SparkContext("local[2]", "test")
+    sc = new SparkContext("local[4]", "test")
 
     // Add a listener to release the semaphore once any tasks are launched.
     val sem = new Semaphore(0)
@@ -145,7 +145,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   }
 
   test("inherited job group (SPARK-6629)") {
-    sc = new SparkContext("local[2]", "test")
+    sc = new SparkContext("local[4]", "test")
 
     // Add a listener to release the semaphore once any tasks are launched.
     val sem = new Semaphore(0)
@@ -180,7 +180,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   }
 
   test("job group with interruption") {
-    sc = new SparkContext("local[2]", "test")
+    sc = new SparkContext("local[4]", "test")
 
     // Add a listener to release the semaphore once any tasks are launched.
     val sem = new Semaphore(0)
@@ -292,7 +292,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     //   make sure the first stage is not finished until cancel is issued
     val sem1 = new Semaphore(0)
 
-    sc = new SparkContext("local[2]", "test")
+    sc = new SparkContext("local[4]", "test")
     sc.addSparkListener(new SparkListener {
       override def onTaskStart(taskStart: SparkListenerTaskStart) {
         sem1.release()
