@@ -54,7 +54,7 @@ private[scheduler] class BlacklistTracker (
     clock: Clock = new SystemClock()) extends Logging {
 
   def this(sc: SparkContext, allocationClient: Option[ExecutorAllocationClient]) = {
-    this(sc.listenerBus, sc.getConf, allocationClient)
+    this(sc.listenerBus, sc.conf, allocationClient)
   }
 
   BlacklistTracker.validateBlacklistConfs(conf)
@@ -174,9 +174,6 @@ private[scheduler] class BlacklistTracker (
         listenerBus.post(SparkListenerExecutorBlacklisted(now, exec, newTotal))
         executorIdToFailureList.remove(exec)
         updateNextExpiryTime()
-        // Add executor to blacklist before attempting to kill it. This allows a scheduler backend
-        // to immediately fail to allocate resources on this executor, since killing could be
-        // asynchronous.
         if (conf.get(config.BLACKLIST_KILL_ENABLED)) {
           allocationClient match {
             case Some(allocationClient) =>
