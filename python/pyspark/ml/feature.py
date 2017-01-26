@@ -224,7 +224,8 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     ...         (Vectors.dense([1.0, -1.0 ]),),
     ...         (Vectors.dense([1.0, 1.0]),)]
     >>> df = spark.createDataFrame(data, ["keys"])
-    >>> rp = BucketedRandomProjectionLSH(inputCol="keys", outputCol="values", seed=12345, bucketLength=1.0)
+    >>> rp = BucketedRandomProjectionLSH(inputCol="keys", outputCol="values",
+    ...                                  seed=12345, bucketLength=1.0)
     >>> model = rp.fit(df)
     >>> model.randUnitVectors
     [DenseVector([-0.3041, 0.9527])]
@@ -258,22 +259,26 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
                          typeConverter=TypeConverters.toFloat)
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, bucketLength=None):
+    def __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1,
+                 bucketLength=None):
         """
-        __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, bucketLength=None)
+        __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1,
+                 bucketLength=None)
         """
         super(BucketedRandomProjectionLSH, self).__init__()
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.BucketedRandomProjectionLSH",
-                                            self.uid)
+        self._java_obj = self._new_java_obj(
+                "org.apache.spark.ml.feature.BucketedRandomProjectionLSH", self.uid)
         self._setDefault(numHashTables=1)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.2.0")
-    def setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, bucketLength=None):
+    def setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1,
+                  bucketLength=None):
         """
-        setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, bucketLength=None)
+        setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1,
+                  bucketLength=None)
         Sets params for this BucketedRandomProjectionLSH.
         """
         kwargs = self.setParams._input_kwargs
@@ -301,10 +306,10 @@ class BucketedRandomProjectionLSHModel(JavaModel, LSHModel, JavaMLReadable, Java
     """
     .. note:: Experimental
 
-    Model fitted by :py:class:`BucketedRandomProjectionLSH`, where multiple random vectors are stored.
-    The vectors are normalized to be unit vectors and each vector is used in a hash function:
-    :math:`h_i(x) = floor(r_i * x / bucketLength)` where :math:`r_i` is the i-th random unit
-    vector. The number of buckets will be `(max L2 norm of input vectors) / bucketLength`.
+    Model fitted by :py:class:`BucketedRandomProjectionLSH`, where multiple random vectors are
+    stored. The vectors are normalized to be unit vectors and each vector is used in a hash
+    function: :math:`h_i(x) = floor(r_i * x / bucketLength)` where :math:`r_i` is the i-th random
+    unit vector. The number of buckets will be `(max L2 norm of input vectors) / bucketLength`.
 
     .. versionadded:: 2.2.0
     """
@@ -316,7 +321,6 @@ class BucketedRandomProjectionLSHModel(JavaModel, LSHModel, JavaMLReadable, Java
         An array of random unit vectors. Each vector represents a hash function.
         """
         return self._call_java("randUnitVectors")
-
 
 
 @inherit_doc
@@ -983,7 +987,7 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     ...          (Vectors.sparse(6, [1, 2, 4], [1.0, 1.0, 1.0]),)]
     >>> df2 = spark.createDataFrame(data2, ["keys"])
     >>> model.approxNearestNeighbors(df2, Vectors.sparse(6, [1], [1.0]), 1).collect()
-    [Row(keys=SparseVector(6, {1: 1.0, 2: 1.0, 4: 1.0}), values=[DenseVector([-1638925712.0])], distCol=0.666...)]
+    [Row(keys=SparseVector(6, {1: 1.0, 2: 1.0, 4: 1.0}), values=[DenseVector([-1638925712.0])]...)]
     >>> model.approxSimilarityJoin(df, df2, 1.0).select("distCol").head()[0]
     0.5
     >>> mhPath = temp_path + "/mh"
@@ -1032,8 +1036,8 @@ class MinHashLSHModel(JavaModel, LSHModel, JavaMLReadable, JavaMLWritable):
     randomly chosen integers less than prime:`h_i(x) = ((x \cdot a_i + b_i) \mod prime)`
     This hash family is approximately min-wise independent according to the reference.
 
-    .. seealso:: Tom Bohman, Colin Cooper, and Alan Frieze. "Min-wise independent linear permutations."
-    Electronic Journal of Combinatorics 7 (2000): R26.
+    .. seealso:: Tom Bohman, Colin Cooper, and Alan Frieze. "Min-wise independent linear
+    permutations." Electronic Journal of Combinatorics 7 (2000): R26.
 
     .. versionadded:: 2.2.0
     """

@@ -51,7 +51,8 @@ if __name__ == "__main__":
 
     key = Vectors.dense([1.0, 0.0])
 
-    brp = BucketedRandomProjectionLSH(inputCol="keys", outputCol="values", bucketLength=2.0, numHashTables=3)
+    brp = BucketedRandomProjectionLSH(inputCol="keys", outputCol="values", bucketLength=2.0,
+                                      numHashTables=3)
     model = brp.fit(dfA)
 
     # Feature Transformation
