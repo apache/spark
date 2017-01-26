@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -51,7 +49,7 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         // will catch it and return the original plan, so that the analyzer can report table not
         // found later.
         val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
-        if (!isFileFormat) {
+        if (!isFileFormat || dataSource.className.toLowerCase == DDLUtils.HIVE_PROVIDER) {
           throw new AnalysisException("Unsupported data source type for direct query on files: " +
             s"${u.tableIdentifier.database.get}")
         }
@@ -110,11 +108,6 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
 
       if (existingTable.tableType == CatalogTableType.VIEW) {
         throw new AnalysisException("Saving data into a view is not allowed.")
-      }
-
-      if (DDLUtils.isHiveTable(existingTable)) {
-        throw new AnalysisException(s"Saving data in the Hive serde table $tableName is " +
-          "not supported yet. Please use the insertInto() API as an alternative.")
       }
 
       // Check if the specified data source match the data source of the existing table.
@@ -383,7 +376,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ InsertIntoTable(table, partition, child, _, _) if table.resolved && child.resolved =>
+    case i @ InsertIntoTable(table, _, child, _, _) if table.resolved && child.resolved =>
       table match {
         case relation: CatalogRelation =>
           val metadata = relation.catalogTable

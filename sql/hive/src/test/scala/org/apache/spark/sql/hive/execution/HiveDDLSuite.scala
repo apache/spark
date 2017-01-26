@@ -656,8 +656,9 @@ class HiveDDLSuite
         assert(sql("DESC FORMATTED view1").collect().containsSlice(
           Seq(
             Row("# View Information", "", ""),
-            Row("View Original Text:", "SELECT * FROM tbl", ""),
-            Row("View Expanded Text:", "SELECT * FROM tbl", "")
+            Row("View Text:", "SELECT * FROM tbl", ""),
+            Row("View Default Database:", "default", ""),
+            Row("View Query Output Columns:", "[a]", "")
           )
         ))
       }
@@ -943,7 +944,9 @@ class HiveDDLSuite
           TableIdentifier(sourceViewName, Some("default")))
         // The original source should be a VIEW with an empty path
         assert(sourceView.tableType == CatalogTableType.VIEW)
-        assert(sourceView.viewText.nonEmpty && sourceView.viewOriginalText.nonEmpty)
+        assert(sourceView.viewText.nonEmpty)
+        assert(sourceView.viewDefaultDatabase == Some("default"))
+        assert(sourceView.viewQueryColumnNames == Seq("a", "b", "c", "d"))
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
 
@@ -956,8 +959,12 @@ class HiveDDLSuite
     // The created table should be a MANAGED table with empty view text and original text.
     assert(targetTable.tableType == CatalogTableType.MANAGED,
       "the created table must be a Hive managed table")
-    assert(targetTable.viewText.isEmpty && targetTable.viewOriginalText.isEmpty,
-      "the view text and original text in the created table must be empty")
+    assert(targetTable.viewText.isEmpty,
+      "the view text in the created table must be empty")
+    assert(targetTable.viewDefaultDatabase.isEmpty,
+      "the view default database in the created table must be empty")
+    assert(targetTable.viewQueryColumnNames.isEmpty,
+      "the view query output columns in the created table must be empty")
     assert(targetTable.comment.isEmpty,
       "the comment in the created table must be empty")
     assert(targetTable.unsupportedFeatures.isEmpty,
@@ -1319,7 +1326,7 @@ class HiveDDLSuite
   }
 
   test("create hive serde table with DataFrameWriter.saveAsTable") {
-    withTable("t", "t2") {
+    withTable("t", "t1") {
       Seq(1 -> "a").toDF("i", "j")
         .write.format("hive").option("fileFormat", "avro").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a"))
@@ -1350,11 +1357,8 @@ class HiveDDLSuite
       assert(table.storage.serde ==
         Some("org.apache.hadoop.hive.serde2.avro.AvroSerDe"))
 
-      sql("INSERT INTO t SELECT 2, 'b'")
-      checkAnswer(spark.table("t"), Row(9, "x") :: Row(2, "b") :: Nil)
-
       val e2 = intercept[AnalysisException] {
-        Seq(1 -> "a").toDF("i", "j").write.format("hive").bucketBy(4, "i").saveAsTable("t2")
+        Seq(1 -> "a").toDF("i", "j").write.format("hive").bucketBy(4, "i").saveAsTable("t1")
       }
       assert(e2.message.contains("Creating bucketed Hive serde table is not supported yet"))
 
@@ -1362,6 +1366,35 @@ class HiveDDLSuite
         spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
       }
       assert(e3.message.contains("Cannot overwrite table default.t that is also being read from"))
+    }
+  }
+
+  test("append data to hive serde table") {
+    withTable("t", "t1") {
+      Seq(1 -> "a").toDF("i", "j")
+        .write.format("hive").option("fileFormat", "avro").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row(1, "a"))
+
+      sql("INSERT INTO t SELECT 2, 'b'")
+      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Nil)
+
+      Seq(3 -> "c").toDF("i", "j")
+        .write.format("hive").mode("append").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Row(3, "c") :: Nil)
+
+      Seq("c" -> 3).toDF("i", "j")
+        .write.format("hive").mode("append").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Row(3, "c")
+        :: Row(null, "3") :: Nil)
+
+      Seq(4 -> "d").toDF("i", "j").write.saveAsTable("t1")
+
+      val e = intercept[AnalysisException] {
+        Seq(5 -> "e").toDF("i", "j")
+          .write.format("hive").mode("append").saveAsTable("t1")
+      }
+      assert(e.message.contains("The format of the existing table default.t1 is " +
+        "`ParquetFileFormat`. It doesn't match the specified format `HiveFileFormat`."))
     }
   }
 

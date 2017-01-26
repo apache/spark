@@ -94,6 +94,20 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
     }
   }
 
+  test("security with aes encryption") {
+    val conf = new SparkConf()
+      .set("spark.authenticate", "true")
+      .set("spark.authenticate.secret", "good")
+      .set("spark.app.id", "app-id")
+      .set("spark.network.crypto.enabled", "true")
+      .set("spark.network.crypto.saslFallback", "false")
+    testConnection(conf, conf) match {
+      case Success(_) => // expected
+      case Failure(t) => fail(t)
+    }
+  }
+
+
   /**
    * Creates two servers with different configurations and sees if they can talk.
    * Returns Success() if they can transfer a block, and Failure() if the block transfer was failed

@@ -31,9 +31,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition}
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition, _}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -933,7 +931,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       val path = dir.getCanonicalPath
 
       withSQLConf(
-          ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true",
+          ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
           "spark.sql.sources.commitProtocolClass" ->
             classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
         spark.range(3).write.parquet(s"$path/p0=0/p1=0")
