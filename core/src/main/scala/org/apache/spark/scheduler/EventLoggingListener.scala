@@ -67,8 +67,7 @@ private[spark] class EventLoggingListener(
   // To reduce the size of event logs, we can omit logging all of internal accumulables for metrics.
   private val omitInternalAccumulables =
     sparkConf.getBoolean("spark.eventLog.omitInternalAccumulables", false)
-  // To reduce the size of event logs, we can omit logging some of metrics.
-  // Internal accumulables representing such metrics will also not be recorded.
+  // To reduce the size of event logs, we can omit logging "Updated Block Statuses" metric.
   private val omitUpdatedBlockStatuses =
     sparkConf.getBoolean("spark.eventLog.omitUpdatedBlockStatuses", false)
   private val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
