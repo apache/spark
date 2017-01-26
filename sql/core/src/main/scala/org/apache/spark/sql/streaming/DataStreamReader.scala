@@ -119,7 +119,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   def load(): DataFrame = {
     if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
-        "write files of Hive data source directly.")
+        "read files of Hive data source directly.")
     }
 
     val dataSource =

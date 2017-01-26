@@ -224,7 +224,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   def start(): StreamingQuery = {
     if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
-        "read files of Hive data source directly.")
+        "write files of Hive data source directly.")
     }
 
     if (source == "memory") {
