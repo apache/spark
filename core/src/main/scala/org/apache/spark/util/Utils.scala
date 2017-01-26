@@ -2215,9 +2215,10 @@ private[spark] object Utils extends Logging {
    */
   def startServiceOnPort[T](
       startPort: Int,
-      startService: Int => (T, Int),
+      startService: (Int, Int) => (T, Int),
       conf: SparkConf,
-      serviceName: String = ""): (T, Int) = {
+      serviceName: String = "",
+      securePort: Int = 0): (T, Int) = {
 
     require(startPort == 0 || (1024 <= startPort && startPort < 65536),
       "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.")
@@ -2233,14 +2234,15 @@ private[spark] object Utils extends Logging {
         ((startPort + offset - 1024) % (65536 - 1024)) + 1024
       }
       try {
-        val (service, port) = startService(tryPort)
+        val (service, port) = startService(tryPort, securePort + offset)
         logInfo(s"Successfully started service$serviceString on port $port.")
         return (service, port)
       } catch {
         case e: Exception if isBindCollision(e) =>
           if (offset >= maxRetries) {
             val exceptionMessage = s"${e.getMessage}: Service$serviceString failed after " +
-              s"$maxRetries retries (starting from $startPort)! Consider explicitly setting " +
+              s"$maxRetries retries (starting from $startPort and $securePort)! " +
+              s"Consider explicitly setting " +
               s"the appropriate port for the service$serviceString (for example spark.ui.port " +
               s"for SparkUI) to an available port or increasing spark.port.maxRetries."
             val exception = new BindException(exceptionMessage)

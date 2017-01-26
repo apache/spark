@@ -75,7 +75,7 @@ private[spark] class NettyBlockTransferService(
 
   /** Creates and binds the TransportServer, possibly trying multiple ports. */
   private def createServer(bootstraps: List[TransportServerBootstrap]): TransportServer = {
-    def startService(port: Int): (TransportServer, Int) = {
+    def startService(port: Int, securePort: Int): (TransportServer, Int) = {
       val server = transportContext.createServer(bindAddress, port, bootstraps.asJava)
       (server, server.getPort)
     }

@@ -78,7 +78,7 @@ private[spark] abstract class RestSubmissionServer(
    * Map the servlets to their corresponding contexts and attach them to a server.
    * Return a 2-tuple of the started server and the bound port.
    */
-  private def doStart(startPort: Int): (Server, Int) = {
+  private def doStart(startPort: Int, securePort: Int): (Server, Int) = {
     val threadPool = new QueuedThreadPool
     threadPool.setDaemon(true)
     val server = new Server(threadPool)

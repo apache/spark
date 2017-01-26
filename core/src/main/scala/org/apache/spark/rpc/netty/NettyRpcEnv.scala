@@ -442,7 +442,7 @@ private[rpc] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
       new NettyRpcEnv(sparkConf, javaSerializerInstance, config.advertiseAddress,
         config.securityManager)
     if (!config.clientMode) {
-      val startNettyRpcEnv: Int => (NettyRpcEnv, Int) = { actualPort =>
+      val startNettyRpcEnv: (Int, Int) => (NettyRpcEnv, Int) = { (actualPort, securePort) =>
         nettyEnv.startServer(config.bindAddress, actualPort)
         (nettyEnv, nettyEnv.address.port)
       }

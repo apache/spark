@@ -1846,6 +1846,16 @@ Apart from these, the following properties are also available, and may be useful
         </td>
     </tr>
     <tr>
+        <td><code>spark.ssl.port</code></td>
+        <td>0</td>
+        <td>
+            Port number to listen on for SSL connections.
+            The SSL port should be between 1024 and 65535 (inclusive). 
+            Default value of 0 means the port will be determined automatically.
+            The port can be specified for services individually, with properties like <code>spark.ssl.YYY.port</code>.
+        </td>
+    </tr>
+    <tr>
         <td><code>spark.ssl.needClientAuth</code></td>
         <td>false</td>
         <td>

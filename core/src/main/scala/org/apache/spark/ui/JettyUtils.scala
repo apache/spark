@@ -284,7 +284,7 @@ private[spark] object JettyUtils extends Logging {
     }
 
     // Bind to the given port, or throw a java.net.BindException if the port is occupied
-    def connect(currentPort: Int): (Server, Int) = {
+    def connect(currentPort: Int, securePort: Int = sslOptions.port): (Server, Int) = {
       val pool = new QueuedThreadPool
       if (serverName.nonEmpty) {
         pool.setName(serverName)
@@ -307,15 +307,26 @@ private[spark] object JettyUtils extends Logging {
       connectors += httpConnector
 
       sslOptions.createJettySslContextFactory().foreach { factory =>
-        // If the new port wraps around, do not try a privileged port.
+
+        require(sslOptions.port == 0 || (1024 <= sslOptions.port && sslOptions.port < 65536),
+          "securePort should be between 1024 and 65535 (inclusive)," +
+            " or 0 for determined automatically.")
+
         val securePort =
           if (currentPort != 0) {
-            (currentPort + 400 - 1024) % (65536 - 1024) + 1024
+            if (sslOptions.port == 0) {
+              // If the new port wraps around, do not try a privileged port
+              (currentPort + 400 - 1024) % (65536 - 1024) + 1024
+            } else {
+              // use sslOptions.port value as securePort
+              sslOptions.port
+            }
           } else {
             0
           }
         val scheme = "https"
-        // Create a connector on port securePort to listen for HTTPS requests
+        // Create a connector on port securePort to listen for HTTPS requests.
+
         val connector = new ServerConnector(server, factory)
         connector.setPort(securePort)
 

@@ -113,6 +113,7 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
       "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA")
     conf.set("spark.ssl.ui.enabledAlgorithms", "ABC, DEF")
     conf.set("spark.ssl.protocol", "SSLv3")
+    conf.set("spark.ssl.port", "18999")
 
     val defaultOpts = SSLOptions.parse(conf, "spark.ssl", defaults = None)
     val opts = SSLOptions.parse(conf, "spark.ssl.ui", defaults = Some(defaultOpts))
@@ -128,6 +129,7 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(opts.keyStorePassword === Some("12345"))
     assert(opts.keyPassword === Some("password"))
     assert(opts.protocol === Some("SSLv3"))
+    assert(opts.port === 18999)
     assert(opts.enabledAlgorithms === Set("ABC", "DEF"))
   }
 
