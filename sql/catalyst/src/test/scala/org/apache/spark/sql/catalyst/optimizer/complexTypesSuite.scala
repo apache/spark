@@ -41,7 +41,7 @@ class ComplexTypesSuite extends PlanTest with Matchers{
       Batch("collapse projections", FixedPoint(10),
           CollapseProject) ::
       Batch("Constant Folding", FixedPoint(10),
-          NullPropagation,
+          NullPropagation(conf),
           ConstantFolding,
           BooleanSimplification,
           SimplifyConditionals,
