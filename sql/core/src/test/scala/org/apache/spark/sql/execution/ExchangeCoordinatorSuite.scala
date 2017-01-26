@@ -250,7 +250,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   def withSparkSession(
-      f: SparkSession => Unit,
+      f: SparkSession => Any,
       targetNumPostShufflePartitions: Int,
       minNumPostShufflePartitions: Option[Int]): Unit = {
     val sparkConf =

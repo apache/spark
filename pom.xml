@@ -708,7 +708,7 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>2.2.6</version>
+        <version>3.0.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -720,7 +720,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.12.5</version> <!-- 1.13.0 appears incompatible with scalatest 2.2.6 -->
+        <version>1.13.4</version>
         <scope>test</scope>
       </dependency>
       <dependency>
