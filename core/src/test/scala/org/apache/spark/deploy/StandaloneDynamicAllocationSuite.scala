@@ -555,7 +555,7 @@ class StandaloneDynamicAllocationSuite
     syncExecutors(sc)
     sc.schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutorsOnHost(host, true)
+        b.killExecutorsOnHost(host)
       case _ => fail("expected coarse grained scheduler")
     }
   }

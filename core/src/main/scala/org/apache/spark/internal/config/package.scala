@@ -140,7 +140,7 @@ package object config {
       .createOptional
 
   private[spark] val BLACKLIST_KILL_ENABLED =
-    ConfigBuilder("spark.blacklist.kill")
+    ConfigBuilder("spark.blacklist.killBlacklistedExecutors")
     .booleanConf
     .createWithDefault(false)
 

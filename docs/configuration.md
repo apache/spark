@@ -1402,7 +1402,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.kill</code></td>
+  <td><code>spark.blacklist.killBlacklistedExecutors</code></td>
   <td>false</td>
   <td>
     (Experimental) If set to "true", allow Spark to automatically kill, and attempt to re-create,

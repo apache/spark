@@ -463,7 +463,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   test("blacklisting kills executors, configured by BLACKLIST_KILL_ENABLED") {
     val allocationClientMock = mock[ExecutorAllocationClient]
     when(allocationClientMock.killExecutors(any(), any(), any())).thenReturn(Seq("called"))
-    when(allocationClientMock.killExecutorsOnHost(any(), any())).thenReturn(true)
+    when(allocationClientMock.killExecutorsOnHost(any())).thenReturn(true)
     blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
 
     // Disable auto-kill. Blacklist an executor and make sure killExecutors is not called.
@@ -488,7 +488,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     }
 
     verify(allocationClientMock, times(0)).killExecutors(any(), any(), any())
-    verify(allocationClientMock, times(0)).killExecutorsOnHost(any(), any())
+    verify(allocationClientMock, times(0)).killExecutorsOnHost(any())
 
     // Enable auto-kill. Blacklist an executor and make sure killExecutors is called.
     conf.set(config.BLACKLIST_KILL_ENABLED, true)
@@ -514,6 +514,6 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist3.execToFailures)
 
     verify(allocationClientMock).killExecutors(Seq("2"), true, true)
-    verify(allocationClientMock).killExecutorsOnHost("hostA", true)
+    verify(allocationClientMock).killExecutorsOnHost("hostA")
   }
 }

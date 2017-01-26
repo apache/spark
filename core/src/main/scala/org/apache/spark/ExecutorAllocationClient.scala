@@ -54,23 +54,20 @@ private[spark] trait ExecutorAllocationClient {
 
   /**
    * Request that the cluster manager kill the specified executors.
-   * @return the ids of the executors acknowledged by the cluster manager to be removed.
-   */
-  def killExecutors(executorIds: Seq[String]): Seq[String]
-
-  /**
-   * Request that the cluster manager kill the specified executors.
    *
    * When asking the executor to be replaced, the executor loss is considered a failure, and
    * killed tasks that are running on the executor will count towards the failure limits. If no
    * replacement is being requested, then the tasks will not count towards the limit.
    *
    * @param executorIds identifiers of executors to kill
-   * @param replace whether to replace the killed executors with new ones
-   * @param force whether to force kill busy executors
+   * @param replace whether to replace the killed executors with new ones, default false
+   * @param force whether to force kill busy executors, default false
    * @return the ids of the executors acknowledged by the cluster manager to be removed.
    */
-  def killExecutors(executorIds: Seq[String], replace: Boolean, force: Boolean): Seq[String]
+  def killExecutors(
+    executorIds: Seq[String],
+    replace: Boolean = false,
+    force: Boolean = false): Seq[String]
 
   /**
    * Request that the cluster manager kill every executor on the specified host.
