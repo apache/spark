@@ -65,17 +65,19 @@ private[kinesis] class KinesisCheckpointer(
     synchronized {
       checkpointers.remove(shardId)
     }
-    try {
-      // We must call `checkpoint()` with no parameter to finish reading shards.
-      // See an URL below for details:
-      // https://forums.aws.amazon.com/thread.jspa?threadID=244218
-      KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(), 4, 100)
-    } catch {
-      case NonFatal(e) =>
-        logError(s"Exception:  WorkerId $workerId encountered an exception while checkpointing" +
-          s"to finish reading a shard of $shardId.", e)
-        // Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor
-        throw e
+    if (checkpointer != null) {
+      try {
+        // We must call `checkpoint()` with no parameter to finish reading shards.
+        // See an URL below for details:
+        // https://forums.aws.amazon.com/thread.jspa?threadID=244218
+        KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(), 4, 100)
+      } catch {
+        case NonFatal(e) =>
+          logError(s"Exception:  WorkerId $workerId encountered an exception while checkpointing" +
+            s"to finish reading a shard of $shardId.", e)
+          // Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor
+          throw e
+      }
     }
   }
 
