@@ -64,25 +64,23 @@ class JavaWrapper(object):
         return java_obj(*java_args)
 
     @staticmethod
-    def _new_java_primitive_array(pylist):
-        if not pylist:
-            raise ValueError("Unable to convert an empty list to Java array")
-        sc = SparkContext._active_spark_context
-        head = pylist[0]
-        if isinstance(head, basestring):
-            java_class = sc._gateway.jvm.java.lang.String
-        elif isinstance(head, int):
-            java_class = sc._gateway.jvm.java.lang.Integer
-        elif isinstance(head, float):
-            java_class = sc._gateway.jvm.java.lang.Double
-        elif isinstance(head, bool):
-            java_class = sc._gateway.jvm.java.lang.Boolean
-        else:
-            raise TypeError("Unknown type for Java primitive array")
-        return JavaWrapper._new_java_array(pylist, java_class)
-
-    @staticmethod
     def _new_java_array(pylist, java_class):
+        """
+        Create a Java array of given java_class type. Useful for
+        calling a method with a Scala Array from Python with Py4J.
+
+        :param pylist:
+          Python list to converto to Java Array
+        :param java_class:
+          Java class to specify the type of Array. Should be in the
+          form of sc._gateway.jvm.* (sc is a valid Spark Context).
+
+        Example primitive Java classes:
+          - basestring -> sc._gateway.jvm.java.lang.String
+          - int -> sc._gateway.jvm.java.lang.Integer
+          - float -> sc._gateway.jvm.java.lang.Double
+          - bool -> sc._gateway.jvm.java.lang.Boolean
+        """
         sc = SparkContext._active_spark_context
         java_array = sc._gateway.new_array(java_class, len(pylist))
         for i in xrange(len(pylist)):
