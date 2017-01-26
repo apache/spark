@@ -223,6 +223,7 @@
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
     <CodeCacheSize>512m</CodeCacheSize>
+    <extraScalaTestArgs></extraScalaTestArgs>
   </properties>
   <repositories>
     <repository>
@@ -2085,7 +2086,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-            <argLine>-ea -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <argLine>-ea -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraScalaTestArgs}</argLine>
             <stderr/>
             <environmentVariables>
               <!--
