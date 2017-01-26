@@ -154,9 +154,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           executorRef.send(RegisterExecutorFailed("Duplicate executor ID: " + executorId))
           context.reply(true)
         } else if (scheduler.nodeBlacklist != null &&
-                   scheduler.nodeBlacklist.contains(executorId)) {
-          // Handle a race where the cluster manager finishes creating an executor, just after
-          // the executor is blacklisted and just before it is possibly killed.
+          scheduler.nodeBlacklist.contains(executorId)) {
+          // If the cluster manager gives us an executor on a blacklisted node (because it
+          // already started allocating those resources before we informed it of our blacklist,
+          // or if it ignored our blacklist), then we reject that executor immediately.
+          logInfo(s"Rejecting $executorId as it has been blacklisted.")
           executorRef.send(RegisterExecutorFailed("Executor is blacklisted: " + executorId))
           context.reply(true)
         } else {
@@ -552,8 +554,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @param executorIds identifiers of executors to kill
    * @param replace whether to replace the killed executors with new ones
    * @param force whether to force kill busy executors
-   * @return whether the kill request is acknowledged. If list to kill is empty, it will return
-   *         false.
+   * @return the ids of the executors acknowledged by the cluster manager to be removed.
    */
   final override def killExecutors(
       executorIds: Seq[String],
