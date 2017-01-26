@@ -480,7 +480,7 @@ private[rpc] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
  */
 private[netty] class NettyRpcEndpointRef(
     @transient private val conf: SparkConf,
-    val endpointAddress: RpcEndpointAddress,
+    private val endpointAddress: RpcEndpointAddress,
     @transient @volatile private var nettyEnv: NettyRpcEnv) extends RpcEndpointRef(conf) {
 
   @transient @volatile var client: TransportClient = _
@@ -538,8 +538,8 @@ private[netty] class RequestMessage(
     val out = new DataOutputStream(bos)
     try {
       writeRpcAddress(out, senderAddress)
-      writeRpcAddress(out, receiver.endpointAddress.rpcAddress)
-      out.writeUTF(receiver.endpointAddress.name)
+      writeRpcAddress(out, receiver.address)
+      out.writeUTF(receiver.name)
       val contentBytes = nettyEnv.serialize(content)
       assert(contentBytes.hasArray)
       out.write(contentBytes.array, contentBytes.arrayOffset, contentBytes.remaining)
