@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.MetricsTestHelper
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -899,5 +900,14 @@ class JDBCSuite extends SparkFunSuite
       "numPartitions" -> "10")
     assert(new JDBCOptions(parameters).asConnectionProperties.isEmpty)
     assert(new JDBCOptions(new CaseInsensitiveMap(parameters)).asConnectionProperties.isEmpty)
+  }
+
+  test("Input/generated/output metrics on JDBC") {
+    val FoobarCnt = sql("SELECT * FROM foobar").count()
+    val res = MetricsTestHelper.runAndGetMetrics(sql("SELECT * FROM foobar").toDF())
+    assert(res.recordsRead === FoobarCnt :: Nil)
+    assert(res.shuffleRecordsRead.sum === 0)
+    assert(res.generatedRows.isEmpty)
+    assert(res.outputRows === FoobarCnt :: Nil)
   }
 }
