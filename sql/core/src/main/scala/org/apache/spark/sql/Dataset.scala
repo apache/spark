@@ -2421,6 +2421,13 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns the number of partitions of this Dataset.
+   * @group basic
+   * @since 2.2.0
+   */
+  def getNumPartitions: Int = rdd.getNumPartitions()
+
+  /**
    * Returns a new Dataset that has exactly `numPartitions` partitions.
    * Similar to coalesce defined on an `RDD`, this operation results in a narrow dependency, e.g.
    * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
