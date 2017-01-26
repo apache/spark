@@ -135,11 +135,6 @@ private[spark] class KubernetesSparkRestServer(
               } else {
                 val tempDir = Utils.createTempDir()
                 val appResourcePath = resolvedAppResource(appResource, tempDir)
-                val driverClasspathDirectory = new File(tempDir, "driver-extra-classpath")
-                if (!driverClasspathDirectory.mkdir) {
-                  throw new IllegalStateException("Failed to create driver extra classpath" +
-                    s" dir at ${driverClasspathDirectory.getAbsolutePath}")
-                }
                 val jarsDirectory = new File(tempDir, "jars")
                 if (!jarsDirectory.mkdir) {
                   throw new IllegalStateException("Failed to create jars dir at" +
