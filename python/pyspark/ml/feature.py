@@ -164,24 +164,16 @@ class LSHModel():
         transform the data; if the :py:attr:`outputCol` exists, it will use that. This allows
         caching of the transformed data when necessary.
 
-        This method implements two ways of fetching k nearest neighbors:
-
-        * Single Probing: Fast, return at most k elements (Probing only one buckets)
-
-        * Multiple Probing: Slow, return exact k elements (Probing multiple buckets close to \
-        the key)
-
         :param dataset: The dataset to search for nearest neighbors of the key.
         :param key: Feature vector representing the item to search for.
         :param numNearestNeighbors: The maximum number of nearest neighbors.
-        :param singleProbing: True for using single probing (default); false for multiple probing.
         :param distCol: Output column for storing the distance between each result row and the key.
                         Use "distCol" as default value if it's not specified.
         :return: A dataset containing at most k items closest to the key. A distCol is added
                  to show the distance between each row and the key.
         """
         return self._call_java("approxNearestNeighbors", dataset, key, numNearestNeighbors,
-                               singleProbing, distCol)
+                               distCol)
 
     @since("2.2.0")
     def approxSimilarityJoin(self, datasetA, datasetB, threshold, distCol="distCol"):
@@ -266,8 +258,8 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
                  bucketLength=None)
         """
         super(BucketedRandomProjectionLSH, self).__init__()
-        self._java_obj = self._new_java_obj(
-                "org.apache.spark.ml.feature.BucketedRandomProjectionLSH", self.uid)
+        self._java_obj = \
+            self._new_java_obj("org.apache.spark.ml.feature.BucketedRandomProjectionLSH", self.uid)
         self._setDefault(numHashTables=1)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -308,8 +300,9 @@ class BucketedRandomProjectionLSHModel(JavaModel, LSHModel, JavaMLReadable, Java
 
     Model fitted by :py:class:`BucketedRandomProjectionLSH`, where multiple random vectors are
     stored. The vectors are normalized to be unit vectors and each vector is used in a hash
-    function: :math:`h_i(x) = floor(r_i * x / bucketLength)` where :math:`r_i` is the i-th random
-    unit vector. The number of buckets will be `(max L2 norm of input vectors) / bucketLength`.
+    function: :math:`h_i(x) = floor(r_i \cdot x / bucketLength)` where :math:`r_i` is the
+    i-th random unit vector. The number of buckets will be `(max L2 norm of input vectors) /
+    bucketLength`.
 
     .. versionadded:: 2.2.0
     """
@@ -1032,11 +1025,12 @@ class MinHashLSHModel(JavaModel, LSHModel, JavaMLReadable, JavaMLWritable):
     .. note:: Experimental
 
     Model produced by :py:class:`MinHashLSH`, where where multiple hash functions are stored. Each
-    hash function is picked from the following family of hash functions, where a_i and b_i are
-    randomly chosen integers less than prime:`h_i(x) = ((x \cdot a_i + b_i) \mod prime)`
-    This hash family is approximately min-wise independent according to the reference.
+    hash function is picked from the following family of hash functions, where :math:`a_i` and
+    :math:`b_i` are randomly chosen integers less than prime:
+    :math:`h_i(x) = ((x \cdot a_i + b_i) \mod prime)` This hash family is approximately min-wise
+    independent according to the reference.
 
-    .. seealso:: Tom Bohman, Colin Cooper, and Alan Frieze. "Min-wise independent linear
+    .. seealso:: Tom Bohman, Colin Cooper, and Alan Frieze. "Min-wise independent linear \
     permutations." Electronic Journal of Combinatorics 7 (2000): R26.
 
     .. versionadded:: 2.2.0
