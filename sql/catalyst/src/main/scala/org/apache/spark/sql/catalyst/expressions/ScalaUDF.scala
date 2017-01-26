@@ -47,7 +47,8 @@ case class ScalaUDF(
 
   override def nullable: Boolean = true
 
-  override def toString: String = s"${udfName.getOrElse("UDF")}(${children.mkString(", ")})"
+  override def toString: String =
+    s"${udfName.map(name => s"UDF:$name").getOrElse("UDF")}(${children.mkString(", ")})"
 
   // scalastyle:off line.size.limit
 
