@@ -91,23 +91,13 @@ private[spark] abstract class WebUI(
   /** Attach a handler to this UI. */
   def attachHandler(handler: ServletContextHandler) {
     handlers += handler
-    serverInfo.foreach { info =>
-      info.rootHandler.addHandler(handler)
-      if (!handler.isStarted) {
-        handler.start()
-      }
-    }
+    serverInfo.foreach(_.addHandler(handler))
   }
 
   /** Detach a handler from this UI. */
   def detachHandler(handler: ServletContextHandler) {
     handlers -= handler
-    serverInfo.foreach { info =>
-      info.rootHandler.removeHandler(handler)
-      if (handler.isStarted) {
-        handler.stop()
-      }
-    }
+    serverInfo.foreach(_.removeHandler(handler))
   }
 
   /**
