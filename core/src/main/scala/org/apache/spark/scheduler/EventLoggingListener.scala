@@ -80,6 +80,7 @@ private[spark] class EventLoggingListener(
     }
   private val compressionCodecName = compressionCodec.map { c =>
     CompressionCodec.getShortName(c.getClass.getName)
+
   }
 
   // Only defined if the file system scheme is not local

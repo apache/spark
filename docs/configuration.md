@@ -660,6 +660,22 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.eventLog.omitInternalAccumulables</code></td>
+  <td>false</td>
+  <td>
+    Whether to log internal accumulables for Spark task metrics, useful for reducing the size
+    of event logs. Spark task metrics will still be recorded under "Task Metrics" field.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.omitUpdatedBlockStatuses</code></td>
+  <td>false</td>
+  <td>
+    Whether to include Updated Block Statuses metrics in Spark event log, useful for reducing
+    the size of event logs.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.enabled</code></td>
   <td>true</td>
   <td>
