@@ -120,24 +120,6 @@ object ExternalCatalogUtils {
       new Path(totalPath, nextPartPath)
     }
   }
-
-  /**
-   * partition path created by Hive is lower-case, while Spark SQL will
-   * rename it with the partition name in partitionColumnNames, and this function
-   * return the extra lower-case path created by Hive, and then we can delete it.
-   * e.g. /path/A=1/B=2/C=3 rename to /path/A=4/B=5/C=6, the extra path returned is
-   * /path/a=4, which also include all its' child path, such as /path/a=4/b=2
-   */
-  def getExtraPartPathCreatedByHive(
-      lowerCaseSpec: TablePartitionSpec,
-       partitionColumnNames: Seq[String],
-       tablePath: Path): Path = {
-    val partColumnNames = partitionColumnNames
-      .take(partitionColumnNames.indexWhere(col => col.toLowerCase != col) + 1)
-      .map(_.toLowerCase)
-
-    generatePartitionPath(lowerCaseSpec, partColumnNames, tablePath)
-  }
 }
 
 object CatalogUtils {

@@ -839,6 +839,25 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     spec.map { case (k, v) => partCols.find(_.equalsIgnoreCase(k)).get -> v }
   }
 
+
+  /**
+    * partition path created by Hive is lower-case, while Spark SQL will
+    * rename it with the partition name in partitionColumnNames, and this function
+    * return the extra lower-case path created by Hive, and then we can delete it.
+    * e.g. /path/A=1/B=2/C=3 rename to /path/A=4/B=5/C=6, the extra path returned is
+    * /path/a=4, which also include all its' child path, such as /path/a=4/b=2
+    */
+  def getExtraPartPathCreatedByHive(
+                                     lowerCaseSpec: TablePartitionSpec,
+                                     partitionColumnNames: Seq[String],
+                                     tablePath: Path): Path = {
+    val partColumnNames = partitionColumnNames
+      .take(partitionColumnNames.indexWhere(col => col.toLowerCase != col) + 1)
+      .map(_.toLowerCase)
+
+    ExternalCatalogUtils.generatePartitionPath(lowerCaseSpec, partColumnNames, tablePath)
+  }
+
   override def createPartitions(
       db: String,
       table: String,
@@ -906,7 +925,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           // newSpec is 'A=1/B=2', after renamePartitions by Hive, the location path in FileSystem
           // changed to 'a=1/b=2', which is wrongPath, then we renamed to 'A=1/B=2', and 'a=1/b=2'
           // in FileSystem is deleted, while 'a=1' is already exists, which should also be deleted
-          val delHivePartPathAfterRename = ExternalCatalogUtils.getExtraPartPathCreatedByHive(
+          val delHivePartPathAfterRename = getExtraPartPathCreatedByHive(
             lowerCasePartitionSpec(spec),
             partitionColumnNames,
             tablePath)
