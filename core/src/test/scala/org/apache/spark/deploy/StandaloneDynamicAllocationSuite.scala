@@ -477,13 +477,15 @@ class StandaloneDynamicAllocationSuite
       assert(apps.head.executors.size === 2)
       assert(apps.head.getExecutorLimit === Int.MaxValue)
     }
+    val beforeList = getApplications().head.executors.keys.toSet
     // kill all executors without replacement
     assert(killExecutorsOnHost(sc, "localhost").equals(true))
 
+    syncExecutors(sc)
+    val afterList = getApplications().head.executors.keys.toSet
+
     eventually(timeout(10.seconds), interval(100.millis)) {
-      val apps = getApplications()
-      assert(apps.head.executors.size === 0)
-      assert(apps.head.getExecutorLimit === 0)
+      assert(beforeList.intersect(afterList).size == 0)
     }
   }
 
@@ -553,7 +555,7 @@ class StandaloneDynamicAllocationSuite
     syncExecutors(sc)
     sc.schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutorsOnHost(host, false)
+        b.killExecutorsOnHost(host, true)
       case _ => fail("expected coarse grained scheduler")
     }
   }

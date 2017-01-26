@@ -76,7 +76,7 @@ private[spark] trait ExecutorAllocationClient {
    * Request that the cluster manager kill every executor on the specified host.
    * @return whether the request is acknowledged by the cluster manager.
    */
-  def killExecutorsOnHost(host: String, replace: Boolean): Boolean
+  def killExecutorsOnHost(host: String): Boolean
 
     /**
    * Request that the cluster manager kill the specified executor.
