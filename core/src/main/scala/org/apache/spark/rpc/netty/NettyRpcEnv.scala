@@ -537,29 +537,26 @@ private[netty] class RequestMessage(
     val bos = new ByteBufferOutputStream()
     val out = new DataOutputStream(bos)
     try {
-      if (senderAddress == null) {
-        out.writeBoolean(false)
-      } else {
-        out.writeBoolean(true)
-        out.writeUTF(senderAddress.host)
-        out.writeInt(senderAddress.port)
-      }
-      val receiverAddress = receiver.endpointAddress
-      if (receiverAddress.rpcAddress == null) {
-        out.writeBoolean(false)
-      } else {
-        out.writeBoolean(true)
-        out.writeUTF(receiverAddress.rpcAddress.host)
-        out.writeInt(receiverAddress.rpcAddress.port)
-      }
-      out.writeUTF(receiverAddress.name)
+      writeRpcAddress(out, senderAddress)
+      writeRpcAddress(out, receiver.endpointAddress.rpcAddress)
+      out.writeUTF(receiver.endpointAddress.name)
       val contentBytes = nettyEnv.serialize(content)
       assert(contentBytes.hasArray)
-      out.write(contentBytes.array(), contentBytes.arrayOffset(), contentBytes.remaining())
+      out.write(contentBytes.array, contentBytes.arrayOffset, contentBytes.remaining)
     } finally {
       out.close()
     }
     bos.toByteBuffer
+  }
+
+  private def writeRpcAddress(out: DataOutputStream, @Nullable rpcAddress: RpcAddress): Unit = {
+    if (rpcAddress == null) {
+      out.writeBoolean(false)
+    } else {
+      out.writeBoolean(true)
+      out.writeUTF(rpcAddress.host)
+      out.writeInt(rpcAddress.port)
+    }
   }
 
   override def toString: String = s"RequestMessage($senderAddress, $receiver, $content)"
@@ -567,30 +564,27 @@ private[netty] class RequestMessage(
 
 private[netty] object RequestMessage {
 
+  private def readRpcAddress(in: DataInputStream): RpcAddress = {
+    val hasRpcAddress = in.readBoolean()
+    if (hasRpcAddress) {
+      RpcAddress(in.readUTF(), in.readInt())
+    } else {
+      null
+    }
+  }
+
   def apply(nettyEnv: NettyRpcEnv, client: TransportClient, bytes: ByteBuffer): RequestMessage = {
     val bis = new ByteBufferInputStream(bytes)
     val in = new DataInputStream(bis)
     try {
-      val hasSenderAddress = in.readBoolean()
-      val senderAddress = if (hasSenderAddress) {
-        RpcAddress(in.readUTF(), in.readInt())
-      } else {
-        null
-      }
-      val endpointAddress = {
-        val hasRpcAddress = in.readBoolean()
-        val rpcAddress = if (hasRpcAddress) {
-          RpcAddress(in.readUTF(), in.readInt())
-        } else {
-          null
-        }
-        RpcEndpointAddress(rpcAddress, in.readUTF())
-      }
+      val senderAddress = readRpcAddress(in)
+      val endpointAddress = RpcEndpointAddress(readRpcAddress(in), in.readUTF())
       val ref = new NettyRpcEndpointRef(nettyEnv.conf, endpointAddress, nettyEnv)
       ref.client = client
       new RequestMessage(
         senderAddress,
         ref,
+        // The remaining bytes in `bytes` are the message content.
         nettyEnv.deserialize(client, bytes))
     } finally {
       in.close()
