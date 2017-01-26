@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.Types
+
 import org.apache.spark.sql.types._
 
 
