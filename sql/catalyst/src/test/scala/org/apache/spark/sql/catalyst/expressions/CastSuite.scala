@@ -110,114 +110,96 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("cast string to timestamp") {
     for (tz <- ALL_TIMEZONES) {
-      val timeZoneId = Option(tz.getID)
-      checkEvaluation(cast(Literal("123"), TimestampType, timeZoneId), null)
+      def checkCastStringToTimestamp(str: String, expected: Timestamp): Unit = {
+        checkEvaluation(cast(Literal(str), TimestampType, Option(tz.getID)), expected)
+      }
+
+      checkCastStringToTimestamp("123", null)
 
       var c = Calendar.getInstance(tz)
       c.set(2015, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015", new Timestamp(c.getTimeInMillis))
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015-03"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03", new Timestamp(c.getTimeInMillis))
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015-03-18"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18 "), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18T"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18", new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18 ", new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18T", new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015-03-18 12:03:17"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18 12:03:17", new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18T12:03:17", new Timestamp(c.getTimeInMillis))
 
       // If the string value includes timezone string, it represents the timestamp string
       // in the timezone regardless of the timeZoneId parameter.
       c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17Z"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18 12:03:17Z"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18T12:03:17Z", new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18 12:03:17Z", new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(TimeZone.getTimeZone("GMT-01:00"))
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17-1:0"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17-01:00"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18T12:03:17-1:0", new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18T12:03:17-01:00", new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17+07:30"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18T12:03:17+07:30", new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:03"))
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 0)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17+7:3"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18T12:03:17+7:3", new Timestamp(c.getTimeInMillis))
 
       // tests for the string including milliseconds.
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 123)
-      checkEvaluation(cast(Literal("2015-03-18 12:03:17.123"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18 12:03:17.123", new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18T12:03:17.123", new Timestamp(c.getTimeInMillis))
 
       // If the string value includes timezone string, it represents the timestamp string
       // in the timezone regardless of the timeZoneId parameter.
       c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 456)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17.456Z"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18 12:03:17.456Z"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18T12:03:17.456Z", new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18 12:03:17.456Z", new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(TimeZone.getTimeZone("GMT-01:00"))
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 123)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123-1:0"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123-01:00"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18T12:03:17.123-1:0", new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18T12:03:17.123-01:00", new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 123)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123+07:30"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18T12:03:17.123+07:30", new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:03"))
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 123)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17.123+7:3"), TimestampType, timeZoneId),
-        new Timestamp(c.getTimeInMillis))
+      checkCastStringToTimestamp("2015-03-18T12:03:17.123+7:3", new Timestamp(c.getTimeInMillis))
 
-      checkEvaluation(cast(Literal("2015-03-18 123142"), TimestampType, timeZoneId), null)
-      checkEvaluation(cast(Literal("2015-03-18T123123"), TimestampType, timeZoneId), null)
-      checkEvaluation(cast(Literal("2015-03-18X"), TimestampType, timeZoneId), null)
-      checkEvaluation(cast(Literal("2015/03/18"), TimestampType, timeZoneId), null)
-      checkEvaluation(cast(Literal("2015.03.18"), TimestampType, timeZoneId), null)
-      checkEvaluation(cast(Literal("20150318"), TimestampType, timeZoneId), null)
-      checkEvaluation(cast(Literal("2015-031-8"), TimestampType, timeZoneId), null)
-      checkEvaluation(cast(Literal("2015-03-18T12:03:17-0:70"), TimestampType, timeZoneId), null)
+      checkCastStringToTimestamp("2015-03-18 123142", null)
+      checkCastStringToTimestamp("2015-03-18T123123", null)
+      checkCastStringToTimestamp("2015-03-18X", null)
+      checkCastStringToTimestamp("2015/03/18", null)
+      checkCastStringToTimestamp("2015.03.18", null)
+      checkCastStringToTimestamp("20150318", null)
+      checkCastStringToTimestamp("2015-031-8", null)
+      checkCastStringToTimestamp("2015-03-18T12:03:17-0:70", null)
     }
   }
 
