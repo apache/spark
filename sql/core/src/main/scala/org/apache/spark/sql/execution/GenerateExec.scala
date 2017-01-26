@@ -51,16 +51,25 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty. `outer` has no effect when `join` is false.
- * @param output the output attributes of this node, which constructed in analysis phase,
- *               and we can not change it, as the parent node bound with it already.
+ * @param generatorOutput the qualified output attributes of the generator of this node, which
+ *                        constructed in analysis phase, and we can not change it, as the
+ *                        parent node bound with it already.
  */
 case class GenerateExec(
     generator: Generator,
     join: Boolean,
     outer: Boolean,
-    output: Seq[Attribute],
+    generatorOutput: Seq[Attribute],
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
+
+  override def output: Seq[Attribute] = {
+    if (join) {
+      child.output ++ generatorOutput
+    } else {
+      generatorOutput
+    }
+  }
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -153,11 +162,15 @@ case class GenerateExec(
     val index = ctx.freshName("index")
 
     // Add a check if the generate outer flag is true.
-    val checks = optionalCode(outer, data.isNull)
+    val checks = optionalCode(outer, s"($index == -1)")
 
     // Add position
     val position = if (e.position) {
-      Seq(ExprCode("", "false", index))
+      if (outer) {
+        Seq(ExprCode("", s"$index == -1", index))
+      } else {
+        Seq(ExprCode("", "false", index))
+      }
     } else {
       Seq.empty
     }

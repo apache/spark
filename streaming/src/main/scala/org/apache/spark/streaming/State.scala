@@ -178,7 +178,7 @@ private[streaming] class StateImpl[S] extends State[S] {
     removed
   }
 
-  /** Whether the state has been been updated */
+  /** Whether the state has been updated */
   def isUpdated(): Boolean = {
     updated
   }

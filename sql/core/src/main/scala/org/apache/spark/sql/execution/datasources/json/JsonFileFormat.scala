@@ -51,13 +51,8 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       val columnNameOfCorruptRecord =
         parsedOptions.columnNameOfCorruptRecord
           .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-      val jsonFiles = files.filterNot { status =>
-        val name = status.getPath.getName
-        (name.startsWith("_") && !name.contains("=")) || name.startsWith(".")
-      }.toArray
-
       val jsonSchema = InferSchema.infer(
-        createBaseRdd(sparkSession, jsonFiles),
+        createBaseRdd(sparkSession, files),
         columnNameOfCorruptRecord,
         parsedOptions)
       checkConstraints(jsonSchema)
@@ -152,16 +147,6 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
   override def equals(other: Any): Boolean = other.isInstanceOf[JsonFileFormat]
 }
 
-/**
- * Implementation of OutputWriter for Json file format. Uses [[JacksonGenerator]]
- * to do json conversion.
- *
- * @param path output location for the job
- * @param options json generator options
- * @param bucketId bucket for this partition
- * @param dataSchema JacksonGenerator factory
- * @param context hadoop task context
- */
 private[json] class JsonOutputWriter(
     path: String,
     options: JSONOptions,
@@ -174,9 +159,7 @@ private[json] class JsonOutputWriter(
   // create the Generator without separator inserted between 2 records
   private[this] val gen = new JacksonGenerator(dataSchema, writer, options)
 
-  override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
-
-  override protected[sql] def writeInternal(row: InternalRow): Unit = {
+  override def write(row: InternalRow): Unit = {
     gen.write(row)
     gen.writeLineEnding()
   }

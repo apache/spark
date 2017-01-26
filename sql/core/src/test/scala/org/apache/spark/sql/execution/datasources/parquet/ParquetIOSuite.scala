@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.sql.Timestamp
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -35,14 +33,14 @@ import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.io.api.RecordConsumer
-import org.apache.parquet.schema.{MessageType, MessageTypeParser, Type, Types}
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
+import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -465,16 +463,19 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("SPARK-8121: spark.sql.parquet.output.committer.class shouldn't be overridden") {
-    val extraOptions = Map(
-      SQLConf.OUTPUT_COMMITTER_CLASS.key -> classOf[ParquetOutputCommitter].getCanonicalName,
-      "spark.sql.parquet.output.committer.class" ->
-        classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName
-    )
-    withTempPath { dir =>
-      val message = intercept[SparkException] {
-        spark.range(0, 1).write.options(extraOptions).parquet(dir.getCanonicalPath)
-      }.getCause.getMessage
-      assert(message === "Intentional exception for testing purposes")
+    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
+      val extraOptions = Map(
+        SQLConf.OUTPUT_COMMITTER_CLASS.key -> classOf[ParquetOutputCommitter].getCanonicalName,
+        "spark.sql.parquet.output.committer.class" ->
+          classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName
+      )
+      withTempPath { dir =>
+        val message = intercept[SparkException] {
+          spark.range(0, 1).write.options(extraOptions).parquet(dir.getCanonicalPath)
+        }.getCause.getMessage
+        assert(message === "Intentional exception for testing purposes")
+      }
     }
   }
 
@@ -491,58 +492,64 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("SPARK-7837 Do not close output writer twice when commitTask() fails") {
-    // Using a output committer that always fail when committing a task, so that both
-    // `commitTask()` and `abortTask()` are invoked.
-    val extraOptions = Map[String, String](
-      "spark.sql.parquet.output.committer.class" ->
-        classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName
-    )
+    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
+      // Using a output committer that always fail when committing a task, so that both
+      // `commitTask()` and `abortTask()` are invoked.
+      val extraOptions = Map[String, String](
+        "spark.sql.parquet.output.committer.class" ->
+          classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName
+      )
 
-    // Before fixing SPARK-7837, the following code results in an NPE because both
-    // `commitTask()` and `abortTask()` try to close output writers.
+      // Before fixing SPARK-7837, the following code results in an NPE because both
+      // `commitTask()` and `abortTask()` try to close output writers.
 
-    withTempPath { dir =>
-      val m1 = intercept[SparkException] {
-        spark.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
-      }.getCause.getMessage
-      assert(m1.contains("Intentional exception for testing purposes"))
-    }
+      withTempPath { dir =>
+        val m1 = intercept[SparkException] {
+          spark.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
+        }.getCause.getMessage
+        assert(m1.contains("Intentional exception for testing purposes"))
+      }
 
-    withTempPath { dir =>
-      val m2 = intercept[SparkException] {
-        val df = spark.range(1).select('id as 'a, 'id as 'b).coalesce(1)
-        df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
-      }.getCause.getMessage
-      assert(m2.contains("Intentional exception for testing purposes"))
+      withTempPath { dir =>
+        val m2 = intercept[SparkException] {
+          val df = spark.range(1).select('id as 'a, 'id as 'b).coalesce(1)
+          df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
+        }.getCause.getMessage
+        assert(m2.contains("Intentional exception for testing purposes"))
+      }
     }
   }
 
   test("SPARK-11044 Parquet writer version fixed as version1 ") {
-    // For dictionary encoding, Parquet changes the encoding types according to its writer
-    // version. So, this test checks one of the encoding types in order to ensure that
-    // the file is written with writer version2.
-    val extraOptions = Map[String, String](
-      // Write a Parquet file with writer version2.
-      ParquetOutputFormat.WRITER_VERSION -> ParquetProperties.WriterVersion.PARQUET_2_0.toString,
-      // By default, dictionary encoding is enabled from Parquet 1.2.0 but
-      // it is enabled just in case.
-      ParquetOutputFormat.ENABLE_DICTIONARY -> "true"
-    )
+    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
+      // For dictionary encoding, Parquet changes the encoding types according to its writer
+      // version. So, this test checks one of the encoding types in order to ensure that
+      // the file is written with writer version2.
+      val extraOptions = Map[String, String](
+        // Write a Parquet file with writer version2.
+        ParquetOutputFormat.WRITER_VERSION -> ParquetProperties.WriterVersion.PARQUET_2_0.toString,
+        // By default, dictionary encoding is enabled from Parquet 1.2.0 but
+        // it is enabled just in case.
+        ParquetOutputFormat.ENABLE_DICTIONARY -> "true"
+      )
 
-    val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
+      val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
 
-    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
-      withTempPath { dir =>
-        val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
-        spark.range(1 << 16).selectExpr("(id % 4) AS i")
-          .coalesce(1).write.options(extraOptions).mode("overwrite").parquet(path)
+      withSQLConf(ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true") {
+        withTempPath { dir =>
+          val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
+          spark.range(1 << 16).selectExpr("(id % 4) AS i")
+            .coalesce(1).write.options(extraOptions).mode("overwrite").parquet(path)
 
-        val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
-        val columnChunkMetadata = blockMetadata.getColumns.asScala.head
+          val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
+          val columnChunkMetadata = blockMetadata.getColumns.asScala.head
 
-        // If the file is written with version2, this should include
-        // Encoding.RLE_DICTIONARY type. For version1, it is Encoding.PLAIN_DICTIONARY
-        assert(columnChunkMetadata.getEncodings.contains(Encoding.RLE_DICTIONARY))
+          // If the file is written with version2, this should include
+          // Encoding.RLE_DICTIONARY type. For version1, it is Encoding.PLAIN_DICTIONARY
+          assert(columnChunkMetadata.getEncodings.contains(Encoding.RLE_DICTIONARY))
+        }
       }
     }
   }
@@ -744,92 +751,6 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
       val option = new ParquetOptions(Map("Compression" -> "uncompressed"), spark.sessionState.conf)
       assert(option.compressionCodecClassName == "UNCOMPRESSED")
-    }
-  }
-
-  test("Pruned blocks within a file split do not get used") {
-    withSQLConf(ParquetOutputFormat.BLOCK_SIZE -> "1",
-      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-      withTempPath { f =>
-        // Create many blocks that will fit within the maxSplitSize.
-        // Ensure that non-contiguous blocks properly get removed within the vectorized reader.
-        val data = sparkContext.parallelize((1 to 100) ++ (100 to 200) ++ (1 to 100), 1).toDF()
-        data.write.parquet(f.getCanonicalPath)
-        val df = spark.read.parquet(f.getCanonicalPath)
-        assert(df.filter("value <=> 1").count() == 2)
-      }
-    }
-  }
-
-  test("Timestamp as INT96") {
-    withTempPath { dir =>
-      withSQLConf(SQLConf.PARQUET_TIMESTAMP_AS_INT96.key -> "true") {
-        val step = 1000L
-        val timestamps = Range.Long(System.currentTimeMillis(),
-          System.currentTimeMillis() + step * 20L, step).map(new Timestamp(_))
-        makeParquetFile(timestamps.map(i => Tuple1(Option(i))), dir)
-
-        val stat = FileSystem.get(new Configuration()).getFileStatus(new Path(dir.getCanonicalPath))
-        val footer = ParquetFileReader.readFooters(new Configuration(), stat, true).get(0)
-        val tsType = Types.primitive(PrimitiveTypeName.INT96, Type.Repetition.OPTIONAL).named("_1")
-        val schema = footer.getParquetMetadata.getFileMetaData.getSchema
-
-        assert(schema.getType(0).equals(tsType))
-        withSQLConf(SQLConf.PARQUET_TIMESTAMP_AS_INT96.key -> "false") {
-          readParquetFile(dir.getCanonicalPath) { df =>
-            assert(df.schema.head.dataType == DataTypes.TimestampType)
-            val results = df.collect().map(_.getTimestamp(0))
-            assert(results sameElements timestamps.toArray[Timestamp])
-          }
-        }
-      }
-    }
-  }
-
-
-  test("Timestamp as INT64") {
-    withTempPath { dir =>
-      withSQLConf(SQLConf.PARQUET_TIMESTAMP_AS_INT96.key -> "false") {
-        val step = 1000L
-        val timestamps = Range.Long(System.currentTimeMillis(),
-          System.currentTimeMillis() + step * 20L, step).map(new Timestamp(_))
-        makeParquetFile(timestamps.map(i => Tuple1(Option(i))), dir)
-
-        val stat = FileSystem.get(new Configuration()).getFileStatus(new Path(dir.getCanonicalPath))
-        val footer = ParquetFileReader.readFooters(new Configuration(), stat, true).get(0)
-        val tsType = Types.primitive(PrimitiveTypeName.INT64, Type.Repetition.OPTIONAL).named("_1")
-        val schema = footer.getParquetMetadata.getFileMetaData.getSchema
-
-        assert(schema.getType(0).equals(tsType))
-        withSQLConf(SQLConf.PARQUET_TIMESTAMP_AS_INT96.key -> "true") {
-          readParquetFile(dir.getCanonicalPath) { df =>
-            assert(df.schema.head.dataType == DataTypes.TimestampType)
-            val results = df.collect().map(_.getTimestamp(0))
-            assert(results sameElements timestamps.toArray[Timestamp])
-          }
-        }
-      }
-    }
-  }
-
-  test("Timestamp INT64 Dictionary encoding") {
-    val data = (1 to 1000).map { i =>
-      if (i < 500) {
-        Row(new java.sql.Timestamp(10))
-      } else {
-        Row(new java.sql.Timestamp(i))
-      }
-    }
-    val schema = StructType(List(StructField("time", TimestampType, false)).toArray)
-    withSQLConf(ParquetOutputFormat.DICTIONARY_PAGE_SIZE -> "64",
-        ParquetOutputFormat.PAGE_SIZE -> "128",
-        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-      withTempPath { file =>
-        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
-        df.coalesce(1).write.parquet(file.getCanonicalPath)
-        val df2 = spark.read.parquet(file.getCanonicalPath)
-        checkAnswer(df2, df.collect().toSeq)
-      }
     }
   }
 }

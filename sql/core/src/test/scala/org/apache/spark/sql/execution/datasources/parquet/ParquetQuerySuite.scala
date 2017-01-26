@@ -25,10 +25,12 @@ import com.google.common.collect.{HashMultiset, Multiset}
 import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path, RawLocalFileSystem}
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -181,6 +183,8 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
 
     withSQLConf(
+      SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName,
       SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
       SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true",
       ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL"
@@ -189,6 +193,8 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
 
     withSQLConf(
+      SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName,
       SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
       SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false"
     ) {
@@ -212,6 +218,35 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
     withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "false") {
       testSchemaMerging(2)
+    }
+  }
+
+  test("Enabling/disabling ignoreCorruptFiles") {
+    def testIgnoreCorruptFiles(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
+        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+        val df = spark.read.parquet(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString,
+          new Path(basePath, "third").toString)
+        checkAnswer(
+          df,
+          Seq(Row(0), Row(1)))
+      }
+    }
+
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+      testIgnoreCorruptFiles()
+    }
+
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+      val exception = intercept[SparkException] {
+        testIgnoreCorruptFiles()
+      }
+      assert(exception.getMessage().contains("is not a Parquet file"))
     }
   }
 
@@ -801,7 +836,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key -> "false") {
       withTempPath { path =>
-        implicit val encoder = Encoders.TIMESTAMP
         val ts = new Timestamp(System.currentTimeMillis())
         spark.createDataset(Seq(ts)).write.parquet(path.getCanonicalPath)
 
@@ -822,7 +856,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key -> "false") {
       withTempPath { path =>
-        implicit val encoder = Encoders.DATE
         val date = new Date(2016, 1, 1)
         spark.createDataset(Seq(date)).write.parquet(path.getCanonicalPath)
 

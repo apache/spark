@@ -20,7 +20,6 @@ package org.apache.spark
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
 import java.net.{URI, URL}
 import java.nio.charset.StandardCharsets
-import java.nio.file.Paths
 import java.util.Arrays
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream}
@@ -28,6 +27,8 @@ import java.util.jar.{JarEntry, JarOutputStream}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.sys.process.{Process, ProcessLogger}
+import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
@@ -93,7 +94,10 @@ private[spark] object TestUtils {
     val jarStream = new JarOutputStream(jarFileStream, new java.util.jar.Manifest())
 
     for (file <- files) {
-      val jarEntry = new JarEntry(Paths.get(directoryPrefix.getOrElse(""), file.getName).toString)
+      // The `name` for the argument in `JarEntry` should use / for its separator. This is
+      // ZIP specification.
+      val prefix = directoryPrefix.map(d => s"$d/").getOrElse("")
+      val jarEntry = new JarEntry(prefix + file.getName)
       jarStream.putNextEntry(jarEntry)
 
       val in = new FileInputStream(file)
@@ -180,6 +184,14 @@ private[spark] object TestUtils {
     sc.addSparkListener(spillListener)
     body
     assert(spillListener.numSpilledStages == 0, s"expected $identifier to not spill, but did")
+  }
+
+  /**
+   * Test if a command is available.
+   */
+  def testCommandAvailable(command: String): Boolean = {
+    val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
+    attempt.isSuccess && attempt.get == 0
   }
 
 }

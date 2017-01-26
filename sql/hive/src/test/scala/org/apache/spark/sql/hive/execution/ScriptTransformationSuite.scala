@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkException, TaskContext, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -50,10 +50,12 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
   )
 
   test("cat without SerDe") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     checkAnswer(
       rowsDf,
-      (child: SparkPlan) => new ScriptTransformation(
+      (child: SparkPlan) => new ScriptTransformationExec(
         input = Seq(rowsDf.col("a").expr),
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
@@ -64,10 +66,12 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
   }
 
   test("cat with LazySimpleSerDe") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     checkAnswer(
       rowsDf,
-      (child: SparkPlan) => new ScriptTransformation(
+      (child: SparkPlan) => new ScriptTransformationExec(
         input = Seq(rowsDf.col("a").expr),
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
@@ -78,11 +82,13 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
   }
 
   test("script transformation should not swallow errors from upstream operators (no serde)") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     val e = intercept[TestFailedException] {
       checkAnswer(
         rowsDf,
-        (child: SparkPlan) => new ScriptTransformation(
+        (child: SparkPlan) => new ScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
@@ -95,11 +101,13 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
   }
 
   test("script transformation should not swallow errors from upstream operators (with serde)") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     val e = intercept[TestFailedException] {
       checkAnswer(
         rowsDf,
-        (child: SparkPlan) => new ScriptTransformation(
+        (child: SparkPlan) => new ScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
@@ -112,11 +120,13 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
   }
 
   test("SPARK-14400 script transformation should fail for bad script command") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
 
     val e = intercept[SparkException] {
       val plan =
-        new ScriptTransformation(
+        new ScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),

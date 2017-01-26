@@ -300,7 +300,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
-    if (getDatabaseOption(databaseName).isDefined) {
+    if (databaseExists(databaseName)) {
       state.setCurrentDatabase(databaseName)
     } else {
       throw new NoSuchDatabaseException(databaseName)
@@ -336,14 +336,18 @@ private[hive] class HiveClientImpl(
         Option(database.properties).map(_.asJava).orNull))
   }
 
-  override def getDatabaseOption(name: String): Option[CatalogDatabase] = withHiveState {
-    Option(client.getDatabase(name)).map { d =>
+  override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
+    Option(client.getDatabase(dbName)).map { d =>
       CatalogDatabase(
         name = d.getName,
         description = d.getDescription,
         locationUri = d.getLocationUri,
         properties = Option(d.getParameters).map(_.asScala.toMap).orNull)
-    }
+    }.getOrElse(throw new NoSuchDatabaseException(dbName))
+  }
+
+  override def databaseExists(dbName: String): Boolean = withHiveState {
+    client.databaseExists(dbName)
   }
 
   override def listDatabases(pattern: String): Seq[String] = withHiveState {
@@ -404,8 +408,15 @@ private[hive] class HiveClientImpl(
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
         storage = CatalogStorageFormat(
           locationUri = shim.getDataLocation(h),
-          inputFormat = Option(h.getInputFormatClass).map(_.getName),
-          outputFormat = Option(h.getOutputFormatClass).map(_.getName),
+          // To avoid ClassNotFound exception, we try our best to not get the format class, but get
+          // the class name directly. However, for non-native tables, there is no interface to get
+          // the format class name, so we may still throw ClassNotFound in this case.
+          inputFormat = Option(h.getTTable.getSd.getInputFormat).orElse {
+            Option(h.getStorageHandler).map(_.getInputFormatClass.getName)
+          },
+          outputFormat = Option(h.getTTable.getSd.getOutputFormat).orElse {
+            Option(h.getStorageHandler).map(_.getOutputFormatClass.getName)
+          },
           serde = Option(h.getSerializationLib),
           compressed = h.getTTable.getSd.isCompressed,
           properties = Option(h.getTTable.getSd.getSerdeInfo.getParameters)
@@ -453,12 +464,14 @@ private[hive] class HiveClientImpl(
       table: String,
       specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit = withHiveState {
+      purge: Boolean,
+      retainData: Boolean): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
     val hiveTable = client.getTable(db, table, true /* throw exception */)
     // do the check at first and collect all the matching partitions
     val matchingParts =
       specs.flatMap { s =>
+        assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
         // The provided spec here can be a partial spec, i.e. it will match all partitions
         // whose specs are supersets of this partial spec. E.g. If a table has partitions
         // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
@@ -473,8 +486,7 @@ private[hive] class HiveClientImpl(
     var droppedParts = ArrayBuffer.empty[java.util.List[String]]
     matchingParts.foreach { partition =>
       try {
-        val deleteData = true
-        shim.dropPartition(client, db, table, partition, deleteData, purge)
+        shim.dropPartition(client, db, table, partition, !retainData, purge)
       } catch {
         case e: Exception =>
           val remainingParts = matchingParts.toBuffer -- droppedParts
@@ -519,6 +531,27 @@ private[hive] class HiveClientImpl(
     client.alterPartitions(table, newParts.map { p => toHivePartition(p, hiveTable) }.asJava)
   }
 
+  /**
+   * Returns the partition names for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   *
+   * The returned sequence is sorted as strings.
+   */
+  override def getPartitionNames(
+      table: CatalogTable,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String] = withHiveState {
+    val hivePartitionNames =
+      partialSpec match {
+        case None =>
+          // -1 for result limit means "no limit/return all"
+          client.getPartitionNames(table.database, table.identifier.table, -1)
+        case Some(s) =>
+          assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
+          client.getPartitionNames(table.database, table.identifier.table, s.asJava, -1)
+      }
+    hivePartitionNames.asScala.sorted
+  }
+
   override def getPartitionOption(
       table: CatalogTable,
       spec: TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
@@ -537,7 +570,9 @@ private[hive] class HiveClientImpl(
     val hiveTable = toHiveTable(table)
     val parts = spec match {
       case None => shim.getAllPartitions(client, hiveTable).map(fromHivePartition)
-      case Some(s) => client.getPartitions(hiveTable, s.asJava).asScala.map(fromHivePartition)
+      case Some(s) =>
+        assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
+        client.getPartitions(hiveTable, s.asJava).asScala.map(fromHivePartition)
     }
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts
@@ -631,7 +666,8 @@ private[hive] class HiveClientImpl(
       partSpec: java.util.LinkedHashMap[String, String],
       replace: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean): Unit = withHiveState {
+      inheritTableSpecs: Boolean,
+      isSrcLocal: Boolean): Unit = withHiveState {
     val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
     shim.loadPartition(
       client,
@@ -641,20 +677,23 @@ private[hive] class HiveClientImpl(
       replace,
       holdDDLTime,
       inheritTableSpecs,
-      isSkewedStoreAsSubdir = hiveTable.isStoredAsSubDirectories)
+      isSkewedStoreAsSubdir = hiveTable.isStoredAsSubDirectories,
+      isSrcLocal = isSrcLocal)
   }
 
   def loadTable(
       loadPath: String, // TODO URI
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean): Unit = withHiveState {
+      holdDDLTime: Boolean,
+      isSrcLocal: Boolean): Unit = withHiveState {
     shim.loadTable(
       client,
       new Path(loadPath),
       tableName,
       replace,
-      holdDDLTime)
+      holdDDLTime,
+      isSrcLocal)
   }
 
   def loadDynamicPartitions(

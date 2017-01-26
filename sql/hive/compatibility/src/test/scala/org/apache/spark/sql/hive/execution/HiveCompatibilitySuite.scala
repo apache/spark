@@ -178,7 +178,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "skewjoin",
     "database",
 
-    // These tests fail and and exit the JVM.
+    // These tests fail and exit the JVM.
     "auto_join18_multi_distinct",
     "join18_multi_distinct",
     "input44",

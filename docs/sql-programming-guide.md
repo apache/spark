@@ -515,16 +515,25 @@ new data.
 ### Saving to Persistent Tables
 
 `DataFrames` can also be saved as persistent tables into Hive metastore using the `saveAsTable`
-command. Notice existing Hive deployment is not necessary to use this feature. Spark will create a
+command. Notice that an existing Hive deployment is not necessary to use this feature. Spark will create a
 default local Hive metastore (using Derby) for you. Unlike the `createOrReplaceTempView` command,
 `saveAsTable` will materialize the contents of the DataFrame and create a pointer to the data in the
 Hive metastore. Persistent tables will still exist even after your Spark program has restarted, as
 long as you maintain your connection to the same metastore. A DataFrame for a persistent table can
 be created by calling the `table` method on a `SparkSession` with the name of the table.
 
-By default `saveAsTable` will create a "managed table", meaning that the location of the data will
-be controlled by the metastore. Managed tables will also have their data deleted automatically
-when a table is dropped.
+For file-based data source, e.g. text, parquet, json, etc. you can specify a custom table path via the
+`path` option, e.g. `df.write.option("path", "/some/path").saveAsTable("t")`. When the table is dropped,
+the custom table path will not be removed and the table data is still there. If no custom table path is
+specifed, Spark will write data to a default table path under the warehouse directory. When the table is
+dropped, the default table path will be removed too.
+
+Starting from Spark 2.1, persistent datasource tables have per-partition metadata stored in the Hive metastore. This brings several benefits:
+
+- Since the metastore can return only necessary partitions for a query, discovering all the partitions on the first query to the table is no longer needed.
+- Hive DDLs such as `ALTER TABLE PARTITION ... SET LOCATION` are now available for tables created with the Datasource API.
+
+Note that partition information is not gathered by default when creating external datasource tables (those with a `path` option). To sync the partition information in the metastore, you can invoke `MSCK REPAIR TABLE`.
 
 ## Parquet Files
 
@@ -942,6 +951,53 @@ adds support for finding tables in the MetaStore and writing queries using HiveQ
 </div>
 </div>
 
+### Specifying storage format for Hive tables
+
+When you create a Hive table, you need to define how this table should read/write data from/to file system,
+i.e. the "input format" and "output format". You also need to define how this table should deserialize the data
+to rows, or serialize rows to data, i.e. the "serde". The following options can be used to specify the storage
+format("serde", "input format", "output format"), e.g. `CREATE TABLE src(id int) USING hive OPTIONS(fileFormat 'parquet')`.
+By default, we will read the table files as plain text. Note that, Hive storage handler is not supported yet when
+creating table, you can create a table using storage handler at Hive side, and use Spark SQL to read it.
+
+<table class="table">
+  <tr><th>Property Name</th><th>Meaning</th></tr>
+  <tr>
+    <td><code>fileFormat</code></td>
+    <td>
+      A fileFormat is kind of a package of storage format specifications, including "serde", "input format" and
+      "output format". Currently we support 6 fileFormats: 'sequencefile', 'rcfile', 'orc', 'parquet', 'textfile' and 'avro'.
+    </td>
+  </tr>
+
+  <tr>
+    <td><code>inputFormat, outputFormat</code></td>
+    <td>
+      These 2 options specify the name of a corresponding `InputFormat` and `OutputFormat` class as a string literal,
+      e.g. `org.apache.hadoop.hive.ql.io.orc.OrcInputFormat`. These 2 options must be appeared in pair, and you can not
+      specify them if you already specified the `fileFormat` option.
+    </td>
+  </tr>
+
+  <tr>
+    <td><code>serde</code></td>
+    <td>
+      This option specifies the name of a serde class. When the `fileFormat` option is specified, do not specify this option
+      if the given `fileFormat` already include the information of serde. Currently "sequencefile", "textfile" and "rcfile"
+      don't include the serde information and you can use this option with these 3 fileFormats.
+    </td>
+  </tr>
+
+  <tr>
+    <td><code>fieldDelim, escapeDelim, collectionDelim, mapkeyDelim, lineDelim</code></td>
+    <td>
+      These options can only be used with "textfile" fileFormat. They define how to read delimited files into rows.
+    </td>
+  </tr>
+</table>
+
+All other properties defined with `OPTIONS` will be regarded as Hive serde properties.
+
 ### Interacting with Different Versions of Hive Metastore
 
 One of the most important pieces of Spark SQL's Hive support is interaction with Hive metastore,
@@ -1356,6 +1412,14 @@ options.
  - Dataset and DataFrame API `unionAll` has been deprecated and replaced by `union`
  - Dataset and DataFrame API `explode` has been deprecated, alternatively, use `functions.explode()` with `select` or `flatMap`
  - Dataset and DataFrame API `registerTempTable` has been deprecated and replaced by `createOrReplaceTempView`
+
+ - Changes to `CREATE TABLE ... LOCATION` behavior for Hive tables.
+    - From Spark 2.0, `CREATE TABLE ... LOCATION` is equivalent to `CREATE EXTERNAL TABLE ... LOCATION`
+      in order to prevent accidental dropping the existing data in the user-provided locations.
+      That means, a Hive table created in Spark SQL with the user-specified location is always a Hive external table.
+      Dropping external tables will not remove the data. Users are not allowed to specify the location for Hive managed tables.
+      Note that this is different from the Hive behavior.
+    - As a result, `DROP TABLE` statements on those tables will not remove the data.
 
 ## Upgrading From Spark SQL 1.5 to 1.6
 
@@ -1851,7 +1915,8 @@ You can access them by doing
   <td> The value type in Scala of the data type of this field
   (For example, Int for a StructField with the data type IntegerType) </td>
   <td>
-  StructField(<i>name</i>, <i>dataType</i>, <i>nullable</i>)
+  StructField(<i>name</i>, <i>dataType</i>, [<i>nullable</i>])<br />
+  <b>Note:</b> The default value of <i>nullable</i> is <i>true</i>.
   </td>
 </tr>
 </table>
@@ -2139,7 +2204,8 @@ from pyspark.sql.types import *
   <td> The value type in Python of the data type of this field
   (For example, Int for a StructField with the data type IntegerType) </td>
   <td>
-  StructField(<i>name</i>, <i>dataType</i>, <i>nullable</i>)
+  StructField(<i>name</i>, <i>dataType</i>, [<i>nullable</i>])<br />
+  <b>Note:</b> The default value of <i>nullable</i> is <i>True</i>.
   </td>
 </tr>
 </table>
@@ -2260,7 +2326,7 @@ from pyspark.sql.types import *
   <td> vector or list </td>
   <td>
   list(type="array", elementType=<i>elementType</i>, containsNull=[<i>containsNull</i>])<br />
-  <b>Note:</b> The default value of <i>containsNull</i> is <i>True</i>.
+  <b>Note:</b> The default value of <i>containsNull</i> is <i>TRUE</i>.
   </td>
 </tr>
 <tr>
@@ -2268,7 +2334,7 @@ from pyspark.sql.types import *
   <td> environment </td>
   <td>
   list(type="map", keyType=<i>keyType</i>, valueType=<i>valueType</i>, valueContainsNull=[<i>valueContainsNull</i>])<br />
-  <b>Note:</b> The default value of <i>valueContainsNull</i> is <i>True</i>.
+  <b>Note:</b> The default value of <i>valueContainsNull</i> is <i>TRUE</i>.
   </td>
 </tr>
 <tr>
@@ -2285,7 +2351,8 @@ from pyspark.sql.types import *
   <td> The value type in R of the data type of this field
   (For example, integer for a StructField with the data type IntegerType) </td>
   <td>
-  list(name=<i>name</i>, type=<i>dataType</i>, nullable=<i>nullable</i>)
+  list(name=<i>name</i>, type=<i>dataType</i>, nullable=[<i>nullable</i>])<br />
+  <b>Note:</b> The default value of <i>nullable</i> is <i>TRUE</i>.
   </td>
 </tr>
 </table>

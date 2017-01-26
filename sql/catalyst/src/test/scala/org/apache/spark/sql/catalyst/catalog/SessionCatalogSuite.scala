@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias}
-
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
 
 /**
  * Tests for [[SessionCatalog]] that assume that [[InMemoryCatalog]] is correctly implemented.
@@ -33,10 +33,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias}
  * signatures but do not extend a common parent. This is largely by design but
  * unfortunately leads to very similar test code in two places.
  */
-class SessionCatalogSuite extends SparkFunSuite {
+class SessionCatalogSuite extends PlanTest {
   private val utils = new CatalogTestUtils {
     override val tableInputFormat: String = "com.fruit.eyephone.CameraInputFormat"
     override val tableOutputFormat: String = "com.fruit.eyephone.CameraOutputFormat"
+    override val defaultProvider: String = "parquet"
     override def newEmptyCatalog(): ExternalCatalog = new InMemoryCatalog
   }
 
@@ -93,13 +94,13 @@ class SessionCatalogSuite extends SparkFunSuite {
 
   test("list databases without pattern") {
     val catalog = new SessionCatalog(newBasicCatalog())
-    assert(catalog.listDatabases().toSet == Set("default", "db1", "db2"))
+    assert(catalog.listDatabases().toSet == Set("default", "db1", "db2", "db3"))
   }
 
   test("list databases with pattern") {
     val catalog = new SessionCatalog(newBasicCatalog())
     assert(catalog.listDatabases("db").toSet == Set.empty)
-    assert(catalog.listDatabases("db*").toSet == Set("db1", "db2"))
+    assert(catalog.listDatabases("db*").toSet == Set("db1", "db2", "db3"))
     assert(catalog.listDatabases("*1").toSet == Set("db1"))
     assert(catalog.listDatabases("db2").toSet == Set("db2"))
   }
@@ -107,7 +108,7 @@ class SessionCatalogSuite extends SparkFunSuite {
   test("drop database") {
     val catalog = new SessionCatalog(newBasicCatalog())
     catalog.dropDatabase("db1", ignoreIfNotExists = false, cascade = false)
-    assert(catalog.listDatabases().toSet == Set("default", "db2"))
+    assert(catalog.listDatabases().toSet == Set("default", "db2", "db3"))
   }
 
   test("drop database when the database is not empty") {
@@ -132,7 +133,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     val externalCatalog3 = newBasicCatalog()
     val sessionCatalog3 = new SessionCatalog(externalCatalog3)
     externalCatalog3.dropDatabase("db2", ignoreIfNotExists = false, cascade = true)
-    assert(sessionCatalog3.listDatabases().toSet == Set("default", "db1"))
+    assert(sessionCatalog3.listDatabases().toSet == Set("default", "db1", "db3"))
   }
 
   test("drop database when the database does not exist") {
@@ -433,24 +434,24 @@ class SessionCatalogSuite extends SparkFunSuite {
     sessionCatalog.setCurrentDatabase("db2")
     // If we explicitly specify the database, we'll look up the relation in that database
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1", Some("db2")))
-      == SubqueryAlias("tbl1", SimpleCatalogRelation("db2", metastoreTable1), None))
+      == SubqueryAlias("tbl1", SimpleCatalogRelation(metastoreTable1), None))
     // Otherwise, we'll first look up a temporary table with the same name
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
-      == SubqueryAlias("tbl1", tempTable1, Some(TableIdentifier("tbl1"))))
+      == SubqueryAlias("tbl1", tempTable1, None))
     // Then, if that does not exist, look up the relation in the current database
     sessionCatalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
-      == SubqueryAlias("tbl1", SimpleCatalogRelation("db2", metastoreTable1), None))
+      == SubqueryAlias("tbl1", SimpleCatalogRelation(metastoreTable1), None))
   }
 
   test("lookup table relation with alias") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val alias = "monster"
     val tableMetadata = catalog.getTableMetadata(TableIdentifier("tbl1", Some("db2")))
-    val relation = SubqueryAlias("tbl1", SimpleCatalogRelation("db2", tableMetadata), None)
+    val relation = SubqueryAlias("tbl1", SimpleCatalogRelation(tableMetadata), None)
     val relationWithAlias =
       SubqueryAlias(alias,
-        SimpleCatalogRelation("db2", tableMetadata), None)
+        SimpleCatalogRelation(tableMetadata), None)
     assert(catalog.lookupRelation(
       TableIdentifier("tbl1", Some("db2")), alias = None) == relation)
     assert(catalog.lookupRelation(
@@ -462,7 +463,24 @@ class SessionCatalogSuite extends SparkFunSuite {
     val tmpView = Range(1, 10, 2, 10)
     catalog.createTempView("vw1", tmpView, overrideIfExists = false)
     val plan = catalog.lookupRelation(TableIdentifier("vw1"), Option("range"))
-    assert(plan == SubqueryAlias("range", tmpView, Option(TableIdentifier("vw1"))))
+    assert(plan == SubqueryAlias("range", tmpView, None))
+  }
+
+  test("look up view relation") {
+    val externalCatalog = newBasicCatalog()
+    val sessionCatalog = new SessionCatalog(externalCatalog)
+    val metadata = externalCatalog.getTable("db3", "view1")
+    sessionCatalog.setCurrentDatabase("default")
+    // Look up a view.
+    assert(metadata.viewText.isDefined)
+    val view = View(desc = metadata, output = metadata.schema.toAttributes,
+      child = CatalystSqlParser.parsePlan(metadata.viewText.get))
+    comparePlans(sessionCatalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
+      SubqueryAlias("view1", view, Some(TableIdentifier("view1", Some("db3")))))
+    // Look up a view using current database of the session catalog.
+    sessionCatalog.setCurrentDatabase("db3")
+    comparePlans(sessionCatalog.lookupRelation(TableIdentifier("view1")),
+      SubqueryAlias("view1", view, Some(TableIdentifier("view1", Some("db3")))))
   }
 
   test("table exists") {
@@ -608,6 +626,13 @@ class SessionCatalogSuite extends SparkFunSuite {
     }
     assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
       "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+    e = intercept[AnalysisException] {
+      catalog.createPartitions(
+        TableIdentifier("tbl2", Some("db2")),
+        Seq(partWithEmptyValue, part1), ignoreIfExists = true)
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
+      "empty partition column value"))
   }
 
   test("drop partitions") {
@@ -618,7 +643,8 @@ class SessionCatalogSuite extends SparkFunSuite {
       TableIdentifier("tbl2", Some("db2")),
       Seq(part1.spec),
       ignoreIfNotExists = false,
-      purge = false)
+      purge = false,
+      retainData = false)
     assert(catalogPartitionsEqual(externalCatalog.listPartitions("db2", "tbl2"), part2))
     // Drop partitions without explicitly specifying database
     sessionCatalog.setCurrentDatabase("db2")
@@ -626,7 +652,8 @@ class SessionCatalogSuite extends SparkFunSuite {
       TableIdentifier("tbl2"),
       Seq(part2.spec),
       ignoreIfNotExists = false,
-      purge = false)
+      purge = false,
+      retainData = false)
     assert(externalCatalog.listPartitions("db2", "tbl2").isEmpty)
     // Drop multiple partitions at once
     sessionCatalog.createPartitions(
@@ -636,7 +663,8 @@ class SessionCatalogSuite extends SparkFunSuite {
       TableIdentifier("tbl2", Some("db2")),
       Seq(part1.spec, part2.spec),
       ignoreIfNotExists = false,
-      purge = false)
+      purge = false,
+      retainData = false)
     assert(externalCatalog.listPartitions("db2", "tbl2").isEmpty)
   }
 
@@ -647,14 +675,16 @@ class SessionCatalogSuite extends SparkFunSuite {
         TableIdentifier("tbl1", Some("unknown_db")),
         Seq(),
         ignoreIfNotExists = false,
-        purge = false)
+        purge = false,
+        retainData = false)
     }
     intercept[NoSuchTableException] {
       catalog.dropPartitions(
         TableIdentifier("does_not_exist", Some("db2")),
         Seq(),
         ignoreIfNotExists = false,
-        purge = false)
+        purge = false,
+        retainData = false)
     }
   }
 
@@ -665,13 +695,15 @@ class SessionCatalogSuite extends SparkFunSuite {
         TableIdentifier("tbl2", Some("db2")),
         Seq(part3.spec),
         ignoreIfNotExists = false,
-        purge = false)
+        purge = false,
+        retainData = false)
     }
     catalog.dropPartitions(
       TableIdentifier("tbl2", Some("db2")),
       Seq(part3.spec),
       ignoreIfNotExists = true,
-      purge = false)
+      purge = false,
+      retainData = false)
   }
 
   test("drop partitions with invalid partition spec") {
@@ -681,7 +713,8 @@ class SessionCatalogSuite extends SparkFunSuite {
         TableIdentifier("tbl2", Some("db2")),
         Seq(partWithMoreColumns.spec),
         ignoreIfNotExists = false,
-        purge = false)
+        purge = false,
+        retainData = false)
     }
     assert(e.getMessage.contains(
       "Partition spec is invalid. The spec (a, b, c) must be contained within " +
@@ -691,11 +724,22 @@ class SessionCatalogSuite extends SparkFunSuite {
         TableIdentifier("tbl2", Some("db2")),
         Seq(partWithUnknownColumns.spec),
         ignoreIfNotExists = false,
-        purge = false)
+        purge = false,
+        retainData = false)
     }
     assert(e.getMessage.contains(
       "Partition spec is invalid. The spec (a, unknown) must be contained within " +
         "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+    e = intercept[AnalysisException] {
+      catalog.dropPartitions(
+        TableIdentifier("tbl2", Some("db2")),
+        Seq(partWithEmptyValue.spec, part1.spec),
+        ignoreIfNotExists = false,
+        purge = false,
+        retainData = false)
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
+      "empty partition column value"))
   }
 
   test("get partition") {
@@ -741,6 +785,11 @@ class SessionCatalogSuite extends SparkFunSuite {
     }
     assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
       "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+    e = intercept[AnalysisException] {
+      catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithEmptyValue.spec)
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
+      "empty partition column value"))
   }
 
   test("rename partitions") {
@@ -808,6 +857,13 @@ class SessionCatalogSuite extends SparkFunSuite {
     }
     assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
       "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+    e = intercept[AnalysisException] {
+      catalog.renamePartitions(
+        TableIdentifier("tbl1", Some("db2")),
+        Seq(part1.spec), Seq(partWithEmptyValue.spec))
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
+      "empty partition column value"))
   }
 
   test("alter partitions") {
@@ -867,6 +923,50 @@ class SessionCatalogSuite extends SparkFunSuite {
     }
     assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
       "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+    e = intercept[AnalysisException] {
+      catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithEmptyValue))
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
+      "empty partition column value"))
+  }
+
+  test("list partition names") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    val expectedPartitionNames = Seq("a=1/b=2", "a=3/b=4")
+    assert(catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2"))) ==
+      expectedPartitionNames)
+    // List partition names without explicitly specifying database
+    catalog.setCurrentDatabase("db2")
+    assert(catalog.listPartitionNames(TableIdentifier("tbl2")) == expectedPartitionNames)
+  }
+
+  test("list partition names with partial partition spec") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    assert(
+      catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")), Some(Map("a" -> "1"))) ==
+        Seq("a=1/b=2"))
+  }
+
+  test("list partition names with invalid partial partition spec") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    var e = intercept[AnalysisException] {
+      catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
+        Some(partWithMoreColumns.spec))
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must be " +
+      "contained within the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+    e = intercept[AnalysisException] {
+      catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
+        Some(partWithUnknownColumns.spec))
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must be " +
+      "contained within the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+    e = intercept[AnalysisException] {
+      catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
+        Some(partWithEmptyValue.spec))
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
+      "empty partition column value"))
   }
 
   test("list partitions") {
@@ -876,6 +976,32 @@ class SessionCatalogSuite extends SparkFunSuite {
     // List partitions without explicitly specifying database
     catalog.setCurrentDatabase("db2")
     assert(catalogPartitionsEqual(catalog.listPartitions(TableIdentifier("tbl2")), part1, part2))
+  }
+
+  test("list partitions with partial partition spec") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    assert(catalogPartitionsEqual(
+      catalog.listPartitions(TableIdentifier("tbl2", Some("db2")), Some(Map("a" -> "1"))), part1))
+  }
+
+  test("list partitions with invalid partial partition spec") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    var e = intercept[AnalysisException] {
+      catalog.listPartitions(TableIdentifier("tbl2", Some("db2")), Some(partWithMoreColumns.spec))
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must be " +
+      "contained within the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+    e = intercept[AnalysisException] {
+      catalog.listPartitions(TableIdentifier("tbl2", Some("db2")),
+        Some(partWithUnknownColumns.spec))
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must be " +
+      "contained within the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+    e = intercept[AnalysisException] {
+      catalog.listPartitions(TableIdentifier("tbl2", Some("db2")), Some(partWithEmptyValue.spec))
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
+      "empty partition column value"))
   }
 
   test("list partitions when database/table does not exist") {
@@ -1092,5 +1218,4 @@ class SessionCatalogSuite extends SparkFunSuite {
       catalog.listFunctions("unknown_db", "func*")
     }
   }
-
 }

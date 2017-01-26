@@ -20,24 +20,14 @@
 set -o pipefail
 set -e
 
-FWDIR="$(cd `dirname $0`; pwd)"
+FWDIR="$(cd `dirname "${BASH_SOURCE[0]}"`; pwd)"
 pushd $FWDIR > /dev/null
 
-if [ ! -z "$R_HOME" ]
-  then
-    R_SCRIPT_PATH="$R_HOME/bin"
-  else
-    # if system wide R_HOME is not found, then exit
-    if [ ! `command -v R` ]; then
-      echo "Cannot find 'R_HOME'. Please specify 'R_HOME' or make sure R is properly installed."
-      exit 1
-    fi
-    R_SCRIPT_PATH="$(dirname $(which R))"
-fi
-echo "USING R_HOME = $R_HOME"
+. $FWDIR/find-r.sh
 
+# Install the package (this is required for code in vignettes to run when building it later)
 # Build the latest docs, but not vignettes, which is built with the package next
-$FWDIR/create-docs.sh
+. $FWDIR/install-dev.sh
 
 # Build source package with vignettes
 SPARK_HOME="$(cd "${FWDIR}"/..; pwd)"
@@ -82,4 +72,5 @@ else
   # This will run tests and/or build vignettes, and require SPARK_HOME
   SPARK_HOME="${SPARK_HOME}" "$R_SCRIPT_PATH/"R CMD check $CRAN_CHECK_OPTIONS SparkR_"$VERSION".tar.gz
 fi
+
 popd > /dev/null

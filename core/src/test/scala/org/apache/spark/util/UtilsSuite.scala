@@ -17,7 +17,8 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, FileOutputStream, PrintStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
+  FileOutputStream, PrintStream}
 import java.lang.{Double => JDouble, Float => JFloat}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -389,6 +390,28 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.deserializeLongValue(bbuf.array) === testval)
   }
 
+  test("writeByteBuffer should not change ByteBuffer position") {
+    // Test a buffer with an underlying array, for both writeByteBuffer methods.
+    val testBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
+    assert(testBuffer.hasArray)
+    val bytesOut = new ByteBufferOutputStream(4096)
+    Utils.writeByteBuffer(testBuffer, bytesOut)
+    assert(testBuffer.position() === 0)
+
+    val dataOut = new DataOutputStream(bytesOut)
+    Utils.writeByteBuffer(testBuffer, dataOut: DataOutput)
+    assert(testBuffer.position() === 0)
+
+    // Test a buffer without an underlying array, for both writeByteBuffer methods.
+    val testDirectBuffer = ByteBuffer.allocateDirect(8)
+    assert(!testDirectBuffer.hasArray())
+    Utils.writeByteBuffer(testDirectBuffer, bytesOut)
+    assert(testDirectBuffer.position() === 0)
+
+    Utils.writeByteBuffer(testDirectBuffer, dataOut: DataOutput)
+    assert(testDirectBuffer.position() === 0)
+  }
+
   test("get iterator size") {
     val empty = Seq[Int]()
     assert(Utils.getIteratorSize(empty.toIterator) === 0L)
@@ -482,7 +505,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5,file:$cwd/path%20to/jar6")
     if (Utils.isWindows) {
       assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
-        s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi,file:/C:/path%20to/jar4")
+        s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
     }
   }
 
