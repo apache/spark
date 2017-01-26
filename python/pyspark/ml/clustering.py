@@ -87,8 +87,6 @@ class ClusteringSummary(JavaWrapper):
 
 class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by GaussianMixture.
 
     .. versionadded:: 2.0.0
@@ -141,8 +139,6 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
 class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
                       HasProbabilityCol, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     GaussianMixture clustering.
     This class performs expectation maximization for multivariate Gaussian
     Mixture Models (GMMs).  A GMM represents a composite distribution of
@@ -155,7 +151,7 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     While this process is generally guaranteed to converge, it is not guaranteed
     to find a global optimum.
 
-    Note: For high-dimensional data (with many features), this algorithm may perform poorly.
+    .. note:: For high-dimensional data (with many features), this algorithm may perform poorly.
           This is due to high-dimensional data (a) making it difficult to cluster at all
           (based on statistical/theoretical arguments) and (b) numerical issues with
           Gaussian distributions.
@@ -179,18 +175,15 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     3
     >>> summary.clusterSizes
     [2, 2, 2]
+    >>> summary.logLikelihood
+    8.14636...
     >>> weights = model.weights
     >>> len(weights)
     3
-    >>> model.gaussiansDF.show()
-    +--------------------+--------------------+
-    |                mean|                 cov|
-    +--------------------+--------------------+
-    |[0.82500000140229...|0.005625000000006...|
-    |[-0.4777098016092...|0.167969502720916...|
-    |[-0.4472625243352...|0.167304119758233...|
-    +--------------------+--------------------+
-    ...
+    >>> model.gaussiansDF.select("mean").head()
+    Row(mean=DenseVector([0.825, 0.8675]))
+    >>> model.gaussiansDF.select("cov").head()
+    Row(cov=DenseMatrix(2, 2, [0.0056, -0.0051, -0.0051, 0.0046], False))
     >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
     >>> rows[4].prediction == rows[5].prediction
@@ -209,15 +202,10 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     False
     >>> model2.weights == model.weights
     True
-    >>> model2.gaussiansDF.show()
-    +--------------------+--------------------+
-    |                mean|                 cov|
-    +--------------------+--------------------+
-    |[0.82500000140229...|0.005625000000006...|
-    |[-0.4777098016092...|0.167969502720916...|
-    |[-0.4472625243352...|0.167304119758233...|
-    +--------------------+--------------------+
-    ...
+    >>> model2.gaussiansDF.select("mean").head()
+    Row(mean=DenseVector([0.825, 0.8675]))
+    >>> model2.gaussiansDF.select("cov").head()
+    Row(cov=DenseMatrix(2, 2, [0.0056, -0.0051, -0.0051, 0.0046], False))
 
     .. versionadded:: 2.0.0
     """
@@ -295,6 +283,25 @@ class GaussianMixtureSummary(ClusteringSummary):
         """
         return self._call_java("probability")
 
+    @property
+    @since("2.2.0")
+    def logLikelihood(self):
+        """
+        Total log-likelihood for this model on the given data.
+        """
+        return self._call_java("logLikelihood")
+
+
+class KMeansSummary(ClusteringSummary):
+    """
+    .. note:: Experimental
+
+    Summary of KMeans.
+
+    .. versionadded:: 2.1.0
+    """
+    pass
+
 
 class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
@@ -315,6 +322,27 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         for this model on the given data.
         """
         return self._call_java("computeCost", dataset)
+
+    @property
+    @since("2.1.0")
+    def hasSummary(self):
+        """
+        Indicates whether a training summary exists for this model instance.
+        """
+        return self._call_java("hasSummary")
+
+    @property
+    @since("2.1.0")
+    def summary(self):
+        """
+        Gets summary (e.g. cluster assignments, cluster sizes) of the model trained on the
+        training set. An exception is thrown if no summary exists.
+        """
+        if self.hasSummary:
+            return KMeansSummary(self._call_java("summary"))
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
 
 
 @inherit_doc
@@ -341,6 +369,13 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     True
     >>> rows[2].prediction == rows[3].prediction
     True
+    >>> model.hasSummary
+    True
+    >>> summary = model.summary
+    >>> summary.k
+    2
+    >>> summary.clusterSizes
+    [2, 2]
     >>> kmeans_path = temp_path + "/kmeans"
     >>> kmeans.save(kmeans_path)
     >>> kmeans2 = KMeans.load(kmeans_path)
@@ -349,6 +384,8 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     >>> model_path = temp_path + "/kmeans_model"
     >>> model.save(model_path)
     >>> model2 = KMeansModel.load(model_path)
+    >>> model2.hasSummary
+    False
     >>> model.clusterCenters()[0] == model2.clusterCenters()[0]
     array([ True,  True], dtype=bool)
     >>> model.clusterCenters()[1] == model2.clusterCenters()[1]
@@ -441,8 +478,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
 
 class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by BisectingKMeans.
 
     .. versionadded:: 2.0.0
@@ -487,8 +522,6 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
 class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasSeed,
                       JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     A bisecting k-means algorithm based on the paper "A comparison of document clustering
     techniques" by Steinbach, Karypis, and Kumar, with modification to fit Spark.
     The algorithm starts from a single cluster that contains all points.
@@ -619,8 +652,6 @@ class BisectingKMeansSummary(ClusteringSummary):
 @inherit_doc
 class LDAModel(JavaModel):
     """
-    .. note:: Experimental
-
     Latent Dirichlet Allocation (LDA) model.
     This abstraction permits for different underlying representations,
     including local and distributed data structures.
@@ -668,7 +699,7 @@ class LDAModel(JavaModel):
     @since("2.0.0")
     def logPerplexity(self, dataset):
         """
-        Calculate an upper bound bound on perplexity.  (Lower is better.)
+        Calculate an upper bound on perplexity.  (Lower is better.)
         See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
 
         WARNING: If this model is an instance of :py:class:`DistributedLDAModel` (produced when
@@ -697,8 +728,6 @@ class LDAModel(JavaModel):
 @inherit_doc
 class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Distributed model fitted by :py:class:`LDA`.
     This type of model is currently only produced by Expectation-Maximization (EM).
 
@@ -749,9 +778,9 @@ class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
         If using checkpointing and :py:attr:`LDA.keepLastCheckpoint` is set to true, then there may
         be saved checkpoint files.  This method is provided so that users can manage those files.
 
-        Note that removing the checkpoints can cause failures if a partition is lost and is needed
-        by certain :py:class:`DistributedLDAModel` methods.  Reference counting will clean up the
-        checkpoints when this model and derivative data go out of scope.
+        .. note:: Removing the checkpoints can cause failures if a partition is lost and is needed
+            by certain :py:class:`DistributedLDAModel` methods.  Reference counting will clean up
+            the checkpoints when this model and derivative data go out of scope.
 
         :return  List of checkpoint files from training
         """
@@ -761,8 +790,6 @@ class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
 @inherit_doc
 class LocalLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Local (non-distributed) model fitted by :py:class:`LDA`.
     This model stores the inferred topics only; it does not store info about the training dataset.
 
@@ -775,8 +802,6 @@ class LocalLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
 class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInterval,
           JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
 
     Terminology:

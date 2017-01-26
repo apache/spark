@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.DoubleType
 /**
  * Params for Naive Bayes Classifiers.
  */
-private[ml] trait NaiveBayesParams extends PredictorParams with HasWeightCol {
+private[classification] trait NaiveBayesParams extends PredictorParams with HasWeightCol {
 
   /**
    * The smoothing parameter.
@@ -60,16 +60,20 @@ private[ml] trait NaiveBayesParams extends PredictorParams with HasWeightCol {
   final def getModelType: String = $(modelType)
 }
 
+// scalastyle:off line.size.limit
 /**
  * Naive Bayes Classifiers.
  * It supports Multinomial NB
- * ([[http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html]])
+ * (see <a href="http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html">
+ * here</a>)
  * which can handle finitely supported discrete data. For example, by converting documents into
  * TF-IDF vectors, it can be used for document classification. By making every vector a
  * binary (0/1) data, it can also be used as Bernoulli NB
- * ([[http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html]]).
+ * (see <a href="http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html">
+ * here</a>).
  * The input feature values must be nonnegative.
  */
+// scalastyle:on line.size.limit
 @Since("1.5.0")
 class NaiveBayes @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
@@ -123,13 +127,11 @@ class NaiveBayes @Since("1.5.0") (
   private[spark] def trainWithLabelCheck(
       dataset: Dataset[_],
       positiveLabel: Boolean): NaiveBayesModel = {
-    if (positiveLabel) {
+    if (positiveLabel && isDefined(thresholds)) {
       val numClasses = getNumClasses(dataset)
-      if (isDefined(thresholds)) {
-        require($(thresholds).length == numClasses, this.getClass.getSimpleName +
-          ".train() called with non-matching numClasses and thresholds.length." +
-          s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
-      }
+      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
+        ".train() called with non-matching numClasses and thresholds.length." +
+        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
     val modelTypeValue = $(modelType)
@@ -145,7 +147,12 @@ class NaiveBayes @Since("1.5.0") (
       }
     }
 
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, rawPredictionCol,
+      probabilityCol, modelType, smoothing, thresholds)
+
     val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
+    instr.logNumFeatures(numFeatures)
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
     // Aggregates term frequencies per label.
@@ -167,6 +174,7 @@ class NaiveBayes @Since("1.5.0") (
       }).collect().sortBy(_._1)
 
     val numLabels = aggregated.length
+    instr.logNumClasses(numLabels)
     val numDocuments = aggregated.map(_._2._1).sum
 
     val labelArray = new Array[Double](numLabels)
@@ -196,7 +204,9 @@ class NaiveBayes @Since("1.5.0") (
 
     val pi = Vectors.dense(piArray)
     val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
-    new NaiveBayesModel(uid, pi, theta).setOldLabels(labelArray)
+    val model = new NaiveBayesModel(uid, pi, theta).setOldLabels(labelArray)
+    instr.logSuccess(model)
+    model
   }
 
   @Since("1.5.0")

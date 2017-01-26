@@ -163,9 +163,11 @@ object FunctionRegistry {
     expression[Abs]("abs"),
     expression[Coalesce]("coalesce"),
     expression[Explode]("explode"),
+    expressionGeneratorOuter[Explode]("explode_outer"),
     expression[Greatest]("greatest"),
     expression[If]("if"),
     expression[Inline]("inline"),
+    expressionGeneratorOuter[Inline]("inline_outer"),
     expression[IsNaN]("isnan"),
     expression[IfNull]("ifnull"),
     expression[IsNull]("isnull"),
@@ -176,6 +178,7 @@ object FunctionRegistry {
     expression[Nvl]("nvl"),
     expression[Nvl2]("nvl2"),
     expression[PosExplode]("posexplode"),
+    expressionGeneratorOuter[PosExplode]("posexplode_outer"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[Stack]("stack"),
@@ -249,8 +252,10 @@ object FunctionRegistry {
     expression[Max]("max"),
     expression[Average]("mean"),
     expression[Min]("min"),
+    expression[Percentile]("percentile"),
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
+    expression[ApproximatePercentile]("approx_percentile"),
     expression[StddevSamp]("std"),
     expression[StddevSamp]("stddev"),
     expression[StddevPop]("stddev_pop"),
@@ -261,6 +266,7 @@ object FunctionRegistry {
     expression[VarianceSamp]("var_samp"),
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
+    expression[CountMinSketchAgg]("count_min_sketch"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -369,6 +375,8 @@ object FunctionRegistry {
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
+    expression[InputFileBlockStart]("input_file_block_start"),
+    expression[InputFileBlockLength]("input_file_block_length"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
     expression[CurrentDatabase]("current_database"),
     expression[CallMethodViaReflection]("reflect"),
@@ -502,5 +510,14 @@ object FunctionRegistry {
     } else {
       new ExpressionInfo(clazz.getCanonicalName, name)
     }
+  }
+
+  private def expressionGeneratorOuter[T <: Generator : ClassTag](name: String)
+    : (String, (ExpressionInfo, FunctionBuilder)) = {
+    val (_, (info, generatorBuilder)) = expression[T](name)
+    val outerBuilder = (args: Seq[Expression]) => {
+      GeneratorOuter(generatorBuilder(args).asInstanceOf[Generator])
+    }
+    (name, (info, outerBuilder))
   }
 }

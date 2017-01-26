@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 
 object InterpretedPredicate {
@@ -86,6 +85,18 @@ trait PredicateHelper {
    */
   protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
     expr.references.subsetOf(plan.outputSet)
+
+  /**
+   * Returns true iff `expr` could be evaluated as a condition within join.
+   */
+  protected def canEvaluateWithinJoin(expr: Expression): Boolean = expr match {
+    case e: SubqueryExpression =>
+      // non-correlated subquery will be replaced as literal
+      e.children.isEmpty
+    case a: AttributeReference => true
+    case e: Unevaluable => false
+    case e => e.children.forall(canEvaluateWithinJoin)
+  }
 }
 
 @ExpressionDescription(
@@ -388,6 +399,8 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
       defineCodeGen(ctx, ev, (c1, c2) => s"${ctx.genComp(left.dataType, c1, c2)} $symbol 0")
     }
   }
+
+  protected lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
 }
 
 
@@ -412,19 +425,24 @@ case class EqualTo(left: Expression, right: Expression)
 
   override def inputType: AbstractDataType = AnyDataType
 
-  override def symbol: String = "="
-
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (left.dataType == FloatType) {
-      Utils.nanSafeCompareFloats(input1.asInstanceOf[Float], input2.asInstanceOf[Float]) == 0
-    } else if (left.dataType == DoubleType) {
-      Utils.nanSafeCompareDoubles(input1.asInstanceOf[Double], input2.asInstanceOf[Double]) == 0
-    } else if (left.dataType != BinaryType) {
-      input1 == input2
-    } else {
-      java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        // TODO: although map type is not orderable, technically map type should be able to be used
+        // in equality comparison, remove this type check once we support it.
+        if (left.dataType.existsRecursively(_.isInstanceOf[MapType])) {
+          TypeCheckResult.TypeCheckFailure("Cannot use map type in EqualTo, but the actual " +
+            s"input type is ${left.dataType.catalogString}.")
+        } else {
+          TypeCheckResult.TypeCheckSuccess
+        }
+      case failure => failure
     }
   }
+
+  override def symbol: String = "="
+
+  protected override def nullSafeEval(left: Any, right: Any): Any = ordering.equiv(left, right)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
@@ -440,6 +458,21 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 
   override def inputType: AbstractDataType = AnyDataType
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        // TODO: although map type is not orderable, technically map type should be able to be used
+        // in equality comparison, remove this type check once we support it.
+        if (left.dataType.existsRecursively(_.isInstanceOf[MapType])) {
+          TypeCheckResult.TypeCheckFailure("Cannot use map type in EqualNullSafe, but the actual " +
+            s"input type is ${left.dataType.catalogString}.")
+        } else {
+          TypeCheckResult.TypeCheckSuccess
+        }
+      case failure => failure
+    }
+  }
+
   override def symbol: String = "<=>"
 
   override def nullable: Boolean = false
@@ -452,15 +485,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     } else if (input1 == null || input2 == null) {
       false
     } else {
-      if (left.dataType == FloatType) {
-        Utils.nanSafeCompareFloats(input1.asInstanceOf[Float], input2.asInstanceOf[Float]) == 0
-      } else if (left.dataType == DoubleType) {
-        Utils.nanSafeCompareDoubles(input1.asInstanceOf[Double], input2.asInstanceOf[Double]) == 0
-      } else if (left.dataType != BinaryType) {
-        input1 == input2
-      } else {
-        java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
-      }
+      ordering.equiv(input1, input2)
     }
   }
 
@@ -483,8 +508,6 @@ case class LessThan(left: Expression, right: Expression)
 
   override def symbol: String = "<"
 
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
-
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
 }
 
@@ -496,8 +519,6 @@ case class LessThanOrEqual(left: Expression, right: Expression)
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
   override def symbol: String = "<="
-
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
 }
@@ -511,8 +532,6 @@ case class GreaterThan(left: Expression, right: Expression)
 
   override def symbol: String = ">"
 
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
-
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
 }
 
@@ -524,8 +543,6 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
   override def symbol: String = ">="
-
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
 }

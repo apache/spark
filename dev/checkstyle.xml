@@ -28,7 +28,7 @@
 
     with Spark-specific changes from:
 
-    https://cwiki.apache.org/confluence/display/SPARK/Spark+Code+Style+Guide
+    http://spark.apache.org/contributing.html#code-style-guide
 
     Checkstyle is very configurable. Be sure to read the documentation at
     http://checkstyle.sf.net (or in your downloaded distribution).

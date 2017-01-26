@@ -78,11 +78,11 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
  * statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
  * feature E is calculated as:
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * For the case $E_{max} == E_{min}$, $Rescaled(e_i) = 0.5 * (max + min)$.
  *

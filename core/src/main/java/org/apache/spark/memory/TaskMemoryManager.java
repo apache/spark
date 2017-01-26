@@ -378,14 +378,14 @@ public class TaskMemoryManager {
       for (MemoryConsumer c: consumers) {
         if (c != null && c.getUsed() > 0) {
           // In case of failed task, it's normal to see leaked memory
-          logger.warn("leak " + Utils.bytesToString(c.getUsed()) + " memory from " + c);
+          logger.debug("unreleased " + Utils.bytesToString(c.getUsed()) + " memory from " + c);
         }
       }
       consumers.clear();
 
       for (MemoryBlock page : pageTable) {
         if (page != null) {
-          logger.warn("leak a page: " + page + " in task " + taskAttemptId);
+          logger.debug("unreleased page: " + page + " in task " + taskAttemptId);
           memoryManager.tungstenMemoryAllocator().free(page);
         }
       }

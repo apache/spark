@@ -1246,6 +1246,22 @@ dstream.foreachRDD { rdd =>
 }
 {% endhighlight %}
 </div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
+  @Override
+  public void call(JavaRDD<String> rdd) {
+    final Connection connection = createNewConnection(); // executed at the driver
+    rdd.foreach(new VoidFunction<String>() {
+      @Override
+      public void call(String record) {
+        connection.send(record); // executed at the worker
+      }
+    });
+  }
+});
+{% endhighlight %}
+</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 def sendRecord(rdd):
@@ -1279,6 +1295,23 @@ dstream.foreachRDD { rdd =>
 }
 {% endhighlight %}
 </div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
+  @Override
+  public void call(JavaRDD<String> rdd) {
+    rdd.foreach(new VoidFunction<String>() {
+      @Override
+      public void call(String record) {
+        Connection connection = createNewConnection();
+        connection.send(record);
+        connection.close();
+      }
+    });
+  }
+});
+{% endhighlight %}
+</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 def sendRecord(record):
@@ -1307,6 +1340,25 @@ dstream.foreachRDD { rdd =>
     connection.close()
   }
 }
+{% endhighlight %}
+</div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
+  @Override
+  public void call(JavaRDD<String> rdd) {
+    rdd.foreachPartition(new VoidFunction<Iterator<String>>() {
+      @Override
+      public void call(Iterator<String> partitionOfRecords) {
+        Connection connection = createNewConnection();
+        while (partitionOfRecords.hasNext()) {
+          connection.send(partitionOfRecords.next());
+        }
+        connection.close();
+      }
+    });
+  }
+});
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
@@ -1342,6 +1394,26 @@ dstream.foreachRDD { rdd =>
 {% endhighlight %}
 </div>
 
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
+  @Override
+  public void call(JavaRDD<String> rdd) {
+    rdd.foreachPartition(new VoidFunction<Iterator<String>>() {
+      @Override
+      public void call(Iterator<String> partitionOfRecords) {
+        // ConnectionPool is a static, lazily initialized pool of connections
+        Connection connection = ConnectionPool.getConnection();
+        while (partitionOfRecords.hasNext()) {
+          connection.send(partitionOfRecords.next());
+        }
+        ConnectionPool.returnConnection(connection); // return to the pool for future reuse
+      }
+    });
+  }
+});
+{% endhighlight %}
+</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 def sendPartition(iter):
@@ -2382,7 +2454,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     - [Kafka Integration Guide](streaming-kafka-integration.html)
     - [Kinesis Integration Guide](streaming-kinesis-integration.html)
     - [Custom Receiver Guide](streaming-custom-receivers.html)
-* Third-party DStream data sources can be found in [Third Party Projects](https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects)
+* Third-party DStream data sources can be found in [Third Party Projects](http://spark.apache.org/third-party-projects.html)
 * API documentation
   - Scala docs
     * [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) and

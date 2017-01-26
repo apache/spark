@@ -382,6 +382,52 @@ For example:
 
 </div>
 
+## Aggregations
+
+The [built-in DataFrames functions](api/scala/index.html#org.apache.spark.sql.functions$) provide common
+aggregations such as `count()`, `countDistinct()`, `avg()`, `max()`, `min()`, etc.
+While those functions are designed for DataFrames, Spark SQL also has type-safe versions for some of them in 
+[Scala](api/scala/index.html#org.apache.spark.sql.expressions.scalalang.typed$) and 
+[Java](api/java/org/apache/spark/sql/expressions/javalang/typed.html) to work with strongly typed Datasets.
+Moreover, users are not limited to the predefined aggregate functions and can create their own.
+
+### Untyped User-Defined Aggregate Functions
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+
+Users have to extend the [UserDefinedAggregateFunction](api/scala/index.html#org.apache.spark.sql.expressions.UserDefinedAggregateFunction) 
+abstract class to implement a custom untyped aggregate function. For example, a user-defined average
+can look like:
+
+{% include_example untyped_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedUntypedAggregation.scala%}
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% include_example untyped_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedUntypedAggregation.java%}
+</div>
+
+</div>
+
+### Type-Safe User-Defined Aggregate Functions
+
+User-defined aggregations for strongly typed Datasets revolve around the [Aggregator](api/scala/index.html#org.apache.spark.sql.expressions.Aggregator) abstract class.
+For example, a type-safe user-defined average can look like:
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+
+{% include_example typed_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedTypedAggregation.scala%}
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% include_example typed_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedTypedAggregation.java%}
+</div>
+
+</div>
 
 # Data Sources
 
@@ -515,16 +561,25 @@ new data.
 ### Saving to Persistent Tables
 
 `DataFrames` can also be saved as persistent tables into Hive metastore using the `saveAsTable`
-command. Notice existing Hive deployment is not necessary to use this feature. Spark will create a
+command. Notice that an existing Hive deployment is not necessary to use this feature. Spark will create a
 default local Hive metastore (using Derby) for you. Unlike the `createOrReplaceTempView` command,
 `saveAsTable` will materialize the contents of the DataFrame and create a pointer to the data in the
 Hive metastore. Persistent tables will still exist even after your Spark program has restarted, as
 long as you maintain your connection to the same metastore. A DataFrame for a persistent table can
 be created by calling the `table` method on a `SparkSession` with the name of the table.
 
-By default `saveAsTable` will create a "managed table", meaning that the location of the data will
-be controlled by the metastore. Managed tables will also have their data deleted automatically
-when a table is dropped.
+For file-based data source, e.g. text, parquet, json, etc. you can specify a custom table path via the
+`path` option, e.g. `df.write.option("path", "/some/path").saveAsTable("t")`. When the table is dropped,
+the custom table path will not be removed and the table data is still there. If no custom table path is
+specifed, Spark will write data to a default table path under the warehouse directory. When the table is
+dropped, the default table path will be removed too.
+
+Starting from Spark 2.1, persistent datasource tables have per-partition metadata stored in the Hive metastore. This brings several benefits:
+
+- Since the metastore can return only necessary partitions for a query, discovering all the partitions on the first query to the table is no longer needed.
+- Hive DDLs such as `ALTER TABLE PARTITION ... SET LOCATION` are now available for tables created with the Datasource API.
+
+Note that partition information is not gathered by default when creating external datasource tables (those with a `path` option). To sync the partition information in the metastore, you can invoke `MSCK REPAIR TABLE`.
 
 ## Parquet Files
 
@@ -942,6 +997,53 @@ adds support for finding tables in the MetaStore and writing queries using HiveQ
 </div>
 </div>
 
+### Specifying storage format for Hive tables
+
+When you create a Hive table, you need to define how this table should read/write data from/to file system,
+i.e. the "input format" and "output format". You also need to define how this table should deserialize the data
+to rows, or serialize rows to data, i.e. the "serde". The following options can be used to specify the storage
+format("serde", "input format", "output format"), e.g. `CREATE TABLE src(id int) USING hive OPTIONS(fileFormat 'parquet')`.
+By default, we will read the table files as plain text. Note that, Hive storage handler is not supported yet when
+creating table, you can create a table using storage handler at Hive side, and use Spark SQL to read it.
+
+<table class="table">
+  <tr><th>Property Name</th><th>Meaning</th></tr>
+  <tr>
+    <td><code>fileFormat</code></td>
+    <td>
+      A fileFormat is kind of a package of storage format specifications, including "serde", "input format" and
+      "output format". Currently we support 6 fileFormats: 'sequencefile', 'rcfile', 'orc', 'parquet', 'textfile' and 'avro'.
+    </td>
+  </tr>
+
+  <tr>
+    <td><code>inputFormat, outputFormat</code></td>
+    <td>
+      These 2 options specify the name of a corresponding `InputFormat` and `OutputFormat` class as a string literal,
+      e.g. `org.apache.hadoop.hive.ql.io.orc.OrcInputFormat`. These 2 options must be appeared in pair, and you can not
+      specify them if you already specified the `fileFormat` option.
+    </td>
+  </tr>
+
+  <tr>
+    <td><code>serde</code></td>
+    <td>
+      This option specifies the name of a serde class. When the `fileFormat` option is specified, do not specify this option
+      if the given `fileFormat` already include the information of serde. Currently "sequencefile", "textfile" and "rcfile"
+      don't include the serde information and you can use this option with these 3 fileFormats.
+    </td>
+  </tr>
+
+  <tr>
+    <td><code>fieldDelim, escapeDelim, collectionDelim, mapkeyDelim, lineDelim</code></td>
+    <td>
+      These options can only be used with "textfile" fileFormat. They define how to read delimited files into rows.
+    </td>
+  </tr>
+</table>
+
+All other properties defined with `OPTIONS` will be regarded as Hive serde properties.
+
 ### Interacting with Different Versions of Hive Metastore
 
 One of the most important pieces of Spark SQL's Hive support is interaction with Hive metastore,
@@ -1061,15 +1163,26 @@ the following case-sensitive options:
   </tr>
 
   <tr>
-    <td><code>partitionColumn, lowerBound, upperBound, numPartitions</code></td>
+    <td><code>partitionColumn, lowerBound, upperBound</code></td>
     <td>
-      These options must all be specified if any of them is specified. They describe how to
-      partition the table when reading in parallel from multiple workers.
+      These options must all be specified if any of them is specified. In addition,
+      <code>numPartitions</code> must be specified. They describe how to partition the table when
+      reading in parallel from multiple workers.
       <code>partitionColumn</code> must be a numeric column from the table in question. Notice
       that <code>lowerBound</code> and <code>upperBound</code> are just used to decide the
       partition stride, not for filtering the rows in table. So all rows in the table will be
       partitioned and returned. This option applies only to reading.
     </td>
+  </tr>
+
+  <tr>
+     <td><code>numPartitions</code></td>
+     <td>
+       The maximum number of partitions that can be used for parallelism in table reading and
+       writing. This also determines the maximum number of concurrent JDBC connections.
+       If the number of partitions to write exceeds this limit, we decrease it to this limit by
+       calling <code>coalesce(numPartitions)</code> before writing.
+     </td>
   </tr>
 
   <tr>
@@ -1087,16 +1200,9 @@ the following case-sensitive options:
   </tr>
 
   <tr>
-     <td><code>maxConnections</code></td>
-     <td>
-       The maximum number of concurrent JDBC connections that can be used, if set. Only applies when writing. It works by limiting the operation's parallelism, which depends on the input's partition count. If its partition count exceeds this limit, the operation will coalesce the input to fewer partitions before writing.
-     </td>
-  </tr>
-
-  <tr>
      <td><code>isolationLevel</code></td>
      <td>
-       The transaction isolation level, which applies to current connection. It can be one of <code>NONE<code>, <code>READ_COMMITTED<code>, <code>READ_UNCOMMITTED<code>, <code>REPEATABLE_READ<code>, or <code>SERIALIZABLE<code>, corresponding to standard transaction isolation levels defined by JDBC's Connection object, with default of <code>READ_UNCOMMITTED<code>. This option applies only to writing. Please refer the documentation in <code>java.sql.Connection</code>.
+       The transaction isolation level, which applies to current connection. It can be one of <code>NONE</code>, <code>READ_COMMITTED</code>, <code>READ_UNCOMMITTED</code>, <code>REPEATABLE_READ</code>, or <code>SERIALIZABLE</code>, corresponding to standard transaction isolation levels defined by JDBC's Connection object, with default of <code>READ_UNCOMMITTED</code>. This option applies only to writing. Please refer the documentation in <code>java.sql.Connection</code>.
      </td>
    </tr>
 
@@ -1327,6 +1433,15 @@ options.
 
 # Migration Guide
 
+## Upgrading From Spark SQL 2.0 to 2.1
+
+ - Datasource tables now store partition metadata in the Hive metastore. This means that Hive DDLs such as `ALTER TABLE PARTITION ... SET LOCATION` are now available for tables created with the Datasource API.
+    - Legacy datasource tables can be migrated to this format via the `MSCK REPAIR TABLE` command. Migrating legacy tables is recommended to take advantage of Hive DDL support and improved planning performance.
+    - To determine if a table has been migrated, look for the `PartitionProvider: Catalog` attribute when issuing `DESCRIBE FORMATTED` on the table.
+ - Changes to `INSERT OVERWRITE TABLE ... PARTITION ...` behavior for Datasource tables.
+    - In prior Spark versions `INSERT OVERWRITE` overwrote the entire Datasource table, even when given a partition specification. Now only partitions matching the specification are overwritten.
+    - Note that this still differs from the behavior of Hive tables, which is to overwrite only partitions overlapping with newly inserted data.
+
 ## Upgrading From Spark SQL 1.6 to 2.0
 
  - `SparkSession` is now the new entry point of Spark that replaces the old `SQLContext` and
@@ -1343,6 +1458,14 @@ options.
  - Dataset and DataFrame API `unionAll` has been deprecated and replaced by `union`
  - Dataset and DataFrame API `explode` has been deprecated, alternatively, use `functions.explode()` with `select` or `flatMap`
  - Dataset and DataFrame API `registerTempTable` has been deprecated and replaced by `createOrReplaceTempView`
+
+ - Changes to `CREATE TABLE ... LOCATION` behavior for Hive tables.
+    - From Spark 2.0, `CREATE TABLE ... LOCATION` is equivalent to `CREATE EXTERNAL TABLE ... LOCATION`
+      in order to prevent accidental dropping the existing data in the user-provided locations.
+      That means, a Hive table created in Spark SQL with the user-specified location is always a Hive external table.
+      Dropping external tables will not remove the data. Users are not allowed to specify the location for Hive managed tables.
+      Note that this is different from the Hive behavior.
+    - As a result, `DROP TABLE` statements on those tables will not remove the data.
 
 ## Upgrading From Spark SQL 1.5 to 1.6
 
@@ -1838,7 +1961,8 @@ You can access them by doing
   <td> The value type in Scala of the data type of this field
   (For example, Int for a StructField with the data type IntegerType) </td>
   <td>
-  StructField(<i>name</i>, <i>dataType</i>, <i>nullable</i>)
+  StructField(<i>name</i>, <i>dataType</i>, [<i>nullable</i>])<br />
+  <b>Note:</b> The default value of <i>nullable</i> is <i>true</i>.
   </td>
 </tr>
 </table>
@@ -2126,7 +2250,8 @@ from pyspark.sql.types import *
   <td> The value type in Python of the data type of this field
   (For example, Int for a StructField with the data type IntegerType) </td>
   <td>
-  StructField(<i>name</i>, <i>dataType</i>, <i>nullable</i>)
+  StructField(<i>name</i>, <i>dataType</i>, [<i>nullable</i>])<br />
+  <b>Note:</b> The default value of <i>nullable</i> is <i>True</i>.
   </td>
 </tr>
 </table>
@@ -2247,7 +2372,7 @@ from pyspark.sql.types import *
   <td> vector or list </td>
   <td>
   list(type="array", elementType=<i>elementType</i>, containsNull=[<i>containsNull</i>])<br />
-  <b>Note:</b> The default value of <i>containsNull</i> is <i>True</i>.
+  <b>Note:</b> The default value of <i>containsNull</i> is <i>TRUE</i>.
   </td>
 </tr>
 <tr>
@@ -2255,7 +2380,7 @@ from pyspark.sql.types import *
   <td> environment </td>
   <td>
   list(type="map", keyType=<i>keyType</i>, valueType=<i>valueType</i>, valueContainsNull=[<i>valueContainsNull</i>])<br />
-  <b>Note:</b> The default value of <i>valueContainsNull</i> is <i>True</i>.
+  <b>Note:</b> The default value of <i>valueContainsNull</i> is <i>TRUE</i>.
   </td>
 </tr>
 <tr>
@@ -2272,7 +2397,8 @@ from pyspark.sql.types import *
   <td> The value type in R of the data type of this field
   (For example, integer for a StructField with the data type IntegerType) </td>
   <td>
-  list(name=<i>name</i>, type=<i>dataType</i>, nullable=<i>nullable</i>)
+  list(name=<i>name</i>, type=<i>dataType</i>, nullable=[<i>nullable</i>])<br />
+  <b>Note:</b> The default value of <i>nullable</i> is <i>TRUE</i>.
   </td>
 </tr>
 </table>
