@@ -28,6 +28,7 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.ml.common import inherit_doc
 
 __all__ = ['Binarizer',
+           'BucketedRandomProjectionLSH', 'BucketedRandomProjectionLSHModel',
            'Bucketizer',
            'ChiSqSelector', 'ChiSqSelectorModel',
            'CountVectorizer', 'CountVectorizerModel',
@@ -37,7 +38,7 @@ __all__ = ['Binarizer',
            'IDF', 'IDFModel',
            'IndexToString',
            'MaxAbsScaler', 'MaxAbsScalerModel',
-           'MinHash', 'MinHashModel',
+           'MinHashLSH', 'MinHashLSHModel',
            'MinMaxScaler', 'MinMaxScalerModel',
            'NGram',
            'Normalizer',
@@ -45,7 +46,6 @@ __all__ = ['Binarizer',
            'PCA', 'PCAModel',
            'PolynomialExpansion',
            'QuantileDiscretizer',
-           'RandomProjection', 'RandomProjectionModel',
            'RegexTokenizer',
            'RFormula', 'RFormulaModel',
            'SQLTransformer',
@@ -120,6 +120,123 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
         Gets the value of threshold or its default value.
         """
         return self.getOrDefault(self.threshold)
+
+
+
+@inherit_doc
+class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
+                                  JavaMLReadable, JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    LSH class for Euclidean distance metrics.
+    The input is dense or sparse vectors, each of which represents a point in the Euclidean
+    distance space. The output will be vectors of configurable dimension. Hash value in the
+    same dimension is calculated by the same hash function.
+
+    .. seealso:: `Stable Distributions \
+    <https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions>`_
+    .. seealso:: `Hashing for Similarity Search: A Survey <https://arxiv.org/abs/1408.2927>`_
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> data = [(Vectors.dense([-1.0, -1.0 ]),),
+    ...         (Vectors.dense([-1.0, 1.0 ]),),
+    ...         (Vectors.dense([1.0, -1.0 ]),),
+    ...         (Vectors.dense([1.0, 1.0]),)]
+    >>> df = spark.createDataFrame(data, ["keys"])
+    >>> rp = BucketedRandomProjectionLSH(inputCol="keys", outputCol="values", seed=12345, bucketLength=1.0)
+    >>> model = rp.fit(df)
+    >>> model.randUnitVectors
+    [DenseVector([-0.3041, 0.9527])]
+    >>> model.transform(df).head()
+    Row(keys=DenseVector([-1.0, -1.0]), values=DenseVector([-1.0]))
+    >>> data2 = [(Vectors.dense([2.0, 2.0 ]),),
+    ...          (Vectors.dense([2.0, 3.0 ]),),
+    ...          (Vectors.dense([3.0, 2.0 ]),),
+    ...          (Vectors.dense([3.0, 3.0]),)]
+    >>> df2 = spark.createDataFrame(data2, ["keys"])
+    >>> model.approxNearestNeighbors(df2, Vectors.dense([1.0, 2.0]), 1).collect()
+    [Row(keys=DenseVector([2.0, 2.0]), values=DenseVector([1.0]), distCol=1.0)]
+    >>> model.approxSimilarityJoin(df, df2, 3.0).select("distCol").head()[0]
+    2.236...
+    >>> rpPath = temp_path + "/rp"
+    >>> rp.save(rpPath)
+    >>> rp2 = BucketedRandomProjectionLSH.load(rpPath)
+    >>> rp2.getBucketLength() == rp.getBucketLength()
+    True
+    >>> modelPath = temp_path + "/rp-model"
+    >>> model.save(modelPath)
+    >>> model2 = BucketedRandomProjectionLSHModel.load(modelPath)
+    >>> model2.randUnitVectors == model.randUnitVectors
+    True
+
+    .. versionadded:: 2.2.0
+    """
+
+    bucketLength = Param(Params._dummy(), "bucketLength", "the length of each hash bucket, " +
+                         "a larger bucket lowers the false negative rate.",
+                         typeConverter=TypeConverters.toFloat)
+
+    @keyword_only
+    def __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, bucketLength=None):
+        """
+        __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, bucketLength=None)
+        """
+        super(BucketedRandomProjectionLSH, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.BucketedRandomProjectionLSH",
+                                            self.uid)
+        self._setDefault(numHashTables=1)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.2.0")
+    def setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, bucketLength=None):
+        """
+        setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, bucketLength=None)
+        Sets params for this BucketedRandomProjectionLSH.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.2.0")
+    def setBucketLength(self, value):
+        """
+        Sets the value of :py:attr:`bucketLength`.
+        """
+        return self._set(bucketLength=value)
+
+    @since("2.2.0")
+    def getBucketLength(self):
+        """
+        Gets the value of bucketLength or its default value.
+        """
+        return self.getOrDefault(self.bucketLength)
+
+    def _create_model(self, java_model):
+        return BucketedRandomProjectionLSHModel(java_model)
+
+
+class BucketedRandomProjectionLSHModel(JavaModel, LSHModel, JavaMLReadable, JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    Model fitted by :py:class:`BucketedRandomProjectionLSH`, where multiple random vectors are stored.
+    The vectors are normalized to be unit vectors and each vector is used in a hash function:
+    :math:`h_i(x) = floor(r_i * x / bucketLength)` where :math:`r_i` is the i-th random unit
+    vector. The number of buckets will be `(max L2 norm of input vectors) / bucketLength`.
+
+    .. versionadded:: 2.2.0
+    """
+
+    @property
+    @since("2.2.0")
+    def randUnitVectors(self):
+        """
+        An array of random unit vectors. Each vector represents a hash function.
+        """
+        return self._call_java("randUnitVectors")
+
 
 
 @inherit_doc
@@ -685,27 +802,27 @@ class LSHParams(Params):
     Mixin for Locality Sensitive Hashing(LSH) algorithm parameters.
     """
 
-    outputDim = Param(Params._dummy(), "outputDim", "The output dimension, where increasing " +
-                      "dimensionality lowers the false negative rate, and decreasing " +
-                      "dimensionality improves the running performance.",
-                      typeConverter=TypeConverters.toInt)
+    numHashTables = Param(Params._dummy(), "numHashTables", "number of hash tables, where " +
+                          "increasing number of hash tables lowers the false negative rate, " +
+                          "and decreasing it improves the running performance.",
+                          typeConverter=TypeConverters.toInt)
 
     def __init__(self):
         super(LSHParams, self).__init__()
 
     @since("2.1.0")
-    def setOutputDim(self, value):
+    def setNumHashTables(self, value):
         """
-        Sets the value of :py:attr:`outputDim`.
+        Sets the value of :py:attr:`numHashTables`.
         """
-        return self._set(outputDim=value)
+        return self._set(numHashTables=value)
 
     @since("2.1.0")
-    def getOutputDim(self):
+    def getNumHashTables(self):
         """
-        Gets the value of outputDim or its default value.
+        Gets the value of numHashTables or its default value.
         """
-        return self.getOrDefault(self.outputDim)
+        return self.getOrDefault(self.numHashTables)
 
 
 class LSHModel():
@@ -838,8 +955,8 @@ class MaxAbsScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class MinHash(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
-              JavaMLReadable, JavaMLWritable):
+class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
+                 JavaMLReadable, JavaMLWritable):
 
     """
     .. note:: Experimental
@@ -860,7 +977,7 @@ class MinHash(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     ...         (Vectors.sparse(10, [3, 4], [1.0, 1.0]),),
     ...         (Vectors.sparse(10, [4, 5], [1.0, 1.0]),)]
     >>> df = spark.createDataFrame(data, ["keys"])
-    >>> mh = MinHash(inputCol="keys", outputCol="values", seed=12345)
+    >>> mh = MinHashLSH(inputCol="keys", outputCol="values", seed=12345)
     >>> model = mh.fit(df)
     >>> model.numEntries
     20
@@ -879,12 +996,12 @@ class MinHash(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     0.666...
     >>> mhPath = temp_path + "/mh"
     >>> mh.save(mhPath)
-    >>> mh2 = MinHash.load(mhPath)
+    >>> mh2 = MinHashLSH.load(mhPath)
     >>> mh2.getOutputCol() == mh.getOutputCol()
     True
     >>> modelPath = temp_path + "/mh-model"
     >>> model.save(modelPath)
-    >>> model2 = MinHashModel.load(modelPath)
+    >>> model2 = MinHashLSHModel.load(modelPath)
     >>> model2.numEntries == model.numEntries
     True
     >>> model2.randCoefficients == model.randCoefficients
@@ -894,55 +1011,47 @@ class MinHash(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     """
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, seed=None, outputDim=1):
+    def __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1):
         """
-        __init__(self, inputCol=None, outputCol=None, seed=None, outputDim=1)
+        __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1)
         """
-        super(MinHash, self).__init__()
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinHash", self.uid)
-        self._setDefault(outputDim=1)
+        super(MinHashLSH, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinHashLSH", self.uid)
+        self._setDefault(numHashTables=1)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    @since("2.1.0")
-    def setParams(self, inputCol=None, outputCol=None, seed=None, outputDim=1):
+    @since("2.2.0")
+    def setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1):
         """
-        setParams(self, inputCol=None, outputCol=None, seed=None, outputDim=1)
-        Sets params for this MinHash.
+        setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1)
+        Sets params for this MinHashLSH.
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
-        return MinHashModel(java_model)
+        return MinHashLSHModel(java_model)
 
 
-class MinHashModel(JavaModel, LSHModel, JavaMLReadable, JavaMLWritable):
+class MinHashLSHModel(JavaModel, LSHModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model produced by :py:class:`MinHash`, where multiple hash functions are stored.
-    Each hash function is a perfect hash function:
-    :math:`h_i(x) = (x * k_i \mod prime) \mod numEntries`
-    where :math:`k_i` is the i-th coefficient, and both `x` and :math:`k_i`
-    are from :math:`Z_{prime^*}`
+    Model produced by :py:class:`MinHashLSH`, where where multiple hash functions are stored. Each
+    hash function is picked from the following family of hash functions, where a_i and b_i are
+    randomly chosen integers less than prime:`h_i(x) = ((x \cdot a_i + b_i) \mod prime)`
+    This hash family is approximately min-wise independent according to the reference.
 
-    .. seealso:: `Perfect Hash Function <https://en.wikipedia.org/wiki/Perfect_hash_function>`_
+    .. seealso:: Tom Bohman, Colin Cooper, and Alan Frieze. "Min-wise independent linear permutations."
+    Electronic Journal of Combinatorics 7 (2000): R26.
 
-    .. versionadded:: 2.1.0
+    .. versionadded:: 2.2.0
     """
 
     @property
-    @since("2.1.0")
-    def numEntries(self):
-        """
-        The number of entries of the hash functions.
-        """
-        return self._call_java("numEntries")
-
-    @property
-    @since("2.1.0")
+    @since("2.2.0")
     def randCoefficients(self):
         """
         An array of random coefficients, each used by one hash function.
@@ -1500,121 +1609,6 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
                           inputCol=self.getInputCol(),
                           outputCol=self.getOutputCol(),
                           handleInvalid=self.getHandleInvalid())
-
-
-@inherit_doc
-class RandomProjection(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
-                       JavaMLReadable, JavaMLWritable):
-    """
-    .. note:: Experimental
-
-    LSH class for Euclidean distance metrics.
-    The input is dense or sparse vectors, each of which represents a point in the Euclidean
-    distance space. The output will be vectors of configurable dimension. Hash value in the
-    same dimension is calculated by the same hash function.
-
-    .. seealso:: `Stable Distributions \
-    <https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions>`_
-    .. seealso:: `Hashing for Similarity Search: A Survey <https://arxiv.org/abs/1408.2927>`_
-
-    >>> from pyspark.ml.linalg import Vectors
-    >>> data = [(Vectors.dense([-1.0, -1.0 ]),),
-    ...         (Vectors.dense([-1.0, 1.0 ]),),
-    ...         (Vectors.dense([1.0, -1.0 ]),),
-    ...         (Vectors.dense([1.0, 1.0]),)]
-    >>> df = spark.createDataFrame(data, ["keys"])
-    >>> rp = RandomProjection(inputCol="keys", outputCol="values", seed=12345, bucketLength=1.0)
-    >>> model = rp.fit(df)
-    >>> model.randUnitVectors
-    [DenseVector([-0.3041, 0.9527])]
-    >>> model.transform(df).head()
-    Row(keys=DenseVector([-1.0, -1.0]), values=DenseVector([-1.0]))
-    >>> data2 = [(Vectors.dense([2.0, 2.0 ]),),
-    ...          (Vectors.dense([2.0, 3.0 ]),),
-    ...          (Vectors.dense([3.0, 2.0 ]),),
-    ...          (Vectors.dense([3.0, 3.0]),)]
-    >>> df2 = spark.createDataFrame(data2, ["keys"])
-    >>> model.approxNearestNeighbors(df2, Vectors.dense([1.0, 2.0]), 1).collect()
-    [Row(keys=DenseVector([2.0, 2.0]), values=DenseVector([1.0]), distCol=1.0)]
-    >>> model.approxSimilarityJoin(df, df2, 3.0).select("distCol").head()[0]
-    2.236...
-    >>> rpPath = temp_path + "/rp"
-    >>> rp.save(rpPath)
-    >>> rp2 = RandomProjection.load(rpPath)
-    >>> rp2.getBucketLength() == rp.getBucketLength()
-    True
-    >>> modelPath = temp_path + "/rp-model"
-    >>> model.save(modelPath)
-    >>> model2 = RandomProjectionModel.load(modelPath)
-    >>> model2.randUnitVectors == model.randUnitVectors
-    True
-
-    .. versionadded:: 2.1.0
-    """
-
-    bucketLength = Param(Params._dummy(), "bucketLength", "the length of each hash bucket, " +
-                         "a larger bucket lowers the false negative rate.",
-                         typeConverter=TypeConverters.toFloat)
-
-    @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, seed=None, outputDim=1, bucketLength=None):
-        """
-        __init__(self, inputCol=None, outputCol=None, seed=None, outputDim=1, bucketLength=None)
-        """
-        super(RandomProjection, self).__init__()
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RandomProjection",
-                                            self.uid)
-        self._setDefault(outputDim=1)
-        kwargs = self.__init__._input_kwargs
-        self.setParams(**kwargs)
-
-    @keyword_only
-    @since("2.1.0")
-    def setParams(self, inputCol=None, outputCol=None, seed=None, outputDim=1, bucketLength=None):
-        """
-        setParams(self, inputCol=None, outputCol=None, seed=None, outputDim=1, bucketLength=None)
-        Sets params for this RandomProjection.
-        """
-        kwargs = self.setParams._input_kwargs
-        return self._set(**kwargs)
-
-    @since("2.1.0")
-    def setBucketLength(self, value):
-        """
-        Sets the value of :py:attr:`bucketLength`.
-        """
-        return self._set(bucketLength=value)
-
-    @since("2.1.0")
-    def getBucketLength(self):
-        """
-        Gets the value of bucketLength or its default value.
-        """
-        return self.getOrDefault(self.bucketLength)
-
-    def _create_model(self, java_model):
-        return RandomProjectionModel(java_model)
-
-
-class RandomProjectionModel(JavaModel, LSHModel, JavaMLReadable, JavaMLWritable):
-    """
-    .. note:: Experimental
-
-    Model fitted by :py:class:`RandomProjection`, where multiple random vectors are stored.
-    The vectors are normalized to be unit vectors and each vector is used in a hash function:
-    :math:`h_i(x) = floor(r_i * x / bucketLength)` where :math:`r_i` is the i-th random unit
-    vector. The number of buckets will be `(max L2 norm of input vectors) / bucketLength`.
-
-    .. versionadded:: 2.1.0
-    """
-
-    @property
-    @since("2.1.0")
-    def randUnitVectors(self):
-        """
-        An array of random unit vectors. Each vector represents a hash function.
-        """
-        return self._call_java("randUnitVectors")
 
 
 @inherit_doc
