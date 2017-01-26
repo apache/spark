@@ -22,9 +22,9 @@ import java.io.File
 import scala.tools.nsc.GenericRunnerSettings
 
 import org.apache.spark._
-import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.Utils
 
 object Main extends Logging {
@@ -54,7 +54,7 @@ object Main extends Logging {
   // Visible for testing
   private[repl] def doMain(args: Array[String], _interp: SparkILoop): Unit = {
     interp = _interp
-    val jars = Utils.getUserJars(conf).mkString(File.pathSeparator)
+    val jars = Utils.getUserJars(conf, isShell = true).mkString(File.pathSeparator)
     val interpArguments = List(
       "-Yrepl-class-based",
       "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",

@@ -95,11 +95,6 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
   /** Trees in this ensemble. Warning: These have null parent Estimators. */
   def trees: Array[M]
 
-  /**
-   * Number of trees in ensemble
-   */
-  val getNumTrees: Int = trees.length
-
   /** Weights for each tree, zippable with [[trees]] */
   def treeWeights: Array[Double]
 
@@ -415,12 +410,12 @@ private[ml] object EnsembleModelReadWrite {
   /**
    * Helper method for loading a tree ensemble from disk.
    * This reconstructs all trees, returning the root nodes.
-   * @param path  Path given to [[saveImpl()]]
+   * @param path  Path given to `saveImpl`
    * @param className  Class name for ensemble model type
    * @param treeClassName  Class name for tree model type in the ensemble
    * @return  (ensemble metadata, array over trees of (tree metadata, root node)),
    *          where the root node is linked with all descendents
-   * @see [[saveImpl()]] for how the model was saved
+   * @see `saveImpl` for how the model was saved
    */
   def loadImpl(
       path: String,

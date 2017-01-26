@@ -50,7 +50,7 @@ object LinearRegressionWithElasticNetExample {
     // Summarize the model over the training set and print out some metrics
     val trainingSummary = lrModel.summary
     println(s"numIterations: ${trainingSummary.totalIterations}")
-    println(s"objectiveHistory: ${trainingSummary.objectiveHistory.toList}")
+    println(s"objectiveHistory: [${trainingSummary.objectiveHistory.mkString(",")}]")
     trainingSummary.residuals.show()
     println(s"RMSE: ${trainingSummary.rootMeanSquaredError}")
     println(s"r2: ${trainingSummary.r2}")

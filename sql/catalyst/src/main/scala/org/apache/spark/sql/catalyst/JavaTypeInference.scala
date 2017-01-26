@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import java.beans.{Introspector, PropertyDescriptor}
 import java.lang.{Iterable => JIterable}
+import java.lang.reflect.Type
 import java.util.{Iterator => JIterator, List => JList, Map => JMap}
 
 import scala.language.existentials
@@ -52,6 +53,15 @@ object JavaTypeInference {
    */
   def inferDataType(beanClass: Class[_]): (DataType, Boolean) = {
     inferDataType(TypeToken.of(beanClass))
+  }
+
+  /**
+   * Infers the corresponding SQL data type of a Java type.
+   * @param beanType Java type
+   * @return (SQL data type, nullable)
+   */
+  private[sql] def inferDataType(beanType: Type): (DataType, Boolean) = {
+    inferDataType(TypeToken.of(beanType))
   }
 
   /**
@@ -395,10 +405,16 @@ object JavaTypeInference {
           toCatalystArray(inputObject, elementType(typeToken))
 
         case _ if mapType.isAssignableFrom(typeToken) =>
-          // TODO: for java map, if we get the keys and values by `keySet` and `values`, we can
-          // not guarantee they have same iteration order(which is different from scala map).
-          // A possible solution is creating a new `MapObjects` that can iterate a map directly.
-          throw new UnsupportedOperationException("map type is not supported currently")
+          val (keyType, valueType) = mapKeyValueType(typeToken)
+
+          ExternalMapToCatalyst(
+            inputObject,
+            ObjectType(keyType.getRawType),
+            serializerFor(_, keyType),
+            ObjectType(valueType.getRawType),
+            serializerFor(_, valueType),
+            valueNullable = true
+          )
 
         case other =>
           val properties = getJavaBeanProperties(other)

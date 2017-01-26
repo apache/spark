@@ -51,7 +51,6 @@ object TypeCoercion {
       PromoteStrings ::
       DecimalPrecision ::
       BooleanEquality ::
-      StringToIntegralCasts ::
       FunctionArgumentConversion ::
       CaseWhenCoercion ::
       IfCoercion ::
@@ -63,7 +62,7 @@ object TypeCoercion {
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
   // The conversion for integral and floating point types have a linear widening hierarchy:
-  private[sql] val numericPrecedence =
+  val numericPrecedence =
     IndexedSeq(
       ByteType,
       ShortType,
@@ -96,27 +95,18 @@ object TypeCoercion {
       val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
       Some(numericPrecedence(index))
 
+    case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
+      Some(TimestampType)
+
     case _ => None
   }
 
   /** Similar to [[findTightestCommonType]], but can promote all the way to StringType. */
-  private def findTightestCommonTypeToString(left: DataType, right: DataType): Option[DataType] = {
+  def findTightestCommonTypeToString(left: DataType, right: DataType): Option[DataType] = {
     findTightestCommonTypeOfTwo(left, right).orElse((left, right) match {
       case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
       case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
       case _ => None
-    })
-  }
-
-  /**
-   * Similar to [[findTightestCommonType]], if can not find the TightestCommonType, try to use
-   * [[findTightestCommonTypeToString]] to find the TightestCommonType.
-   */
-  private def findTightestCommonTypeAndPromoteToString(types: Seq[DataType]): Option[DataType] = {
-    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
-      case None => None
-      case Some(d) =>
-        findTightestCommonTypeToString(d, c)
     })
   }
 
@@ -153,6 +143,28 @@ object TypeCoercion {
   private def findWiderCommonType(types: Seq[DataType]) = {
     types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
       case Some(d) => findWiderTypeForTwo(d, c)
+      case None => None
+    })
+  }
+
+  /**
+   * Similar to [[findWiderCommonType]], but can't promote to string. This is also similar to
+   * [[findTightestCommonType]], but can handle decimal types. If the wider decimal type exceeds
+   * system limitation, this rule will truncate the decimal type before return it.
+   */
+  def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {
+    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
+      case Some(d) => findTightestCommonTypeOfTwo(d, c).orElse((d, c) match {
+        case (t1: DecimalType, t2: DecimalType) =>
+          Some(DecimalPrecision.widerDecimalType(t1, t2))
+        case (t: IntegralType, d: DecimalType) =>
+          Some(DecimalPrecision.widerDecimalType(DecimalType.forType(t), d))
+        case (d: DecimalType, t: IntegralType) =>
+          Some(DecimalPrecision.widerDecimalType(DecimalType.forType(t), d))
+        case (_: FractionalType, _: DecimalType) | (_: DecimalType, _: FractionalType) =>
+          Some(DoubleType)
+        case _ => None
+      })
       case None => None
     })
   }
@@ -326,10 +338,13 @@ object TypeCoercion {
       case p @ BinaryComparison(left @ NullType(), right @ StringType()) =>
         p.makeCopy(Array(Literal.create(null, StringType), right))
 
-      case p @ BinaryComparison(left @ StringType(), right) if right.dataType != StringType =>
-        p.makeCopy(Array(Cast(left, DoubleType), right))
-      case p @ BinaryComparison(left, right @ StringType()) if left.dataType != StringType =>
-        p.makeCopy(Array(left, Cast(right, DoubleType)))
+      // When compare string with atomic type, case string to that type.
+      case p @ BinaryComparison(left @ StringType(), right @ AtomicType())
+        if right.dataType != StringType =>
+        p.makeCopy(Array(Cast(left, right.dataType), right))
+      case p @ BinaryComparison(left @ AtomicType(), right @ StringType())
+        if left.dataType != StringType =>
+        p.makeCopy(Array(left, Cast(right, left.dataType)))
 
       case i @ In(a @ DateType(), b) if b.forall(_.dataType == StringType) =>
         i.makeCopy(Array(Cast(a, StringType), b))
@@ -422,21 +437,6 @@ object TypeCoercion {
   }
 
   /**
-   * When encountering a cast from a string representing a valid fractional number to an integral
-   * type the jvm will throw a `java.lang.NumberFormatException`.  Hive, in contrast, returns the
-   * truncated version of this number.
-   */
-  object StringToIntegralCasts extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
-      // Skip nodes who's children have not been resolved yet.
-      case e if !e.childrenResolved => e
-
-      case Cast(e @ StringType(), t: IntegralType) =>
-        Cast(Cast(e, DecimalType.forType(LongType)), t)
-    }
-  }
-
-  /**
    * This ensure that the types for various functions are as expected.
    */
   object FunctionArgumentConversion extends Rule[LogicalPlan] {
@@ -446,7 +446,7 @@ object TypeCoercion {
 
       case a @ CreateArray(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
-        findTightestCommonTypeAndPromoteToString(types) match {
+        findWiderCommonType(types) match {
           case Some(finalDataType) => CreateArray(children.map(Cast(_, finalDataType)))
           case None => a
         }
@@ -457,7 +457,7 @@ object TypeCoercion {
           m.keys
         } else {
           val types = m.keys.map(_.dataType)
-          findTightestCommonTypeAndPromoteToString(types) match {
+          findWiderCommonType(types) match {
             case Some(finalDataType) => m.keys.map(Cast(_, finalDataType))
             case None => m.keys
           }
@@ -467,7 +467,7 @@ object TypeCoercion {
           m.values
         } else {
           val types = m.values.map(_.dataType)
-          findTightestCommonTypeAndPromoteToString(types) match {
+          findWiderCommonType(types) match {
             case Some(finalDataType) => m.values.map(Cast(_, finalDataType))
             case None => m.values
           }
@@ -500,16 +500,19 @@ object TypeCoercion {
           case None => c
         }
 
+      // When finding wider type for `Greatest` and `Least`, we should handle decimal types even if
+      // we need to truncate, but we should not promote one side to string if the other side is
+      // string.g
       case g @ Greatest(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
-        findTightestCommonType(types) match {
+        findWiderTypeWithoutStringPromotion(types) match {
           case Some(finalDataType) => Greatest(children.map(Cast(_, finalDataType)))
           case None => g
         }
 
       case l @ Least(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
-        findTightestCommonType(types) match {
+        findWiderTypeWithoutStringPromotion(types) match {
           case Some(finalDataType) => Least(children.map(Cast(_, finalDataType)))
           case None => l
         }
@@ -518,8 +521,6 @@ object TypeCoercion {
         NaNvl(l, Cast(r, DoubleType))
       case NaNvl(l, r) if l.dataType == FloatType && r.dataType == DoubleType =>
         NaNvl(Cast(l, DoubleType), r)
-
-      case e: RuntimeReplaceable => e.replaceForTypeCoercion()
     }
   }
 
@@ -536,11 +537,14 @@ object TypeCoercion {
       // Decimal and Double remain the same
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
-      case Divide(left, right) if isNumeric(left) && isNumeric(right) =>
+      case Divide(left, right) if isNumericOrNull(left) && isNumericOrNull(right) =>
         Divide(Cast(left, DoubleType), Cast(right, DoubleType))
     }
 
-    private def isNumeric(ex: Expression): Boolean = ex.dataType.isInstanceOf[NumericType]
+    private def isNumericOrNull(ex: Expression): Boolean = {
+      // We need to handle null types in case a query contains null literals.
+      ex.dataType.isInstanceOf[NumericType] || ex.dataType == NullType
+    }
   }
 
   /**
@@ -662,48 +666,69 @@ object TypeCoercion {
      * If the expression has an incompatible type that cannot be implicitly cast, return None.
      */
     def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] = {
-      val inType = e.dataType
+      implicitCast(e.dataType, expectedType).map { dt =>
+        if (dt == e.dataType) e else Cast(e, dt)
+      }
+    }
 
+    private def implicitCast(inType: DataType, expectedType: AbstractDataType): Option[DataType] = {
       // Note that ret is nullable to avoid typing a lot of Some(...) in this local scope.
       // We wrap immediately an Option after this.
-      @Nullable val ret: Expression = (inType, expectedType) match {
-
+      @Nullable val ret: DataType = (inType, expectedType) match {
         // If the expected type is already a parent of the input type, no need to cast.
-        case _ if expectedType.acceptsType(inType) => e
+        case _ if expectedType.acceptsType(inType) => inType
 
         // Cast null type (usually from null literals) into target types
-        case (NullType, target) => Cast(e, target.defaultConcreteType)
+        case (NullType, target) => target.defaultConcreteType
 
         // If the function accepts any numeric type and the input is a string, we follow the hive
         // convention and cast that input into a double
-        case (StringType, NumericType) => Cast(e, NumericType.defaultConcreteType)
+        case (StringType, NumericType) => NumericType.defaultConcreteType
 
         // Implicit cast among numeric types. When we reach here, input type is not acceptable.
 
         // If input is a numeric type but not decimal, and we expect a decimal type,
         // cast the input to decimal.
-        case (d: NumericType, DecimalType) => Cast(e, DecimalType.forType(d))
+        case (d: NumericType, DecimalType) => DecimalType.forType(d)
         // For any other numeric types, implicitly cast to each other, e.g. long -> int, int -> long
-        case (_: NumericType, target: NumericType) => Cast(e, target)
+        case (_: NumericType, target: NumericType) => target
 
         // Implicit cast between date time types
-        case (DateType, TimestampType) => Cast(e, TimestampType)
-        case (TimestampType, DateType) => Cast(e, DateType)
+        case (DateType, TimestampType) => TimestampType
+        case (TimestampType, DateType) => DateType
 
         // Implicit cast from/to string
-        case (StringType, DecimalType) => Cast(e, DecimalType.SYSTEM_DEFAULT)
-        case (StringType, target: NumericType) => Cast(e, target)
-        case (StringType, DateType) => Cast(e, DateType)
-        case (StringType, TimestampType) => Cast(e, TimestampType)
-        case (StringType, BinaryType) => Cast(e, BinaryType)
+        case (StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
+        case (StringType, target: NumericType) => target
+        case (StringType, DateType) => DateType
+        case (StringType, TimestampType) => TimestampType
+        case (StringType, BinaryType) => BinaryType
         // Cast any atomic type to string.
-        case (any: AtomicType, StringType) if any != StringType => Cast(e, StringType)
+        case (any: AtomicType, StringType) if any != StringType => StringType
 
         // When we reach here, input type is not acceptable for any types in this type collection,
         // try to find the first one we can implicitly cast.
-        case (_, TypeCollection(types)) => types.flatMap(implicitCast(e, _)).headOption.orNull
+        case (_, TypeCollection(types)) =>
+          types.flatMap(implicitCast(inType, _)).headOption.orNull
 
-        // Else, just return the same input expression
+        // Implicit cast between array types.
+        //
+        // Compare the nullabilities of the from type and the to type, check whether the cast of
+        // the nullability is resolvable by the following rules:
+        // 1. If the nullability of the to type is true, the cast is always allowed;
+        // 2. If the nullability of the to type is false, and the nullability of the from type is
+        // true, the cast is never allowed;
+        // 3. If the nullabilities of both the from type and the to type are false, the cast is
+        // allowed only when Cast.forceNullable(fromType, toType) is false.
+        case (ArrayType(fromType, fn), ArrayType(toType: DataType, true)) =>
+          implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
+
+        case (ArrayType(fromType, true), ArrayType(toType: DataType, false)) => null
+
+        case (ArrayType(fromType, false), ArrayType(toType: DataType, false))
+            if !Cast.forceNullable(fromType, toType) =>
+          implicitCast(fromType, toType).map(ArrayType(_, false)).orNull
+
         case _ => null
       }
       Option(ret)

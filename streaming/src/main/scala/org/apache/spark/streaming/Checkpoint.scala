@@ -18,8 +18,8 @@
 package org.apache.spark.streaming
 
 import java.io._
-import java.util.concurrent.Executors
-import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.{ArrayBlockingQueue, RejectedExecutionException,
+  ThreadPoolExecutor, TimeUnit}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -117,7 +117,7 @@ object Checkpoint extends Logging {
 
     val path = new Path(checkpointDir)
     val fs = fsOption.getOrElse(path.getFileSystem(SparkHadoopUtil.get.conf))
-    if (fs.exists(path)) {
+    try {
       val statuses = fs.listStatus(path)
       if (statuses != null) {
         val paths = statuses.map(_.getPath)
@@ -127,9 +127,10 @@ object Checkpoint extends Logging {
         logWarning(s"Listing $path returned null")
         Seq.empty
       }
-    } else {
-      logWarning(s"Checkpoint directory $path does not exist")
-      Seq.empty
+    } catch {
+      case _: FileNotFoundException =>
+        logWarning(s"Checkpoint directory $path does not exist")
+        Seq.empty
     }
   }
 
@@ -184,7 +185,14 @@ class CheckpointWriter(
     hadoopConf: Configuration
   ) extends Logging {
   val MAX_ATTEMPTS = 3
-  val executor = Executors.newFixedThreadPool(1)
+
+  // Single-thread executor which rejects executions when a large amount have queued up.
+  // This fails fast since this typically means the checkpoint store will never keep up, and
+  // will otherwise lead to filling memory with waiting payloads of byte[] to write.
+  val executor = new ThreadPoolExecutor(
+    1, 1,
+    0L, TimeUnit.MILLISECONDS,
+    new ArrayBlockingQueue[Runnable](1000))
   val compressionCodec = CompressionCodec.createCodec(conf)
   private var stopped = false
   @volatile private[this] var fs: FileSystem = null
@@ -222,9 +230,7 @@ class CheckpointWriter(
           logInfo(s"Saving checkpoint for time $checkpointTime to file '$checkpointFile'")
 
           // Write checkpoint to temp file
-          if (fs.exists(tempFile)) {
-            fs.delete(tempFile, true)   // just in case it exists
-          }
+          fs.delete(tempFile, true) // just in case it exists
           val fos = fs.create(tempFile)
           Utils.tryWithSafeFinally {
             fos.write(bytes)
@@ -235,9 +241,7 @@ class CheckpointWriter(
           // If the checkpoint file exists, back it up
           // If the backup exists as well, just delete it, otherwise rename will fail
           if (fs.exists(checkpointFile)) {
-            if (fs.exists(backupFile)) {
-              fs.delete(backupFile, true) // just in case it exists
-            }
+            fs.delete(backupFile, true) // just in case it exists
             if (!fs.rename(checkpointFile, backupFile)) {
               logWarning(s"Could not rename $checkpointFile to $backupFile")
             }

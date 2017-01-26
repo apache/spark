@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Ensembles - spark.mllib
-displayTitle: Ensembles - spark.mllib
+title: Ensembles - RDD-based API
+displayTitle: Ensembles - RDD-based API
 ---
 
 * Table of contents

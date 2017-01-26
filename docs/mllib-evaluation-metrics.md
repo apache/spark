@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Evaluation Metrics - spark.mllib
-displayTitle: Evaluation Metrics - spark.mllib
+title: Evaluation Metrics - RDD-based API
+displayTitle: Evaluation Metrics - RDD-based API
 ---
 
 * Table of contents

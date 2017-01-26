@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup}
 import org.apache.spark.ml.linalg._
@@ -29,18 +29,16 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: Experimental ::
  * This class takes a feature vector and outputs a new feature vector with a subarray of the
  * original features.
  *
- * The subset of features can be specified with either indices ([[setIndices()]])
- * or names ([[setNames()]]).  At least one feature must be selected. Duplicate features
+ * The subset of features can be specified with either indices (`setIndices()`)
+ * or names (`setNames()`). At least one feature must be selected. Duplicate features
  * are not allowed, so there can be no overlap between selected indices and names.
  *
  * The output vector will order features with the selected indices first (in the order given),
  * followed by the selected names (in the order given).
  */
-@Experimental
 @Since("1.5.0")
 final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {

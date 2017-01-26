@@ -34,14 +34,15 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         print("Usage: dataframe_example.py <libsvm file>", file=sys.stderr)
         exit(-1)
-    spark = SparkSession\
-        .builder\
-        .appName("DataFrameExample")\
-        .getOrCreate()
-    if len(sys.argv) == 2:
+    elif len(sys.argv) == 2:
         input = sys.argv[1]
     else:
         input = "data/mllib/sample_libsvm_data.txt"
+
+    spark = SparkSession \
+        .builder \
+        .appName("DataFrameExample") \
+        .getOrCreate()
 
     # Load input data
     print("Loading LIBSVM file with UDT from " + input + ".")

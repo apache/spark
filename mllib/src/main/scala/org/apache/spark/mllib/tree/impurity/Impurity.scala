@@ -17,17 +17,15 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
- * :: Experimental ::
  * Trait for calculating information gain.
  * This trait is used for
  *  (a) setting the impurity parameter in [[org.apache.spark.mllib.tree.configuration.Strategy]]
  *  (b) calculating impurity values from sufficient statistics.
  */
 @Since("1.0.0")
-@Experimental
 trait Impurity extends Serializable {
 
   /**

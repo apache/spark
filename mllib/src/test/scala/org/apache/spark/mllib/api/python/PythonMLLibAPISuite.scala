@@ -72,7 +72,7 @@ class PythonMLLibAPISuite extends SparkFunSuite {
     assert(matrix === nm)
 
     // Test conversion for empty matrix
-    val empty = Array[Double]()
+    val empty = Array.empty[Double]
     val emptyMatrix = Matrices.dense(0, 0, empty)
     val ne = SerDe.loads(SerDe.dumps(emptyMatrix)).asInstanceOf[DenseMatrix]
     assert(emptyMatrix == ne)

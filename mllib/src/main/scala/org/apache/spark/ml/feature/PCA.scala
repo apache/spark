@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
@@ -34,6 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
  * Params for [[PCA]] and [[PCAModel]].
@@ -44,7 +45,8 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
    * The number of principal components.
    * @group param
    */
-  final val k: IntParam = new IntParam(this, "k", "the number of principal components")
+  final val k: IntParam = new IntParam(this, "k", "the number of principal components (> 0)",
+    ParamValidators.gt(0))
 
   /** @group getParam */
   def getK: Int = $(k)
@@ -59,12 +61,11 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
   }
 
 }
+
 /**
- * :: Experimental ::
- * PCA trains a model to project vectors to a lower dimensional space of the top [[PCA!.k]]
+ * PCA trains a model to project vectors to a lower dimensional space of the top `PCA!.k`
  * principal components.
  */
-@Experimental
 @Since("1.5.0")
 class PCA @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
@@ -116,14 +117,12 @@ object PCA extends DefaultParamsReadable[PCA] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[PCA]]. Transforms vectors to a lower dimensional space.
  *
  * @param pc A principal components Matrix. Each column is one principal component.
  * @param explainedVariance A vector of proportions of variance explained by
  *                          each principal component.
  */
-@Experimental
 @Since("1.5.0")
 class PCAModel private[ml] (
     @Since("1.5.0") override val uid: String,
@@ -143,8 +142,9 @@ class PCAModel private[ml] (
 
   /**
    * Transform a vector by computed Principal Components.
-   * NOTE: Vectors to be transformed must be the same length
-   * as the source vectors given to [[PCA.fit()]].
+   *
+   * @note Vectors to be transformed must be the same length as the source vectors given
+   * to `PCA.fit()`.
    */
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -206,11 +206,8 @@ object PCAModel extends MLReadable[PCAModel] {
     override def load(path: String): PCAModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
-      val versionRegex = "([0-9]+)\\.(.+)".r
-      val versionRegex(major, _) = metadata.sparkVersion
-
       val dataPath = new Path(path, "data").toString
-      val model = if (major.toInt >= 2) {
+      val model = if (majorVersion(metadata.sparkVersion) >= 2) {
         val Row(pc: DenseMatrix, explainedVariance: DenseVector) =
           sparkSession.read.parquet(dataPath)
             .select("pc", "explainedVariance")

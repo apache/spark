@@ -72,6 +72,12 @@ class VectorsSuite extends SparkMLFunSuite {
     }
   }
 
+  test("sparse vector construction with negative indices") {
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(3, Array(-1, 1), Array(3.0, 5.0))
+    }
+  }
+
   test("dense to array") {
     val vec = Vectors.dense(arr).asInstanceOf[DenseVector]
     assert(vec.toArray.eq(arr))

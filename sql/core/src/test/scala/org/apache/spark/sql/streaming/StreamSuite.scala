@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.streaming
 
+import scala.reflect.ClassTag
+import scala.util.control.ControlThrowable
+
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
-import org.apache.spark.util.ManualClock
 
 class StreamSuite extends StreamTest {
 
@@ -159,7 +161,7 @@ class StreamSuite extends StreamTest {
 
     val inputData = MemoryStream[Int]
     testStream(inputData.toDS())(
-      StartStream(ProcessingTime("10 seconds"), new ManualClock),
+      StartStream(ProcessingTime("10 seconds"), new StreamManualClock),
 
       /* -- batch 0 ----------------------- */
       // Add some data in batch 0
@@ -197,7 +199,7 @@ class StreamSuite extends StreamTest {
 
       /* Stop then restart the Stream  */
       StopStream,
-      StartStream(ProcessingTime("10 seconds"), new ManualClock),
+      StartStream(ProcessingTime("10 seconds"), new StreamManualClock(60 * 1000)),
 
       /* -- batch 1 rerun ----------------- */
       // this batch 1 would re-run because the latest batch id logged in offset log is 1
@@ -236,11 +238,41 @@ class StreamSuite extends StreamTest {
     }
   }
 
+  testQuietly("handle fatal errors thrown from the stream thread") {
+    for (e <- Seq(
+      new VirtualMachineError {},
+      new ThreadDeath,
+      new LinkageError,
+      new ControlThrowable {}
+    )) {
+      val source = new Source {
+        override def getOffset: Option[Offset] = {
+          throw e
+        }
+
+        override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+          throw e
+        }
+
+        override def schema: StructType = StructType(Array(StructField("value", IntegerType)))
+
+        override def stop(): Unit = {}
+      }
+      val df = Dataset[Int](sqlContext.sparkSession, StreamingExecutionRelation(source))
+      testStream(df)(
+        // `ExpectFailure(isFatalError = true)` verifies two things:
+        // - Fatal errors can be propagated to `StreamingQuery.exception` and
+        //   `StreamingQuery.awaitTermination` like non fatal errors.
+        // - Fatal errors can be caught by UncaughtExceptionHandler.
+        ExpectFailure(isFatalError = true)(ClassTag(e.getClass))
+      )
+    }
+  }
+
   test("output mode API in Scala") {
-    val o1 = OutputMode.Append
-    assert(o1 === InternalOutputModes.Append)
-    val o2 = OutputMode.Complete
-    assert(o2 === InternalOutputModes.Complete)
+    assert(OutputMode.Append === InternalOutputModes.Append)
+    assert(OutputMode.Complete === InternalOutputModes.Complete)
+    assert(OutputMode.Update === InternalOutputModes.Update)
   }
 
   test("explain") {
@@ -249,7 +281,8 @@ class StreamSuite extends StreamTest {
     // Test `explain` not throwing errors
     df.explain()
     val q = df.writeStream.queryName("memory_explain").format("memory").start()
-      .asInstanceOf[StreamExecution]
+      .asInstanceOf[StreamingQueryWrapper]
+      .streamingQuery
     try {
       assert("No physical plan. Waiting for data." === q.explainInternal(false))
       assert("No physical plan. Waiting for data." === q.explainInternal(true))
@@ -269,6 +302,32 @@ class StreamSuite extends StreamTest {
       assert("LocalTableScan".r.findAllMatchIn(explainWithExtended).size === 1)
     } finally {
       q.stop()
+    }
+  }
+
+  test("SPARK-19065: dropDuplicates should not create expressions using the same id") {
+    withTempPath { testPath =>
+      val data = Seq((1, 2), (2, 3), (3, 4))
+      data.toDS.write.mode("overwrite").json(testPath.getCanonicalPath)
+      val schema = spark.read.json(testPath.getCanonicalPath).schema
+      val query = spark
+        .readStream
+        .schema(schema)
+        .json(testPath.getCanonicalPath)
+        .dropDuplicates("_1")
+        .writeStream
+        .format("memory")
+        .queryName("testquery")
+        .outputMode("complete")
+        .start()
+      try {
+        query.processAllAvailable()
+        if (query.exception.isDefined) {
+          throw query.exception.get
+        }
+      } finally {
+        query.stop()
+      }
     }
   }
 }

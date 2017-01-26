@@ -107,7 +107,11 @@ public class JavaPCASuite extends SharedSparkSession {
       .fit(df);
     List<Row> result = pca.transform(df).select("pca_features", "expected").toJavaRDD().collect();
     for (Row r : result) {
-      Assert.assertEquals(r.get(1), r.get(0));
+      Vector calculatedVector = (Vector) r.get(0);
+      Vector expectedVector = (Vector) r.get(1);
+      for (int i = 0; i < calculatedVector.size(); i++) {
+        Assert.assertEquals(calculatedVector.apply(i), expectedVector.apply(i), 1.0e-8);
+      }
     }
   }
 }

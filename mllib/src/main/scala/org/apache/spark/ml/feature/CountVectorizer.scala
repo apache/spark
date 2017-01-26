@@ -18,7 +18,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
@@ -53,8 +53,9 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
   /**
    * Specifies the minimum number of different documents a term must appear in to be included
    * in the vocabulary.
-   * If this is an integer >= 1, this specifies the number of documents the term must appear in;
-   * if this is a double in [0,1), then this specifies the fraction of documents.
+   * If this is an integer greater than or equal to 1, this specifies the number of documents
+   * the term must appear in; if this is a double in [0,1), then this specifies the fraction of
+   * documents.
    *
    * Default: 1.0
    * @group param
@@ -78,8 +79,8 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
   /**
    * Filter to ignore rare words in a document. For each document, terms with
    * frequency/count less than the given threshold are ignored.
-   * If this is an integer >= 1, then this specifies a count (of times the term must appear
-   * in the document);
+   * If this is an integer greater than or equal to 1, then this specifies a count (of times the
+   * term must appear in the document);
    * if this is a double in [0,1), then this specifies a fraction (out of the document's token
    * count).
    *
@@ -116,10 +117,8 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
 }
 
 /**
- * :: Experimental ::
  * Extracts a vocabulary from document collections and generates a [[CountVectorizerModel]].
  */
-@Experimental
 @Since("1.5.0")
 class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[CountVectorizerModel] with CountVectorizerParams with DefaultParamsWritable {
@@ -201,11 +200,9 @@ object CountVectorizer extends DefaultParamsReadable[CountVectorizer] {
 }
 
 /**
- * :: Experimental ::
  * Converts a text document to a sparse vector of token counts.
  * @param vocabulary An Array over terms. Only the terms in the vocabulary will be counted.
  */
-@Experimental
 @Since("1.5.0")
 class CountVectorizerModel(
     @Since("1.5.0") override val uid: String,

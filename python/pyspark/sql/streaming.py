@@ -16,6 +16,8 @@
 #
 
 import sys
+import json
+
 if sys.version >= '3':
     intlike = int
     basestring = unicode = str
@@ -26,8 +28,10 @@ from abc import ABCMeta, abstractmethod
 
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
+from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.types import *
+from pyspark.sql.utils import StreamingQueryException
 
 __all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
 
@@ -48,15 +52,29 @@ class StreamingQuery(object):
     @property
     @since(2.0)
     def id(self):
-        """The id of the streaming query. This id is unique across all queries that have been
-        started in the current process.
+        """Returns the unique id of this query that persists across restarts from checkpoint data.
+        That is, this id is generated when a query is started for the first time, and
+        will be the same every time it is restarted from checkpoint data.
+        There can only be one query with the same id active in a Spark cluster.
+        Also see, `runId`.
         """
-        return self._jsq.id()
+        return self._jsq.id().toString()
+
+    @property
+    @since(2.1)
+    def runId(self):
+        """Returns the unique id of this query that does not persist across restarts. That is, every
+        query that is started (or restarted from checkpoint) will have a different runId.
+        """
+        return self._jsq.runId().toString()
 
     @property
     @since(2.0)
     def name(self):
-        """The name of the streaming query. This name is unique across all active queries.
+        """Returns the user-specified name of the query, or null if not specified.
+        This name can be specified in the `org.apache.spark.sql.streaming.DataStreamWriter`
+        as `dataframe.writeStream.queryName("query").start()`.
+        This name, if set, must be unique across all active queries.
         """
         return self._jsq.name()
 
@@ -87,13 +105,46 @@ class StreamingQuery(object):
         else:
             return self._jsq.awaitTermination()
 
+    @property
+    @since(2.1)
+    def status(self):
+        """
+        Returns the current status of the query.
+        """
+        return json.loads(self._jsq.status().json())
+
+    @property
+    @since(2.1)
+    def recentProgress(self):
+        """Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
+        The number of progress updates retained for each stream is configured by Spark session
+        configuration `spark.sql.streaming.numRecentProgressUpdates`.
+        """
+        return [json.loads(p.json()) for p in self._jsq.recentProgress()]
+
+    @property
+    @since(2.1)
+    def lastProgress(self):
+        """
+        Returns the most recent :class:`StreamingQueryProgress` update of this streaming query or
+        None if there were no progress updates
+        :return: a map
+        """
+        lastProgress = self._jsq.lastProgress()
+        if lastProgress:
+            return json.loads(lastProgress.json())
+        else:
+            return None
+
     @since(2.0)
     def processAllAvailable(self):
         """Blocks until all available data in the source has been processed and committed to the
-        sink. This method is intended for testing. Note that in the case of continually arriving
-        data, this method may block forever. Additionally, this method is only guaranteed to block
-        until data that has been synchronously appended data to a stream source prior to invocation.
-        (i.e. `getOffset` must immediately reflect the addition).
+        sink. This method is intended for testing.
+
+        .. note:: In the case of continually arriving data, this method may block forever.
+            Additionally, this method is only guaranteed to block until data that has been
+            synchronously appended data to a stream source prior to invocation.
+            (i.e. `getOffset` must immediately reflect the addition).
         """
         return self._jsq.processAllAvailable()
 
@@ -102,6 +153,45 @@ class StreamingQuery(object):
         """Stop this streaming query.
         """
         self._jsq.stop()
+
+    @since(2.1)
+    def explain(self, extended=False):
+        """Prints the (logical and physical) plans to the console for debugging purpose.
+
+        :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
+
+        >>> sq = sdf.writeStream.format('memory').queryName('query_explain').start()
+        >>> sq.processAllAvailable() # Wait a bit to generate the runtime plans.
+        >>> sq.explain()
+        == Physical Plan ==
+        ...
+        >>> sq.explain(True)
+        == Parsed Logical Plan ==
+        ...
+        == Analyzed Logical Plan ==
+        ...
+        == Optimized Logical Plan ==
+        ...
+        == Physical Plan ==
+        ...
+        >>> sq.stop()
+        """
+        # Cannot call `_jsq.explain(...)` because it will print in the JVM process.
+        # We should print it in the Python process.
+        print(self._jsq.explainInternal(extended))
+
+    @since(2.1)
+    def exception(self):
+        """
+        :return: the StreamingQueryException if the query was terminated by an exception, or None.
+        """
+        if self._jsq.exception().isDefined():
+            je = self._jsq.exception().get()
+            msg = je.toString().split(': ', 1)[1]  # Drop the Java StreamingQueryException type info
+            stackTrace = '\n\t at '.join(map(lambda x: x.toString(), je.getStackTrace()))
+            return StreamingQueryException(msg, stackTrace)
+        else:
+            return None
 
 
 class StreamingQueryManager(object):
@@ -147,8 +237,6 @@ class StreamingQueryManager(object):
         True
         >>> sq.stop()
         """
-        if not isinstance(id, intlike):
-            raise ValueError("The id for the query must be an integer. Got: %s" % id)
         return StreamingQuery(self._jsqm.get(id))
 
     @since(2.0)
@@ -269,13 +357,15 @@ class DataStreamReader(OptionUtils):
 
         .. note:: Experimental.
 
-        :param schema: a StructType object
+        :param schema: a :class:`pyspark.sql.types.StructType` object
 
         >>> s = spark.readStream.schema(sdf_schema)
         """
+        from pyspark.sql import SparkSession
         if not isinstance(schema, StructType):
             raise TypeError("schema should be StructType")
-        jschema = self._spark._ssql_ctx.parseDataType(schema.json())
+        spark = SparkSession.builder.getOrCreate()
+        jschema = spark._jsparkSession.parseDataType(schema.json())
         self._jreader = self._jreader.schema(jschema)
         return self
 
@@ -310,12 +400,12 @@ class DataStreamReader(OptionUtils):
 
         :param path: optional string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
-        :param schema: optional :class:`StructType` for the input schema.
+        :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema.
         :param options: all other string options
 
-        >>> json_sdf = spark.readStream.format("json")\
-                                       .schema(sdf_schema)\
-                                       .load(tempfile.mkdtemp())
+        >>> json_sdf = spark.readStream.format("json") \\
+        ...     .schema(sdf_schema) \\
+        ...     .load(tempfile.mkdtemp())
         >>> json_sdf.isStreaming
         True
         >>> json_sdf.schema == sdf_schema
@@ -338,9 +428,11 @@ class DataStreamReader(OptionUtils):
     def json(self, path, schema=None, primitivesAsString=None, prefersDecimal=None,
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
-             mode=None, columnNameOfCorruptRecord=None):
+             mode=None, columnNameOfCorruptRecord=None, dateFormat=None,
+             timestampFormat=None):
         """
-        Loads a JSON file stream (one object per line) and returns a :class`DataFrame`.
+        Loads a JSON file stream (`JSON Lines text format or newline-delimited JSON
+        <http://jsonlines.org/>`_) and returns a :class`DataFrame`.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
@@ -349,7 +441,7 @@ class DataStreamReader(OptionUtils):
 
         :param path: string represents path to the JSON dataset,
                      or RDD of Strings storing JSON objects.
-        :param schema: an optional :class:`StructType` for the input schema.
+        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema.
         :param primitivesAsString: infers all primitive values as a string type. If None is set,
                                    it uses the default value, ``false``.
         :param prefersDecimal: infers all floating-point values as a decimal type. If the values
@@ -381,6 +473,14 @@ class DataStreamReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``. If None is set,
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
+        :param dateFormat: sets the string that indicates a date format. Custom date formats
+                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           applies to date type. If None is set, it uses the
+                           default value value, ``yyyy-MM-dd``.
+        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
+                                formats follow the formats at ``java.text.SimpleDateFormat``.
+                                This applies to timestamp type. If None is set, it uses the
+                                default value value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -393,7 +493,8 @@ class DataStreamReader(OptionUtils):
             allowComments=allowComments, allowUnquotedFieldNames=allowUnquotedFieldNames,
             allowSingleQuotes=allowSingleQuotes, allowNumericLeadingZero=allowNumericLeadingZero,
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
-            mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord)
+            mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
+            timestampFormat=timestampFormat)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:
@@ -450,8 +551,8 @@ class DataStreamReader(OptionUtils):
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
-            negativeInf=None, dateFormat=None, maxColumns=None, maxCharsPerColumn=None,
-            maxMalformedLogPerPartition=None, mode=None):
+            negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
+            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -461,7 +562,7 @@ class DataStreamReader(OptionUtils):
         .. note:: Experimental.
 
         :param path: string, or list of strings, for input path(s).
-        :param schema: an optional :class:`StructType` for the input schema.
+        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema.
         :param sep: sets the single character as a separator for each field and value.
                     If None is set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set,
@@ -485,7 +586,8 @@ class DataStreamReader(OptionUtils):
                                          being read should be skipped. If None is set, it uses
                                          the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
-                          the default value, empty string.
+                          the default value, empty string. Since 2.0.1, this ``nullValue`` param
+                          applies to all supported types including the string type.
         :param nanValue: sets the string representation of a non-number value. If None is set, it
                          uses the default value, ``NaN``.
         :param positiveInf: sets the string representation of a positive infinity value. If None
@@ -494,14 +596,17 @@ class DataStreamReader(OptionUtils):
                             is set, it uses the default value, ``Inf``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.text.SimpleDateFormat``. This
-                           applies to both date type and timestamp type. By default, it is None
-                           which means trying to parse times and date by
-                           ``java.sql.Timestamp.valueOf()`` and ``java.sql.Date.valueOf()``.
+                           applies to date type. If None is set, it uses the
+                           default value value, ``yyyy-MM-dd``.
+        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
+                                formats follow the formats at ``java.text.SimpleDateFormat``.
+                                This applies to timestamp type. If None is set, it uses the
+                                default value value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
                                   value being read. If None is set, it uses the default value,
-                                  ``1000000``.
+                                  ``-1`` meaning unlimited length.
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
@@ -521,7 +626,8 @@ class DataStreamReader(OptionUtils):
             header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
             ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace, nullValue=nullValue,
             nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
-            dateFormat=dateFormat, maxColumns=maxColumns, maxCharsPerColumn=maxCharsPerColumn,
+            dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
+            maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
@@ -559,6 +665,9 @@ class DataStreamWriter(object):
            the sink
         * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
            every time these is some updates
+        * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
+           written to the sink every time there are some updates. If the query doesn't contain
+           aggregations, it will be equivalent to `append` mode.
 
        .. note:: Experimental.
 
@@ -575,7 +684,7 @@ class DataStreamWriter(object):
 
         .. note:: Experimental.
 
-        :param source: string, name of the data source, e.g. 'json', 'parquet'.
+        :param source: string, name of the data source, which for now can be 'parquet'.
 
         >>> writer = sdf.writeStream.format('json')
         """
@@ -662,7 +771,8 @@ class DataStreamWriter(object):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def start(self, path=None, format=None, partitionBy=None, queryName=None, **options):
+    def start(self, path=None, format=None, outputMode=None, partitionBy=None, queryName=None,
+              **options):
         """Streams the contents of the :class:`DataFrame` to a data source.
 
         The data source is specified by the ``format`` and a set of ``options``.
@@ -673,15 +783,20 @@ class DataStreamWriter(object):
 
         :param path: the path in a Hadoop supported file system
         :param format: the format used to save
+        :param outputMode: specifies how data of a streaming DataFrame/Dataset is written to a
+                           streaming sink.
 
-            * ``append``: Append contents of this :class:`DataFrame` to existing data.
-            * ``overwrite``: Overwrite existing data.
-            * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` (default case): Throw an exception if data already exists.
+            * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to the
+              sink
+            * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
+               every time these is some updates
+            * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
+              written to the sink every time there are some updates. If the query doesn't contain
+              aggregations, it will be equivalent to `append` mode.
         :param partitionBy: names of partitioning columns
         :param queryName: unique name for the query
         :param options: All other string options. You may want to provide a `checkpointLocation`
-            for most streams, however it is not required for a `memory` stream.
+                        for most streams, however it is not required for a `memory` stream.
 
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sq.isActive
@@ -692,7 +807,7 @@ class DataStreamWriter(object):
         >>> sq.isActive
         False
         >>> sq = sdf.writeStream.trigger(processingTime='5 seconds').start(
-        ...     queryName='that_query', format='memory')
+        ...     queryName='that_query', outputMode="append", format='memory')
         >>> sq.name
         u'that_query'
         >>> sq.isActive
@@ -700,6 +815,8 @@ class DataStreamWriter(object):
         >>> sq.stop()
         """
         self.options(**options)
+        if outputMode is not None:
+            self.outputMode(outputMode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
         if format is not None:
@@ -741,6 +858,7 @@ def _test():
         pyspark.sql.streaming, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     globs['spark'].stop()
+
     if failure_count:
         exit(-1)
 

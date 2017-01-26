@@ -18,18 +18,18 @@
 package org.apache.spark.sql.execution
 
 import java.nio.charset.StandardCharsets
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
+import java.util.TimeZone
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec}
+import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
 import org.apache.spark.util.Utils
 
@@ -55,7 +55,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   }
 
   def assertSupported(): Unit = {
-    if (sparkSession.sessionState.conf.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
+    if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
       UnsupportedOperationChecker.checkForBatch(analyzed)
     }
   }
@@ -101,61 +101,44 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     PlanSubqueries(sparkSession),
     EnsureRequirements(sparkSession.sessionState.conf),
     CollapseCodegenStages(sparkSession.sessionState.conf),
-    ReuseExchange(sparkSession.sessionState.conf))
+    ReuseExchange(sparkSession.sessionState.conf),
+    ReuseSubquery(sparkSession.sessionState.conf))
 
   protected def stringOrError[A](f: => A): String =
-    try f.toString catch { case e: Throwable => e.toString }
+    try f.toString catch { case e: AnalysisException => e.toString }
 
 
   /**
-   * Returns the result as a hive compatible sequence of strings.  For native commands, the
-   * execution is simply passed back to Hive.
+   * Returns the result as a hive compatible sequence of strings. This is for testing only.
    */
   def hiveResultString(): Seq[String] = executedPlan match {
     case ExecutedCommandExec(desc: DescribeTableCommand) =>
-      SQLExecution.withNewExecutionId(sparkSession, this) {
-        // If it is a describe command for a Hive table, we want to have the output format
-        // be similar with Hive.
-        desc.run(sparkSession).map {
-          case Row(name: String, dataType: String, comment) =>
-            Seq(name, dataType,
-              Option(comment.asInstanceOf[String]).getOrElse(""))
-              .map(s => String.format(s"%-20s", s))
-              .mkString("\t")
-        }
+      // If it is a describe command for a Hive table, we want to have the output format
+      // be similar with Hive.
+      desc.run(sparkSession).map {
+        case Row(name: String, dataType: String, comment) =>
+          Seq(name, dataType,
+            Option(comment.asInstanceOf[String]).getOrElse(""))
+            .map(s => String.format(s"%-20s", s))
+            .mkString("\t")
       }
+    // SHOW TABLES in Hive only output table names, while ours outputs database, table name, isTemp.
+    case command: ExecutedCommandExec if command.cmd.isInstanceOf[ShowTablesCommand] =>
+      command.executeCollect().map(_.getString(1))
     case command: ExecutedCommandExec =>
       command.executeCollect().map(_.getString(0))
     case other =>
-      SQLExecution.withNewExecutionId(sparkSession, this) {
-        val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
-        // We need the types so we can output struct field names
-        val types = analyzed.output.map(_.dataType)
-        // Reformat to match hive tab delimited output.
-        result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t")).toSeq
-      }
+      val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
+      // We need the types so we can output struct field names
+      val types = analyzed.output.map(_.dataType)
+      // Reformat to match hive tab delimited output.
+      result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t"))
   }
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
   private def toHiveString(a: (Any, DataType)): String = {
     val primitiveTypes = Seq(StringType, IntegerType, LongType, DoubleType, FloatType,
       BooleanType, ByteType, ShortType, DateType, TimestampType, BinaryType)
-
-    /** Implementation following Hive's TimestampWritable.toString */
-    def formatTimestamp(timestamp: Timestamp): String = {
-      val timestampString = timestamp.toString
-      if (timestampString.length() > 19) {
-        if (timestampString.length() == 21) {
-          if (timestampString.substring(19).compareTo(".0") == 0) {
-            return DateTimeUtils.threadLocalTimestampFormat.get().format(timestamp)
-          }
-        }
-        return DateTimeUtils.threadLocalTimestampFormat.get().format(timestamp) +
-          timestampString.substring(19)
-      }
-
-      return DateTimeUtils.threadLocalTimestampFormat.get().format(timestamp)
-    }
 
     def formatDecimal(d: java.math.BigDecimal): String = {
       if (d.compareTo(java.math.BigDecimal.ZERO) == 0) {
@@ -197,8 +180,11 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
         }.toSeq.sorted.mkString("{", ",", "}")
       case (null, _) => "NULL"
-      case (d: Int, DateType) => new java.util.Date(DateTimeUtils.daysToMillis(d)).toString
-      case (t: Timestamp, TimestampType) => formatTimestamp(t)
+      case (d: Date, DateType) =>
+        DateTimeUtils.dateToString(DateTimeUtils.fromJavaDate(d))
+      case (t: Timestamp, TimestampType) =>
+        DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(t),
+          TimeZone.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone))
       case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
       case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
       case (other, tpe) if primitiveTypes.contains(tpe) => other.toString

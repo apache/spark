@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vectors
@@ -29,20 +29,19 @@ import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{DoubleType, NumericType, StructType}
 
 /**
- * :: Experimental ::
  * A one-hot encoder that maps a column of category indices to a column of binary vectors, with
  * at most a single one-value per row that indicates the input category index.
  * For example with 5 categories, an input value of 2.0 would map to an output vector of
  * `[0.0, 0.0, 1.0, 0.0]`.
- * The last category is not included by default (configurable via [[OneHotEncoder!.dropLast]]
+ * The last category is not included by default (configurable via `OneHotEncoder!.dropLast`
  * because it makes the vector entries sum up to one, and hence linearly dependent.
  * So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
- * Note that this is different from scikit-learn's OneHotEncoder, which keeps all categories.
+ *
+ * @note This is different from scikit-learn's OneHotEncoder, which keeps all categories.
  * The output vectors are sparse.
  *
- * @see [[StringIndexer]] for converting categorical values into category indices
+ * @see `StringIndexer` for converting categorical values into category indices
  */
-@Experimental
 @Since("1.4.0")
 class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends Transformer
   with HasInputCol with HasOutputCol with DefaultParamsWritable {
@@ -166,8 +165,8 @@ class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) e
     // data transformation
     val size = outputAttrGroup.size
     val oneValue = Array(1.0)
-    val emptyValues = Array[Double]()
-    val emptyIndices = Array[Int]()
+    val emptyValues = Array.empty[Double]
+    val emptyIndices = Array.empty[Int]
     val encode = udf { label: Double =>
       if (label < size) {
         Vectors.sparse(size, Array(label.toInt), oneValue)

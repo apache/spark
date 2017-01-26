@@ -21,7 +21,7 @@ Isotonic Regression Example.
 from __future__ import print_function
 
 # $example on$
-from pyspark.ml.regression import IsotonicRegression, IsotonicRegressionModel
+from pyspark.ml.regression import IsotonicRegression
 # $example off$
 from pyspark.sql import SparkSession
 
@@ -30,11 +30,11 @@ An example demonstrating isotonic regression.
 Run with:
   bin/spark-submit examples/src/main/python/ml/isotonic_regression_example.py
 """
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     spark = SparkSession\
         .builder\
-        .appName("PythonIsotonicRegressionExample")\
+        .appName("IsotonicRegressionExample")\
         .getOrCreate()
 
     # $example on$
@@ -44,8 +44,8 @@ if __name__ == "__main__":
 
     # Trains an isotonic regression model.
     model = IsotonicRegression().fit(dataset)
-    print("Boundaries in increasing order: " + str(model.boundaries))
-    print("Predictions associated with the boundaries: " + str(model.predictions))
+    print("Boundaries in increasing order: %s\n" % str(model.boundaries))
+    print("Predictions associated with the boundaries: %s\n" % str(model.predictions))
 
     # Makes predictions.
     model.transform(dataset).show()

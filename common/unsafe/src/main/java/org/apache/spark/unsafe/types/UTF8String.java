@@ -147,6 +147,25 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     buffer.position(pos + numBytes);
   }
 
+  public void writeTo(OutputStream out) throws IOException {
+    if (base instanceof byte[] && offset >= BYTE_ARRAY_OFFSET) {
+      final byte[] bytes = (byte[]) base;
+
+      // the offset includes an object header... this is only needed for unsafe copies
+      final long arrayOffset = offset - BYTE_ARRAY_OFFSET;
+
+      // verify that the offset and length points somewhere inside the byte array
+      // and that the offset can safely be truncated to a 32-bit integer
+      if ((long) bytes.length < arrayOffset + numBytes) {
+        throw new ArrayIndexOutOfBoundsException();
+      }
+
+      out.write(bytes, (int) arrayOffset, numBytes);
+    } else {
+      out.write(getBytes());
+    }
+  }
+
   /**
    * Returns the number of bytes for a code point with the first byte as `b`
    * @param b The first byte of a code point
@@ -465,12 +484,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int s = 0;
     int e = this.numBytes - 1;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) <= 0x20 && getByte(s) >= 0x00) s++;
+    while (s < this.numBytes && getByte(s) == 0x20) s++;
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && getByte(e) <= 0x20 && getByte(e) >= 0x00) e--;
+    while (e >= 0 && getByte(e) == 0x20) e--;
     if (s > e) {
       // empty string
-      return UTF8String.fromBytes(new byte[0]);
+      return EMPTY_UTF8;
     } else {
       return copyUTF8String(s, e);
     }
@@ -479,10 +498,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimLeft() {
     int s = 0;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) <= 0x20 && getByte(s) >= 0x00) s++;
+    while (s < this.numBytes && getByte(s) == 0x20) s++;
     if (s == this.numBytes) {
       // empty string
-      return UTF8String.fromBytes(new byte[0]);
+      return EMPTY_UTF8;
     } else {
       return copyUTF8String(s, this.numBytes - 1);
     }
@@ -491,11 +510,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimRight() {
     int e = numBytes - 1;
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && getByte(e) <= 0x20 && getByte(e) >= 0x00) e--;
+    while (e >= 0 && getByte(e) == 0x20) e--;
 
     if (e < 0) {
       // empty string
-      return UTF8String.fromBytes(new byte[0]);
+      return EMPTY_UTF8;
     } else {
       return copyUTF8String(0, e);
     }
@@ -761,7 +780,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     if (numInputs == 0) {
       // Return an empty string if there is no input, or all the inputs are null.
-      return fromBytes(new byte[0]);
+      return EMPTY_UTF8;
     }
 
     // Allocate a new byte array, and copy the inputs one by one into it.
@@ -814,6 +833,190 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
     }
     return fromString(sb.toString());
+  }
+
+  private int getDigit(byte b) {
+    if (b >= '0' && b <= '9') {
+      return b - '0';
+    }
+    throw new NumberFormatException(toString());
+  }
+
+  /**
+   * Parses this UTF8String to long.
+   *
+   * Note that, in this method we accumulate the result in negative format, and convert it to
+   * positive format at the end, if this string is not started with '-'. This is because min value
+   * is bigger than max value in digits, e.g. Integer.MAX_VALUE is '2147483647' and
+   * Integer.MIN_VALUE is '-2147483648'.
+   *
+   * This code is mostly copied from LazyLong.parseLong in Hive.
+   */
+  public long toLong() {
+    if (numBytes == 0) {
+      throw new NumberFormatException("Empty string");
+    }
+
+    byte b = getByte(0);
+    final boolean negative = b == '-';
+    int offset = 0;
+    if (negative || b == '+') {
+      offset++;
+      if (numBytes == 1) {
+        throw new NumberFormatException(toString());
+      }
+    }
+
+    final byte separator = '.';
+    final int radix = 10;
+    final long stopValue = Long.MIN_VALUE / radix;
+    long result = 0;
+
+    while (offset < numBytes) {
+      b = getByte(offset);
+      offset++;
+      if (b == separator) {
+        // We allow decimals and will return a truncated integral in that case.
+        // Therefore we won't throw an exception here (checking the fractional
+        // part happens below.)
+        break;
+      }
+
+      int digit = getDigit(b);
+      // We are going to process the new digit and accumulate the result. However, before doing
+      // this, if the result is already smaller than the stopValue(Long.MIN_VALUE / radix), then
+      // result * 10 will definitely be smaller than minValue, and we can stop and throw exception.
+      if (result < stopValue) {
+        throw new NumberFormatException(toString());
+      }
+
+      result = result * radix - digit;
+      // Since the previous result is less than or equal to stopValue(Long.MIN_VALUE / radix), we
+      // can just use `result > 0` to check overflow. If result overflows, we should stop and throw
+      // exception.
+      if (result > 0) {
+        throw new NumberFormatException(toString());
+      }
+    }
+
+    // This is the case when we've encountered a decimal separator. The fractional
+    // part will not change the number, but we will verify that the fractional part
+    // is well formed.
+    while (offset < numBytes) {
+      if (getDigit(getByte(offset)) == -1) {
+        throw new NumberFormatException(toString());
+      }
+      offset++;
+    }
+
+    if (!negative) {
+      result = -result;
+      if (result < 0) {
+        throw new NumberFormatException(toString());
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Parses this UTF8String to int.
+   *
+   * Note that, in this method we accumulate the result in negative format, and convert it to
+   * positive format at the end, if this string is not started with '-'. This is because min value
+   * is bigger than max value in digits, e.g. Integer.MAX_VALUE is '2147483647' and
+   * Integer.MIN_VALUE is '-2147483648'.
+   *
+   * This code is mostly copied from LazyInt.parseInt in Hive.
+   *
+   * Note that, this method is almost same as `toLong`, but we leave it duplicated for performance
+   * reasons, like Hive does.
+   */
+  public int toInt() {
+    if (numBytes == 0) {
+      throw new NumberFormatException("Empty string");
+    }
+
+    byte b = getByte(0);
+    final boolean negative = b == '-';
+    int offset = 0;
+    if (negative || b == '+') {
+      offset++;
+      if (numBytes == 1) {
+        throw new NumberFormatException(toString());
+      }
+    }
+
+    final byte separator = '.';
+    final int radix = 10;
+    final int stopValue = Integer.MIN_VALUE / radix;
+    int result = 0;
+
+    while (offset < numBytes) {
+      b = getByte(offset);
+      offset++;
+      if (b == separator) {
+        // We allow decimals and will return a truncated integral in that case.
+        // Therefore we won't throw an exception here (checking the fractional
+        // part happens below.)
+        break;
+      }
+
+      int digit = getDigit(b);
+      // We are going to process the new digit and accumulate the result. However, before doing
+      // this, if the result is already smaller than the stopValue(Integer.MIN_VALUE / radix), then
+      // result * 10 will definitely be smaller than minValue, and we can stop and throw exception.
+      if (result < stopValue) {
+        throw new NumberFormatException(toString());
+      }
+
+      result = result * radix - digit;
+      // Since the previous result is less than or equal to stopValue(Integer.MIN_VALUE / radix),
+      // we can just use `result > 0` to check overflow. If result overflows, we should stop and
+      // throw exception.
+      if (result > 0) {
+        throw new NumberFormatException(toString());
+      }
+    }
+
+    // This is the case when we've encountered a decimal separator. The fractional
+    // part will not change the number, but we will verify that the fractional part
+    // is well formed.
+    while (offset < numBytes) {
+      if (getDigit(getByte(offset)) == -1) {
+        throw new NumberFormatException(toString());
+      }
+      offset++;
+    }
+
+    if (!negative) {
+      result = -result;
+      if (result < 0) {
+        throw new NumberFormatException(toString());
+      }
+    }
+
+    return result;
+  }
+
+  public short toShort() {
+    int intValue = toInt();
+    short result = (short) intValue;
+    if (result != intValue) {
+      throw new NumberFormatException(toString());
+    }
+
+    return result;
+  }
+
+  public byte toByte() {
+    int intValue = toInt();
+    byte result = (byte) intValue;
+    if (result != intValue) {
+      throw new NumberFormatException(toString());
+    }
+
+    return result;
   }
 
   @Override

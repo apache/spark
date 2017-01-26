@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 
 class SQLDataTypesSuite extends SparkFunSuite {
   test("sqlDataTypes") {
-    assert(sqlDataTypes.VectorType === new VectorUDT)
-    assert(sqlDataTypes.MatrixType === new MatrixUDT)
+    assert(SQLDataTypes.VectorType === new VectorUDT)
+    assert(SQLDataTypes.MatrixType === new MatrixUDT)
   }
 }

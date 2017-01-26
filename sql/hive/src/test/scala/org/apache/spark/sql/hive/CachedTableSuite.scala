@@ -19,12 +19,15 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.util.Utils
 
@@ -98,13 +101,16 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sql("DROP TABLE IF EXISTS nonexistantTable")
   }
 
-  test("correct error on uncache of nonexistant tables") {
+  test("uncache of nonexistant tables") {
+    // make sure table doesn't exist
+    intercept[NoSuchTableException](spark.table("nonexistantTable"))
     intercept[NoSuchTableException] {
       spark.catalog.uncacheTable("nonexistantTable")
     }
     intercept[NoSuchTableException] {
       sql("UNCACHE TABLE nonexistantTable")
     }
+    sql("UNCACHE TABLE IF EXISTS nonexistantTable")
   }
 
   test("no error on uncache of non-cached table") {
@@ -129,7 +135,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
-    withTempTable("testCacheTable") {
+    withTempView("testCacheTable") {
       sql("CACHE TABLE testCacheTable AS SELECT * FROM src")
       assertCached(table("testCacheTable"))
 
@@ -144,7 +150,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("CACHE TABLE tableName AS SELECT ...") {
-    withTempTable("testCacheTable") {
+    withTempView("testCacheTable") {
       sql("CACHE TABLE testCacheTable AS SELECT key FROM src LIMIT 10")
       assertCached(table("testCacheTable"))
 
@@ -177,7 +183,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("CACHE TABLE with Hive UDF") {
-    withTempTable("udfTest") {
+    withTempView("udfTest") {
       sql("CACHE TABLE udfTest AS SELECT * FROM src WHERE floor(key) = 1")
       assertCached(table("udfTest"))
       uncacheTable("udfTest")
@@ -276,7 +282,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("Cache/Uncache Qualified Tables") {
     withTempDatabase { db =>
-      withTempTable("cachedTable") {
+      withTempView("cachedTable") {
         sql(s"CREATE TABLE $db.cachedTable STORED AS PARQUET AS SELECT 1")
         sql(s"CACHE TABLE $db.cachedTable")
         assertCached(spark.table(s"$db.cachedTable"))
@@ -298,7 +304,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("Cache Table As Select - having database name") {
     withTempDatabase { db =>
-      withTempTable("cachedTable") {
+      withTempView("cachedTable") {
         val e = intercept[ParseException] {
           sql(s"CACHE TABLE $db.cachedTable AS SELECT 1")
         }.getMessage
@@ -316,5 +322,41 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     assert(sparkPlan.collect { case e: InMemoryTableScanExec => e }.size === 1)
 
     sql("DROP TABLE cachedTable")
+  }
+
+  test("cache a table using CatalogFileIndex") {
+    withTable("test") {
+      sql("CREATE TABLE test(i int) PARTITIONED BY (p int) STORED AS parquet")
+      val tableMeta = spark.sharedState.externalCatalog.getTable("default", "test")
+      val catalogFileIndex = new CatalogFileIndex(spark, tableMeta, 0)
+
+      val dataSchema = StructType(tableMeta.schema.filterNot { f =>
+        tableMeta.partitionColumnNames.contains(f.name)
+      })
+      val relation = HadoopFsRelation(
+        location = catalogFileIndex,
+        partitionSchema = tableMeta.partitionSchema,
+        dataSchema = dataSchema,
+        bucketSpec = None,
+        fileFormat = new ParquetFileFormat(),
+        options = Map.empty)(sparkSession = spark)
+
+      val plan = LogicalRelation(relation, catalogTable = Some(tableMeta))
+      spark.sharedState.cacheManager.cacheQuery(Dataset.ofRows(spark, plan))
+
+      assert(spark.sharedState.cacheManager.lookupCachedData(plan).isDefined)
+
+      val sameCatalog = new CatalogFileIndex(spark, tableMeta, 0)
+      val sameRelation = HadoopFsRelation(
+        location = sameCatalog,
+        partitionSchema = tableMeta.partitionSchema,
+        dataSchema = dataSchema,
+        bucketSpec = None,
+        fileFormat = new ParquetFileFormat(),
+        options = Map.empty)(sparkSession = spark)
+      val samePlan = LogicalRelation(sameRelation, catalogTable = Some(tableMeta))
+
+      assert(spark.sharedState.cacheManager.lookupCachedData(samePlan).isDefined)
+    }
   }
 }

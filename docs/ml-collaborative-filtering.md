@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Collaborative Filtering - spark.ml
-displayTitle: Collaborative Filtering - spark.ml
+title: Collaborative Filtering
+displayTitle: Collaborative Filtering
 ---
 
 * Table of contents
@@ -59,7 +59,7 @@ This approach is named "ALS-WR" and discussed in the paper
 It makes `regParam` less dependent on the scale of the dataset, so we can apply the
 best parameter learned from a sampled subset to the full dataset and expect similar performance.
 
-## Examples
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -149,4 +149,12 @@ als = ALS(maxIter=5, regParam=0.01, implicitPrefs=True,
 {% endhighlight %}
 
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.als.html) for more details.
+
+{% include_example r/ml/als.R %}
+</div>
+
 </div>

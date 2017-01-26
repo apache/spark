@@ -23,7 +23,6 @@ import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 
@@ -36,11 +35,11 @@ import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
+import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, WAREHOUSE_PATH}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -54,6 +53,14 @@ private[spark] object HiveUtils extends Logging {
 
   /** The version of hive used internally by Spark SQL. */
   val hiveExecutionVersion: String = "1.2.1"
+
+  /**
+   * The property key that is used to store the raw hive type string in the metadata of StructField.
+   * For example, in the case where the Hive type is varchar, the type gets mapped to a string type
+   * in Spark SQL, but we need to preserve the original type in order to invoke the correct object
+   * inspector in Hive.
+   */
+  val hiveTypeString: String = "HIVE_TYPE_STRING"
 
   val HIVE_METASTORE_VERSION = SQLConfigBuilder("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
@@ -97,10 +104,11 @@ private[spark] object HiveUtils extends Logging {
       .createWithDefault(false)
 
   val CONVERT_METASTORE_ORC = SQLConfigBuilder("spark.sql.hive.convertMetastoreOrc")
+    .internal()
     .doc("When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of " +
       "the built in support.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val HIVE_METASTORE_SHARED_PREFIXES = SQLConfigBuilder("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
@@ -373,7 +381,7 @@ private[spark] object HiveUtils extends Logging {
         propMap.put(confvar.varname, confvar.getDefaultExpr())
       }
     }
-    propMap.put(SQLConf.WAREHOUSE_PATH.key, localMetastore.toURI.toString)
+    propMap.put(WAREHOUSE_PATH.key, localMetastore.toURI.toString)
     propMap.put(HiveConf.ConfVars.METASTORECONNECTURLKEY.varname,
       s"jdbc:derby:${withInMemoryMode};databaseName=${localMetastore.getAbsolutePath};create=true")
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
@@ -392,6 +400,13 @@ private[spark] object HiveUtils extends Logging {
     // Then, you will find that the local metastore mode is only set to true when
     // hive.metastore.uris is not set.
     propMap.put(ConfVars.METASTOREURIS.varname, "")
+
+    // The execution client will generate garbage events, therefore the listeners that are generated
+    // for the execution clients are useless. In order to not output garbage, we don't generate
+    // these listeners.
+    propMap.put(ConfVars.METASTORE_PRE_EVENT_LISTENERS.varname, "")
+    propMap.put(ConfVars.METASTORE_EVENT_LISTENERS.varname, "")
+    propMap.put(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname, "")
 
     propMap.toMap
   }

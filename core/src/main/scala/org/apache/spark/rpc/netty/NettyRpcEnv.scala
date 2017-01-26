@@ -33,8 +33,8 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.client._
+import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.sasl.{SaslClientBootstrap, SaslServerBootstrap}
 import org.apache.spark.network.server._
 import org.apache.spark.rpc._
 import org.apache.spark.serializer.{JavaSerializer, JavaSerializerInstance}
@@ -60,8 +60,8 @@ private[netty] class NettyRpcEnv(
 
   private def createClientBootstraps(): java.util.List[TransportClientBootstrap] = {
     if (securityManager.isAuthenticationEnabled()) {
-      java.util.Arrays.asList(new SaslClientBootstrap(transportConf, "", securityManager,
-        securityManager.isSaslEncryptionEnabled()))
+      java.util.Arrays.asList(new AuthClientBootstrap(transportConf,
+        securityManager.getSaslUser(), securityManager))
     } else {
       java.util.Collections.emptyList[TransportClientBootstrap]
     }
@@ -108,14 +108,14 @@ private[netty] class NettyRpcEnv(
     }
   }
 
-  def startServer(port: Int): Unit = {
+  def startServer(bindAddress: String, port: Int): Unit = {
     val bootstraps: java.util.List[TransportServerBootstrap] =
       if (securityManager.isAuthenticationEnabled()) {
-        java.util.Arrays.asList(new SaslServerBootstrap(transportConf, securityManager))
+        java.util.Arrays.asList(new AuthServerBootstrap(transportConf, securityManager))
       } else {
         java.util.Collections.emptyList()
       }
-    server = transportContext.createServer(host, port, bootstraps)
+    server = transportContext.createServer(bindAddress, port, bootstraps)
     dispatcher.registerRpcEndpoint(
       RpcEndpointVerifier.NAME, new RpcEndpointVerifier(this, dispatcher))
   }
@@ -407,11 +407,9 @@ private[netty] class NettyRpcEnv(
     }
 
   }
-
 }
 
 private[netty] object NettyRpcEnv extends Logging {
-
   /**
    * When deserializing the [[NettyRpcEndpointRef]], it needs a reference to [[NettyRpcEnv]].
    * Use `currentEnv` to wrap the deserialization codes. E.g.,
@@ -441,10 +439,11 @@ private[rpc] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
     val javaSerializerInstance =
       new JavaSerializer(sparkConf).newInstance().asInstanceOf[JavaSerializerInstance]
     val nettyEnv =
-      new NettyRpcEnv(sparkConf, javaSerializerInstance, config.host, config.securityManager)
+      new NettyRpcEnv(sparkConf, javaSerializerInstance, config.advertiseAddress,
+        config.securityManager)
     if (!config.clientMode) {
       val startNettyRpcEnv: Int => (NettyRpcEnv, Int) = { actualPort =>
-        nettyEnv.startServer(actualPort)
+        nettyEnv.startServer(config.bindAddress, actualPort)
         (nettyEnv, nettyEnv.address.port)
       }
       try {

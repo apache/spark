@@ -18,13 +18,19 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Returns -a.")
+  usage = "_FUNC_(expr) - Returns the negated value of `expr`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(1);
+       -1
+  """)
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
 
@@ -57,11 +63,11 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
     }
   }
 
-  override def sql: String = s"(-${child.sql})"
+  override def sql: String = s"(- ${child.sql})"
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Returns a.")
+  usage = "_FUNC_(expr) - Returns the value of `expr`.")
 case class UnaryPositive(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
   override def prettyName: String = "positive"
@@ -75,7 +81,7 @@ case class UnaryPositive(child: Expression)
 
   protected override def nullSafeEval(input: Any): Any = input
 
-  override def sql: String = s"(+${child.sql})"
+  override def sql: String = s"(+ ${child.sql})"
 }
 
 /**
@@ -83,7 +89,11 @@ case class UnaryPositive(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the absolute value of the numeric value.",
-  extended = "> SELECT _FUNC_('-1');\n 1")
+  extended = """
+    Examples:
+      > SELECT _FUNC_(-1);
+       1
+  """)
 case class Abs(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -125,12 +135,17 @@ abstract class BinaryArithmetic extends BinaryOperator {
   }
 }
 
-private[sql] object BinaryArithmetic {
+object BinaryArithmetic {
   def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns a+b.")
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`+`expr2`.",
+  extended = """
+    Examples:
+      > SELECT 1 _FUNC_ 2;
+       3
+  """)
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
@@ -161,7 +176,12 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic wit
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns a-b.")
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`-`expr2`.",
+  extended = """
+    Examples:
+      > SELECT 2 _FUNC_ 1;
+       1
+  """)
 case class Subtract(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -193,7 +213,12 @@ case class Subtract(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Multiplies a by b.")
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`*`expr2`.",
+  extended = """
+    Examples:
+      > SELECT 2 _FUNC_ 3;
+       6
+  """)
 case class Multiply(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -207,9 +232,17 @@ case class Multiply(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Divides a by b.",
-  extended = "> SELECT 3 _FUNC_ 2;\n 1.5")
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`/`expr2`. It always performs floating point division.",
+  extended = """
+    Examples:
+      > SELECT 3 _FUNC_ 2;
+       1.5
+      > SELECT 2L _FUNC_ 2L;
+       1.0
+  """)
+// scalastyle:on line.size.limit
 case class Divide(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -285,7 +318,12 @@ case class Divide(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns the remainder when dividing a by b.")
+  usage = "expr1 _FUNC_ expr2 - Returns the remainder after `expr1`/`expr2`.",
+  extended = """
+    Examples:
+      > SELECT 2 _FUNC_ 1.8;
+       0.2
+  """)
 case class Remainder(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -309,7 +347,11 @@ case class Remainder(left: Expression, right: Expression)
       if (input1 == null) {
         null
       } else {
-        integral.rem(input1, input2)
+        input1 match {
+          case d: Double => d % input2.asInstanceOf[java.lang.Double]
+          case f: Float => f % input2.asInstanceOf[java.lang.Float]
+          case _ => integral.rem(input1, input2)
+        }
       }
     }
   }
@@ -361,119 +403,15 @@ case class Remainder(left: Expression, right: Expression)
   }
 }
 
-case class MaxOf(left: Expression, right: Expression)
-  extends BinaryArithmetic with NonSQLExpression {
-
-  // TODO: Remove MaxOf and MinOf, and replace its usage with Greatest and Least.
-
-  override def inputType: AbstractDataType = TypeCollection.Ordered
-
-  override def nullable: Boolean = left.nullable && right.nullable
-
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
-
-  override def eval(input: InternalRow): Any = {
-    val input1 = left.eval(input)
-    val input2 = right.eval(input)
-    if (input1 == null) {
-      input2
-    } else if (input2 == null) {
-      input1
-    } else {
-      if (ordering.compare(input1, input2) < 0) {
-        input2
-      } else {
-        input1
-      }
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval1 = left.genCode(ctx)
-    val eval2 = right.genCode(ctx)
-    val compCode = ctx.genComp(dataType, eval1.value, eval2.value)
-
-    ev.copy(code = eval1.code + eval2.code + s"""
-      boolean ${ev.isNull} = false;
-      ${ctx.javaType(left.dataType)} ${ev.value} =
-        ${ctx.defaultValue(left.dataType)};
-
-      if (${eval1.isNull}) {
-        ${ev.isNull} = ${eval2.isNull};
-        ${ev.value} = ${eval2.value};
-      } else if (${eval2.isNull}) {
-        ${ev.isNull} = ${eval1.isNull};
-        ${ev.value} = ${eval1.value};
-      } else {
-        if ($compCode > 0) {
-          ${ev.value} = ${eval1.value};
-        } else {
-          ${ev.value} = ${eval2.value};
-        }
-      }""")
-  }
-
-  override def symbol: String = "max"
-}
-
-case class MinOf(left: Expression, right: Expression)
-  extends BinaryArithmetic with NonSQLExpression {
-
-  // TODO: Remove MaxOf and MinOf, and replace its usage with Greatest and Least.
-
-  override def inputType: AbstractDataType = TypeCollection.Ordered
-
-  override def nullable: Boolean = left.nullable && right.nullable
-
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
-
-  override def eval(input: InternalRow): Any = {
-    val input1 = left.eval(input)
-    val input2 = right.eval(input)
-    if (input1 == null) {
-      input2
-    } else if (input2 == null) {
-      input1
-    } else {
-      if (ordering.compare(input1, input2) < 0) {
-        input1
-      } else {
-        input2
-      }
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval1 = left.genCode(ctx)
-    val eval2 = right.genCode(ctx)
-    val compCode = ctx.genComp(dataType, eval1.value, eval2.value)
-
-    ev.copy(code = eval1.code + eval2.code + s"""
-      boolean ${ev.isNull} = false;
-      ${ctx.javaType(left.dataType)} ${ev.value} =
-        ${ctx.defaultValue(left.dataType)};
-
-      if (${eval1.isNull}) {
-        ${ev.isNull} = ${eval2.isNull};
-        ${ev.value} = ${eval2.value};
-      } else if (${eval2.isNull}) {
-        ${ev.isNull} = ${eval1.isNull};
-        ${ev.value} = ${eval1.value};
-      } else {
-        if ($compCode < 0) {
-          ${ev.value} = ${eval1.value};
-        } else {
-          ${ev.value} = ${eval2.value};
-        }
-      }""")
-  }
-
-  override def symbol: String = "min"
-}
-
 @ExpressionDescription(
-  usage = "_FUNC_(a, b) - Returns the positive modulo",
-  extended = "> SELECT _FUNC_(10,3);\n 1")
+  usage = "_FUNC_(expr1, expr2) - Returns the positive value of `expr1` mod `expr2`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(10, 3);
+       1
+      > SELECT _FUNC_(-10, 3);
+       2
+  """)
 case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 
   override def toString: String = s"pmod($left, $right)"
@@ -569,4 +507,134 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic wi
   }
 
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+}
+
+/**
+ * A function that returns the least value of all parameters, skipping null values.
+ * It takes at least 2 parameters, and returns null iff all parameters are null.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr, ...) - Returns the least value of all parameters, skipping null values.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(10, 9, 2, 4, 3);
+       2
+  """)
+case class Least(children: Seq[Expression]) extends Expression {
+
+  override def nullable: Boolean = children.forall(_.nullable)
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.length <= 1) {
+      TypeCheckResult.TypeCheckFailure(s"LEAST requires at least 2 arguments")
+    } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"The expressions should all have the same type," +
+          s" got LEAST(${children.map(_.dataType.simpleString).mkString(", ")}).")
+    } else {
+      TypeUtils.checkForOrderingExpr(dataType, "function " + prettyName)
+    }
+  }
+
+  override def dataType: DataType = children.head.dataType
+
+  override def eval(input: InternalRow): Any = {
+    children.foldLeft[Any](null)((r, c) => {
+      val evalc = c.eval(input)
+      if (evalc != null) {
+        if (r == null || ordering.lt(evalc, r)) evalc else r
+      } else {
+        r
+      }
+    })
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val evalChildren = children.map(_.genCode(ctx))
+    val first = evalChildren(0)
+    val rest = evalChildren.drop(1)
+    def updateEval(eval: ExprCode): String = {
+      s"""
+        ${eval.code}
+        if (!${eval.isNull} && (${ev.isNull} ||
+          ${ctx.genGreater(dataType, ev.value, eval.value)})) {
+          ${ev.isNull} = false;
+          ${ev.value} = ${eval.value};
+        }
+      """
+    }
+    ev.copy(code = s"""
+      ${first.code}
+      boolean ${ev.isNull} = ${first.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
+      ${rest.map(updateEval).mkString("\n")}""")
+  }
+}
+
+/**
+ * A function that returns the greatest value of all parameters, skipping null values.
+ * It takes at least 2 parameters, and returns null iff all parameters are null.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr, ...) - Returns the greatest value of all parameters, skipping null values.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(10, 9, 2, 4, 3);
+       10
+  """)
+case class Greatest(children: Seq[Expression]) extends Expression {
+
+  override def nullable: Boolean = children.forall(_.nullable)
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.length <= 1) {
+      TypeCheckResult.TypeCheckFailure(s"GREATEST requires at least 2 arguments")
+    } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"The expressions should all have the same type," +
+          s" got GREATEST(${children.map(_.dataType.simpleString).mkString(", ")}).")
+    } else {
+      TypeUtils.checkForOrderingExpr(dataType, "function " + prettyName)
+    }
+  }
+
+  override def dataType: DataType = children.head.dataType
+
+  override def eval(input: InternalRow): Any = {
+    children.foldLeft[Any](null)((r, c) => {
+      val evalc = c.eval(input)
+      if (evalc != null) {
+        if (r == null || ordering.gt(evalc, r)) evalc else r
+      } else {
+        r
+      }
+    })
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val evalChildren = children.map(_.genCode(ctx))
+    val first = evalChildren(0)
+    val rest = evalChildren.drop(1)
+    def updateEval(eval: ExprCode): String = {
+      s"""
+        ${eval.code}
+        if (!${eval.isNull} && (${ev.isNull} ||
+          ${ctx.genGreater(dataType, eval.value, ev.value)})) {
+          ${ev.isNull} = false;
+          ${ev.value} = ${eval.value};
+        }
+      """
+    }
+    ev.copy(code = s"""
+      ${first.code}
+      boolean ${ev.isNull} = ${first.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
+      ${rest.map(updateEval).mkString("\n")}""")
+  }
 }

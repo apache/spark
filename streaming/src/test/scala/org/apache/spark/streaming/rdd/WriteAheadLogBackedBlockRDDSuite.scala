@@ -108,7 +108,7 @@ class WriteAheadLogBackedBlockRDDSuite
 
   /**
    * Test the WriteAheadLogBackedRDD, by writing some partitions of the data to block manager
-   * and the rest to a write ahead log, and then reading reading it all back using the RDD.
+   * and the rest to a write ahead log, and then reading it all back using the RDD.
    * It can also test if the partitions that were read from the log were again stored in
    * block manager.
    *
@@ -186,7 +186,7 @@ class WriteAheadLogBackedBlockRDDSuite
     assert(rdd.collect() === data.flatten)
 
     // Verify that the block fetching is skipped when isBlockValid is set to false.
-    // This is done by using a RDD whose data is only in memory but is set to skip block fetching
+    // This is done by using an RDD whose data is only in memory but is set to skip block fetching
     // Using that RDD will throw exception, as it skips block fetching even if the blocks are in
     // in BlockManager.
     if (testIsBlockValid) {

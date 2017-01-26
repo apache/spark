@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
@@ -41,8 +41,8 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
 
   /**
    * Threshold for the number of values a categorical feature can take.
-   * If a feature is found to have > maxCategories values, then it is declared continuous.
-   * Must be >= 2.
+   * If a feature is found to have {@literal >} maxCategories values, then it is declared
+   * continuous. Must be greater than or equal to 2.
    *
    * (default = 20)
    * @group param
@@ -59,8 +59,7 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
 }
 
 /**
- * :: Experimental ::
- * Class for indexing categorical feature columns in a dataset of [[Vector]].
+ * Class for indexing categorical feature columns in a dataset of `Vector`.
  *
  * This has 2 usage modes:
  *  - Automatically identify categorical features (default behavior)
@@ -77,7 +76,8 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *     - Warning: This can cause problems if features are continuous since this will collect ALL
  *       unique values to the driver.
  *     - E.g.: Feature 0 has unique values {-1.0, 0.0}, and feature 1 values {1.0, 3.0, 5.0}.
- *       If maxCategories >= 3, then both features will be declared categorical.
+ *       If maxCategories is greater than or equal to 3, then both features will be declared
+ *       categorical.
  *
  * This returns a model which can transform categorical features to use 0-based indices.
  *
@@ -93,7 +93,6 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *  - Add warning if a categorical feature has only 1 category.
  *  - Add option for allowing unknown categories.
  */
-@Experimental
 @Since("1.4.0")
 class VectorIndexer @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
@@ -247,7 +246,6 @@ object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[VectorIndexer]]. Transform categorical features to use 0-based indices
  * instead of their original values.
  *  - Categorical features are mapped to indices.
@@ -263,7 +261,6 @@ object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
  *                      Values are maps from original features values to 0-based category indices.
  *                      If a feature is not in this map, it is treated as continuous.
  */
-@Experimental
 @Since("1.4.0")
 class VectorIndexerModel private[ml] (
     @Since("1.4.0") override val uid: String,

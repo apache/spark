@@ -158,10 +158,9 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       0 until rdd.partitions.size, resultHandler, () => Unit)
     // It's an error if the job completes successfully even though no committer was authorized,
     // so throw an exception if the job was allowed to complete.
-    val e = intercept[SparkException] {
+    intercept[TimeoutException] {
       ThreadUtils.awaitResult(futureAction, 5 seconds)
     }
-    assert(e.getCause.isInstanceOf[TimeoutException])
     assert(tempDir.list().size === 0)
   }
 
@@ -189,6 +188,12 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // There can only be one authorized committer
     assert(
       !outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 3))
+  }
+
+  test("Duplicate calls to canCommit from the authorized committer gets idempotent responses.") {
+    val rdd = sc.parallelize(Seq(1), 1)
+    sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).callCanCommitMultipleTimes _,
+       0 until rdd.partitions.size)
   }
 }
 
@@ -220,6 +225,16 @@ private case class OutputCommitFunctions(tempDirPath: String) {
     val ctx = TaskContext.get()
     runCommitWithProvidedCommitter(ctx, iter,
       if (ctx.attemptNumber == 0) failingOutputCommitter else successfulOutputCommitter)
+  }
+
+  // Receiver should be idempotent for AskPermissionToCommitOutput
+  def callCanCommitMultipleTimes(iter: Iterator[Int]): Unit = {
+    val ctx = TaskContext.get()
+    val canCommit1 = SparkEnv.get.outputCommitCoordinator
+      .canCommit(ctx.stageId(), ctx.partitionId(), ctx.attemptNumber())
+    val canCommit2 = SparkEnv.get.outputCommitCoordinator
+      .canCommit(ctx.stageId(), ctx.partitionId(), ctx.attemptNumber())
+    assert(canCommit1 && canCommit2)
   }
 
   private def runCommitWithProvidedCommitter(

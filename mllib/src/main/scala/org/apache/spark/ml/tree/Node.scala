@@ -17,17 +17,14 @@
 
 package org.apache.spark.ml.tree
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{ImpurityStats,
   InformationGainStats => OldInformationGainStats, Node => OldNode, Predict => OldPredict}
 
 /**
- * :: DeveloperApi ::
  * Decision tree node interface.
  */
-@DeveloperApi
 sealed abstract class Node extends Serializable {
 
   // TODO: Add aggregate stats (once available).  This will happen after we move the DecisionTree
@@ -109,12 +106,10 @@ private[ml] object Node {
 }
 
 /**
- * :: DeveloperApi ::
  * Decision tree leaf node.
  * @param prediction  Prediction this node makes
  * @param impurity  Impurity measure at this node (for training data)
  */
-@DeveloperApi
 class LeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
@@ -147,17 +142,15 @@ class LeafNode private[ml] (
 }
 
 /**
- * :: DeveloperApi ::
  * Internal Decision Tree node.
  * @param prediction  Prediction this node would make if it were a leaf node
  * @param impurity  Impurity measure at this node (for training data)
- * @param gain Information gain value.
- *             Values < 0 indicate missing values; this quirk will be removed with future updates.
+ * @param gain Information gain value. Values less than 0 indicate missing values;
+ *             this quirk will be removed with future updates.
  * @param leftChild  Left-hand child node
  * @param rightChild  Right-hand child node
  * @param split  Information about the test used to split to the left or right child.
  */
-@DeveloperApi
 class InternalNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
@@ -166,6 +159,9 @@ class InternalNode private[ml] (
     val rightChild: Node,
     val split: Split,
     override private[ml] val impurityStats: ImpurityCalculator) extends Node {
+
+  // Note to developers: The constructor argument impurityStats should be reconsidered before we
+  //                     make the constructor public.  We may be able to improve the representation.
 
   override def toString: String = {
     s"InternalNode(prediction = $prediction, impurity = $impurity, split = $split)"
