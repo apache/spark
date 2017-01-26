@@ -173,6 +173,10 @@ private[spark] class KubernetesSparkRestServer(
                 val driverMemory = resolvedSparkProperties.getOrElse("spark.driver.memory", "1g")
                 command += s"-Xms$driverMemory"
                 command += s"-Xmx$driverMemory"
+                val extraJavaOpts = resolvedSparkProperties.get("spark.driver.extraJavaOptions")
+                  .map(Utils.splitCommandString)
+                  .getOrElse(Seq.empty)
+                command ++= extraJavaOpts
                 command += mainClass
                 command ++= appArgs
                 val pb = new ProcessBuilder(command: _*).inheritIO()
