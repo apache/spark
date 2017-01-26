@@ -92,7 +92,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         def register[$typeTags](name: String, func: Function$x[$types]): UserDefinedFunction = {
           val dataType = ScalaReflection.schemaFor[RT].dataType
           val inputTypes = Try($inputTypes).toOption
-          def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil))
+          def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name))
           functionRegistry.registerFunction(name, builder)
           UserDefinedFunction(func, dataType, inputTypes)
         }""")
