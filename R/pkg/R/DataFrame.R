@@ -3410,8 +3410,6 @@ setMethod("randomSplit",
 #' getNumPartitions
 #'
 #' Return the number of partitions
-#' Note: in order to compute the number of partition the SparkDataFrame has to be converted into a
-#' RDD temporarily internally.
 #'
 #' @param x A SparkDataFrame
 #' @family SparkDataFrame functions
