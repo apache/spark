@@ -28,7 +28,7 @@ object SimplifyCreateStructOps extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformExpressionsUp {
       // push down field extraction
-      case GetStructField(createNamedStructLike : CreateNamedStructLike, ordinal, _) =>
+      case GetStructField(createNamedStructLike: CreateNamedStructLike, ordinal, _) =>
         createNamedStructLike.valExprs(ordinal)
     }
   }
