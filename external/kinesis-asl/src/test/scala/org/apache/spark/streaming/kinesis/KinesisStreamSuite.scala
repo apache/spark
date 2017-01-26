@@ -225,6 +225,76 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     ssc.stop(stopSparkContext = false)
   }
 
+  testIfEnabled("split and merge shards in a stream") {
+    // Since this test tries to split and merge shards in a stream, we create another
+    // temporary stream and then remove it when finished.
+    val localAppName = s"KinesisStreamSuite-${math.abs(Random.nextLong())}"
+    val localTestUtils = new KPLBasedKinesisTestUtils(1)
+    localTestUtils.createStream()
+    try {
+      val awsCredentials = KinesisTestUtils.getAWSCredentials()
+      val stream = KinesisUtils.createStream(ssc, localAppName, localTestUtils.streamName,
+        localTestUtils.endpointUrl, localTestUtils.regionName, InitialPositionInStream.LATEST,
+        Seconds(10), StorageLevel.MEMORY_ONLY,
+        awsCredentials.getAWSAccessKeyId, awsCredentials.getAWSSecretKey)
+
+      val collected = new mutable.HashSet[Int]
+      stream.map { bytes => new String(bytes).toInt }.foreachRDD { rdd =>
+        collected.synchronized {
+          collected ++= rdd.collect()
+          logInfo("Collected = " + collected.mkString(", "))
+        }
+      }
+      ssc.start()
+
+      val testData1 = 1 to 10
+      val testData2 = 11 to 20
+      val testData3 = 21 to 30
+
+      eventually(timeout(60 seconds), interval(10 second)) {
+        localTestUtils.pushData(testData1, aggregateTestData)
+        assert(collected.synchronized { collected === testData1.toSet },
+          "\nData received does not match data sent")
+      }
+
+      val shardToSplit = localTestUtils.getShards().head
+      localTestUtils.splitShard(shardToSplit.getShardId)
+      val (splitOpenShards, splitCloseShards) = localTestUtils.getShards().partition { shard =>
+        shard.getSequenceNumberRange.getEndingSequenceNumber == null
+      }
+
+      // We should have one closed shard and two open shards
+      assert(splitCloseShards.size == 1)
+      assert(splitOpenShards.size == 2)
+
+      eventually(timeout(60 seconds), interval(10 second)) {
+        localTestUtils.pushData(testData2, aggregateTestData)
+        assert(collected.synchronized { collected === (testData1 ++ testData2).toSet },
+          "\nData received does not match data sent after splitting a shard")
+      }
+
+      val Seq(shardToMerge, adjShard) = splitOpenShards
+      localTestUtils.mergeShard(shardToMerge.getShardId, adjShard.getShardId)
+      val (mergedOpenShards, mergedCloseShards) = localTestUtils.getShards().partition { shard =>
+        shard.getSequenceNumberRange.getEndingSequenceNumber == null
+      }
+
+      // We should have three closed shards and one open shard
+      assert(mergedCloseShards.size == 3)
+      assert(mergedOpenShards.size == 1)
+
+      eventually(timeout(60 seconds), interval(10 second)) {
+        localTestUtils.pushData(testData3, aggregateTestData)
+        assert(collected.synchronized { collected === (testData1 ++ testData2 ++ testData3).toSet },
+          "\nData received does not match data sent after merging shards")
+      }
+    } finally {
+      ssc.stop(stopSparkContext = false)
+      localTestUtils.deleteStream()
+      localTestUtils.deleteDynamoDBTable(localAppName)
+    }
+  }
+
   testIfEnabled("failure recovery") {
     val sparkConf = new SparkConf().setMaster("local[4]").setAppName(this.getClass.getSimpleName)
     val checkpointDir = Utils.createTempDir().getAbsolutePath
