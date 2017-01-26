@@ -19,6 +19,8 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
+import org.apache.kafka.common.TopicPartition
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
@@ -57,13 +59,13 @@ private[kafka010] class KafkaRelation(
     // Obtain topicPartitions in both from and until partition offset, ignoring
     // topic partitions that were added and/or deleted between the two above calls.
     if (fromPartitionOffsets.keySet.size != untilPartitionOffsets.keySet.size) {
-      throw new IllegalStateException("Kafka return different topic partitions " +
-        "for starting and ending offsets")
+      implicit val topicOrdering: Ordering[TopicPartition] = Ordering.by(t => t.topic())
+      val fromTopics = fromPartitionOffsets.keySet.toList.sorted.mkString(",")
+      val untilTopics = untilPartitionOffsets.keySet.toList.sorted.mkString(",")
+      throw new IllegalStateException("different topic partitions " +
+        s"for starting offsets topics[${fromTopics}] and " +
+        s"ending offsets topics[${untilTopics}]")
     }
-
-    val sortedExecutors = KafkaUtils.getSortedExecutorList(sqlContext.sparkContext)
-    val numExecutors = sortedExecutors.length
-    logDebug("Sorted executors: " + sortedExecutors.mkString(", "))
 
     // Calculate offset ranges
     val offsetRanges = untilPartitionOffsets.keySet.map { tp =>
@@ -82,7 +84,7 @@ private[kafka010] class KafkaRelation(
     // Create an RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD(
       sqlContext.sparkContext, executorKafkaParams, offsetRanges,
-      pollTimeoutMs, failOnDataLoss, false).map { cr =>
+      pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer = false).map { cr =>
       InternalRow(
         cr.key,
         cr.value,

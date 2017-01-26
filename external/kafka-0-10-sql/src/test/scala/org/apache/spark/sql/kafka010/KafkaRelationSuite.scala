@@ -146,10 +146,8 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
     testUtils.createTopic(topic, partitions = 1)
     testUtils.sendMessages(topic, (0 to 10).map(_.toString).toArray, Some(0))
 
-    // Ensure local[2] so that two tasks will execute the query on one partition
-    val testSession = new TestSparkSession(sparkContext)
     // Specify explicit earliest and latest offset values
-    val reader = testSession
+    val reader = spark
       .read
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
@@ -158,8 +156,7 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
       .option("endingOffsets", "latest")
       .load()
     var df = reader.selectExpr("CAST(value AS STRING)")
-    checkAnswer(df.union(df),
-      (0 to 10).map(_.toString).toDF.union((0 to 10).map(_.toString).toDF))
+    checkAnswer(df.union(df), ((0 to 10) ++ (0 to 10)).map(_.toString).toDF)
   }
 
   test("bad source options") {

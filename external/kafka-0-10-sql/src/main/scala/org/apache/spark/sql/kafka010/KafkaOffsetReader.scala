@@ -267,7 +267,6 @@ private[kafka010] class UninterruptibleKafkaOffsetReader(kafkaOffsetReader: Kafk
 
   val kafkaReaderThread = Executors.newSingleThreadExecutor(new ThreadFactory {
     override def newThread(r: Runnable): Thread = {
-      logInfo("NEW UNINTERRUPTIBLE THREAD KAFKA OFFSET")
       val t = new UninterruptibleThread("Kafka Offset Reader") {
         override def run(): Unit = {
           r.run()
@@ -312,7 +311,6 @@ private[kafka010] class UninterruptibleKafkaOffsetReader(kafkaOffsetReader: Kafk
       kafkaOffsetReader.fetchNewPartitionEarliestOffsets(newPartitions)
     }(execContext)
     ThreadUtils.awaitResult(future, Duration.Inf)
-
   }
 }
 
