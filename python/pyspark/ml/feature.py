@@ -269,7 +269,7 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     def setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1,
                   bucketLength=None):
         """
-        setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1,
+        setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, \
                   bucketLength=None)
         Sets params for this BucketedRandomProjectionLSH.
         """
