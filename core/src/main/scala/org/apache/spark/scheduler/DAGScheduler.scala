@@ -1192,7 +1192,7 @@ class DAGScheduler(
               shuffleStage.addOutputLoc(smt.partitionId, status)
             }
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
-              // Check if there is active tasks running for other partitions.
+              // Check if there is active TaskSetManager.
               val noActiveTaskSetManager = taskScheduler.rootPool == null ||
                 !taskScheduler.rootPool.getSortedTaskSetQueue.exists {
                   tsm =>
@@ -1201,10 +1201,9 @@ class DAGScheduler(
               if (noActiveTaskSetManager) {
                 markStageAsFinished(shuffleStage)
               } else {
-                // There can be tasks running for other partitions at this point
-                // for reasons like fetch failed. If so, should not mark the stage
-                // as finished. Thus the running tasks' results will be added to
-                // mapOutputTracker when succeed.
+                // There can be tasks running at this point for reasons like fetch failed.
+                // If so, should not mark the stage as finished. Thus the running tasks' results
+                // will be added to mapOutputTracker when succeed.
               }
               logInfo("looking for newly runnable stages")
               logInfo("running: " + runningStages)
