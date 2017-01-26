@@ -1191,18 +1191,14 @@ class DAGScheduler(
             } else {
               shuffleStage.addOutputLoc(smt.partitionId, status)
             }
-
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
               // Check if there is active tasks running for other partitions.
-              val noActiveTasksForOtherPartitions = taskScheduler.rootPool == null ||
+              val noActiveTaskSetManager = taskScheduler.rootPool == null ||
                 !taskScheduler.rootPool.getSortedTaskSetQueue.exists {
                   tsm =>
-                    tsm.stageId == stageId && !tsm.isZombie && tsm.copiesRunning.exists {
-                      i =>
-                        tsm.tasks(i).partitionId != smt.partitionId && tsm.copiesRunning(i) > 0
-                    }
+                    tsm.stageId == stageId && !tsm.isZombie
                 }
-              if (noActiveTasksForOtherPartitions) {
+              if (noActiveTaskSetManager) {
                 markStageAsFinished(shuffleStage)
               } else {
                 // There can be tasks running for other partitions at this point
@@ -1228,7 +1224,7 @@ class DAGScheduler(
 
               clearCacheLocs()
 
-              if (!shuffleStage.isAvailable && noActiveTasksForOtherPartitions) {
+              if (!shuffleStage.isAvailable && noActiveTaskSetManager) {
                 // Some tasks had failed; let's resubmit this shuffleStage.
                 // Do not resubmit shuffleStage if there is active tasks running.
                 // TODO: Lower-level scheduler should also deal with this
