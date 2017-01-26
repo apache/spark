@@ -28,6 +28,7 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.ml.common import inherit_doc
 
 __all__ = ['Binarizer',
+           'BucketedRandomProjectionLSH', 'BucketedRandomProjectionLSHModel',
            'Bucketizer',
            'ChiSqSelector', 'ChiSqSelectorModel',
            'CountVectorizer', 'CountVectorizerModel',
@@ -37,6 +38,7 @@ __all__ = ['Binarizer',
            'IDF', 'IDFModel',
            'IndexToString',
            'MaxAbsScaler', 'MaxAbsScalerModel',
+           'MinHashLSH', 'MinHashLSHModel',
            'MinMaxScaler', 'MinMaxScalerModel',
            'NGram',
            'Normalizer',
@@ -118,6 +120,123 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
         Gets the value of threshold or its default value.
         """
         return self.getOrDefault(self.threshold)
+
+
+
+@inherit_doc
+class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
+                                  JavaMLReadable, JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    LSH class for Euclidean distance metrics.
+    The input is dense or sparse vectors, each of which represents a point in the Euclidean
+    distance space. The output will be vectors of configurable dimension. Hash value in the
+    same dimension is calculated by the same hash function.
+
+    .. seealso:: `Stable Distributions \
+    <https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions>`_
+    .. seealso:: `Hashing for Similarity Search: A Survey <https://arxiv.org/abs/1408.2927>`_
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> data = [(Vectors.dense([-1.0, -1.0 ]),),
+    ...         (Vectors.dense([-1.0, 1.0 ]),),
+    ...         (Vectors.dense([1.0, -1.0 ]),),
+    ...         (Vectors.dense([1.0, 1.0]),)]
+    >>> df = spark.createDataFrame(data, ["keys"])
+    >>> rp = BucketedRandomProjectionLSH(inputCol="keys", outputCol="values", seed=12345, bucketLength=1.0)
+    >>> model = rp.fit(df)
+    >>> model.randUnitVectors
+    [DenseVector([-0.3041, 0.9527])]
+    >>> model.transform(df).head()
+    Row(keys=DenseVector([-1.0, -1.0]), values=DenseVector([-1.0]))
+    >>> data2 = [(Vectors.dense([2.0, 2.0 ]),),
+    ...          (Vectors.dense([2.0, 3.0 ]),),
+    ...          (Vectors.dense([3.0, 2.0 ]),),
+    ...          (Vectors.dense([3.0, 3.0]),)]
+    >>> df2 = spark.createDataFrame(data2, ["keys"])
+    >>> model.approxNearestNeighbors(df2, Vectors.dense([1.0, 2.0]), 1).collect()
+    [Row(keys=DenseVector([2.0, 2.0]), values=DenseVector([1.0]), distCol=1.0)]
+    >>> model.approxSimilarityJoin(df, df2, 3.0).select("distCol").head()[0]
+    2.236...
+    >>> rpPath = temp_path + "/rp"
+    >>> rp.save(rpPath)
+    >>> rp2 = BucketedRandomProjectionLSH.load(rpPath)
+    >>> rp2.getBucketLength() == rp.getBucketLength()
+    True
+    >>> modelPath = temp_path + "/rp-model"
+    >>> model.save(modelPath)
+    >>> model2 = BucketedRandomProjectionLSHModel.load(modelPath)
+    >>> model2.randUnitVectors == model.randUnitVectors
+    True
+
+    .. versionadded:: 2.2.0
+    """
+
+    bucketLength = Param(Params._dummy(), "bucketLength", "the length of each hash bucket, " +
+                         "a larger bucket lowers the false negative rate.",
+                         typeConverter=TypeConverters.toFloat)
+
+    @keyword_only
+    def __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, bucketLength=None):
+        """
+        __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, bucketLength=None)
+        """
+        super(BucketedRandomProjectionLSH, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.BucketedRandomProjectionLSH",
+                                            self.uid)
+        self._setDefault(numHashTables=1)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.2.0")
+    def setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, bucketLength=None):
+        """
+        setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, bucketLength=None)
+        Sets params for this BucketedRandomProjectionLSH.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.2.0")
+    def setBucketLength(self, value):
+        """
+        Sets the value of :py:attr:`bucketLength`.
+        """
+        return self._set(bucketLength=value)
+
+    @since("2.2.0")
+    def getBucketLength(self):
+        """
+        Gets the value of bucketLength or its default value.
+        """
+        return self.getOrDefault(self.bucketLength)
+
+    def _create_model(self, java_model):
+        return BucketedRandomProjectionLSHModel(java_model)
+
+
+class BucketedRandomProjectionLSHModel(JavaModel, LSHModel, JavaMLReadable, JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    Model fitted by :py:class:`BucketedRandomProjectionLSH`, where multiple random vectors are stored.
+    The vectors are normalized to be unit vectors and each vector is used in a hash function:
+    :math:`h_i(x) = floor(r_i * x / bucketLength)` where :math:`r_i` is the i-th random unit
+    vector. The number of buckets will be `(max L2 norm of input vectors) / bucketLength`.
+
+    .. versionadded:: 2.2.0
+    """
+
+    @property
+    @since("2.2.0")
+    def randUnitVectors(self):
+        """
+        An array of random unit vectors. Each vector represents a hash function.
+        """
+        return self._call_java("randUnitVectors")
+
 
 
 @inherit_doc
@@ -678,6 +797,87 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("idf")
 
 
+class LSHParams(Params):
+    """
+    Mixin for Locality Sensitive Hashing(LSH) algorithm parameters.
+    """
+
+    numHashTables = Param(Params._dummy(), "numHashTables", "number of hash tables, where " +
+                          "increasing number of hash tables lowers the false negative rate, " +
+                          "and decreasing it improves the running performance.",
+                          typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(LSHParams, self).__init__()
+
+    @since("2.1.0")
+    def setNumHashTables(self, value):
+        """
+        Sets the value of :py:attr:`numHashTables`.
+        """
+        return self._set(numHashTables=value)
+
+    @since("2.1.0")
+    def getNumHashTables(self):
+        """
+        Gets the value of numHashTables or its default value.
+        """
+        return self.getOrDefault(self.numHashTables)
+
+
+class LSHModel():
+    """
+    Mixin for Locality Sensitive Hashing(LSH) models.
+    """
+
+    @since("2.1.0")
+    def approxNearestNeighbors(self, dataset, key, numNearestNeighbors, singleProbing=True,
+                               distCol="distCol"):
+        """
+        Given a large dataset and an item, approximately find at most k items which have the
+        closest distance to the item. If the :py:attr:`outputCol` is missing, the method will
+        transform the data; if the :py:attr:`outputCol` exists, it will use that. This allows
+        caching of the transformed data when necessary.
+
+        This method implements two ways of fetching k nearest neighbors:
+
+        * Single Probing: Fast, return at most k elements (Probing only one buckets)
+
+        * Multiple Probing: Slow, return exact k elements (Probing multiple buckets close to \
+        the key)
+
+        :param dataset: The dataset to search for nearest neighbors of the key.
+        :param key: Feature vector representing the item to search for.
+        :param numNearestNeighbors: The maximum number of nearest neighbors.
+        :param singleProbing: True for using single probing (default); false for multiple probing.
+        :param distCol: Output column for storing the distance between each result row and the key.
+                        Use "distCol" as default value if it's not specified.
+        :return: A dataset containing at most k items closest to the key. A distCol is added
+                 to show the distance between each row and the key.
+        """
+        return self._call_java("approxNearestNeighbors", dataset, key, numNearestNeighbors,
+                               singleProbing, distCol)
+
+    @since("2.1.0")
+    def approxSimilarityJoin(self, datasetA, datasetB, threshold, distCol="distCol"):
+        """
+        Join two dataset to approximately find all pairs of rows whose distance are smaller than
+        the threshold. If the :py:attr:`outputCol` is missing, the method will transform the data;
+        if the :py:attr:`outputCol` exists, it will use that. This allows caching of the
+        transformed data when necessary.
+
+        :param datasetA: One of the datasets to join.
+        :param datasetB: Another dataset to join.
+        :param threshold: The threshold for the distance of row pairs.
+        :param distCol: Output column for storing the distance between each result row and the key.
+                        Use "distCol" as default value if it's not specified.
+        :return: A joined dataset containing pairs of rows. The original rows are in columns
+                "datasetA" and "datasetB", and a distCol is added to show the distance of
+                each pair.
+        """
+        return self._call_java("approxSimilarityJoin", datasetA, datasetB, threshold, distCol)
+
+
 @inherit_doc
 class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
@@ -752,6 +952,111 @@ class MaxAbsScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         Max Abs vector.
         """
         return self._call_java("maxAbs")
+
+
+@inherit_doc
+class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
+                 JavaMLReadable, JavaMLWritable):
+
+    """
+    .. note:: Experimental
+
+    LSH class for Jaccard distance.
+    The input can be dense or sparse vectors, but it is more efficient if it is sparse.
+    For example, `Vectors.sparse(10, Array[(2, 1.0), (3, 1.0), (5, 1.0)])`
+    means there are 10 elements in the space. This set contains elem 2, elem 3 and elem 5.
+    Also, any input vector must have at least 1 non-zero indices, and all non-zero values
+    are treated as binary "1" values.
+
+    .. seealso:: `MinHash <https://en.wikipedia.org/wiki/MinHash>`_
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> data = [(Vectors.sparse(10, [0, 1], [1.0, 1.0]),),
+    ...         (Vectors.sparse(10, [1, 2], [1.0, 1.0]),),
+    ...         (Vectors.sparse(10, [2, 3], [1.0, 1.0]),),
+    ...         (Vectors.sparse(10, [3, 4], [1.0, 1.0]),),
+    ...         (Vectors.sparse(10, [4, 5], [1.0, 1.0]),)]
+    >>> df = spark.createDataFrame(data, ["keys"])
+    >>> mh = MinHashLSH(inputCol="keys", outputCol="values", seed=12345)
+    >>> model = mh.fit(df)
+    >>> model.numEntries
+    20
+    >>> model.randCoefficients
+    [776966252]
+    >>> model.transform(df).head()
+    Row(keys=SparseVector(10, {0: 1.0, 1: 1.0}), values=DenseVector([4.0]))
+    >>> data2 = [(Vectors.sparse(10, [5, 6], [1.0, 1.0]),),
+    ...          (Vectors.sparse(10, [6, 7], [1.0, 1.0]),),
+    ...          (Vectors.sparse(10, [7, 8], [1.0, 1.0]),),
+    ...          (Vectors.sparse(10, [8, 9], [1.0, 1.0]),)]
+    >>> df2 = spark.createDataFrame(data2, ["keys"])
+    >>> model.approxNearestNeighbors(df2, Vectors.sparse(10, [5, 8], [1.0, 1.0]), 1).collect()
+    [Row(keys=SparseVector(10, {5: 1.0, 6: 1.0}), values=DenseVector([6.0]), distCol=0.666...)]
+    >>> model.approxSimilarityJoin(df, df2, 1.0).select("distCol").head()[0]
+    0.666...
+    >>> mhPath = temp_path + "/mh"
+    >>> mh.save(mhPath)
+    >>> mh2 = MinHashLSH.load(mhPath)
+    >>> mh2.getOutputCol() == mh.getOutputCol()
+    True
+    >>> modelPath = temp_path + "/mh-model"
+    >>> model.save(modelPath)
+    >>> model2 = MinHashLSHModel.load(modelPath)
+    >>> model2.numEntries == model.numEntries
+    True
+    >>> model2.randCoefficients == model.randCoefficients
+    True
+
+    .. versionadded:: 2.1.0
+    """
+
+    @keyword_only
+    def __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1):
+        """
+        __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1)
+        """
+        super(MinHashLSH, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinHashLSH", self.uid)
+        self._setDefault(numHashTables=1)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.2.0")
+    def setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1):
+        """
+        setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1)
+        Sets params for this MinHashLSH.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return MinHashLSHModel(java_model)
+
+
+class MinHashLSHModel(JavaModel, LSHModel, JavaMLReadable, JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    Model produced by :py:class:`MinHashLSH`, where where multiple hash functions are stored. Each
+    hash function is picked from the following family of hash functions, where a_i and b_i are
+    randomly chosen integers less than prime:`h_i(x) = ((x \cdot a_i + b_i) \mod prime)`
+    This hash family is approximately min-wise independent according to the reference.
+
+    .. seealso:: Tom Bohman, Colin Cooper, and Alan Frieze. "Min-wise independent linear permutations."
+    Electronic Journal of Combinatorics 7 (2000): R26.
+
+    .. versionadded:: 2.2.0
+    """
+
+    @property
+    @since("2.2.0")
+    def randCoefficients(self):
+        """
+        An array of random coefficients, each used by one hash function.
+        """
+        return self._call_java("randCoefficients")
 
 
 @inherit_doc
