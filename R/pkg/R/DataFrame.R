@@ -1717,6 +1717,23 @@ getColumn <- function(x, c) {
   column(callJMethod(x@sdf, "col", c))
 }
 
+setColumn <- function(x, c, value) {
+  if (class(value) != "Column" && !is.null(value)) {
+    if (isAtomicLengthOne(value)) {
+      value <- lit(value)
+    } else {
+      stop("value must be a Column, literal value as atomic in length of 1, or NULL")
+    }
+  }
+
+  if (is.null(value)) {
+    nx <- drop(x, c)
+  } else {
+    nx <- withColumn(x, c, value)
+  }
+  nx
+}
+
 #' @param name name of a Column (without being wrapped by \code{""}).
 #' @rdname select
 #' @name $
@@ -1727,20 +1744,15 @@ setMethod("$", signature(x = "SparkDataFrame"),
             getColumn(x, name)
           })
 
-#' @param value a Column or \code{NULL}. If \code{NULL}, the specified Column is dropped.
+#' @param value a Column or an atomic vector in the length of 1 as literal value, or \code{NULL}.
+#'              If \code{NULL}, the specified Column is dropped.
 #' @rdname select
 #' @name $<-
 #' @aliases $<-,SparkDataFrame-method
 #' @note $<- since 1.4.0
 setMethod("$<-", signature(x = "SparkDataFrame"),
           function(x, name, value) {
-            stopifnot(class(value) == "Column" || is.null(value))
-
-            if (is.null(value)) {
-              nx <- drop(x, name)
-            } else {
-              nx <- withColumn(x, name, value)
-            }
+            nx <- setColumn(x, name, value)
             x@sdf <- nx@sdf
             x
           })
@@ -1758,6 +1770,21 @@ setMethod("[[", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
               i <- cols[[i]]
             }
             getColumn(x, i)
+          })
+
+#' @rdname subset
+#' @name [[<-
+#' @aliases [[<-,SparkDataFrame,numericOrcharacter-method
+#' @note [[<- since 2.1.1
+setMethod("[[<-", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
+          function(x, i, value) {
+            if (is.numeric(i)) {
+              cols <- columns(x)
+              i <- cols[[i]]
+            }
+            nx <- setColumn(x, i, value)
+            x@sdf <- nx@sdf
+            x
           })
 
 #' @rdname subset
@@ -1807,6 +1834,8 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' @param j,select expression for the single Column or a list of columns to select from the SparkDataFrame.
 #' @param drop if TRUE, a Column will be returned if the resulting dataset has only one column.
 #'             Otherwise, a SparkDataFrame will always be returned.
+#' @param value a Column or an atomic vector in the length of 1 as literal value, or \code{NULL}.
+#'              If \code{NULL}, the specified Column is dropped.
 #' @param ... currently not used.
 #' @return A new SparkDataFrame containing only the rows that meet the condition with selected columns.
 #' @export
@@ -1947,10 +1976,10 @@ setMethod("selectExpr",
 #'
 #' @param x a SparkDataFrame.
 #' @param colName a column name.
-#' @param col a Column expression.
+#' @param col a Column expression, or an atomic vector in the length of 1 as literal value.
 #' @return A SparkDataFrame with the new column added or the existing column replaced.
 #' @family SparkDataFrame functions
-#' @aliases withColumn,SparkDataFrame,character,Column-method
+#' @aliases withColumn,SparkDataFrame,character-method
 #' @rdname withColumn
 #' @name withColumn
 #' @seealso \link{rename} \link{mutate}
@@ -1963,11 +1992,16 @@ setMethod("selectExpr",
 #' newDF <- withColumn(df, "newCol", df$col1 * 5)
 #' # Replace an existing column
 #' newDF2 <- withColumn(newDF, "newCol", newDF$col1)
+#' newDF3 <- withColumn(newDF, "newCol", 42)
 #' }
 #' @note withColumn since 1.4.0
 setMethod("withColumn",
-          signature(x = "SparkDataFrame", colName = "character", col = "Column"),
+          signature(x = "SparkDataFrame", colName = "character"),
           function(x, colName, col) {
+            if (class(col) != "Column") {
+              if (!isAtomicLengthOne(col)) stop("Literal value must be atomic in length of 1")
+              col <- lit(col)
+            }
             sdf <- callJMethod(x@sdf, "withColumn", colName, col@jc)
             dataFrame(sdf)
           })
@@ -2313,9 +2347,9 @@ setMethod("dropDuplicates",
 #' @param joinExpr (Optional) The expression used to perform the join. joinExpr must be a
 #' Column expression. If joinExpr is omitted, the default, inner join is attempted and an error is
 #' thrown if it would be a Cartesian Product. For Cartesian join, use crossJoin instead.
-#' @param joinType The type of join to perform. The following join types are available:
-#' 'inner', 'outer', 'full', 'fullouter', leftouter', 'left_outer', 'left',
-#' 'right_outer', 'rightouter', 'right', and 'leftsemi'. The default joinType is "inner".
+#' @param joinType The type of join to perform, default 'inner'.
+#' Must be one of: 'inner', 'cross', 'outer', 'full', 'full_outer',
+#' 'left', 'left_outer', 'right', 'right_outer', 'left_semi', or 'left_anti'.
 #' @return A SparkDataFrame containing the result of the join operation.
 #' @family SparkDataFrame functions
 #' @aliases join,SparkDataFrame,SparkDataFrame-method
@@ -2344,15 +2378,18 @@ setMethod("join",
               if (is.null(joinType)) {
                 sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc)
               } else {
-                if (joinType %in% c("inner", "outer", "full", "fullouter",
-                    "leftouter", "left_outer", "left",
-                    "rightouter", "right_outer", "right", "leftsemi")) {
+                if (joinType %in% c("inner", "cross",
+                    "outer", "full", "fullouter", "full_outer",
+                    "left", "leftouter", "left_outer",
+                    "right", "rightouter", "right_outer",
+                    "left_semi", "leftsemi", "left_anti", "leftanti")) {
                   joinType <- gsub("_", "", joinType)
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
                 } else {
                   stop("joinType must be one of the following types: ",
-                      "'inner', 'outer', 'full', 'fullouter', 'leftouter', 'left_outer', 'left',
-                      'rightouter', 'right_outer', 'right', 'leftsemi'")
+                       "'inner', 'cross', 'outer', 'full', 'full_outer',",
+                       "'left', 'left_outer', 'right', 'right_outer',",
+                       "'left_semi', or 'left_anti'.")
                 }
               }
             }

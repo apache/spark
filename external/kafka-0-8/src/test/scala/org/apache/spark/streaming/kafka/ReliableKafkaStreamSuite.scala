@@ -80,7 +80,7 @@ class ReliableKafkaStreamSuite extends SparkFunSuite
 
   after {
     if (ssc != null) {
-      ssc.stop()
+      ssc.stop(stopSparkContext = true)
       ssc = null
     }
   }

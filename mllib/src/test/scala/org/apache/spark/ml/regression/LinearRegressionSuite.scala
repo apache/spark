@@ -988,7 +988,7 @@ class LinearRegressionSuite
       checkModelData)
   }
 
-  test("should support all NumericType labels and not support other types") {
+  test("should support all NumericType labels and weights, and not support other types") {
     for (solver <- Seq("auto", "l-bfgs", "normal")) {
       val lr = new LinearRegression().setMaxIter(1).setSolver(solver)
       MLTestingUtils.checkNumericTypes[LinearRegressionModel, LinearRegression](
