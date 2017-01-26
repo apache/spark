@@ -269,9 +269,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData.select('key).repartition(10).select('key),
       testData.select('key).collect().toSeq)
-    checkAnswer(
-      testData.select('key).repartition(10).select('key).getNumPartitions(),
-      10)
+    assert(testData.select('key).repartition(10).select('key).getNumPartitions == 10)
   }
 
   test("coalesce") {
@@ -1304,14 +1302,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("distributeBy and localSort") {
     val original = testData.repartition(1)
     assert(original.rdd.partitions.length == 1)
-    assert(original.getNumPartitions() == 1)
+    assert(original.getNumPartitions == 1)
     val df = original.repartition(5, $"key")
     assert(df.rdd.partitions.length == 5)
-    assert(df.getNumPartitions() == 5)
+    assert(df.getNumPartitions == 5)
     checkAnswer(original.select(), df.select())
 
     val df2 = original.repartition(10, $"key")
-    assert(df2.getNumPartitions() == 10)
+    assert(df2.getNumPartitions == 10)
     checkAnswer(original.select(), df2.select())
 
     // Group by the column we are distributed by. This should generate a plan with no exchange

@@ -2425,7 +2425,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 2.2.0
    */
-  def getNumPartitions: Int = rdd.getNumPartitions()
+  def getNumPartitions: Int = rdd.getNumPartitions
 
   /**
    * Returns a new Dataset that has exactly `numPartitions` partitions.
