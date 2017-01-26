@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.text.SimpleDateFormat
-import java.util.{Calendar, Locale, TimeZone}
+import java.text.DateFormat
+import java.util.{Calendar, TimeZone}
 
-import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
@@ -464,21 +464,16 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
-    val sdf = new SimpleDateFormat(format.toString, Locale.US)
-    sdf.setTimeZone(timeZone)
-    UTF8String.fromString(sdf.format(new java.util.Date(timestamp.asInstanceOf[Long] / 1000)))
+    val df = DateTimeUtils.newDateFormat(format.toString, timeZone)
+    UTF8String.fromString(df.format(new java.util.Date(timestamp.asInstanceOf[Long] / 1000)))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val sdf = classOf[SimpleDateFormat].getName
-    nullSafeCodeGen(ctx, ev, (timestamp, format) => {
-      val tz = ctx.addReferenceMinorObj(timeZone)
-      val s = ctx.freshName("sdf")
-      s"""
-        $sdf $s = new $sdf($format.toString(), java.util.Locale.US);
-        $s.setTimeZone($tz);
-        ${ev.value} = UTF8String.fromString($s.format(new java.util.Date($timestamp / 1000)));
-      """
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val tz = ctx.addReferenceMinorObj(timeZone)
+    defineCodeGen(ctx, ev, (timestamp, format) => {
+      s"""UTF8String.fromString($dtu.newDateFormat($format.toString(), $tz)
+          .format(new java.util.Date($timestamp / 1000)))"""
     })
   }
 
@@ -568,12 +563,12 @@ abstract class UnixTime
   override def nullable: Boolean = true
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
-  private lazy val formatter: SimpleDateFormat =
-    Try {
-      val sdf = new SimpleDateFormat(constFormat.toString, Locale.US)
-      sdf.setTimeZone(timeZone)
-      sdf
-    }.getOrElse(null)
+  private lazy val formatter: DateFormat =
+    try {
+      DateTimeUtils.newDateFormat(constFormat.toString, timeZone)
+    } catch {
+      case NonFatal(_) => null
+    }
 
   override def eval(input: InternalRow): Any = {
     val t = left.eval(input)
@@ -589,8 +584,12 @@ abstract class UnixTime
           if (constFormat == null || formatter == null) {
             null
           } else {
-            Try(formatter.parse(
-              t.asInstanceOf[UTF8String].toString).getTime / 1000L).getOrElse(null)
+            try {
+              formatter.parse(
+                t.asInstanceOf[UTF8String].toString).getTime / 1000L
+            } catch {
+              case NonFatal(_) => null
+            }
           }
         case StringType =>
           val f = right.eval(input)
@@ -598,11 +597,12 @@ abstract class UnixTime
             null
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
-            Try {
-              val sdf = new SimpleDateFormat(formatString, Locale.US)
-              sdf.setTimeZone(timeZone)
-              sdf.parse(t.asInstanceOf[UTF8String].toString).getTime / 1000L
-            }.getOrElse(null)
+            try {
+              DateTimeUtils.newDateFormat(formatString, timeZone).parse(
+                t.asInstanceOf[UTF8String].toString).getTime / 1000L
+            } catch {
+              case NonFatal(_) => null
+            }
           }
       }
     }
@@ -611,11 +611,11 @@ abstract class UnixTime
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     left.dataType match {
       case StringType if right.foldable =>
-        val sdf = classOf[SimpleDateFormat].getName
+        val df = classOf[DateFormat].getName
         if (formatter == null) {
           ExprCode("", "true", ctx.defaultValue(dataType))
         } else {
-          val formatterName = ctx.addReferenceObj("formatter", formatter, sdf)
+          val formatterName = ctx.addReferenceObj("formatter", formatter, df)
           val eval1 = left.genCode(ctx)
           ev.copy(code = s"""
             ${eval1.code}
@@ -631,14 +631,12 @@ abstract class UnixTime
         }
       case StringType =>
         val tz = ctx.addReferenceMinorObj(timeZone)
-        val sdf = classOf[SimpleDateFormat].getName
-        val formatterName = ctx.freshName("formatter")
+        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
             try {
-              $sdf $formatterName = new $sdf($format.toString(), java.util.Locale.US);
-              $formatterName.setTimeZone($tz);
-              ${ev.value} = $formatterName.parse($string.toString()).getTime() / 1000L;
+              ${ev.value} = $dtu.newDateFormat($format.toString(), $tz)
+                .parse($string.toString()).getTime() / 1000L;
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
             } catch (java.text.ParseException e) {
@@ -706,12 +704,12 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     copy(timeZoneId = Option(timeZoneId))
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
-  private lazy val formatter: SimpleDateFormat =
-    Try {
-      val sdf = new SimpleDateFormat(constFormat.toString, Locale.US)
-      sdf.setTimeZone(timeZone)
-      sdf
-    }.getOrElse(null)
+  private lazy val formatter: DateFormat =
+    try {
+      DateTimeUtils.newDateFormat(constFormat.toString, timeZone)
+    } catch {
+      case NonFatal(_) => null
+    }
 
   override def eval(input: InternalRow): Any = {
     val time = left.eval(input)
@@ -722,31 +720,36 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
         if (constFormat == null || formatter == null) {
           null
         } else {
-          Try(UTF8String.fromString(formatter.format(
-            new java.util.Date(time.asInstanceOf[Long] * 1000L)))).getOrElse(null)
+          try {
+            UTF8String.fromString(formatter.format(
+              new java.util.Date(time.asInstanceOf[Long] * 1000L)))
+          } catch {
+            case NonFatal(_) => null
+          }
         }
       } else {
         val f = format.eval(input)
         if (f == null) {
           null
         } else {
-          Try {
-            val sdf = new SimpleDateFormat(f.toString, Locale.US)
-            sdf.setTimeZone(timeZone)
-            UTF8String.fromString(sdf.format(new java.util.Date(time.asInstanceOf[Long] * 1000L)))
-          }.getOrElse(null)
+          try {
+            UTF8String.fromString(DateTimeUtils.newDateFormat(f.toString, timeZone)
+              .format(new java.util.Date(time.asInstanceOf[Long] * 1000L)))
+          } catch {
+            case NonFatal(_) => null
+          }
         }
       }
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val sdf = classOf[SimpleDateFormat].getName
+    val df = classOf[DateFormat].getName
     if (format.foldable) {
       if (formatter == null) {
         ExprCode("", "true", "(UTF8String) null")
       } else {
-        val formatterName = ctx.addReferenceObj("formatter", formatter, sdf)
+        val formatterName = ctx.addReferenceObj("formatter", formatter, df)
         val t = left.genCode(ctx)
         ev.copy(code = s"""
           ${t.code}
@@ -763,13 +766,11 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
       }
     } else {
       val tz = ctx.addReferenceMinorObj(timeZone)
-      val formatterName = ctx.freshName("formatter")
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
         s"""
         try {
-          $sdf $formatterName = new $sdf($f.toString(), java.util.Locale.US);
-          $formatterName.setTimeZone($tz);
-          ${ev.value} = UTF8String.fromString($formatterName.format(
+          ${ev.value} = UTF8String.fromString($dtu.newDateFormat($f.toString(), $tz).format(
             new java.util.Date($seconds * 1000L)));
         } catch (java.lang.IllegalArgumentException e) {
           ${ev.isNull} = true;

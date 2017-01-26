@@ -95,6 +95,12 @@ object DateTimeUtils {
     sdf
   }
 
+  def newDateFormat(formatString: String, timeZone: TimeZone): DateFormat = {
+    val sdf = new SimpleDateFormat(formatString, Locale.US)
+    sdf.setTimeZone(timeZone)
+    sdf
+  }
+
   // we should use the exact day as Int, for example, (year, month, day) -> day
   def millisToDays(millisUtc: Long): SQLDate = {
     millisToDays(millisUtc, defaultTimeZone())
