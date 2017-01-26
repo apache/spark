@@ -623,28 +623,28 @@ class GeneralizedLinearRegressionSuite
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
       for (family <- Seq("gaussian", "poisson", "gamma")) {
-      val trainer = new GeneralizedLinearRegression().setFamily(family)
-        .setFitIntercept(fitIntercept).setOffsetCol("offset")
-        .setWeightCol("weight").setLinkPredictionCol("linkPrediction")
-      val model = trainer.fit(dataset)
-      val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
-      assert(actual ~= expected(idx) absTol 1e-4, s"Model mismatch: GLM with family = $family," +
-        s" and fitIntercept = $fitIntercept.")
+        val trainer = new GeneralizedLinearRegression().setFamily(family)
+          .setFitIntercept(fitIntercept).setOffsetCol("offset")
+          .setWeightCol("weight").setLinkPredictionCol("linkPrediction")
+        val model = trainer.fit(dataset)
+        val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
+        assert(actual ~= expected(idx) absTol 1e-4, s"Model mismatch: GLM with family = $family," +
+          s" and fitIntercept = $fitIntercept.")
 
-      val familyObj = Family.fromName(family)
-      val familyLink = new FamilyAndLink(familyObj, familyObj.defaultLink)
-      model.transform(dataset).select("features", "offset", "prediction", "linkPrediction")
-        .collect().foreach {
-          case Row(features: DenseVector, offset: Double, prediction1: Double,
-          linkPrediction1: Double) =>
-            val eta = BLAS.dot(features, model.coefficients) + model.intercept + offset
-            val prediction2 = familyLink.fitted(eta)
-            val linkPrediction2 = eta
-            assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
-              s"family = $family, and fitIntercept = $fitIntercept.")
-            assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
-              s"GLM with family = $family, and fitIntercept = $fitIntercept.")
-        }
+        val familyObj = Family.fromName(family)
+        val familyLink = new FamilyAndLink(familyObj, familyObj.defaultLink)
+        model.transform(dataset).select("features", "offset", "prediction", "linkPrediction")
+          .collect().foreach {
+            case Row(features: DenseVector, offset: Double, prediction1: Double,
+            linkPrediction1: Double) =>
+              val eta = BLAS.dot(features, model.coefficients) + model.intercept + offset
+              val prediction2 = familyLink.fitted(eta)
+              val linkPrediction2 = eta
+              assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
+                s"family = $family, and fitIntercept = $fitIntercept.")
+              assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
+                s"GLM with family = $family, and fitIntercept = $fitIntercept.")
+          }
 
         idx += 1
       }

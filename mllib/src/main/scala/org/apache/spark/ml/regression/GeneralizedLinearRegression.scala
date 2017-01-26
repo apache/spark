@@ -798,13 +798,13 @@ class GeneralizedLinearRegressionModel private[ml] (
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val predictUDF = udf { (features: Vector, offset: Double) => predict(features, offset) }
     val predictLinkUDF = udf { (features: Vector, offset: Double) => predictLink(features, offset) }
-    val off = if (!isSet(offsetCol) || $(offsetCol).isEmpty) lit(0.0) else col($(offsetCol))
+    val offset = if (!isSet(offsetCol) || $(offsetCol).isEmpty) lit(0.0) else col($(offsetCol))
     var output = dataset
     if ($(predictionCol).nonEmpty) {
-      output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol)), off))
+      output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol)), offset))
     }
     if (hasLinkPredictionCol) {
-      output = output.withColumn($(linkPredictionCol), predictLinkUDF(col($(featuresCol)), off))
+      output = output.withColumn($(linkPredictionCol), predictLinkUDF(col($(featuresCol)), offset))
     }
     output.toDF()
   }
