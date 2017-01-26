@@ -222,13 +222,15 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("correctly parse CREATE VIEW statement") {
-    sql(
-      """CREATE VIEW IF NOT EXISTS
-        |default.testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
-        |TBLPROPERTIES ('a' = 'b')
-        |AS SELECT * FROM jt""".stripMargin)
-    checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))
-    sql("DROP VIEW testView")
+    withView("testView") {
+      sql(
+        """CREATE VIEW IF NOT EXISTS
+          |default.testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
+          |TBLPROPERTIES ('a' = 'b')
+          |AS SELECT * FROM jt
+          |""".stripMargin)
+      checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))
+    }
   }
 
   test("correctly parse CREATE TEMPORARY VIEW statement") {
@@ -554,7 +556,6 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           tableType = CatalogTableType.VIEW,
           storage = CatalogStorageFormat.empty,
           schema = new StructType().add("x", "long").add("y", "long"),
-          viewOriginalText = Some("SELECT * FROM jt"),
           viewText = Some("SELECT * FROM jt"),
           properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
             CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
@@ -565,7 +566,6 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           tableType = CatalogTableType.VIEW,
           storage = CatalogStorageFormat.empty,
           schema = new StructType().add("id", "long").add("id1", "long"),
-          viewOriginalText = Some("SELECT * FROM view1"),
           viewText = Some("SELECT * FROM view1"),
           properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> db,
             CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
@@ -587,7 +587,6 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
         schema = new StructType().add("n", "int"),
-        viewOriginalText = Some("WITH w AS (SELECT 1 AS n) SELECT n FROM w"),
         viewText = Some("WITH w AS (SELECT 1 AS n) SELECT n FROM w"),
         properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
           CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "1",
@@ -604,7 +603,6 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
         schema = new StructType().add("id", "long").add("id1", "long"),
-        viewOriginalText = Some("SELECT * FROM jt"),
         viewText = Some("SELECT * FROM jt"),
         properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
           CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
@@ -632,7 +630,6 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
         schema = new StructType().add("id", "long").add("id1", "long"),
-        viewOriginalText = Some("SELECT * FROM invalid_db.jt"),
         viewText = Some("SELECT * FROM invalid_db.jt"),
         properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
           CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
@@ -647,7 +644,6 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
         schema = new StructType().add("id", "long").add("id1", "long"),
-        viewOriginalText = Some("SELECT * FROM invalid_table"),
         viewText = Some("SELECT * FROM invalid_table"),
         properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
           CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
@@ -662,7 +658,6 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
         schema = new StructType().add("id", "long").add("id1", "long"),
-        viewOriginalText = Some("SELECT * FROM view2"),
         viewText = Some("SELECT * FROM view2"),
         properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
           CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
@@ -685,7 +680,6 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           tableType = CatalogTableType.VIEW,
           storage = CatalogStorageFormat.empty,
           schema = new StructType().add("a", "int").add("b", "int"),
-          viewOriginalText = Some(s"SELECT * FROM hive_table"),
           viewText = Some("SELECT `gen_attr_0` AS `a`, `gen_attr_1` AS `b` FROM (SELECT " +
             "`gen_attr_0`, `gen_attr_1` FROM (SELECT `a` AS `gen_attr_0`, `b` AS " +
             "`gen_attr_1` FROM hive_table) AS gen_subquery_0) AS hive_table")
@@ -709,7 +703,6 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           tableType = CatalogTableType.VIEW,
           storage = CatalogStorageFormat.empty,
           schema = new StructType().add("x", "long").add("y", "long"),
-          viewOriginalText = Some("SELECT * FROM testTable"),
           viewText = Some("SELECT * FROM testTable"),
           properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
             CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",
@@ -742,7 +735,6 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           tableType = CatalogTableType.VIEW,
           storage = CatalogStorageFormat.empty,
           schema = new StructType().add("id", "long").add("id1", "long"),
-          viewOriginalText = Some("SELECT * FROM testTable"),
           viewText = Some("SELECT * FROM testTable"),
           properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "default",
             CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> "2",

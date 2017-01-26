@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.api.python.PythonFunction
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, GreaterThan, In}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, EqualTo, Expression, GreaterThan, In}
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, SparkPlanTest, WholeStageCodegenExec}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.BooleanType
@@ -86,13 +86,11 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
   test("Python UDF refers to the attributes from more than one child") {
     val df = Seq(("Hello", 4)).toDF("a", "b")
     val df2 = Seq(("Hello", 4)).toDF("c", "d")
-    val joinDF = df.join(df2).where("dummyPythonUDF(a, c) == dummyPythonUDF(d, c)")
-
-    val e = intercept[RuntimeException] {
-      joinDF.queryExecution.executedPlan
-    }.getMessage
-    assert(Seq("Invalid PythonUDF dummyUDF", "requires attributes from more than one child")
-      .forall(e.contains))
+    val joinDF = df.crossJoin(df2).where("dummyPythonUDF(a, c) == dummyPythonUDF(d, c)")
+    val qualifiedPlanNodes = joinDF.queryExecution.executedPlan.collect {
+      case b: BatchEvalPythonExec => b
+    }
+    assert(qualifiedPlanNodes.size == 1)
   }
 }
 

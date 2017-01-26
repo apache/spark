@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
@@ -513,8 +514,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       isDataSourceTable: Boolean,
       format: String,
       userSpecifiedLocation: Option[String] = None): Unit = {
-    val relation = EliminateSubqueryAliases(
-      sessionState.catalog.lookupRelation(TableIdentifier(tableName)))
+    var relation: LogicalPlan = null
+    withSQLConf(
+      HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false",
+      HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
+      relation = EliminateSubqueryAliases(spark.table(tableName).queryExecution.analyzed)
+    }
     val catalogTable =
       sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
     relation match {
@@ -1021,13 +1026,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     // generates an invalid query plan.
     val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
     read.json(rdd).createOrReplaceTempView("data")
-    val originalConf = sessionState.conf.convertCTAS
-    setConf(SQLConf.CONVERT_CTAS, false)
 
-    try {
+    withSQLConf(SQLConf.CONVERT_CTAS.key -> "false") {
       sql("CREATE TABLE explodeTest (key bigInt)")
       table("explodeTest").queryExecution.analyzed match {
-        case metastoreRelation: MetastoreRelation => // OK
+        case SubqueryAlias(_, r: MetastoreRelation, _) => // OK
         case _ =>
           fail("To correctly test the fix of SPARK-5875, explodeTest should be a MetastoreRelation")
       }
@@ -1040,8 +1043,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
       sql("DROP TABLE explodeTest")
       dropTempTable("data")
-    } finally {
-      setConf(SQLConf.CONVERT_CTAS, originalConf)
     }
   }
 
@@ -1457,6 +1458,23 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         df)
       checkAnswer(sql(s"select a.id from json.`${f.getCanonicalPath}` as a"),
         df)
+    })
+  }
+
+  test("run sql directly on files - hive") {
+    withTempPath(f => {
+      spark.range(100).toDF.write.parquet(f.getCanonicalPath)
+
+      var e = intercept[AnalysisException] {
+        sql(s"select id from hive.`${f.getCanonicalPath}`")
+      }
+      assert(e.message.contains("Unsupported data source type for direct query on files: hive"))
+
+      // data source type is case insensitive
+      e = intercept[AnalysisException] {
+        sql(s"select id from HIVE.`${f.getCanonicalPath}`")
+      }
+      assert(e.message.contains("Unsupported data source type for direct query on files: HIVE"))
     })
   }
 
@@ -2011,6 +2029,19 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             |(1, "one"), (2, "two"), (3, null) AS data(key, value)
           """.stripMargin)
       )
+    }
+  }
+
+  test("SPARK-19292: filter with partition columns should be case-insensitive on Hive tables") {
+    withTable("tbl") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        sql("CREATE TABLE tbl(i int, j int) USING hive PARTITIONED BY (j)")
+        sql("INSERT INTO tbl PARTITION(j=10) SELECT 1")
+        checkAnswer(spark.table("tbl"), Row(1, 10))
+
+        checkAnswer(sql("SELECT i, j FROM tbl WHERE J=10"), Row(1, 10))
+        checkAnswer(spark.table("tbl").filter($"J" === 10), Row(1, 10))
+      }
     }
   }
 }

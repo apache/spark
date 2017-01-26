@@ -162,11 +162,15 @@ case class GenerateExec(
     val index = ctx.freshName("index")
 
     // Add a check if the generate outer flag is true.
-    val checks = optionalCode(outer, data.isNull)
+    val checks = optionalCode(outer, s"($index == -1)")
 
     // Add position
     val position = if (e.position) {
-      Seq(ExprCode("", "false", index))
+      if (outer) {
+        Seq(ExprCode("", s"$index == -1", index))
+      } else {
+        Seq(ExprCode("", "false", index))
+      }
     } else {
       Seq.empty
     }
@@ -177,7 +181,14 @@ case class GenerateExec(
         val row = codeGenAccessor(ctx, data.value, "col", index, st, nullable, checks)
         val fieldChecks = checks ++ optionalCode(nullable, row.isNull)
         val columns = st.fields.toSeq.zipWithIndex.map { case (f, i) =>
-          codeGenAccessor(ctx, row.value, f.name, i.toString, f.dataType, f.nullable, fieldChecks)
+          codeGenAccessor(
+            ctx,
+            row.value,
+            s"st_col${i}",
+            i.toString,
+            f.dataType,
+            f.nullable,
+            fieldChecks)
         }
         ("", row.code, columns)
 
@@ -243,7 +254,7 @@ case class GenerateExec(
     val values = e.dataType match {
       case ArrayType(st: StructType, nullable) =>
         st.fields.toSeq.zipWithIndex.map { case (f, i) =>
-          codeGenAccessor(ctx, current, f.name, s"$i", f.dataType, f.nullable, checks)
+          codeGenAccessor(ctx, current, s"st_col${i}", s"$i", f.dataType, f.nullable, checks)
         }
     }
 

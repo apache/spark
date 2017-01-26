@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.io._
 import java.lang.reflect.Constructor
-import java.net.{URI}
+import java.net.URI
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}

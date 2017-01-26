@@ -45,6 +45,9 @@ import org.apache.spark.util.Utils
  */
 private[spark] object JettyUtils extends Logging {
 
+  val SPARK_CONNECTOR_NAME = "Spark"
+  val REDIRECT_CONNECTOR_NAME = "HttpsRedirect"
+
   // Base type for a function that returns something based on an HTTP request. Allows for
   // implicit conversion from many types of functions to jetty Handlers.
   type Responder[T] = HttpServletRequest => T
@@ -274,10 +277,11 @@ private[spark] object JettyUtils extends Logging {
       conf: SparkConf,
       serverName: String = ""): ServerInfo = {
 
-    val collection = new ContextHandlerCollection
     addFilters(handlers, conf)
 
     val gzipHandlers = handlers.map { h =>
+      h.setVirtualHosts(Array("@" + SPARK_CONNECTOR_NAME))
+
       val gzipHandler = new GzipHandler
       gzipHandler.setHandler(h)
       gzipHandler
@@ -346,6 +350,7 @@ private[spark] object JettyUtils extends Logging {
 
         val (connector, boundPort) = Utils.startServiceOnPort[ServerConnector](securePort,
           sslConnect, conf, secureServerName)
+        connector.setName(SPARK_CONNECTOR_NAME)
         server.addConnector(connector)
         boundPort
       }
@@ -359,10 +364,15 @@ private[spark] object JettyUtils extends Logging {
         conf, serverName)
 
       // If SSL is configured, then configure redirection in the HTTP connector.
-      securePort.foreach { p =>
-        val redirector = createRedirectHttpsHandler(p, "https")
-        collection.addHandler(redirector)
-        redirector.start()
+      securePort match {
+        case Some(p) =>
+          httpConnector.setName(REDIRECT_CONNECTOR_NAME)
+          val redirector = createRedirectHttpsHandler(p, "https")
+          collection.addHandler(redirector)
+          redirector.start()
+
+        case None =>
+          httpConnector.setName(SPARK_CONNECTOR_NAME)
       }
 
       server.addConnector(httpConnector)
@@ -393,6 +403,7 @@ private[spark] object JettyUtils extends Logging {
   private def createRedirectHttpsHandler(securePort: Int, scheme: String): ContextHandler = {
     val redirectHandler: ContextHandler = new ContextHandler
     redirectHandler.setContextPath("/")
+    redirectHandler.setVirtualHosts(Array("@" + REDIRECT_CONNECTOR_NAME))
     redirectHandler.setHandler(new AbstractHandler {
       override def handle(
           target: String,
@@ -472,7 +483,22 @@ private[spark] case class ServerInfo(
     server: Server,
     boundPort: Int,
     securePort: Option[Int],
-    rootHandler: ContextHandlerCollection) {
+    private val rootHandler: ContextHandlerCollection) {
+
+  def addHandler(handler: ContextHandler): Unit = {
+    handler.setVirtualHosts(Array("@" + JettyUtils.SPARK_CONNECTOR_NAME))
+    rootHandler.addHandler(handler)
+    if (!handler.isStarted()) {
+      handler.start()
+    }
+  }
+
+  def removeHandler(handler: ContextHandler): Unit = {
+    rootHandler.removeHandler(handler)
+    if (handler.isStarted) {
+      handler.stop()
+    }
+  }
 
   def stop(): Unit = {
     server.stop()

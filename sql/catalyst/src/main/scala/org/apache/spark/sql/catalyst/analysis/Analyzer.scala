@@ -106,6 +106,13 @@ class Analyzer(
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
+  /**
+   * Override to provide rules to do post-hoc resolution. Note that these rules will be executed
+   * in an individual batch. This batch is to run right after the normal resolution batch and
+   * execute its rules in one pass.
+   */
+  val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
+
   lazy val batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
@@ -139,6 +146,7 @@ class Analyzer(
       ResolveInlineTables ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
+    Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
     Batch("View", Once,
       AliasViewChild(conf)),
     Batch("Nondeterministic", Once,
@@ -147,6 +155,8 @@ class Analyzer(
       HandleNullInputsForUDF),
     Batch("FixNullability", Once,
       FixNullability),
+    Batch("ResolveTimeZone", Once,
+      ResolveTimeZone),
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
@@ -215,7 +225,7 @@ class Analyzer(
               case ne: NamedExpression => ne
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
-              case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
+              case c @ Cast(ne: NamedExpression, _, _) => Alias(c, ne.name)()
               case e: ExtractValue => Alias(e, toPrettySQL(e))()
               case e if optGenAliasFunc.isDefined =>
                 Alias(child, optGenAliasFunc.get.apply(e))()
@@ -1619,11 +1629,18 @@ class Analyzer(
       case _ => expr
     }
 
-    /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
     private object AliasedGenerator {
-      def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
-        case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil))
-        case MultiAlias(g: Generator, names) if g.resolved => Some(g, names)
+      /**
+       * Extracts a [[Generator]] expression, any names assigned by aliases to the outputs
+       * and the outer flag. The outer flag is used when joining the generator output.
+       * @param e the [[Expression]]
+       * @return (the [[Generator]], seq of output names, outer flag)
+       */
+      def unapply(e: Expression): Option[(Generator, Seq[String], Boolean)] = e match {
+        case Alias(GeneratorOuter(g: Generator), name) if g.resolved => Some((g, name :: Nil, true))
+        case MultiAlias(GeneratorOuter(g: Generator), names) if g.resolved => Some(g, names, true)
+        case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil, false))
+        case MultiAlias(g: Generator, names) if g.resolved => Some(g, names, false)
         case _ => None
       }
     }
@@ -1644,7 +1661,8 @@ class Analyzer(
         var resolvedGenerator: Generate = null
 
         val newProjectList = projectList.flatMap {
-          case AliasedGenerator(generator, names) if generator.childrenResolved =>
+
+          case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
             // It's a sanity check, this should not happen as the previous case will throw
             // exception earlier.
             assert(resolvedGenerator == null, "More than one generator found in SELECT.")
@@ -1653,7 +1671,7 @@ class Analyzer(
               Generate(
                 generator,
                 join = projectList.size > 1, // Only join if there are other expressions in SELECT.
-                outer = false,
+                outer = outer,
                 qualifier = None,
                 generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
                 child)
@@ -2053,7 +2071,7 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(func, _, inputs, _) =>
+        case udf @ ScalaUDF(func, _, inputs, _, _) =>
           val parameterTypes = ScalaReflection.getParameterTypes(func)
           assert(parameterTypes.length == inputs.length)
 
@@ -2294,6 +2312,18 @@ class Analyzer(
 
         case UpCast(child, dataType, walkedTypePath) => Cast(child, dataType.asNullable)
       }
+    }
+  }
+
+  /**
+   * Replace [[TimeZoneAwareExpression]] without [[TimeZone]] by its copy with session local
+   * time zone.
+   */
+  object ResolveTimeZone extends Rule[LogicalPlan] {
+
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
+      case e: TimeZoneAwareExpression if e.timeZoneId.isEmpty =>
+        e.withTimeZone(conf.sessionLocalTimeZone)
     }
   }
 }

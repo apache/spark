@@ -25,8 +25,8 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.TransportContext
+import org.apache.spark.network.crypto.AuthServerBootstrap
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.sasl.SaslServerBootstrap
 import org.apache.spark.network.server.{TransportServer, TransportServerBootstrap}
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
 import org.apache.spark.network.util.TransportConf
@@ -47,7 +47,6 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   private val enabled = sparkConf.getBoolean("spark.shuffle.service.enabled", false)
   private val port = sparkConf.getInt("spark.shuffle.service.port", 7337)
-  private val useSasl: Boolean = securityManager.isAuthenticationEnabled()
 
   private val transportConf =
     SparkTransportConf.fromSparkConf(sparkConf, "shuffle", numUsableCores = 0)
@@ -74,10 +73,11 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   /** Start the external shuffle service */
   def start() {
     require(server == null, "Shuffle server already started")
-    logInfo(s"Starting shuffle service on port $port with useSasl = $useSasl")
+    val authEnabled = securityManager.isAuthenticationEnabled()
+    logInfo(s"Starting shuffle service on port $port (auth enabled = $authEnabled)")
     val bootstraps: Seq[TransportServerBootstrap] =
-      if (useSasl) {
-        Seq(new SaslServerBootstrap(transportConf, securityManager))
+      if (authEnabled) {
+        Seq(new AuthServerBootstrap(transportConf, securityManager))
       } else {
         Nil
       }
