@@ -1622,7 +1622,7 @@ class MatrixUDTTests(MLlibTestCase):
 
 class WrapperTests(MLlibTestCase):
 
-    def test_java_array_of_class(self):
+    def test_new_java_array(self):
         # test array of strings
         str_list = ["a", "b", "c"]
         java_class = self.sc._gateway.jvm.java.lang.String
@@ -1650,6 +1650,10 @@ class WrapperTests(MLlibTestCase):
         java_class = self.sc._gateway.jvm.org.apache.spark.ml.linalg.DenseVector
         java_array = JavaWrapper._new_java_array(vec_java_list, java_class)
         self.assertEqual(_java2py(self.sc, java_array), [v1, v2])
+        # test empty array
+        java_class = self.sc._gateway.jvm.java.lang.Integer
+        java_array = JavaWrapper._new_java_array([], java_class)
+        self.assertEqual(_java2py(self.sc, java_array), [])
 
 
 if __name__ == "__main__":
