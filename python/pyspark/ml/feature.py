@@ -122,6 +122,86 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
         return self.getOrDefault(self.threshold)
 
 
+class LSHParams(Params):
+    """
+    Mixin for Locality Sensitive Hashing(LSH) algorithm parameters.
+    """
+
+    numHashTables = Param(Params._dummy(), "numHashTables", "number of hash tables, where " +
+                          "increasing number of hash tables lowers the false negative rate, " +
+                          "and decreasing it improves the running performance.",
+                          typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(LSHParams, self).__init__()
+
+    @since("2.2.0")
+    def setNumHashTables(self, value):
+        """
+        Sets the value of :py:attr:`numHashTables`.
+        """
+        return self._set(numHashTables=value)
+
+    @since("2.2.0")
+    def getNumHashTables(self):
+        """
+        Gets the value of numHashTables or its default value.
+        """
+        return self.getOrDefault(self.numHashTables)
+
+
+class LSHModel():
+    """
+    Mixin for Locality Sensitive Hashing(LSH) models.
+    """
+
+    @since("2.2.0")
+    def approxNearestNeighbors(self, dataset, key, numNearestNeighbors, singleProbing=True,
+                               distCol="distCol"):
+        """
+        Given a large dataset and an item, approximately find at most k items which have the
+        closest distance to the item. If the :py:attr:`outputCol` is missing, the method will
+        transform the data; if the :py:attr:`outputCol` exists, it will use that. This allows
+        caching of the transformed data when necessary.
+
+        This method implements two ways of fetching k nearest neighbors:
+
+        * Single Probing: Fast, return at most k elements (Probing only one buckets)
+
+        * Multiple Probing: Slow, return exact k elements (Probing multiple buckets close to \
+        the key)
+
+        :param dataset: The dataset to search for nearest neighbors of the key.
+        :param key: Feature vector representing the item to search for.
+        :param numNearestNeighbors: The maximum number of nearest neighbors.
+        :param singleProbing: True for using single probing (default); false for multiple probing.
+        :param distCol: Output column for storing the distance between each result row and the key.
+                        Use "distCol" as default value if it's not specified.
+        :return: A dataset containing at most k items closest to the key. A distCol is added
+                 to show the distance between each row and the key.
+        """
+        return self._call_java("approxNearestNeighbors", dataset, key, numNearestNeighbors,
+                               singleProbing, distCol)
+
+    @since("2.2.0")
+    def approxSimilarityJoin(self, datasetA, datasetB, threshold, distCol="distCol"):
+        """
+        Join two dataset to approximately find all pairs of rows whose distance are smaller than
+        the threshold. If the :py:attr:`outputCol` is missing, the method will transform the data;
+        if the :py:attr:`outputCol` exists, it will use that. This allows caching of the
+        transformed data when necessary.
+
+        :param datasetA: One of the datasets to join.
+        :param datasetB: Another dataset to join.
+        :param threshold: The threshold for the distance of row pairs.
+        :param distCol: Output column for storing the distance between each result row and the key.
+                        Use "distCol" as default value if it's not specified.
+        :return: A joined dataset containing pairs of rows. The original rows are in columns
+                "datasetA" and "datasetB", and a distCol is added to show the distance of
+                each pair.
+        """
+        return self._call_java("approxSimilarityJoin", datasetA, datasetB, threshold, distCol)
+
 
 @inherit_doc
 class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
@@ -797,87 +877,6 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("idf")
 
 
-class LSHParams(Params):
-    """
-    Mixin for Locality Sensitive Hashing(LSH) algorithm parameters.
-    """
-
-    numHashTables = Param(Params._dummy(), "numHashTables", "number of hash tables, where " +
-                          "increasing number of hash tables lowers the false negative rate, " +
-                          "and decreasing it improves the running performance.",
-                          typeConverter=TypeConverters.toInt)
-
-    def __init__(self):
-        super(LSHParams, self).__init__()
-
-    @since("2.1.0")
-    def setNumHashTables(self, value):
-        """
-        Sets the value of :py:attr:`numHashTables`.
-        """
-        return self._set(numHashTables=value)
-
-    @since("2.1.0")
-    def getNumHashTables(self):
-        """
-        Gets the value of numHashTables or its default value.
-        """
-        return self.getOrDefault(self.numHashTables)
-
-
-class LSHModel():
-    """
-    Mixin for Locality Sensitive Hashing(LSH) models.
-    """
-
-    @since("2.1.0")
-    def approxNearestNeighbors(self, dataset, key, numNearestNeighbors, singleProbing=True,
-                               distCol="distCol"):
-        """
-        Given a large dataset and an item, approximately find at most k items which have the
-        closest distance to the item. If the :py:attr:`outputCol` is missing, the method will
-        transform the data; if the :py:attr:`outputCol` exists, it will use that. This allows
-        caching of the transformed data when necessary.
-
-        This method implements two ways of fetching k nearest neighbors:
-
-        * Single Probing: Fast, return at most k elements (Probing only one buckets)
-
-        * Multiple Probing: Slow, return exact k elements (Probing multiple buckets close to \
-        the key)
-
-        :param dataset: The dataset to search for nearest neighbors of the key.
-        :param key: Feature vector representing the item to search for.
-        :param numNearestNeighbors: The maximum number of nearest neighbors.
-        :param singleProbing: True for using single probing (default); false for multiple probing.
-        :param distCol: Output column for storing the distance between each result row and the key.
-                        Use "distCol" as default value if it's not specified.
-        :return: A dataset containing at most k items closest to the key. A distCol is added
-                 to show the distance between each row and the key.
-        """
-        return self._call_java("approxNearestNeighbors", dataset, key, numNearestNeighbors,
-                               singleProbing, distCol)
-
-    @since("2.1.0")
-    def approxSimilarityJoin(self, datasetA, datasetB, threshold, distCol="distCol"):
-        """
-        Join two dataset to approximately find all pairs of rows whose distance are smaller than
-        the threshold. If the :py:attr:`outputCol` is missing, the method will transform the data;
-        if the :py:attr:`outputCol` exists, it will use that. This allows caching of the
-        transformed data when necessary.
-
-        :param datasetA: One of the datasets to join.
-        :param datasetB: Another dataset to join.
-        :param threshold: The threshold for the distance of row pairs.
-        :param distCol: Output column for storing the distance between each result row and the key.
-                        Use "distCol" as default value if it's not specified.
-        :return: A joined dataset containing pairs of rows. The original rows are in columns
-                "datasetA" and "datasetB", and a distCol is added to show the distance of
-                each pair.
-        """
-        return self._call_java("approxSimilarityJoin", datasetA, datasetB, threshold, distCol)
-
-
 @inherit_doc
 class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
@@ -971,29 +970,22 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     .. seealso:: `MinHash <https://en.wikipedia.org/wiki/MinHash>`_
 
     >>> from pyspark.ml.linalg import Vectors
-    >>> data = [(Vectors.sparse(10, [0, 1], [1.0, 1.0]),),
-    ...         (Vectors.sparse(10, [1, 2], [1.0, 1.0]),),
-    ...         (Vectors.sparse(10, [2, 3], [1.0, 1.0]),),
-    ...         (Vectors.sparse(10, [3, 4], [1.0, 1.0]),),
-    ...         (Vectors.sparse(10, [4, 5], [1.0, 1.0]),)]
+    >>> data = [(Vectors.sparse(6, [0, 1, 2], [1.0, 1.0, 1.0]),),
+    ...         (Vectors.sparse(6, [2, 3, 4], [1.0, 1.0, 1.0]),),
+    ...         (Vectors.sparse(6, [0, 2, 4], [1.0, 1.0, 1.0]),)]
     >>> df = spark.createDataFrame(data, ["keys"])
     >>> mh = MinHashLSH(inputCol="keys", outputCol="values", seed=12345)
     >>> model = mh.fit(df)
-    >>> model.numEntries
-    20
-    >>> model.randCoefficients
-    [776966252]
     >>> model.transform(df).head()
-    Row(keys=SparseVector(10, {0: 1.0, 1: 1.0}), values=DenseVector([4.0]))
-    >>> data2 = [(Vectors.sparse(10, [5, 6], [1.0, 1.0]),),
-    ...          (Vectors.sparse(10, [6, 7], [1.0, 1.0]),),
-    ...          (Vectors.sparse(10, [7, 8], [1.0, 1.0]),),
-    ...          (Vectors.sparse(10, [8, 9], [1.0, 1.0]),)]
+    Row(keys=SparseVector(10, {0: 1.0, 1: 1.0}), values=[DenseVector([-1638925712.0])])
+    >>> data2 = [(Vectors.sparse(6, [1, 3, 5], [1.0, 1.0, 1.0]),),
+    ...          (Vectors.sparse(6, [2, 3, 5], [1.0, 1.0, 1.0]),),
+    ...          (Vectors.sparse(6, [1, 2, 4], [1.0, 1.0, 1.0]),)]
     >>> df2 = spark.createDataFrame(data2, ["keys"])
-    >>> model.approxNearestNeighbors(df2, Vectors.sparse(10, [5, 8], [1.0, 1.0]), 1).collect()
-    [Row(keys=SparseVector(10, {5: 1.0, 6: 1.0}), values=DenseVector([6.0]), distCol=0.666...)]
+    >>> model.approxNearestNeighbors(df2, Vectors.sparse(6, [1], [1.0]), 1).collect()
+    [Row(keys=SparseVector(6, {1: 1.0, 2: 1.0, 4: 1.0}), values=[DenseVector([-1638925712.0])], distCol=0.666...)]
     >>> model.approxSimilarityJoin(df, df2, 1.0).select("distCol").head()[0]
-    0.666...
+    0.5
     >>> mhPath = temp_path + "/mh"
     >>> mh.save(mhPath)
     >>> mh2 = MinHashLSH.load(mhPath)
@@ -1002,12 +994,8 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     >>> modelPath = temp_path + "/mh-model"
     >>> model.save(modelPath)
     >>> model2 = MinHashLSHModel.load(modelPath)
-    >>> model2.numEntries == model.numEntries
-    True
-    >>> model2.randCoefficients == model.randCoefficients
-    True
 
-    .. versionadded:: 2.1.0
+    .. versionadded:: 2.2.0
     """
 
     @keyword_only
