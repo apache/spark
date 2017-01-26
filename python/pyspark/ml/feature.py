@@ -222,14 +222,14 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     >>> model.randUnitVectors
     [DenseVector([-0.3041, 0.9527])]
     >>> model.transform(df).head()
-    Row(keys=DenseVector([-1.0, -1.0]), values=DenseVector([-1.0]))
+    Row(keys=DenseVector([-1.0, -1.0]), values=[DenseVector([-1.0])])
     >>> data2 = [(Vectors.dense([2.0, 2.0 ]),),
     ...          (Vectors.dense([2.0, 3.0 ]),),
     ...          (Vectors.dense([3.0, 2.0 ]),),
     ...          (Vectors.dense([3.0, 3.0]),)]
     >>> df2 = spark.createDataFrame(data2, ["keys"])
     >>> model.approxNearestNeighbors(df2, Vectors.dense([1.0, 2.0]), 1).collect()
-    [Row(keys=DenseVector([2.0, 2.0]), values=DenseVector([1.0]), distCol=1.0)]
+    [Row(keys=DenseVector([2.0, 2.0]), values=[DenseVector([1.0])], distCol=1.0)]
     >>> model.approxSimilarityJoin(df, df2, 3.0).select("distCol").head()[0]
     2.236...
     >>> rpPath = temp_path + "/rp"
@@ -974,13 +974,14 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     >>> mh = MinHashLSH(inputCol="keys", outputCol="values", seed=12345)
     >>> model = mh.fit(df)
     >>> model.transform(df).head()
-    Row(keys=SparseVector(10, {0: 1.0, 1: 1.0}), values=[DenseVector([-1638925712.0])])
+    Row(keys=SparseVector(6, {0: 1.0, 1: 1.0, 2: 1.0}), values=[DenseVector([-1638925712.0])])
     >>> data2 = [(Vectors.sparse(6, [1, 3, 5], [1.0, 1.0, 1.0]),),
     ...          (Vectors.sparse(6, [2, 3, 5], [1.0, 1.0, 1.0]),),
     ...          (Vectors.sparse(6, [1, 2, 4], [1.0, 1.0, 1.0]),)]
     >>> df2 = spark.createDataFrame(data2, ["keys"])
-    >>> model.approxNearestNeighbors(df2, Vectors.sparse(6, [1], [1.0]), 1).collect()
-    [Row(keys=SparseVector(6, {1: 1.0, 2: 1.0, 4: 1.0}), values=[DenseVector([-1638925712.0])]...)]
+    >>> key = Vectors.sparse(6, [1], [1.0])
+    >>> model.approxNearestNeighbors(df2, key, 1).select("distCol").head()[0]
+    0.66666...
     >>> model.approxSimilarityJoin(df, df2, 1.0).select("distCol").head()[0]
     0.5
     >>> mhPath = temp_path + "/mh"
