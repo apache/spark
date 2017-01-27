@@ -768,17 +768,27 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         "2016-01-01 00:39:59.123",
         "2016-01-01 01:29:59.123"
       ).map { x => Row(java.sql.Timestamp.valueOf(x)) })
-      // TODO this doesn't work.  It writes out int64, not int96, and the stored schema just treats
-      // it as a long, not a timestamp
       spark.createDataFrame(data, schema).write.parquet(dir.getCanonicalPath)
 
-      // now we should try to read that data back.  We'll fake a timezone one the table, to see
+      // Ideally, we'd check the parquet schema here, make sure it was int96
+
+      // now we should try to read that data back.  We'll fake a timezone on the table, to see
       // what the resulting behavior is
       ParquetRowConverter.setTimezone(TimeZone.getTimeZone("PST"))
-      spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, false)
+//      spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, false)
       val readInPst = spark.read.parquet(dir.getCanonicalPath)
-      readInPst.explain(true)
       readInPst.show()
+
+      import functions._
+      val originalTsCol = readInPst("timestamp")
+      val newTable = readInPst.withColumn("year", expr("year(timestamp)"))
+      assert(newTable.filter("year > '2015'").count() === 0)
+
+      // TODO test:
+      // * w/ & w/out vectorization
+      // * filtering
+      // * partioning
+      // * DST?
     }
   }
 }
