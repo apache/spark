@@ -79,37 +79,37 @@ object SimplifyCreateMapOps extends Rule[LogicalPlan] {
     }
   }
 
-  case class ClassifiedEntries(
-    undetermined: Seq[Expression],
-    nullable: Boolean,
-    firstPositive: Option[Expression]) {
-    def normalize(k: Expression) : ClassifiedEntries = this match {
-      /**
-        * when we have undetermined matches that might bproduce a null value,
-        * we can't separate a positive match and use [[Coalesce]] to choose the final result.
-        * so we 'hide' the positive match as an undetermined match.
-        */
-      case ClassifiedEntries(u, true, Some(p)) if u.nonEmpty =>
-        ClassifiedEntries(u ++ Seq(k, p), true, None)
-      case _ => this
-    }
-  }
-
+  /**
+    * classify entries according to their potential to produce a match with the requested key in runtime, it may somtimes be possible
+    * to determine statically if a requested key and an entry match or not, otherwise the entry is considered undetermined.
+    * @param mapEntries
+    * @param requestedKey
+    * @return list of keys that may or may not produce a match in runtime and potentially a result known statically to match the requested key.
+    *         under certain circumstances, this method may identify a positive match but 'hide' it as part of the undetermined entries,
+    *         this has to do with the way we use [[Coalesce]] when constructing the rewriten tree.
+    */
   def classifyEntries(mapEntries : Seq[(Expression, Expression)],
-                      requestedKey : Expression) : ClassifiedEntries = {
-    val res1 = mapEntries.foldLeft(ClassifiedEntries(Seq.empty, nullable = false, None)) {
-      case (prev @ ClassifiedEntries(_, _, Some(_)), _) => prev
-      case (ClassifiedEntries(prev, nullable, None), (k, v)) =>
-        compareKeys(k, requestedKey) match {
-          case ComparisonResult.UnDetermined =>
-            val vIsNullable = v.nullable
-            val nextNullbale = nullable || vIsNullable
-            ClassifiedEntries(prev ++ Seq(k, v), nullable = nextNullbale, None)
-          case ComparisonResult.NegativeMatch => ClassifiedEntries(prev, nullable, None)
-          case ComparisonResult.PositiveMatch => ClassifiedEntries(prev, nullable, Some(v))
-        }
+                      requestedKey : Expression): (Seq[(Expression, Expression, _root_.org.apache.spark.sql.catalyst.optimizer.SimplifyCreateMapOps.ComparisonResult.Value)], Option[Expression]) = {
+    //compare all key expressions to the requested key's expression.
+    //this comparison classifies the keys as definitely negative match (i.e. two DIFFERENT literals), definitely a match(i.e. two identical literals, two identical refs) or unknown (can't be determined statically).
+    val res1 = mapEntries.map{
+      case (k,v) => (k,v,compareKeys(k,requestedKey))
     }
-    res1.normalize(requestedKey)
+    //we first filter away the negatives
+    val res2 = res1.filter(_._3 != ComparisonResult.NegativeMatch)
+    //now we're left with positives and unknowns (either or both groups can be empty)
+    //considering the runtime behavior of [[GetMapValue]] we can eliminate any key following the first known positive (if there is any),
+    //this keys are guaranteed not to 'win' the search in key-space.
+    val (h,t) = res2.span(_._3 == ComparisonResult.UnDetermined)
+    //when one of the potential results is nullable we cannot separate the positive result from the rest (see apply below for details and the use of Coalesce)
+    val hasNullableUndetermined = h.exists(_._2.nullable)
+    if( hasNullableUndetermined ){
+      //we 'hide' the positive result with the undetermined ones
+      (h ++ t.headOption, None)
+    } else{
+      //positive result can be separated from undetermined results
+      (h, t.headOption.map(_._2))
+    }
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -118,15 +118,22 @@ object SimplifyCreateMapOps extends Rule[LogicalPlan] {
       // this enables other optimizations to take place.
       case gmv @ GetMapValue(cm @ CreateMap(elems), key) =>
         val kvs = cm.keys.zip(cm.values)
-        val classifiedEntries = classifyEntries(kvs, key)
-        classifiedEntries match {
-          case ClassifiedEntries(Seq(), _, None) => Literal.create(null, gmv.dataType)
-          case ClassifiedEntries(`elems`, _, None) => gmv
-          case ClassifiedEntries(newElems, _, optPos) =>
-            val getFromTrimmedMap = GetMapValue(CreateMap(newElems), key)
-            optPos.map(pos => Coalesce(Seq(getFromTrimmedMap, pos)))
-              .getOrElse(getFromTrimmedMap)
+        val (classifiedEntries, positiveValue) = classifyEntries(kvs, key)
+
+        val newGmv = classifiedEntries match {
+            //all keys filtered out, definitely null.
+          case Seq() => Literal.create(null, gmv.dataType)
+            //no modification, leave the tree as is
+          case ces if ces.size == kvs.size => gmv
+            //some keys trimmed away but there's no way to determine statically what's this expression fgoing to return in runtime, let's construct the trimmed tree.
+          case ces =>
+            val trimmedKVs = ces.flatMap{
+              case (k,v,_) => Seq(k,v)
+            }
+            GetMapValue(CreateMap(trimmedKVs), key)
         }
+        //this might be further simplified by NullPropagation.
+        positiveValue.map( pv => Coalesce(Seq(newGmv, pv)) ).getOrElse(newGmv)
     }
   }
 }
