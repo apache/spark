@@ -759,9 +759,14 @@ varargsToJProperties <- function(...) {
 launchScript <- function(script, combinedArgs, wait = FALSE) {
   if (.Platform$OS.type == "windows") {
     scriptWithArgs <- paste(script, combinedArgs, sep = " ")
+    # on Windows, intern = F seems to mean output to the console. (documentation on this is missing)
     shell(scriptWithArgs, translate = TRUE, wait = wait, intern = wait) # nolint
   } else {
-    system2(script, combinedArgs, wait = wait)
+    # http://stat.ethz.ch/R-manual/R-devel/library/base/html/system2.html
+    # stdout = F means discard output
+    # stdout = "" means to its console (default)
+    # Note that the console of this child process might not be the same as the running R process.
+    system2(script, combinedArgs, stdout = "", wait = wait)
   }
 }
 
