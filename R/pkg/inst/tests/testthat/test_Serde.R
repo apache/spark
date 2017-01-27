@@ -17,6 +17,9 @@
 
 context("SerDe functionality")
 
+# Ensure Spark is installed
+sparkCheckInstall(Sys.getenv("SPARK_HOME"), "local", "")
+
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 
 test_that("SerDe of primitive types", {

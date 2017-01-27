@@ -17,6 +17,9 @@
 
 context("JVM API")
 
+# Ensure Spark is installed
+sparkCheckInstall(Sys.getenv("SPARK_HOME"), "local", "")
+
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 
 test_that("Create and call methods on object", {

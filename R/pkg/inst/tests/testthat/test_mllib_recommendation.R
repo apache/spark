@@ -19,6 +19,9 @@ library(testthat)
 
 context("MLlib recommendation algorithms")
 
+# Ensure Spark is installed
+sparkCheckInstall(Sys.getenv("SPARK_HOME"), "local", "")
+
 # Tests for MLlib recommendation algorithms in SparkR
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 

@@ -17,6 +17,9 @@
 
 context("binary functions")
 
+# Ensure Spark is installed
+sparkCheckInstall(Sys.getenv("SPARK_HOME"), "local", "")
+
 # JavaSparkContext handle
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
