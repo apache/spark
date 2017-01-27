@@ -599,8 +599,8 @@ private[spark] object RandomForest extends Logging {
         if (!isLeaf) {
           node.split = Some(split)
           val childIsLeaf = (LearningNode.indexToLevel(nodeIndex) + 1) == metadata.maxDepth
-          val leftChildIsLeaf = childIsLeaf || (math.abs(stats.leftImpurity) < 1e-8)
-          val rightChildIsLeaf = childIsLeaf || (math.abs(stats.rightImpurity) < 1e-8)
+          val leftChildIsLeaf = childIsLeaf || (math.abs(stats.leftImpurity) < 1e-16)
+          val rightChildIsLeaf = childIsLeaf || (math.abs(stats.rightImpurity) < 1e-16)
           node.leftChild = Some(LearningNode(LearningNode.leftChildIndex(nodeIndex),
             leftChildIsLeaf, ImpurityStats.getEmptyImpurityStats(stats.leftImpurityCalculator)))
           node.rightChild = Some(LearningNode(LearningNode.rightChildIndex(nodeIndex),

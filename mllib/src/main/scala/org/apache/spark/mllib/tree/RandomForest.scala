@@ -23,7 +23,7 @@ import scala.util.Try
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance => NewInstance}
 import org.apache.spark.ml.tree.{DecisionTreeModel => NewDTModel, RandomForestParams => NewRFParams}
 import org.apache.spark.ml.tree.impl.{RandomForest => NewRandomForest}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -92,7 +92,9 @@ private class RandomForest (
    * @return RandomForestModel that can be used for prediction.
    */
   def run(input: RDD[LabeledPoint]): RandomForestModel = {
-    val instances = input.map(_.asML.toInstance)
+    val instances = input.map { case LabeledPoint(label, features) =>
+      NewInstance(label, 1.0, features.asML)
+    }
     val trees: Array[NewDTModel] =
       NewRandomForest.run(instances, strategy, numTrees, featureSubsetStrategy, seed.toLong, None)
     new RandomForestModel(strategy.algo, trees.map(_.toOld))

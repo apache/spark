@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode}
@@ -30,8 +30,6 @@ import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTre
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.functions._
-
 
 class DecisionTreeClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -45,7 +43,7 @@ class DecisionTreeClassifierSuite
   private var categoricalDataPointsForMulticlassRDD: RDD[LabeledPoint] = _
   private var continuousDataPointsForMulticlassRDD: RDD[LabeledPoint] = _
   private var categoricalDataPointsForMulticlassForOrderedFeaturesRDD: RDD[LabeledPoint] = _
-  private var smallMultinomialDataset: DataFrame = _
+  private var linearMulticlassDataset: DataFrame = _
 
   private val seed = 42
 
@@ -64,7 +62,7 @@ class DecisionTreeClassifierSuite
     categoricalDataPointsForMulticlassForOrderedFeaturesRDD = sc.parallelize(
       OldDecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures())
       .map(_.asML)
-    smallMultinomialDataset = {
+    linearMulticlassDataset = {
       val nPoints = 100
       val coefficients = Array(
         -0.57997, 0.912083, -0.371077,
@@ -372,50 +370,34 @@ class DecisionTreeClassifierSuite
     dt.fit(df)
   }
 
-  test("weights") {
-
-    val df = smallMultinomialDataset
+  test("training with sample weights") {
+    val df = linearMulticlassDataset
     val numClasses = 3
     val predEquals = (x: Double, y: Double) => x == y
-//    val outlierDS = df.withColumn("weight", lit(10000.0)).as[Instance].flatMap {
-//      case Instance(l, w, f) =>
-//        val outlierLabel = if (numClasses == 0) -l else numClasses - l - 1
-//        List.fill(1)(Instance(outlierLabel, 1.0, f)) ++ List(Instance(l, w, f))
-//    }
-//    val trueModel = estimator.set(estimator.weightCol, "").fit(df)
-//    val outlierModel = estimator.set(estimator.weightCol, "weight")
-//      .fit(outlierDS)
-//    println(trueModel.toDebugString)
-//    println(outlierModel.toDebugString)
+    // (impurity, maxDepth)
     val testParams = Seq(
-      ("gini"),
-      ("entropy")
+      ("gini", 10),
+      ("entropy", 10),
+      ("gini", 5)
     )
-    for ((impurity) <- testParams) {
+    for ((impurity, maxDepth) <- testParams) {
       val estimator = new DecisionTreeClassifier()
-        .setMaxDepth(10)
-        .setSeed(seed)
-        .setMinWeightFractionPerNode(0.1)
+        .setMaxDepth(maxDepth)
+        .setSeed(seed)t
+        .setMinWeightFractionPerNode(0.049)
         .setImpurity(impurity)
+
       MLTestingUtils.testArbitrarilyScaledWeights[DecisionTreeClassificationModel,
         DecisionTreeClassifier](df.as[LabeledPoint], estimator,
         MLTestingUtils.modelPredictionEquals(df, predEquals, 0.9))
       MLTestingUtils.testOutliersWithSmallWeights[DecisionTreeClassificationModel,
         DecisionTreeClassifier](df.as[LabeledPoint], estimator,
-        3, MLTestingUtils.modelPredictionEquals(df, predEquals, 0.9),
-        outlierRatio = 1)
+        numClasses, MLTestingUtils.modelPredictionEquals(df, predEquals, 0.8),
+        outlierRatio = 2)
       MLTestingUtils.testOversamplingVsWeighting[DecisionTreeClassificationModel,
         DecisionTreeClassifier](df.as[LabeledPoint], estimator,
-        MLTestingUtils.modelPredictionEquals(df, predEquals, 0.99), seed)
+        MLTestingUtils.modelPredictionEquals(df, predEquals, 1.0), seed)
     }
-//    val models = Seq(0.001, 1.0, 1000.0).map { w =>
-//      val df2 = df.withColumn("weight", lit(w))
-//      estimator.setWeightCol("weight").fit(df2)
-//    }
-//    println(models(2).toDebugString)
-//    println(models(1).toDebugString)
-//    TreeTests.checkEqual(models(0), models(1))
-//    TreeTests.checkEqual(models(2), models(1))
   }
 
   /////////////////////////////////////////////////////////////////////////////

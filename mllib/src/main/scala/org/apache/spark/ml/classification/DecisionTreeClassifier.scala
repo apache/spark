@@ -145,7 +145,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
   private[ml] def train(data: RDD[LabeledPoint],
       oldStrategy: OldStrategy): DecisionTreeClassificationModel = {
 
-    val instances = data.map {lp => Instance(lp.label, 1.0, lp.features)}
+    val instances = data.map(_.toInstance)
     val instr = Instrumentation.create(this, instances)
     instr.logParams(params: _*)
     val trees = RandomForest.run(instances, oldStrategy, numTrees = 1,

@@ -143,7 +143,7 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
     val instr = Instrumentation.create(this, data)
     instr.logParams(params: _*)
 
-    val instances = data.map {lp => Instance(lp.label, 1.0, lp.features)}
+    val instances = data.map(_.toInstance)
     val trees = RandomForest.run(instances, oldStrategy, numTrees = 1,
       featureSubsetStrategy = "all", seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 

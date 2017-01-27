@@ -23,7 +23,7 @@ import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
@@ -261,7 +261,7 @@ object MLTestingUtils extends SparkFunSuite {
       estimator: E with HasWeightCol,
       numClasses: Int,
       modelEquals: (M, M) => Unit,
-      outlierRatio: Int = 3): Unit = {
+      outlierRatio: Int): Unit = {
     import data.sqlContext.implicits._
     val outlierDS = data.withColumn("weight", lit(10000.0)).as[Instance].flatMap {
       case Instance(l, w, f) =>
@@ -283,38 +283,26 @@ object MLTestingUtils extends SparkFunSuite {
       estimator: E with HasWeightCol,
       modelEquals: (M, M) => Unit): Unit = {
     estimator.set(estimator.weightCol, "weight")
-    val models = Seq(0.001, 1.0, 1000.0).map { w =>
+    val models = Seq(0.01, 1.0, 1000.0).map { w =>
       val df = data.withColumn("weight", lit(w))
       estimator.fit(df)
     }
     models.sliding(2).foreach { case Seq(m1, m2) => modelEquals(m1, m2)}
   }
 
-
   def modelPredictionEquals[M <: PredictionModel[_, M]](
       data: DataFrame,
       compareFunc: (Double, Double) => Boolean,
       fractionInTol: Double)(
-      model1: M with HasPredictionCol,
-      model2: M with HasPredictionCol): Unit = {
+      model1: M,
+      model2: M): Unit = {
     val pred1 = model1.transform(data).select(model1.getPredictionCol).collect()
     val pred2 = model2.transform(data).select(model2.getPredictionCol).collect()
     val inTol = pred1.zip(pred2).map { case (p1, p2) =>
       val x = p1.getDouble(0)
       val y = p2.getDouble(0)
-//      println(x, y, math.abs(x - y) / math.min(math.abs(x), math.abs(y)))
-//      println(x, y, math.abs(x - y))
       compareFunc(x, y)
     }
-    assert(inTol.count(b => b) / pred1.length.toDouble > fractionInTol)
-  }
-
-  def relativeTolerance(tol: Double)(x: Double, y: Double): Boolean = {
-    val diff = math.abs(x - y)
-    if (math.abs(x) < Double.MinPositiveValue || math.abs(y) < Double.MinPositiveValue) {
-      throw new IllegalArgumentException("x or y is close to zero")
-    } else {
-      diff < tol * math.min(math.abs(x), math.abs(y))
-    }
+    assert(inTol.count(b => b) / pred1.length.toDouble >= fractionInTol)
   }
 }

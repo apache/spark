@@ -70,6 +70,7 @@ private[spark] object BaggedPoint {
       withReplacement: Boolean,
       extractSampleWeight: (Datum => Double) = (_: Datum) => 1.0,
       seed: Long = Utils.random.nextLong()): RDD[BaggedPoint[Datum]] = {
+    // TODO: implement weighted bootstrapping
     if (withReplacement) {
       convertToBaggedRDDSamplingWithReplacement(input, subsamplingRate, numSubsamples, seed)
     } else {

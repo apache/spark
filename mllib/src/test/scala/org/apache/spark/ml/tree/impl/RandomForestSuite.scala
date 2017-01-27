@@ -162,11 +162,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         .findSplitsForContinuousFeature(featureSamplesSmallWeight, fakeMetadata, 0)
       val splitsLargeWeight = RandomForest
         .findSplitsForContinuousFeature(featureSamplesLargeWeight, fakeMetadata, 0)
-      assert(splitsUnitWeight.length === 5)
-      assert(splitsUnitWeight.length === splitsSmallWeight.length)
-      assert(splitsUnitWeight.length === splitsLargeWeight.length)
-      assert(splitsUnitWeight.zip(splitsSmallWeight).forall { case (a, b) => a == b })
-      assert(splitsUnitWeight.zip(splitsLargeWeight).forall { case (a, b) => a == b })
+      assert(splitsUnitWeight === splitsSmallWeight)
+      assert(splitsUnitWeight === splitsLargeWeight)
     }
 
     // find splits when most weight is close to the minimum
@@ -180,14 +177,12 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         case (w, x) => (w.toDouble, x.toDouble)
       }
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits.length === 2)
-      assert(splits(0) === 1.0)
-      assert(splits(1) === 2.0)
+      assert(splits === Array(1.0, 2.0))
     }
   }
 
   test("train with empty arrays") {
-    val lp = LabeledPoint(1.0, Vectors.dense(Array.empty[Double]))
+    val lp = LabeledPoint(1.0, Vectors.dense(Array.empty[Double])).toInstance
     val data = Array.fill(5)(lp)
     val rdd = sc.parallelize(data)
 
@@ -678,30 +673,6 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     strategy.minInstancesPerNode = 1
     val Array(tree4) = RandomForest.run(rdd, strategy, 1, "all", 42L, None)
     assert(tree4.depth == 1)
-  }
-
-  test("extremely unbalanced weighting with bagging") {
-    /*
-    This test verifies that sample weights are taken into account during the
-    bagging process, instead of applied afterwards. If sample weights were applied
-    after the sampling is done, then some of the trees would not contain the heavily
-    weighted example. Here, we verify that all trees predict the correct value.
-     */
-    val data = Array(
-      Instance(0.0, 1.0, Vectors.dense(0.0)),
-      Instance(0.0, 1.0, Vectors.dense(0.0)),
-      Instance(0.0, 1.0, Vectors.dense(0.0)),
-      Instance(0.0, 1.0, Vectors.dense(0.0)),
-      Instance(1.0, 1e6, Vectors.dense(1.0))
-    )
-    val rdd = sc.parallelize(data)
-    val strategy = new OldStrategy(OldAlgo.Classification, Gini, 3, 2)
-    val trees = RandomForest.run(rdd, strategy, 10, "all", 42L, None)
-    val features = Vectors.dense(1.0)
-    trees.foreach { tree =>
-      val predict = tree.rootNode.predictImpl(features).prediction
-      assert(predict == 1.0)
-    }
   }
 
 }

@@ -56,9 +56,9 @@ class ImpuritySuite extends SparkFunSuite {
     }
   }
   test("Regression impurities are insensitive to scaling") {
-    def computeStats(samples: Seq[Double], weights: Seq[Double]): (Int, Double, Double, Double) = {
-      samples.zip(weights).foldLeft((0, 0.0, 0.0, 0.0)) { case ((n, wn, wy, wyy), (y, w)) =>
-        (n + 1, wn + w, wy + w * y, wyy + w * y * y)
+    def computeStats(samples: Seq[Double], weights: Seq[Double]): (Double, Double, Double) = {
+      samples.zip(weights).foldLeft((0.0, 0.0, 0.0)) { case ((wn, wy, wyy), (y, w)) =>
+        (wn + w, wy + w * y, wyy + w * y * y)
       }
     }
     val rng = new scala.util.Random(seed)
@@ -66,11 +66,11 @@ class ImpuritySuite extends SparkFunSuite {
     val _weights = Array.fill(10)(rng.nextDouble())
     val smallWeights = _weights.map(_ * 0.0001)
     val largeWeights = _weights.map(_ * 10000)
-    val (_, count, sum, sumSquared) = computeStats(samples, _weights)
+    val (count, sum, sumSquared) = computeStats(samples, _weights)
     Seq(Variance).foreach { impurity =>
       val impurity1 = impurity.calculate(count, sum, sumSquared)
-      val (_, smallCount, smallSum, smallSumSquared) = computeStats(samples, smallWeights)
-      val (_, largeCount, largeSum, largeSumSquared) = computeStats(samples, largeWeights)
+      val (smallCount, smallSum, smallSumSquared) = computeStats(samples, smallWeights)
+      val (largeCount, largeSum, largeSumSquared) = computeStats(samples, largeWeights)
       assert(impurity.calculate(smallCount, smallSum, smallSumSquared) ~== impurity1 relTol 0.005)
       assert(impurity.calculate(largeCount, largeSum, largeSumSquared) ~== impurity1 relTol 0.005)
     }

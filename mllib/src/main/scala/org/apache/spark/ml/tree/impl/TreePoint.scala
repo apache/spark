@@ -21,6 +21,7 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.tree.{ContinuousSplit, Split}
 import org.apache.spark.rdd.RDD
 
+
 /**
  * Internal representation of LabeledPoint for DecisionTree.
  * This bins feature values based on a subsampled of data as follows:
@@ -35,7 +36,7 @@ import org.apache.spark.rdd.RDD
  * @param label  Label from LabeledPoint
  * @param binnedFeatures  Binned feature values.
  *                        Same length as LabeledPoint.features, but values are bin indices.
- * @param weight weight for this TreePoint
+ * @param weight Sample weight for this TreePoint.
  */
 private[spark] class TreePoint(
     val label: Double,

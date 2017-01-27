@@ -154,22 +154,25 @@ class DecisionTreeRegressorSuite
       }
   }
 
-  test("weights") {
-    val estimator = new DecisionTreeRegressor()
-      .setMaxDepth(10)
-
+  test("training with sample weights") {
     val df = linearRegressionData
-    MLTestingUtils.testArbitrarilyScaledWeights[DecisionTreeRegressionModel,
-      DecisionTreeRegressor](df.as[LabeledPoint], estimator,
-      MLTestingUtils.modelPredictionEquals(df, MLTestingUtils.relativeTolerance(0.1), 0.98))
-    MLTestingUtils.testOutliersWithSmallWeights[DecisionTreeRegressionModel,
-      DecisionTreeRegressor](df.as[LabeledPoint], estimator,
-      0,
-      MLTestingUtils.modelPredictionEquals(df, MLTestingUtils.relativeTolerance(0.1), 0.9),
-      outlierRatio = 1)
-    MLTestingUtils.testOversamplingVsWeighting[DecisionTreeRegressionModel,
-      DecisionTreeRegressor](df.as[LabeledPoint], estimator,
-      MLTestingUtils.modelPredictionEquals(df, MLTestingUtils.relativeTolerance(0.01), 0.99), 42L)
+    val numClasses = 0
+    val testParams = Seq(5, 10)
+    for (maxDepth <- testParams) {
+      val estimator = new DecisionTreeRegressor()
+        .setMaxDepth(maxDepth)
+        .setMinWeightFractionPerNode(0.05)
+      MLTestingUtils.testArbitrarilyScaledWeights[DecisionTreeRegressionModel,
+        DecisionTreeRegressor](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, RelativeErrorComparison(_, _, 0.05), 0.9))
+      MLTestingUtils.testOutliersWithSmallWeights[DecisionTreeRegressionModel,
+        DecisionTreeRegressor](df.as[LabeledPoint], estimator, numClasses,
+        MLTestingUtils.modelPredictionEquals(df, RelativeErrorComparison(_, _, 0.1), 0.8),
+        outlierRatio = 2)
+      MLTestingUtils.testOversamplingVsWeighting[DecisionTreeRegressionModel,
+        DecisionTreeRegressor](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, RelativeErrorComparison(_, _, 0.01), 1.0), seed)
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////
