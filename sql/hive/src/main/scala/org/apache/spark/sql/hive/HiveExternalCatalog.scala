@@ -841,16 +841,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
 
   /**
-   * partition path created by Hive is lower-case, while Spark SQL will
+   * The partition path created by Hive is in lowercase, while Spark SQL will
    * rename it with the partition name in partitionColumnNames, and this function
-   * return the extra lower-case path created by Hive, and then we can delete it.
-   * e.g. /path/A=1/B=2/C=3 rename to /path/A=4/B=5/C=6, the extra path returned is
-   * /path/a=4, which also include all its' child path, such as /path/a=4/b=2
+   * returns the extra lowercase path created by Hive, and then we can delete it.
+   * e.g. /path/A=1/B=2/C=3 is changed to /path/A=4/B=5/C=6, this function returns is
+   * /path/a=4
    */
   def getExtraPartPathCreatedByHive(
-                                     lowerCaseSpec: TablePartitionSpec,
-                                     partitionColumnNames: Seq[String],
-                                     tablePath: Path): Path = {
+      lowerCaseSpec: TablePartitionSpec,
+      partitionColumnNames: Seq[String],
+      tablePath: Path): Path = {
     val partColumnNames = partitionColumnNames
       .take(partitionColumnNames.indexWhere(col => col.toLowerCase != col) + 1)
       .map(_.toLowerCase)
@@ -919,12 +919,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         try {
           tablePath.getFileSystem(hadoopConf).rename(wrongPath, rightPath)
 
-          // if the newSpec contains more than one depth partitoin, FileSystem.rename just delete
-          // only one path(wrongPath), we should check if wrongPath's parents need to be deleted.
+          // If the newSpec contains more than one depth partition, FileSystem.rename just deletes
+          // the leaf(i.e. wrongPath), we should check if wrongPath's parents need to be deleted.
           // for example:
           // newSpec is 'A=1/B=2', after renamePartitions by Hive, the location path in FileSystem
-          // changed to 'a=1/b=2', which is wrongPath, then we renamed to 'A=1/B=2', and 'a=1/b=2'
-          // in FileSystem is deleted, while 'a=1' is already exists, which should also be deleted
+          // is changed to 'a=1/b=2', which is wrongPath, then we renamed to 'A=1/B=2', and
+          // 'a=1/b=2' in FileSystem is deleted, while 'a=1' is already exists,
+          // which should also be deleted
           val delHivePartPathAfterRename = getExtraPartPathCreatedByHive(
             lowerCasePartitionSpec(spec),
             partitionColumnNames,
