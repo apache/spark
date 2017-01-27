@@ -37,8 +37,9 @@ import org.apache.spark.util.Utils
  * For a [[StructType]] object, one or multiple [[StructField]]s can be extracted by names.
  * If multiple [[StructField]]s are extracted, a [[StructType]] object will be returned.
  * If a provided name does not have a matching field, it will be ignored. For the case
- * of extracting a single StructField, a `null` will be returned.
- * Example:
+ * of extracting a single [[StructField]], a `null` will be returned.
+ *
+ * Scala Example:
  * {{{
  * import org.apache.spark.sql._
  * import org.apache.spark.sql.types._
@@ -53,28 +54,30 @@ import org.apache.spark.util.Utils
  * val singleField = struct("b")
  * // singleField: StructField = StructField(b,LongType,false)
  *
- * // This struct does not have a field called "d". null will be returned.
- * val nonExisting = struct("d")
- * // nonExisting: StructField = null
+ * // If this struct does not have a field called "d", it throws an exception.
+ * struct("d")
+ * // java.lang.IllegalArgumentException: Field "d" does not exist.
+ * //   ...
  *
  * // Extract multiple StructFields. Field names are provided in a set.
  * // A StructType object will be returned.
  * val twoFields = struct(Set("b", "c"))
  * // twoFields: StructType =
- * //   StructType(List(StructField(b,LongType,false), StructField(c,BooleanType,false)))
+ * //   StructType(StructField(b,LongType,false), StructField(c,BooleanType,false))
  *
- * // Any names without matching fields will be ignored.
- * // For the case shown below, "d" will be ignored and
- * // it is treated as struct(Set("b", "c")).
- * val ignoreNonExisting = struct(Set("b", "c", "d"))
- * // ignoreNonExisting: StructType =
- * //   StructType(List(StructField(b,LongType,false), StructField(c,BooleanType,false)))
+ * // Any names without matching fields will throw an exception.
+ * // For the case shown below, an exception is thrown due to "d".
+ * struct(Set("b", "c", "d"))
+ * // java.lang.IllegalArgumentException: Field "d" does not exist.
+ * //    ...
  * }}}
  *
- * A [[org.apache.spark.sql.Row]] object is used as a value of the StructType.
- * Example:
+ * A [[org.apache.spark.sql.Row]] object is used as a value of the [[StructType]].
+ *
+ * Scala Example:
  * {{{
  * import org.apache.spark.sql._
+ * import org.apache.spark.sql.types._
  *
  * val innerStruct =
  *   StructType(
@@ -87,7 +90,6 @@ import org.apache.spark.util.Utils
  *
  * // Create a Row with the schema defined by struct
  * val row = Row(Row(1, 2, true))
- * // row: Row = [[1,2,true]]
  * }}}
  *
  * @since 1.3.0
