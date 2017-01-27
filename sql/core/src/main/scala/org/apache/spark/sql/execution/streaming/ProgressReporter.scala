@@ -180,11 +180,7 @@ trait ProgressReporter extends Logging {
     currentStatus = currentStatus.copy(isTriggerActive = false)
   }
 
-  /**
-   * Extract statistics about stateful operators from the executed query plan.
-   * SPARK-19378: Still report stateOperator metrics even though no data was processed while
-   * reporting progress.
-   */
+  /** Extract statistics about stateful operators from the executed query plan. */
   private def extractStateOperatorMetrics(hasNewData: Boolean): Seq[StateOperatorProgress] = {
     if (lastExecution == null) return Nil
     // lastExecution could belong to one of the previous triggers if `!hasNewData`.
@@ -204,13 +200,15 @@ trait ProgressReporter extends Logging {
     }
   }
 
-  /**
-   * Extract statistics about event time from the executed query plan.
-   * SPARK-19378: Still report eventTime metrics even though no data was processed while
-   * reporting progress.
-   */
-  private def extractEventTimeStats(watermarkTs: Map[String, String]): Map[String, String] = {
-    if (lastExecution == null) return watermarkTs
+  /** Extract statistics about event time from the executed query plan. */
+  private def extractEventTimeStats(): Map[String, String] = {
+    val hasEventTime = logicalPlan.collect { case e: EventTimeWatermark => e }.nonEmpty
+    val watermarkTimestamp =
+      if (hasEventTime) Map("watermark" -> formatTimestamp(offsetSeqMetadata.batchWatermarkMs))
+      else Map.empty[String, String]
+
+    if (lastExecution == null || !hasEventTime) return watermarkTimestamp
+
     lastExecution.executedPlan.collect {
       case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>
         val stats = e.eventTimeStats.value
@@ -218,18 +216,15 @@ trait ProgressReporter extends Logging {
           "max" -> stats.max,
           "min" -> stats.min,
           "avg" -> stats.avg).mapValues(formatTimestamp)
-    }.headOption.getOrElse(Map.empty) ++ watermarkTs
+    }.headOption.getOrElse(Map.empty)
   }
 
   /** Extracts statistics from the most recent query execution. */
   private def extractExecutionStats(hasNewData: Boolean): ExecutionStats = {
-    val hasEventTime = logicalPlan.collect { case e: EventTimeWatermark => e }.nonEmpty
-    val watermarkTimestamp =
-      if (hasEventTime) Map("watermark" -> formatTimestamp(offsetSeqMetadata.batchWatermarkMs))
-      else Map.empty[String, String]
 
+    // SPARK-19378: Still report metrics even though no data was processed while reporting progress.
     val stateOperators = extractStateOperatorMetrics(hasNewData)
-    val eventTimeStats = extractEventTimeStats(watermarkTimestamp)
+    val eventTimeStats = extractEventTimeStats()
 
     if (!hasNewData) {
       return ExecutionStats(Map.empty, stateOperators, eventTimeStats)

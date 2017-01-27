@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import java.util.UUID
 
 import scala.collection.JavaConverters._
-import scala.language.postfixOps._
+import scala.language.postfixOps
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -202,8 +202,13 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         eventually(timeout(1 minute)) {
           val nextProgress = query.lastProgress
           assert(nextProgress.timestamp !== progress.timestamp)
-          assert(progress.eventTime.size() > 1)
-          assert(progress.stateOperators.length > 0)
+          assert(nextProgress.numInputRows === 0)
+          assert(nextProgress.eventTime.get("min") === "2017-01-26 01:00:00")
+          assert(nextProgress.eventTime.get("avg") === "2017-01-26 01:00:01")
+          assert(nextProgress.eventTime.get("max") === "2017-01-26 01:00:02")
+          assert(nextProgress.stateOperators.head.numRowsTotal === 2)
+          assert(nextProgress.stateOperators.head.numRowsTotal === 2)
+          assert(nextProgress.stateOperators.head.numRowsUpdated === 0)
         }
       } finally {
         query.stop()
