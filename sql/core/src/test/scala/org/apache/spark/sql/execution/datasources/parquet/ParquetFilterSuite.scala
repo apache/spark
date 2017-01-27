@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
+import org.apache.parquet.hadoop.ParquetInputFormat
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -55,33 +56,33 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       expected: Seq[Row]): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
 
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-        val query = df
-          .select(output.map(e => Column(e)): _*)
-          .where(Column(predicate))
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+      ParquetInputFormat.RECORD_FILTERING_ENABLED -> "true") {
+      val query = df
+        .select(output.map(e => Column(e)): _*)
+        .where(Column(predicate))
 
-        var maybeRelation: Option[HadoopFsRelation] = None
-        val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-          case PhysicalOperation(_, filters, LogicalRelation(relation: HadoopFsRelation, _, _)) =>
-            maybeRelation = Some(relation)
-            filters
-        }.flatten.reduceLeftOption(_ && _)
-        assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
+      var maybeRelation: Option[HadoopFsRelation] = None
+      val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
+        case PhysicalOperation(_, filters, LogicalRelation(relation: HadoopFsRelation, _, _)) =>
+          maybeRelation = Some(relation)
+          filters
+      }.flatten.reduceLeftOption(_ && _)
+      assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
-        val (_, selectedFilters, _) =
-          DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
-        assert(selectedFilters.nonEmpty, "No filter is pushed down")
+      val (_, selectedFilters, _) =
+        DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
+      assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
-        selectedFilters.foreach { pred =>
-          val maybeFilter = ParquetFilters.createFilter(df.schema, pred,
-            spark.sessionState.conf.isParquetINT96AsTimestamp)
-          assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
-          // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
-          maybeFilter.exists(_.getClass === filterClass)
-        }
-        checker(stripSparkFilter(query), expected)
+      selectedFilters.foreach { pred =>
+        val maybeFilter = ParquetFilters.createFilter(df.schema, pred,
+          spark.sessionState.conf.isParquetINT96AsTimestamp)
+        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
+        // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
+        maybeFilter.exists(_.getClass === filterClass)
       }
+      checker(stripSparkFilter(query), expected)
     }
   }
 
@@ -230,8 +231,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  // See SPARK-17213: https://issues.apache.org/jira/browse/SPARK-17213
-  ignore("filter pushdown - string") {
+  test("filter pushdown - string") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i.toString))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
       checkFilterPredicate(
@@ -259,8 +259,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  // See SPARK-17213: https://issues.apache.org/jira/browse/SPARK-17213
-  ignore("filter pushdown - binary") {
+  test("filter pushdown - binary") {
     implicit class IntToBinary(int: Int) {
       def b: Array[Byte] = int.toString.getBytes(StandardCharsets.UTF_8)
     }
@@ -447,19 +446,19 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   // The unsafe row RecordReader does not support row by row filtering so run it with it disabled.
   test("SPARK-11661 Still pushdown filters returned by unhandledFilters") {
     import testImplicits._
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-        withTempPath { dir =>
-          val path = s"${dir.getCanonicalPath}/part=1"
-          (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
-          val df = spark.read.parquet(path).filter("a = 2")
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+      ParquetInputFormat.RECORD_FILTERING_ENABLED -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/part=1"
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
+        val df = spark.read.parquet(path).filter("a = 2")
 
-          // The result should be single row.
-          // When a filter is pushed to Parquet, Parquet can apply it to every row.
-          // So, we can check the number of rows returned from the Parquet
-          // to make sure our filter pushdown work.
-          assert(stripSparkFilter(df).count == 1)
-        }
+        // The result should be single row.
+        // When a filter is pushed to Parquet, Parquet can apply it to every row.
+        // So, we can check the number of rows returned from the Parquet
+        // to make sure our filter pushdown work.
+        assert(stripSparkFilter(df).count == 1)
       }
     }
   }
