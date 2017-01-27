@@ -42,6 +42,9 @@ class ExpressionSetSuite extends SparkFunSuite {
           // exprId's hashCode to this specific value to make sure maxHash's hashcode is almost
           // `Int.MaxValue`
           override def hashCode: Int = 826929706
+          // We are implementing this equals() only because the style-checking rule "you should
+          // implement equals and hashCode together" requires us to
+          override def equals(obj: Any): Boolean = super.equals(obj)
         })).asInstanceOf[AttributeReference]
   assert(maxHash.hashCode() == Int.MaxValue - 1)
 
@@ -55,6 +58,9 @@ class ExpressionSetSuite extends SparkFunSuite {
           // exprId's hashCode to this specific value to make sure minHash's hashcode is almost
           // `Int.MinValue`
           override def hashCode: Int = 826929707
+          // We are implementing this equals() only because the style-checking rule "you should
+          // implement equals and hashCode together" requires us to
+          override def equals(obj: Any): Boolean = super.equals(obj)
         })).asInstanceOf[AttributeReference]
   assert(minHash.hashCode() == Int.MinValue + 35)
 
