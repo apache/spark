@@ -71,7 +71,9 @@ private[r] object GeneralizedLinearRegressionWrapper
       tol: Double,
       maxIter: Int,
       weightCol: String,
-      regParam: Double): GeneralizedLinearRegressionWrapper = {
+      regParam: Double,
+      variancePower: Double,
+      linkPower: Double): GeneralizedLinearRegressionWrapper = {
     val rFormula = new RFormula().setFormula(formula)
     checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
@@ -81,7 +83,7 @@ private[r] object GeneralizedLinearRegressionWrapper
       .attributes.get
     val features = featureAttrs.map(_.name.get)
     // assemble and fit the pipeline
-    val glr = new GeneralizedLinearRegression()
+    var glr = new GeneralizedLinearRegression()
       .setFamily(family)
       .setLink(link)
       .setFitIntercept(rFormula.hasIntercept)
@@ -90,6 +92,12 @@ private[r] object GeneralizedLinearRegressionWrapper
       .setWeightCol(weightCol)
       .setRegParam(regParam)
       .setFeaturesCol(rFormula.getFeaturesCol)
+    // set variancePower and linkPower in tweedie family and clear link
+    if (family.toLowerCase == "tweedie") {
+      glr = glr.clear(glr.link)
+        .setVariancePower(variancePower)
+        .setLinkPower(linkPower)
+    }
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, glr))
       .fit(data)

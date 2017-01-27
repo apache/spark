@@ -84,6 +84,12 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' # can also read back the saved model and print
 #' savedModel <- read.ml(path)
 #' summary(savedModel)
+#'
+#' # fit tweedie model
+#' library(statmod)
+#' model <- spark.glm(df, Sepal_Length ~ Sepal_Width, 
+#'   family = tweedie(var.power = 1.5, link.power = 0))
+#' summary(model)
 #' }
 #' @note spark.glm since 2.0.0
 #' @seealso \link{glm}, \link{read.ml}
@@ -100,6 +106,15 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
               print(family)
               stop("'family' not recognized")
             }
+            # recover variancePower and linkPower from specified tweedie family
+            if (tolower(family$family) == "tweedie") {
+              variancePower <- log(family$variance(exp(1)))
+              linkPower <- log(family$linkfun(exp(1)))
+            } else {
+              # these values won't be used if family is not tweedie
+              variancePower <- 0.0
+              linkPower <- 0.0
+            }
 
             formula <- paste(deparse(formula), collapse = "")
             if (is.null(weightCol)) {
@@ -109,7 +124,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
             # For known families, Gamma is upper-cased
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, tolower(family$family), family$link,
-                                tol, as.integer(maxIter), as.character(weightCol), regParam)
+                                tol, as.integer(maxIter), as.character(weightCol), regParam,
+                                as.double(variancePower), as.double(linkPower))
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
 
@@ -124,7 +140,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #'               Currently these families are supported: \code{binomial}, \code{gaussian},
-#'               \code{Gamma}, and \code{poisson}.
+#'               \code{poisson}, \code{Gamma}, and \code{tweedie} (\code{statmod} package).
 #' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
 #' @param epsilon positive convergence tolerance of iterations.
