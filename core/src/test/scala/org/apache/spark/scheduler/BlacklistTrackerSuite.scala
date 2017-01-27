@@ -17,8 +17,8 @@
 
 package org.apache.spark.scheduler
 
-import org.mockito.Matchers._
-import org.mockito.Mockito.{times, verify, when}
+import org.mockito.Matchers.any
+import org.mockito.Mockito.{never, verify, when}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mock.MockitoSugar
 
@@ -477,7 +477,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     }
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist0.execToFailures)
 
-    verify(allocationClientMock, times(0)).killExecutor(any())
+    verify(allocationClientMock, never).killExecutor(any())
 
     val taskSetBlacklist1 = createTaskSetBlacklist(stageId = 1)
     // Fail 4 tasks in one task set on executor 2, so that executor gets blacklisted for the whole
@@ -487,8 +487,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       taskSetBlacklist1.updateBlacklistForFailedTask("hostA", exec = "2", index = partition)
     }
 
-    verify(allocationClientMock, times(0)).killExecutors(any(), any(), any())
-    verify(allocationClientMock, times(0)).killExecutorsOnHost(any())
+    verify(allocationClientMock, never).killExecutors(any(), any(), any())
+    verify(allocationClientMock, never).killExecutorsOnHost(any())
 
     // Enable auto-kill. Blacklist an executor and make sure killExecutors is called.
     conf.set(config.BLACKLIST_KILL_ENABLED, true)

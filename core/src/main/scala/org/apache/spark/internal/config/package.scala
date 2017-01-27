@@ -141,8 +141,8 @@ package object config {
 
   private[spark] val BLACKLIST_KILL_ENABLED =
     ConfigBuilder("spark.blacklist.killBlacklistedExecutors")
-    .booleanConf
-    .createWithDefault(false)
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val BLACKLIST_LEGACY_TIMEOUT_CONF =
     ConfigBuilder("spark.scheduler.executorTaskBlacklistTime")
