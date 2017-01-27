@@ -18,17 +18,20 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode, LeafNode}
+import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode}
 import org.apache.spark.ml.tree.impl.TreeTests
+import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions._
+
 
 class DecisionTreeClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -42,6 +45,9 @@ class DecisionTreeClassifierSuite
   private var categoricalDataPointsForMulticlassRDD: RDD[LabeledPoint] = _
   private var continuousDataPointsForMulticlassRDD: RDD[LabeledPoint] = _
   private var categoricalDataPointsForMulticlassForOrderedFeaturesRDD: RDD[LabeledPoint] = _
+  private var smallMultinomialDataset: DataFrame = _
+
+  private val seed = 42
 
   override def beforeAll() {
     super.beforeAll()
@@ -58,6 +64,20 @@ class DecisionTreeClassifierSuite
     categoricalDataPointsForMulticlassForOrderedFeaturesRDD = sc.parallelize(
       OldDecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures())
       .map(_.asML)
+    smallMultinomialDataset = {
+      val nPoints = 100
+      val coefficients = Array(
+        -0.57997, 0.912083, -0.371077,
+        -0.16624, -0.84355, -0.048509)
+
+      val xMean = Array(5.843, 3.057)
+      val xVariance = Array(0.6856, 0.1899)
+
+      val testData = LogisticRegressionSuite.generateMultinomialLogisticInput(
+        coefficients, xMean, xVariance, addIntercept = true, nPoints, 42)
+
+      sc.parallelize(testData, 4).toDF()
+    }
   }
 
   test("params") {
@@ -246,7 +266,8 @@ class DecisionTreeClassifierSuite
     val categoricalFeatures = Map(0 -> 3)
     val numClasses = 3
 
-    val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val newData: DataFrame =
+      TreeTests.setMetadata(rdd.map(_.toInstance), categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
 
     // copied model must have the same parent.
@@ -273,7 +294,7 @@ class DecisionTreeClassifierSuite
       LabeledPoint(1, Vectors.dense(0, 3, 9)),
       LabeledPoint(0, Vectors.dense(0, 2, 6))
     ))
-    val df = TreeTests.setMetadata(data, Map(0 -> 1), 2)
+    val df = TreeTests.setMetadata(data.map(_.toInstance), Map(0 -> 1), 2)
     val dt = new DecisionTreeClassifier().setMaxDepth(3)
     dt.fit(df)
   }
@@ -295,7 +316,7 @@ class DecisionTreeClassifierSuite
       LabeledPoint(0.0, Vectors.dense(2.0)),
       LabeledPoint(1.0, Vectors.dense(2.0)))
     val data = sc.parallelize(arr)
-    val df = TreeTests.setMetadata(data, Map(0 -> 3), 2)
+    val df = TreeTests.setMetadata(data.map(_.toInstance), Map(0 -> 3), 2)
 
     // Must set maxBins s.t. the feature will be treated as an ordered categorical feature.
     val dt = new DecisionTreeClassifier()
@@ -326,7 +347,7 @@ class DecisionTreeClassifierSuite
     val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
     val numFeatures = data.first().features.size
     val categoricalFeatures = (0 to numFeatures).map(i => (i, 2)).toMap
-    val df = TreeTests.setMetadata(data, categoricalFeatures, 2)
+    val df = TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, 2)
 
     val model = dt.fit(df)
 
@@ -351,6 +372,52 @@ class DecisionTreeClassifierSuite
     dt.fit(df)
   }
 
+  test("weights") {
+
+    val df = smallMultinomialDataset
+    val numClasses = 3
+    val predEquals = (x: Double, y: Double) => x == y
+//    val outlierDS = df.withColumn("weight", lit(10000.0)).as[Instance].flatMap {
+//      case Instance(l, w, f) =>
+//        val outlierLabel = if (numClasses == 0) -l else numClasses - l - 1
+//        List.fill(1)(Instance(outlierLabel, 1.0, f)) ++ List(Instance(l, w, f))
+//    }
+//    val trueModel = estimator.set(estimator.weightCol, "").fit(df)
+//    val outlierModel = estimator.set(estimator.weightCol, "weight")
+//      .fit(outlierDS)
+//    println(trueModel.toDebugString)
+//    println(outlierModel.toDebugString)
+    val testParams = Seq(
+      ("gini"),
+      ("entropy")
+    )
+    for ((impurity) <- testParams) {
+      val estimator = new DecisionTreeClassifier()
+        .setMaxDepth(10)
+        .setSeed(seed)
+        .setMinWeightFractionPerNode(0.1)
+        .setImpurity(impurity)
+      MLTestingUtils.testArbitrarilyScaledWeights[DecisionTreeClassificationModel,
+        DecisionTreeClassifier](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, predEquals, 0.9))
+      MLTestingUtils.testOutliersWithSmallWeights[DecisionTreeClassificationModel,
+        DecisionTreeClassifier](df.as[LabeledPoint], estimator,
+        3, MLTestingUtils.modelPredictionEquals(df, predEquals, 0.9),
+        outlierRatio = 1)
+      MLTestingUtils.testOversamplingVsWeighting[DecisionTreeClassificationModel,
+        DecisionTreeClassifier](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, predEquals, 0.99), seed)
+    }
+//    val models = Seq(0.001, 1.0, 1000.0).map { w =>
+//      val df2 = df.withColumn("weight", lit(w))
+//      estimator.setWeightCol("weight").fit(df2)
+//    }
+//    println(models(2).toDebugString)
+//    println(models(1).toDebugString)
+//    TreeTests.checkEqual(models(0), models(1))
+//    TreeTests.checkEqual(models(2), models(1))
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
@@ -371,12 +438,12 @@ class DecisionTreeClassifierSuite
 
     // Categorical splits with tree depth 2
     val categoricalData: DataFrame =
-      TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 2)
+      TreeTests.setMetadata(rdd.map(_.toInstance), Map(0 -> 2, 1 -> 3), numClasses = 2)
     testEstimatorAndModelReadWrite(dt, categoricalData, allParamSettings, checkModelData)
 
     // Continuous splits with tree depth 2
     val continuousData: DataFrame =
-      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
+      TreeTests.setMetadata(rdd.map(_.toInstance), Map.empty[Int, Int], numClasses = 2)
     testEstimatorAndModelReadWrite(dt, continuousData, allParamSettings, checkModelData)
 
     // Continuous splits with tree depth 0
@@ -399,7 +466,8 @@ private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
     val numFeatures = data.first().features.size
     val oldStrategy = dt.getOldStrategy(categoricalFeatures, numClasses)
     val oldTree = OldDecisionTree.train(data.map(OldLabeledPoint.fromML), oldStrategy)
-    val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
+    val newData: DataFrame =
+      TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(

@@ -18,17 +18,17 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -129,7 +129,7 @@ class RandomForestClassifierSuite
   }
 
   test("predictRaw and predictProbability") {
-    val rdd = orderedLabeledPoints5_20
+    val rdd = orderedLabeledPoints5_20.map(_.toInstance)
     val rf = new RandomForestClassifier()
       .setImpurity("Gini")
       .setMaxDepth(3)
@@ -167,7 +167,6 @@ class RandomForestClassifierSuite
   /////////////////////////////////////////////////////////////////////////////
   // Tests of feature importance
   /////////////////////////////////////////////////////////////////////////////
-
   test("Feature importance with toy data") {
     val numClasses = 2
     val rf = new RandomForestClassifier()
@@ -179,7 +178,7 @@ class RandomForestClassifierSuite
       .setSeed(123)
 
     // In this data, feature 1 is very important.
-    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
+    val data: RDD[Instance] = TreeTests.featureImportanceData(sc).map(_.toInstance)
     val categoricalFeatures = Map.empty[Int, Int]
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
 
@@ -212,7 +211,7 @@ class RandomForestClassifierSuite
     }
 
     val rf = new RandomForestClassifier().setNumTrees(2)
-    val rdd = TreeTests.getTreeReadWriteData(sc)
+    val rdd = TreeTests.getTreeReadWriteData(sc).map(_.toInstance)
 
     val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "entropy")
 
@@ -239,7 +238,8 @@ private object RandomForestClassifierSuite extends SparkFunSuite {
     val oldModel = OldRandomForest.trainClassifier(
       data.map(OldLabeledPoint.fromML), oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy,
       rf.getSeed.toInt)
-    val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
+    val newData: DataFrame =
+      TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, numClasses)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = RandomForestClassificationModel.fromOld(

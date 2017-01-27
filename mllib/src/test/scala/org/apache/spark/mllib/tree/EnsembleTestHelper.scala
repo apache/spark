@@ -83,9 +83,15 @@ object EnsembleTestHelper {
       s"validateRegressor calculated $metricName $metric but required $required.")
   }
 
-  def generateOrderedLabeledPoints(numFeatures: Int, numInstances: Int): Array[LabeledPoint] = {
+  def generateOrderedLabeledPoints(numFeatures: Int,
+                                   numInstances: Int,
+                                   noise: Double = 0.0,
+                                   seed: Long = 42L): Array[LabeledPoint] = {
+    require(noise >= 0.0 && noise <= 1.0, s"noise expects a probability but got $noise")
+    val rng = new scala.util.Random(seed)
     val arr = new Array[LabeledPoint](numInstances)
     for (i <- 0 until numInstances) {
+      val rnd = rng.nextDouble()
       val label = if (i < numInstances / 10) {
         0.0
       } else if (i < numInstances / 2) {
@@ -94,6 +100,24 @@ object EnsembleTestHelper {
         0.0
       } else {
         1.0
+      }
+      val features = Array.fill[Double](numFeatures)(i.toDouble)
+      arr(i) = new LabeledPoint(if (rnd < noise) 1.0 - label else label, Vectors.dense(features))
+    }
+    arr
+  }
+
+  def generateNonlinearRegressionData(numFeatures: Int, numInstances: Int): Array[LabeledPoint] = {
+    val arr = new Array[LabeledPoint](numInstances)
+    for (i <- 0 until numInstances) {
+      val label = if (i < numInstances / 10) {
+        i.toDouble
+      } else if (i < numInstances / 2) {
+        -i.toDouble
+      } else if (i < numInstances * 0.9) {
+        2.0 * i + 5.0
+      } else {
+        -0.5 * i - 5.0
       }
       val features = Array.fill[Double](numFeatures)(i.toDouble)
       arr(i) = new LabeledPoint(label, Vectors.dense(features))

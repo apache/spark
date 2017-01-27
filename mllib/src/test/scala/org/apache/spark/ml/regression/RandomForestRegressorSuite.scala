@@ -20,13 +20,15 @@ package org.apache.spark.ml.regression
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+
 
 /**
  * Test suite for [[RandomForestRegressor]].
@@ -86,7 +88,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     // In this data, feature 1 is very important.
     val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
     val categoricalFeatures = Map.empty[Int, Int]
-    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0)
+    val df: DataFrame = TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, 0)
 
     val model = rf.fit(df)
 
@@ -123,7 +125,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "variance")
 
     val continuousData: DataFrame =
-      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
+      TreeTests.setMetadata(rdd.map(_.toInstance), Map.empty[Int, Int], numClasses = 0)
     testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings, checkModelData)
   }
 }
@@ -143,7 +145,8 @@ private object RandomForestRegressorSuite extends SparkFunSuite {
       rf.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, rf.getOldImpurity)
     val oldModel = OldRandomForest.trainRegressor(data.map(OldLabeledPoint.fromML), oldStrategy,
       rf.getNumTrees, rf.getFeatureSubsetStrategy, rf.getSeed.toInt)
-    val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
+    val newData: DataFrame = TreeTests.setMetadata(data.map(_.toInstance),
+      categoricalFeatures, numClasses = 0)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = RandomForestRegressionModel.fromOld(

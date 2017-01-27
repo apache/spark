@@ -33,13 +33,20 @@ import org.apache.spark.util.random.XORShiftRandom
  * this datum has 1 copy, 0 copies, and 4 copies in the 3 subsamples, respectively.
  *
  * @param datum  Data instance
- * @param subsampleWeights  Weight of this instance in each subsampled dataset.
- *
- * TODO: This does not currently support (Double) weighted instances.  Once MLlib has weighted
- *       dataset support, update.  (We store subsampleWeights as Double for this future extension.)
+ * @param subsampleCounts  Number of samples of this instance in each subsampled dataset.
+ * @param sampleWeight The weight of this instance.
  */
-private[spark] class BaggedPoint[Datum](val datum: Datum, val subsampleWeights: Array[Double])
-  extends Serializable
+private[spark] class BaggedPoint[Datum](
+    val datum: Datum,
+    val subsampleCounts: Array[Int],
+    val sampleWeight: Double) extends Serializable {
+
+  /**
+   * Subsample counts weighted by the sample weight.
+   */
+  def weightedCounts: Array[Double] = subsampleCounts.map(_ * sampleWeight)
+
+}
 
 private[spark] object BaggedPoint {
 
@@ -52,6 +59,7 @@ private[spark] object BaggedPoint {
    * @param subsamplingRate Fraction of the training data used for learning decision tree.
    * @param numSubsamples Number of subsamples of this RDD to take.
    * @param withReplacement Sampling with/without replacement.
+   * @param extractSampleWeight A function to get the sample weight of each datum.
    * @param seed Random seed.
    * @return BaggedPoint dataset representation.
    */
@@ -60,12 +68,13 @@ private[spark] object BaggedPoint {
       subsamplingRate: Double,
       numSubsamples: Int,
       withReplacement: Boolean,
+      extractSampleWeight: (Datum => Double) = (_: Datum) => 1.0,
       seed: Long = Utils.random.nextLong()): RDD[BaggedPoint[Datum]] = {
     if (withReplacement) {
       convertToBaggedRDDSamplingWithReplacement(input, subsamplingRate, numSubsamples, seed)
     } else {
       if (numSubsamples == 1 && subsamplingRate == 1.0) {
-        convertToBaggedRDDWithoutSampling(input)
+        convertToBaggedRDDWithoutSampling(input, extractSampleWeight)
       } else {
         convertToBaggedRDDSamplingWithoutReplacement(input, subsamplingRate, numSubsamples, seed)
       }
@@ -82,16 +91,16 @@ private[spark] object BaggedPoint {
       val rng = new XORShiftRandom
       rng.setSeed(seed + partitionIndex + 1)
       instances.map { instance =>
-        val subsampleWeights = new Array[Double](numSubsamples)
+        val subsampleCounts = new Array[Int](numSubsamples)
         var subsampleIndex = 0
         while (subsampleIndex < numSubsamples) {
           val x = rng.nextDouble()
-          subsampleWeights(subsampleIndex) = {
-            if (x < subsamplingRate) 1.0 else 0.0
+          subsampleCounts(subsampleIndex) = {
+            if (x < subsamplingRate) 1 else 0
           }
           subsampleIndex += 1
         }
-        new BaggedPoint(instance, subsampleWeights)
+        new BaggedPoint(instance, subsampleCounts, 1.0)
       }
     }
   }
@@ -106,20 +115,20 @@ private[spark] object BaggedPoint {
       val poisson = new PoissonDistribution(subsample)
       poisson.reseedRandomGenerator(seed + partitionIndex + 1)
       instances.map { instance =>
-        val subsampleWeights = new Array[Double](numSubsamples)
+        val subsampleCounts = new Array[Int](numSubsamples)
         var subsampleIndex = 0
         while (subsampleIndex < numSubsamples) {
-          subsampleWeights(subsampleIndex) = poisson.sample()
+          subsampleCounts(subsampleIndex) = poisson.sample()
           subsampleIndex += 1
         }
-        new BaggedPoint(instance, subsampleWeights)
+        new BaggedPoint(instance, subsampleCounts, 1.0)
       }
     }
   }
 
   private def convertToBaggedRDDWithoutSampling[Datum] (
-      input: RDD[Datum]): RDD[BaggedPoint[Datum]] = {
-    input.map(datum => new BaggedPoint(datum, Array(1.0)))
+      input: RDD[Datum],
+      extractSampleWeight: (Datum => Double)): RDD[BaggedPoint[Datum]] = {
+    input.map(datum => new BaggedPoint(datum, Array(1), extractSampleWeight(datum)))
   }
-
 }

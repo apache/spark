@@ -80,7 +80,8 @@ class Strategy @Since("1.3.0") (
     @Since("1.0.0") @BeanProperty var maxMemoryInMB: Int = 256,
     @Since("1.2.0") @BeanProperty var subsamplingRate: Double = 1,
     @Since("1.2.0") @BeanProperty var useNodeIdCache: Boolean = false,
-    @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
+    @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10,
+    private[spark] var minWeightFractionPerNode: Double = 0.0) extends Serializable {
 
   /**
    */
@@ -171,8 +172,9 @@ class Strategy @Since("1.3.0") (
   @Since("1.2.0")
   def copy: Strategy = {
     new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
-      quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode, minInfoGain,
-      maxMemoryInMB, subsamplingRate, useNodeIdCache, checkpointInterval)
+      quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode,
+      minInfoGain, maxMemoryInMB, subsamplingRate, useNodeIdCache,
+      checkpointInterval, minWeightFractionPerNode)
   }
 }
 

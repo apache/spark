@@ -23,8 +23,9 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite._
@@ -33,8 +34,10 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.types.DoubleType
 
 
 /**
@@ -45,7 +48,7 @@ import org.apache.spark.sql.functions._
 @Since("1.4.0")
 class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
-  with DecisionTreeRegressorParams with DefaultParamsWritable {
+  with DecisionTreeRegressorParams with DefaultParamsWritable with HasWeightCol {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("dtr"))
@@ -64,6 +67,9 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   override def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
   /** @group setParam */
+  @Since("2.2.0")
+  def setMinWeightFractionPerNode(value: Double): this.type = set(minWeightFractionPerNode, value)
+
   @Since("1.4.0")
   override def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
@@ -99,16 +105,31 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   @Since("2.0.0")
   def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
+  /**
+   * Sets the value of param [[weightCol]].
+   * If this is not set or empty, we treat all instance weights as 1.0.
+   * Default is not set, so all instances have weight one.
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+
   override protected def train(dataset: Dataset[_]): DecisionTreeRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+    val instances =
+      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
+        case Row(label: Double, weight: Double, features: Vector) =>
+          Instance(label, weight, features)
+      }
     val strategy = getOldStrategy(categoricalFeatures)
 
-    val instr = Instrumentation.create(this, oldDataset)
+    val instr = Instrumentation.create(this, instances)
     instr.logParams(params: _*)
 
-    val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
+    val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
@@ -122,8 +143,9 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
     val instr = Instrumentation.create(this, data)
     instr.logParams(params: _*)
 
-    val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = $(seed), instr = Some(instr), parentUID = Some(uid))
+    val instances = data.map {lp => Instance(lp.label, 1.0, lp.features)}
+    val trees = RandomForest.run(instances, oldStrategy, numTrees = 1,
+      featureSubsetStrategy = "all", seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
     instr.logSuccess(m)
@@ -153,6 +175,7 @@ object DecisionTreeRegressor extends DefaultParamsReadable[DecisionTreeRegressor
  * <a href="http://en.wikipedia.org/wiki/Decision_tree_learning">
  * Decision tree (Wikipedia)</a> model for regression.
  * It supports both continuous and categorical features.
+ *
  * @param rootNode  Root of the decision tree
  */
 @Since("1.4.0")
@@ -171,6 +194,7 @@ class DecisionTreeRegressionModel private[ml] (
 
   /**
    * Construct a decision tree regression model.
+   *
    * @param rootNode  Root node of tree, with other nodes attached.
    */
   private[ml] def this(rootNode: Node, numFeatures: Int) =

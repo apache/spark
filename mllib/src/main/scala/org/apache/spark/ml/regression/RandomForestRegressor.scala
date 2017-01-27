@@ -22,7 +22,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -31,10 +31,9 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.functions._
-
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a>
@@ -65,7 +64,6 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   @Since("1.4.0")
   override def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
-  /** @group setParam */
   @Since("1.4.0")
   override def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
@@ -117,20 +115,22 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   override protected def train(dataset: Dataset[_]): RandomForestRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+
+    val instances = dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
+      case Row(label: Double, features: Vector) => Instance(label, 1.0, features)
+    }
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
 
-    val instr = Instrumentation.create(this, oldDataset)
+    val instr = Instrumentation.create(this, instances)
     instr.logParams(labelCol, featuresCol, predictionCol, impurity, numTrees,
       featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, seed, subsamplingRate, cacheNodeIds, checkpointInterval)
 
     val trees = RandomForest
-      .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
+      .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
       .map(_.asInstanceOf[DecisionTreeRegressionModel])
-
-    val numFeatures = oldDataset.first().features.size
+    val numFeatures = instances.first().features.size
     val m = new RandomForestRegressionModel(trees, numFeatures)
     instr.logSuccess(m)
     m

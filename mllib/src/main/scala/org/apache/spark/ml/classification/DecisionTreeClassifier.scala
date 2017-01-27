@@ -22,18 +22,21 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.tree._
+import org.apache.spark.ml.tree.{DecisionTreeModel, Node, TreeClassifierParams}
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Dataset
-
+import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * Decision tree learning algorithm (http://en.wikipedia.org/wiki/Decision_tree_learning)
@@ -45,7 +48,7 @@ import org.apache.spark.sql.Dataset
 class DecisionTreeClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
-  with DecisionTreeClassifierParams with DefaultParamsWritable {
+  with DecisionTreeClassifierParams with HasWeightCol with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("dtc"))
@@ -65,6 +68,9 @@ class DecisionTreeClassifier @Since("1.4.0") (
   override def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
   /** @group setParam */
+  @Since("2.2.0")
+  def setMinWeightFractionPerNode(value: Double): this.type = set(minWeightFractionPerNode, value)
+
   @Since("1.4.0")
   override def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
@@ -96,6 +102,16 @@ class DecisionTreeClassifier @Since("1.4.0") (
   @Since("1.6.0")
   override def setSeed(value: Long): this.type = set(seed, value)
 
+  /**
+   * Sets the value of param [[weightCol]].
+   * If this is not set or empty, we treat all instance weights as 1.0.
+   * Default is not set, so all instances have weight one.
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+
   override protected def train(dataset: Dataset[_]): DecisionTreeClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
@@ -106,14 +122,18 @@ class DecisionTreeClassifier @Since("1.4.0") (
         ".train() called with non-matching numClasses and thresholds.length." +
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
-
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, numClasses)
+    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+    val instances =
+      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
+        case Row(label: Double, weight: Double, features: Vector) =>
+          Instance(label, weight, features)
+      }
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
 
-    val instr = Instrumentation.create(this, oldDataset)
+    val instr = Instrumentation.create(this, instances)
     instr.logParams(params: _*)
 
-    val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
+    val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeClassificationModel]
@@ -124,11 +144,12 @@ class DecisionTreeClassifier @Since("1.4.0") (
   /** (private[ml]) Train a decision tree on an RDD */
   private[ml] def train(data: RDD[LabeledPoint],
       oldStrategy: OldStrategy): DecisionTreeClassificationModel = {
-    val instr = Instrumentation.create(this, data)
-    instr.logParams(params: _*)
 
-    val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 0L, instr = Some(instr), parentUID = Some(uid))
+    val instances = data.map {lp => Instance(lp.label, 1.0, lp.features)}
+    val instr = Instrumentation.create(this, instances)
+    instr.logParams(params: _*)
+    val trees = RandomForest.run(instances, oldStrategy, numTrees = 1,
+      featureSubsetStrategy = "all", seed = 0L, instr = Some(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeClassificationModel]
     instr.logSuccess(m)
@@ -176,6 +197,7 @@ class DecisionTreeClassificationModel private[ml] (
 
   /**
    * Construct a decision tree classification model.
+   *
    * @param rootNode  Root node of tree, with other nodes attached.
    */
   private[ml] def this(rootNode: Node, numFeatures: Int, numClasses: Int) =

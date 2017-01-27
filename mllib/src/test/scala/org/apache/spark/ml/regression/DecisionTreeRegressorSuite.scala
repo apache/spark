@@ -18,15 +18,14 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
-import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
-  DecisionTreeSuite => OldDecisionTreeSuite}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
+import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -34,13 +33,20 @@ class DecisionTreeRegressorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import DecisionTreeRegressorSuite.compareAPIs
+  import testImplicits._
 
   private var categoricalDataPointsRDD: RDD[LabeledPoint] = _
+  private var linearRegressionData: DataFrame = _
+
+  private val seed = 42
 
   override def beforeAll() {
     super.beforeAll()
     categoricalDataPointsRDD =
       sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPoints().map(_.asML))
+    linearRegressionData = sc.parallelize(LinearDataGenerator.generateLinearInput(
+      intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
+      xVariance = Array(0.7, 1.2), nPoints = 1000, seed, eps = 0.5), 2).map(_.asML).toDF()
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -68,7 +74,8 @@ class DecisionTreeRegressorSuite
 
   test("copied model must have the same parent") {
     val categoricalFeatures = Map(0 -> 2, 1 -> 2)
-    val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
+    val df = TreeTests.setMetadata(categoricalDataPointsRDD.map(_.toInstance),
+      categoricalFeatures, numClasses = 0)
     val model = new DecisionTreeRegressor()
       .setImpurity("variance")
       .setMaxDepth(2)
@@ -85,7 +92,8 @@ class DecisionTreeRegressorSuite
       .setVarianceCol("variance")
     val categoricalFeatures = Map(0 -> 2, 1 -> 2)
 
-    val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
+    val df = TreeTests.setMetadata(categoricalDataPointsRDD.map(_.toInstance),
+      categoricalFeatures, numClasses = 0)
     val model = dt.fit(df)
 
     val predictions = model.transform(df)
@@ -98,7 +106,7 @@ class DecisionTreeRegressorSuite
         s"Expected variance $expectedVariance but got $variance.")
     }
 
-    val varianceData: RDD[LabeledPoint] = TreeTests.varianceData(sc)
+    val varianceData: RDD[Instance] = TreeTests.varianceData(sc).map(_.toInstance)
     val varianceDF = TreeTests.setMetadata(varianceData, Map.empty[Int, Int], 0)
     dt.setMaxDepth(1)
       .setMaxBins(6)
@@ -125,7 +133,7 @@ class DecisionTreeRegressorSuite
       .setSeed(123)
 
     // In this data, feature 1 is very important.
-    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
+    val data: RDD[Instance] = TreeTests.featureImportanceData(sc).map(_.toInstance)
     val categoricalFeatures = Map.empty[Int, Int]
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0)
 
@@ -146,6 +154,24 @@ class DecisionTreeRegressorSuite
       }
   }
 
+  test("weights") {
+    val estimator = new DecisionTreeRegressor()
+      .setMaxDepth(10)
+
+    val df = linearRegressionData
+    MLTestingUtils.testArbitrarilyScaledWeights[DecisionTreeRegressionModel,
+      DecisionTreeRegressor](df.as[LabeledPoint], estimator,
+      MLTestingUtils.modelPredictionEquals(df, MLTestingUtils.relativeTolerance(0.1), 0.98))
+    MLTestingUtils.testOutliersWithSmallWeights[DecisionTreeRegressionModel,
+      DecisionTreeRegressor](df.as[LabeledPoint], estimator,
+      0,
+      MLTestingUtils.modelPredictionEquals(df, MLTestingUtils.relativeTolerance(0.1), 0.9),
+      outlierRatio = 1)
+    MLTestingUtils.testOversamplingVsWeighting[DecisionTreeRegressionModel,
+      DecisionTreeRegressor](df.as[LabeledPoint], estimator,
+      MLTestingUtils.modelPredictionEquals(df, MLTestingUtils.relativeTolerance(0.01), 0.99), 42L)
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
@@ -159,7 +185,7 @@ class DecisionTreeRegressorSuite
     }
 
     val dt = new DecisionTreeRegressor()
-    val rdd = TreeTests.getTreeReadWriteData(sc)
+    val rdd = TreeTests.getTreeReadWriteData(sc).map(_.toInstance)
 
     // Categorical splits with tree depth 2
     val categoricalData: DataFrame =
@@ -192,7 +218,8 @@ private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
     val numFeatures = data.first().features.size
     val oldStrategy = dt.getOldStrategy(categoricalFeatures)
     val oldTree = OldDecisionTree.train(data.map(OldLabeledPoint.fromML), oldStrategy)
-    val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
+    val newData: DataFrame =
+      TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, numClasses = 0)
     val newTree = dt.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldTreeAsNew = DecisionTreeRegressionModel.fromOld(

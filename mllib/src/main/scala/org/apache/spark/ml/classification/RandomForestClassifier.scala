@@ -21,19 +21,20 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
+import org.apache.spark.ml.tree.{RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.functions._
-
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a> learning algorithm for
@@ -126,20 +127,22 @@ class RandomForestClassifier @Since("1.4.0") (
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, numClasses)
+    val instances = dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
+      case Row(label: Double, features: Vector) => Instance(label, 1.0, features)
+    }
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
 
-    val instr = Instrumentation.create(this, oldDataset)
+    val instr = Instrumentation.create(this, instances)
     instr.logParams(labelCol, featuresCol, predictionCol, probabilityCol, rawPredictionCol,
       impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, seed, subsamplingRate, thresholds, cacheNodeIds, checkpointInterval)
 
     val trees = RandomForest
-      .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
+      .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
       .map(_.asInstanceOf[DecisionTreeClassificationModel])
 
-    val numFeatures = oldDataset.first().features.size
+    val numFeatures = instances.first().features.size
     val m = new RandomForestClassificationModel(trees, numFeatures, numClasses)
     instr.logSuccess(m)
     m
