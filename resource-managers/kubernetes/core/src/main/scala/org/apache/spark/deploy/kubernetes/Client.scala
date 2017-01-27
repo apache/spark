@@ -123,6 +123,8 @@ private[spark] class Client(
             .endSpec()
           .done()
         sparkConf.set("spark.kubernetes.driver.service.name", service.getMetadata.getName)
+        sparkConf.set("spark.kubernetes.driver.pod.name", kubernetesAppId)
+
         sparkConf.setIfMissing("spark.driver.port", DEFAULT_DRIVER_PORT.toString)
         sparkConf.setIfMissing("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT.toString)
         val submitRequest = buildSubmissionRequest()
@@ -131,6 +133,23 @@ private[spark] class Client(
 
         val podWatcher = new Watcher[Pod] {
           override def eventReceived(action: Action, t: Pod): Unit = {
+            if (action == Action.ADDED) {
+              val ownerRefs = new ArrayBuffer[OwnerReference]
+              ownerRefs += new OwnerReferenceBuilder()
+                .withApiVersion(t.getApiVersion)
+                .withController(true)
+                .withKind(t.getKind)
+                .withName(t.getMetadata.getName)
+                .withUid(t.getMetadata.getUid)
+                .build()
+
+              secret.getMetadata().setOwnerReferences(ownerRefs.asJava)
+              kubernetesClient.secrets().createOrReplace(secret)
+
+              service.getMetadata().setOwnerReferences(ownerRefs.asJava)
+              kubernetesClient.services().createOrReplace(service)
+            }
+
             if ((action == Action.ADDED || action == Action.MODIFIED)
                 && t.getStatus.getPhase == "Running"
                 && !submitCompletedFuture.isDone) {
