@@ -844,18 +844,19 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * The partition path created by Hive is in lowercase, while Spark SQL will
    * rename it with the partition name in partitionColumnNames, and this function
    * returns the extra lowercase path created by Hive, and then we can delete it.
-   * e.g. /path/A=1/B=2/C=3 is changed to /path/A=4/B=5/C=6, this function returns is
+   * e.g. /path/A=1/B=2/C=3 is changed to /path/A=4/B=5/C=6, this function returns
    * /path/a=4
    */
   def getExtraPartPathCreatedByHive(
-      lowerCaseSpec: TablePartitionSpec,
+      spec: TablePartitionSpec,
       partitionColumnNames: Seq[String],
       tablePath: Path): Path = {
     val partColumnNames = partitionColumnNames
       .take(partitionColumnNames.indexWhere(col => col.toLowerCase != col) + 1)
       .map(_.toLowerCase)
 
-    ExternalCatalogUtils.generatePartitionPath(lowerCaseSpec, partColumnNames, tablePath)
+    ExternalCatalogUtils.generatePartitionPath(lowerCasePartitionSpec(spec),
+      partColumnNames, tablePath)
   }
 
   override def createPartitions(
@@ -921,13 +922,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
           // If the newSpec contains more than one depth partition, FileSystem.rename just deletes
           // the leaf(i.e. wrongPath), we should check if wrongPath's parents need to be deleted.
-          // for example:
-          // newSpec is 'A=1/B=2', after renamePartitions by Hive, the location path in FileSystem
-          // is changed to 'a=1/b=2', which is wrongPath, then we renamed to 'A=1/B=2', and
-          // 'a=1/b=2' in FileSystem is deleted, while 'a=1' is already exists,
-          // which should also be deleted
+          // For example, give a newSpec 'A=1/B=2', after calling Hive's client.renamePartitions,
+          // the location path in FileSystem is changed to 'a=1/b=2', which is wrongPath, then
+          // although we renamed it to 'A=1/B=2', 'a=1/b=2' in FileSystem is deleted, but 'a=1'
+          // is still exists, which we also need to delete
           val delHivePartPathAfterRename = getExtraPartPathCreatedByHive(
-            lowerCasePartitionSpec(spec),
+            spec,
             partitionColumnNames,
             tablePath)
 
