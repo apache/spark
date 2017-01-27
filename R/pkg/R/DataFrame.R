@@ -1843,7 +1843,7 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' @export
 #' @family SparkDataFrame functions
 #' @aliases subset,SparkDataFrame-method
-#' @seealso \link{rename} \link{withColumn}
+#' @seealso \link{withColumn}
 #' @rdname subset
 #' @name subset
 #' @family subsetting functions
