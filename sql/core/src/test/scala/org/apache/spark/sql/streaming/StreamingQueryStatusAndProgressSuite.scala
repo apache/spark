@@ -175,15 +175,14 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
     }
   }
 
-  test("SPARK-19378: Continue reporting stateOp and eventTime metrics even if there is no data") {
+  test("SPARK-19378: Continue reporting stateOp metrics even if there is no active trigger") {
     import testImplicits._
 
     withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10") {
-      val inputData = MemoryStream[(Int, String)]
+      val inputData = MemoryStream[Int]
 
-      val query = inputData.toDS().toDF("value", "time")
-        .select('value, 'time.cast("timestamp"))
-        .withWatermark("time", "10 seconds")
+      val query = inputData.toDS().toDF("value")
+        .select('value)
         .groupBy($"value")
         .agg(count("*"))
         .writeStream
@@ -192,20 +191,16 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         .outputMode("complete")
         .start()
       try {
-        inputData.addData((1, "2017-01-26 01:00:00"), (2, "2017-01-26 01:00:02"))
+        inputData.addData(1, 2)
         query.processAllAvailable()
 
         val progress = query.lastProgress
-        assert(progress.eventTime.size() > 1)
         assert(progress.stateOperators.length > 0)
         // Should emit new progresses every 10 ms, but we could be facing a slow Jenkins
         eventually(timeout(1 minute)) {
           val nextProgress = query.lastProgress
           assert(nextProgress.timestamp !== progress.timestamp)
           assert(nextProgress.numInputRows === 0)
-          assert(nextProgress.eventTime.get("min") === "2017-01-26 01:00:00")
-          assert(nextProgress.eventTime.get("avg") === "2017-01-26 01:00:01")
-          assert(nextProgress.eventTime.get("max") === "2017-01-26 01:00:02")
           assert(nextProgress.stateOperators.head.numRowsTotal === 2)
           assert(nextProgress.stateOperators.head.numRowsTotal === 2)
           assert(nextProgress.stateOperators.head.numRowsUpdated === 0)

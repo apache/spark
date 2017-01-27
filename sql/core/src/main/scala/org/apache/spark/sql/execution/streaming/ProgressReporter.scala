@@ -200,34 +200,18 @@ trait ProgressReporter extends Logging {
     }
   }
 
-  /** Extract statistics about event time from the executed query plan. */
-  private def extractEventTimeStats(): Map[String, String] = {
+  /** Extracts statistics from the most recent query execution. */
+  private def extractExecutionStats(hasNewData: Boolean): ExecutionStats = {
     val hasEventTime = logicalPlan.collect { case e: EventTimeWatermark => e }.nonEmpty
     val watermarkTimestamp =
       if (hasEventTime) Map("watermark" -> formatTimestamp(offsetSeqMetadata.batchWatermarkMs))
       else Map.empty[String, String]
 
-    if (lastExecution == null || !hasEventTime) return watermarkTimestamp
-
-    lastExecution.executedPlan.collect {
-      case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>
-        val stats = e.eventTimeStats.value
-        Map(
-          "max" -> stats.max,
-          "min" -> stats.min,
-          "avg" -> stats.avg).mapValues(formatTimestamp)
-    }.headOption.getOrElse(Map.empty)
-  }
-
-  /** Extracts statistics from the most recent query execution. */
-  private def extractExecutionStats(hasNewData: Boolean): ExecutionStats = {
-
     // SPARK-19378: Still report metrics even though no data was processed while reporting progress.
     val stateOperators = extractStateOperatorMetrics(hasNewData)
-    val eventTimeStats = extractEventTimeStats()
 
     if (!hasNewData) {
-      return ExecutionStats(Map.empty, stateOperators, eventTimeStats)
+      return ExecutionStats(Map.empty, stateOperators, watermarkTimestamp)
     }
 
     // We want to associate execution plan leaves to sources that generate them, so that we match
@@ -275,6 +259,15 @@ trait ProgressReporter extends Logging {
         }
         Map.empty
       }
+
+    val eventTimeStats = lastExecution.executedPlan.collect {
+      case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>
+        val stats = e.eventTimeStats.value
+        Map(
+          "max" -> stats.max,
+          "min" -> stats.min,
+          "avg" -> stats.avg).mapValues(formatTimestamp)
+    }.headOption.getOrElse(Map.empty) ++ watermarkTimestamp
 
     ExecutionStats(numInputRows, stateOperators, eventTimeStats)
   }
