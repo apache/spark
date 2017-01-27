@@ -276,7 +276,8 @@ public class VectorizedColumnReader {
             // TODO: Convert dictionary of Binaries to dictionary of Longs
             if (!column.isNullAt(i)) {
               Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
-              column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v));
+              column.putLong(i,
+                  ParquetRowConverter.binaryToSQLTimestamp(v, ParquetRowConverter.tz()));
             }
           }
         } else {
@@ -401,7 +402,8 @@ public class VectorizedColumnReader {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putLong(rowId + i,
               // Read 12 bytes for INT96
-              ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12)));
+              ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12),
+                  ParquetRowConverter.tz()));
         } else {
           column.putNull(rowId + i);
         }

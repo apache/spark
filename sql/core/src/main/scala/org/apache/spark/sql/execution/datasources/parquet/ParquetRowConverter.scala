@@ -19,6 +19,10 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
+import java.sql.Timestamp
+import java.util.{Calendar, Date, TimeZone}
+import java.util.Formatter.DateTime
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -257,15 +261,10 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           // Converts nanosecond timestamps stored as INT96
           override def addBinary(value: Binary): Unit = {
-            assert(
-              value.length() == 12,
-              "Timestamps (with nanoseconds) are expected to be stored in 12-byte long binaries, " +
-              s"but got a ${value.length()}-byte binary.")
-
-            val buf = value.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
-            val timeOfDayNanos = buf.getLong
-            val julianDay = buf.getInt
-            updater.setLong(DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos))
+            // TODO timezone from table props
+            val timestamp =
+              ParquetRowConverter.binaryToSQLTimestamp(value, ParquetRowConverter.tz)
+            updater.setLong(timestamp)
           }
         }
 
@@ -644,7 +643,14 @@ private[parquet] class ParquetRowConverter(
 }
 
 private[parquet] object ParquetRowConverter {
-  def binaryToUnscaledLong(binary: Binary): Long = {
+
+    // just for testing
+    var tz: TimeZone = DateTimeUtils.TimeZoneGMT
+    def setTimezone(tz: TimeZone): Unit = {
+      this.tz = tz
+    }
+
+    def binaryToUnscaledLong(binary: Binary): Long = {
     // The underlying `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here
     // we are using `Binary.toByteBuffer.array()` to steal the underlying byte array without
     // copying it.
@@ -666,12 +672,21 @@ private[parquet] object ParquetRowConverter {
     unscaled
   }
 
-  def binaryToSQLTimestamp(binary: Binary): SQLTimestamp = {
+  def binaryToSQLTimestamp(binary: Binary, tz: TimeZone): SQLTimestamp = {
     assert(binary.length() == 12, s"Timestamps (with nanoseconds) are expected to be stored in" +
       s" 12-byte long binaries. Found a ${binary.length()}-byte binary instead.")
     val buffer = binary.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
     val timeOfDayNanos = buffer.getLong
     val julianDay = buffer.getInt
-    DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
+    val utcEpochMicros = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
+    // avoid expensive time logic if possible
+    if (tz != DateTimeUtils.TimeZoneGMT) {
+      // TODO not really sure what the desired behavior here is ...
+      val millis = utcEpochMicros / 1000
+      val offset = tz.getOffset(millis)
+      ((millis + offset) * 1000) + (utcEpochMicros % 1000)
+    } else {
+      utcEpochMicros
+    }
   }
 }

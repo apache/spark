@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.util.TimeZone
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -751,6 +753,32 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
       val option = new ParquetOptions(Map("Compression" -> "uncompressed"), spark.sessionState.conf)
       assert(option.compressionCodecClassName == "UNCOMPRESSED")
+    }
+  }
+
+  test("SPARK-12297: Parquet Timestamp & Hive Timezones") {
+    // Test that we can correctly adjust parquet timestamps for Hive timezone bug.
+    withTempPath { dir =>
+      // First, lets generate some parquet data we can use to test this
+      val schema = StructType(StructField("timestamp", TimestampType) :: Nil)
+      // intentionally pick a few times right around new years, so time zone will effect many fields
+      val data = spark.sparkContext.parallelize(Seq(
+        "2015-12-31 23:50:59.123",
+        "2015-12-31 22:49:59.123",
+        "2016-01-01 00:39:59.123",
+        "2016-01-01 01:29:59.123"
+      ).map { x => Row(java.sql.Timestamp.valueOf(x)) })
+      // TODO this doesn't work.  It writes out int64, not int96, and the stored schema just treats
+      // it as a long, not a timestamp
+      spark.createDataFrame(data, schema).write.parquet(dir.getCanonicalPath)
+
+      // now we should try to read that data back.  We'll fake a timezone one the table, to see
+      // what the resulting behavior is
+      ParquetRowConverter.setTimezone(TimeZone.getTimeZone("PST"))
+      spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, false)
+      val readInPst = spark.read.parquet(dir.getCanonicalPath)
+      readInPst.explain(true)
+      readInPst.show()
     }
   }
 }
