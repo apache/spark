@@ -2066,7 +2066,7 @@ class LogisticRegressionSuite
       checkModelData)
   }
 
-  test("should support all NumericType labels and not support other types") {
+  test("should support all NumericType labels and weights, and not support other types") {
     val lr = new LogisticRegression().setMaxIter(1)
     MLTestingUtils.checkNumericTypes[LogisticRegressionModel, LogisticRegression](
       lr, spark) { (expected, actual) =>

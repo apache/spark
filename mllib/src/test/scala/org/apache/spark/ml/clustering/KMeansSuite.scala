@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
@@ -156,6 +158,17 @@ object KMeansSuite {
   def generateKMeansData(spark: SparkSession, rows: Int, dim: Int, k: Int): DataFrame = {
     val sc = spark.sparkContext
     val rdd = sc.parallelize(1 to rows).map(i => Vectors.dense(Array.fill(dim)((i % k).toDouble)))
+      .map(v => new TestRow(v))
+    spark.createDataFrame(rdd)
+  }
+
+  def generateSparseData(spark: SparkSession, rows: Int, dim: Int, seed: Int): DataFrame = {
+    val sc = spark.sparkContext
+    val random = new Random(seed)
+    val nnz = random.nextInt(dim)
+    val rdd = sc.parallelize(1 to rows)
+      .map(i => Vectors.sparse(dim, random.shuffle(0 to dim - 1).slice(0, nnz).sorted.toArray,
+        Array.fill(nnz)(random.nextDouble())))
       .map(v => new TestRow(v))
     spark.createDataFrame(rdd)
   }

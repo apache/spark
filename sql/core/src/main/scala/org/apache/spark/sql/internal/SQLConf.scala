@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.{NoSuchElementException, Properties}
+import java.util.{NoSuchElementException, Properties, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -48,6 +48,11 @@ object SQLConf {
     require(!sqlConfEntries.containsKey(entry.key),
       s"Duplicate SQLConfigEntry. ${entry.key} has been registered")
     sqlConfEntries.put(entry.key, entry)
+  }
+
+  // For testing only
+  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntries.synchronized {
+    sqlConfEntries.remove(entry.key)
   }
 
   private[sql] object SQLConfigBuilder {
@@ -655,6 +660,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SESSION_LOCAL_TIMEZONE =
+    SQLConfigBuilder("spark.sql.session.timeZone")
+      .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
+      .stringConf
+      .createWithDefault(TimeZone.getDefault().getID())
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -852,6 +863,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
 
   override def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
+
+  override def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
 

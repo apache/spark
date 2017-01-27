@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -104,7 +105,9 @@ case class OptimizeMetadataOnlyQuery(
             val partAttrs = getPartitionAttrs(relation.catalogTable.partitionColumnNames, relation)
             val partitionData = catalog.listPartitions(relation.catalogTable.identifier).map { p =>
               InternalRow.fromSeq(partAttrs.map { attr =>
-                Cast(Literal(p.spec(attr.name)), attr.dataType).eval()
+                // TODO: use correct timezone for partition values.
+                Cast(Literal(p.spec(attr.name)), attr.dataType,
+                  Option(DateTimeUtils.defaultTimeZone().getID)).eval()
               })
             }
             LocalRelation(partAttrs, partitionData)

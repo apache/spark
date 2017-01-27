@@ -68,8 +68,14 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // Note that will almost certainly be planned as a Broadcast Nested Loop join.
           // Use EXISTS if performance matters to you.
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          val anyNull = splitConjunctivePredicates(joinCond.get).map(IsNull).reduceLeft(Or)
-          Join(outerPlan, sub, LeftAnti, Option(Or(anyNull, joinCond.get)))
+          // Expand the NOT IN expression with the NULL-aware semantic
+          // to its full form. That is from:
+          //   (a1,b1,...) = (a2,b2,...)
+          // to
+          //   (a1=a2 OR isnull(a1=a2)) AND (b1=b2 OR isnull(b1=b2)) AND ...
+          val joinConds = splitConjunctivePredicates(joinCond.get)
+          val pairs = joinConds.map(c => Or(c, IsNull(c))).reduceLeft(And)
+          Join(outerPlan, sub, LeftAnti, Option(pairs))
         case (p, predicate) =>
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))

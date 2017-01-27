@@ -26,7 +26,7 @@ import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
+import org.apache.spark.util.{Clock, SystemClock}
 
 /**
  * This is a helper class for managing Kinesis checkpointing.
@@ -64,7 +64,20 @@ private[kinesis] class KinesisCheckpointer(
   def removeCheckpointer(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
     synchronized {
       checkpointers.remove(shardId)
-      checkpoint(shardId, checkpointer)
+    }
+    if (checkpointer != null) {
+      try {
+        // We must call `checkpoint()` with no parameter to finish reading shards.
+        // See an URL below for details:
+        // https://forums.aws.amazon.com/thread.jspa?threadID=244218
+        KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(), 4, 100)
+      } catch {
+        case NonFatal(e) =>
+          logError(s"Exception:  WorkerId $workerId encountered an exception while checkpointing" +
+            s"to finish reading a shard of $shardId.", e)
+          // Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor
+          throw e
+      }
     }
   }
 
