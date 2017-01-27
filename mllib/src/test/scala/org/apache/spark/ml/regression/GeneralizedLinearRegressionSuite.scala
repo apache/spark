@@ -746,12 +746,13 @@ class GeneralizedLinearRegressionSuite
   test("generalized linear regression with offset") {
     /*
       R code:
+      library(statmod)
       df <- as.data.frame(matrix(c(
         1.0, 1.0, 2.0, 0.0, 5.0,
         2.0, 2.0, 0.5, 1.0, 2.0,
         1.0, 3.0, 1.0, 2.0, 1.0,
         2.0, 4.0, 0.0, 3.0, 3.0), 4, 5, byrow = TRUE))
-      families <- c(gaussian, poisson, Gamma)
+      families <- list(gaussian, poisson, Gamma, tweedie(1.5))
       f1 <- V1 ~ -1 + V4 + V5
       f2 <- V1 ~ V4 + V5
       for (f in c(f1, f2)) {
@@ -764,9 +765,11 @@ class GeneralizedLinearRegressionSuite
       [1] 0.535040431 0.005390836
       [1]  0.1968355 -0.2061711
       [1]  0.307996 -0.153579
+      [1]  0.32166185 -0.09698986
       [1] -0.8800000  0.7342857  0.1714286
       [1] -1.9991044  0.7247511  0.1424392
       [1] -0.27378146  0.31599396 -0.06204946
+      [1] -0.17118812  0.31200361 -0.02541656
     */
     val dataset = Seq(
       OffsetInstance(1.0, 1.0, 2.0, Vectors.dense(0.0, 5.0)),
@@ -779,18 +782,21 @@ class GeneralizedLinearRegressionSuite
       Vectors.dense(0.0, 0.535040431, 0.005390836),
       Vectors.dense(0.0, 0.1968355, -0.2061711),
       Vectors.dense(0.0, 0.307996, -0.153579),
+      Vectors.dense(0.0, 0.32166185, -0.09698986),
       Vectors.dense(-0.88, 0.7342857, 0.1714286),
       Vectors.dense(-1.9991044, 0.7247511, 0.1424392),
-      Vectors.dense(-0.27378146, 0.31599396, -0.06204946))
+      Vectors.dense(-0.27378146, 0.31599396, -0.06204946),
+      Vectors.dense(-0.17118812, 0.31200361, -0.02541656))
 
     import GeneralizedLinearRegression._
 
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
-      for (family <- Seq("gaussian", "poisson", "gamma")) {
-        val trainer = new GeneralizedLinearRegression().setFamily(family)
+      for (family <- Seq("gaussian", "poisson", "gamma", "tweedie")) {
+        var trainer = new GeneralizedLinearRegression().setFamily(family)
           .setFitIntercept(fitIntercept).setOffsetCol("offset")
           .setWeightCol("weight").setLinkPredictionCol("linkPrediction")
+        if (family == "tweedie") trainer = trainer.setVariancePower(1.5)
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
         assert(actual ~= expected(idx) absTol 1e-4, s"Model mismatch: GLM with family = $family," +
