@@ -18,7 +18,6 @@
 from abc import ABCMeta, abstractmethod
 import sys
 if sys.version >= '3':
-    basestring = str
     xrange = range
 
 from pyspark import SparkContext
