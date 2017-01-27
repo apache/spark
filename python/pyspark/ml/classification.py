@@ -65,33 +65,30 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
                 HasRegParam, HasTol, HasRawPredictionCol, HasFitIntercept, HasStandardization,
                 HasThreshold, HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
     """
-    Linear SVM Classifier (https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM)
+    `Linear SVM Classifier <https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM>`_
     This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
-    >>> bdf = sc.parallelize([
-    ...     Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
-    ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], []))]).toDF()
-    >>> svm = LinearSVC(maxIter=5, regParam=0.01, weightCol="weight")
-    >>> model = svm.fit(bdf)
+    >>> df = sc.parallelize([
+    ...     Row(label=1.0, features=Vectors.dense(1.0, 1.0, 1.0)),
+    ...     Row(label=0.0, features=Vectors.dense(1.0, 2.0, 3.0))]).toDF()
+    >>> svm = LinearSVC(maxIter=5, regParam=0.01)
+    >>> model = svm.fit(df)
     >>> model.coefficients
-    DenseVector([1.909])
+    DenseVector([0.0, -0.2792, -0.1833])
     >>> model.intercept
-    -1.0045358384178
+    1.0206118982229047
     >>> model.numClasses
     2
     >>> model.numFeatures
-    1
-    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
+    3
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, -1.0, -1.0))]).toDF()
     >>> result = model.transform(test0).head()
     >>> result.prediction
-    0.0
-    >>> result.rawPrediction
-    DenseVector([2.9135, -2.9135])
-    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
-    >>> model.transform(test1).head().prediction
     1.0
+    >>> result.rawPrediction
+    DenseVector([-1.4831, 1.4831])
     >>> svm.setParams("vector")
     Traceback (most recent call last):
         ...

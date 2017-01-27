@@ -63,7 +63,7 @@ class LinearSVC @Since("2.2.0") (
   def this() = this(Identifiable.randomUID("linearsvc"))
 
   /**
-   * Sets the regularization parameter.
+   * Set the regularization parameter.
    * Default is 0.0.
    *
    * @group setParam
@@ -73,7 +73,7 @@ class LinearSVC @Since("2.2.0") (
   setDefault(regParam -> 0.0)
 
   /**
-   * Sets the maximum number of iterations.
+   * Set the maximum number of iterations.
    * Default is 100.
    *
    * @group setParam
@@ -93,7 +93,7 @@ class LinearSVC @Since("2.2.0") (
   setDefault(fitIntercept -> true)
 
   /**
-   * Sets the convergence tolerance of iterations.
+   * Set the convergence tolerance of iterations.
    * Smaller values will lead to higher accuracy at the cost of more iterations.
    * Default is 1E-6.
    *
@@ -114,7 +114,7 @@ class LinearSVC @Since("2.2.0") (
   setDefault(standardization -> true)
 
   /**
-   * Sets the value of param [[weightCol]].
+   * Set the value of param [[weightCol]].
    * If this is not set or empty, we treat all instance weights as 1.0.
    * Default is not set, so all instances have weight one.
    *
@@ -124,7 +124,7 @@ class LinearSVC @Since("2.2.0") (
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /**
-   * Sets threshold in binary classification, in range [0, 1].
+   * Set threshold in binary classification, in range [0, 1].
    *
    * @group setParam
    */
