@@ -29,12 +29,11 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types._
 
 /**
-* Created by eyalf on 11/4/2016.
-* SPARK-18601 discusses simplification direct access to complex types creators.
-* i.e. {{{create_named_struct(square, `x` * `x`).square}}} can be simplified to {{{`x` * `x`}}}.
-* sam applies to create_array and create_map
-*/
-class ComplexTypesSuite extends PlanTest with Matchers{
+  * SPARK-18601 discusses simplification direct access to complex types creators.
+  * i.e. {{{create_named_struct(square, `x` * `x`).square}}} can be simplified to {{{`x` * `x`}}}.
+  * sam applies to create_array and create_map
+  */
+class ComplexTypesSuite extends PlanTest{
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -58,36 +57,36 @@ class ComplexTypesSuite extends PlanTest with Matchers{
 
   implicit class ComplexTypeDslSupport(e : Expression) {
     def getStructField(f : String): GetStructField = {
-      e should be ('resolved)
-      e.dataType should be (a[StructType])
+      assert(e.resolved)
+      assert(e.dataType.isInstanceOf[StructType])
       val structType = e.dataType.asInstanceOf[StructType]
       val ord = structType.fieldNames.indexOf(f)
-      ord shouldNot be (-1)
+      assert(-1 != ord)
       GetStructField(e, ord, Some(f))
     }
 
     def getArrayStructField(f : String) : Expression = {
-      e should be ('resolved)
-      e.dataType should be (a[ArrayType])
+      assert(e.resolved)
+      assert(e.dataType.isInstanceOf[ArrayType])
       val arrType = e.dataType.asInstanceOf[ArrayType]
-      arrType.elementType should be (a[StructType])
+      assert(arrType.elementType.isInstanceOf[StructType])
       val structType = arrType.elementType.asInstanceOf[StructType]
       val ord = structType.fieldNames.indexOf(f)
-      ord shouldNot be (-1)
+      assert(-1 != ord)
       GetArrayStructFields(e, structType(ord), ord, 1, arrType.containsNull)
     }
 
     def getArrayItem(i : Int) : GetArrayItem = {
-      e should be ('resolved)
-      e.dataType should be (a[ArrayType])
+      assert(e.resolved)
+      assert(e.dataType.isInstanceOf[ArrayType])
       GetArrayItem(e, Literal(i))
     }
 
     def getMapValue(k : Expression) : Expression = {
-      e should be ('resolved)
-      e.dataType should be (a[MapType])
+      assert(e.resolved)
+      assert(e.dataType.isInstanceOf[MapType])
       val mapType = e.dataType.asInstanceOf[MapType]
-      k.dataType shouldEqual mapType.keyType
+      assert(k.dataType == mapType.keyType)
       GetMapValue(e, k)
     }
   }
@@ -97,8 +96,7 @@ class ComplexTypesSuite extends PlanTest with Matchers{
       CreateNamedStruct("att" :: idRef :: Nil).getStructField("att") as "outerAtt"
    )
 
-    rel.schema shouldEqual
-      StructType(StructField("outerAtt", LongType, nullable = false) :: Nil)
+    assertResult(StructType(StructField("outerAtt", LongType, nullable = false) :: Nil))(rel.schema)
 
     val optimized = Optimize execute rel
 
@@ -111,10 +109,9 @@ class ComplexTypesSuite extends PlanTest with Matchers{
     val rel = baseOptimizedPlan.select(
       CreateNamedStruct("att" :: idRef :: Nil).getStructField("att")
    )
-    rel.schema shouldEqual
-      StructType(
-        StructField("named_struct(att, id AS `att`).att", LongType, nullable = false) :: Nil
-     )
+    assertResult(StructType(
+      StructField("named_struct(att, id AS `att`).att", LongType, nullable = false) :: Nil
+    ))(rel.schema)
 
     val optimized = Optimize execute rel
 
@@ -126,23 +123,25 @@ class ComplexTypesSuite extends PlanTest with Matchers{
   test("collapsed") {
     val rel = baseOptimizedPlan.select(
       CreateNamedStruct("att" :: idRef :: Nil) as "struct1"
-   )
-    rel.schema shouldEqual
+    )
+    assertResult(
       StructType(
         StructField(
           "struct1",
           StructType(StructField("att", LongType, false) :: Nil),
           false
        ) :: Nil
-     )
+      )
+    )(rel.schema)
 
     val struct1Ref = rel.output.head
     val rel2 = rel.select(struct1Ref.getStructField("att").as("struct1Att"))
 
-    rel2.schema shouldEqual
+    assertResult(
       StructType(
         StructField("struct1Att", LongType, false) :: Nil
      )
+    )(rel2.schema)
 
     val optimized = Optimize execute rel2
     val expected =
@@ -158,17 +157,18 @@ class ComplexTypesSuite extends PlanTest with Matchers{
         Literal("att2") :: (idRef * idRef) ::
         Nil) as "struct1"
    )
-    rel.schema shouldEqual
+    assertResult(
       StructType(
         StructField(
           "struct1",
           StructType(
             StructField("att1", LongType, false) ::
             StructField("att2", LongType, false) :: Nil
-         ),
+          ),
           false
-       ) :: Nil
-     )
+        ) :: Nil
+      )
+    )(rel.schema)
 
     val structRef = rel.output.head
 
@@ -176,12 +176,13 @@ class ComplexTypesSuite extends PlanTest with Matchers{
       structRef.getStructField("att1").as("struct1Att1"),
       structRef.getStructField("att2").as("struct1Att2"))
 
-    rel2.schema shouldEqual
+    assertResult(
       StructType(
         StructField("struct1Att1", LongType, false) ::
         StructField("struct1Att2", LongType, false) ::
         Nil
      )
+    )(rel2.schema)
 
     val optimized = Optimize execute rel2
     val expected =
@@ -201,28 +202,30 @@ class ComplexTypesSuite extends PlanTest with Matchers{
         Nil
      ) as "struct1"
    )
-    rel.schema shouldEqual
+    assertResult(
       StructType(
         StructField(
           "struct1",
           StructType(
             StructField("att1", LongType, false) ::
             StructField("att2", LongType, false) :: Nil
-         ),
+          ),
           false
-       ) :: Nil
-     )
+        ) :: Nil
+      )
+    )(rel.schema)
     val structRef = rel.output.head
     val rel2 = rel.select(
       structRef.getStructField("att1"),
       structRef.getStructField("att2"))
 
-    rel2.schema shouldEqual
+    assertResult(
       StructType(
         StructField("struct1.att1", LongType, false) ::
         StructField("struct1.att2", LongType, false) ::
         Nil
-     )
+      )
+    )(rel2.schema)
 
     val optimized = Optimize execute rel2
     val expected =
@@ -250,7 +253,7 @@ class ComplexTypesSuite extends PlanTest with Matchers{
         Nil
      ) as "arr"
    )
-    rel.schema shouldEqual
+    assertResult(
       StructType(
         StructField(
           "arr",
@@ -259,12 +262,13 @@ class ComplexTypesSuite extends PlanTest with Matchers{
               StructField("att1", LongType, false) ::
               StructField("att2", LongType, false) ::
               Nil
-           ),
+            ),
             false
-         ),
+          ),
           nullable = false
-       ) :: Nil
-     )
+        ) :: Nil
+      )
+    )(rel.schema)
 
     val arrRef = rel.output.head
     val rel2 = rel.select(
@@ -274,7 +278,7 @@ class ComplexTypesSuite extends PlanTest with Matchers{
       arrRef.getArrayStructField("att1").getArrayItem(1) as "a4"
    )
 
-    rel2.schema shouldEqual
+    assertResult(
       StructType(
         StructField("a1", ArrayType(LongType, false), nullable = false) ::
           StructField("a2",
@@ -289,6 +293,7 @@ class ComplexTypesSuite extends PlanTest with Matchers{
           StructField("a4", LongType, nullable = true) ::
           Nil
      )
+    )(rel2.schema)
 
     val optimized = Optimize execute rel2
     val expected =
@@ -315,7 +320,7 @@ class ComplexTypesSuite extends PlanTest with Matchers{
         :: Nil
      ) as "m"
    )
-    rel.schema shouldEqual
+    assertResult(
       StructType(
         StructField(
           "m",
@@ -328,6 +333,7 @@ class ComplexTypesSuite extends PlanTest with Matchers{
        )
         :: Nil
      )
+    )(rel.schema)
 
     val mapRef = rel.output.head
 

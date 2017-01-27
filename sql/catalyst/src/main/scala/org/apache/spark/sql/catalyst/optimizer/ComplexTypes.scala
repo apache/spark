@@ -42,12 +42,17 @@ object SimplifyCreateArrayOps extends Rule[LogicalPlan] {
     plan.transformExpressionsUp {
       // push down field selection (array of structs)
       case GetArrayStructFields(CreateArray(elems), field, ordinal, numFields, containsNull) =>
+        //instead f selecting the field on the entire array, select it from each member of the array.
+        //pushing down the operation this way open other optimizations opportunities (i.e. struct(...,x,...).x)
         CreateArray(elems.map(GetStructField(_, ordinal, Some(field.name))))
       // push down item selection.
       case ga @ GetArrayItem(CreateArray(elems), IntegerLiteral(idx)) =>
+        //instead of creating the array and then selecting one row, remove array creation altgether.
         if (idx >= 0 && idx < elems.size) {
+          //valid index
           elems(idx)
         } else {
+          //out of bounds, mimic the runtime behavior and return null
           Cast(Literal(null), ga.dataType)
         }
     }
@@ -67,7 +72,7 @@ object SimplifyCreateMapOps extends Rule[LogicalPlan] {
   def compareKeys(k1 : Expression, k2 : Expression) : ComparisonResult.Value = {
     (k1, k2) match {
       case (x, y) if x.semanticEquals(y) => ComparisonResult.PositiveMatch
-      // make surethis is null safe, especially when datatypes differ
+      // make suret his is null safe, especially when datatypes differ
       // is this even possible?
       case (_ : Literal, _ : Literal) => ComparisonResult.NegativeMatch
       case _ => ComparisonResult.UnDetermined
@@ -75,15 +80,15 @@ object SimplifyCreateMapOps extends Rule[LogicalPlan] {
   }
 
   case class ClassifiedEntries(
-    undetermined : Seq[Expression],
-    nullable : Boolean,
-    firstPositive : Option[Expression]) {
-    def normalize(k : Expression) : ClassifiedEntries = this match {
+    undetermined: Seq[Expression],
+    nullable: Boolean,
+    firstPositive: Option[Expression]) {
+    def normalize(k: Expression) : ClassifiedEntries = this match {
       /**
-      * when we have undetermined matches that might bproduce a null value,
-      * we can't separate a positive match and use [[Coalesce]] to choose the final result.
-      * so we 'hide' the positive match as an undetermined match.
-      */
+        * when we have undetermined matches that might bproduce a null value,
+        * we can't separate a positive match and use [[Coalesce]] to choose the final result.
+        * so we 'hide' the positive match as an undetermined match.
+        */
       case ClassifiedEntries(u, true, Some(p)) if u.nonEmpty =>
         ClassifiedEntries(u ++ Seq(k, p), true, None)
       case _ => this
