@@ -60,6 +60,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
     .getOrElse(
       throw new SparkException("Must specify the service name the driver is running with"))
 
+  private val kubernetesDriverPodName = conf
+    .getOption("spark.kubernetes.driver.pod.name")
+    .getOrElse(
+      throw new SparkException("Must specify the driver pod name"))
+
   private val executorMemory = conf.getOption("spark.executor.memory").getOrElse("1g")
   private val executorMemoryBytes = Utils.byteStringAsBytes(executorMemory)
 
@@ -81,6 +86,15 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val kubernetesClient = KubernetesClientBuilder
     .buildFromWithinPod(kubernetesMaster, kubernetesNamespace)
+
+  val driverPod = try {
+    kubernetesClient.pods().inNamespace(kubernetesNamespace).
+      withName(kubernetesDriverPodName).get()
+  } catch {
+    case throwable: Throwable =>
+      logError(s"Executor cannot find driver pod.", throwable)
+      throw new SparkException(s"Executor cannot find driver pod", throwable)
+  }
 
   override val minRegisteredRatio =
     if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
@@ -202,7 +216,15 @@ private[spark] class KubernetesClusterSchedulerBackend(
       .withNewMetadata()
         .withName(name)
         .withLabels(selectors)
-        .endMetadata()
+        .withOwnerReferences()
+        .addNewOwnerReference()
+          .withController(true)
+          .withApiVersion(driverPod.getApiVersion)
+          .withKind(driverPod.getKind)
+          .withName(driverPod.getMetadata.getName)
+          .withUid(driverPod.getMetadata.getUid)
+        .endOwnerReference()
+      .endMetadata()
       .withNewSpec()
         .addNewContainer()
           .withName(s"exec-${applicationId()}-container")
