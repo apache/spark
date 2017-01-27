@@ -47,7 +47,8 @@ exportMethods("glm",
               "spark.kstest",
               "spark.logit",
               "spark.randomForest",
-              "spark.gbt")
+              "spark.gbt",
+              "spark.bisectingKmeans")
 
 # Job group lifecycle management methods
 export("setJobGroup",

@@ -27,6 +27,46 @@ absoluteSparkPath <- function(x) {
   file.path(sparkHome, x)
 }
 
+test_that("spark.bisectingKmeans", {
+  newIris <- iris
+  newIris$Species <- NULL
+  training <- suppressWarnings(createDataFrame(newIris))
+
+  take(training, 1)
+
+  model <- spark.bisectingKmeans(data = training, ~ .)
+  sample <- take(select(predict(model, training), "prediction"), 1)
+  expect_equal(typeof(sample$prediction), "integer")
+  expect_equal(sample$prediction, 1)
+
+  # Test fitted works on Bisecting KMeans
+  fitted.model <- fitted(model)
+  expect_equal(sort(collect(distinct(select(fitted.model, "prediction")))$prediction),
+               c(0, 1, 2, 3))
+
+  # Test summary works on KMeans
+  summary.model <- summary(model)
+  cluster <- summary.model$cluster
+  k <- summary.model$k
+  expect_equal(k, 4)
+  expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction),
+               c(0, 1, 2, 3))
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-bisectingkmeans", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  summary2 <- summary(model2)
+  expect_equal(sort(unlist(summary.model$size)), sort(unlist(summary2$size)))
+  expect_equal(summary.model$coefficients, summary2$coefficients)
+  expect_true(!summary.model$is.loaded)
+  expect_true(summary2$is.loaded)
+
+  unlink(modelPath)
+})
+
 test_that("spark.gaussianMixture", {
   # R code to reproduce the result.
   # nolint start
