@@ -28,6 +28,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
+
 /**
  * Test suite for [[RandomForestRegressor]].
  */
@@ -100,7 +101,7 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
     // In this data, feature 1 is very important.
     val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
     val categoricalFeatures = Map.empty[Int, Int]
-    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0)
+    val df: DataFrame = TreeTests.setMetadata(data.map(_.toInstance(1.0)), categoricalFeatures, 0)
 
     val model = rf.fit(df)
 
@@ -139,10 +140,9 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
     val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "variance")
 
     val continuousData: DataFrame =
-      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
+      TreeTests.setMetadata(rdd.map(_.toInstance(1.0)), Map.empty[Int, Int], numClasses = 0)
     testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings,
-      allParamSettings, checkModelData)
-  }
+      allParamSettings, checkModelData)  }
 }
 
 private object RandomForestRegressorSuite extends SparkFunSuite {
@@ -160,7 +160,8 @@ private object RandomForestRegressorSuite extends SparkFunSuite {
       rf.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, rf.getOldImpurity)
     val oldModel = OldRandomForest.trainRegressor(data.map(OldLabeledPoint.fromML), oldStrategy,
       rf.getNumTrees, rf.getFeatureSubsetStrategy, rf.getSeed.toInt)
-    val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
+    val newData: DataFrame = TreeTests.setMetadata(data.map(_.toInstance(1.0)),
+      categoricalFeatures, numClasses = 0)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = RandomForestRegressionModel.fromOld(

@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.LeafNode
@@ -127,7 +127,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("predictRaw and predictProbability") {
-    val rdd = orderedLabeledPoints5_20
+    val rdd = orderedLabeledPoints5_20.map(_.toInstance(1.0))
     val rf = new RandomForestClassifier()
       .setImpurity("Gini")
       .setMaxDepth(3)
@@ -141,7 +141,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
 
     MLTestingUtils.checkCopyAndUids(rf, model)
 
-    testTransformer[(Vector, Double)](df, model, "prediction", "rawPrediction",
+    testTransformer[(Vector, Double, Double)](df, model, "prediction", "rawPrediction",
       "probability") { case Row(pred: Double, rawPred: Vector, probPred: Vector) =>
       assert(pred === rawPred.argmax,
         s"Expected prediction $pred but calculated ${rawPred.argmax} from rawPrediction.")
@@ -165,7 +165,8 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     val categoricalFeatures = Map.empty[Int, Int]
     val numClasses = 2
 
-    val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val df: DataFrame =
+      TreeTests.setMetadata(rdd.map(_.toInstance(1.0)), categoricalFeatures, numClasses)
     val model = rf.fit(df)
 
     testPredictionModelSinglePrediction(model, df)
@@ -180,7 +181,6 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
   /////////////////////////////////////////////////////////////////////////////
   // Tests of feature importance
   /////////////////////////////////////////////////////////////////////////////
-
   test("Feature importance with toy data") {
     val numClasses = 2
     val rf = new RandomForestClassifier()
@@ -192,7 +192,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
       .setSeed(123)
 
     // In this data, feature 1 is very important.
-    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
+    val data: RDD[Instance] = TreeTests.featureImportanceData(sc).map(_.toInstance(1.0))
     val categoricalFeatures = Map.empty[Int, Int]
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
 
@@ -225,7 +225,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     }
 
     val rf = new RandomForestClassifier().setNumTrees(2)
-    val rdd = TreeTests.getTreeReadWriteData(sc)
+    val rdd = TreeTests.getTreeReadWriteData(sc).map(_.toInstance(1.0))
 
     val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "entropy")
 
@@ -253,7 +253,8 @@ private object RandomForestClassifierSuite extends SparkFunSuite {
     val oldModel = OldRandomForest.trainClassifier(
       data.map(OldLabeledPoint.fromML), oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy,
       rf.getSeed.toInt)
-    val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
+    val newData: DataFrame =
+      TreeTests.setMetadata(data.map(_.toInstance(1.0)), categoricalFeatures, numClasses)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = RandomForestClassificationModel.fromOld(

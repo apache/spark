@@ -167,7 +167,7 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     // In this data, feature 1 is very important.
     val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
     val categoricalFeatures = Map.empty[Int, Int]
-    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0)
+    val df: DataFrame = TreeTests.setMetadata(data.map(_.toInstance(1.0)), categoricalFeatures, 0)
 
     val importances = gbt.fit(df).featureImportances
     val mostImportantFeature = importances.argmax
@@ -190,7 +190,8 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     // In this data, feature 1 is very important.
     val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
     val categoricalFeatures = Map.empty[Int, Int]
-    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
+    val df: DataFrame = TreeTests.setMetadata(data.map(_.toInstance(1.0)),
+      categoricalFeatures, numClasses)
 
     val importances = gbt.fit(df).featureImportances
     val mostImportantFeature = importances.argmax
@@ -294,7 +295,7 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
 
     val allParamSettings = TreeTests.allParamSettings ++ Map("lossType" -> "squared")
     val continuousData: DataFrame =
-      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
+      TreeTests.setMetadata(rdd.map(_.toInstance(1.0)), Map.empty[Int, Int], numClasses = 0)
     testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings,
       allParamSettings, checkModelData)
   }
@@ -315,7 +316,8 @@ private object GBTRegressorSuite extends SparkFunSuite {
     val oldBoostingStrategy = gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
     val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt)
     val oldModel = oldGBT.run(data.map(OldLabeledPoint.fromML))
-    val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
+    val newData: DataFrame =
+      TreeTests.setMetadata(data.map(_.toInstance(1.0)), categoricalFeatures, numClasses = 0)
     val newModel = gbt.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = GBTRegressionModel.fromOld(

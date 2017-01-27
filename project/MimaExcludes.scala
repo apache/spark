@@ -498,6 +498,9 @@ object MimaExcludes {
 
   // Exclude rules for 2.2.x
   lazy val v22excludes = v21excludes ++ Seq(
+    // [SPARK-19591][ML] Add sample weights to decision trees
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.tree.configuration.Strategy.this"),
+
     // [SPARK-20355] Add per application spark version on the history server headerpage
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.this"),
 

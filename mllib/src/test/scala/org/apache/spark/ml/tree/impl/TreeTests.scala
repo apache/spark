@@ -18,13 +18,15 @@
 package org.apache.spark.ml.tree.impl
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.tree._
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -32,6 +34,7 @@ private[ml] object TreeTests extends SparkFunSuite {
 
   /**
    * Convert the given data to a DataFrame, and set the features and label metadata.
+   *
    * @param data  Dataset.  Categorical features and labels must already have 0-based indices.
    *              This must be non-empty.
    * @param categoricalFeatures  Map: categorical feature index to number of distinct values
@@ -39,7 +42,7 @@ private[ml] object TreeTests extends SparkFunSuite {
    * @return DataFrame with metadata
    */
   def setMetadata(
-      data: RDD[LabeledPoint],
+      data: RDD[Instance],
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DataFrame = {
     val spark = SparkSession.builder()
@@ -64,7 +67,7 @@ private[ml] object TreeTests extends SparkFunSuite {
     }
     val labelMetadata = labelAttribute.toMetadata()
     df.select(df("features").as("features", featuresMetadata),
-      df("label").as("label", labelMetadata))
+      df("label").as("label", labelMetadata), df("weight"))
   }
 
   /**
@@ -74,12 +77,14 @@ private[ml] object TreeTests extends SparkFunSuite {
       data: JavaRDD[LabeledPoint],
       categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer],
       numClasses: Int): DataFrame = {
-    setMetadata(data.rdd, categoricalFeatures.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
+    setMetadata(data.rdd.map(_.toInstance(1.0)),
+      categoricalFeatures.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       numClasses)
   }
 
   /**
    * Set label metadata (particularly the number of classes) on a DataFrame.
+   *
    * @param data  Dataset.  Categorical features and labels must already have 0-based indices.
    *              This must be non-empty.
    * @param numClasses  Number of classes label can take. If 0, mark as continuous.
@@ -124,8 +129,8 @@ private[ml] object TreeTests extends SparkFunSuite {
    *       make mistakes such as creating loops of Nodes.
    */
   private def checkEqual(a: Node, b: Node): Unit = {
-    assert(a.prediction === b.prediction)
-    assert(a.impurity === b.impurity)
+    assert(a.prediction ~== b.prediction absTol 1e-8)
+    assert(a.impurity ~== b.impurity absTol 1e-8)
     (a, b) match {
       case (aye: InternalNode, bee: InternalNode) =>
         assert(aye.split === bee.split)
@@ -156,6 +161,7 @@ private[ml] object TreeTests extends SparkFunSuite {
   /**
    * Helper method for constructing a tree for testing.
    * Given left, right children, construct a parent node.
+   *
    * @param split  Split for parent node
    * @return  Parent node with children attached
    */
@@ -163,8 +169,8 @@ private[ml] object TreeTests extends SparkFunSuite {
     val leftImp = left.impurityStats
     val rightImp = right.impurityStats
     val parentImp = leftImp.copy.add(rightImp)
-    val leftWeight = leftImp.count / parentImp.count.toDouble
-    val rightWeight = rightImp.count / parentImp.count.toDouble
+    val leftWeight = leftImp.count / parentImp.count
+    val rightWeight = rightImp.count / parentImp.count
     val gain = parentImp.calculate() -
       (leftWeight * leftImp.calculate() + rightWeight * rightImp.calculate())
     val pred = parentImp.predict
