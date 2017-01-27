@@ -63,7 +63,8 @@ private[kafka010] class KafkaSourceRDD(
     executorKafkaParams: ju.Map[String, Object],
     offsetRanges: Seq[KafkaSourceRDDOffsetRange],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean)
+    failOnDataLoss: Boolean,
+    reuseKafkaConsumer: Boolean)
   extends RDD[ConsumerRecord[Array[Byte], Array[Byte]]](sc, Nil) {
 
   override def persist(newLevel: StorageLevel): this.type = {
@@ -122,7 +123,7 @@ private[kafka010] class KafkaSourceRDD(
   override def compute(
       thePart: Partition,
       context: TaskContext): Iterator[ConsumerRecord[Array[Byte], Array[Byte]]] = {
-    val range = thePart.asInstanceOf[KafkaSourceRDDPartition].offsetRange
+    var range = thePart.asInstanceOf[KafkaSourceRDDPartition].offsetRange
     assert(
       range.fromOffset <= range.untilOffset,
       s"Beginning offset ${range.fromOffset} is after the ending offset ${range.untilOffset} " +
@@ -135,7 +136,24 @@ private[kafka010] class KafkaSourceRDD(
     } else {
       new NextIterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
         val consumer = CachedKafkaConsumer.getOrCreate(
-          range.topic, range.partition, executorKafkaParams)
+            range.topic, range.partition, executorKafkaParams, reuseKafkaConsumer)
+        if (range.fromOffset < 0 || range.untilOffset < 0) {
+          // Late bind the offset range
+          val fromOffset = if (range.fromOffset < 0) {
+            consumer.rawConsumer.seekToBeginning(ju.Arrays.asList(range.topicPartition))
+            consumer.rawConsumer.position(range.topicPartition)
+          } else {
+            range.fromOffset
+          }
+          val untilOffset = if (range.untilOffset < 0) {
+            consumer.rawConsumer.seekToEnd(ju.Arrays.asList(range.topicPartition))
+            consumer.rawConsumer.position(range.topicPartition)
+          } else {
+            range.untilOffset
+          }
+          range = KafkaSourceRDDOffsetRange(range.topicPartition,
+            fromOffset, untilOffset, range.preferredLoc)
+        }
         var requestOffset = range.fromOffset
 
         override def getNext(): ConsumerRecord[Array[Byte], Array[Byte]] = {
