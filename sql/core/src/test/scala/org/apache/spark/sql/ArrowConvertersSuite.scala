@@ -19,15 +19,13 @@ package org.apache.spark.sql
 import java.io.File
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.util.{Locale, TimeZone}
+import java.util.Locale
 
-import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.file.json.JsonFileReader
 import org.apache.arrow.vector.util.Validator
 
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.unsafe.types.CalendarInterval
 
 
 // NOTE - nullable type can be declared as Option[*] or java.lang.*
@@ -38,7 +36,7 @@ private[sql] case class FloatData(i: Int, a_f: Float, b_f: Option[Float])
 private[sql] case class DoubleData(i: Int, a_d: Double, b_d: Option[Double])
 
 
-class ArrowSuite extends SharedSQLContext {
+class ArrowConvertersSuite extends SharedSQLContext {
   import testImplicits._
 
   private def testFile(fileName: String): String = {
@@ -46,10 +44,11 @@ class ArrowSuite extends SharedSQLContext {
   }
 
   test("collect to arrow record batch") {
-    val arrowRecordBatch = indexData.collectAsArrow()
-    assert(arrowRecordBatch.getLength > 0)
-    assert(arrowRecordBatch.getNodes.size() > 0)
-    arrowRecordBatch.close()
+    val arrowPayload = indexData.collectAsArrow()
+    assert(arrowPayload.nonEmpty)
+    arrowPayload.foreach(arrowRecordBatch => assert(arrowRecordBatch.getLength > 0))
+    arrowPayload.foreach(arrowRecordBatch => assert(arrowRecordBatch.getNodes.size() > 0))
+    arrowPayload.foreach(arrowRecordBatch => arrowRecordBatch.close())
   }
 
   test("standard type conversion") {
@@ -124,8 +123,9 @@ class ArrowSuite extends SharedSQLContext {
   }
 
   test("empty frame collect") {
-    val emptyBatch = spark.emptyDataFrame.collectAsArrow()
-    assert(emptyBatch.getLength == 0)
+    val arrowPayload = spark.emptyDataFrame.collectAsArrow()
+    assert(arrowPayload.nonEmpty)
+    arrowPayload.foreach(emptyBatch => assert(emptyBatch.getLength == 0))
   }
 
   test("unsupported types") {
@@ -163,17 +163,17 @@ class ArrowSuite extends SharedSQLContext {
   private def collectAndValidate(df: DataFrame, arrowFile: String) {
     val jsonFilePath = testFile(arrowFile)
 
-    val allocator = new RootAllocator(Integer.MAX_VALUE)
-    val jsonReader = new JsonFileReader(new File(jsonFilePath), allocator)
+    val converter = new ArrowConverters
+    val jsonReader = new JsonFileReader(new File(jsonFilePath), converter.allocator)
 
-    val arrowSchema = Arrow.schemaToArrowSchema(df.schema)
+    val arrowSchema = ArrowConverters.schemaToArrowSchema(df.schema)
     val jsonSchema = jsonReader.start()
     Validator.compareSchemas(arrowSchema, jsonSchema)
 
-    val arrowRecordBatch = df.collectAsArrow(Some(allocator))
-    val arrowRoot = new VectorSchemaRoot(arrowSchema, allocator)
+    val arrowPayload = df.collectAsArrow(Some(converter))
+    val arrowRoot = new VectorSchemaRoot(arrowSchema, converter.allocator)
     val vectorLoader = new VectorLoader(arrowRoot)
-    vectorLoader.load(arrowRecordBatch)
+    arrowPayload.foreach(vectorLoader.load)
     val jsonRoot = jsonReader.read()
 
     Validator.compareVectorSchemaRoot(arrowRoot, jsonRoot)

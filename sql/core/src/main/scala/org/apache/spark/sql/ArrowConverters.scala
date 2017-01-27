@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql
 
+import java.io.ByteArrayOutputStream
+import java.nio.channels.Channels
+
 import scala.collection.JavaConverters._
-import scala.language.implicitConversions
 
 import io.netty.buffer.ArrowBuf
 import org.apache.arrow.memory.{BaseAllocator, RootAllocator}
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.BaseValueVector.BaseMutator
+import org.apache.arrow.vector.file.ArrowWriter
 import org.apache.arrow.vector.schema.{ArrowFieldNode, ArrowRecordBatch}
 import org.apache.arrow.vector.types.{FloatingPointPrecision, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
@@ -31,7 +34,33 @@ import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
-object Arrow {
+/**
+ * Intermediate data structure returned from Arrow conversions
+ */
+private[sql] abstract class ArrowPayload extends Iterator[ArrowRecordBatch]
+
+/**
+ * Class that wraps an Arrow RootAllocator used in conversion
+ */
+private[sql] class ArrowConverters {
+  private val _allocator = new RootAllocator(Long.MaxValue)
+
+  private[sql] def allocator: RootAllocator = _allocator
+
+  private class ArrowStaticPayload(batches: ArrowRecordBatch*) extends ArrowPayload {
+    private val iter = batches.iterator
+
+    override def next(): ArrowRecordBatch = iter.next()
+    override def hasNext: Boolean = iter.hasNext
+  }
+
+  def internalRowsToPayload(rows: Array[InternalRow], schema: StructType): ArrowPayload = {
+    val batch = ArrowConverters.internalRowsToArrowRecordBatch(rows, schema, allocator)
+    new ArrowStaticPayload(batch)
+  }
+}
+
+private[sql] object ArrowConverters {
 
   /**
    * Map a Spark Dataset type to ArrowType.
@@ -49,7 +78,7 @@ object Arrow {
       case BinaryType => ArrowType.Binary.INSTANCE
       case DateType => ArrowType.Date.INSTANCE
       case TimestampType => new ArrowType.Timestamp(TimeUnit.MILLISECOND)
-      case _ => throw new UnsupportedOperationException(s"Unsupported data type: ${dataType}")
+      case _ => throw new UnsupportedOperationException(s"Unsupported data type: $dataType")
     }
   }
 
@@ -108,6 +137,25 @@ object Arrow {
       new Field(f.name, f.nullable, sparkTypeToArrowType(f.dataType), List.empty[Field].asJava)
     }
     new Schema(arrowFields.toList.asJava)
+  }
+
+  /**
+   * Write an ArrowPayload to a byte array
+   */
+  private[sql] def payloadToByteArray(payload: ArrowPayload, schema: StructType): Array[Byte] = {
+    val arrowSchema = ArrowConverters.schemaToArrowSchema(schema)
+    val out = new ByteArrayOutputStream()
+    val writer = new ArrowWriter(Channels.newChannel(out), arrowSchema)
+    try {
+      payload.foreach(writer.writeRecordBatch)
+    } catch {
+      case e: Exception =>
+        throw e
+    } finally {
+      writer.close()
+      payload.foreach(_.close())
+    }
+    out.toByteArray
   }
 }
 
@@ -255,7 +303,7 @@ private[sql] class UTF8StringColumnWriter(allocator: BaseAllocator)
 private[sql] class BinaryColumnWriter(allocator: BaseAllocator)
     extends PrimitiveColumnWriter(allocator) {
   override protected val valueVector: NullableVarBinaryVector
-    = new NullableVarBinaryVector("UTF8StringValue", allocator)
+    = new NullableVarBinaryVector("BinaryValue", allocator)
   override protected val valueMutator: NullableVarBinaryVector#Mutator = valueVector.getMutator
 
   override def setNull(): Unit = valueMutator.setNull(count)
@@ -273,6 +321,7 @@ private[sql] class DateColumnWriter(allocator: BaseAllocator)
 
   override protected def setNull(): Unit = valueMutator.setNull(count)
   override protected def setValue(row: InternalRow, ordinal: Int): Unit = {
+    // TODO: comment on diff btw value representations of date/timestamp
     valueMutator.setSafe(count, row.getInt(ordinal).toLong * 24 * 3600 * 1000)
   }
 }
@@ -286,6 +335,7 @@ private[sql] class TimeStampColumnWriter(allocator: BaseAllocator)
   override protected def setNull(): Unit = valueMutator.setNull(count)
 
   override protected def setValue(row: InternalRow, ordinal: Int): Unit = {
+    // TODO: use microsecond timestamp when ARROW-477 is resolved
     valueMutator.setSafe(count, row.getLong(ordinal) / 1000)
   }
 }

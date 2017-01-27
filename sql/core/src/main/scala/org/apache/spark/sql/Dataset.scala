@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.{ByteArrayOutputStream, CharArrayWriter}
-import java.nio.channels.Channels
+import java.io.CharArrayWriter
 import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
@@ -27,9 +26,6 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.file.ArrowWriter
-import org.apache.arrow.vector.schema.ArrowRecordBatch
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
@@ -2373,14 +2369,12 @@ class Dataset[T] private[sql](
    * @since 2.2.0
    */
   @DeveloperApi
-  def collectAsArrow(rootAllocator: Option[RootAllocator] = None): ArrowRecordBatch = {
-    val allocator = rootAllocator.getOrElse(new RootAllocator(Long.MaxValue))
+  def collectAsArrow(converter: Option[ArrowConverters] = None): ArrowPayload = {
+    val cnvtr = converter.getOrElse(new ArrowConverters)
     withNewExecutionId {
       try {
         val collectedRows = queryExecution.executedPlan.executeCollect()
-        val recordBatch = Arrow.internalRowsToArrowRecordBatch(
-          collectedRows, this.schema, allocator)
-        recordBatch
+        cnvtr.internalRowsToPayload(collectedRows, this.schema)
       } catch {
         case e: Exception =>
           throw e
@@ -2777,22 +2771,11 @@ class Dataset[T] private[sql](
    * Collect a Dataset as an ArrowRecordBatch, and serve the ArrowRecordBatch to PySpark.
    */
   private[sql] def collectAsArrowToPython(): Int = {
-    val recordBatch = collectAsArrow()
-    val arrowSchema = Arrow.schemaToArrowSchema(this.schema)
-    val out = new ByteArrayOutputStream()
-    try {
-      val writer = new ArrowWriter(Channels.newChannel(out), arrowSchema)
-      writer.writeRecordBatch(recordBatch)
-      writer.close()
-    } catch {
-      case e: Exception =>
-        throw e
-    } finally {
-      recordBatch.close()
-    }
+    val payload = collectAsArrow()
+    val payloadBytes = ArrowConverters.payloadToByteArray(payload, this.schema)
 
     withNewExecutionId {
-      PythonRDD.serveIterator(Iterator(out.toByteArray), "serve-Arrow")
+      PythonRDD.serveIterator(Iterator(payloadBytes), "serve-Arrow")
     }
   }
 
