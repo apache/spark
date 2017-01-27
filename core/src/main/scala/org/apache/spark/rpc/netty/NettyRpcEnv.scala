@@ -37,7 +37,7 @@ import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server._
 import org.apache.spark.rpc._
-import org.apache.spark.serializer.{JavaSerializer, JavaSerializerInstance}
+import org.apache.spark.serializer.{JavaSerializer, JavaSerializerInstance, SerializationStream}
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, ThreadUtils, Utils}
 
 private[netty] class NettyRpcEnv(
@@ -251,6 +251,13 @@ private[netty] class NettyRpcEnv(
 
   private[netty] def serialize(content: Any): ByteBuffer = {
     javaSerializerInstance.serialize(content)
+  }
+
+  /**
+   * Returns [[SerializationStream]] that forwards the serialized bytes to `out`.
+   */
+  private[netty] def serializeStream(out: OutputStream): SerializationStream = {
+    javaSerializerInstance.serializeStream(out)
   }
 
   private[netty] def deserialize[T: ClassTag](client: TransportClient, bytes: ByteBuffer): T = {
@@ -530,9 +537,10 @@ private[netty] class NettyRpcEndpointRef(
  */
 private[netty] class RequestMessage(
     val senderAddress: RpcAddress,
-    val receiver: NettyRpcEndpointRef, val content: Any) {
+    val receiver: NettyRpcEndpointRef,
+    val content: Any) {
 
-  /** Manually serialize [[RequestMessage]] to minimize the size of bytes. */
+  /** Manually serialize [[RequestMessage]] to minimize the size. */
   def serialize(nettyEnv: NettyRpcEnv): ByteBuffer = {
     val bos = new ByteBufferOutputStream()
     val out = new DataOutputStream(bos)
@@ -540,9 +548,12 @@ private[netty] class RequestMessage(
       writeRpcAddress(out, senderAddress)
       writeRpcAddress(out, receiver.address)
       out.writeUTF(receiver.name)
-      val contentBytes = nettyEnv.serialize(content)
-      assert(contentBytes.hasArray)
-      out.write(contentBytes.array, contentBytes.arrayOffset, contentBytes.remaining)
+      val s = nettyEnv.serializeStream(out)
+      try {
+        s.writeObject(content)
+      } finally {
+        s.close()
+      }
     } finally {
       out.close()
     }
