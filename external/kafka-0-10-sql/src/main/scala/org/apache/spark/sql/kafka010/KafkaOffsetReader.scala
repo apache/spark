@@ -43,6 +43,11 @@ private[kafka010] trait KafkaOffsetReader {
   def close()
 
   /**
+   * @return The Set of TopicPartitions for a given topic
+   */
+  def fetchTopicPartitions(): Set[TopicPartition]
+
+  /**
    * Set consumer position to specified offsets, making sure all assignments are set.
    */
   def fetchSpecificStartingOffsets(
@@ -108,7 +113,14 @@ private[kafka010] class KafkaOffsetReaderImpl(
 
   def close(): Unit = consumer.close()
 
-  def fetchSpecificStartingOffsets(
+  override def fetchTopicPartitions(): Set[TopicPartition] = {
+    assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
+    // Poll to get the latest assigned partitions
+    consumer.poll(0)
+    consumer.assignment().asScala.toSet
+  }
+
+  override def fetchSpecificStartingOffsets(
       partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
     withRetriesWithoutInterrupt {
       // Poll to get the latest assigned partitions
@@ -131,7 +143,7 @@ private[kafka010] class KafkaOffsetReaderImpl(
       }
     }
 
-  def fetchEarliestOffsets(): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
+  override def fetchEarliestOffsets(): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
     // Poll to get the latest assigned partitions
     consumer.poll(0)
     val partitions = consumer.assignment()
@@ -144,7 +156,7 @@ private[kafka010] class KafkaOffsetReaderImpl(
     partitionOffsets
   }
 
-  def fetchLatestOffsets(): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
+  override def fetchLatestOffsets(): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
     // Poll to get the latest assigned partitions
     consumer.poll(0)
     val partitions = consumer.assignment()
@@ -157,7 +169,7 @@ private[kafka010] class KafkaOffsetReaderImpl(
     partitionOffsets
   }
 
-  def fetchNewPartitionEarliestOffsets(
+  override def fetchNewPartitionEarliestOffsets(
       newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = {
     if (newPartitions.isEmpty) {
       Map.empty[TopicPartition, Long]
@@ -281,6 +293,13 @@ private[kafka010] class UninterruptibleKafkaOffsetReader(kafkaOffsetReader: Kafk
   override def close(): Unit = {
     kafkaOffsetReader.close()
     kafkaReaderThread.shutdownNow()
+  }
+
+  override def fetchTopicPartitions(): Set[TopicPartition] = {
+    val future = Future {
+      kafkaOffsetReader.fetchTopicPartitions()
+    }(execContext)
+    ThreadUtils.awaitResult(future, Duration.Inf)
   }
 
   override def fetchSpecificStartingOffsets(

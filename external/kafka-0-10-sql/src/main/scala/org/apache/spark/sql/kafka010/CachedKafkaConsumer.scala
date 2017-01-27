@@ -42,7 +42,7 @@ private[kafka010] case class CachedKafkaConsumer private(
 
   private val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
 
-  private var consumer = createConsumer
+  var rawConsumer = createConsumer
 
   /** Iterator to the already fetch data */
   private var fetchedData = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
@@ -224,8 +224,8 @@ private[kafka010] case class CachedKafkaConsumer private(
 
   /** Create a new consumer and reset cached states */
   private def resetConsumer(): Unit = {
-    consumer.close()
-    consumer = createConsumer
+    rawConsumer.close()
+    rawConsumer = createConsumer
     resetFetchedData()
   }
 
@@ -271,15 +271,15 @@ private[kafka010] case class CachedKafkaConsumer private(
     }
   }
 
-  private def close(): Unit = consumer.close()
+  private def close(): Unit = rawConsumer.close()
 
   private def seek(offset: Long): Unit = {
     logDebug(s"Seeking to $groupId $topicPartition $offset")
-    consumer.seek(topicPartition, offset)
+    rawConsumer.seek(topicPartition, offset)
   }
 
   private def poll(pollTimeoutMs: Long): Unit = {
-    val p = consumer.poll(pollTimeoutMs)
+    val p = rawConsumer.poll(pollTimeoutMs)
     val r = p.records(topicPartition)
     logDebug(s"Polled $groupId ${p.partitions()}  ${r.size}")
     fetchedData = r.iterator
@@ -290,10 +290,10 @@ private[kafka010] case class CachedKafkaConsumer private(
    * and the latest offset.
    */
   private def getAvailableOffsetRange(): (Long, Long) = {
-    consumer.seekToBeginning(Set(topicPartition).asJava)
-    val earliestOffset = consumer.position(topicPartition)
-    consumer.seekToEnd(Set(topicPartition).asJava)
-    val latestOffset = consumer.position(topicPartition)
+    rawConsumer.seekToBeginning(Set(topicPartition).asJava)
+    val earliestOffset = rawConsumer.position(topicPartition)
+    rawConsumer.seekToEnd(Set(topicPartition).asJava)
+    val latestOffset = rawConsumer.position(topicPartition)
     (earliestOffset, latestOffset)
   }
 }

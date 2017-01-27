@@ -123,7 +123,26 @@ private[kafka010] class KafkaSourceRDD(
   override def compute(
       thePart: Partition,
       context: TaskContext): Iterator[ConsumerRecord[Array[Byte], Array[Byte]]] = {
-    val range = thePart.asInstanceOf[KafkaSourceRDDPartition].offsetRange
+    var range = thePart.asInstanceOf[KafkaSourceRDDPartition].offsetRange
+    if (range.fromOffset < 0 || range.untilOffset < 0) {
+      // Late bind the offset range
+      val consumer = CachedKafkaConsumer.getOrCreate(
+        range.topic, range.partition, executorKafkaParams, reuseKafkaConsumer)
+      val fromOffset = if (range.fromOffset < 0) {
+        consumer.rawConsumer.seekToBeginning(ju.Arrays.asList(range.topicPartition))
+        consumer.rawConsumer.position(range.topicPartition)
+      } else {
+        range.fromOffset
+      }
+      val untilOffset = if (range.untilOffset < 0) {
+        consumer.rawConsumer.seekToEnd(ju.Arrays.asList(range.topicPartition))
+        consumer.rawConsumer.position(range.topicPartition)
+      } else {
+        range.untilOffset
+      }
+      range = KafkaSourceRDDOffsetRange(range.topicPartition,
+        fromOffset, untilOffset, range.preferredLoc)
+    }
     assert(
       range.fromOffset <= range.untilOffset,
       s"Beginning offset ${range.fromOffset} is after the ending offset ${range.untilOffset} " +

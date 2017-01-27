@@ -58,7 +58,7 @@ private[kafka010] class KafkaRelation(
     val untilPartitionOffsets = getPartitionOffsets(endingOffsets)
     // Obtain topicPartitions in both from and until partition offset, ignoring
     // topic partitions that were added and/or deleted between the two above calls.
-    if (fromPartitionOffsets.keySet.size != untilPartitionOffsets.keySet.size) {
+    if (fromPartitionOffsets.keySet != untilPartitionOffsets.keySet) {
       implicit val topicOrdering: Ordering[TopicPartition] = Ordering.by(t => t.topic())
       val fromTopics = fromPartitionOffsets.keySet.toList.sorted.mkString(",")
       val untilTopics = untilPartitionOffsets.keySet.toList.sorted.mkString(",")
@@ -97,9 +97,27 @@ private[kafka010] class KafkaRelation(
     sqlContext.internalCreateDataFrame(rdd, schema).rdd
   }
 
-  private def getPartitionOffsets(kafkaOffsets: KafkaOffsets) = kafkaOffsets match {
-    case EarliestOffsets => kafkaReader.fetchEarliestOffsets()
-    case LatestOffsets => kafkaReader.fetchLatestOffsets()
-    case SpecificOffsets(p) => kafkaReader.fetchSpecificStartingOffsets(p)
+  private def getPartitionOffsets(kafkaOffsets: KafkaOffsets): Map[TopicPartition, Long] = {
+    def validateTopicPartitions(partitions: Set[TopicPartition],
+      partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
+      assert(partitions == partitionOffsets.keySet,
+        "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
+          "Use -1 for latest, -2 for earliest, if you don't care.\n" +
+          s"Specified: ${partitionOffsets.keySet} Assigned: ${partitions}")
+      logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
+      partitionOffsets
+    }
+    val partitions = kafkaReader.fetchTopicPartitions()
+    // Obtain TopicPartition offsets with late binding support
+    kafkaOffsets match {
+      case EarliestOffsets => partitions.map {
+        case tp => tp -> -2L
+      }.toMap
+      case LatestOffsets => partitions.map {
+        case tp => tp -> -1L
+      }.toMap
+      case SpecificOffsets(partitionOffsets) =>
+        validateTopicPartitions(partitions, partitionOffsets)
+    }
   }
 }

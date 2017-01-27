@@ -23,7 +23,7 @@ import org.apache.kafka.common.TopicPartition
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
+import org.apache.spark.sql.test.SharedSQLContext
 
 class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLContext {
 
@@ -61,7 +61,7 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
     testUtils.sendMessages(topic, Array("20"), Some(2))
 
     // Specify explicit earliest and latest offset values
-    val reader = spark
+    val df = spark
       .read
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
@@ -69,12 +69,11 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
       .option("startingOffsets", "earliest")
       .option("endingOffsets", "latest")
       .load()
-    var df = reader.selectExpr("CAST(value AS STRING)")
+      .selectExpr("CAST(value AS STRING)")
     checkAnswer(df, (0 to 20).map(_.toString).toDF)
 
-    // "latest" should late bind to the current (latest) offset in the reader
+    // "latest" should late bind to the current (latest) offset in the df
     testUtils.sendMessages(topic, (21 to 29).map(_.toString).toArray, Some(2))
-    df = reader.selectExpr("CAST(value AS STRING)")
     checkAnswer(df, (0 to 29).map(_.toString).toDF)
   }
 
@@ -118,7 +117,7 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
       new TopicPartition(topic, 2) -> 1L  // explicit offset happens to = the latest
     )
     val endingOffsets = JsonUtils.partitionOffsets(endPartitionOffsets)
-    val reader = spark
+    val df = spark
       .read
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
@@ -126,17 +125,15 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
       .option("startingOffsets", startingOffsets)
       .option("endingOffsets", endingOffsets)
       .load()
-    var df = reader.selectExpr("CAST(value AS STRING)")
+      .selectExpr("CAST(value as STRING)")
     checkAnswer(df, (0 to 20).map(_.toString).toDF)
 
     // static offset partition 2, nothing should change
     testUtils.sendMessages(topic, (31 to 39).map(_.toString).toArray, Some(2))
-    df = reader.selectExpr("CAST(value AS STRING)")
     checkAnswer(df, (0 to 20).map(_.toString).toDF)
 
     // latest offset partition 1, should change
     testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(1))
-    df = reader.selectExpr("CAST(value AS STRING)")
     checkAnswer(df, (0 to 30).map(_.toString).toDF)
   }
 
@@ -147,7 +144,7 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
     testUtils.sendMessages(topic, (0 to 10).map(_.toString).toArray, Some(0))
 
     // Specify explicit earliest and latest offset values
-    val reader = spark
+    val df = spark
       .read
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
@@ -155,8 +152,54 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
       .option("startingOffsets", "earliest")
       .option("endingOffsets", "latest")
       .load()
-    var df = reader.selectExpr("CAST(value AS STRING)")
+      .selectExpr("CAST(value AS STRING)")
     checkAnswer(df.union(df), ((0 to 10) ++ (0 to 10)).map(_.toString).toDF)
+  }
+
+  test("test late binding start offsets") {
+    try {
+      // First, establish a new KafkaUtils instance that will clear
+      // all messages when cleanupLogs is called.
+      if (testUtils != null) {
+        testUtils.teardown()
+        testUtils = null
+      }
+      // The following settings will ensure that all log entries
+      // are removed following a call to cleanupLogs
+      val brokerProps = Map[String, Object](
+        "log.retention.bytes" -> 1.asInstanceOf[AnyRef], // retain nothing
+        "log.retention.ms" -> 1.asInstanceOf[AnyRef]     // no wait time
+      )
+      testUtils = new KafkaTestUtils(withBrokerProps = Some(brokerProps))
+      testUtils.setup()
+
+      val topic = newTopic()
+      testUtils.createTopic(topic, partitions = 1)
+      testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
+      // Specify explicit earliest and latest offset values
+      val df = spark
+        .read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribe", topic)
+        .option("startingOffsets", "earliest")
+        .option("endingOffsets", "latest")
+        .load()
+        .selectExpr("CAST(value AS STRING)")
+      checkAnswer(df, (0 to 9).map(_.toString).toDF)
+      // Blow away current set of messages.
+      testUtils.cleanupLogs()
+      // Add some more data, but do not call cleanup
+      testUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(0))
+      // Ensure that we late bind to the new starting position
+      checkAnswer(df, (10 to 19).map(_.toString).toDF)
+    } finally {
+      if (testUtils != null) {
+        testUtils.teardown()
+      }
+      testUtils = new KafkaTestUtils
+      testUtils.setup()
+    }
   }
 
   test("bad source options") {
