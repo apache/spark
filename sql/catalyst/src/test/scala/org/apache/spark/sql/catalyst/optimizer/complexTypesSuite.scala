@@ -29,10 +29,10 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types._
 
 /**
-  * SPARK-18601 discusses simplification direct access to complex types creators.
-  * i.e. {{{create_named_struct(square, `x` * `x`).square}}} can be simplified to {{{`x` * `x`}}}.
-  * sam applies to create_array and create_map
-  */
+* SPARK-18601 discusses simplification direct access to complex types creators.
+* i.e. {{{create_named_struct(square, `x` * `x`).square}}} can be simplified to {{{`x` * `x`}}}.
+* sam applies to create_array and create_map
+*/
 class ComplexTypesSuite extends PlanTest{
 
   object Optimize extends RuleExecutor[LogicalPlan] {
