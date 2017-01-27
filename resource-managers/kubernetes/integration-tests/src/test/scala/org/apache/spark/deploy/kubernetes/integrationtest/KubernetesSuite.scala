@@ -36,6 +36,7 @@ import org.apache.spark.deploy.kubernetes.Client
 import org.apache.spark.deploy.kubernetes.integrationtest.docker.SparkDockerImageBuilder
 import org.apache.spark.deploy.kubernetes.integrationtest.minikube.Minikube
 import org.apache.spark.deploy.kubernetes.integrationtest.restapis.SparkRestApiV1
+import org.apache.spark.internal.Logging
 import org.apache.spark.status.api.v1.{ApplicationStatus, StageStatus}
 import org.apache.spark.util.Utils
 
@@ -82,8 +83,15 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
 
   before {
     Eventually.eventually(TIMEOUT, INTERVAL) {
-      assert(minikubeKubernetesClient.pods().list().getItems.isEmpty)
-      assert(minikubeKubernetesClient.services().list().getItems.isEmpty)
+      val podsList = minikubeKubernetesClient.pods().list()
+      assert(podsList == null
+        || podsList.getItems == null
+        || podsList.getItems.isEmpty
+      )
+      val servicesList = minikubeKubernetesClient.services().list()
+      assert(servicesList == null
+        || servicesList.getItems == null
+        || servicesList.getItems.isEmpty)
     }
   }
 
@@ -139,6 +147,9 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Run a simple example") {
+    // We'll make assertions based on spark rest api, so we need to turn on
+    // spark.ui.enabled explicitly since the scalatest-maven-plugin would set it
+    // to false by default.
     val sparkConf = new SparkConf(true)
       .setMaster(s"k8s://https://${Minikube.getMinikubeIp}:8443")
       .set("spark.kubernetes.submit.caCertFile", clientConfig.getCaCertFile)
@@ -152,6 +163,8 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       .set("spark.executor.cores", "1")
       .set("spark.executors.instances", "1")
       .set("spark.app.id", "spark-pi")
+      .set("spark.ui.enabled", "true")
+      .set("spark.testing", "false")
     val mainAppResource = s"file://$EXAMPLES_JAR"
 
     new Client(
@@ -174,6 +187,8 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--num-executors", "1",
       "--upload-jars", HELPER_JAR,
       "--class", MAIN_CLASS,
+      "--conf", "spark.ui.enabled=true",
+      "--conf", "spark.testing=false",
       "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
       "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
       "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",

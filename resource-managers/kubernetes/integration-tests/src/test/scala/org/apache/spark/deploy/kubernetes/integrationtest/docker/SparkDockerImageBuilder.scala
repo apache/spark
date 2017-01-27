@@ -55,5 +55,4 @@ private[spark] class SparkDockerImageBuilder(private val dockerEnv: Map[String, 
     dockerClient.build(Paths.get("target", "docker", "driver"), "spark-driver")
     dockerClient.build(Paths.get("target", "docker", "executor"), "spark-executor")
   }
-
 }
