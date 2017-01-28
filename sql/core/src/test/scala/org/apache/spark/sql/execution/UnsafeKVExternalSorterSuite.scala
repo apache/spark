@@ -19,13 +19,14 @@ package org.apache.spark.sql.execution
 
 import java.util.Properties
 
+import scala.collection.JavaConverters._
 import scala.util.Random
 
 import org.apache.spark._
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, Descending, InterpretedOrdering, SortOrder, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
@@ -110,7 +111,8 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
       valueSchema: StructType,
       inputData: Seq[(InternalRow, InternalRow)],
       pageSize: Long,
-      spill: Boolean): Unit = {
+      spill: Boolean,
+      sortOrdering: java.util.List[SortOrder] = null): Unit = {
     val memoryManager =
       new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"))
     val taskMemMgr = new TaskMemoryManager(memoryManager, 0)
@@ -125,7 +127,8 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
 
     val sorter = new UnsafeKVExternalSorter(
       keySchema, valueSchema, SparkEnv.get.blockManager, SparkEnv.get.serializerManager,
-      pageSize, UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD)
+      pageSize, UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD,
+      null, sortOrdering)
 
     // Insert the keys and values into the sorter
     inputData.foreach { case (k, v) =>
@@ -145,7 +148,11 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
     }
     sorter.cleanupResources()
 
-    val keyOrdering = InterpretedOrdering.forSchema(keySchema.map(_.dataType))
+    val keyOrdering = if (sortOrdering == null) {
+      InterpretedOrdering.forSchema(keySchema.map(_.dataType))
+    } else {
+      new InterpretedOrdering(sortOrdering.asScala)
+    }
     val valueOrdering = InterpretedOrdering.forSchema(valueSchema.map(_.dataType))
     val kvOrdering = new Ordering[(InternalRow, InternalRow)] {
       override def compare(x: (InternalRow, InternalRow), y: (InternalRow, InternalRow)): Int = {
@@ -202,6 +209,43 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
       inputData,
       pageSize,
       spill = true
+    )
+  }
+
+  test("kv sorting with records that exceed page size: with specified sort order") {
+    val pageSize = 128
+
+    val keySchema = StructType(StructField("a", BinaryType) :: StructField("b", BinaryType) :: Nil)
+    val valueSchema = StructType(StructField("c", BinaryType) :: Nil)
+    val keyExternalConverter = CatalystTypeConverters.createToCatalystConverter(keySchema)
+    val valueExternalConverter = CatalystTypeConverters.createToCatalystConverter(valueSchema)
+    val keyConverter = UnsafeProjection.create(keySchema)
+    val valueConverter = UnsafeProjection.create(valueSchema)
+
+    val rand = new Random()
+    val inputData = Seq.fill(1024) {
+      val kBytes1 = new Array[Byte](rand.nextInt(pageSize))
+      val kBytes2 = new Array[Byte](rand.nextInt(pageSize))
+      val vBytes = new Array[Byte](rand.nextInt(pageSize))
+      rand.nextBytes(kBytes1)
+      rand.nextBytes(kBytes2)
+      rand.nextBytes(vBytes)
+      val k =
+        keyConverter(keyExternalConverter.apply(Row(kBytes1, kBytes2)).asInstanceOf[InternalRow])
+      val v = valueConverter(valueExternalConverter.apply(Row(vBytes)).asInstanceOf[InternalRow])
+      (k.asInstanceOf[InternalRow].copy(), v.asInstanceOf[InternalRow].copy())
+    }
+
+    val sortOrder = SortOrder(BoundReference(0, BinaryType, nullable = true), Ascending) ::
+      SortOrder(BoundReference(1, BinaryType, nullable = true), Descending) :: Nil
+
+    testKVSorter(
+      keySchema,
+      valueSchema,
+      inputData,
+      pageSize,
+      spill = true,
+      sortOrder.asJava
     )
   }
 }

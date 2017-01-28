@@ -487,6 +487,36 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
+  test("SPARK-19352: Keep sort order of rows after external sorter when writing") {
+    spark.stop()
+    // Explicitly set memory configuration to force `UnsafeKVExternalSorter` to spill to files
+    // when inserting data.
+    val newSpark = SparkSession.builder()
+      .master("local")
+      .appName("test")
+      .config("spark.buffer.pageSize", "16b")
+      .config("spark.testing.memory", "1400")
+      .config("spark.memory.fraction", "0.1")
+      .config("spark.shuffle.sort.initialBufferSize", "2")
+      .config("spark.memory.offHeap.enabled", "false")
+      .getOrCreate()
+    withTempPath { path =>
+      val tempDir = path.getCanonicalPath
+      val df = newSpark.range(100)
+        .select($"id", explode(array(col("id") + 1, col("id") + 2, col("id") + 3)).as("value"))
+        .repartition($"id")
+        .sortWithinPartitions($"value".desc).toDF()
+
+      df.write
+        .partitionBy("id")
+        .parquet(tempDir)
+
+      val dfReadIn = newSpark.read.parquet(tempDir).select("id", "value")
+      checkAnswer(df.filter("id = 65"), dfReadIn.filter("id = 65"))
+    }
+    newSpark.stop()
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =
