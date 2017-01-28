@@ -350,7 +350,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, linkPredictionCol,
+    instr.logParams(labelCol, featuresCol, weightCol, offsetCol, predictionCol, linkPredictionCol,
       family, solver, fitIntercept, link, maxIter, regParam, tol)
     instr.logNumFeatures(numFeatures)
 
@@ -361,7 +361,11 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     }
 
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val off = if (!isDefined(offsetCol) || $(offsetCol).isEmpty) lit(0.0) else col($(offsetCol))
+    val off = if (!isDefined(offsetCol) || $(offsetCol).isEmpty) {
+      lit(0.0)
+    } else {
+      col($(offsetCol)).cast(DoubleType)
+    }
 
     val model = if (familyAndLink.family == Gaussian && familyAndLink.link == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
@@ -1002,7 +1006,11 @@ class GeneralizedLinearRegressionModel private[ml] (
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val predictUDF = udf { (features: Vector, offset: Double) => predict(features, offset) }
     val predictLinkUDF = udf { (features: Vector, offset: Double) => predictLink(features, offset) }
-    val offset = if (!isSet(offsetCol) || $(offsetCol).isEmpty) lit(0.0) else col($(offsetCol))
+    val offset = if (!isSet(offsetCol) || $(offsetCol).isEmpty) {
+      lit(0.0)
+    } else {
+      col($(offsetCol)).cast(DoubleType)
+    }
     var output = dataset
     if ($(predictionCol).nonEmpty) {
       output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol)), offset))
