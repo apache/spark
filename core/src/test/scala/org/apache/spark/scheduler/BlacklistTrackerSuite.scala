@@ -17,8 +17,10 @@
 
 package org.apache.spark.scheduler
 
+import org.mockito.invocation.InvocationOnMock
 import org.mockito.Matchers.any
 import org.mockito.Mockito.{never, verify, when}
+import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mock.MockitoSugar
 
@@ -463,7 +465,14 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   test("blacklisting kills executors, configured by BLACKLIST_KILL_ENABLED") {
     val allocationClientMock = mock[ExecutorAllocationClient]
     when(allocationClientMock.killExecutors(any(), any(), any())).thenReturn(Seq("called"))
-    when(allocationClientMock.killExecutorsOnHost(any())).thenReturn(true)
+    when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer(new Answer[Boolean] {
+      override def answer(invocation: InvocationOnMock): Boolean = {
+        if (blacklist.nodeBlacklist.contains("hostA") == false) {
+          throw new IllegalStateException("hostA should be on the blacklist")
+        }
+        true
+      }
+    })
     blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
 
     // Disable auto-kill. Blacklist an executor and make sure killExecutors is not called.
@@ -515,5 +524,32 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
     verify(allocationClientMock).killExecutors(Seq("2"), true, true)
     verify(allocationClientMock).killExecutorsOnHost("hostA")
+  }
+
+  /*
+  Also it would be nice to have a test for CoarseGrainedSchedulerBackend, that it rejects executors
+  that are registered on a blacklisted node -- that one will be a bit more work to setup, but
+  I think it should be possible.
+
+  These tests won't really be stressing this implementation, but they'll help prevent regressions
+  with future changes.
+   */
+
+  test("reject executors on a node scheduled for killing") {
+    val allocationClientMock = mock[ExecutorAllocationClient]
+    when(allocationClientMock.killExecutors(any(), any(), any())).thenReturn(Seq("called"))
+    // when(allocationClientMock.killExecutorsOnHost(any())).thenReturn(true)
+    when(allocationClientMock.killExecutorsOnHost("hostA")).
+      thenReturn(blacklist.nodeBlacklist.contains("hostA"))
+    blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
+
+    // Disable auto-kill. Blacklist an executor and make sure killExecutors is not called.
+    conf.set(config.BLACKLIST_KILL_ENABLED, false)
+
+    // Construct an environment with a node and three executors.
+    // Blacklist the first executor.
+    // Blacklist the second executor. This should trigger node killing.
+    // Try to allocate a resource on the third executor and verify that you are unable.
+
   }
 }

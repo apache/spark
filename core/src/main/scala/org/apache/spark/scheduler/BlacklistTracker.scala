@@ -203,7 +203,9 @@ private[scheduler] class BlacklistTracker (
               case Some(allocationClient) =>
                 logInfo(s"Killing all executors on blacklisted host $node " +
                   s"since spark.blacklist.kill is set.")
-                allocationClient.killExecutorsOnHost(node)
+                if(allocationClient.killExecutorsOnHost(node) == false) {
+                  logError(s"Killing executors on node $node failed.")
+                }
               case None =>
                 logWarning(s"Not attempting to kill executors on blacklisted host $node " +
                   s"since allocation client is not defined.")
