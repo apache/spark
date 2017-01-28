@@ -130,21 +130,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
-  /**
-   * For Hive serde tables, some serde libraries require the specified schema and record it
-   * in the metastore. The main code is from the function hasMetastoreBasedSchema in Table.java
-   */
-  private def verifySchema(table: CatalogTable): Unit = {
-    val serdeLib = table.storage.serde
-    val serdeUsingMetastoreForSchemaConf = HiveConf.ConfVars.SERDESUSINGMETASTOREFORSCHEMA.varname
-    val hasMetastoreBasedSchema = serdeLib.isEmpty ||
-      client.getConf(serdeUsingMetastoreForSchemaConf, "").contains(serdeLib.get)
-    if (table.schema.length <= 0 && DDLUtils.isHiveTable(table) && hasMetastoreBasedSchema) {
-      throw new AnalysisException("Unable to infer the schema. " +
-        s"The schema specification is required to create the table ${table.identifier}.")
-    }
-  }
-
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
@@ -210,7 +195,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val table = tableDefinition.identifier.table
     requireDbExists(db)
     verifyTableProperties(tableDefinition)
-    verifySchema(tableDefinition)
 
     if (tableExists(db, table) && !ignoreIfExists) {
       throw new TableAlreadyExistsException(db = db, table = table)
@@ -526,7 +510,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
     verifyTableProperties(tableDefinition)
-    verifySchema(tableDefinition)
 
     // convert table statistics to properties so that we can persist them through hive api
     val withStatsProps = if (tableDefinition.stats.isDefined) {
