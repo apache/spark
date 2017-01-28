@@ -47,7 +47,7 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
 /**
  * :: Experimental ::
  *
- * Linear SVM Classifier (https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM)
+ * [[https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM  Linear SVM Classifier]]
  *
  * This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
  *
