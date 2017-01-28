@@ -18,7 +18,7 @@
 context("functions on binary files")
 
 # Ensure Spark is installed
-sparkCheckInstall(Sys.getenv("SPARK_HOME"), "local", "")
+sparkCheckInstall()
 
 # JavaSparkContext handle
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)

@@ -18,7 +18,7 @@
 context("tests RDD function take()")
 
 # Ensure Spark is installed
-sparkCheckInstall(Sys.getenv("SPARK_HOME"), "local", "")
+sparkCheckInstall()
 
 # Mock data
 numVector <- c(-10:97)

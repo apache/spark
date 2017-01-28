@@ -20,7 +20,7 @@ library(testthat)
 context("MLlib statistics algorithms")
 
 # Ensure Spark is installed
-sparkCheckInstall(Sys.getenv("SPARK_HOME"), "local", "")
+sparkCheckInstall()
 
 # Tests for MLlib statistics algorithms in SparkR
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)

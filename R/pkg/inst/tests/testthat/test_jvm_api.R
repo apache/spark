@@ -18,7 +18,7 @@
 context("JVM API")
 
 # Ensure Spark is installed
-sparkCheckInstall(Sys.getenv("SPARK_HOME"), "local", "")
+sparkCheckInstall()
 
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 

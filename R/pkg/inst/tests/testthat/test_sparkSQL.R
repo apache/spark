@@ -20,7 +20,7 @@ library(testthat)
 context("SparkSQL functions")
 
 # Ensure Spark is installed
-sparkCheckInstall(Sys.getenv("SPARK_HOME"), "local", "")
+sparkCheckInstall()
 
 # Utility function for easily checking the values of a StructField
 checkStructField <- function(actual, expectedName, expectedType, expectedNullable) {

@@ -20,7 +20,7 @@ library(testthat)
 context("MLlib classification algorithms, except for tree-based algorithms")
 
 # Ensure Spark is installed
-sparkCheckInstall(Sys.getenv("SPARK_HOME"), "local", "")
+sparkCheckInstall()
 
 # Tests for MLlib classification algorithms in SparkR
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
