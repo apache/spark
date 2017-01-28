@@ -106,14 +106,15 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
               print(family)
               stop("'family' not recognized")
             }
-            # recover variancePower and linkPower from specified tweedie family
+            
+            # recover variancePower and linkPower from the specified tweedie family
             if (tolower(family$family) == "tweedie") {
               variancePower <- log(family$variance(exp(1)))
               linkPower <- log(family$linkfun(exp(1)))
             } else {
-              # these values won't be used if family is not tweedie
+              # these default values are not used
               variancePower <- 0.0
-              linkPower <- 0.0
+              linkPower <- 1.0
             }
 
             formula <- paste(deparse(formula), collapse = "")
@@ -186,9 +187,10 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             deviance <- callJMethod(jobj, "rDeviance")
             df.null <- callJMethod(jobj, "rResidualDegreeOfFreedomNull")
             df.residual <- callJMethod(jobj, "rResidualDegreeOfFreedom")
-            aic <- callJMethod(jobj, "rAic")
             iter <- callJMethod(jobj, "rNumIterations")
             family <- callJMethod(jobj, "rFamily")
+            aic <- callJMethod(jobj, "rAic")
+            if (family == "tweedie" && aic == 0) aic <- NA
             deviance.resid <- if (is.loaded) {
               NULL
             } else {

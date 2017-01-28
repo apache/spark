@@ -85,18 +85,17 @@ private[r] object GeneralizedLinearRegressionWrapper
     // assemble and fit the pipeline
     var glr = new GeneralizedLinearRegression()
       .setFamily(family)
-      .setLink(link)
       .setFitIntercept(rFormula.hasIntercept)
       .setTol(tol)
       .setMaxIter(maxIter)
       .setWeightCol(weightCol)
       .setRegParam(regParam)
       .setFeaturesCol(rFormula.getFeaturesCol)
-    // set variancePower and linkPower in tweedie family and clear link
+    // set variancePower and linkPower if family is tweedie; otherwise, set link function
     if (family.toLowerCase == "tweedie") {
-      glr = glr.clear(glr.link)
-        .setVariancePower(variancePower)
-        .setLinkPower(linkPower)
+      glr = glr.setVariancePower(variancePower).setLinkPower(linkPower)
+    } else {
+      glr = glr.setLink(link)
     }
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, glr))
@@ -151,7 +150,12 @@ private[r] object GeneralizedLinearRegressionWrapper
     val rDeviance: Double = summary.deviance
     val rResidualDegreeOfFreedomNull: Long = summary.residualDegreeOfFreedomNull
     val rResidualDegreeOfFreedom: Long = summary.residualDegreeOfFreedom
-    val rAic: Double = summary.aic
+    val rAic: Double = if (family.toLowerCase == "tweedie" &&
+      !Array(0.0, 1.0, 2.0).contains(variancePower)) {
+      0.0
+    } else {
+      summary.aic
+    }
     val rNumIterations: Int = summary.numIterations
 
     new GeneralizedLinearRegressionWrapper(pipeline, rFeatures, rCoefficients, rDispersion,
