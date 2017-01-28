@@ -106,7 +106,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
               print(family)
               stop("'family' not recognized")
             }
-            
+
             # recover variancePower and linkPower from the specified tweedie family
             if (tolower(family$family) == "tweedie") {
               variancePower <- log(family$variance(exp(1)))

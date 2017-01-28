@@ -88,7 +88,7 @@ test_that("spark.glm and predict", {
     glm(Sepal.Width ~ Sepal.Length + Species, data = iris,
         family = tweedie(var.power = 1.2, link.power = 1.0)), iris))
   expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
-  
+
   # Test stats::predict is working
   x <- rnorm(15)
   y <- x + rnorm(15)
