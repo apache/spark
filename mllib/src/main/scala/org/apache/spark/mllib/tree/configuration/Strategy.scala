@@ -109,7 +109,8 @@ class Strategy @Since("1.3.0") (
       maxBins: Int,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]) {
     this(algo, impurity, maxDepth, numClasses, maxBins, Sort,
-      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
+      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
+      minWeightFractionPerNode = 0.0)
   }
 
   /**
