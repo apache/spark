@@ -114,7 +114,7 @@ class LinearSVC @Since("2.2.0") (
   setDefault(standardization -> true)
 
   /**
-   * Sets the value of param [[weightCol]].
+   * Set the value of param [[weightCol]].
    * If this is not set or empty, we treat all instance weights as 1.0.
    * Default is not set, so all instances have weight one.
    *
@@ -421,7 +421,7 @@ private class LinearSVCCostFun(
 
 /**
  * LinearSVCAggregator computes the gradient and loss for hinge loss function, as used
- * in binary classification for instances in sparse or dense vector in a online fashion.
+ * in binary classification for instances in sparse or dense vector in an online fashion.
  *
  * Two LinearSVCAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
