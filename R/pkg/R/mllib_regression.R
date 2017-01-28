@@ -86,9 +86,9 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' summary(savedModel)
 #'
 #' # fit tweedie model
-#' library(statmod)
+#' require(statmod)
 #' model <- spark.glm(df, Sepal_Length ~ Sepal_Width, 
-#'   family = tweedie(var.power = 1.5, link.power = 0))
+#'   family = tweedie(var.power = 1.2, link.power = 0))
 #' summary(model)
 #' }
 #' @note spark.glm since 2.0.0
