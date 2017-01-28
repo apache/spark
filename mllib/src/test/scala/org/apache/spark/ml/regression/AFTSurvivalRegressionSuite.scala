@@ -383,11 +383,11 @@ class AFTSurvivalRegressionSuite
       assert(expected.coefficients === actual.coefficients)
     }
 
-    val dfWithStringLabels = spark.createDataFrame(Seq(
+    val dfWithStringCensors = spark.createDataFrame(Seq(
       (0, Vectors.dense(0, 2, 3), "0")
     )).toDF("label", "features", "censor")
     val thrown = intercept[IllegalArgumentException] {
-      aft.fit(dfWithStringLabels)
+      aft.fit(dfWithStringCensors)
     }
     assert(thrown.getMessage.contains(
       "Column censor must be of type NumericType but was actually of type StringType"))
