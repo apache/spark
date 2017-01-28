@@ -62,16 +62,16 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
         catalog.OrcConversions ::
-        new DetermineHiveSerde(conf) ::
+        new ResolveHiveSerdeTable(sparkSession) ::
         new FindDataSourceTable(sparkSession) ::
         new FindHiveSerdeTable(sparkSession) ::
-        new ResolveDataSource(sparkSession) :: Nil
+        new ResolveSQLOnFile(sparkSession) :: Nil
 
       override val postHocResolutionRules =
         AnalyzeCreateTable(sparkSession) ::
         PreprocessTableInsertion(conf) ::
         DataSourceAnalysis(conf) ::
-        new HiveAnalysis(sparkSession) :: Nil
+        HiveAnalysis :: Nil
 
       override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
