@@ -383,7 +383,7 @@ class DecisionTreeClassifierSuite
     for ((impurity, maxDepth) <- testParams) {
       val estimator = new DecisionTreeClassifier()
         .setMaxDepth(maxDepth)
-        .setSeed(seed)t
+        .setSeed(seed)
         .setMinWeightFractionPerNode(0.049)
         .setImpurity(impurity)
 
