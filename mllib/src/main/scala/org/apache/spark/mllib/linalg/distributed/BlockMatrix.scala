@@ -281,7 +281,7 @@ class BlockMatrix @Since("1.3.0") (
 
       val wholeVector =
         if (numberNonZeroPerRow <= 0.1) { // Sparse at 1/10th nnz
-        val wholeVectorBuf = VectorBuilder.zeros[Double](cols)
+          val wholeVectorBuf = VectorBuilder.zeros[Double](cols)
           vectors.foreach { case (blockColIdx: Int, vec: BV[Double]) =>
             val offset = colsPerBlock * blockColIdx
             vec.activeIterator.foreach {
