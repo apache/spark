@@ -636,6 +636,7 @@ object functions {
    * @since 2.2.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def approx_percentile(col: Column, percentages: Array[Double], accuracy: Int): Column =
     withAggregateFunction {
       new ApproximatePercentile(
@@ -662,6 +663,7 @@ object functions {
    * @since 2.2.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def approx_percentile(columnName: String, percentages: Array[Double], accuracy: Int): Column = {
     approx_percentile(Column(columnName), percentages, accuracy)
   }
@@ -684,6 +686,7 @@ object functions {
    * @since 2.2.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def approx_percentile(col: Column, percentages: Array[Double]): Column = withAggregateFunction {
     new ApproximatePercentile(col.expr, CreateArray(percentages.map(v => Literal(v))))
   }
@@ -706,6 +709,7 @@ object functions {
    * @since 2.2.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def approx_percentile(columnName: String, percentages: Array[Double]): Column = {
     approx_percentile(Column(columnName), percentages)
   }
@@ -730,6 +734,7 @@ object functions {
    * @since 2.2.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def approx_percentile(col: Column, percentage: Double, accuracy: Int): Column =
     withAggregateFunction {
       new ApproximatePercentile(col.expr, Literal(percentage), Literal(accuracy))
@@ -755,6 +760,7 @@ object functions {
    * @since 2.2.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def approx_percentile(columnName: String, percentage: Double, accuracy: Int): Column = {
     approx_percentile(Column(columnName), percentage, accuracy)
   }
@@ -777,6 +783,7 @@ object functions {
    * @since 2.2.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def approx_percentile(col: Column, percentage: Double): Column = withAggregateFunction {
     new ApproximatePercentile(col.expr, Literal(percentage))
   }
@@ -799,6 +806,7 @@ object functions {
    * @since 2.2.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def approx_percentile(columnName: String, percentage: Double): Column = {
     approx_percentile(Column(columnName), percentage)
   }
