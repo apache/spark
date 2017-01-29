@@ -70,8 +70,8 @@ test_that("spark.logit", {
   summary <- summary(model)
 
   # test summary coefficients return matrix type
-  expect_equal(class(summary$coefficients), "matrix")
-  expect_equal(class(summary$coefficients[, 1]), "numeric")
+  expect_true(class(summary$coefficients) == "matrix")
+  expect_true(class(summary$coefficients[, 1]) == "numeric")
 
   versicolorCoefsR <- c(1.52, 0.03, -0.53, 0.04, 0.00)
   virginicaCoefsR <- c(-2.62, 0.27, -0.02, 0.16, 0.42)

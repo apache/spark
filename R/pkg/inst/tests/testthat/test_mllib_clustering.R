@@ -127,8 +127,8 @@ test_that("spark.kmeans", {
   expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
 
   # test summary coefficients return matrix type
-  expect_equal(class(summary.model$coefficients), "matrix")
-  expect_equal(class(summary.model$coefficients[, 1]), "numeric")
+  expect_true(class(summary.model$coefficients) == "matrix")
+  expect_true(class(summary.model$coefficients[, 1]) == "numeric")
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-kmeans", fileext = ".tmp")
