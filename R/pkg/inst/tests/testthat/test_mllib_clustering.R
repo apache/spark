@@ -128,7 +128,7 @@ test_that("spark.kmeans", {
 
   # test summary coefficients return matrix type
   expect_true(class(summary.model$coefficients) == "matrix")
-  expect_true(class(summary.model$coefficients[, 1]) == "numeric")
+  expect_true(class(summary.model$coefficients[1, ]) == "numeric")
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-kmeans", fileext = ".tmp")
