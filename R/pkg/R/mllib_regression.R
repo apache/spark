@@ -143,7 +143,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #'               Currently these families are supported: \code{binomial}, \code{gaussian},
-#'               \code{poisson}, \code{Gamma}, and \code{tweedie} (\code{statmod} package).
+#'               \code{poisson}, \code{Gamma}, and \code{"tweedie"}.
 #' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
 #' @param epsilon positive convergence tolerance of iterations.
@@ -162,8 +162,10 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @note glm since 1.5.0
 #' @seealso \link{spark.glm}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
-          function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25, weightCol = NULL) {
-            spark.glm(data, formula, family, tol = epsilon, maxIter = maxit, weightCol = weightCol)
+          function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25, weightCol = NULL,
+                   variancePower = 0.0, linkPower = 1.0 - variancePower) {
+            spark.glm(data, formula, family, tol = epsilon, maxIter = maxit, weightCol = weightCol,
+                      variancePower = 0.0, linkPower = linkPower)
           })
 
 #  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().

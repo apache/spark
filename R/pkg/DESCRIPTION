@@ -21,8 +21,7 @@ Suggests:
     rmarkdown,
     testthat,
     e1071,
-    survival,
-    statmod
+    survival
 Collate:
     'schema.R'
     'generics.R'
