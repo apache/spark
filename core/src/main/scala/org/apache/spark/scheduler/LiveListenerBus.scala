@@ -142,7 +142,8 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
           logWarning(s"At least the following SparkListenerEvents were dropped since " +
             s"${new java.util.Date(prevLastReportTimestamp)}: " +
             s"${droppedEvents.asScala.take(100).toArray.mkString(",")}")
-          logDebug(s"The dropped events since ${new java.util.Date(prevLastReportTimestamp)}: " +
+          logDebug(s"The dropped events (incomplete) since" +
+            s" ${new java.util.Date(prevLastReportTimestamp)}: " +
             s"${droppedEvents.asScala.toArray.mkString(",")}")
           lastReportTimestamp = System.currentTimeMillis()
           droppedEvents.clear()
