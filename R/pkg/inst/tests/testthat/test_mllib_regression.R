@@ -89,8 +89,8 @@ test_that("spark.glm and predict", {
   #             family = tweedie(var.power = 1.2, link.power = 1.0))
   # print(coef(rModel))
   rCoef <- c(1.7009682, 0.3436700, -0.9703189, -0.9852648)
-  rVals <- as.numeric(model.matrix(lm(Sepal.Width ~ Sepal.Length + Species,
-                                      data = iris)) %*% rCoef)
+  rVals <- as.numeric(model.matrix(Sepal.Width ~ Sepal.Length + Species,
+                                   data = iris) %*% rCoef)
   expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
 
   # Test stats::predict is working
