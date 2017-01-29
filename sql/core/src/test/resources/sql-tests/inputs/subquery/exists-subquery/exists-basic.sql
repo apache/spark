@@ -103,8 +103,16 @@ WHERE  NOT EXISTS (SELECT *
                    WHERE  emp.emp_name = emp_name 
                           AND bonus_amt > emp.salary); 
 
+-- select employees who have not received any bonus
+-- TC 01.09
+SELECT emp.*
+FROM   emp
+WHERE  NOT EXISTS (SELECT NULL
+                   FROM   bonus
+                   WHERE  bonus.emp_name = emp.emp_name);
+
 -- Nested exists
--- TC.01.09
+-- TC.01.10
 SELECT * 
 FROM   bonus 
 WHERE  EXISTS (SELECT emp_name 
