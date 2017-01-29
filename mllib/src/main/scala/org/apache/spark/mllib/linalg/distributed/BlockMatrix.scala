@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
-import breeze.linalg.{VectorBuilder, DenseMatrix => BDM, DenseVector => BDV, Matrix => BM, Vector => BV}
+import breeze.linalg.{VectorBuilder, DenseMatrix => BDM, DenseVector => BDV, Matrix => BM}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg._
@@ -274,25 +274,25 @@ class BlockMatrix @Since("1.3.0") (
     val rows = blocks.flatMap { case ((blockRowIdx, blockColIdx), mat) =>
       mat.rowIter.zipWithIndex.map {
         case (vector, rowIdx) =>
-          blockRowIdx * rowsPerBlock + rowIdx -> ((blockColIdx, vector.asBreeze))
+          blockRowIdx * rowsPerBlock + rowIdx -> (blockColIdx, vector)
       }
     }.groupByKey().map { case (rowIdx, vectors) =>
-      val numberNonZeroPerRow = vectors.map(_._2.activeSize).sum.toDouble / cols.toDouble
+      val numberNonZeroPerRow = vectors.map(_._2.numActives).sum.toDouble / cols.toDouble
 
       val wholeVector =
         if (numberNonZeroPerRow <= 0.1) { // Sparse at 1/10th nnz
-          val wholeVectorBuf = VectorBuilder.zeros[Double](cols)
-          vectors.foreach { case (blockColIdx: Int, vec: BV[Double]) =>
+        val wholeVectorBuf = VectorBuilder.zeros[Double](cols)
+          vectors.foreach { case (blockColIdx: Int, vec: Vector) =>
             val offset = colsPerBlock * blockColIdx
-            vec.activeIterator.foreach {
-              case (colIdx: Int, value: Double) => wholeVectorBuf.add(offset + colIdx, value) }
+            vec.foreachActive { case (colIdx: Int, value: Double) =>
+              wholeVectorBuf.add(offset + colIdx, value) }
           }
           Vectors.fromBreeze(wholeVectorBuf.toSparseVector)
         } else {
           val wholeVectorBuf = BDV.zeros[Double](cols)
-          vectors.foreach { case (blockColIdx: Int, vec: BV[Double]) =>
+          vectors.foreach { case (blockColIdx: Int, vec: Vector) =>
             val offset = colsPerBlock * blockColIdx
-            wholeVectorBuf(offset until Math.min(cols, offset + colsPerBlock)) := vec
+            wholeVectorBuf(offset until Math.min(cols, offset + colsPerBlock)) := vec.asBreeze
           }
           Vectors.fromBreeze(wholeVectorBuf)
         }
