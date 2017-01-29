@@ -101,9 +101,10 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL,
-                   regParam = 0.0, variancePower = 0.0, linkPower = 1.0) {
+                   regParam = 0.0, variancePower = 0.0, linkPower = 1.0 - variancePower) {
             if (is.character(family)) {
-              # recover variancePower and linkPower from the specified tweedie family
+              # create a pseudo family for tweedie to avoid family validation
+              # only family name, variancePower and linkPower are used for the tweedie family
               if (tolower(family) == "tweedie") {
                 family <- list(family = "tweedie", link = "identity")
               } else {
