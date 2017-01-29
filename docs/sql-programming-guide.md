@@ -1135,7 +1135,7 @@ Tables from the remote database can be loaded as a DataFrame or Spark SQL tempor
 the Data Sources API. Users can specify the JDBC connection properties in the data source options.
 <code>user</code> and <code>password</code> are normally provided as connection properties for
 logging into the data sources. In addition to the connection properties, Spark also supports
-the following case-sensitive options:
+the following case-insensitive options:
 
 <table class="table">
   <tr><th>Property Name</th><th>Meaning</th></tr>
