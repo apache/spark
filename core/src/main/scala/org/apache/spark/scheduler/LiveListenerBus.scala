@@ -139,10 +139,12 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
         if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
           import scala.collection.JavaConverters._
           val prevLastReportTimestamp = lastReportTimestamp
-          lastReportTimestamp = System.currentTimeMillis()
           logWarning(s"At least the following SparkListenerEvents were dropped since " +
             s"${new java.util.Date(prevLastReportTimestamp)}: " +
+            s"${droppedEvents.asScala.take(100).toArray.mkString(",")}")
+          logDebug(s"The dropped events since ${new java.util.Date(prevLastReportTimestamp)}: " +
             s"${droppedEvents.asScala.toArray.mkString(",")}")
+          lastReportTimestamp = System.currentTimeMillis()
           droppedEvents.clear()
         }
       }
