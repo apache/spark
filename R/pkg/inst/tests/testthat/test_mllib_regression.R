@@ -83,11 +83,13 @@ test_that("spark.glm and predict", {
   prediction <- predict(model, training)
   expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
   vals <- collect(select(prediction, "prediction"))
+
   # manual calculation of the R predicted values to avoid dependence on statmod
-  # library(statmod)
-  # rModel <- glm(Sepal.Width ~ Sepal.Length + Species, data = iris,
-  #             family = tweedie(var.power = 1.2, link.power = 1.0))
-  # print(coef(rModel))
+  #' library(statmod)
+  #' rModel <- glm(Sepal.Width ~ Sepal.Length + Species, data = iris,
+  #'             family = tweedie(var.power = 1.2, link.power = 1.0))
+  #' print(coef(rModel))
+
   rCoef <- c(1.7009682, 0.3436700, -0.9703189, -0.9852648)
   rVals <- as.numeric(model.matrix(Sepal.Width ~ Sepal.Length + Species,
                                    data = iris) %*% rCoef)
