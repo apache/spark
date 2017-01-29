@@ -78,18 +78,12 @@ object Canonicalize extends {
     case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
     case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
 
-    case Not(GreaterThan(l, r)) =>
-      assert(l.hashCode() <= r.hashCode())
-      LessThanOrEqual(l, r)
-    case Not(LessThan(l, r)) =>
-      assert(l.hashCode() <= r.hashCode())
-      GreaterThanOrEqual(l, r)
-    case Not(GreaterThanOrEqual(l, r)) =>
-      assert(l.hashCode() <= r.hashCode())
-      LessThan(l, r)
-    case Not(LessThanOrEqual(l, r)) =>
-      assert(l.hashCode() <= r.hashCode())
-      GreaterThan(l, r)
+    // Note in the following `NOT` cases, `l.hashCode() <= r.hashCode()` holds. The reason is that
+    // canonicalization is conducted bottom-up -- see [[Expression.canonicalized]].
+    case Not(GreaterThan(l, r)) => LessThanOrEqual(l, r)
+    case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
+    case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
+    case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
 
     case _ => e
   }
