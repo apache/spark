@@ -53,7 +53,7 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #'               Currently these families are supported: \code{binomial}, \code{gaussian},
-#'               \code{Gamma}, \code{poisson} and code{tweedie}.
+#'               \code{Gamma}, \code{poisson} and \code{"tweedie"}.
 #'               The tweedie family must be specified using character string \code{"tweedie"}. The family
 #'               function \code{tweedie} in the \code{statmod} package is not supported.
 #' @param tol positive convergence tolerance of iterations.
@@ -148,6 +148,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'                  weights as 1.0.
 #' @param epsilon positive convergence tolerance of iterations.
 #' @param maxit integer giving the maximal number of IRLS iterations.
+#' @param variancePower the index of the power variance function in the Tweedie family.
+#' @param linkPower the index of the power link function in the Tweedie family.
 #' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
 #' @export
