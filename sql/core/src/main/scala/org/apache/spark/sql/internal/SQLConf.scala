@@ -464,6 +464,12 @@ object SQLConf {
     .intConf
     .createWithDefault(20)
 
+  val TABLE_RELATION_CACHE_MAX_SIZE = SQLConfigBuilder("spark.sql.tableRelationCacheMaxSize")
+    .internal()
+    .doc("The maximum size of the cache that maps qualified table name to table relation plan.")
+    .intConf
+    .createWithDefault(1000)
+
   val FILES_MAX_PARTITION_BYTES = SQLConfigBuilder("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .longConf
@@ -779,6 +785,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def wholeStageFallback: Boolean = getConf(WHOLESTAGE_FALLBACK)
 
   def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
+
+  def tableRelationCacheMaxSize: Int = getConf(TABLE_RELATION_CACHE_MAX_SIZE)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
