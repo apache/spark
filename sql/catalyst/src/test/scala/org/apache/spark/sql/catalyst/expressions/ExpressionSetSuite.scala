@@ -39,14 +39,14 @@ class ExpressionSetSuite extends SparkFunSuite {
       AttributeReference("maxHash", IntegerType)(exprId =
         new ExprId(4, NamedExpression.jvmId) {
           // maxHash's hashcode is calculated based on this exprId's hashcode, so we set this
-          // exprId's hashCode to this specific value to make sure maxHash's hashcode is almost
+          // exprId's hashCode to this specific value to make sure maxHash's hashcode is
           // `Int.MaxValue`
-          override def hashCode: Int = 826929706
+          override def hashCode: Int = -1030353449
           // We are implementing this equals() only because the style-checking rule "you should
           // implement equals and hashCode together" requires us to
           override def equals(obj: Any): Boolean = super.equals(obj)
         })).asInstanceOf[AttributeReference]
-  assert(maxHash.hashCode() == Int.MaxValue - 1)
+  assert(maxHash.hashCode() == Int.MaxValue)
 
   // An [AttributeReference] with almost the minimum hashcode, to make testing canonicalize rules
   // like `case GreaterThan(l, r) if l.hashcode > r.hashcode => GreaterThan(r, l)` easier
@@ -55,14 +55,14 @@ class ExpressionSetSuite extends SparkFunSuite {
       AttributeReference("minHash", IntegerType)(exprId =
         new ExprId(5, NamedExpression.jvmId) {
           // minHash's hashcode is calculated based on this exprId's hashcode, so we set this
-          // exprId's hashCode to this specific value to make sure minHash's hashcode is almost
+          // exprId's hashCode to this specific value to make sure minHash's hashcode is
           // `Int.MinValue`
-          override def hashCode: Int = 826929707
+          override def hashCode: Int = 1407330692
           // We are implementing this equals() only because the style-checking rule "you should
           // implement equals and hashCode together" requires us to
           override def equals(obj: Any): Boolean = super.equals(obj)
         })).asInstanceOf[AttributeReference]
-  assert(minHash.hashCode() == Int.MinValue + 35)
+  assert(minHash.hashCode() == Int.MinValue)
 
   def setTest(size: Int, exprs: Expression*): Unit = {
     test(s"expect $size: ${exprs.mkString(", ")}") {
