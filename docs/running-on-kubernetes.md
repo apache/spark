@@ -132,6 +132,24 @@ To specify a main application resource that is in the Docker image, and if it ha
       --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
       container:///home/applications/examples/example.jar
 
+### Setting Up SSL For Submitting the Driver
+
+When submitting to Kubernetes, a pod is started for the driver, and the pod starts an HTTP server. This HTTP server
+receives the driver's configuration, including uploaded driver jars, from the client before starting the application.
+Spark supports using SSL to encrypt the traffic in this bootstrapping process. It is recommended to configure this
+whenever possible. 
+
+See the [security page](security.html) and [configuration](configuration.html) sections for more information on
+configuring SSL; use the prefix `spark.ssl.kubernetes.driverlaunch` in configuring the SSL-related fields in the context
+of submitting to Kubernetes. For example, to set the trustStore used when the local machine communicates with the driver
+pod in starting the application, set `spark.ssl.kubernetes.driverlaunch.trustStore`.
+
+One note about the keyStore is that it can be specified as either a file on the client machine or a file in the
+container image's disk. Thus `spark.ssl.kubernetes.driverlaunch.keyStore` can be a URI with a scheme of either `file:`
+or `container:`. A scheme of `file:` corresponds to the keyStore being located on the client machine; it is mounted onto
+the driver container as a [secret volume](https://kubernetes.io/docs/user-guide/secrets/). When the URI has the scheme
+`container:`, the file is assumed to already be on the container's disk at the appropriate path.
+
 ### Spark Properties
 
 Below are some other common properties that are specific to Kubernetes. Most of the other configurations are the same

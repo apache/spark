@@ -106,12 +106,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
   protected var totalExpectedExecutors = new AtomicInteger(0)
 
   private val driverUrl = RpcEndpointAddress(
-    System.getenv(s"${convertToEnvMode(kubernetesDriverServiceName)}_SERVICE_HOST"),
+    sc.getConf.get("spark.driver.host"),
     sc.getConf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT),
     CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
-
-  private def convertToEnvMode(value: String): String =
-    value.toUpperCase.map { c => if (c == '-') '_' else c }
 
   private val initialExecutors = getInitialTargetExecutorNumber(1)
 
