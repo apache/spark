@@ -44,6 +44,7 @@ class ComplexTypesSuite extends PlanTest{
           ConstantFolding,
           BooleanSimplification,
           SimplifyConditionals,
+          SimplifyBinaryComparison,
           SimplifyCreateStructOps,
           SimplifyCreateArrayOps,
           SimplifyCreateMapOps) :: Nil
@@ -88,6 +89,15 @@ class ComplexTypesSuite extends PlanTest{
       val mapType = e.dataType.asInstanceOf[MapType]
       assert(k.dataType == mapType.keyType)
       GetMapValue(e, k)
+    }
+
+    def addCaseWhen( cond : Expression, v : Expression) : Expression = {
+      assert(e.resolved)
+      assert(e.isInstanceOf[CaseWhen])
+      assert(cond.dataType == BooleanType)
+      assert(v.dataType == e.dataType)
+      val CaseWhen(branches, default) = e
+      CaseWhen( branches :+ (cond, v), default)
     }
   }
 
@@ -374,16 +384,13 @@ class ComplexTypesSuite extends PlanTest{
    )
     val optimized = Optimize execute rel
     val expected = baseOptimizedPlan.select(
-      Coalesce(
-        CreateMap(
-          idRef :: (idRef + 1L) ::
-            (idRef + 1L) :: (idRef + 2L) ::
-            (idRef + 2L) :: (idRef + 3L) ::
-            Nil
-       ).getMapValue(13L) ::
-        idRef ::
-        Nil
-     ) as "a"
+      CaseKeyWhen(13L,
+        idRef :: (idRef + 1L) ::
+          (idRef + 1L) :: (idRef + 2L) ::
+          (idRef + 2L) :: (idRef + 3L) ::
+          Nil
+      ).addCaseWhen(Literal(true), idRef)
+      as "a"
    )
     comparePlans(optimized, expected)
   }
@@ -401,16 +408,12 @@ class ComplexTypesSuite extends PlanTest{
    )
     val optimized = Optimize execute rel
     val expected = baseOptimizedPlan.select(
-      Coalesce(
-        CreateMap(
-          idRef :: (idRef + 1L) ::
-            (idRef + 1L) :: (idRef + 2L) ::
-            (idRef + 2L) :: (idRef + 3L) ::
-            Nil
-       ).getMapValue(idRef + 3L) ::
-          (idRef + 4L) ::
+      CaseKeyWhen(idRef + 3L,
+        idRef :: (idRef + 1L) ::
+          (idRef + 1L) :: (idRef + 2L) ::
+          (idRef + 2L) :: (idRef + 3L) ::
           Nil
-     ) as "a"
+      ).addCaseWhen(true, (idRef + 4L)) as "a"
    )
     comparePlans(optimized, expected)
   }
@@ -427,7 +430,16 @@ class ComplexTypesSuite extends PlanTest{
      ).getMapValue(idRef + 30L) as "a"
    )
     val optimized = Optimize execute rel
-    val expected = rel
+    val expected = baseOptimizedPlan.select(
+      CaseKeyWhen(idRef + 30L,
+        idRef :: (idRef + 1L) ::
+          (idRef + 1L) :: (idRef + 2L) ::
+          (idRef + 2L) :: (idRef + 3L) ::
+          (idRef + 3L) :: (idRef + 4L) ::
+          (idRef + 4L) :: (idRef + 5L)::
+          Nil
+      ) as "a"
+    )
     comparePlans(optimized, expected)
   }
 
@@ -445,14 +457,14 @@ class ComplexTypesSuite extends PlanTest{
    )
     val optimized = Optimize execute rel
     val expected = baseOptimizedPlan.select(
-      CreateMap(
+      CaseKeyWhen(13L,
         idRef :: (idRef + 1L) ::
           (idRef + 1L) :: (idRef + 2L) ::
           (idRef + 2L) :: (idRef + 3L) ::
           (idRef + 3L) :: (idRef + 4L) ::
           (idRef + 4L) :: (idRef + 5L) ::
           Nil
-     ).getMapValue(13L) as "a"
+     ) as "a"
    )
     comparePlans(optimized, expected)
   }
@@ -471,7 +483,7 @@ class ComplexTypesSuite extends PlanTest{
     )
     val optimized = Optimize execute rel
     val expected = baseOptimizedPlan.select(
-      CreateMap(
+      CaseKeyWhen(2L,
         idRef :: (idRef + 1L) ::
           // these two are possible matches, we can't tell untill runtime
           (idRef + 1L) :: (idRef + 2L) ::
@@ -479,9 +491,8 @@ class ComplexTypesSuite extends PlanTest{
           // this is a definite match (two constants),
           // but it cannot override a potential match with (idRef + 2L),
           // which is exactly what [[Coalesce]] would do in this case.
-          Literal(2L) :: idRef ::
           Nil
-      ).getMapValue( 2L ) as "a"
+      ).addCaseWhen(true, idRef) as "a"
     )
     comparePlans(optimized, expected)
   }

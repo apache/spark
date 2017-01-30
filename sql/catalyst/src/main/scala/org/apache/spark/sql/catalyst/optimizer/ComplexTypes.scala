@@ -131,7 +131,7 @@ object SimplifyCreateMapOps extends Rule[LogicalPlan] {
     (resPairs, resPositive)
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = {
+  def applyOld(plan: LogicalPlan): LogicalPlan = {
     plan.transformExpressionsUp {
       // attempt to unfold 'constant' key extraction,
       // this enables other optimizations to take place.
@@ -154,6 +154,12 @@ object SimplifyCreateMapOps extends Rule[LogicalPlan] {
         }
         // this might be further simplified by NullPropagation.
         positiveValue.map( pv => Coalesce(Seq(newGmv, pv)) ).getOrElse(newGmv)
+    }
+  }
+
+  override def apply(plan: LogicalPlan) = {
+    plan.transformExpressionsUp {
+      case GetMapValue(CreateMap(elems),key) => CaseKeyWhen(key, elems)
     }
   }
 }
