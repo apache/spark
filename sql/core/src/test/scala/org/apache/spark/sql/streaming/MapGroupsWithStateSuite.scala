@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.State
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.StateImpl
@@ -84,8 +85,6 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
   }
 
   test("flatMapGroupsWithState - streaming") {
-    val inputData = MemoryStream[String]
-
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count if state is defined, otherwise does not return anything
     val stateFunc = (key: String, values: Iterator[String], state: State[RunningCount]) => {
@@ -100,6 +99,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
       }
     }
 
+    val inputData = MemoryStream[String]
     val result =
       inputData.toDS()
         .groupByKey(x => x)
@@ -120,8 +120,8 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
       StopStream,
       StartStream(),
       AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
-      CheckLastBatch(("a", "1"), ("c", "1"))
-      // assertNumStateRows(total = 3, updated = 2)
+      CheckLastBatch(("a", "1"), ("c", "1")),
+      assertNumStateRows(total = 3, updated = 2)
     )
   }
 
@@ -140,13 +140,11 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
   }
 
   test("mapGroupsWithState - streaming") {
-    val inputData = MemoryStream[String]
-
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
     val stateFunc = (key: String, values: Iterator[String], state: State[RunningCount]) => {
 
-      var count = state.getOption.map(_.count).getOrElse(0L) + values.size
+      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
       if (count == 3) {
         state.remove()
         (key, "-1")
@@ -156,6 +154,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
       }
     }
 
+    val inputData = MemoryStream[String]
     val result =
       inputData.toDS()
         .groupByKey(x => x)
@@ -198,10 +197,48 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
       spark.createDataset(Seq(("a", 2), ("b", 1))).toDF)
   }
 
+  testQuietly("StateStore.abort on task failure handling") {
+    val stateFunc = (key: String, values: Iterator[String], state: State[RunningCount]) => {
+      if (MapGroupsWithStateSuite.failInTask) throw new Exception("expected failure")
+      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
+      state.update(RunningCount(count))
+      (key, count)
+    }
+
+    val inputData = MemoryStream[String]
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .mapGroupsWithState(stateFunc) // Types = State: MyState, Out: (Str, Str)
+
+    def setFailInTask(value: Boolean): AssertOnQuery = AssertOnQuery { q =>
+      MapGroupsWithStateSuite.failInTask = value
+      true
+    }
+
+    testStream(result, Append)(
+      setFailInTask(false),
+      AddData(inputData, "a"),
+      CheckLastBatch(("a", 1L)),
+      AddData(inputData, "a"),
+      CheckLastBatch(("a", 2L)),
+      setFailInTask(true),
+      AddData(inputData, "a"),
+      ExpectFailure[SparkException](),   // task should fail but should not increment count
+      setFailInTask(false),
+      StartStream(),
+      CheckLastBatch(("a", 3L))     // task should not fail, and should show correct count
+    )
+  }
+
   private def assertNumStateRows(total: Long, updated: Long): AssertOnQuery = AssertOnQuery { q =>
     val progressWithData = q.recentProgress.filter(_.numInputRows > 0).lastOption.get
     assert(progressWithData.stateOperators(0).numRowsTotal === total)
     assert(progressWithData.stateOperators(0).numRowsUpdated === updated)
     true
   }
+}
+
+object MapGroupsWithStateSuite {
+  var failInTask = true
 }
