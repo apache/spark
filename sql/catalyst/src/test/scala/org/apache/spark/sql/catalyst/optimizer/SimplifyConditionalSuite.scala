@@ -90,4 +90,14 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
       CaseWhen(normalBranch :: trueBranch :: normalBranch :: Nil, None),
       CaseWhen(normalBranch :: trueBranch :: normalBranch :: Nil, None))
   }
+
+  test("wimplify CaseWhen, prune branches following a definite true") {
+    assertEquivalent(
+      CaseWhen(normalBranch :: unreachableBranch ::
+        unreachableBranch :: nullBranch ::
+        trueBranch :: normalBranch ::
+        Nil,
+        None),
+      CaseWhen(normalBranch :: trueBranch :: Nil, None))
+  }
 }
