@@ -18,6 +18,7 @@
 package org.apache.spark.ml.regression
 
 import scala.util.Random
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
