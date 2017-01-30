@@ -57,7 +57,6 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
   // Indicate if `stop()` is called
   private val stopped = new AtomicBoolean(false)
 
-  /** A counter for dropped events. It will be reset every time we log it. */
   private lazy val droppedEvents = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
 
   /** When `droppedEventsCounter` was logged last time in milliseconds. */
