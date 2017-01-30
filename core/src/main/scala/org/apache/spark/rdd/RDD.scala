@@ -675,6 +675,14 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
+   * elements (a, b) where a is in `this` and b is in `other`, where pair satisfies predicate `f`.
+   */
+  def cartesianFilter[U: ClassTag](other: RDD[U])(f: (T, U) => Boolean): RDD[(T, U)] = withScope {
+    new CartesianFilterRDD(sc, this, other, f)
+  }
+
+  /**
    * Return an RDD of grouped items. Each group consists of a key and a sequence of elements
    * mapping to that key. The ordering of elements within each group is not guaranteed, and
    * may even differ each time the resulting RDD is evaluated.

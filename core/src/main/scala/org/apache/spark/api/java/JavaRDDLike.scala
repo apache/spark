@@ -233,6 +233,17 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     JavaPairRDD.fromRDD(rdd.cartesian(other.rdd)(other.classTag))(classTag, other.classTag)
 
   /**
+   * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
+   * elements (a, b) where a is in `this` and b is in `other`, where pair satisfies predicate `f`.
+   */
+  def cartesianFilter[U](
+      other: JavaRDDLike[U, _],
+      f: JFunction[(T, U), java.lang.Boolean]): JavaPairRDD[T, U] =
+    JavaPairRDD.fromRDD(
+      rdd.cartesianFilter(other.rdd)((x, y) => f.call((x, y)).booleanValue())
+        (other.classTag))(classTag, other.classTag)
+
+  /**
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
    * mapping to that key.
    */
