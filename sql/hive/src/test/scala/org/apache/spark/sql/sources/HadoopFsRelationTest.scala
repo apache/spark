@@ -20,14 +20,12 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import scala.util.Random
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.parquet.hadoop.ParquetOutputCommitter
-
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql._
+import org.apache.spark.sql.{DataFrame, _}
 import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -900,10 +898,18 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("DataSourceScanExec uses active session upon execution") {
     withTempPath { dir =>
-      val path = "file://" + dir.getCanonicalPath
-      spark.range(4).coalesce(1).write.format(dataSourceName).save(path)
-      val df = spark.read.format(dataSourceName).load(path)
-      val Some(scan1) = df.queryExecution.executedPlan.collectFirst {
+      val childDir = new File(dir, dataSourceName).getCanonicalPath
+      val dataDf = spark.range(4).coalesce(1).toDF()
+      dataDf.write.format(dataSourceName).save(childDir)
+      val reader = spark.read.format(dataSourceName)
+
+      // This is needed for SimpleTextHadoopFsRelationSuite as SimpleTextSource needs schema.
+      if (dataSourceName == classOf[SimpleTextSource].getCanonicalName) {
+        reader.option("dataSchema", dataDf.schema.json)
+      }
+
+      val readDf = reader.load(childDir)
+      val Some(scan1) = readDf.queryExecution.executedPlan.collectFirst {
         case scan: FileSourceScanExec => scan
       }
 
@@ -911,7 +917,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
       val session1 = scan1.sparkSession
       SparkSession.setActiveSession(newSession)
-      val Some(scan2) = df.queryExecution.executedPlan.collectFirst {
+      val Some(scan2) = readDf.queryExecution.executedPlan.collectFirst {
         case scan: FileSourceScanExec => scan
       }
 
