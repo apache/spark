@@ -21,20 +21,26 @@ import java.net.URI
 import java.util.concurrent.CountDownLatch
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
+import com.google.common.base.Charsets
 import com.google.common.io.Files
 import org.apache.commons.codec.binary.Base64
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SecurityManager, SPARK_VERSION, SparkConf}
+import org.apache.spark.{SecurityManager, SPARK_VERSION => sparkVersion, SparkConf, SparkException, SSLOptions}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ShutdownHookManager, ThreadUtils, Utils}
 
 private case class KubernetesSparkRestServerArguments(
-    val host: Option[String] = None,
-    val port: Option[Int] = None,
-    val secretFile: Option[String] = None) {
+    host: Option[String] = None,
+    port: Option[Int] = None,
+    useSsl: Boolean = false,
+    secretFile: Option[String] = None,
+    keyStoreFile: Option[String] = None,
+    keyStorePasswordFile: Option[String] = None,
+    keyStoreType: Option[String] = None,
+    keyPasswordFile: Option[String] = None) {
   def validate(): KubernetesSparkRestServerArguments = {
     require(host.isDefined, "Hostname not set via --hostname.")
     require(port.isDefined, "Port not set via --port")
@@ -58,6 +64,21 @@ private object KubernetesSparkRestServerArguments {
         case "--secret-file" :: value :: tail =>
           args = tail
           resolvedArguments.copy(secretFile = Some(value))
+        case "--use-ssl" :: value :: tail =>
+          args = tail
+          resolvedArguments.copy(useSsl = value.toBoolean)
+        case "--keystore-file" :: value :: tail =>
+          args = tail
+          resolvedArguments.copy(keyStoreFile = Some(value))
+        case "--keystore-password-file" :: value :: tail =>
+          args = tail
+          resolvedArguments.copy(keyStorePasswordFile = Some(value))
+        case "--keystore-type" :: value :: tail =>
+          args = tail
+          resolvedArguments.copy(keyStoreType = Some(value))
+        case "--keystore-key-password-file" :: value :: tail =>
+          args = tail
+          resolvedArguments.copy(keyPasswordFile = Some(value))
         // TODO polish usage message
         case Nil => resolvedArguments
         case unknown => throw new IllegalStateException(s"Unknown argument(s) found: $unknown")
@@ -78,8 +99,9 @@ private[spark] class KubernetesSparkRestServer(
     port: Int,
     conf: SparkConf,
     expectedApplicationSecret: Array[Byte],
-    shutdownLock: CountDownLatch)
-  extends RestSubmissionServer(host, port, conf) {
+    shutdownLock: CountDownLatch,
+    sslOptions: SSLOptions = new SSLOptions)
+  extends RestSubmissionServer(host, port, conf, sslOptions) {
 
   private val SERVLET_LOCK = new Object
   private val javaExecutable = s"${System.getenv("JAVA_HOME")}/bin/java"
@@ -196,7 +218,7 @@ private[spark] class KubernetesSparkRestServer(
                 response.success = true
                 response.submissionId = null
                 response.message = "success"
-                response.serverSparkVersion = SPARK_VERSION
+                response.serverSparkVersion = sparkVersion
                 response
               }
             case unexpected =>
@@ -249,12 +271,31 @@ private[spark] class KubernetesSparkRestServer(
 
 private[spark] object KubernetesSparkRestServer {
   private val barrier = new CountDownLatch(1)
+
   def main(args: Array[String]): Unit = {
     val parsedArguments = KubernetesSparkRestServerArguments.fromArgsArray(args)
     val secretFile = new File(parsedArguments.secretFile.get)
     if (!secretFile.isFile) {
       throw new IllegalArgumentException(s"Secret file specified by --secret-file" +
         " is not a file, or does not exist.")
+    }
+    val sslOptions = if (parsedArguments.useSsl) {
+      val keyStorePassword = parsedArguments
+        .keyStorePasswordFile
+        .map(new File(_))
+        .map(Files.toString(_, Charsets.UTF_8))
+      val keyPassword = parsedArguments
+        .keyPasswordFile
+        .map(new File(_))
+        .map(Files.toString(_, Charsets.UTF_8))
+      new SSLOptions(
+        enabled = true,
+        keyStore = parsedArguments.keyStoreFile.map(new File(_)),
+        keyStoreType = parsedArguments.keyStoreType,
+        keyStorePassword = keyStorePassword,
+        keyPassword = keyPassword)
+    } else {
+      new SSLOptions
     }
     val secretBytes = Files.toByteArray(secretFile)
     val sparkConf = new SparkConf(true)
@@ -263,7 +304,8 @@ private[spark] object KubernetesSparkRestServer {
       parsedArguments.port.get,
       sparkConf,
       secretBytes,
-      barrier)
+      barrier,
+      sslOptions)
     server.start()
     ShutdownHookManager.addShutdownHook(() => {
       try {
