@@ -22,7 +22,7 @@ import scala.collection.mutable.{LinkedHashMap, ListBuffer}
 import org.apache.spark.{Resubmitted, SparkConf, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
-import org.apache.spark.storage.{StorageStatus, StorageStatusListener}
+import org.apache.spark.storage.StorageStatus
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
@@ -63,17 +63,16 @@ private[ui] case class ExecutorTaskSummary(
  */
 @DeveloperApi
 @deprecated("This class will be removed in a future release.", "2.2.0")
-class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: SparkConf)
-    extends SparkListener {
+class ExecutorsListener(conf: SparkConf) extends SparkListener {
   val executorToTaskSummary = LinkedHashMap[String, ExecutorTaskSummary]()
   var executorEvents = new ListBuffer[SparkListenerEvent]()
 
   private val maxTimelineExecutors = conf.getInt("spark.ui.timeline.executors.maximum", 1000)
   private val retainedDeadExecutors = conf.getInt("spark.ui.retainedDeadExecutors", 100)
 
-  def activeStorageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
+  def activeStorageStatusList: Seq[StorageStatus] = Nil // Temporary until SPARK-20646 is in.
 
-  def deadStorageStatusList: Seq[StorageStatus] = storageStatusListener.deadStorageStatusList
+  def deadStorageStatusList: Seq[StorageStatus] = Nil // Temporary until SPARK-20646 is in.
 
   override def onExecutorAdded(
       executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
