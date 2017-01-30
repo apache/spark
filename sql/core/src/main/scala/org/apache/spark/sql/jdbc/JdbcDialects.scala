@@ -60,7 +60,7 @@ abstract class JdbcDialect extends Serializable {
    * Check if this dialect instance can handle a certain jdbc url.
    * @param url the jdbc url.
    * @return True if the dialect can be applied on the given jdbc url.
-   * @note Throws `NullPointerException` if the url is null.
+   * @throws NullPointerException if the url is null.
    */
   def canHandle(url : String): Boolean
 

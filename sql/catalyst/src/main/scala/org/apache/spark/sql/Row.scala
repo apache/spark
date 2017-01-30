@@ -193,40 +193,40 @@ trait Row extends Serializable {
   /**
    * Returns the value at position i as a primitive boolean.
    *
-   * @note Throws `ClassCastException` when data type does not match.
-   * @note Throws `NullPointerException` when value is null.
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
    */
   def getBoolean(i: Int): Boolean = getAnyValAs[Boolean](i)
 
   /**
    * Returns the value at position i as a primitive byte.
    *
-   * @note Throws `ClassCastException` when data type does not match.
-   * @note Throws `NullPointerException` when value is null.
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
    */
   def getByte(i: Int): Byte = getAnyValAs[Byte](i)
 
   /**
    * Returns the value at position i as a primitive short.
    *
-   * @note Throws `ClassCastException` when data type does not match.
-   * @note Throws `NullPointerException` when value is null.
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
    */
   def getShort(i: Int): Short = getAnyValAs[Short](i)
 
   /**
    * Returns the value at position i as a primitive int.
    *
-   * @note Throws `ClassCastException` when data type does not match.
-   * @note Throws `NullPointerException` when value is null.
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
    */
   def getInt(i: Int): Int = getAnyValAs[Int](i)
 
   /**
    * Returns the value at position i as a primitive long.
    *
-   * @note Throws `ClassCastException` when data type does not match.
-   * @note Throws `NullPointerException` when value is null.
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
    */
   def getLong(i: Int): Long = getAnyValAs[Long](i)
 
@@ -234,58 +234,58 @@ trait Row extends Serializable {
    * Returns the value at position i as a primitive float.
    * Throws an exception if the type mismatches or if the value is null.
    *
-   * @note Throws `ClassCastException` when data type does not match.
-   * @note Throws `NullPointerException` when value is null.
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
    */
   def getFloat(i: Int): Float = getAnyValAs[Float](i)
 
   /**
    * Returns the value at position i as a primitive double.
    *
-   * @note Throws `ClassCastException` when data type does not match.
-   * @note Throws `NullPointerException` when value is null.
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
    */
   def getDouble(i: Int): Double = getAnyValAs[Double](i)
 
   /**
    * Returns the value at position i as a String object.
    *
-   * @note Throws `ClassCastException` when data type does not match.
+   * @throws ClassCastException when data type does not match.
    */
   def getString(i: Int): String = getAs[String](i)
 
   /**
    * Returns the value at position i of decimal type as java.math.BigDecimal.
    *
-   * @note Throws `ClassCastException` when data type does not match.
+   * @throws ClassCastException when data type does not match.
    */
   def getDecimal(i: Int): java.math.BigDecimal = getAs[java.math.BigDecimal](i)
 
   /**
    * Returns the value at position i of date type as java.sql.Date.
    *
-   * @note Throws `ClassCastException` when data type does not match.
+   * @throws ClassCastException when data type does not match.
    */
   def getDate(i: Int): java.sql.Date = getAs[java.sql.Date](i)
 
   /**
    * Returns the value at position i of date type as java.sql.Timestamp.
    *
-   * @note Throws `ClassCastException` when data type does not match.
+   * @throws ClassCastException when data type does not match.
    */
   def getTimestamp(i: Int): java.sql.Timestamp = getAs[java.sql.Timestamp](i)
 
   /**
    * Returns the value at position i of array type as a Scala Seq.
    *
-   * @note Throws `ClassCastException` when data type does not match.
+   * @throws ClassCastException when data type does not match.
    */
   def getSeq[T](i: Int): Seq[T] = getAs[Seq[T]](i)
 
   /**
    * Returns the value at position i of array type as `java.util.List`.
    *
-   * @note Throws `ClassCastException` when data type does not match.
+   * @throws ClassCastException when data type does not match.
    */
   def getList[T](i: Int): java.util.List[T] =
     getSeq[T](i).asJava
@@ -293,14 +293,14 @@ trait Row extends Serializable {
   /**
    * Returns the value at position i of map type as a Scala Map.
    *
-   * @note Throws `ClassCastException` when data type does not match.
+   * @throws ClassCastException when data type does not match.
    */
   def getMap[K, V](i: Int): scala.collection.Map[K, V] = getAs[Map[K, V]](i)
 
   /**
    * Returns the value at position i of array type as a `java.util.Map`.
    *
-   * @note Throws `ClassCastException` when data type does not match.
+   * @throws ClassCastException when data type does not match.
    */
   def getJavaMap[K, V](i: Int): java.util.Map[K, V] =
     getMap[K, V](i).asJava
@@ -308,7 +308,7 @@ trait Row extends Serializable {
   /**
    * Returns the value at position i of struct type as a [[Row]] object.
    *
-   * @note Throws `ClassCastException` when data type does not match.
+   * @throws ClassCastException when data type does not match.
    */
   def getStruct(i: Int): Row = getAs[Row](i)
 
@@ -317,7 +317,7 @@ trait Row extends Serializable {
    * For primitive types if value is null it returns 'zero value' specific for primitive
    * ie. 0 for Int - use isNullAt to ensure that value is not null
    *
-   * @note Throws `ClassCastException` when data type does not match.
+   * @throws ClassCastException when data type does not match.
    */
   def getAs[T](i: Int): T = get(i).asInstanceOf[T]
 
@@ -326,17 +326,17 @@ trait Row extends Serializable {
    * For primitive types if value is null it returns 'zero value' specific for primitive
    * ie. 0 for Int - use isNullAt to ensure that value is not null
    *
-   * @note Throws `UnsupportedOperationException` when schema is not defined.
-   * @note Throws `IllegalArgumentException` when fieldName do not exist.
-   * @note Throws `ClassCastException` when data type does not match.
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
    */
   def getAs[T](fieldName: String): T = getAs[T](fieldIndex(fieldName))
 
   /**
    * Returns the index of a given field name.
    *
-   * @note Throws `UnsupportedOperationException` when schema is not defined.
-   * @note Throws `IllegalArgumentException` when a field `name` does not exist.
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when a field `name` does not exist.
    */
   def fieldIndex(name: String): Int = {
     throw new UnsupportedOperationException("fieldIndex on a Row without schema is undefined.")
@@ -347,9 +347,9 @@ trait Row extends Serializable {
    * For primitive types if value is null it returns 'zero value' specific for primitive
    * ie. 0 for Int - use isNullAt to ensure that value is not null
    *
-   * @note Throws `UnsupportedOperationException` when schema is not defined.
-   * @note Throws `IllegalArgumentException` when fieldName do not exist.
-   * @note Throws `ClassCastException` when data type does not match.
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
    */
   def getValuesMap[T](fieldNames: Seq[String]): Map[String, T] = {
     fieldNames.map { name =>
@@ -464,9 +464,9 @@ trait Row extends Serializable {
   /**
    * Returns the value at position i.
    *
-   * @note Throws `UnsupportedOperationException` when schema is not defined.
-   * @note Throws `ClassCastException` when data type does not match.
-   * @note Throws `NullPointerException` when value is null.
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
    */
   private def getAnyValAs[T <: AnyVal](i: Int): T =
     if (isNullAt(i)) throw new NullPointerException(s"Value at index $i is null")

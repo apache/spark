@@ -100,8 +100,8 @@ abstract class Classifier[
    * @param maxNumClasses  Maximum number of classes allowed when inferred from data.  If numClasses
    *                       is specified in the metadata, then maxNumClasses is ignored.
    * @return  number of classes
-   * @note Throws `IllegalArgumentException`  if metadata does not specify numClasses, and the
-   * actual numClasses exceeds maxNumClasses
+   * @throws IllegalArgumentException  if metadata does not specify numClasses, and the
+   *                                   actual numClasses exceeds maxNumClasses
    */
   protected def getNumClasses(dataset: Dataset[_], maxNumClasses: Int = 100): Int = {
     MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {

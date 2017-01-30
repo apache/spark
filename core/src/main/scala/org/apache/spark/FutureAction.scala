@@ -58,7 +58,7 @@ trait FutureAction[T] extends Future[T] {
    *
    * @param atMost maximum wait time, which may be negative (no waiting is done), Duration.Inf
    *               for unbounded waiting, or a finite positive duration
-   * @note Throws `Exception` exception during action execution
+   * @throws Exception exception during action execution
    * @return the result value if the action is completed within the specific maximum wait time
    */
   @throws(classOf[Exception])
