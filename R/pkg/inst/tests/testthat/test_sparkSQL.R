@@ -196,18 +196,18 @@ test_that("create DataFrame from RDD", {
   expect_equal(dtypes(df), list(c("name", "string"), c("age", "int"), c("height", "float")))
   expect_equal(as.list(collect(where(df, df$name == "John"))),
                list(name = "John", age = 19L, height = 176.5))
-  expect_equal(getNumPartitions(toRDD(df)), 1)
+  expect_equal(getNumPartitions(df), 1)
 
   df <- as.DataFrame(cars, numPartitions = 2)
-  expect_equal(getNumPartitions(toRDD(df)), 2)
+  expect_equal(getNumPartitions(df), 2)
   df <- createDataFrame(cars, numPartitions = 3)
-  expect_equal(getNumPartitions(toRDD(df)), 3)
+  expect_equal(getNumPartitions(df), 3)
   # validate limit by num of rows
   df <- createDataFrame(cars, numPartitions = 60)
-  expect_equal(getNumPartitions(toRDD(df)), 50)
+  expect_equal(getNumPartitions(df), 50)
   # validate when 1 < (length(coll) / numSlices) << length(coll)
   df <- createDataFrame(cars, numPartitions = 20)
-  expect_equal(getNumPartitions(toRDD(df)), 20)
+  expect_equal(getNumPartitions(df), 20)
 
   df <- as.DataFrame(data.frame(0))
   expect_is(df, "SparkDataFrame")
@@ -215,7 +215,7 @@ test_that("create DataFrame from RDD", {
   expect_is(df, "SparkDataFrame")
   df <- as.DataFrame(data.frame(0), numPartitions = 2)
   # no data to partition, goes to 1
-  expect_equal(getNumPartitions(toRDD(df)), 1)
+  expect_equal(getNumPartitions(df), 1)
 
   setHiveContext(sc)
   sql("CREATE TABLE people (name string, age double, height float)")
@@ -234,7 +234,7 @@ test_that("createDataFrame uses files for large objects", {
   conf <- callJMethod(sparkSession, "conf")
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
   df <- suppressWarnings(createDataFrame(iris, numPartitions = 3))
-  expect_equal(getNumPartitions(toRDD(df)), 3)
+  expect_equal(getNumPartitions(df), 3)
 
   # Resetting the conf back to default value
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", toString(.Machine$integer.max / 10))
@@ -1021,6 +1021,9 @@ test_that("select operators", {
   df$age2 <- df$age * 2
   expect_equal(columns(df), c("name", "age", "age2"))
   expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
+  df$age2 <- df[["age"]] * 3
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == df$age * 3)), 2)
 
   df$age2 <- 21
   expect_equal(columns(df), c("name", "age", "age2"))
@@ -1031,6 +1034,23 @@ test_that("select operators", {
   expect_equal(count(where(df, df$age2 == 22)), 3)
 
   expect_error(df$age3 <- c(22, NA),
+              "value must be a Column, literal value as atomic in length of 1, or NULL")
+
+  df[["age2"]] <- 23
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 23)), 3)
+
+  df[[3]] <- 24
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 24)), 3)
+
+  df[[3]] <- df$age
+  expect_equal(count(where(df, df$age2 == df$age)), 2)
+
+  df[["age2"]] <- df[["name"]]
+  expect_equal(count(where(df, df$age2 == df$name)), 3)
+
+  expect_error(df[["age3"]] <- c(22, 23),
               "value must be a Column, literal value as atomic in length of 1, or NULL")
 
   # Test parameter drop

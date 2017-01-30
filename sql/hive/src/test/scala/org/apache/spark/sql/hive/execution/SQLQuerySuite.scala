@@ -1461,6 +1461,23 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     })
   }
 
+  test("run sql directly on files - hive") {
+    withTempPath(f => {
+      spark.range(100).toDF.write.parquet(f.getCanonicalPath)
+
+      var e = intercept[AnalysisException] {
+        sql(s"select id from hive.`${f.getCanonicalPath}`")
+      }
+      assert(e.message.contains("Unsupported data source type for direct query on files: hive"))
+
+      // data source type is case insensitive
+      e = intercept[AnalysisException] {
+        sql(s"select id from HIVE.`${f.getCanonicalPath}`")
+      }
+      assert(e.message.contains("Unsupported data source type for direct query on files: HIVE"))
+    })
+  }
+
   test("SPARK-8976 Wrong Result for Rollup #1") {
     checkAnswer(sql(
       "SELECT count(*) AS cnt, key % 5, grouping_id() FROM src GROUP BY key%5 WITH ROLLUP"),
@@ -2012,6 +2029,19 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             |(1, "one"), (2, "two"), (3, null) AS data(key, value)
           """.stripMargin)
       )
+    }
+  }
+
+  test("SPARK-19292: filter with partition columns should be case-insensitive on Hive tables") {
+    withTable("tbl") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        sql("CREATE TABLE tbl(i int, j int) USING hive PARTITIONED BY (j)")
+        sql("INSERT INTO tbl PARTITION(j=10) SELECT 1")
+        checkAnswer(spark.table("tbl"), Row(1, 10))
+
+        checkAnswer(sql("SELECT i, j FROM tbl WHERE J=10"), Row(1, 10))
+        checkAnswer(spark.table("tbl").filter($"J" === 10), Row(1, 10))
+      }
     }
   }
 }

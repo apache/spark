@@ -122,6 +122,7 @@ private[hive] object IsolatedClientLoader extends Logging {
     // TODO: Remove copy logic.
     val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
     allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
+    logInfo(s"Downloaded metastore jars to ${tempDir.getCanonicalPath}")
     tempDir.listFiles().map(_.toURI.toURL)
   }
 
