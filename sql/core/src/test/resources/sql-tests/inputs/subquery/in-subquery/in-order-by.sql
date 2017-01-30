@@ -148,7 +148,7 @@ FROM   t1
 WHERE  t1b IN (SELECT Min(t2b)
                FROM   t2
                GROUP  BY t2a
-               ORDER  BY t2a DESC)
+               ORDER  BY t2a DESC);
 
 -- TC 01.12
 SELECT DISTINCT( t1a ),
