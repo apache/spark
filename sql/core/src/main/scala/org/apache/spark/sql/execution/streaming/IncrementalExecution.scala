@@ -41,7 +41,7 @@ class IncrementalExecution(
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // TODO: make this always part of planning.
-  val stateStrategy =
+  val streamingExtraStrategies =
     sparkSession.sessionState.planner.StatefulAggregationStrategy +:
     sparkSession.sessionState.planner.MapGroupsWithStateStrategy +:
     sparkSession.sessionState.planner.StreamingRelationStrategy +:
@@ -52,7 +52,7 @@ class IncrementalExecution(
     new SparkPlanner(
       sparkSession.sparkContext,
       sparkSession.sessionState.conf,
-      stateStrategy)
+      streamingExtraStrategies)
 
   /**
    * See [SPARK-18339]

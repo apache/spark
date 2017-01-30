@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.catalyst.streaming.InternalState
 import org.apache.spark.sql.types._
 
 object CatalystSerde {
@@ -313,6 +312,9 @@ case class MapGroups(
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer
+
+/** Internal class representing State */
+trait InternalState[S]
 
 /** Factory for constructing new `MapGroups` nodes. */
 object MapGroupsWithState {

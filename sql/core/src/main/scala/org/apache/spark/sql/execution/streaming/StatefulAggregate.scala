@@ -22,17 +22,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
-import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, InternalState}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.catalyst.streaming.InternalState
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.{OutputMode, State}
-import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.util.{CompletionIterator, NextIterator}
+import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.CompletionIterator
 
 
 /** Used to identify the state store for a given operator. */
@@ -286,8 +285,7 @@ case class MapGroupsWithStateExec(
             val keyObj = getKeyObj(keyRow)
             val valueObjIter = valueRowIter.map(getValueObj.apply)
             val stateObjOption = store.get(key).map(getStateObj)
-            val wrappedState = new StateImpl[Any]()
-            wrappedState.wrap(stateObjOption)
+            val wrappedState = StateImpl[Any](stateObjOption)
             val mappedIterator = func(keyObj, valueObjIter, wrappedState)
             if (wrappedState.isRemoved) {
               store.remove(key)

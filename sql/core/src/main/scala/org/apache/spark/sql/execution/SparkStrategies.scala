@@ -244,21 +244,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  object MapGroupsWithStateStrategy extends Strategy {
-    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case MapGroupsWithState(
-        func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr,
-        stateDeser, stateSer, child) =>
-        val execPlan = MapGroupsWithStateExec(
-          func, keyDeser, valueDeser,
-          groupAttr, dataAttr, outputAttr, None, stateDeser, stateSer,
-          planLater(child))
-        execPlan :: Nil
-      case _ =>
-        Nil
-    }
-  }
-
   /**
    * Used to plan the aggregate operator for expressions based on the AggregateFunction2 interface.
    */
@@ -328,6 +313,21 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  object MapGroupsWithStateStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case MapGroupsWithState(
+        func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr,
+        stateDeser, stateSer, child) =>
+        val execPlan = MapGroupsWithStateExec(
+          func, keyDeser, valueDeser,
+          groupAttr, dataAttr, outputAttr, None, stateDeser, stateSer,
+          planLater(child))
+        execPlan :: Nil
+      case _ =>
+        Nil
+    }
+  }
+
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
     def numPartitions: Int = self.numPartitions
@@ -369,6 +369,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.AppendColumnsWithObjectExec(f, childSer, newSer, planLater(child)) :: Nil
       case logical.MapGroups(f, key, value, grouping, data, objAttr, child) =>
         execution.MapGroupsExec(f, key, value, grouping, data, objAttr, planLater(child)) :: Nil
+      case logical.MapGroupsWithState(f, key, value, grouping, data, output, _, _, child) =>
+        execution.MapGroupsExec(f, key, value, grouping, data, output, planLater(child)) :: Nil
       case logical.CoGroup(f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr, left, right) =>
         execution.CoGroupExec(
           f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr,

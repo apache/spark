@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.plans.logical.InternalState
 import org.apache.spark.sql.types.{DataType, ObjectType, StructType}
 
 
@@ -347,6 +348,21 @@ case class MapGroupsExec(
         result.map(outputObject)
       }
     }
+  }
+}
+
+object MapGroupsExec {
+  def apply(
+      func: (Any, Iterator[Any], InternalState[Any]) => TraversableOnce[Any],
+      keyDeserializer: Expression,
+      valueDeserializer: Expression,
+      groupingAttributes: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      outputObjAttr: Attribute,
+      child: SparkPlan): MapGroupsExec = {
+    val f = (key: Any, values: Iterator[Any]) => func(key, values, StateImpl[Any](None))
+    new MapGroupsExec(f, keyDeserializer, valueDeserializer,
+      groupingAttributes, dataAttributes, outputObjAttr, child)
   }
 }
 
