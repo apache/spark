@@ -88,9 +88,7 @@ private[ml] class IterativelyReweightedLeastSquares(
       // Check convergence
       val oldCoefficients = oldModel.coefficients.toArray :+ oldModel.intercept
       val coefficients = model.coefficients.toArray :+ model.intercept
-      val maxTol = oldCoefficients.zip(coefficients).map(x => x._1 - x._2).reduce {
-        (x, y) => math.max(math.abs(x), math.abs(y))
-      }
+      val maxTol = oldCoefficients.zip(coefficients).map(x => math.abs(x._1 - x._2)).max
 
       if (maxTol < tol) {
         converged = true
