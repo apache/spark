@@ -678,14 +678,45 @@ setMethod("storageLevel",
             storageLevelToString(callJMethod(x@sdf, "storageLevel"))
           })
 
+#' Coalesce
+#'
+#' Returns a new SparkDataFrame that has exactly \code{numPartitions} partitions.
+#' This operation results in a narrow dependency, e.g. if you go from 1000 partitions to 100
+#' partitions, there will not be a shuffle, instead each of the 100 new partitions will claim 10 of
+#' the current partitions.
+#'
+#' @param numPartitions the number of partitions to use.
+#'
+#' @family SparkDataFrame functions
+#' @rdname coalesce
+#' @name coalesce
+#' @aliases coalesce,SparkDataFrame-method
+#' @seealso \link{repartition}
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' newDF <- coalesce(df, 1L)
+#'}
+#' @note coalesce(SparkDataFrame) since 2.1.1
+setMethod("coalesce",
+          signature(x = "SparkDataFrame"),
+          function(x, numPartitions) {
+            stopifnot(is.numeric(numPartitions))
+            sdf <- callJMethod(x@sdf, "coalesce", numToInt(numPartitions))
+            dataFrame(sdf)
+          })
+
 #' Repartition
 #'
 #' The following options for repartition are possible:
 #' \itemize{
-#'  \item{1.} {Return a new SparkDataFrame partitioned by
+#'  \item{1.} {Return a new SparkDataFrame that has exactly \code{numPartitions}.}
+#'  \item{2.} {Return a new SparkDataFrame hash partitioned by
 #'                      the given columns into \code{numPartitions}.}
-#'  \item{2.} {Return a new SparkDataFrame that has exactly \code{numPartitions}.}
-#'  \item{3.} {Return a new SparkDataFrame partitioned by the given column(s),
+#'  \item{3.} {Return a new SparkDataFrame hash partitioned by the given column(s),
 #'                      using \code{spark.sql.shuffle.partitions} as number of partitions.}
 #'}
 #' @param x a SparkDataFrame.
@@ -697,6 +728,7 @@ setMethod("storageLevel",
 #' @rdname repartition
 #' @name repartition
 #' @aliases repartition,SparkDataFrame-method
+#' @seealso \link{coalesce}
 #' @export
 #' @examples
 #'\dontrun{
