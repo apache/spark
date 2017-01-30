@@ -115,8 +115,11 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     }
   }
 
-  private def getSchedulingModeValue(poolNode: Node, poolName: String, defaultValue: SchedulingMode)
-  : SchedulingMode = {
+  private def getSchedulingModeValue(
+      poolNode: Node,
+      poolName: String,
+      defaultValue: SchedulingMode): SchedulingMode = {
+
     val xmlSchedulingMode = (poolNode \ SCHEDULING_MODE_PROPERTY).text.trim.toUpperCase
     val warningMessage = s"Unsupported schedulingMode: $xmlSchedulingMode, using the default " +
       s"schedulingMode: $defaultValue for pool: $poolName"
@@ -134,8 +137,11 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     }
   }
 
-  private def getIntValue(poolNode: Node, poolName: String, propertyName: String, defaultValue: Int)
-  : Int = {
+  private def getIntValue(
+      poolNode: Node,
+      poolName: String,
+      propertyName: String, defaultValue: Int): Int = {
+
     val data = (poolNode \ propertyName).text.trim
     try {
       data.toInt
