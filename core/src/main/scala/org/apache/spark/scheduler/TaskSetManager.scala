@@ -711,7 +711,6 @@ private[spark] class TaskSetManager(
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
-    maybeFinishTaskSet()
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
     // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
@@ -727,6 +726,7 @@ private[spark] class TaskSetManager(
         s"as the attempt ${info.attemptNumber} succeeded on ${info.host}")
       sched.backend.killTask(attemptInfo.taskId, attemptInfo.executorId, true)
     }
+    maybeFinishTaskSet()
   }
 
   /**
