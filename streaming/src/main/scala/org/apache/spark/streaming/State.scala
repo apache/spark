@@ -88,7 +88,7 @@ sealed abstract class State[S] {
    * Get the state if it exists, otherwise it will throw `java.util.NoSuchElementException`.
    * Check with `exists()` whether the state exists or not before calling `get()`.
    *
-   * @note Throws `java.util.NoSuchElementException` if the state does not exist.
+   * @throws java.util.NoSuchElementException If the state does not exist.
    */
   def get(): S
 
@@ -98,8 +98,8 @@ sealed abstract class State[S] {
    * State cannot be updated if it has been already removed (that is, `remove()` has already been
    * called) or it is going to be removed due to timeout (that is, `isTimingOut()` is `true`).
    *
-   * @note Throws `java.lang.IllegalArgumentException` If the state has already been removed, or is
-   * going to be removed
+   * @throws java.lang.IllegalArgumentException If the state has already been removed, or is
+   *                                            going to be removed
    */
   def update(newState: S): Unit
 
