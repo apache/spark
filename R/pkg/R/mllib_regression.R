@@ -63,9 +63,9 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @param regParam regularization parameter for L2 regularization.
 #' @param variancePower the power in the variance function of the Tweedie distribution which provides
 #'                      the relationship between the variance and mean of the distribution. Refer to
-#'                      \code{\link[statmod]{tweedie}} for details.
+#'                      \code{tweedie} in package \code{statmod} for details.
 #' @param linkPower the index in the power link function. Only applicable for the Tweedie family.
-#'                  Refer to \code{\link[statmod]{tweedie}} for details.
+#'                  Refer to \code{tweedie} in package \code{statmod} for details.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model.
