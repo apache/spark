@@ -361,7 +361,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     }
 
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val off = if (!isDefined(offsetCol) || $(offsetCol).isEmpty) {
+    val offset = if (!isDefined(offsetCol) || $(offsetCol).isEmpty) {
       lit(0.0)
     } else {
       col($(offsetCol)).cast(DoubleType)
@@ -370,7 +370,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     val model = if (familyAndLink.family == Gaussian && familyAndLink.link == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
       val instances: RDD[Instance] =
-        dataset.select(col($(labelCol)), w, off, col($(featuresCol))).rdd.map {
+        dataset.select(col($(labelCol)), w, offset, col($(featuresCol))).rdd.map {
           case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
             Instance(label - offset, weight, features)
         }
@@ -385,7 +385,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       model.setSummary(Some(trainingSummary))
     } else {
       val instances: RDD[OffsetInstance] =
-        dataset.select(col($(labelCol)), w, off, col($(featuresCol))).rdd.map {
+        dataset.select(col($(labelCol)), w, offset, col($(featuresCol))).rdd.map {
           case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
             OffsetInstance(label, weight, offset, features)
         }
