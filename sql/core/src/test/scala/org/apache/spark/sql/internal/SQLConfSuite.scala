@@ -226,16 +226,11 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     withSQLConf(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE.key -> "2000") {
       assert(spark.conf.get(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE) === 2000)
     }
-    intercept[IllegalArgumentException] {
-      spark.conf.set(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE.key, "not int")
+    val e = intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE.key, "-1")
     }
-    intercept[IllegalArgumentException] {
-      // This value exceeds Int.MaxValue
-      spark.conf.set(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE.key, "100000000000000")
-    }
-    intercept[IllegalArgumentException] {
-      // This value is less than Int.MinValue
-      spark.conf.set(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE.key, "-100000000000000")
+    Seq("maximum size", "must not be negative").foreach { words =>
+      assert(e.getMessage.contains(words))
     }
   }
 

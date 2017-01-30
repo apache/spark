@@ -467,8 +467,11 @@ object SQLConf {
   val DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE =
     SQLConfigBuilder("spark.sql.sources.tableRelationCache.maxSize")
       .internal()
-      .doc("The maximum size of the cache that maps qualified table names to table relation plans.")
+      .doc("The maximum size of the cache that maps qualified table names to table relation " +
+        "plans. It's better to leave this to the default value if you are not super confident " +
+        "with the value you provide.")
       .intConf
+      .checkValue(maxSize => maxSize >= 0, "The maximum size of the cache must not be negative")
       .createWithDefault(1000)
 
   val FILES_MAX_PARTITION_BYTES = SQLConfigBuilder("spark.sql.files.maxPartitionBytes")

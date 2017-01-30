@@ -128,6 +128,21 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(transformationConf) === "bar")
   }
 
+  test("conf entry: checkValue()") {
+    def createConf(default: Int): ConfigEntry[Int] =
+      ConfigBuilder(testKey("checkValue"))
+        .intConf
+        .checkValue(value => value >= 0, "value must be non-negative")
+        .createWithDefault(default)
+
+    // this succeeds
+    createConf(10)
+
+    // this fails
+    val e = intercept[IllegalArgumentException] { createConf(-1) }
+    assert(e.getMessage == "value must be non-negative")
+  }
+
   test("conf entry: valid values check") {
     val conf = new SparkConf()
     val enum = ConfigBuilder(testKey("enum"))
