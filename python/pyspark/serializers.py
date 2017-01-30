@@ -192,9 +192,9 @@ class ArrowSerializer(FramedSerializer):
         raise NotImplementedError
 
     def loads(self, obj):
-        from pyarrow.ipc import ArrowFileReader
-        reader = ArrowFileReader(obj)
-        return reader.get_record_batch(0)
+        from pyarrow import FileReader, BufferReader
+        reader = FileReader(BufferReader(obj))
+        return reader.read_all()
 
     def __repr__(self):
         return "ArrowSerializer"
