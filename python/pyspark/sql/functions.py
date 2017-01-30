@@ -1833,6 +1833,10 @@ class UserDefinedFunction(object):
 
     @property
     def _judf(self):
+        # It is possible that concurrent access, to newly created UDF,
+        # will initialize multiple UserDefinedPythonFunctions.
+        # This is unlikely, doesn't affect correctness,
+        # and should have a minimal performance impact.
         if self._judf_placeholder is None:
             self._judf_placeholder = self._create_judf()
         return self._judf_placeholder
