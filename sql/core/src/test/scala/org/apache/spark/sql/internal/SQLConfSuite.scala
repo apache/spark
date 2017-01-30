@@ -221,6 +221,24 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       .sessionState.conf.warehousePath.stripSuffix("/"))
   }
 
+  test("DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE") {
+    assert(spark.conf.get(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE) === 1000)
+    withSQLConf(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE.key -> "2000") {
+      assert(spark.conf.get(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE) === 2000)
+    }
+    intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE.key, "not int")
+    }
+    intercept[IllegalArgumentException] {
+      // This value exceeds Int.MaxValue
+      spark.conf.set(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE.key, "100000000000000")
+    }
+    intercept[IllegalArgumentException] {
+      // This value is less than Int.MinValue
+      spark.conf.set(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE.key, "-100000000000000")
+    }
+  }
+
   test("MAX_CASES_BRANCHES") {
     withTable("tab1") {
       spark.range(10).write.saveAsTable("tab1")
