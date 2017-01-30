@@ -54,7 +54,7 @@ object RateEstimator {
    * The only known and acceptable estimator right now is `pid`.
    *
    * @return An instance of RateEstimator
-   * @throws IllegalArgumentException if the configured RateEstimator is not `pid`.
+   * @note Throws `IllegalArgumentException` if the configured RateEstimator is not `pid`.
    */
   def create(conf: SparkConf, batchInterval: Duration): RateEstimator =
     conf.get("spark.streaming.backpressure.rateEstimator", "pid") match {

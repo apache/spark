@@ -106,7 +106,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * Otherwise, returns `threshold` if set, or its default value if unset.
    *
    * @group getParam
-   * @throws IllegalArgumentException if `thresholds` is set to an array of length other than 2.
+   * @note Throws `IllegalArgumentException` if `thresholds` is set to an array of length
+   * other than 2.
    */
   override def getThreshold: Double = {
     checkThresholdConsistency()
@@ -161,7 +162,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   /**
    * If `threshold` and `thresholds` are both set, ensures they are consistent.
    *
-   * @throws IllegalArgumentException if `threshold` and `thresholds` are not equivalent
+   * @note Throws `IllegalArgumentException` if `threshold` and `thresholds` are not equivalent
    */
   protected def checkThresholdConsistency(): Unit = {
     if (isSet(threshold) && isSet(thresholds)) {

@@ -259,7 +259,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   /**
    * Extracts the [[StructField]] with the given name.
    *
-   * @throws IllegalArgumentException if a field with the given name does not exist
+   * @note Throws `IllegalArgumentException` if a field with the given name does not exist
    */
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
@@ -270,7 +270,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * Returns a [[StructType]] containing [[StructField]]s of the given names, preserving the
    * original order of fields.
    *
-   * @throws IllegalArgumentException if a field cannot be found for any of the given names
+   * @note Throws `IllegalArgumentException` if a field cannot be found for any of the given names
    */
   def apply(names: Set[String]): StructType = {
     val nonExistFields = names -- fieldNamesSet
@@ -285,7 +285,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   /**
    * Returns the index of a given field.
    *
-   * @throws IllegalArgumentException if a field with the given name does not exist
+   * @note Throws `IllegalArgumentException` if a field with the given name does not exist
    */
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
