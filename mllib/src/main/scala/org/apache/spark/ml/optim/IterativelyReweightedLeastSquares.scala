@@ -86,13 +86,11 @@ private[ml] class IterativelyReweightedLeastSquares(
         standardizeFeatures = false, standardizeLabel = false).fit(newInstances)
 
       // Check convergence
-      val oldCoefficients = oldModel.coefficients
-      val coefficients = model.coefficients
-      BLAS.axpy(-1.0, coefficients, oldCoefficients)
-      val maxTolOfCoefficients = oldCoefficients.toArray.reduce { (x, y) =>
-        math.max(math.abs(x), math.abs(y))
+      val oldCoefficients = oldModel.coefficients.toArray :+ oldModel.intercept
+      val coefficients = model.coefficients.toArray :+ model.intercept
+      val maxTol = oldCoefficients.zip(coefficients).map(x => x._1 - x._2).reduce {
+        (x, y) => math.max(math.abs(x), math.abs(y))
       }
-      val maxTol = math.max(maxTolOfCoefficients, math.abs(oldModel.intercept - model.intercept))
 
       if (maxTol < tol) {
         converged = true

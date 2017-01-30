@@ -743,6 +743,54 @@ class GeneralizedLinearRegressionSuite
     }
   }
 
+  test("generalized linear regression: intercept only") {
+    /*
+      R code:
+      y <- c(17, 19, 23, 29)
+      w <- c(1, 2, 3, 4)
+      model1 <- glm(y ~ 1, family = poisson)
+      model2 <- glm(y ~ 1, family = poisson, weights = w)
+      as.vector(c(coef(model1), coef(model2)))
+      [1] 3.091042 3.178054
+     */
+
+    val dataset = Seq(
+      Instance(17.0, 1.0, Vectors.zeros(0)),
+      Instance(19.0, 2.0, Vectors.zeros(0)),
+      Instance(23.0, 3.0, Vectors.zeros(0)),
+      Instance(29.0, 4.0, Vectors.zeros(0))
+    ).toDF()
+
+    val expected = Seq(3.091, 3.178)
+
+    import GeneralizedLinearRegression._
+
+    var idx = 0
+    for (useWeight <- Seq(false, true)) {
+      val trainer = new GeneralizedLinearRegression().setFamily("poisson")
+        .setLinkPredictionCol("linkPrediction")
+      if (useWeight) trainer.setWeightCol("weight")
+      val model = trainer.fit(dataset)
+      val actual = model.intercept
+      assert(actual ~== expected(idx) absTol 1E-3, "Model mismatch: intercept only GLM with " +
+        s"useWeight = $useWeight.")
+
+      val familyLink = FamilyAndLink(trainer)
+      model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
+        .foreach {
+          case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
+            val eta = BLAS.dot(features, model.coefficients) + model.intercept
+            val prediction2 = familyLink.fitted(eta)
+            val linkPrediction2 = eta
+            assert(prediction1 ~== prediction2 relTol 1E-5, "Prediction mismatch: intercept only " +
+              s"GLM with useWeight = $useWeight.")
+            assert(linkPrediction1 ~== linkPrediction2 relTol 1E-5, "Link prediction mismatch: " +
+              s"intercept only GLM with useWeight = $useWeight.")
+        }
+      idx += 1
+    }
+  }
+
   test("glm summary: gaussian family with weight") {
     /*
        R code:
