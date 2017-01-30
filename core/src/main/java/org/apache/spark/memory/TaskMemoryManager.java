@@ -159,14 +159,15 @@ public class TaskMemoryManager {
             List<MemoryConsumer> list = null;
             if (sortedConsumers.containsKey(key)) {
               list = sortedConsumers.get(key);
+              list.add(c);
             } else {
               list = new ArrayList<MemoryConsumer>(1);
+              list.add(c);
+              sortedConsumers.put(key, list);
             }
-            list.add(c);
-            sortedConsumers.put(key, list);
           }
         }
-        while (true) {
+        while (!sortedConsumers.isEmpty()) {
           // Get the consumer using the least memory more than the remaining required memory.
           Map.Entry<Long, List<MemoryConsumer>> currentEntry =
             sortedConsumers.ceilingEntry(required - got);
@@ -175,12 +176,11 @@ public class TaskMemoryManager {
           if (currentEntry == null) {
             currentEntry = sortedConsumers.lastEntry();
           }
-          // No available consumer.
-          if (currentEntry == null) {
-            break;
-          }
           List<MemoryConsumer> cList = currentEntry.getValue();
           MemoryConsumer c = cList.remove(cList.size() - 1);
+          if (cList.size() == 0) {
+            sortedConsumers.remove(currentEntry.getKey());
+          }
           try {
             long released = c.spill(required - got, consumer);
             if (released > 0) {
@@ -190,9 +190,6 @@ public class TaskMemoryManager {
               if (got >= required) {
                 break;
               }
-            }
-            if (cList.size() == 0) {
-              sortedConsumers.remove(currentEntry.getKey());
             }
           } catch (IOException e) {
             logger.error("error while calling spill() on " + c, e);
