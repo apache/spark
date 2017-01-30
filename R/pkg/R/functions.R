@@ -327,7 +327,7 @@ col <- function(x) {
 #' @family normal_funcs
 #' @export
 #' @aliases column,character-method
-#' @examples \dontrun{column("name"")}
+#' @examples \dontrun{column("name")}
 #' @note column since 1.6.0
 setMethod("column",
           signature(x = "character"),
