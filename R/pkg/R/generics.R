@@ -408,7 +408,7 @@ setGeneric("cache", function(x) { standardGeneric("cache") })
 
 #' @rdname coalesce
 #' @param x a Column or a SparkDataFrame.
-#' @param ... additional argument(s). If \code{x} is a Column, addition Columns can be optionally
+#' @param ... additional argument(s). If \code{x} is a Column, additional Columns can be optionally
 #'        provided.
 #' @export
 setGeneric("coalesce", function(x, ...) { standardGeneric("coalesce") })
