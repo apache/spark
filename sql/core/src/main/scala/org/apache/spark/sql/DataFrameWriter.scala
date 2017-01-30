@@ -196,16 +196,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * methods.
    *
    * @param funcName A identifier for the method executing the query
-   * @param qe the @see [[QueryExecution]] object associated with the
-   *        query
+   * @param qe the @see [[QueryExecution]] object associated with the query
    * @param outputParams The output parameters useful for query analysis
    * @param action the function that executes the query after which the listener methods gets
    *               called.
    */
   private def executeAndCallQEListener(
-                                        funcName: String,
-                                        qe: QueryExecution,
-                                        outputParams: OutputParams)(action: => Unit) = {
+      funcName: String,
+      qe: QueryExecution,
+      outputParams: OutputParams)(action: => Unit) = {
     try {
       val start = System.nanoTime()
       action
