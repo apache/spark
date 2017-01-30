@@ -47,8 +47,22 @@ private[spark] class AppStatusStore(store: KVStore) {
   }
 
   def executorList(activeOnly: Boolean): Seq[v1.ExecutorSummary] = {
-    store.view(classOf[ExecutorSummaryWrapper]).index("active").reverse().first(true)
-      .last(true).asScala.map(_.info).toSeq
+    val base = store.view(classOf[ExecutorSummaryWrapper])
+    val filtered = if (activeOnly) {
+      base.index("active").reverse().first(true).last(true)
+    } else {
+      base
+    }
+    filtered.asScala.map(_.info).toSeq
+  }
+
+  def executorSummary(executorId: String): Option[v1.ExecutorSummary] = {
+    try {
+      Some(store.read(classOf[ExecutorSummaryWrapper], executorId).info)
+    } catch {
+      case _: NoSuchElementException =>
+        None
+    }
   }
 
   def stageList(statuses: JList[v1.StageStatus]): Seq[v1.StageData] = {

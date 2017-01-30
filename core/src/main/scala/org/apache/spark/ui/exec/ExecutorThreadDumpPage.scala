@@ -22,11 +22,12 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Text}
 
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.SparkContext
+import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
 
-private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage("threadDump") {
-
-  private val sc = parent.sc
+private[ui] class ExecutorThreadDumpPage(
+    parent: SparkUITab,
+    sc: Option[SparkContext]) extends WebUIPage("threadDump") {
 
   // stripXSS is called first to remove suspicious characters used in XSS attacks
   def render(request: HttpServletRequest): Seq[Node] = {
