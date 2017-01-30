@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
-import org.apache.spark.sql.catalyst.plans.logical.InternalState
+import org.apache.spark.sql.catalyst.plans.logical.LogicalState
 
 /**
  * :: Experimental ::
@@ -83,7 +83,7 @@ import org.apache.spark.sql.catalyst.plans.logical.InternalState
  */
 @Experimental
 @InterfaceStability.Evolving
-trait State[S] extends InternalState[S] {
+trait State[S] extends LogicalState[S] {
 
   def exists: Boolean
 

@@ -314,12 +314,12 @@ case class MapGroups(
     child: LogicalPlan) extends UnaryNode with ObjectProducer
 
 /** Internal class representing State */
-trait InternalState[S]
+trait LogicalState[S]
 
 /** Factory for constructing new `MapGroups` nodes. */
 object MapGroupsWithState {
   def apply[K: Encoder, V: Encoder, S: Encoder, U: Encoder](
-      func: (Any, Iterator[Any], InternalState[Any]) => Iterator[Any],
+      func: (Any, Iterator[Any], LogicalState[Any]) => Iterator[Any],
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       child: LogicalPlan): LogicalPlan = {
@@ -338,7 +338,7 @@ object MapGroupsWithState {
 }
 
 case class MapGroupsWithState(
-    func: (Any, Iterator[Any], InternalState[Any]) => Iterator[Any],
+    func: (Any, Iterator[Any], LogicalState[Any]) => Iterator[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],

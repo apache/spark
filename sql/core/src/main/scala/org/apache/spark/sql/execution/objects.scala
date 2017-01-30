@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.plans.logical.InternalState
+import org.apache.spark.sql.catalyst.plans.logical.LogicalState
 import org.apache.spark.sql.types.{DataType, ObjectType, StructType}
 
 
@@ -353,7 +353,7 @@ case class MapGroupsExec(
 
 object MapGroupsExec {
   def apply(
-      func: (Any, Iterator[Any], InternalState[Any]) => TraversableOnce[Any],
+      func: (Any, Iterator[Any], LogicalState[Any]) => TraversableOnce[Any],
       keyDeserializer: Expression,
       valueDeserializer: Expression,
       groupingAttributes: Seq[Attribute],

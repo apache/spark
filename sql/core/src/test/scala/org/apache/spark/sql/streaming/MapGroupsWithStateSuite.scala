@@ -37,7 +37,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     StateStore.stop()
   }
 
-  test("state - get, exists, update, remove, ") {
+  test("state - get, exists, update, remove") {
     var state: StateImpl[String] = null
 
     def testState(
@@ -83,84 +83,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     testState(Some("4"), shouldBeRemoved = false, shouldBeUpdated = true)
   }
 
-
-
-  // ************* Batch query tests for [flat]mapGroupsWithState *************
-
-  test("batch - mapGroupsWithState") {
-    val stateFunc = (key: String, values: Iterator[String], state: State[RunningCount]) => {
-      assert(!state.exists)
-      assert(state.getOption.isEmpty)
-      (key, values.size)
-    }
-
-    checkAnswer(
-      spark.createDataset(Seq("a", "a", "b"))
-        .groupByKey(x => x)
-        .mapGroupsWithState(stateFunc)
-        .toDF,
-      spark.createDataset(Seq(("a", 2), ("b", 1))).toDF)
-  }
-
-  test("batch - flatMapGroupsWithState") {
-    // Function that returns running count only if its even, otherwise does not return
-    val stateFunc = (key: String, values: Iterator[String], state: State[RunningCount]) => {
-      assert(!state.exists)
-      assert(state.getOption.isEmpty)
-      if (values.size == 2) {
-        Iterator((key, values.size))
-      } else Iterator.empty
-    }
-    checkAnswer(
-      Seq("a", "a", "b").toDS.groupByKey(x => x).flatMapGroupsWithState(stateFunc).toDF,
-      Seq(("a", 2), ("b", 1)).toDF)
-  }
-
-  // ************* Streaming query tests for [flat]mapGroupsWithState *************
-
-  test("streaming - mapGroupsWithState") {
-    val inputData = MemoryStream[String]
-
-    // Function to maintain running count up to 2, and then remove the count
-    // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
-    val stateFunc = (key: String, values: Iterator[String], state: State[RunningCount]) => {
-
-      var count = state.getOption.map(_.count).getOrElse(0L) + values.size
-      if (count == 3) {
-        state.remove()
-        (key, "-1")
-      } else {
-        state.update(RunningCount(count))
-        (key, count.toString)
-      }
-    }
-
-    val result =
-      inputData.toDS()
-        .groupByKey(x => x)
-        .mapGroupsWithState(stateFunc) // Types = State: MyState, Out: (Str, Str)
-
-    testStream(result, Append)(
-      AddData(inputData, "a"),
-      CheckLastBatch(("a", "1")),
-      assertNumStateRows(1),
-      AddData(inputData, "a", "b"),
-      CheckLastBatch(("a", "2"), ("b", "1")),
-      assertNumStateRows(2),
-      StopStream,
-      StartStream(),
-      AddData(inputData, "a", "b"), // should remove state for "a" and return count as -1
-      CheckLastBatch(("a", "-1"), ("b", "2")),
-      assertNumStateRows(1),
-      StopStream,
-      StartStream(),
-      AddData(inputData, "a", "b", "c"), // should recreate state for "a" and return count as 1
-      CheckLastBatch(("a", "1"), ("b", "-1"), ("c", "1")),
-      assertNumStateRows(2)
-    )
-  }
-
-  test("streaming - flatMapGroupsWithState") {
+  test("flatMapGroupsWithState - streaming") {
     val inputData = MemoryStream[String]
 
     // Function to maintain running count up to 2, and then remove the count
@@ -185,26 +108,100 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     testStream(result, Append)(
       AddData(inputData, "a"),
       CheckLastBatch(("a", "1")),
-      assertNumStateRows(1),
+      assertNumStateRows(total = 1, updated = 1),
       AddData(inputData, "a", "b"),
       CheckLastBatch(("a", "2"), ("b", "1")),
-      assertNumStateRows(2),
+      assertNumStateRows(total = 2, updated = 2),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
-      CheckLastBatch( ("b", "2")),
-      assertNumStateRows(1),
+      CheckLastBatch(("b", "2")),
+      assertNumStateRows(total = 1, updated = 2),
       StopStream,
       StartStream(),
-      AddData(inputData, "a", "b", "c"), // should recreate state for "a" and return count as 1 and
-      CheckLastBatch(("a", "1"), ("c", "1")),  // ... not return anything for b
-      assertNumStateRows(2)
+      AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
+      CheckLastBatch(("a", "1"), ("c", "1"))
+      // assertNumStateRows(total = 3, updated = 2)
     )
   }
 
-  private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>
+  test("flatMapGroupsWithState - batch") {
+    // Function that returns running count only if its even, otherwise does not return
+    val stateFunc = (key: String, values: Iterator[String], state: State[RunningCount]) => {
+      if (state.exists) throw new IllegalArgumentException("state.exists should be false")
+      if (state.getOption.nonEmpty) {
+        throw new IllegalArgumentException("state.getOption should be empty")
+      }
+      Iterator((key, values.size))
+    }
+    checkAnswer(
+      Seq("a", "a", "b").toDS.groupByKey(x => x).flatMapGroupsWithState(stateFunc).toDF,
+      Seq(("a", 2), ("b", 1)).toDF)
+  }
+
+  test("mapGroupsWithState - streaming") {
+    val inputData = MemoryStream[String]
+
+    // Function to maintain running count up to 2, and then remove the count
+    // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
+    val stateFunc = (key: String, values: Iterator[String], state: State[RunningCount]) => {
+
+      var count = state.getOption.map(_.count).getOrElse(0L) + values.size
+      if (count == 3) {
+        state.remove()
+        (key, "-1")
+      } else {
+        state.update(RunningCount(count))
+        (key, count.toString)
+      }
+    }
+
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .mapGroupsWithState(stateFunc) // Types = State: MyState, Out: (Str, Str)
+
+    testStream(result, Append)(
+      AddData(inputData, "a"),
+      CheckLastBatch(("a", "1")),
+      assertNumStateRows(total = 1, updated = 1),
+      AddData(inputData, "a", "b"),
+      CheckLastBatch(("a", "2"), ("b", "1")),
+      assertNumStateRows(total = 2, updated = 2),
+      StopStream,
+      StartStream(),
+      AddData(inputData, "a", "b"), // should remove state for "a" and return count as -1
+      CheckLastBatch(("a", "-1"), ("b", "2")),
+      assertNumStateRows(total = 1, updated = 2),
+      StopStream,
+      StartStream(),
+      AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1
+      CheckLastBatch(("a", "1"), ("c", "1")),
+      assertNumStateRows(total = 3, updated = 2)
+    )
+  }
+
+  test("mapGroupsWithState - batch") {
+    val stateFunc = (key: String, values: Iterator[String], state: State[RunningCount]) => {
+      if (state.exists) throw new IllegalArgumentException("state.exists should be false")
+      if (state.getOption.nonEmpty) {
+        throw new IllegalArgumentException("state.getOption should be empty")
+      }
+      (key, values.size)
+    }
+
+    checkAnswer(
+      spark.createDataset(Seq("a", "a", "b"))
+        .groupByKey(x => x)
+        .mapGroupsWithState(stateFunc)
+        .toDF,
+      spark.createDataset(Seq(("a", 2), ("b", 1))).toDF)
+  }
+
+  private def assertNumStateRows(total: Long, updated: Long): AssertOnQuery = AssertOnQuery { q =>
     val progressWithData = q.recentProgress.filter(_.numInputRows > 0).lastOption.get
-    assert(progressWithData.stateOperators(0).numRowsTotal === numTotalRows)
+    assert(progressWithData.stateOperators(0).numRowsTotal === total)
+    assert(progressWithData.stateOperators(0).numRowsUpdated === updated)
     true
   }
 }

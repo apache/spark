@@ -226,9 +226,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
   @Experimental
   @InterfaceStability.Evolving
   def mapGroupsWithState[STATE: Encoder, OUT: Encoder](
-      f: (K, Iterator[V], State[STATE]) => OUT): Dataset[OUT] = {
-    val func = (key: K, it: Iterator[V], s: State[STATE]) => Iterator(f(key, it, s))
-    flatMapGroupsWithState[STATE, OUT](func)
+      func: (K, Iterator[V], State[STATE]) => OUT): Dataset[OUT] = {
+    val f = (key: K, it: Iterator[V], s: State[STATE]) => Iterator(func(key, it, s))
+    flatMapGroupsWithState[STATE, OUT](f)
   }
 
   /**
@@ -239,11 +239,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
   @Experimental
   @InterfaceStability.Evolving
   def mapGroupsWithState[STATE, OUT](
-      f: MapGroupsWithStateFunction[K, V, STATE, OUT],
+      func: MapGroupsWithStateFunction[K, V, STATE, OUT],
       stateEncoder: Encoder[STATE],
       outputEncoder: Encoder[OUT]): Dataset[OUT] = {
-    val func = (key: K, it: Iterator[V], s: State[STATE]) => Iterator(f.call(key, it.asJava, s))
-    flatMapGroupsWithState[STATE, OUT](func)(stateEncoder, outputEncoder)
+    val f = (key: K, it: Iterator[V], s: State[STATE]) => Iterator(func.call(key, it.asJava, s))
+    flatMapGroupsWithState[STATE, OUT](f)(stateEncoder, outputEncoder)
   }
 
 
@@ -259,7 +259,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
     Dataset[OUT](
       sparkSession,
       MapGroupsWithState[K, V, STATE, OUT](
-        func.asInstanceOf[(Any, Iterator[Any], InternalState[Any]) => Iterator[Any]],
+        func.asInstanceOf[(Any, Iterator[Any], LogicalState[Any]) => Iterator[Any]],
         groupingAttributes,
         dataAttributes,
         logicalPlan))
@@ -273,11 +273,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
   @Experimental
   @InterfaceStability.Evolving
   def flatMapGroupsWithState[STATE, OUT](
-      f: FlatMapGroupsWithStateFunction[K, V, STATE, OUT],
+      func: FlatMapGroupsWithStateFunction[K, V, STATE, OUT],
       stateEncoder: Encoder[STATE],
       outputEncoder: Encoder[OUT]): Dataset[OUT] = {
-    val func = (key: K, it: Iterator[V], s: State[STATE]) => f.call(key, it.asJava, s).asScala
-    flatMapGroupsWithState[STATE, OUT](func)(stateEncoder, outputEncoder)
+    val f = (key: K, it: Iterator[V], s: State[STATE]) => func.call(key, it.asJava, s).asScala
+    flatMapGroupsWithState[STATE, OUT](f)(stateEncoder, outputEncoder)
   }
 
   /**
