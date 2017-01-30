@@ -403,9 +403,9 @@ class AFTSurvivalRegressionSuite
 
   test("SPARK-19234: Fail fast on zero-valued labels") {
     val dataset = spark.createDataFrame(Seq(
-         (1.218, 1.0, Vectors.dense(1.560, -0.605)),
-         (0.000, 0.0, Vectors.dense(0.346, 2.158)), // ← generates error; zero labels invalid
-         (4.199, 0.0, Vectors.dense(0.795, -0.226)))).toDF("label", "censor", "features")
+      (1.218, 1.0, Vectors.dense(1.560, -0.605)),
+      (0.000, 0.0, Vectors.dense(0.346, 2.158)), // ← generates error; zero labels invalid
+      (4.199, 0.0, Vectors.dense(0.795, -0.226)))).toDF("label", "censor", "features")
     val aft = new AFTSurvivalRegression()
     withClue("label of AFTPoint must be positive") {
       intercept[SparkException] {
