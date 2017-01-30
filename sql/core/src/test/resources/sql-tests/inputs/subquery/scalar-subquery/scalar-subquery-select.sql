@@ -71,7 +71,7 @@ SELECT (SELECT min(t3d) FROM t3) min_t3d,
        null
 FROM   t1
 WHERE  t1a = 'val1c'
-UNION 
+UNION
 SELECT null,
        (SELECT max(t2h) FROM t2) max_t2h
 FROM   t1
@@ -81,7 +81,7 @@ WHERE  t1a = 'val1c';
 SELECT (SELECT min(t3c) FROM t3) min_t3d
 FROM   t1
 WHERE  t1a = 'val1a'
-INTERSECT 
+INTERSECT
 SELECT (SELECT min(t2c) FROM t2) min_t2d
 FROM   t1
 WHERE  t1a = 'val1d';
@@ -110,7 +110,7 @@ WHERE  t1a = 'val1b';
 SELECT (SELECT min(t3d) FROM t3 WHERE t3a = t1a) min_t3d
 FROM   t1
 WHERE  t1a = 'val1b'
-MINUS 
+MINUS
 SELECT (SELECT min(t3d) FROM t3) abs_min_t3d
 FROM   t1
 WHERE  t1a = 'val1b';
