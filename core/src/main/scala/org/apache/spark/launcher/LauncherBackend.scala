@@ -61,7 +61,7 @@ private[spark] abstract class LauncherBackend extends Logging {
         ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
         logInfo("Invoking onStopRequest() from shutdown hook")
         try {
-          if (_isConnected && stopOnShutdown) {
+          if (_isConnected) {
             onStopRequest()
           }
         }

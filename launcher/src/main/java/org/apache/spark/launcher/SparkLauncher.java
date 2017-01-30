@@ -127,7 +127,7 @@ public class SparkLauncher {
    * Specifies that Spark Application be stopped if current process goes away.
    * It tries stop/kill Spark Application if {@link LauncherServer} goes away.
    *
-   * @since 2.1.0
+   * @since 2.2.0
    * @return This launcher.
    */
   public SparkLauncher stopIfLauncherShutdown() {
@@ -139,7 +139,7 @@ public class SparkLauncher {
    * Specifies that Spark Submit be launched as a daemon thread using reflection.
    * Please note this feature is currently supported only for YARN cluster deployment mode.
    *
-   * @since 2.1.0
+   * @since 2.2.0
    * @return This launcher.
    */
   public SparkLauncher launchAsThread(boolean launchAsThread) {
