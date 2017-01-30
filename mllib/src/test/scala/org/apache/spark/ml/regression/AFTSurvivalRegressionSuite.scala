@@ -407,8 +407,10 @@ class AFTSurvivalRegressionSuite
          (0.000, 0.0, Vectors.dense(0.346, 2.158)), // ← generates error; zero labels invalid
          (4.199, 0.0, Vectors.dense(0.795, -0.226)))).toDF("label", "censor", "features")
     val aft = new AFTSurvivalRegression()
-    intercept[SparkException] {
-      aft.fit(dataset)
+    withClue("label of AFTPoint must be positive") {
+      intercept[SparkException] {
+        aft.fit(dataset)
+      }
     }
   }
 }
