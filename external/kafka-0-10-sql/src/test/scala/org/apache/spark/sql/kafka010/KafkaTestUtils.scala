@@ -50,7 +50,7 @@ import org.apache.spark.SparkConf
  *
  * The reason to put Kafka test utility class in src is to test Python related Kafka APIs.
  */
-class KafkaTestUtils(withBrokerProps: Option[Map[String, Object]] = None) extends Logging {
+class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends Logging {
 
   // Zookeeper related configurations
   private val zkHost = "localhost"
@@ -255,7 +255,7 @@ class KafkaTestUtils(withBrokerProps: Option[Map[String, Object]] = None) extend
 
   def getEarliestOffsets(topics: Set[String]): Map[TopicPartition, Long] = {
     val kc = new KafkaConsumer[String, String](consumerConfiguration)
-    logInfo("Created consumer to get latest offsets")
+    logInfo("Created consumer to get earliest offsets")
     kc.subscribe(topics.asJavaCollection)
     kc.poll(0)
     val partitions = kc.assignment()
@@ -263,7 +263,7 @@ class KafkaTestUtils(withBrokerProps: Option[Map[String, Object]] = None) extend
     kc.seekToBeginning(partitions)
     val offsets = partitions.asScala.map(p => p -> kc.position(p)).toMap
     kc.close()
-    logInfo("Closed consumer to get latest offsets")
+    logInfo("Closed consumer to get earliest offsets")
     offsets
   }
 
@@ -292,11 +292,7 @@ class KafkaTestUtils(withBrokerProps: Option[Map[String, Object]] = None) extend
     props.put("log.flush.interval.messages", "1")
     props.put("replica.socket.timeout.ms", "1500")
     props.put("delete.topic.enable", "true")
-    withBrokerProps.map { p =>
-      p.foreach {
-        case (key, value) => props.put(key, value)
-      }
-    }
+    props.putAll(withBrokerProps.asJava)
     props
   }
 

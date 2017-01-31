@@ -123,7 +123,7 @@ private[kafka010] class KafkaSource(
   private def fetchAndVerify(specificOffsets: Map[TopicPartition, Long]) = {
     val result = kafkaReader.fetchSpecificStartingOffsets(specificOffsets)
     specificOffsets.foreach {
-      case (tp, off) if off != -1 && off != -2 =>
+      case (tp, off) if off != KafkaUtils.LATEST && off != KafkaUtils.EARLIEST =>
         if (result(tp) != off) {
           reportDataLoss(
             s"startingOffsets for $tp was $off but consumer reset to ${result(tp)}")

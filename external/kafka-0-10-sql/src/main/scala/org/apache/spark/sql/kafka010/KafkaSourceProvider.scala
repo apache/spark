@@ -327,7 +327,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister with Stre
         throw new IllegalArgumentException("starting relation offset can't be latest")
       case Some(json) => (SpecificOffsets(JsonUtils.partitionOffsets(json)))
         .partitionOffsets.foreach {
-          case (tp, off) if off == -1 =>
+          case (tp, off) if off == KafkaUtils.LATEST =>
             throw new IllegalArgumentException(s"startingOffsets for $tp can't be latest")
           case _ => // ignore
         }
@@ -340,7 +340,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister with Stre
       case Some("latest") => // good to go
       case Some(json) => (SpecificOffsets(JsonUtils.partitionOffsets(json)))
         .partitionOffsets.foreach {
-          case (tp, off) if off == -2 =>
+          case (tp, off) if off == KafkaUtils.EARLIEST =>
             throw new IllegalArgumentException(s"ending offset for $tp can't be earliest")
           case _ => // ignore
         }
