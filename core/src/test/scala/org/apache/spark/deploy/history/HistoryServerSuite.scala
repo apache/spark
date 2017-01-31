@@ -23,6 +23,7 @@ import java.util.zip.ZipInputStream
 import javax.servlet._
 import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -44,8 +45,8 @@ import org.scalatest.selenium.WebBrowser
 
 import org.apache.spark._
 import org.apache.spark.deploy.history.config._
+import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.ui.jobs.UIData.JobUIData
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
@@ -262,7 +263,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     val badStageAttemptId = getContentAndCode("applications/local-1422981780767/stages/1/1")
     badStageAttemptId._1 should be (HttpServletResponse.SC_NOT_FOUND)
-    badStageAttemptId._3 should be (Some("unknown attempt for stage 1.  Found attempts: [0]"))
+    badStageAttemptId._3 should be (Some("unknown attempt 1 for stage 1."))
 
     val badStageId2 = getContentAndCode("applications/local-1422981780767/stages/flimflam")
     badStageId2._1 should be (HttpServletResponse.SC_NOT_FOUND)
@@ -496,12 +497,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       }
     }
 
-    def completedJobs(): Seq[JobUIData] = {
-      getAppUI.jobProgressListener.completedJobs
+    def completedJobs(): Seq[JobData] = {
+      getAppUI.store.jobsList(List(JobExecutionStatus.SUCCEEDED).asJava)
     }
 
-    def activeJobs(): Seq[JobUIData] = {
-      getAppUI.jobProgressListener.activeJobs.values.toSeq
+    def activeJobs(): Seq[JobData] = {
+      getAppUI.store.jobsList(List(JobExecutionStatus.RUNNING).asJava)
     }
 
     activeJobs() should have size 0

@@ -2,9 +2,12 @@
   "status" : "COMPLETE",
   "stageId" : 0,
   "attemptId" : 0,
+  "numTasks" : 8,
   "numActiveTasks" : 0,
   "numCompleteTasks" : 8,
   "numFailedTasks" : 0,
+  "numKilledTasks" : 0,
+  "numCompletedIndices" : 8,
   "executorRunTime" : 120,
   "executorCpuTime" : 0,
   "submissionTime" : "2015-03-16T19:25:36.103GMT",
@@ -23,6 +26,7 @@
   "name" : "foreach at <console>:15",
   "details" : "org.apache.spark.rdd.RDD.foreach(RDD.scala:765)\n$line9.$read$$iwC$$iwC$$iwC$$iwC.<init>(<console>:15)\n$line9.$read$$iwC$$iwC$$iwC.<init>(<console>:20)\n$line9.$read$$iwC$$iwC.<init>(<console>:22)\n$line9.$read$$iwC.<init>(<console>:24)\n$line9.$read.<init>(<console>:26)\n$line9.$read$.<init>(<console>:30)\n$line9.$read$.<clinit>(<console>)\n$line9.$eval$.<init>(<console>:7)\n$line9.$eval$.<clinit>(<console>)\n$line9.$eval.$print(<console>)\nsun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)\nsun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)\nsun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)\njava.lang.reflect.Method.invoke(Method.java:483)\norg.apache.spark.repl.SparkIMain$ReadEvalPrint.call(SparkIMain.scala:852)\norg.apache.spark.repl.SparkIMain$Request.loadAndRun(SparkIMain.scala:1125)\norg.apache.spark.repl.SparkIMain.loadAndRunReq$1(SparkIMain.scala:674)\norg.apache.spark.repl.SparkIMain.interpret(SparkIMain.scala:705)\norg.apache.spark.repl.SparkIMain.interpret(SparkIMain.scala:669)",
   "schedulingPool" : "default",
+  "rddIds" : [ 0 ],
   "accumulatorUpdates" : [ {
     "id" : 1,
     "name" : "my counter",
@@ -34,7 +38,7 @@
       "index" : 0,
       "attempt" : 0,
       "launchTime" : "2015-03-16T19:25:36.515GMT",
-      "duration" : 15,
+      "duration" : 61,
       "executorId" : "<driver>",
       "host" : "localhost",
       "status" : "SUCCESS",
@@ -56,6 +60,7 @@
         "resultSerializationTime" : 2,
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -85,7 +90,7 @@
       "index" : 1,
       "attempt" : 0,
       "launchTime" : "2015-03-16T19:25:36.521GMT",
-      "duration" : 15,
+      "duration" : 53,
       "executorId" : "<driver>",
       "host" : "localhost",
       "status" : "SUCCESS",
@@ -107,6 +112,7 @@
         "resultSerializationTime" : 2,
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -136,7 +142,7 @@
       "index" : 2,
       "attempt" : 0,
       "launchTime" : "2015-03-16T19:25:36.522GMT",
-      "duration" : 15,
+      "duration" : 48,
       "executorId" : "<driver>",
       "host" : "localhost",
       "status" : "SUCCESS",
@@ -158,6 +164,7 @@
         "resultSerializationTime" : 2,
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -187,7 +194,7 @@
       "index" : 3,
       "attempt" : 0,
       "launchTime" : "2015-03-16T19:25:36.522GMT",
-      "duration" : 15,
+      "duration" : 50,
       "executorId" : "<driver>",
       "host" : "localhost",
       "status" : "SUCCESS",
@@ -209,6 +216,7 @@
         "resultSerializationTime" : 2,
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -238,7 +246,7 @@
       "index" : 4,
       "attempt" : 0,
       "launchTime" : "2015-03-16T19:25:36.522GMT",
-      "duration" : 15,
+      "duration" : 52,
       "executorId" : "<driver>",
       "host" : "localhost",
       "status" : "SUCCESS",
@@ -260,6 +268,7 @@
         "resultSerializationTime" : 1,
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -289,7 +298,7 @@
       "index" : 5,
       "attempt" : 0,
       "launchTime" : "2015-03-16T19:25:36.523GMT",
-      "duration" : 15,
+      "duration" : 52,
       "executorId" : "<driver>",
       "host" : "localhost",
       "status" : "SUCCESS",
@@ -311,6 +320,7 @@
         "resultSerializationTime" : 2,
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -340,7 +350,7 @@
       "index" : 6,
       "attempt" : 0,
       "launchTime" : "2015-03-16T19:25:36.523GMT",
-      "duration" : 15,
+      "duration" : 51,
       "executorId" : "<driver>",
       "host" : "localhost",
       "status" : "SUCCESS",
@@ -362,6 +372,7 @@
         "resultSerializationTime" : 2,
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -391,7 +402,7 @@
       "index" : 7,
       "attempt" : 0,
       "launchTime" : "2015-03-16T19:25:36.524GMT",
-      "duration" : 15,
+      "duration" : 51,
       "executorId" : "<driver>",
       "host" : "localhost",
       "status" : "SUCCESS",
@@ -413,6 +424,7 @@
         "resultSerializationTime" : 2,
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -443,12 +455,18 @@
       "taskTime" : 418,
       "failedTasks" : 0,
       "succeededTasks" : 8,
+      "killedTasks" : 0,
       "inputBytes" : 0,
+      "inputRecords" : 0,
       "outputBytes" : 0,
+      "outputRecords" : 0,
       "shuffleRead" : 0,
+      "shuffleReadRecords" : 0,
       "shuffleWrite" : 0,
+      "shuffleWriteRecords" : 0,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0
     }
-  }
+  },
+  "killedTasksSummary" : { }
 }

@@ -316,7 +316,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     val listener = if (needReplay) {
-      val _listener = new AppStatusListener(kvstore, conf, false)
+      val _listener = new AppStatusListener(kvstore, conf, false,
+        lastUpdateTime = Some(attempt.info.lastUpdated.getTime()))
       replayBus.addListener(_listener)
       Some(_listener)
     } else {
