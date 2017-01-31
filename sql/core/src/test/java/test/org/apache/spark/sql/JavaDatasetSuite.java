@@ -228,7 +228,7 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> mapped2 = grouped.mapGroupsWithState(
       new MapGroupsWithStateFunction<Integer, String, Long, String>() {
         @Override
-        public String call(Integer key, Iterator<String> values, State<Long> s) throws Exception {
+        public String call(Integer key, Iterator<String> values, KeyedState<Long> s) throws Exception {
           StringBuilder sb = new StringBuilder(key.toString());
           while (values.hasNext()) {
             sb.append(values.next());
@@ -244,7 +244,7 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> flatMapped2 = grouped.flatMapGroupsWithState(
       new FlatMapGroupsWithStateFunction<Integer, String, Long, String>() {
         @Override
-        public Iterator<String> call(Integer key, Iterator<String> values, State<Long> s) {
+        public Iterator<String> call(Integer key, Iterator<String> values, KeyedState<Long> s) {
           StringBuilder sb = new StringBuilder(key.toString());
           while (values.hasNext()) {
             sb.append(values.next());

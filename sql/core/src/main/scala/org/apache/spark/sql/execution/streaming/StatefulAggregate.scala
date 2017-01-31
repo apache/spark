@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
-import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalState}
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalKeyedState}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution
@@ -32,7 +32,6 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CompletionIterator
-import org.apache.spark.TaskContext
 
 
 /** Used to identify the state store for a given operator. */
@@ -156,13 +155,6 @@ case class StateStoreSaveExec(
         val numTotalStateRows = longMetric("numTotalStateRows")
         val numUpdatedStateRows = longMetric("numUpdatedStateRows")
 
-        // Abort the state store in case of error
-        TaskContext.get().addTaskCompletionListener(_ => {
-          if (!store.hasCommitted) {
-            store.abort()
-          }
-        })
-
         outputMode match {
           // Update and output all rows in the StateStore.
           case Some(Complete) =>
@@ -242,12 +234,10 @@ case class StateStoreSaveExec(
 }
 
 
-/**
- * Physical operator for executing streaming mapGroupsWithState.
- */
+/** Physical operator for executing streaming mapGroupsWithState. */
 case class MapGroupsWithStateExec(
-    func: (Any, Iterator[Any], LogicalState[Any]) => Iterator[Any],
-    keyDeserializer: Expression,   // probably not needed
+    func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
+    keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
@@ -259,14 +249,15 @@ case class MapGroupsWithStateExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
+  /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(groupingAttributes) :: Nil
 
+  /** Ordering needed for using GroupingIterator */
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(groupingAttributes.map(SortOrder(_, Ascending)))   // is this ordering needed?
+    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
 
   override protected def doExecute(): RDD[InternalRow] = {
-
     child.execute().mapPartitionsWithStateStore[InternalRow](
       getStateId.checkpointLocation,
       operatorId = getStateId.operatorId,
@@ -275,51 +266,45 @@ case class MapGroupsWithStateExec(
       child.output.toStructType,
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
-        try {
-          val numTotalStateRows = longMetric("numTotalStateRows")
-          val numUpdatedStateRows = longMetric("numUpdatedStateRows")
-          val numOutputRows = longMetric("numOutputRows")
+        val numTotalStateRows = longMetric("numTotalStateRows")
+        val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+        val numOutputRows = longMetric("numOutputRows")
 
-          val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
+        val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
 
-          val getKeyObj = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
-          val getKey = GenerateUnsafeProjection.generate(groupingAttributes, child.output)
-          val getValueObj = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
-          val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
-          val getStateObj =
-            ObjectOperator.deserializeRowToObject(stateDeserializer)
-          val outputStateObj = ObjectOperator.serializeObjectToRow(stateSerializer)
+        val getKeyObj = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
+        val getKey = GenerateUnsafeProjection.generate(groupingAttributes, child.output)
+        val getValueObj = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
+        val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
+        val getStateObj =
+          ObjectOperator.deserializeRowToObject(stateDeserializer)
+        val outputStateObj = ObjectOperator.serializeObjectToRow(stateSerializer)
 
-          val finalIterator = groupedIter.flatMap { case (keyRow, valueRowIter) =>
-            val key = keyRow.asInstanceOf[UnsafeRow]
-            val keyObj = getKeyObj(keyRow)
-            val valueObjIter = valueRowIter.map(getValueObj.apply)
-            val stateObjOption = store.get(key).map(getStateObj)
-            val wrappedState = StateImpl[Any](stateObjOption)
-            val mappedIterator = func(keyObj, valueObjIter, wrappedState)
+        val finalIterator = groupedIter.flatMap { case (keyRow, valueRowIter) =>
+          val key = keyRow.asInstanceOf[UnsafeRow]
+          val keyObj = getKeyObj(keyRow)
+          val valueObjIter = valueRowIter.map(getValueObj.apply)
+          val stateObjOption = store.get(key).map(getStateObj)
+          val wrappedState = KeyedStateImpl[Any](stateObjOption)
+          val mappedIterator = func(keyObj, valueObjIter, wrappedState)
 
-            if (wrappedState.isRemoved) {
-              store.remove(key)
-              numUpdatedStateRows += 1
-            } else if (wrappedState.isUpdated) {
-              store.put(key, outputStateObj(wrappedState.get()))
-              numUpdatedStateRows += 1
-            }
-
-            mappedIterator.map { obj =>
-              numOutputRows += 1
-              getOutputRow(obj)
-            }
+          if (wrappedState.isRemoved) {
+            store.remove(key)
+            numUpdatedStateRows += 1
+          } else if (wrappedState.isUpdated) {
+            store.put(key, outputStateObj(wrappedState.get))
+            numUpdatedStateRows += 1
           }
-          CompletionIterator[InternalRow, Iterator[InternalRow]](finalIterator, {
-            store.commit()
-            numTotalStateRows += store.numKeys()
-          })
-        } catch {
-          case e: Throwable =>
-            store.abort()
-            throw e
+
+          mappedIterator.map { obj =>
+            numOutputRows += 1
+            getOutputRow(obj)
+          }
         }
-    }
+        CompletionIterator[InternalRow, Iterator[InternalRow]](finalIterator, {
+          store.commit()
+          numTotalStateRows += store.numKeys()
+        })
+      }
   }
 }

@@ -94,13 +94,11 @@ class IncrementalExecution(
               Some(stateId),
               child) :: Nil))
       case MapGroupsWithStateExec(
-        func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr,
-        None, stateDeser, stateSer, child) =>
+             f, kDeser, vDeser, group, data, output, None, stateDeser, stateSer, child) =>
         val stateId =
           OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
         MapGroupsWithStateExec(
-          func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr,
-          Some(stateId), stateDeser, stateSer, child)
+          f, kDeser, vDeser, group, data, output, Some(stateId), stateDeser, stateSer, child)
     }
   }
 

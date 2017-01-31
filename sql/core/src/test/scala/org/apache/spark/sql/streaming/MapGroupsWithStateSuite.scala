@@ -20,9 +20,9 @@ package org.apache.spark.sql.streaming
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.State
+import org.apache.spark.sql.KeyedState
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution.StateImpl
+import org.apache.spark.sql.execution.KeyedStateImpl
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.StateStore
 
@@ -39,7 +39,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
   }
 
   test("state - get, exists, update, remove") {
-    var state: StateImpl[String] = null
+    var state: KeyedStateImpl[String] = null
 
     def testState(
         expectedData: Option[String],
@@ -48,14 +48,14 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
       ): Unit = {
       if (expectedData.isDefined) {
         assert(state.exists)
-        assert(state.get() === expectedData.get)
-        assert(state.getOption() === expectedData)
+        assert(state.get === expectedData.get)
+        assert(state.getOption === expectedData)
       } else {
         assert(!state.exists)
         intercept[NoSuchElementException] {
-          state.get()
+          state.get
         }
-        assert(state.getOption() === None)
+        assert(state.getOption === None)
       }
 
       assert(state.isUpdated === shouldBeUpdated)
@@ -63,13 +63,13 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     }
 
     // Updating empty state
-    state = StateImpl[String](None)
+    state = KeyedStateImpl[String](None)
     testState(None)
     state.update("")
     testState(Some(""), shouldBeUpdated = true)
 
     // Updating exiting state, even if with null
-    state = StateImpl[String](Some("2"))
+    state = KeyedStateImpl[String](Some("2"))
     testState(Some("2"))
     state.update("3")
     testState(Some("3"), shouldBeUpdated = true)
@@ -87,7 +87,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
   test("flatMapGroupsWithState - streaming") {
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count if state is defined, otherwise does not return anything
-    val stateFunc = (key: String, values: Iterator[String], state: State[RunningCount]) => {
+    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
 
       var count = state.getOption.map(_.count).getOrElse(0L) + values.size
       if (count == 3) {
@@ -127,7 +127,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
 
   test("flatMapGroupsWithState - batch") {
     // Function that returns running count only if its even, otherwise does not return
-    val stateFunc = (key: String, values: Iterator[String], state: State[RunningCount]) => {
+    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
       if (state.exists) throw new IllegalArgumentException("state.exists should be false")
       if (state.getOption.nonEmpty) {
         throw new IllegalArgumentException("state.getOption should be empty")
@@ -142,7 +142,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
   test("mapGroupsWithState - streaming") {
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
-    val stateFunc = (key: String, values: Iterator[String], state: State[RunningCount]) => {
+    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
 
       val count = state.getOption.map(_.count).getOrElse(0L) + values.size
       if (count == 3) {
@@ -181,7 +181,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
   }
 
   test("mapGroupsWithState - batch") {
-    val stateFunc = (key: String, values: Iterator[String], state: State[RunningCount]) => {
+    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
       if (state.exists) throw new IllegalArgumentException("state.exists should be false")
       if (state.getOption.nonEmpty) {
         throw new IllegalArgumentException("state.getOption should be empty")
@@ -198,7 +198,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
   }
 
   testQuietly("StateStore.abort on task failure handling") {
-    val stateFunc = (key: String, values: Iterator[String], state: State[RunningCount]) => {
+    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
       if (MapGroupsWithStateSuite.failInTask) throw new Exception("expected failure")
       val count = state.getOption.map(_.count).getOrElse(0L) + values.size
       state.update(RunningCount(count))

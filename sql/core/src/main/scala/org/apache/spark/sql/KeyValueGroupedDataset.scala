@@ -243,15 +243,15 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * (for example, by calling `toList`) unless they are sure that this is possible given the memory
    * constraints of their cluster.
    *
-   * @see [[State]] for more details of how to update/remove state in the function.
+   * @see [[KeyedState]] for more details of how to update/remove state in the function.
    * @since 2.1.1
    */
   @Experimental
   @InterfaceStability.Evolving
   def mapGroupsWithState[STATE: Encoder, OUT: Encoder](
-      func: (K, Iterator[V], State[STATE]) => OUT): Dataset[OUT] = {
-    val f = (key: K, it: Iterator[V], s: State[STATE]) => Iterator(func(key, it, s))
-    flatMapGroupsWithState[STATE, OUT](f)
+      func: (K, Iterator[V], KeyedState[STATE]) => OUT): Dataset[OUT] = {
+    flatMapGroupsWithState[STATE, OUT](
+      (key: K, it: Iterator[V], s: KeyedState[STATE]) => Iterator(func(key, it, s)))
   }
 
   /**
@@ -279,7 +279,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * (for example, by calling `toList`) unless they are sure that this is possible given the memory
    * constraints of their cluster.
    *
-   * @see [[State]] for more details of how to update/remove state in the function.
+   * @see [[KeyedState]] for more details of how to update/remove state in the function.
    * @since 2.1.1
    */
   @Experimental
@@ -288,8 +288,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
       func: MapGroupsWithStateFunction[K, V, STATE, OUT],
       stateEncoder: Encoder[STATE],
       outputEncoder: Encoder[OUT]): Dataset[OUT] = {
-    val f = (key: K, it: Iterator[V], s: State[STATE]) => Iterator(func.call(key, it.asJava, s))
-    flatMapGroupsWithState[STATE, OUT](f)(stateEncoder, outputEncoder)
+    flatMapGroupsWithState[STATE, OUT](
+      (key: K, it: Iterator[V], s: KeyedState[STATE]) => Iterator(func.call(key, it.asJava, s))
+    )(stateEncoder, outputEncoder)
   }
 
 
@@ -318,17 +319,17 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * (for example, by calling `toList`) unless they are sure that this is possible given the memory
    * constraints of their cluster.
    *
-   * @see [[State]] for more details of how to update/remove state in the function.
+   * @see [[KeyedState]] for more details of how to update/remove state in the function.
    * @since 2.1.1
    */
   @Experimental
   @InterfaceStability.Evolving
   def flatMapGroupsWithState[STATE: Encoder, OUT: Encoder](
-      func: (K, Iterator[V], State[STATE]) => Iterator[OUT]): Dataset[OUT] = {
+      func: (K, Iterator[V], KeyedState[STATE]) => Iterator[OUT]): Dataset[OUT] = {
     Dataset[OUT](
       sparkSession,
       MapGroupsWithState[K, V, STATE, OUT](
-        func.asInstanceOf[(Any, Iterator[Any], LogicalState[Any]) => Iterator[Any]],
+        func.asInstanceOf[(Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any]],
         groupingAttributes,
         dataAttributes,
         logicalPlan))
@@ -359,7 +360,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * (for example, by calling `toList`) unless they are sure that this is possible given the memory
    * constraints of their cluster.
    *
-   * @see [[State]] for more details of how to update/remove state in the function.
+   * @see [[KeyedState]] for more details of how to update/remove state in the function.
    * @since 2.1.1
    */
   @Experimental
@@ -368,8 +369,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
       func: FlatMapGroupsWithStateFunction[K, V, STATE, OUT],
       stateEncoder: Encoder[STATE],
       outputEncoder: Encoder[OUT]): Dataset[OUT] = {
-    val f = (key: K, it: Iterator[V], s: State[STATE]) => func.call(key, it.asJava, s).asScala
-    flatMapGroupsWithState[STATE, OUT](f)(stateEncoder, outputEncoder)
+    flatMapGroupsWithState[STATE, OUT](
+      (key: K, it: Iterator[V], s: KeyedState[STATE]) => func.call(key, it.asJava, s).asScala
+    )(stateEncoder, outputEncoder)
   }
 
   /**

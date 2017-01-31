@@ -17,21 +17,21 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.State
+import org.apache.spark.sql.KeyedState
 
-/** Internal implementation of the [[State]] interface */
-private[sql] class StateImpl[S](optionalValue: Option[S]) extends State[S] {
+/** Internal implementation of the [[KeyedState]] interface */
+private[sql] class KeyedStateImpl[S](optionalValue: Option[S]) extends KeyedState[S] {
   private var value: S = optionalValue.getOrElse(null.asInstanceOf[S])
   private var defined: Boolean = optionalValue.isDefined
   private var updated: Boolean = false  // whether value has been updated (but not removed)
-  private var removed: Boolean = false  // whether value has eben removed
+  private var removed: Boolean = false  // whether value has been removed
 
   // ========= Public API =========
   override def exists: Boolean = {
     defined
   }
 
-  override def get(): S = {
+  override def get: S = {
     if (defined) {
       value
     } else {
@@ -65,6 +65,6 @@ private[sql] class StateImpl[S](optionalValue: Option[S]) extends State[S] {
   }
 }
 
-object StateImpl {
-  def apply[S](optionalValue: Option[S]): StateImpl[S] = new StateImpl[S](optionalValue)
+object KeyedStateImpl {
+  def apply[S](optionalValue: Option[S]): KeyedStateImpl[S] = new KeyedStateImpl[S](optionalValue)
 }
