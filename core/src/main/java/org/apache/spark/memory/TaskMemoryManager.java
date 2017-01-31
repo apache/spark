@@ -151,20 +151,16 @@ public class TaskMemoryManager {
         // Sort the consumers according their memory usage. So we avoid spilling the same consumer
         // which is just spilled in last few times and re-spilling on it will produce many small
         // spill files.
-        TreeMap<Long, List<MemoryConsumer>> sortedConsumers =
-          new TreeMap<Long, List<MemoryConsumer>>();
+        TreeMap<Long, List<MemoryConsumer>> sortedConsumers = new TreeMap<>();
         for (MemoryConsumer c: consumers) {
           if (c != consumer && c.getUsed() > 0 && c.getMode() == mode) {
             long key = c.getUsed();
-            List<MemoryConsumer> list = null;
-            if (sortedConsumers.containsKey(key)) {
-              list = sortedConsumers.get(key);
-              list.add(c);
-            } else {
-              list = new ArrayList<MemoryConsumer>(1);
-              list.add(c);
+            List<MemoryConsumer> list = sortedConsumers.get(key);
+            if (list == null) {
+              list = new ArrayList<>(1);
               sortedConsumers.put(key, list);
             }
+            list.add(c);
           }
         }
         while (!sortedConsumers.isEmpty()) {
@@ -178,7 +174,7 @@ public class TaskMemoryManager {
           }
           List<MemoryConsumer> cList = currentEntry.getValue();
           MemoryConsumer c = cList.remove(cList.size() - 1);
-          if (cList.size() == 0) {
+          if (cList.isEmpty()) {
             sortedConsumers.remove(currentEntry.getKey());
           }
           try {
