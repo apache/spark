@@ -34,7 +34,7 @@ trait CatalystConf {
   def optimizerInSetConversionThreshold: Int
   def maxCaseBranchesForCodegen: Int
 
-  def dataSourceTableRelationCacheMaxSize: Int
+  def filesourceTableRelationCacheSize: Int
 
   def runSQLonFile: Boolean
 
@@ -71,7 +71,7 @@ case class SimpleCatalystConf(
     optimizerMaxIterations: Int = 100,
     optimizerInSetConversionThreshold: Int = 10,
     maxCaseBranchesForCodegen: Int = 20,
-    dataSourceTableRelationCacheMaxSize: Int = 1000,
+    filesourceTableRelationCacheSize: Int = 1000,
     runSQLonFile: Boolean = true,
     crossJoinEnabled: Boolean = false,
     cboEnabled: Boolean = false,

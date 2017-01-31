@@ -221,17 +221,8 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       .sessionState.conf.warehousePath.stripSuffix("/"))
   }
 
-  test("DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE") {
-    assert(spark.conf.get(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE) === 1000)
-    withSQLConf(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE.key -> "2000") {
-      assert(spark.conf.get(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE) === 2000)
-    }
-    val e = intercept[IllegalArgumentException] {
-      spark.conf.set(SQLConf.DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE.key, "-1")
-    }
-    Seq("maximum size", "must not be negative").foreach { words =>
-      assert(e.getMessage.contains(words))
-    }
+  test("default value of FILESOURCE_TABLE_RELATION_CACHE_SIZE") {
+    assert(spark.conf.get(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE) === 1000)
   }
 
   test("MAX_CASES_BRANCHES") {

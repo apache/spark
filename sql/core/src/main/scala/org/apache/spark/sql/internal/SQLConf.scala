@@ -464,16 +464,6 @@ object SQLConf {
     .intConf
     .createWithDefault(20)
 
-  val DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE =
-    SQLConfigBuilder("spark.sql.sources.tableRelationCache.maxSize")
-      .internal()
-      .doc("The maximum size of the cache that maps qualified table names to table relation " +
-        "plans. It's better to leave this to the default value if you are not super confident " +
-        "with the value you provide.")
-      .intConf
-      .checkValue(maxSize => maxSize >= 0, "The maximum size of the cache must not be negative")
-      .createWithDefault(1000)
-
   val FILES_MAX_PARTITION_BYTES = SQLConfigBuilder("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .longConf
@@ -790,7 +780,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
 
-  def dataSourceTableRelationCacheMaxSize: Int = getConf(DATA_SOURCE_TABLE_RELATION_CACHE_MAX_SIZE)
+  def filesourceTableRelationCacheSize: Int =
+    getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
@@ -1044,6 +1035,13 @@ object StaticSQLConf {
     .internal()
     .intConf
     .createWithDefault(4000)
+
+  val FILESOURCE_TABLE_RELATION_CACHE_SIZE = buildConf("spark.sql.filesourceTableRelationCacheSize")
+      .internal()
+      .doc("The maximum size of the cache that maps qualified table names to table relation plans.")
+      .intConf
+      .checkValue(cacheSize => cacheSize >= 0, "The maximum size of the cache must not be negative")
+      .createWithDefault(1000)
 
   // When enabling the debug, Spark SQL internal table properties are not filtered out; however,
   // some related DDL commands (e.g., ANALYZE TABLE and CREATE TABLE LIKE) might not work properly.
