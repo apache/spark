@@ -234,7 +234,15 @@ object LinearSVCSuite {
       val yD = new BDV(xi).dot(weightsMat) + intercept + 0.01 * rnd.nextGaussian()
       if (yD > 0) 1.0 else 0.0
     }
-    y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
+    val index = (0 to weights.length - 1).toArray
+    val (yd, ys) = y.splitAt(y.length/2)
+    val (xd, xs) = x.splitAt(x.length/2)
+    val first = yd.zip(xd).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
+    val second = ys.zip(xs).map(p => LabeledPoint(p._1,
+      Vectors.sparse(weights.length *10, index, p._2)))
+    first ++ second
+//    y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
+//    y.zip(x).map(p => LabeledPoint(p._1, Vectors.sparse(weights.length *10, index, p._2)))
   }
 
 }
