@@ -1517,6 +1517,11 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     >>> test2 = sc.parallelize([Row(features=Vectors.dense(0.5, 0.4))]).toDF()
     >>> model.transform(test2).head().prediction
     2.0
+    >>> model_path = temp_path + "/ovr_model"
+    >>> model.save(model_path)
+    >>> model2 = OneVsRestModel.load(model_path)
+    >>> model2.transform(test0).head().prediction
+    1.0
 
     .. versionadded:: 2.0.0
     """
@@ -1759,9 +1764,13 @@ class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
 
         :return: Java object equivalent to this instance.
         """
+        sc = SparkContext._active_spark_context
         java_models = [model._to_java() for model in self.models]
+        java_models_array = JavaWrapper._new_java_array(
+            java_models, sc._gateway.jvm.org.apache.spark.ml.classification.ClassificationModel)
+        metadata = JavaParams._new_java_obj("org.apache.spark.sql.types.Metadata")
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRestModel",
-                                             self.uid, java_models)
+                                             self.uid, metadata.empty(), java_models_array)
         _java_obj.set("classifier", self.getClassifier()._to_java())
         _java_obj.set("featuresCol", self.getFeaturesCol())
         _java_obj.set("labelCol", self.getLabelCol())
