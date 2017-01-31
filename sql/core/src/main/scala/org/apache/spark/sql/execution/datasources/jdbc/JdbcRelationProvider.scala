@@ -53,33 +53,31 @@ class JdbcRelationProvider extends CreatableRelationProvider
       parameters: Map[String, String],
       df: DataFrame): BaseRelation = {
     val jdbcOptions = new JDBCOptions(parameters)
-    val url = jdbcOptions.url
     val table = jdbcOptions.table
-    val createTableOptions = jdbcOptions.createTableOptions
     val isTruncate = jdbcOptions.isTruncate
     val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
 
     val conn = JdbcUtils.createConnectionFactory(jdbcOptions)()
     try {
-      val tableExists = JdbcUtils.tableExists(conn, url, table)
+      val tableExists = JdbcUtils.tableExists(conn, jdbcOptions)
       if (tableExists) {
         mode match {
           case SaveMode.Overwrite =>
-            if (isTruncate && isCascadingTruncateTable(url) == Some(false)) {
+            if (isTruncate && isCascadingTruncateTable(jdbcOptions.url) == Some(false)) {
               // In this case, we should truncate table and then load.
               truncateTable(conn, table)
-              val tableSchema = JdbcUtils.getSchemaOption(conn, url, table)
-              saveTable(df, url, table, tableSchema, isCaseSensitive, jdbcOptions)
+              val tableSchema = JdbcUtils.getSchemaOption(conn, jdbcOptions)
+              saveTable(df, tableSchema, isCaseSensitive, jdbcOptions)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, table)
-              createTable(df.schema, url, table, createTableOptions, conn)
-              saveTable(df, url, table, Some(df.schema), isCaseSensitive, jdbcOptions)
+              createTable(conn, df.schema, jdbcOptions)
+              saveTable(df, Some(df.schema), isCaseSensitive, jdbcOptions)
             }
 
           case SaveMode.Append =>
-            val tableSchema = JdbcUtils.getSchemaOption(conn, url, table)
-            saveTable(df, url, table, tableSchema, isCaseSensitive, jdbcOptions)
+            val tableSchema = JdbcUtils.getSchemaOption(conn, jdbcOptions)
+            saveTable(df, tableSchema, isCaseSensitive, jdbcOptions)
 
           case SaveMode.ErrorIfExists =>
             throw new AnalysisException(
@@ -91,8 +89,8 @@ class JdbcRelationProvider extends CreatableRelationProvider
             // Therefore, it is okay to do nothing here and then just return the relation below.
         }
       } else {
-        createTable(df.schema, url, table, createTableOptions, conn)
-        saveTable(df, url, table, Some(df.schema), isCaseSensitive, jdbcOptions)
+        createTable(conn, df.schema, jdbcOptions)
+        saveTable(df, Some(df.schema), isCaseSensitive, jdbcOptions)
       }
     } finally {
       conn.close()
