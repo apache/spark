@@ -21,17 +21,18 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
-import io.fabric8.kubernetes.api.model.{ContainerPort, ContainerPortBuilder, EnvVar, EnvVarBuilder, Pod, QuantityBuilder}
+import io.fabric8.kubernetes.api.model.{ContainerPortBuilder, EnvVarBuilder, Pod, QuantityBuilder}
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.deploy.kubernetes.{Client, KubernetesClientBuilder}
+import org.apache.spark.deploy.kubernetes.config._
+import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
@@ -44,24 +45,19 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val runningExecutorPods = new scala.collection.mutable.HashMap[String, Pod]
 
   private val kubernetesMaster = Client.resolveK8sMaster(sc.master)
-
-  private val executorDockerImage = conf
-    .get("spark.kubernetes.executor.docker.image", s"spark-executor:${sc.version}")
-
-  private val kubernetesNamespace = conf.get("spark.kubernetes.namespace", "default")
-
+  private val executorDockerImage = conf.get(EXECUTOR_DOCKER_IMAGE)
+  private val kubernetesNamespace = conf.get(KUBERNETES_NAMESPACE)
   private val executorPort = conf.getInt("spark.executor.port", DEFAULT_STATIC_PORT)
-
   private val blockmanagerPort = conf
     .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
 
   private val kubernetesDriverServiceName = conf
-    .getOption("spark.kubernetes.driver.service.name")
+    .get(KUBERNETES_DRIVER_SERVICE_NAME)
     .getOrElse(
       throw new SparkException("Must specify the service name the driver is running with"))
 
   private val kubernetesDriverPodName = conf
-    .getOption("spark.kubernetes.driver.pod.name")
+    .get(KUBERNETES_DRIVER_POD_NAME)
     .getOrElse(
       throw new SparkException("Must specify the driver pod name"))
 
@@ -69,7 +65,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val executorMemoryBytes = Utils.byteStringAsBytes(executorMemory)
 
   private val memoryOverheadBytes = conf
-    .getOption("spark.kubernetes.executor.memoryOverhead")
+    .get(KUBERNETES_EXECUTOR_MEMORY_OVERHEAD)
     .map(overhead => Utils.byteStringAsBytes(overhead))
     .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryBytes).toInt,
       MEMORY_OVERHEAD_MIN))
@@ -78,16 +74,12 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val executorCores = conf.getOption("spark.executor.cores").getOrElse("1")
 
   private implicit val requestExecutorContext = ExecutionContext.fromExecutorService(
-    Executors.newCachedThreadPool(
-      new ThreadFactoryBuilder()
-        .setDaemon(true)
-        .setNameFormat("kubernetes-executor-requests-%d")
-        .build))
+    ThreadUtils.newDaemonCachedThreadPool("kubernetes-executor-requests"))
 
   private val kubernetesClient = KubernetesClientBuilder
     .buildFromWithinPod(kubernetesMaster, kubernetesNamespace)
 
-  val driverPod = try {
+  private val driverPod = try {
     kubernetesClient.pods().inNamespace(kubernetesNamespace).
       withName(kubernetesDriverPodName).get()
   } catch {
@@ -127,6 +119,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
     }
   }
 
+  override def applicationId(): String = conf.get("spark.app.id", super.applicationId())
+
   override def sufficientResourcesRegistered(): Boolean = {
     totalRegisteredExecutors.get() >= initialExecutors * minRegisteredRatio
   }
@@ -163,9 +157,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private def allocateNewExecutorPod(): (String, Pod) = {
     val executorKubernetesId = UUID.randomUUID().toString.replaceAll("-", "")
     val executorId = EXECUTOR_ID_COUNTER.incrementAndGet().toString
-    val name = s"$kubernetesDriverServiceName-exec-$executorKubernetesId"
-    val selectors = Map(SPARK_EXECUTOR_SELECTOR -> executorId,
-      SPARK_APP_SELECTOR -> applicationId()).asJava
+    val name = s"${applicationId()}-exec-$executorKubernetesId"
+    val selectors = Map(SPARK_EXECUTOR_ID_LABEL -> executorId,
+      SPARK_APP_ID_LABEL -> applicationId()).asJava
     val executorMemoryQuantity = new QuantityBuilder(false)
       .withAmount(executorMemoryBytes.toString)
       .build()
@@ -175,69 +169,61 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val executorCpuQuantity = new QuantityBuilder(false)
       .withAmount(executorCores)
       .build()
-    val requiredEnv = new ArrayBuffer[EnvVar]
-    requiredEnv += new EnvVarBuilder()
-      .withName("SPARK_EXECUTOR_PORT")
-      .withValue(executorPort.toString)
-      .build()
-    requiredEnv += new EnvVarBuilder()
-      .withName("SPARK_DRIVER_URL")
-      .withValue(driverUrl)
-      .build()
-    requiredEnv += new EnvVarBuilder()
-      .withName("SPARK_EXECUTOR_CORES")
-      .withValue(executorCores)
-      .build()
-    requiredEnv += new EnvVarBuilder()
-      .withName("SPARK_EXECUTOR_MEMORY")
-      .withValue(executorMemory)
-      .build()
-    requiredEnv += new EnvVarBuilder()
-      .withName("SPARK_APPLICATION_ID")
-      .withValue(applicationId())
-      .build()
-    requiredEnv += new EnvVarBuilder()
-      .withName("SPARK_EXECUTOR_ID")
-      .withValue(executorId)
-      .build()
-    val requiredPorts = new ArrayBuffer[ContainerPort]
-    requiredPorts += new ContainerPortBuilder()
-      .withName(EXECUTOR_PORT_NAME)
-      .withContainerPort(executorPort)
-      .build()
-    requiredPorts += new ContainerPortBuilder()
-      .withName(BLOCK_MANAGER_PORT_NAME)
-      .withContainerPort(blockmanagerPort)
-      .build()
-    (executorKubernetesId, kubernetesClient.pods().createNew()
-      .withNewMetadata()
-        .withName(name)
-        .withLabels(selectors)
-        .withOwnerReferences()
-        .addNewOwnerReference()
-          .withController(true)
-          .withApiVersion(driverPod.getApiVersion)
-          .withKind(driverPod.getKind)
-          .withName(driverPod.getMetadata.getName)
-          .withUid(driverPod.getMetadata.getUid)
-        .endOwnerReference()
-      .endMetadata()
-      .withNewSpec()
-        .addNewContainer()
-          .withName(s"exec-${applicationId()}-container")
-          .withImage(executorDockerImage)
-          .withImagePullPolicy("IfNotPresent")
-          .withNewResources()
-            .addToRequests("memory", executorMemoryQuantity)
-            .addToLimits("memory", executorMemoryLimitQuantity)
-            .addToRequests("cpu", executorCpuQuantity)
-            .addToLimits("cpu", executorCpuQuantity)
-            .endResources()
-          .withEnv(requiredEnv.asJava)
-          .withPorts(requiredPorts.asJava)
-          .endContainer()
-        .endSpec()
-      .done())
+    val requiredEnv = Seq(
+      (ENV_EXECUTOR_PORT, executorPort.toString),
+      (ENV_DRIVER_URL, driverUrl),
+      (ENV_EXECUTOR_CORES, executorCores),
+      (ENV_EXECUTOR_MEMORY, executorMemory),
+      (ENV_APPLICATION_ID, applicationId()),
+      (ENV_EXECUTOR_ID, executorId)
+    ).map(env => new EnvVarBuilder()
+      .withName(env._1)
+      .withValue(env._2)
+      .build())
+    val requiredPorts = Seq(
+      (EXECUTOR_PORT_NAME, executorPort),
+      (BLOCK_MANAGER_PORT_NAME, blockmanagerPort))
+      .map(port => {
+        new ContainerPortBuilder()
+          .withName(port._1)
+          .withContainerPort(port._2)
+          .build()
+      })
+    try {
+      (executorKubernetesId, kubernetesClient.pods().createNew()
+        .withNewMetadata()
+          .withName(name)
+          .withLabels(selectors)
+          .withOwnerReferences()
+          .addNewOwnerReference()
+            .withController(true)
+            .withApiVersion(driverPod.getApiVersion)
+            .withKind(driverPod.getKind)
+            .withName(driverPod.getMetadata.getName)
+            .withUid(driverPod.getMetadata.getUid)
+          .endOwnerReference()
+        .endMetadata()
+        .withNewSpec()
+          .addNewContainer()
+            .withName(s"executor")
+            .withImage(executorDockerImage)
+            .withImagePullPolicy("IfNotPresent")
+            .withNewResources()
+              .addToRequests("memory", executorMemoryQuantity)
+              .addToLimits("memory", executorMemoryLimitQuantity)
+              .addToRequests("cpu", executorCpuQuantity)
+              .addToLimits("cpu", executorCpuQuantity)
+              .endResources()
+            .withEnv(requiredEnv.asJava)
+            .withPorts(requiredPorts.asJava)
+            .endContainer()
+          .endSpec()
+        .done())
+    } catch {
+      case throwable: Throwable =>
+        logError("Failed to allocate executor pod.", throwable)
+        throw throwable
+    }
   }
 
   override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = Future[Boolean] {
@@ -269,13 +255,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 }
 
 private object KubernetesClusterSchedulerBackend {
-  private val SPARK_EXECUTOR_SELECTOR = "spark-exec"
-  private val SPARK_APP_SELECTOR = "spark-app"
   private val DEFAULT_STATIC_PORT = 10000
-  private val DEFAULT_BLOCKMANAGER_PORT = 7079
-  private val DEFAULT_DRIVER_PORT = 7078
-  private val BLOCK_MANAGER_PORT_NAME = "blockmanager"
-  private val EXECUTOR_PORT_NAME = "executor"
   private val MEMORY_OVERHEAD_FACTOR = 0.10
   private val MEMORY_OVERHEAD_MIN = 384L
   private val EXECUTOR_ID_COUNTER = new AtomicLong(0L)

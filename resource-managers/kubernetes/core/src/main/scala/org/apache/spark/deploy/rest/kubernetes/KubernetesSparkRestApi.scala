@@ -28,12 +28,11 @@ trait KubernetesSparkRestApi {
   @Consumes(Array(MediaType.APPLICATION_JSON))
   @Produces(Array(MediaType.APPLICATION_JSON))
   @Path("/create")
-  def create(request: KubernetesCreateSubmissionRequest): CreateSubmissionResponse
+  def submitApplication(request: KubernetesCreateSubmissionRequest): CreateSubmissionResponse
 
   @GET
   @Consumes(Array(MediaType.APPLICATION_JSON))
   @Produces(Array(MediaType.APPLICATION_JSON))
   @Path("/ping")
   def ping(): PingResponse
-
 }

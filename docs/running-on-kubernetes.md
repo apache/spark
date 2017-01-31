@@ -140,12 +140,12 @@ Spark supports using SSL to encrypt the traffic in this bootstrapping process. I
 whenever possible. 
 
 See the [security page](security.html) and [configuration](configuration.html) sections for more information on
-configuring SSL; use the prefix `spark.ssl.kubernetes.driverlaunch` in configuring the SSL-related fields in the context
+configuring SSL; use the prefix `spark.ssl.kubernetes.submit` in configuring the SSL-related fields in the context
 of submitting to Kubernetes. For example, to set the trustStore used when the local machine communicates with the driver
-pod in starting the application, set `spark.ssl.kubernetes.driverlaunch.trustStore`.
+pod in starting the application, set `spark.ssl.kubernetes.submit.trustStore`.
 
 One note about the keyStore is that it can be specified as either a file on the client machine or a file in the
-container image's disk. Thus `spark.ssl.kubernetes.driverlaunch.keyStore` can be a URI with a scheme of either `file:`
+container image's disk. Thus `spark.ssl.kubernetes.submit.keyStore` can be a URI with a scheme of either `file:`
 or `container:`. A scheme of `file:` corresponds to the keyStore being located on the client machine; it is mounted onto
 the driver container as a [secret volume](https://kubernetes.io/docs/user-guide/secrets/). When the URI has the scheme
 `container:`, the file is assumed to already be on the container's disk at the appropriate path.
@@ -235,7 +235,15 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td>(none)</td>
   <td>
     Custom labels that will be added to the driver pod. This should be a comma-separated list of label key-value pairs,
-    where each label is in the format <code>key=value</code>.
+    where each label is in the format <code>key=value</code>. Note that Spark also adds its own labels to the driver pod
+    for bookkeeping purposes.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driverSubmitTimeout</code></td>
+  <td>60s</td>
+  <td>
+    Time to wait for the driver pod to start running before aborting its execution.
   </td>
 </tr>
 </table>

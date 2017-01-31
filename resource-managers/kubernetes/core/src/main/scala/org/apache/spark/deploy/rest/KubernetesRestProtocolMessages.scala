@@ -20,23 +20,22 @@ import com.fasterxml.jackson.annotation.{JsonSubTypes, JsonTypeInfo}
 
 import org.apache.spark.SPARK_VERSION
 
-// TODO: jars should probably be compressed. Shipping tarballs would be optimal.
 case class KubernetesCreateSubmissionRequest(
-  val appResource: AppResource,
-  val mainClass: String,
-  val appArgs: Array[String],
-  val sparkProperties: Map[String, String],
-  val secret: String,
-  val uploadedJarsBase64Contents: Option[TarGzippedData]) extends SubmitRestProtocolRequest {
+  appResource: AppResource,
+  mainClass: String,
+  appArgs: Array[String],
+  sparkProperties: Map[String, String],
+  secret: String,
+  uploadedJarsBase64Contents: Option[TarGzippedData]) extends SubmitRestProtocolRequest {
   message = "create"
   clientSparkVersion = SPARK_VERSION
 }
 
 case class TarGzippedData(
-  val dataBase64: String,
-  val blockSize: Int = 10240,
-  val recordSize: Int = 512,
-  val encoding: String
+  dataBase64: String,
+  blockSize: Int = 10240,
+  recordSize: Int = 512,
+  encoding: String
 )
 
 @JsonTypeInfo(
