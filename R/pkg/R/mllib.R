@@ -173,7 +173,7 @@ predict_internal <- function(object, newData) {
 
 #' Generalized Linear Models
 #'
-#' Fits generalized linear model against a Spark DataFrame.
+#' Fits generalized linear model against a SparkDataFrame.
 #' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
 #' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
@@ -499,7 +499,7 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 
 #' Isotonic Regression Model
 #'
-#' Fits an Isotonic Regression model against a Spark DataFrame, similarly to R's isoreg().
+#' Fits an Isotonic Regression model against a SparkDataFrame, similarly to R's isoreg().
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
 #' @param data SparkDataFrame for training.
@@ -588,7 +588,7 @@ setMethod("summary", signature(object = "IsotonicRegressionModel"),
 
 #' K-Means Clustering Model
 #'
-#' Fits a k-means clustering model against a Spark DataFrame, similarly to R's kmeans().
+#' Fits a k-means clustering model against a SparkDataFrame, similarly to R's kmeans().
 #' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
 #' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
@@ -712,7 +712,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 
 #' Logistic Regression Model
 #'
-#' Fits an logistic regression model against a Spark DataFrame. It supports "binomial": Binary logistic regression
+#' Fits an logistic regression model against a SparkDataFrame. It supports "binomial": Binary logistic regression
 #' with pivoting; "multinomial": Multinomial logistic (softmax) regression without pivoting, similar to glmnet.
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
@@ -1321,7 +1321,7 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 
 #' Multivariate Gaussian Mixture Model (GMM)
 #'
-#' Fits multivariate gaussian mixture model against a Spark DataFrame, similarly to R's
+#' Fits multivariate gaussian mixture model against a SparkDataFrame, similarly to R's
 #' mvnormalmixEM(). Users can call \code{summary} to print a summary of the fitted model,
 #' \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml}
 #' to save/load fitted models.
