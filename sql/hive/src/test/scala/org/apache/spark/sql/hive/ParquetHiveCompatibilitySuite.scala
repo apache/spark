@@ -182,17 +182,21 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
       newTable.createOrReplaceTempView("newTable")
       spark.sql("INSERT INTO foobar SELECT year, timestamp FROM newTable")
 
-      spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, false)
-      val readFromHiveTable = spark.sql("select year, timestamp from foobar")
-      // from manual logging, confirmed that table properties are read back
-      readFromHiveTable.explain(true)
-      // Note that we've already stored the table with bad "year" date in this example so far
-      // Here we determine the year based on the table property
-      val collected = readFromHiveTable.withColumn("fixed_year", expr("year(timestamp)")).collect()
-      // Make sure our test is setup correctly
-      assert(collected.exists { row => row.getInt(0) == 2016 } )
-      // now check we've converted the data correctly
-      collected.foreach { row => assert(row.getInt(2) == 2015) }
+      Seq(false, true).foreach { vectorized =>
+        withSQLConf((SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString)) {
+          withClue(s"vectorized = $vectorized") {
+            val readFromHiveTable = spark.sql("select year, timestamp from foobar")
+            // Note that we've already stored the table with bad "year" date in this example so far
+            // Here we determine the year based on the table property
+            val collected = readFromHiveTable.withColumn("fixed_year", expr("year(timestamp)"))
+              .collect()
+            // Make sure our test is setup correctly
+            assert(collected.exists { row => row.getInt(0) == 2016 })
+            // now check we've converted the data correctly
+            collected.foreach { row => assert(row.getInt(2) == 2015) }
+          }
+        }
+      }
     }
   }
 }

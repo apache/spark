@@ -220,7 +220,7 @@ private[parquet] class ParquetRowConverter(
       catalystType: DataType,
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
 
-    val r = catalystType match {
+    catalystType match {
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType =>
         new ParquetPrimitiveConverter(updater)
 
@@ -262,9 +262,6 @@ private[parquet] class ParquetRowConverter(
       case TimestampType =>
         // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
         val tzString = hadoopConf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
-        // scalastyle:off println
-        println(s"creating timestamp converter w/ tzString = $tzString")
-        // scalastyle:on println
         val tz = if (tzString == null) {
           DateTimeUtils.TimeZoneGMT
         } else {

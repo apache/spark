@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.util.TimeZone;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;
@@ -28,6 +30,7 @@ import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.PrimitiveType;
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
@@ -89,11 +92,19 @@ public class VectorizedColumnReader {
 
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
+  private final TimeZone tz;
 
-  public VectorizedColumnReader(ColumnDescriptor descriptor, PageReader pageReader)
+  public VectorizedColumnReader(ColumnDescriptor descriptor, PageReader pageReader,
+                                Configuration conf)
       throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
+    String tzString = conf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY());
+    if (tzString == null) {
+      tz = DateTimeUtils.TimeZoneGMT();
+    } else {
+      tz = TimeZone.getTimeZone(tzString);
+    }
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
 
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
@@ -276,9 +287,7 @@ public class VectorizedColumnReader {
             // TODO: Convert dictionary of Binaries to dictionary of Longs
             if (!column.isNullAt(i)) {
               Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
-              // TODO IR XXX get tz
-              column.putLong(i,
-                  ParquetRowConverter.binaryToSQLTimestamp(v, ParquetRowConverter.tz()));
+              column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v, tz));
             }
           }
         } else {
@@ -403,8 +412,7 @@ public class VectorizedColumnReader {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putLong(rowId + i,
               // Read 12 bytes for INT96
-              ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12),
-                  ParquetRowConverter.tz()));
+              ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12), tz));
         } else {
           column.putNull(rowId + i);
         }
