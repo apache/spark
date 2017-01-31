@@ -25,10 +25,14 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.MetadataBuilder
 
-class RemoveAliasOnlyProjectSuite extends PlanTest with PredicateHelper {
+class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("RemoveAliasOnlyProject", FixedPoint(50), RemoveAliasOnlyProject) :: Nil
+    val batches = Batch(
+      "RemoveAliasOnlyProject",
+      FixedPoint(50),
+      RemoveRedundantAliases,
+      RemoveRedundantProject) :: Nil
   }
 
   test("all expressions in project list are aliased child output") {
@@ -40,8 +44,8 @@ class RemoveAliasOnlyProjectSuite extends PlanTest with PredicateHelper {
 
   test("all expressions in project list are aliased child output but with different order") {
     val relation = LocalRelation('a.int, 'b.int)
-    val query = relation.select('b as 'b, 'a as 'a).analyze
-    val optimized = Optimize.execute(query)
+    val query = relation.select('b, 'a).analyze
+    val optimized = Optimize.execute(relation.select('b as 'b, 'a as 'a).analyze)
     comparePlans(optimized, query)
   }
 
@@ -54,15 +58,15 @@ class RemoveAliasOnlyProjectSuite extends PlanTest with PredicateHelper {
 
   test("some expressions in project list are aliased child output but with different order") {
     val relation = LocalRelation('a.int, 'b.int)
-    val query = relation.select('b as 'b, 'a).analyze
-    val optimized = Optimize.execute(query)
+    val query = relation.select('b, 'a).analyze
+    val optimized = Optimize.execute(relation.select('b as 'b, 'a).analyze)
     comparePlans(optimized, query)
   }
 
   test("some expressions in project list are not Alias or Attribute") {
     val relation = LocalRelation('a.int, 'b.int)
-    val query = relation.select('a as 'a, 'b + 1).analyze
-    val optimized = Optimize.execute(query)
+    val query = relation.select('a, 'b + 1).analyze
+    val optimized = Optimize.execute(relation.select('a as 'a, 'b + 1).analyze)
     comparePlans(optimized, query)
   }
 
@@ -72,6 +76,15 @@ class RemoveAliasOnlyProjectSuite extends PlanTest with PredicateHelper {
     val aliasWithMeta = Alias('a, "a")(explicitMetadata = Some(metadata))
     val query = relation.select(aliasWithMeta, 'b).analyze
     val optimized = Optimize.execute(query)
+    comparePlans(optimized, query)
+  }
+
+  test("do not dedup in cross join") {
+    val relation = LocalRelation('a.int)
+    val fragment = relation.select('a as 'a)
+    val query = relation.join(relation.select('a as 'a)).analyze
+    val optimized = Optimize.execute(
+      fragment.select('a as 'a).join(fragment.select('a as 'a)).analyze)
     comparePlans(optimized, query)
   }
 }

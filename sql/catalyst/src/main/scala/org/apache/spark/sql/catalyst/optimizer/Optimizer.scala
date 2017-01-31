@@ -110,7 +110,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       SimplifyCaseConversionExpressions,
       RewriteCorrelatedScalarSubquery,
       EliminateSerialization,
-      RemoveAliasOnlyProject) ::
+      RemoveRedundantAliases,
+      RemoveRedundantProject) ::
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts(conf)) ::
     Batch("Decimal Optimizations", fixedPoint,
@@ -154,56 +155,113 @@ class SimpleTestOptimizer extends Optimizer(
   new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 /**
- * Removes the Project only conducting Alias of its child node.
- * It is created mainly for removing extra Project added in EliminateSerialization rule,
- * but can also benefit other operators.
+ * Remove redundant aliases from a query plan. A redundant alias is an alias that does not change
+ * the name or metadata of a column, and does not deduplicate it.
  */
-object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
+object RemoveRedundantAliases extends Rule[LogicalPlan] {
+
   /**
-   * Returns true if the project list is semantically same as child output, after strip alias on
-   * attribute.
+   * Replace the attributes in an expression using the given mapping.
    */
-  private def isAliasOnly(
-      projectList: Seq[NamedExpression],
-      childOutput: Seq[Attribute]): Boolean = {
-    if (projectList.length != childOutput.length) {
-      false
-    } else {
-      stripAliasOnAttribute(projectList).zip(childOutput).forall {
-        case (a: Attribute, o) if a semanticEquals o => true
-        case _ => false
-      }
+  private def createAttributeMapping(current: LogicalPlan, next: LogicalPlan)
+      : Seq[(Attribute, Attribute)] = {
+    current.output.zip(next.output).filterNot {
+      case (a1, a2) => a1.semanticEquals(a2)
     }
   }
 
-  private def stripAliasOnAttribute(projectList: Seq[NamedExpression]) = {
-    projectList.map {
-      // Alias with metadata can not be stripped, or the metadata will be lost.
-      // If the alias name is different from attribute name, we can't strip it either, or we may
-      // accidentally change the output schema name of the root plan.
-      case a @ Alias(attr: Attribute, name) if a.metadata == Metadata.empty && name == attr.name =>
-        attr
-      case other => other
+  /**
+   * Create an attribute map from a sequence of Attribute to Attribute mappings.
+   */
+  private def toAttributeMap(pairs: Seq[(Attribute, Attribute)]): AttributeMap[Attribute] = {
+    val map = AttributeMap(pairs)
+    assert(map.size == pairs.size)
+    map
+  }
+
+  /**
+   * Remove the top-level alias from an expression when it is redundant.
+   */
+  private def removeRedundantAlias(e: Expression, blacklist: AttributeSet): Expression = e match {
+    // Alias with metadata can not be stripped, or the metadata will be lost.
+    // If the alias name is different from attribute name, we can't strip it either, or we
+    // may accidentally change the output schema name of the root plan.
+    case a @ Alias(attr: Attribute, name)
+      if a.metadata == Metadata.empty && name == attr.name && !blacklist.contains(attr) =>
+      attr
+    case a => a
+  }
+
+  /**
+   * Get an appropriate alias cleaning method for the given node.
+   *
+   * We currently clean Project, Aggregate & Window nodes.
+   */
+  private def getAliasCleaner(plan: LogicalPlan): (Expression, AttributeSet) => Expression = {
+    plan match {
+      case _: Project => removeRedundantAlias
+      case _: Aggregate => removeRedundantAlias
+      case _: Window => removeRedundantAlias
+      case _ => (e, _) => e
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    val aliasOnlyProject = plan.collectFirst {
-      case p @ Project(pList, child) if isAliasOnly(pList, child.output) => p
-    }
+  /**
+   * Remove redundant alias expression from a LogicalPlan and its subtree. A blacklist is used to
+   * prevent the removal of seemingly redundant aliases which are actually to deduplicate the
+   * input for a (self) join.
+   */
+  private def removeRedundantAliases(plan: LogicalPlan, blacklist: AttributeSet): LogicalPlan = {
+    plan match {
+      // A join has to be treated differently, because the left and the right side of the join are
+      // not allowed to use the same attributes. We use a blacklist to prevent us from creating a
+      // situation in which this happens; the rule will only remove an alias if its child is not on
+      // the black list.
+      case Join(left, right, joinType, condition) =>
+        val newLeft = removeRedundantAliases(left, blacklist ++ right.outputSet)
+        val newRight = removeRedundantAliases(right, blacklist ++ newLeft.outputSet)
+        val mapping = toAttributeMap(
+          createAttributeMapping(left, newLeft) ++
+          createAttributeMapping(right, newRight))
+        val newCondition = condition.map(_.transform {
+          case a: Attribute => mapping.getOrElse(a, a)
+        })
+        Join(newLeft, newRight, joinType, newCondition)
 
-    aliasOnlyProject.map { case proj =>
-      val attributesToReplace = proj.output.zip(proj.child.output).filterNot {
-        case (a1, a2) => a1 semanticEquals a2
-      }
-      val attrMap = AttributeMap(attributesToReplace)
-      plan transform {
-        case plan: Project if plan eq proj => plan.child
-        case plan => plan transformExpressions {
-          case a: Attribute if attrMap.contains(a) => attrMap(a)
+      case _ =>
+        // Drop blacklisted attributes that are masked in the current project. This allows us to
+        // remove redundant aliases in the subtree.
+        val childBlacklist = blacklist -- (plan.inputSet -- plan.outputSet)
+
+        // Remove redundant aliases in the subtree(s).
+        val currentNextAttrPairs = mutable.Buffer.empty[(Attribute, Attribute)]
+        val newNode = plan.mapChildren { child =>
+          val newChild = removeRedundantAliases(child, childBlacklist)
+          currentNextAttrPairs ++= createAttributeMapping(child, newChild)
+          newChild
         }
-      }
-    }.getOrElse(plan)
+
+        // Transform the expressions.
+        val cleanExpression = getAliasCleaner(plan)
+        val mapping = toAttributeMap(currentNextAttrPairs)
+        newNode.mapExpressions { expr =>
+          val newExpr = expr.transform {
+            case a: Attribute => mapping.getOrElse(a, a)
+          }
+          cleanExpression(newExpr, blacklist)
+        }
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = removeRedundantAliases(plan, AttributeSet.empty)
+}
+
+/**
+ * Remove projections from the query plan that do not make any modifications.
+ */
+object RemoveRedundantProject extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p @ Project(_, child) if p.output == child.output => child
   }
 }
 
