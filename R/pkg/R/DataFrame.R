@@ -1717,6 +1717,23 @@ getColumn <- function(x, c) {
   column(callJMethod(x@sdf, "col", c))
 }
 
+setColumn <- function(x, c, value) {
+  if (class(value) != "Column" && !is.null(value)) {
+    if (isAtomicLengthOne(value)) {
+      value <- lit(value)
+    } else {
+      stop("value must be a Column, literal value as atomic in length of 1, or NULL")
+    }
+  }
+
+  if (is.null(value)) {
+    nx <- drop(x, c)
+  } else {
+    nx <- withColumn(x, c, value)
+  }
+  nx
+}
+
 #' @param name name of a Column (without being wrapped by \code{""}).
 #' @rdname select
 #' @name $
@@ -1735,19 +1752,7 @@ setMethod("$", signature(x = "SparkDataFrame"),
 #' @note $<- since 1.4.0
 setMethod("$<-", signature(x = "SparkDataFrame"),
           function(x, name, value) {
-            if (class(value) != "Column" && !is.null(value)) {
-              if (isAtomicLengthOne(value)) {
-                value <- lit(value)
-              } else {
-                stop("value must be a Column, literal value as atomic in length of 1, or NULL")
-              }
-            }
-
-            if (is.null(value)) {
-              nx <- drop(x, name)
-            } else {
-              nx <- withColumn(x, name, value)
-            }
+            nx <- setColumn(x, name, value)
             x@sdf <- nx@sdf
             x
           })
@@ -1765,6 +1770,21 @@ setMethod("[[", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
               i <- cols[[i]]
             }
             getColumn(x, i)
+          })
+
+#' @rdname subset
+#' @name [[<-
+#' @aliases [[<-,SparkDataFrame,numericOrcharacter-method
+#' @note [[<- since 2.1.1
+setMethod("[[<-", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
+          function(x, i, value) {
+            if (is.numeric(i)) {
+              cols <- columns(x)
+              i <- cols[[i]]
+            }
+            nx <- setColumn(x, i, value)
+            x@sdf <- nx@sdf
+            x
           })
 
 #' @rdname subset
@@ -1811,14 +1831,19 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' Return subsets of SparkDataFrame according to given conditions
 #' @param x a SparkDataFrame.
 #' @param i,subset (Optional) a logical expression to filter on rows.
+#'                 For extract operator [[ and replacement operator [[<-, the indexing parameter for
+#'                 a single Column.
 #' @param j,select expression for the single Column or a list of columns to select from the SparkDataFrame.
 #' @param drop if TRUE, a Column will be returned if the resulting dataset has only one column.
 #'             Otherwise, a SparkDataFrame will always be returned.
+#' @param value a Column or an atomic vector in the length of 1 as literal value, or \code{NULL}.
+#'              If \code{NULL}, the specified Column is dropped.
 #' @param ... currently not used.
 #' @return A new SparkDataFrame containing only the rows that meet the condition with selected columns.
 #' @export
 #' @family SparkDataFrame functions
 #' @aliases subset,SparkDataFrame-method
+#' @seealso \link{withColumn}
 #' @rdname subset
 #' @name subset
 #' @family subsetting functions
@@ -1836,6 +1861,10 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #'   subset(df, df$age %in% c(19, 30), 1:2)
 #'   subset(df, df$age %in% c(19), select = c(1,2))
 #'   subset(df, select = c(1,2))
+#'   # Columns can be selected and set
+#'   df[["age"]] <- 23
+#'   df[[1]] <- df$age
+#'   df[[2]] <- NULL # drop column
 #' }
 #' @note subset since 1.5.0
 setMethod("subset", signature(x = "SparkDataFrame"),
@@ -1960,7 +1989,7 @@ setMethod("selectExpr",
 #' @aliases withColumn,SparkDataFrame,character-method
 #' @rdname withColumn
 #' @name withColumn
-#' @seealso \link{rename} \link{mutate}
+#' @seealso \link{rename} \link{mutate} \link{subset}
 #' @export
 #' @examples
 #'\dontrun{
@@ -1971,6 +2000,10 @@ setMethod("selectExpr",
 #' # Replace an existing column
 #' newDF2 <- withColumn(newDF, "newCol", newDF$col1)
 #' newDF3 <- withColumn(newDF, "newCol", 42)
+#' # Use extract operator to set an existing or new column
+#' df[["age"]] <- 23
+#' df[[2]] <- df$col1
+#' df[[2]] <- NULL # drop column
 #' }
 #' @note withColumn since 1.4.0
 setMethod("withColumn",
@@ -3405,4 +3438,27 @@ setMethod("randomSplit",
               sdfs <- callJMethod(x@sdf, "randomSplit", normalized_list)
             }
             sapply(sdfs, dataFrame)
+          })
+
+#' getNumPartitions
+#'
+#' Return the number of partitions
+#'
+#' @param x A SparkDataFrame
+#' @family SparkDataFrame functions
+#' @aliases getNumPartitions,SparkDataFrame-method
+#' @rdname getNumPartitions
+#' @name getNumPartitions
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df <- createDataFrame(cars, numPartitions = 2)
+#' getNumPartitions(df)
+#' }
+#' @note getNumPartitions since 2.1.1
+setMethod("getNumPartitions",
+          signature(x = "SparkDataFrame"),
+          function(x) {
+            callJMethod(callJMethod(x@sdf, "rdd"), "getNumPartitions")
           })

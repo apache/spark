@@ -117,66 +117,72 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis(s"Window specification $s is not valid because $m")
               case None => w
             }
-          case s @ ScalarSubquery(query, conditions, _)
+
+          case s @ ScalarSubquery(query, conditions, _) =>
             // If no correlation, the output must be exactly one column
-            if (conditions.isEmpty && query.output.size != 1) =>
+            if (conditions.isEmpty && query.output.size != 1) {
               failAnalysis(
                 s"Scalar subquery must return only one column, but got ${query.output.size}")
-
-          case s @ ScalarSubquery(query, conditions, _) if conditions.nonEmpty =>
-
-            // Collect the columns from the subquery for further checking.
-            var subqueryColumns = conditions.flatMap(_.references).filter(query.output.contains)
-
-            def checkAggregate(agg: Aggregate): Unit = {
-              // Make sure correlated scalar subqueries contain one row for every outer row by
-              // enforcing that they are aggregates which contain exactly one aggregate expressions.
-              // The analyzer has already checked that subquery contained only one output column,
-              // and added all the grouping expressions to the aggregate.
-              val aggregates = agg.expressions.flatMap(_.collect {
-                case a: AggregateExpression => a
-              })
-              if (aggregates.isEmpty) {
-                failAnalysis("The output of a correlated scalar subquery must be aggregated")
-              }
-
-              // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
-              // are not part of the correlated columns.
-              val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
-              val correlatedCols = AttributeSet(subqueryColumns)
-              val invalidCols = groupByCols -- correlatedCols
-              // GROUP BY columns must be a subset of columns in the predicates
-              if (invalidCols.nonEmpty) {
-                failAnalysis(
-                  "A GROUP BY clause in a scalar correlated subquery " +
-                    "cannot contain non-correlated columns: " +
-                    invalidCols.mkString(","))
-              }
             }
+            else if (conditions.nonEmpty) {
+              // Collect the columns from the subquery for further checking.
+              var subqueryColumns = conditions.flatMap(_.references).filter(query.output.contains)
 
-            // Skip subquery aliases added by the Analyzer and the SQLBuilder.
-            // For projects, do the necessary mapping and skip to its child.
-            def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
-              case s: SubqueryAlias => cleanQuery(s.child)
-              case p: Project =>
-                // SPARK-18814: Map any aliases to their AttributeReference children
-                // for the checking in the Aggregate operators below this Project.
-                subqueryColumns = subqueryColumns.map {
-                  xs => p.projectList.collectFirst {
-                    case e @ Alias(child : AttributeReference, _) if e.exprId == xs.exprId =>
-                      child
-                  }.getOrElse(xs)
+              def checkAggregate(agg: Aggregate): Unit = {
+                // Make sure correlated scalar subqueries contain one row for every outer row by
+                // enforcing that they are aggregates containing exactly one aggregate expression.
+                // The analyzer has already checked that subquery contained only one output column,
+                // and added all the grouping expressions to the aggregate.
+                val aggregates = agg.expressions.flatMap(_.collect {
+                  case a: AggregateExpression => a
+                })
+                if (aggregates.isEmpty) {
+                  failAnalysis("The output of a correlated scalar subquery must be aggregated")
                 }
 
-                cleanQuery(p.child)
-              case child => child
-            }
+                // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
+                // are not part of the correlated columns.
+                val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
+                val correlatedCols = AttributeSet(subqueryColumns)
+                val invalidCols = groupByCols -- correlatedCols
+                // GROUP BY columns must be a subset of columns in the predicates
+                if (invalidCols.nonEmpty) {
+                  failAnalysis(
+                    "A GROUP BY clause in a scalar correlated subquery " +
+                      "cannot contain non-correlated columns: " +
+                      invalidCols.mkString(","))
+                }
+              }
 
-            cleanQuery(query) match {
-              case a: Aggregate => checkAggregate(a)
-              case Filter(_, a: Aggregate) => checkAggregate(a)
-              case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
+              // Skip subquery aliases added by the Analyzer and the SQLBuilder.
+              // For projects, do the necessary mapping and skip to its child.
+              def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
+                case s: SubqueryAlias => cleanQuery(s.child)
+                case p: Project =>
+                  // SPARK-18814: Map any aliases to their AttributeReference children
+                  // for the checking in the Aggregate operators below this Project.
+                  subqueryColumns = subqueryColumns.map {
+                    xs => p.projectList.collectFirst {
+                      case e @ Alias(child : AttributeReference, _) if e.exprId == xs.exprId =>
+                        child
+                    }.getOrElse(xs)
+                  }
+
+                  cleanQuery(p.child)
+                case child => child
+              }
+
+              cleanQuery(query) match {
+                case a: Aggregate => checkAggregate(a)
+                case Filter(_, a: Aggregate) => checkAggregate(a)
+                case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
+              }
             }
+            checkAnalysis(query)
+            s
+
+          case s: SubqueryExpression =>
+            checkAnalysis(s.plan)
             s
         }
 
@@ -368,22 +374,6 @@ trait CheckAnalysis extends PredicateHelper {
                  |Failure when resolving conflicting references in Except:
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-               """.stripMargin)
-
-          case s: SimpleCatalogRelation =>
-            failAnalysis(
-              s"""
-                 |Hive support is required to select over the following tables:
-                 |${s.catalogTable.identifier}
-               """.stripMargin)
-
-          // TODO: We need to consolidate this kind of checks for InsertIntoTable
-          // with the rule of PreWriteCheck defined in extendedCheckRules.
-          case InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _) =>
-            failAnalysis(
-              s"""
-                 |Hive support is required to insert into the following tables:
-                 |${s.catalogTable.identifier}
                """.stripMargin)
 
           case InsertIntoTable(t, _, _, _, _)
