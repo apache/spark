@@ -172,7 +172,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       .set("spark.executor.memory", "500m")
       .set("spark.executor.cores", "1")
       .set("spark.executors.instances", "1")
-      .set("spark.app.id", "spark-pi")
+      .set("spark.app.name", "spark-pi")
       .set("spark.ui.enabled", "true")
       .set("spark.testing", "false")
     val mainAppResource = s"file://$EXAMPLES_JAR"
@@ -298,11 +298,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       .getLabels
     // We can't match all of the selectors directly since one of the selectors is based on the
     // launch time.
-    assert(driverPodLabels.size == 4, "Unexpected number of pod labels.")
-    assert(driverPodLabels.containsKey("driver-launcher-selector"), "Expected driver launcher" +
-      " selector label to be present.")
+    assert(driverPodLabels.size == 5, "Unexpected number of pod labels.")
     assert(driverPodLabels.get("spark-app-name") == "spark-pi", "Unexpected value for" +
       " spark-app-name label.")
+    assert(driverPodLabels.get("spark-app-id").startsWith("spark-pi"), "Unexpected value for" +
+      " spark-app-id label (should be prefixed with the app name).")
     assert(driverPodLabels.get("label1") == "label1value", "Unexpected value for label1")
     assert(driverPodLabels.get("label2") == "label2value", "Unexpected value for label2")
   }
@@ -323,12 +323,12 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
       "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
       "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
-      "--conf", "spark.ssl.kubernetes.driverlaunch.enabled=true",
-      "--conf", "spark.ssl.kubernetes.driverlaunch.keyStore=" +
+      "--conf", "spark.ssl.kubernetes.submit.enabled=true",
+      "--conf", "spark.ssl.kubernetes.submit.keyStore=" +
         s"file://${keyStoreFile.getAbsolutePath}",
-      "--conf", "spark.ssl.kubernetes.driverlaunch.keyStorePassword=changeit",
-      "--conf", "spark.ssl.kubernetes.driverlaunch.keyPassword=changeit",
-      "--conf", "spark.ssl.kubernetes.driverlaunch.trustStore=" +
+      "--conf", "spark.ssl.kubernetes.submit.keyStorePassword=changeit",
+      "--conf", "spark.ssl.kubernetes.submit.keyPassword=changeit",
+      "--conf", "spark.ssl.kubernetes.submit.trustStore=" +
         s"file://${trustStoreFile.getAbsolutePath}",
       "--conf", s"spark.ssl.kubernetes.driverlaunch.trustStorePassword=changeit",
       EXAMPLES_JAR)

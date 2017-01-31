@@ -1,0 +1,70 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.spark.deploy.kubernetes
+
+package object constants {
+  // Labels
+  private[spark] val SPARK_DRIVER_LABEL = "spark-driver"
+  private[spark] val SPARK_APP_ID_LABEL = "spark-app-id"
+  private[spark] val SPARK_APP_NAME_LABEL = "spark-app-name"
+  private[spark] val SPARK_EXECUTOR_ID_LABEL = "spark-exec-id"
+
+  // Secrets
+  private[spark] val DRIVER_CONTAINER_SECRETS_BASE_DIR = "/var/run/secrets/spark-submission"
+  private[spark] val SUBMISSION_APP_SECRET_NAME = "spark-submission-server-secret"
+  private[spark] val SUBMISSION_APP_SECRET_PREFIX = "spark-submission-server-secret"
+  private[spark] val SUBMISSION_APP_SECRET_VOLUME_NAME = "spark-submission-secret-volume"
+  private[spark] val SUBMISSION_SSL_KEY_PASSWORD_SECRET_NAME =
+      "spark-submission-server-key-password"
+  private[spark] val SUBMISSION_SSL_KEYSTORE_PASSWORD_SECRET_NAME =
+      "spark-submission-server-keystore-password"
+  private[spark] val SUBMISSION_SSL_KEYSTORE_SECRET_NAME = "spark-submission-server-keystore"
+  private[spark] val SUBMISSION_SSL_SECRETS_PREFIX = "spark-submission-server-ssl"
+  private[spark] val SUBMISSION_SSL_SECRETS_VOLUME_NAME = "spark-submission-server-ssl-secrets"
+
+  // Default and fixed ports
+  private[spark] val SUBMISSION_SERVER_PORT = 7077
+  private[spark] val DEFAULT_DRIVER_PORT = 7078
+  private[spark] val DEFAULT_BLOCKMANAGER_PORT = 7079
+  private[spark] val DEFAULT_UI_PORT = 4040
+  private[spark] val UI_PORT_NAME = "spark-ui-port"
+  private[spark] val SUBMISSION_SERVER_PORT_NAME = "submit-server"
+  private[spark] val BLOCK_MANAGER_PORT_NAME = "blockmanager"
+  private[spark] val DRIVER_PORT_NAME = "driver"
+  private[spark] val EXECUTOR_PORT_NAME = "executor"
+
+  // Environment Variables
+  private[spark] val ENV_SUBMISSION_SECRET_LOCATION = "SPARK_SUBMISSION_SECRET_LOCATION"
+  private[spark] val ENV_SUBMISSION_SERVER_PORT = "SPARK_SUBMISSION_SERVER_PORT"
+  private[spark] val ENV_SUBMISSION_KEYSTORE_FILE = "SPARK_SUBMISSION_KEYSTORE_FILE"
+  private[spark] val ENV_SUBMISSION_KEYSTORE_PASSWORD_FILE =
+      "SPARK_SUBMISSION_KEYSTORE_PASSWORD_FILE"
+  private[spark] val ENV_SUBMISSION_KEYSTORE_KEY_PASSWORD_FILE =
+      "SPARK_SUBMISSION_KEYSTORE_KEY_PASSWORD_FILE"
+  private[spark] val ENV_SUBMISSION_KEYSTORE_TYPE = "SPARK_SUBMISSION_KEYSTORE_TYPE"
+  private[spark] val ENV_SUBMISSION_USE_SSL = "SPARK_SUBMISSION_USE_SSL"
+  private[spark] val ENV_EXECUTOR_PORT = "SPARK_EXECUTOR_PORT"
+  private[spark] val ENV_DRIVER_URL = "SPARK_DRIVER_URL"
+  private[spark] val ENV_EXECUTOR_CORES = "SPARK_EXECUTOR_CORES"
+  private[spark] val ENV_EXECUTOR_MEMORY = "SPARK_EXECUTOR_MEMORY"
+  private[spark] val ENV_APPLICATION_ID = "SPARK_APPLICATION_ID"
+  private[spark] val ENV_EXECUTOR_ID = "SPARK_EXECUTOR_ID"
+
+  // Miscellaneous
+  private[spark] val DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
+  private[spark] val KUBERNETES_SUBMIT_SSL_NAMESPACE = "kubernetes.submit"
+}
