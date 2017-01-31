@@ -152,6 +152,14 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     val kmeans = new KMeans()
     testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings, checkModelData)
   }
+
+  test("evaluate on test set") {
+    val kmeans = new KMeans().setK(k).setSeed(1)
+    val model = kmeans.fit(dataset)
+    val summary = model.summary
+    val sameSummary = model.evaluate(dataset)
+    assert(summary.wssse === sameSummary.wssse)
+  }
 }
 
 object KMeansSuite {

@@ -134,6 +134,13 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
 
+    @since("2.2.0")
+    def evaluate(self, dataset):
+        """
+        Evaluates the model on a test dataset.
+        """
+        return GaussianMixtureSummary(self._call_java("evaluate", dataset))
+
 
 @inherit_doc
 class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
@@ -177,6 +184,9 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     [2, 2, 2]
     >>> summary.logLikelihood
     8.14636...
+    >>> same_summary = model.evaluate(df)
+    >>> abs(summary.logLikelihood - same_summary.logLikelihood) < 1e-3
+    True
     >>> weights = model.weights
     >>> len(weights)
     3
@@ -300,7 +310,13 @@ class KMeansSummary(ClusteringSummary):
 
     .. versionadded:: 2.1.0
     """
-    pass
+    @property
+    @since("2.2.0")
+    def wssse(self):
+        """
+        Within Set Sum of Squared Error.
+        """
+        return self._call_java("wssse")
 
 
 class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
@@ -344,6 +360,13 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
 
+    @since("2.2.0")
+    def evaluate(self, dataset):
+        """
+        Evaluates the model on a test dataset.
+        """
+        return KMeansSummary(self._call_java("evaluate", dataset))
+
 
 @inherit_doc
 class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
@@ -376,6 +399,11 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     2
     >>> summary.clusterSizes
     [2, 2]
+    >>> summary.wssse
+    2.000...
+    >>> same_summary = model.evaluate(df)
+    >>> abs(summary.wssse - same_summary.wssse) < 1e-3
+    True
     >>> kmeans_path = temp_path + "/kmeans"
     >>> kmeans.save(kmeans_path)
     >>> kmeans2 = KMeans.load(kmeans_path)
@@ -517,6 +545,13 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
 
+    @since("2.2.0")
+    def evaluate(self, dataset):
+        """
+        Evaluates the model on a test dataset.
+        """
+        return BisectingKMeansSummary(self._call_java("evaluate", dataset))
+
 
 @inherit_doc
 class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasSeed,
@@ -549,6 +584,11 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     2
     >>> summary.clusterSizes
     [2, 2]
+    >>> summary.wssse
+    2.000...
+    >>> same_summary = model.evaluate(df)
+    >>> abs(summary.wssse - same_summary.wssse) < 1e-3
+    True
     >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
     >>> rows[0].prediction == rows[1].prediction
@@ -646,7 +686,13 @@ class BisectingKMeansSummary(ClusteringSummary):
 
     .. versionadded:: 2.1.0
     """
-    pass
+    @property
+    @since("2.2.0")
+    def wssse(self):
+        """
+        Within Set Sum of Squared Error.
+        """
+        return self._call_java("wssse")
 
 
 @inherit_doc

@@ -257,6 +257,14 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val expectedMatrix = GaussianMixture.unpackUpperTriangularMatrix(4, triangularValues)
     assert(symmetricMatrix === expectedMatrix)
   }
+
+  test("evaluate on test set") {
+    val gm = new GaussianMixture().setK(k).setMaxIter(2).setSeed(1)
+    val model = gm.fit(dataset)
+    val summary = model.summary
+    val sameSummary = model.evaluate(dataset)
+    assert(summary.logLikelihood ~== sameSummary.logLikelihood absTol 2)
+  }
 }
 
 object GaussianMixtureSuite extends SparkFunSuite {

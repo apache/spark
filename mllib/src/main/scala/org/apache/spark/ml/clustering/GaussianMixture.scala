@@ -180,6 +180,53 @@ class GaussianMixtureModel private[ml] (
     throw new RuntimeException(
       s"No training summary available for the ${this.getClass.getSimpleName}")
   }
+
+  /**
+   * Return the total log-likelihood for this model on the given data.
+   */
+  private[clustering] def computeLogLikelihood(dataset: Dataset[_]): Double = {
+    SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
+    val spark = dataset.sparkSession
+    import spark.implicits._
+
+    val bcWeightAndDists = spark.sparkContext.broadcast(weights.zip(gaussians))
+    dataset.select(col($(featuresCol))).map {
+      case Row(feature: Vector) =>
+        val likelihood = bcWeightAndDists.value.map {
+          case (weight, dist) => EPSILON + weight * dist.pdf(feature)
+        }.sum
+        math.log(likelihood)
+    }.reduce(_ + _)
+  }
+
+  /**
+   * If the probability column is set returns the current model and probability column,
+   * otherwise generates a new column and sets it as the probability column on a new copy
+   * of the current model.
+   */
+  private[clustering] def findSummaryModelAndProbabilityCol():
+      (GaussianMixtureModel, String) = {
+    $(probabilityCol) match {
+      case "" =>
+        val probabilityColName = "probability_" + java.util.UUID.randomUUID.toString
+        (copy(ParamMap.empty).setProbabilityCol(probabilityColName), probabilityColName)
+      case p => (this, p)
+    }
+  }
+
+  /**
+   * Evaluates the model on a test dataset.
+   *
+   * @param dataset Test dataset to evaluate model on.
+   */
+  @Since("2.2.0")
+  def evaluate(dataset: Dataset[_]): GaussianMixtureSummary = {
+    // Handle possible missing or invalid prediction columns
+    val (summaryModel, probabilityColName) = findSummaryModelAndProbabilityCol()
+    val loglikelihood = computeLogLikelihood(dataset)
+    new GaussianMixtureSummary(summaryModel.transform(dataset), $(predictionCol),
+      probabilityColName, $(featuresCol), $(k), loglikelihood)
+  }
 }
 
 @Since("2.0.0")

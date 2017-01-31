@@ -141,6 +141,14 @@ class BisectingKMeansSuite
     testEstimatorAndModelReadWrite(
       bisectingKMeans, dataset, BisectingKMeansSuite.allParamSettings, checkModelData)
   }
+
+  test("evaluate on test set") {
+    val bkm = new BisectingKMeans().setK(k).setSeed(1)
+    val model = bkm.fit(dataset)
+    val summary = model.summary
+    val sameSummary = model.evaluate(dataset)
+    assert(summary.wssse === sameSummary.wssse)
+  }
 }
 
 object BisectingKMeansSuite {
