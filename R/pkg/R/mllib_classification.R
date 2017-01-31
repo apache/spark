@@ -41,7 +41,7 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 
 #' Logistic Regression Model
 #'
-#' Fits an logistic regression model against a Spark DataFrame. It supports "binomial": Binary logistic regression
+#' Fits an logistic regression model against a SparkDataFrame. It supports "binomial": Binary logistic regression
 #' with pivoting; "multinomial": Multinomial logistic (softmax) regression without pivoting, similar to glmnet.
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
