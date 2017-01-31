@@ -923,9 +923,9 @@ The main method calls of actual computation happen in the Spark JVM of the drive
 
 Two kinds of RPCs are supported in the SparkR JVM backend: method invocation and creating new objects. Method invocation can be done in two ways.
 
-* `sparkR.invokeJMethod` takes a reference to an existing Java object and a list of arguments to be passed on to the method.
+* `sparkR.callJMethod` takes a reference to an existing Java object and a list of arguments to be passed on to the method.
 
-* `sparkR.invokeJStatic` takes a class name for static method and a list of arguments to be passed on to the method.
+* `sparkR.callJStatic` takes a class name for static method and a list of arguments to be passed on to the method.
 
 The arguments are serialized using our custom wire format which is then deserialized on the JVM side. We then use Java reflection to invoke the appropriate method.
 

@@ -41,7 +41,7 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 
 #' Generalized Linear Models
 #'
-#' Fits generalized linear model against a Spark DataFrame.
+#' Fits generalized linear model against a SparkDataFrame.
 #' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
 #' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
@@ -259,7 +259,7 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 
 #' Isotonic Regression Model
 #'
-#' Fits an Isotonic Regression model against a Spark DataFrame, similarly to R's isoreg().
+#' Fits an Isotonic Regression model against a SparkDataFrame, similarly to R's isoreg().
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
 #' @param data SparkDataFrame for training.

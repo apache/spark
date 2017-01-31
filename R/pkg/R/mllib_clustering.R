@@ -47,7 +47,7 @@ setClass("LDAModel", representation(jobj = "jobj"))
 
 #' Bisecting K-Means Clustering Model
 #'
-#' Fits a bisecting k-means clustering model against a Spark DataFrame.
+#' Fits a bisecting k-means clustering model against a SparkDataFrame.
 #' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
 #' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
@@ -189,7 +189,7 @@ setMethod("write.ml", signature(object = "BisectingKMeansModel", path = "charact
 
 #' Multivariate Gaussian Mixture Model (GMM)
 #'
-#' Fits multivariate gaussian mixture model against a Spark DataFrame, similarly to R's
+#' Fits multivariate gaussian mixture model against a SparkDataFrame, similarly to R's
 #' mvnormalmixEM(). Users can call \code{summary} to print a summary of the fitted model,
 #' \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml}
 #' to save/load fitted models.
@@ -314,7 +314,7 @@ setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "charact
 
 #' K-Means Clustering Model
 #'
-#' Fits a k-means clustering model against a Spark DataFrame, similarly to R's kmeans().
+#' Fits a k-means clustering model against a SparkDataFrame, similarly to R's kmeans().
 #' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
 #' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
