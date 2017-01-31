@@ -394,7 +394,7 @@ setMethod("summary", signature(object = "KMeansModel"),
             k <- callJMethod(jobj, "k")
             size <- callJMethod(jobj, "size")
             clusterSize <- callJMethod(jobj, "clusterSize")
-            coefficients <- t(matrix(coefficients, ncol = clusterSize))
+            coefficients <- t(matrix(unlist(coefficients), ncol = clusterSize))
             colnames(coefficients) <- unlist(features)
             rownames(coefficients) <- 1:clusterSize
             cluster <- if (is.loaded) {
