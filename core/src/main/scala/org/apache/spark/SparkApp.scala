@@ -24,6 +24,14 @@ package org.apache.spark
 private[spark] trait SparkApp {
   this: Singleton =>
 
+  /**
+   * The Client should implement this as entry method to provide application,
+   * spark conf and system configuration.
+   *
+   * @param args    - all argouments for SparkApp.
+   * @param conf    - Spark Configuration.
+   * @param sysConf - system configurations.
+   **/
   def sparkMain(
     args: Array[String],
     conf: scala.collection.immutable.Map[String, String],
