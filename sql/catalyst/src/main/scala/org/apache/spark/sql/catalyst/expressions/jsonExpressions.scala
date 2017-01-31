@@ -517,7 +517,10 @@ case class StructToJson(options: Map[String, String], child: Expression)
 
   @transient
   lazy val gen =
-    new JacksonGenerator(child.dataType.asInstanceOf[StructType], writer)
+    new JacksonGenerator(
+      child.dataType.asInstanceOf[StructType],
+      writer,
+      new JSONOptions(options))
 
   override def dataType: DataType = StringType
 
