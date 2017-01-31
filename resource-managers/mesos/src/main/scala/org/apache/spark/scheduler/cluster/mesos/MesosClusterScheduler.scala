@@ -130,6 +130,7 @@ private[spark] class MesosClusterScheduler(
   private val retainedDrivers = conf.getInt("spark.mesos.retainedDrivers", 200)
   private val maxRetryWaitTime = conf.getInt("spark.mesos.cluster.retry.wait.max", 60) // 1 minute
   private val useFetchCache = conf.getBoolean("spark.mesos.fetchCache.enable", false)
+  private val slaveOfferConstraints = parseConstraintString(conf.get("spark.mesos.constraints", ""))
   private val schedulerState = engineFactory.createEngine("scheduler")
   private val stateLock = new Object()
   private val finishedDrivers =
@@ -594,7 +595,17 @@ private[spark] class MesosClusterScheduler(
     val tasks = new mutable.HashMap[OfferID, ArrayBuffer[TaskInfo]]()
     val currentTime = new Date()
 
-    val currentOffers = offers.asScala.map {
+    // split offers by matching constraints
+    val (matchedOffers, unmatchedOffers) = offers.asScala.partition { offer =>
+      val offerAttributes = toAttributeMap(offer.getAttributesList)
+      matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
+    }
+
+    for (o <- unmatchedOffers) {
+      driver.declineOffer(o.getId)
+    }
+
+    val currentOffers = matchedOffers.map {
       offer => new ResourceOffer(offer, offer.getResourcesList)
     }.toList
 

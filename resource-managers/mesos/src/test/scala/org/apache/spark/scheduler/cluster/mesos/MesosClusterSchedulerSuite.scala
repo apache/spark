@@ -22,7 +22,7 @@ import java.util.{Collection, Collections, Date}
 import scala.collection.JavaConverters._
 
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
-import org.apache.mesos.Protos.Value.{Scalar, Type}
+import org.apache.mesos.Protos.Value.{Scalar, Text, Type}
 import org.apache.mesos.SchedulerDriver
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Mockito._
@@ -157,6 +157,71 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     verify(driver, times(1)).launchTasks(
       Matchers.eq(Collections.singleton(offer.getId)),
       capture.capture()
+    )
+  }
+
+  test("reject offers not matching constraints") {
+    setScheduler(Map("spark.mesos.constraints" -> "attr1:value1"))
+
+    val driver = mock[SchedulerDriver]
+    val response = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", 1000, 1.0, true,
+        command,
+        Map(("spark.mesos.executor.home", "test"), ("spark.app.name", "test")),
+        "s1",
+        new Date()))
+    assert(response.success)
+
+    val matchingOffer = Offer.newBuilder()
+      .addResources(
+        Resource.newBuilder()
+          .setScalar(Scalar.newBuilder().setValue(1).build()).setName("cpus").setType(Type.SCALAR))
+      .addResources(
+        Resource.newBuilder()
+          .setScalar(Scalar.newBuilder().setValue(1000).build())
+          .setName("mem")
+          .setType(Type.SCALAR))
+      .addAttributes(0,
+        Attribute.newBuilder()
+          .setType(Type.TEXT)
+          .setName("attr1")
+          .setText(Text.newBuilder().setValue("value1")))
+      .setId(OfferID.newBuilder().setValue("o2").build())
+      .setFrameworkId(FrameworkID.newBuilder().setValue("f1").build())
+      .setSlaveId(SlaveID.newBuilder().setValue("s1").build())
+      .setHostname("host1")
+      .build()
+
+    val nonMatchingOffer = Offer.newBuilder()
+      .addResources(
+        Resource.newBuilder()
+          .setScalar(Scalar.newBuilder().setValue(1).build()).setName("cpus").setType(Type.SCALAR))
+      .addResources(
+        Resource.newBuilder()
+          .setScalar(Scalar.newBuilder().setValue(1000).build())
+          .setName("mem")
+          .setType(Type.SCALAR))
+      .setId(OfferID.newBuilder().setValue("o1").build())
+      .setFrameworkId(FrameworkID.newBuilder().setValue("f1").build())
+      .setSlaveId(SlaveID.newBuilder().setValue("s1").build())
+      .setHostname("host1")
+      .build()
+
+    when(
+      driver.launchTasks(
+        Matchers.eq(Collections.singleton(matchingOffer.getId)),
+        Matchers.any())
+    ).thenReturn(Status.valueOf(1))
+
+    scheduler.resourceOffers(driver, List(nonMatchingOffer, matchingOffer).asJava)
+
+    verify(driver, times(1)).launchTasks(
+      Matchers.eq(Collections.singleton(matchingOffer.getId)),
+      Matchers.any()
+    )
+
+    verify(driver, times(1)).declineOffer(
+      Matchers.eq(nonMatchingOffer.getId)
     )
   }
 
