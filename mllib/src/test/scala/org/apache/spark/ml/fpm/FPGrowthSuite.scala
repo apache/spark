@@ -42,8 +42,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(expectedRules.sort("antecedent").rdd.collect().sameElements(
       generatedRules.sort("antecedent").rdd.collect()))
     val transformed = model.transform(dataset)
-    assert(transformed.count() == 3 &&
-      transformed.rdd.collect().forall(r => r.getSeq[String](2).sameElements(Array("1", "2"))))
+    assert(transformed.count() == 3)
   }
 
   test("FPGrowth getFreqItems") {

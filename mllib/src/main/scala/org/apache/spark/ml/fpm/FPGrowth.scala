@@ -150,7 +150,6 @@ class FPGrowthModel private[ml] (
   val minConfidence: DoubleParam = new DoubleParam(this, "minConfidence",
     "minimal confidence for generating Association Rule (Default: 0.8)",
     ParamValidators.inRange(0.0, 1.0))
-  setDefault(minConfidence -> 0.8)
 
   /** @group getParam */
   @Since("2.2.0")
@@ -159,18 +158,54 @@ class FPGrowthModel private[ml] (
   /** @group setParam */
   @Since("2.2.0")
   def setMinConfidence(value: Double): this.type = set(minConfidence, value)
+  setDefault(minConfidence -> 0.8)
+
+  /** @group setParam */
+  @Since("2.2.0")
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  @Since("2.2.0")
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+   /**
+   * Get association rules fitted by AssociationRules using the minConfidence. Returns a dataframe
+   * with three fields, "antecedent", "consequent" and "confidence", with * "antecedent" and
+   * "consequent" being Array[String] and the "confidence" being Double.
+   */
+  @Since("2.2.0")
+  @transient private lazy val associationRulesModel: AssociationRulesModel = {
+    val freqItems = getFreqItems
+    val associationRules = new AssociationRules()
+      .setMinConfidence($(minConfidence))
+      .setItemsCol("items")
+      .setFreqCol("freq")
+    associationRules.fit(freqItems)
+  }
+
+   /**
+   * Get association rules fitted by AssociationRules using the minConfidence, in the format
+   * of DataFrame("antecedent", "consequent", "confidence")
+   */
+  @Since("2.2.0")
+  def getAssociationRules: DataFrame = {
+     associationRulesModel.associationRules
+  }
+
+  /**
+   * Get frequent items fitted by FPGrowth, in the format of DataFrame("items", "freq")
+   */
+  @Since("2.2.0")
+  @transient lazy val getFreqItems: DataFrame = {
+    val sqlContext = SparkSession.builder().getOrCreate()
+    import sqlContext.implicits._
+    parentModel.freqItemsets.map(f => (f.items.map(_.toString), f.freq))
+      .toDF("items", "freq")
+  }
 
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    val associationRules = getAssociationRules.rdd.map(r =>
-      (r.getSeq[String](0), r.getSeq[String](1))
-    ).collect()
-
-    // For each rule, examine the input items and summarize the consequents
-    val predictUDF = udf((items: Seq[String]) => associationRules.flatMap( r =>
-      if (r._1.forall(items.contains(_))) r._2 else Array.empty[String]
-    ).distinct)
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    associationRulesModel.setItemsCol($(featuresCol)).transform(dataset)
   }
 
   @Since("2.2.0")
@@ -182,32 +217,6 @@ class FPGrowthModel private[ml] (
   override def copy(extra: ParamMap): FPGrowthModel = {
     val copied = new FPGrowthModel(uid, parentModel)
     copyValues(copied, extra)
-  }
-
-  /**
-   * Get frequent items fitted by FPGrowth, in the format of DataFrame("items", "freq")
-   */
-  @Since("2.2.0")
-  def getFreqItems: DataFrame = {
-    val sqlContext = SparkSession.builder().getOrCreate()
-    import sqlContext.implicits._
-    parentModel.freqItemsets.map(f => (f.items.map(_.toString), f.freq))
-      .toDF("items", "freq")
-  }
-
-  /**
-   * Get association rules fitted by AssociationRules using the minConfidence, in the format
-   * of DataFrame("antecedent", "consequent", "confidence")
-   */
-  @Since("2.2.0")
-  def getAssociationRules: DataFrame = {
-    val freqItems = getFreqItems
-
-    val associationRules = new AssociationRules()
-      .setMinConfidence($(minConfidence))
-      .setItemsCol("items")
-      .setFreqCol("freq")
-    associationRules.run(freqItems)
   }
 
   @Since("2.2.0")
