@@ -338,10 +338,13 @@ object TypeCoercion {
       case p @ BinaryComparison(left @ NullType(), right @ StringType()) =>
         p.makeCopy(Array(Literal.create(null, StringType), right))
 
-      case p @ BinaryComparison(left @ StringType(), right) if right.dataType != StringType =>
-        p.makeCopy(Array(Cast(left, DoubleType), right))
-      case p @ BinaryComparison(left, right @ StringType()) if left.dataType != StringType =>
-        p.makeCopy(Array(left, Cast(right, DoubleType)))
+      // When compare string with atomic type, case string to that type.
+      case p @ BinaryComparison(left @ StringType(), right @ AtomicType())
+        if right.dataType != StringType =>
+        p.makeCopy(Array(Cast(left, right.dataType), right))
+      case p @ BinaryComparison(left @ AtomicType(), right @ StringType())
+        if left.dataType != StringType =>
+        p.makeCopy(Array(left, Cast(right, left.dataType)))
 
       case i @ In(a @ DateType(), b) if b.forall(_.dataType == StringType) =>
         i.makeCopy(Array(Cast(a, StringType), b))

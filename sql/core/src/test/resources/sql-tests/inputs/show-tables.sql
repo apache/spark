@@ -1,9 +1,9 @@
 -- Test data.
 CREATE DATABASE showdb;
 USE showdb;
-CREATE TABLE show_t1(a String, b Int) PARTITIONED BY (c String, d String);
+CREATE TABLE show_t1(a String, b Int, c String, d String) USING parquet PARTITIONED BY (c, d);
 ALTER TABLE show_t1 ADD PARTITION (c='Us', d=1);
-CREATE TABLE show_t2(b String, d Int);
+CREATE TABLE show_t2(b String, d Int) USING parquet;
 CREATE TEMPORARY VIEW show_t3(e int) USING parquet;
 CREATE GLOBAL TEMP VIEW show_t4 AS SELECT 1 as col1;
 

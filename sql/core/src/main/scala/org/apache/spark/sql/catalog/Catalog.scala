@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalog
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
@@ -187,82 +189,169 @@ abstract class Catalog {
   def functionExists(dbName: String, functionName: String): Boolean
 
   /**
-   * :: Experimental ::
-   * Creates an external table from the given path and returns the corresponding DataFrame.
+   * Creates a table from the given path and returns the corresponding DataFrame.
    * It will use the default data source configured by spark.sql.sources.default.
    *
    * @since 2.0.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
-  def createExternalTable(tableName: String, path: String): DataFrame
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(tableName: String, path: String): DataFrame = {
+    createTable(tableName, path)
+  }
 
   /**
    * :: Experimental ::
-   * Creates an external table from the given path based on a data source
-   * and returns the corresponding DataFrame.
+   * Creates a table from the given path and returns the corresponding DataFrame.
+   * It will use the default data source configured by spark.sql.sources.default.
    *
-   * @since 2.0.0
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createExternalTable(tableName: String, path: String, source: String): DataFrame
+  def createTable(tableName: String, path: String): DataFrame
+
+  /**
+   * Creates a table from the given path based on a data source and returns the corresponding
+   * DataFrame.
+   *
+   * @since 2.0.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(tableName: String, path: String, source: String): DataFrame = {
+    createTable(tableName, path, source)
+  }
 
   /**
    * :: Experimental ::
-   * Creates an external table from the given path based on a data source and a set of options.
+   * Creates a table from the given path based on a data source and returns the corresponding
+   * DataFrame.
+   *
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def createTable(tableName: String, path: String, source: String): DataFrame
+
+  /**
+   * Creates a table from the given path based on a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
    * @since 2.0.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
+  @deprecated("use createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       source: String,
-      options: java.util.Map[String, String]): DataFrame
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, options)
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a table from the given path based on a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def createTable(
+      tableName: String,
+      source: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, options.asScala.toMap)
+  }
+
+  /**
+   * (Scala-specific)
+   * Creates a table from the given path based on a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @since 2.0.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      options: Map[String, String]): DataFrame = {
+    createTable(tableName, source, options)
+  }
 
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Creates an external table from the given path based on a data source and a set of options.
+   * Creates a table from the given path based on a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
-   * @since 2.0.0
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createExternalTable(
+  def createTable(
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame
 
   /**
    * :: Experimental ::
-   * Create an external table from the given path based on a data source, a schema and
-   * a set of options. Then, returns the corresponding DataFrame.
+   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
    *
    * @since 2.0.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
+  @deprecated("use createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       source: String,
       schema: StructType,
-      options: java.util.Map[String, String]): DataFrame
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options)
+  }
+
+  /**
+   * :: Experimental ::
+   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def createTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options.asScala.toMap)
+  }
+
+  /**
+   * (Scala-specific)
+   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @since 2.0.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options)
+  }
 
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Create an external table from the given path based on a data source, a schema and
-   * a set of options. Then, returns the corresponding DataFrame.
+   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
    *
-   * @since 2.0.0
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createExternalTable(
+  def createTable(
       tableName: String,
       source: String,
       schema: StructType,
@@ -291,8 +380,8 @@ abstract class Catalog {
    *
    * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark application,
    * i.e. it will be automatically dropped when the application terminates. It's tied to a system
-   * preserved database `_global_temp`, and we must use the qualified name to refer a global temp
-   * view, e.g. `SELECT * FROM _global_temp.view1`.
+   * preserved database `global_temp`, and we must use the qualified name to refer a global temp
+   * view, e.g. `SELECT * FROM global_temp.view1`.
    *
    * @param viewName the name of the view to be dropped.
    * @return true if the view is dropped successfully, false otherwise.

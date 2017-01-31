@@ -27,6 +27,46 @@ absoluteSparkPath <- function(x) {
   file.path(sparkHome, x)
 }
 
+test_that("spark.bisectingKmeans", {
+  newIris <- iris
+  newIris$Species <- NULL
+  training <- suppressWarnings(createDataFrame(newIris))
+
+  take(training, 1)
+
+  model <- spark.bisectingKmeans(data = training, ~ .)
+  sample <- take(select(predict(model, training), "prediction"), 1)
+  expect_equal(typeof(sample$prediction), "integer")
+  expect_equal(sample$prediction, 1)
+
+  # Test fitted works on Bisecting KMeans
+  fitted.model <- fitted(model)
+  expect_equal(sort(collect(distinct(select(fitted.model, "prediction")))$prediction),
+               c(0, 1, 2, 3))
+
+  # Test summary works on KMeans
+  summary.model <- summary(model)
+  cluster <- summary.model$cluster
+  k <- summary.model$k
+  expect_equal(k, 4)
+  expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction),
+               c(0, 1, 2, 3))
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-bisectingkmeans", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  summary2 <- summary(model2)
+  expect_equal(sort(unlist(summary.model$size)), sort(unlist(summary2$size)))
+  expect_equal(summary.model$coefficients, summary2$coefficients)
+  expect_true(!summary.model$is.loaded)
+  expect_true(summary2$is.loaded)
+
+  unlink(modelPath)
+})
+
 test_that("spark.gaussianMixture", {
   # R code to reproduce the result.
   # nolint start
@@ -56,6 +96,10 @@ test_that("spark.gaussianMixture", {
   #            [,1]     [,2]
   #  [1,] 0.2961543 0.160783
   #  [2,] 0.1607830 1.008878
+  #
+  #' model$loglik
+  #
+  #  [1] -46.89499
   # nolint end
   data <- list(list(-0.6264538, 0.1836433), list(-0.8356286, 1.5952808),
                list(0.3295078, -0.8204684), list(0.4874291, 0.7383247),
@@ -72,9 +116,11 @@ test_that("spark.gaussianMixture", {
   rMu <- c(0.11731091, -0.06192351, 10.363673, 9.897081)
   rSigma <- c(0.62049934, 0.06880802, 0.06880802, 1.27431874,
               0.2961543, 0.160783, 0.1607830, 1.008878)
+  rLoglik <- -46.89499
   expect_equal(stats$lambda, rLambda, tolerance = 1e-3)
   expect_equal(unlist(stats$mu), rMu, tolerance = 1e-3)
   expect_equal(unlist(stats$sigma), rSigma, tolerance = 1e-3)
+  expect_equal(unlist(stats$loglik), rLoglik, tolerance = 1e-3)
   p <- collect(select(predict(model, df), "prediction"))
   expect_equal(p$prediction, c(0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1))
 
@@ -88,6 +134,7 @@ test_that("spark.gaussianMixture", {
   expect_equal(stats$lambda, stats2$lambda)
   expect_equal(unlist(stats$mu), unlist(stats2$mu))
   expect_equal(unlist(stats$sigma), unlist(stats2$sigma))
+  expect_equal(unlist(stats$loglik), unlist(stats2$loglik))
 
   unlink(modelPath)
 })
