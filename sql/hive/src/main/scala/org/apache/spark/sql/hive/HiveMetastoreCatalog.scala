@@ -205,6 +205,12 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           bucketSpec,
           None)
         val logicalRelation = cached.getOrElse {
+          // We add the timezone to the relation options, which automatically gets injected into
+          // the hadoopConf for the Parquet Converters
+          logInfo(s"creating HadoopFsRelation from a metastore table with" +
+            s" ${metastoreRelation.hiveQlTable.getParameters}")
+          val tzKey = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
+          val tz = Option(metastoreRelation.hiveQlTable.getParameters.get(tzKey)).getOrElse("")
           val created =
             LogicalRelation(
               DataSource(
@@ -212,7 +218,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 paths = rootPath.toString :: Nil,
                 userSpecifiedSchema = Some(metastoreRelation.schema),
                 bucketSpec = bucketSpec,
-                options = options,
+                options = options ++ Map(tzKey -> tz),
                 className = fileType).resolveRelation(),
               catalogTable = Some(metastoreRelation.catalogTable))
 
@@ -237,6 +243,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     }
 
     private def convertToParquetRelation(relation: MetastoreRelation): LogicalRelation = {
+      logInfo(s"creating a parquet relation from a metastore relation on" +
+        s" ${relation.catalogTable.qualifiedName} : $relation")
       val defaultSource = new ParquetFileFormat()
       val fileFormatClass = classOf[ParquetFileFormat]
 
@@ -256,10 +264,12 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         case InsertIntoTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
           // Inserting into partitioned table is not supported in Parquet data source (yet).
           if !r.hiveQlTable.isPartitioned && shouldConvertMetastoreParquet(r) =>
+          logInfo("checking parquet conversions for insertion")
           InsertIntoTable(convertToParquetRelation(r), partition, child, overwrite, ifNotExists)
 
         // Read path
         case relation: MetastoreRelation if shouldConvertMetastoreParquet(relation) =>
+          logInfo(s"checking parquet conversions for $plan")
           val parquetRelation = convertToParquetRelation(relation)
           SubqueryAlias(relation.tableName, parquetRelation, None)
       }

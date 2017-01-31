@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
 import org.apache.parquet.schema.{GroupType, MessageType, Type}
@@ -121,12 +122,14 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * @param parquetType Parquet schema of Parquet records
  * @param catalystType Spark SQL schema that corresponds to the Parquet record type. User-defined
  *        types should have been expanded.
+ * @param hadoopConf a hadoop Configuration for passing any extra parameters for parquet conversion
  * @param updater An updater which propagates converted field values to the parent container
  */
 private[parquet] class ParquetRowConverter(
     schemaConverter: ParquetSchemaConverter,
     parquetType: GroupType,
     catalystType: StructType,
+    hadoopConf: Configuration,
     updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
 
@@ -217,7 +220,7 @@ private[parquet] class ParquetRowConverter(
       catalystType: DataType,
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
 
-    catalystType match {
+    val r = catalystType match {
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType =>
         new ParquetPrimitiveConverter(updater)
 
@@ -258,12 +261,20 @@ private[parquet] class ParquetRowConverter(
 
       case TimestampType =>
         // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
+        val tzString = hadoopConf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
+        // scalastyle:off println
+        println(s"creating timestamp converter w/ tzString = $tzString")
+        // scalastyle:on println
+        val tz = if (tzString == null) {
+          DateTimeUtils.TimeZoneGMT
+        } else {
+          TimeZone.getTimeZone(tzString)
+        }
         new ParquetPrimitiveConverter(updater) {
           // Converts nanosecond timestamps stored as INT96
           override def addBinary(value: Binary): Unit = {
-            // TODO timezone from table props
             val timestamp =
-              ParquetRowConverter.binaryToSQLTimestamp(value, ParquetRowConverter.tz)
+              ParquetRowConverter.binaryToSQLTimestamp(value, tz)
             updater.setLong(timestamp)
           }
         }
@@ -294,7 +305,7 @@ private[parquet] class ParquetRowConverter(
 
       case t: StructType =>
         new ParquetRowConverter(
-          schemaConverter, parquetType.asGroupType(), t, new ParentContainerUpdater {
+          schemaConverter, parquetType.asGroupType(), t, hadoopConf, new ParentContainerUpdater {
             override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
           })
 

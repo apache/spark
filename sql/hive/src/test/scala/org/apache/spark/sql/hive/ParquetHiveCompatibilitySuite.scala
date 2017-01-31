@@ -20,9 +20,10 @@ package org.apache.spark.sql.hive
 import java.sql.Timestamp
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.execution.datasources.parquet.ParquetCompatibilityTest
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompatibilityTest, ParquetFileFormat}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{StructField, StructType, TimestampType}
 
 class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHiveSingleton {
   /**
@@ -140,5 +141,58 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
     testParquetHiveCompatibility(
       Row(Seq(Row(1))),
       "ARRAY<STRUCT<array_element: INT>>")
+  }
+
+  test("SPARK-12297: Parquet Timestamps & Hive Timezones") {
+        // Test that we can correctly adjust parquet timestamps for Hive timezone bug.
+    withTempPath { dir =>
+      // First, lets generate some parquet data we can use to test this
+      val schema = StructType(StructField("timestamp", TimestampType) :: Nil)
+      // intentionally pick a few times right around new years, so time zone will effect many fields
+      val data = spark.sparkContext.parallelize(Seq(
+        "2015-12-31 23:50:59.123",
+        "2015-12-31 22:49:59.123",
+        "2016-01-01 00:39:59.123",
+        "2016-01-01 01:29:59.123"
+      ).map { x => Row(java.sql.Timestamp.valueOf(x)) })
+      spark.createDataFrame(data, schema).write.parquet(dir.getCanonicalPath)
+
+      // Ideally, we'd check the parquet schema here, make sure it was int96
+
+      import org.apache.spark.sql.functions._
+      val readData = spark.read.parquet(dir.getCanonicalPath)
+      val newTable = readData.withColumn("year", expr("year(timestamp)"))
+
+      // TODO test:
+      // * w/ & w/out vectorization
+      // * filtering
+      // * partioning
+      // * predicate pushdown
+      // * DST?
+      val key = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
+      spark.sql(
+        raw"""CREATE TABLE foobar (
+          |   year int,
+          |   timestamp timestamp
+          | )
+          | STORED AS PARQUET
+          | TBLPROPERTIES ($key="America/Los_Angeles")
+        """.stripMargin
+      )
+      newTable.createOrReplaceTempView("newTable")
+      spark.sql("INSERT INTO foobar SELECT year, timestamp FROM newTable")
+
+      spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, false)
+      val readFromHiveTable = spark.sql("select year, timestamp from foobar")
+      // from manual logging, confirmed that table properties are read back
+      readFromHiveTable.explain(true)
+      // Note that we've already stored the table with bad "year" date in this example so far
+      // Here we determine the year based on the table property
+      val collected = readFromHiveTable.withColumn("fixed_year", expr("year(timestamp)")).collect()
+      // Make sure our test is setup correctly
+      assert(collected.exists { row => row.getInt(0) == 2016 } )
+      // now check we've converted the data correctly
+      collected.foreach { row => assert(row.getInt(2) == 2015) }
+    }
   }
 }

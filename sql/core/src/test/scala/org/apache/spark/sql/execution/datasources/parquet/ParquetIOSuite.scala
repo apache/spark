@@ -789,6 +789,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       // * filtering
       // * partioning
       // * DST?
+      spark.sql(
+        """CREATE TABLE foobar (
+          |   year int,
+          |   timestamp timestamp
+          | )
+          | STORED AS PARQUET
+        """.stripMargin
+      )
+      newTable.createOrReplaceTempView("newTable")
+      spark.sql("insert into foobar (year, timestamp) select  year, timestamp from newTable")
     }
   }
 }

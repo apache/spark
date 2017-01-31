@@ -276,6 +276,7 @@ public class VectorizedColumnReader {
             // TODO: Convert dictionary of Binaries to dictionary of Longs
             if (!column.isNullAt(i)) {
               Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
+              // TODO IR XXX get tz
               column.putLong(i,
                   ParquetRowConverter.binaryToSQLTimestamp(v, ParquetRowConverter.tz()));
             }
