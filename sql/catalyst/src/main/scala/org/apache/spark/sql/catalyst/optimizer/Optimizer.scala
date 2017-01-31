@@ -171,15 +171,6 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
   }
 
   /**
-   * Create an attribute map from a sequence of Attribute to Attribute mappings.
-   */
-  private def toAttributeMap(pairs: Seq[(Attribute, Attribute)]): AttributeMap[Attribute] = {
-    val map = AttributeMap(pairs)
-    assert(map.size == pairs.size)
-    map
-  }
-
-  /**
    * Remove the top-level alias from an expression when it is redundant.
    */
   private def removeRedundantAlias(e: Expression, blacklist: AttributeSet): Expression = e match {
@@ -208,19 +199,19 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
 
   /**
    * Remove redundant alias expression from a LogicalPlan and its subtree. A blacklist is used to
-   * prevent the removal of seemingly redundant aliases which are actually to deduplicate the
-   * input for a (self) join.
+   * prevent the removal of seemingly redundant aliases used to deduplicate the input for a (self)
+   * join.
    */
   private def removeRedundantAliases(plan: LogicalPlan, blacklist: AttributeSet): LogicalPlan = {
     plan match {
       // A join has to be treated differently, because the left and the right side of the join are
       // not allowed to use the same attributes. We use a blacklist to prevent us from creating a
-      // situation in which this happens; the rule will only remove an alias if its child is not on
-      // the black list.
+      // situation in which this happens; the rule will only remove an alias if its child
+      // attribute is not on the black list.
       case Join(left, right, joinType, condition) =>
         val newLeft = removeRedundantAliases(left, blacklist ++ right.outputSet)
         val newRight = removeRedundantAliases(right, blacklist ++ newLeft.outputSet)
-        val mapping = toAttributeMap(
+        val mapping = AttributeMap(
           createAttributeMapping(left, newLeft) ++
           createAttributeMapping(right, newRight))
         val newCondition = condition.map(_.transform {
@@ -241,9 +232,13 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
           newChild
         }
 
+        // Create the attribute mapping. Note that the currentNextAttrPairs can contain duplicate
+        // keys in case of Union (this is caused by the PushProjectionThroughUnion rule); in this
+        // case we use the the first mapping (which should be provided by the first child).
+        val mapping = AttributeMap(currentNextAttrPairs)
+
         // Transform the expressions.
         val cleanExpression = getAliasCleaner(plan)
-        val mapping = toAttributeMap(currentNextAttrPairs)
         newNode.mapExpressions { expr =>
           val newExpr = expr.transform {
             case a: Attribute => mapping.getOrElse(a, a)
