@@ -316,7 +316,7 @@ case class MapGroups(
 /** Internal class representing State */
 trait LogicalState[S]
 
-/** Factory for constructing new `MapGroups` nodes. */
+/** Factory for constructing new `MapGroupsWithState` nodes. */
 object MapGroupsWithState {
   def apply[K: Encoder, V: Encoder, S: Encoder, U: Encoder](
       func: (Any, Iterator[Any], LogicalState[Any]) => Iterator[Any],
@@ -337,6 +337,20 @@ object MapGroupsWithState {
   }
 }
 
+/**
+ * Applies func to each unique group in `child`, based on the evaluation of `groupingAttributes`,
+ * while using state data.
+ * Func is invoked with an object representation of the grouping key an iterator containing the
+ * object representation of all the rows with that key.
+ *
+ * @param keyDeserializer used to extract the key object for each group.
+ * @param valueDeserializer used to extract the items in the iterator from an input row.
+ * @param groupingAttributes used to group the data
+ * @param dataAttributes used to read the data
+ * @param outputObjAttr used to define the output object
+ * @param stateDeserializer used to deserialize state before calling `func`
+ * @param stateSerializer used to serialize updated state after calling `func`
+ */
 case class MapGroupsWithState(
     func: (Any, Iterator[Any], LogicalState[Any]) => Iterator[Any],
     keyDeserializer: Expression,
