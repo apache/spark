@@ -68,7 +68,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       Utils.tryWithResource(factory.createParser(writer.toString)) { jsonParser =>
         jsonParser.nextToken()
-        val converter = parser.makeRootConverter(dataType)
+        val converter = parser.makeConverter(dataType)
         converter.apply(jsonParser)
       }
     }
@@ -448,7 +448,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
-      sql("select num_str + 1.2 from jsonTable where num_str > 14"),
+      sql("select num_str + 1.2 from jsonTable where num_str > 14d"),
       Row(92233720368547758071.2)
     )
 
@@ -845,7 +845,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("Loading a JSON dataset from a text file with SQL") {
     val dir = Utils.createTempDir()
     dir.delete()
-    val path = dir.getCanonicalPath
+    val path = dir.toURI.toString
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
 
     sql(
@@ -1366,7 +1366,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val emptySchema = InferSchema.infer(empty, "", new JSONOptions(Map()))
+    val emptySchema = InferSchema.infer(empty, "", new JSONOptions(Map.empty[String, String]))
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1390,7 +1390,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-8093 Erase empty structs") {
-    val emptySchema = InferSchema.infer(emptyRecords, "", new JSONOptions(Map()))
+    val emptySchema = InferSchema.infer(
+      emptyRecords, "", new JSONOptions(Map.empty[String, String]))
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1748,5 +1749,19 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       checkAnswer(stringTimestampsWithFormat, expectedStringDatesWithFormat)
     }
+  }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    val records = sparkContext
+      .parallelize("""{"a": 3, "b": 1.1}""" :: """{"a": 3.1, "b": 0.000001}""" :: Nil)
+
+    val schema = StructType(
+      StructField("a", DecimalType(21, 1), true) ::
+      StructField("b", DecimalType(7, 6), true) :: Nil)
+
+    val df1 = spark.read.option("prefersDecimal", "true").json(records)
+    assert(df1.schema == schema)
+    val df2 = spark.read.option("PREfersdecimaL", "true").json(records)
+    assert(df2.schema == schema)
   }
 }

@@ -40,15 +40,13 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
  * An expression that concatenates multiple input strings into a single string.
  * If any input is null, concat returns null.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str1, str2, ..., strN) - Returns the concatenation of `str1`, `str2`, ..., `strN`.",
+  usage = "_FUNC_(str1, str2, ..., strN) - Returns the concatenation of str1, str2, ..., strN.",
   extended = """
     Examples:
-      > SELECT _FUNC_('Spark','SQL');
+      > SELECT _FUNC_('Spark', 'SQL');
        SparkSQL
   """)
-// scalastyle:on line.size.limit
 case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
@@ -89,8 +87,8 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
   usage = "_FUNC_(sep, [str | array(str)]+) - Returns the concatenation of the strings separated by `sep`.",
   extended = """
     Examples:
-      > SELECT _FUNC_(' ', Spark', 'SQL');
-       Spark SQL
+      > SELECT _FUNC_(' ', 'Spark', 'SQL');
+        Spark SQL
   """)
 // scalastyle:on line.size.limit
 case class ConcatWs(children: Seq[Expression])
@@ -1431,18 +1429,20 @@ case class FormatNumber(x: Expression, d: Expression)
 
   // Associated with the pattern, for the last d value, and we will update the
   // pattern (DecimalFormat) once the new coming d value differ with the last one.
+  // This is an Option to distinguish between 0 (numberFormat is valid) and uninitialized after
+  // serialization (numberFormat has not been updated for dValue = 0).
   @transient
-  private var lastDValue: Int = -100
+  private var lastDValue: Option[Int] = None
 
   // A cached DecimalFormat, for performance concern, we will change it
   // only if the d value changed.
   @transient
-  private val pattern: StringBuffer = new StringBuffer()
+  private lazy val pattern: StringBuffer = new StringBuffer()
 
   // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
   // as a decimal separator.
   @transient
-  private val numberFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
+  private lazy val numberFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
 
   override protected def nullSafeEval(xObject: Any, dObject: Any): Any = {
     val dValue = dObject.asInstanceOf[Int]
@@ -1450,24 +1450,28 @@ case class FormatNumber(x: Expression, d: Expression)
       return null
     }
 
-    if (dValue != lastDValue) {
-      // construct a new DecimalFormat only if a new dValue
-      pattern.delete(0, pattern.length)
-      pattern.append("#,###,###,###,###,###,##0")
+    lastDValue match {
+      case Some(last) if last == dValue =>
+        // use the current pattern
+      case _ =>
+        // construct a new DecimalFormat only if a new dValue
+        pattern.delete(0, pattern.length)
+        pattern.append("#,###,###,###,###,###,##0")
 
-      // decimal place
-      if (dValue > 0) {
-        pattern.append(".")
+        // decimal place
+        if (dValue > 0) {
+          pattern.append(".")
 
-        var i = 0
-        while (i < dValue) {
-          i += 1
-          pattern.append("0")
+          var i = 0
+          while (i < dValue) {
+            i += 1
+            pattern.append("0")
+          }
         }
-      }
-      lastDValue = dValue
 
-      numberFormat.applyLocalizedPattern(pattern.toString)
+        lastDValue = Some(dValue)
+
+        numberFormat.applyLocalizedPattern(pattern.toString)
     }
 
     x.dataType match {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.io
 
+import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
 
 import org.apache.spark.util.Utils
@@ -82,8 +83,23 @@ abstract class FileCommitProtocol {
    *
    * The "dir" parameter specifies 2, and "ext" parameter specifies both 4 and 5, and the rest
    * are left to the commit protocol implementation to decide.
+   *
+   * Important: it is the caller's responsibility to add uniquely identifying content to "ext"
+   * if a task is going to write out multiple files to the same dir. The file commit protocol only
+   * guarantees that files written by different tasks will not conflict.
    */
   def newTaskTempFile(taskContext: TaskAttemptContext, dir: Option[String], ext: String): String
+
+  /**
+   * Similar to newTaskTempFile(), but allows files to committed to an absolute output location.
+   * Depending on the implementation, there may be weaker guarantees around adding files this way.
+   *
+   * Important: it is the caller's responsibility to add uniquely identifying content to "ext"
+   * if a task is going to write out multiple files to the same dir. The file commit protocol only
+   * guarantees that files written by different tasks will not conflict.
+   */
+  def newTaskTempFileAbsPath(
+      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String
 
   /**
    * Commits a task after the writes succeed. Must be called on the executors when running tasks.
@@ -97,6 +113,14 @@ abstract class FileCommitProtocol {
    * just crashes (or killed) before it can call abort.
    */
   def abortTask(taskContext: TaskAttemptContext): Unit
+
+  /**
+   * Specifies that a file should be deleted with the commit of this job. The default
+   * implementation deletes the file immediately.
+   */
+  def deleteWithJob(fs: FileSystem, path: Path, recursive: Boolean): Boolean = {
+    fs.delete(path, recursive)
+  }
 }
 
 

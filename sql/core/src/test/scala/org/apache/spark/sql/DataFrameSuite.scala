@@ -29,6 +29,7 @@ import org.scalatest.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Project, Union}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
@@ -869,6 +870,30 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(testData.select($"*").filter($"key" < 0).showString(1) === expectedAnswer)
   }
 
+  test("SPARK-18350 show with session local timezone") {
+    val d = Date.valueOf("2016-12-01")
+    val ts = Timestamp.valueOf("2016-12-01 00:00:00")
+    val df = Seq((d, ts)).toDF("d", "ts")
+    val expectedAnswer = """+----------+-------------------+
+                           ||d         |ts                 |
+                           |+----------+-------------------+
+                           ||2016-12-01|2016-12-01 00:00:00|
+                           |+----------+-------------------+
+                           |""".stripMargin
+    assert(df.showString(1, truncate = 0) === expectedAnswer)
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      val expectedAnswer = """+----------+-------------------+
+                             ||d         |ts                 |
+                             |+----------+-------------------+
+                             ||2016-12-01|2016-12-01 08:00:00|
+                             |+----------+-------------------+
+                             |""".stripMargin
+      assert(df.showString(1, truncate = 0) === expectedAnswer)
+    }
+  }
+
   test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
     val rowRDD = sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
     val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
@@ -1518,14 +1543,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-12982: Add table name validation in temp table registration") {
     val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
-    // invalid table name test as below
-    intercept[AnalysisException](df.createOrReplaceTempView("t~"))
-    // valid table name test as below
-    df.createOrReplaceTempView("table1")
-    // another invalid table name test as below
-    intercept[AnalysisException](df.createOrReplaceTempView("#$@sum"))
-    // another invalid table name test as below
-    intercept[AnalysisException](df.createOrReplaceTempView("table!#"))
+    // invalid table names
+    Seq("11111", "t~", "#$@sum", "table!#").foreach { name =>
+      val m = intercept[AnalysisException](df.createOrReplaceTempView(name)).getMessage
+      assert(m.contains(s"Invalid view name: $name"))
+    }
+
+    // valid table names
+    Seq("table1", "`11111`", "`t~`", "`#$@sum`", "`table!#`").foreach { name =>
+      df.createOrReplaceTempView(name)
+    }
   }
 
   test("assertAnalyzed shouldn't replace original stack trace") {
@@ -1624,17 +1651,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(d.size == d.distinct.size)
   }
 
-  test("SPARK-17625: data source table in InMemoryCatalog should guarantee output consistency") {
-    val tableName = "tbl"
-    withTable(tableName) {
-      spark.range(10).select('id as 'i, 'id as 'j).write.saveAsTable(tableName)
-      val relation = spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName))
-      val expr = relation.resolve("i")
-      val qe = spark.sessionState.executePlan(Project(Seq(expr), relation))
-      qe.assertAnalyzed()
-    }
-  }
-
   private def verifyNullabilityInFilterExec(
       df: DataFrame,
       expr: String,
@@ -1697,6 +1713,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       expr = "cast((_1 + _2) as boolean)", expectedNonNullableColumns = Seq("_1", "_2"))
   }
 
+  test("SPARK-17897: Fixed IsNotNull Constraint Inference Rule") {
+    val data = Seq[java.lang.Integer](1, null).toDF("key")
+    checkAnswer(data.filter(!$"key".isNotNull), Row(null))
+    checkAnswer(data.filter(!(- $"key").isNotNull), Row(null))
+  }
+
   test("SPARK-17957: outer join + na.fill") {
     val df1 = Seq((1, 2), (2, 3)).toDF("a", "b")
     val df2 = Seq((2, 5), (3, 4)).toDF("a", "c")
@@ -1727,5 +1749,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .add("array2", ArrayType(IntegerType, containsNull = false))
     val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
     assert(df.filter($"array1" === $"array2").count() == 1)
+  }
+
+  test("SPARK-17913: compare long and string type column may return confusing result") {
+    val df = Seq(123L -> "123", 19157170390056973L -> "19157170390056971").toDF("i", "j")
+    checkAnswer(df.select($"i" === $"j"), Row(true) :: Row(false) :: Nil)
   }
 }

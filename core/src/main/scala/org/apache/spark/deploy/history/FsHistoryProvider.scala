@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.io.{FileNotFoundException, IOException, OutputStream}
 import java.util.UUID
-import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
+import java.util.concurrent.{Executors, ExecutorService, Future, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
@@ -97,6 +97,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     .map { d => Utils.resolveURI(d).toString }
     .getOrElse(DEFAULT_LOG_DIR)
 
+  private val HISTORY_UI_ACLS_ENABLE = conf.getBoolean("spark.history.ui.acls.enable", false)
+  private val HISTORY_UI_ADMIN_ACLS = conf.get("spark.history.ui.admin.acls", "")
+  private val HISTORY_UI_ADMIN_ACLS_GROUPS = conf.get("spark.history.ui.admin.acls.groups", "")
+  logInfo(s"History server ui acls " + (if (HISTORY_UI_ACLS_ENABLE) "enabled" else "disabled") +
+    "; users with admin permissions: " + HISTORY_UI_ADMIN_ACLS.toString +
+    "; groups with admin permissions" + HISTORY_UI_ADMIN_ACLS_GROUPS.toString)
+
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
   private val fs = Utils.getHadoopFileSystem(logDir, hadoopConf)
 
@@ -108,7 +115,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // The modification time of the newest log detected during the last scan.   Currently only
   // used for logging msgs (logs are re-scanned based on file size, rather than modtime)
-  private var lastScanTime = -1L
+  private val lastScanTime = new java.util.concurrent.atomic.AtomicLong(-1)
 
   // Mapping of application IDs to their metadata, in descending end time order. Apps are inserted
   // into the map in order, so the LinkedHashMap maintains the correct ordering.
@@ -119,6 +126,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // List of application logs to be deleted by event log cleaner.
   private var attemptsToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
+
+  private val pendingReplayTasksCount = new java.util.concurrent.atomic.AtomicInteger(0)
 
   /**
    * Return a runnable that performs the given operation on the event logs.
@@ -226,6 +235,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     applications.get(appId)
   }
 
+  override def getEventLogsUnderProcess(): Int = pendingReplayTasksCount.get()
+
+  override def getLastUpdatedTime(): Long = lastScanTime.get()
+
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
     try {
       applications.get(appId).flatMap { appInfo =>
@@ -244,13 +257,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val appListener = replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
 
           if (appListener.appId.isDefined) {
-            val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
-            ui.getSecurityManager.setAcls(uiAclsEnabled)
+            ui.getSecurityManager.setAcls(HISTORY_UI_ACLS_ENABLE)
             // make sure to set admin acls before view acls so they are properly picked up
-            ui.getSecurityManager.setAdminAcls(appListener.adminAcls.getOrElse(""))
-            ui.getSecurityManager.setViewAcls(attempt.sparkUser,
-              appListener.viewAcls.getOrElse(""))
-            ui.getSecurityManager.setAdminAclsGroups(appListener.adminAclsGroups.getOrElse(""))
+            val adminAcls = HISTORY_UI_ADMIN_ACLS + "," + appListener.adminAcls.getOrElse("")
+            ui.getSecurityManager.setAdminAcls(adminAcls)
+            ui.getSecurityManager.setViewAcls(attempt.sparkUser, appListener.viewAcls.getOrElse(""))
+            val adminAclsGroups = HISTORY_UI_ADMIN_ACLS_GROUPS + "," +
+              appListener.adminAclsGroups.getOrElse("")
+            ui.getSecurityManager.setAdminAclsGroups(adminAclsGroups)
             ui.getSecurityManager.setViewAclsGroups(appListener.viewAclsGroups.getOrElse(""))
             Some(LoadedAppUI(ui, updateProbe(appId, attemptId, attempt.fileSize)))
           } else {
@@ -329,26 +343,43 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       if (logInfos.nonEmpty) {
         logDebug(s"New/updated attempts found: ${logInfos.size} ${logInfos.map(_.getPath)}")
       }
-      logInfos.map { file =>
-          replayExecutor.submit(new Runnable {
+
+      var tasks = mutable.ListBuffer[Future[_]]()
+
+      try {
+        for (file <- logInfos) {
+          tasks += replayExecutor.submit(new Runnable {
             override def run(): Unit = mergeApplicationListing(file)
           })
         }
-        .foreach { task =>
-          try {
-            // Wait for all tasks to finish. This makes sure that checkForLogs
-            // is not scheduled again while some tasks are already running in
-            // the replayExecutor.
-            task.get()
-          } catch {
-            case e: InterruptedException =>
-              throw e
-            case e: Exception =>
-              logError("Exception while merging application listings", e)
-          }
-        }
+      } catch {
+        // let the iteration over logInfos break, since an exception on
+        // replayExecutor.submit (..) indicates the ExecutorService is unable
+        // to take any more submissions at this time
 
-      lastScanTime = newLastScanTime
+        case e: Exception =>
+          logError(s"Exception while submitting event log for replay", e)
+      }
+
+      pendingReplayTasksCount.addAndGet(tasks.size)
+
+      tasks.foreach { task =>
+        try {
+          // Wait for all tasks to finish. This makes sure that checkForLogs
+          // is not scheduled again while some tasks are already running in
+          // the replayExecutor.
+          task.get()
+        } catch {
+          case e: InterruptedException =>
+            throw e
+          case e: Exception =>
+            logError("Exception while merging application listings", e)
+        } finally {
+          pendingReplayTasksCount.decrementAndGet()
+        }
+      }
+
+      lastScanTime.set(newLastScanTime)
     } catch {
       case e: Exception => logError("Exception in checking for event log updates", e)
     }
@@ -365,7 +396,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } catch {
       case e: Exception =>
         logError("Exception encountered when attempting to update last scan time", e)
-        lastScanTime
+        lastScanTime.get()
     } finally {
       if (!fs.delete(path, true)) {
         logWarning(s"Error deleting ${path}")
@@ -423,8 +454,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
 
       val logPath = fileStatus.getPath()
-
       val appCompleted = isApplicationCompleted(fileStatus)
+
+      // Use loading time as lastUpdated since some filesystems don't update modifiedTime
+      // each time file is updated. However use modifiedTime for completed jobs so lastUpdated
+      // won't change whenever HistoryServer restarts and reloads the file.
+      val lastUpdated = if (appCompleted) fileStatus.getModificationTime else clock.getTimeMillis()
 
       val appListener = replay(fileStatus, appCompleted, new ReplayListenerBus(), eventsFilter)
 
@@ -438,7 +473,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           appListener.appAttemptId,
           appListener.startTime.getOrElse(-1L),
           appListener.endTime.getOrElse(-1L),
-          fileStatus.getModificationTime(),
+          lastUpdated,
           appListener.sparkUser.getOrElse(NOT_STARTED),
           appCompleted,
           fileStatus.getLen()
@@ -523,7 +558,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val appsToRetain = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
 
       def shouldClean(attempt: FsApplicationAttemptInfo): Boolean = {
-        now - attempt.lastUpdated > maxAge && attempt.completed
+        now - attempt.lastUpdated > maxAge
       }
 
       // Scan all logs from the log directory.
@@ -640,9 +675,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       false
   }
 
-  // For testing.
   private[history] def isFsInSafeMode(dfs: DistributedFileSystem): Boolean = {
-    dfs.setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_GET)
+    /* true to check only for Active NNs status */
+    dfs.setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_GET, true)
   }
 
   /**

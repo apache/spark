@@ -82,6 +82,12 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
+    val executorBlacklisted = SparkListenerExecutorBlacklisted(executorBlacklistedTime, "exec1", 22)
+    val executorUnblacklisted =
+      SparkListenerExecutorUnblacklisted(executorUnblacklistedTime, "exec1")
+    val nodeBlacklisted = SparkListenerNodeBlacklisted(nodeBlacklistedTime, "node1", 33)
+    val nodeUnblacklisted =
+      SparkListenerNodeUnblacklisted(nodeUnblacklistedTime, "node1")
     val executorMetricsUpdate = {
       // Use custom accum ID for determinism
       val accumUpdates =
@@ -109,6 +115,10 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(applicationEnd, applicationEndJsonString)
     testEvent(executorAdded, executorAddedJsonString)
     testEvent(executorRemoved, executorRemovedJsonString)
+    testEvent(executorBlacklisted, executorBlacklistedJsonString)
+    testEvent(executorUnblacklisted, executorUnblacklistedJsonString)
+    testEvent(nodeBlacklisted, nodeBlacklistedJsonString)
+    testEvent(nodeUnblacklisted, nodeUnblacklistedJsonString)
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
   }
 
@@ -432,6 +442,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private val jobCompletionTime = 1421191296660L
   private val executorAddedTime = 1421458410000L
   private val executorRemovedTime = 1421458922000L
+  private val executorBlacklistedTime = 1421458932000L
+  private val executorUnblacklistedTime = 1421458942000L
+  private val nodeBlacklistedTime = 1421458952000L
+  private val nodeUnblacklistedTime = 1421458962000L
 
   private def testEvent(event: SparkListenerEvent, jsonString: String) {
     val actualJsonString = compact(render(JsonProtocol.sparkEventToJson(event)))
@@ -788,11 +802,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private def makeTaskInfo(a: Long, b: Int, c: Int, d: Long, speculative: Boolean) = {
     val taskInfo = new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL,
       speculative)
-    val (acc1, acc2, acc3) =
-      (makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3, internal = true))
-    taskInfo.accumulables += acc1
-    taskInfo.accumulables += acc2
-    taskInfo.accumulables += acc3
+    taskInfo.setAccumulables(
+      List(makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3, internal = true)))
     taskInfo
   }
 
@@ -1981,6 +1992,41 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      ]
       |    }
       |  ]
+      |}
+    """.stripMargin
+
+  private val executorBlacklistedJsonString =
+    s"""
+      |{
+      |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorBlacklisted",
+      |  "time" : ${executorBlacklistedTime},
+      |  "executorId" : "exec1",
+      |  "taskFailures" : 22
+      |}
+    """.stripMargin
+  private val executorUnblacklistedJsonString =
+    s"""
+      |{
+      |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorUnblacklisted",
+      |  "time" : ${executorUnblacklistedTime},
+      |  "executorId" : "exec1"
+      |}
+    """.stripMargin
+  private val nodeBlacklistedJsonString =
+    s"""
+      |{
+      |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeBlacklisted",
+      |  "time" : ${nodeBlacklistedTime},
+      |  "hostId" : "node1",
+      |  "executorFailures" : 33
+      |}
+    """.stripMargin
+  private val nodeUnblacklistedJsonString =
+    s"""
+      |{
+      |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeUnblacklisted",
+      |  "time" : ${nodeUnblacklistedTime},
+      |  "hostId" : "node1"
       |}
     """.stripMargin
 }

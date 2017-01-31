@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
  * The Hive table scan operator.  Column and partition pruning are both handled.
  *
  * @param requestedAttributes Attributes to be fetched from the Hive table.
- * @param relation The Hive table be be scanned.
+ * @param relation The Hive table be scanned.
  * @param partitionPruningPred An optional partition pruning predicate for partitioned table.
  */
 private[hive]
@@ -146,9 +146,19 @@ case class HiveTableScanExec(
         hadoopReader.makeRDDForTable(relation.hiveQlTable)
       }
     } else {
+      // The attribute name of predicate could be different than the one in schema in case of
+      // case insensitive, we should change them to match the one in schema, so we do not need to
+      // worry about case sensitivity anymore.
+      val normalizedFilters = partitionPruningPred.map { e =>
+        e transform {
+          case a: AttributeReference =>
+            a.withName(relation.output.find(_.semanticEquals(a)).get.name)
+        }
+      }
+
       Utils.withDummyCallSite(sqlContext.sparkContext) {
         hadoopReader.makeRDDForPartitionedTable(
-          prunePartitions(relation.getHiveQlPartitions(partitionPruningPred)))
+          prunePartitions(relation.getHiveQlPartitions(normalizedFilters)))
       }
     }
     val numOutputRows = longMetric("numOutputRows")

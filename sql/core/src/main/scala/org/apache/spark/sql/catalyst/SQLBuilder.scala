@@ -138,8 +138,13 @@ class SQLBuilder private (
     case g: Generate =>
       generateToSQL(g)
 
-    case Limit(limitExpr, child) =>
+    // This prevents a pattern of `((...) AS gen_subquery_0 LIMIT 1)` which does not work.
+    // For example, `SELECT * FROM (SELECT id FROM tbl TABLESAMPLE (2 ROWS))` makes this plan.
+    case Limit(limitExpr, child: SubqueryAlias) =>
       s"${toSQL(child)} LIMIT ${limitExpr.sql}"
+
+    case Limit(limitExpr, child) =>
+      s"(${toSQL(child)} LIMIT ${limitExpr.sql})"
 
     case Filter(condition, child) =>
       val whereOrHaving = child match {
@@ -213,6 +218,9 @@ class SQLBuilder private (
 
     case OneRowRelation =>
       ""
+
+    case p: View =>
+      toSQL(p.child)
 
     case _ =>
       throw new UnsupportedOperationException(s"unsupported plan $node")
@@ -361,7 +369,7 @@ class SQLBuilder private (
         case ar: AttributeReference if groupByAttrMap.contains(ar) => groupByAttrMap(ar)
         case a @ Cast(BitwiseAnd(
             ShiftRight(ar: AttributeReference, Literal(value: Any, IntegerType)),
-            Literal(1, IntegerType)), ByteType) if ar == gid =>
+            Literal(1, IntegerType)), ByteType, _) if ar == gid =>
           // for converting an expression to its original SQL format grouping(col)
           val idx = groupByExprs.length - 1 - value.asInstanceOf[Int]
           groupByExprs.lift(idx).map(Grouping).getOrElse(a)

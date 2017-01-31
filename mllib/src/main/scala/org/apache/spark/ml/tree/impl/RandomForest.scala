@@ -82,7 +82,7 @@ private[spark] object RandomForest extends Logging {
   /**
    * Train a random forest.
    *
-   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param input Training data: RDD of `LabeledPoint`
    * @return an unweighted set of trees
    */
   def run(
@@ -343,7 +343,7 @@ private[spark] object RandomForest extends Logging {
   /**
    * Given a group of nodes, this finds the best split for each node.
    *
-   * @param input Training data: RDD of [[org.apache.spark.ml.tree.impl.TreePoint]]
+   * @param input Training data: RDD of [[TreePoint]]
    * @param metadata Learning and dataset metadata
    * @param topNodesForGroup For each tree in group, tree index -> root node.
    *                         Used for matching instances with nodes.
@@ -714,7 +714,7 @@ private[spark] object RandomForest extends Logging {
       }
 
     // For each (feature, split), calculate the gain, and select the best (feature, split).
-    val (bestSplit, bestSplitStats) =
+    val splitsAndImpurityInfo =
       validFeatureSplits.map { case (featureIndexIdx, featureIndex) =>
         val numSplits = binAggregates.metadata.numSplits(featureIndex)
         if (binAggregates.metadata.isContinuous(featureIndex)) {
@@ -828,8 +828,26 @@ private[spark] object RandomForest extends Logging {
             new CategoricalSplit(featureIndex, categoriesForSplit.toArray, numCategories)
           (bestFeatureSplit, bestFeatureGainStats)
         }
-      }.maxBy(_._2.gain)
+      }
 
+    val (bestSplit, bestSplitStats) =
+      if (splitsAndImpurityInfo.isEmpty) {
+        // If no valid splits for features, then this split is invalid,
+        // return invalid information gain stats.  Take any split and continue.
+        // Splits is empty, so arbitrarily choose to split on any threshold
+        val dummyFeatureIndex = featuresForNode.map(_.head).getOrElse(0)
+        val parentImpurityCalculator = binAggregates.getParentImpurityCalculator()
+        if (binAggregates.metadata.isContinuous(dummyFeatureIndex)) {
+          (new ContinuousSplit(dummyFeatureIndex, 0),
+            ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator))
+        } else {
+          val numCategories = binAggregates.metadata.featureArity(dummyFeatureIndex)
+          (new CategoricalSplit(dummyFeatureIndex, Array(), numCategories),
+            ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator))
+        }
+      } else {
+        splitsAndImpurityInfo.maxBy(_._2.gain)
+      }
     (bestSplit, bestSplitStats)
   }
 
@@ -854,10 +872,10 @@ private[spark] object RandomForest extends Logging {
    *       and for multiclass classification with a high-arity feature,
    *       there is one bin per category.
    *
-   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param input Training data: RDD of [[LabeledPoint]]
    * @param metadata Learning and dataset metadata
    * @param seed random seed
-   * @return Splits, an Array of [[org.apache.spark.mllib.tree.model.Split]]
+   * @return Splits, an Array of [[Split]]
    *          of size (numFeatures, numSplits)
    */
   protected[tree] def findSplits(

@@ -17,11 +17,11 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, PrintStream}
+import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
 import java.security.PrivilegedExceptionAction
-import java.util
+import java.text.ParseException
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -43,13 +43,11 @@ import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
-import org.apache.spark.{SPARK_REVISION, SPARK_VERSION, SparkException, SparkUserAppException}
-import org.apache.spark.{SPARK_BRANCH, SPARK_BUILD_DATE, SPARK_BUILD_USER, SPARK_REPO_URL}
-import org.apache.spark.SparkApp
+import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
+import org.apache.spark.util._
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -66,7 +64,7 @@ private[deploy] object SparkSubmitAction extends Enumeration {
  * This program handles setting up the classpath with relevant Spark dependencies and provides
  * a layer over the different cluster managers and deploy modes that Spark supports.
  */
-object SparkSubmit {
+object SparkSubmit extends CommandLineUtils {
 
   // Cluster managers
   private val YARN = 1
@@ -90,15 +88,6 @@ object SparkSubmit {
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // scalastyle:off println
-  // Exposed for testing
-  private[spark] var exitFn: Int => Unit = (exitCode: Int) => System.exit(exitCode)
-  private[spark] var printStream: PrintStream = System.err
-  private[spark] def printWarning(str: String): Unit = printStream.println("Warning: " + str)
-  private[spark] def printErrorAndExit(str: String): Unit = {
-    printStream.println("Error: " + str)
-    printStream.println("Run with --help for usage help or --verbose for debug output")
-    exitFn(1)
-  }
   private[spark] def printVersionAndExit(): Unit = {
     printStream.println("""Welcome to
       ____              __
@@ -118,7 +107,7 @@ object SparkSubmit {
   }
   // scalastyle:on println
 
-  def main(args: Array[String]): Unit = {
+  override def main(args: Array[String]): Unit = {
     val appArgs = new SparkSubmitArguments(args)
     if (appArgs.verbose) {
       // scalastyle:off println
@@ -296,8 +285,17 @@ object SparkSubmit {
       } else {
         Nil
       }
+
+    // Create the IvySettings, either load from file or build defaults
+    val ivySettings = args.sparkProperties.get("spark.jars.ivySettings").map { ivySettingsFile =>
+      SparkSubmitUtils.loadIvySettings(ivySettingsFile, Option(args.repositories),
+        Option(args.ivyRepoPath))
+    }.getOrElse {
+      SparkSubmitUtils.buildIvySettings(Option(args.repositories), Option(args.ivyRepoPath))
+    }
+
     val resolvedMavenCoordinates = SparkSubmitUtils.resolveMavenCoordinates(args.packages,
-      Option(args.repositories), Option(args.ivyRepoPath), exclusions = exclusions)
+      ivySettings, exclusions = exclusions)
     if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
       args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
       if (args.isPython) {
@@ -896,30 +894,13 @@ private[spark] object SparkSubmitUtils {
 
   /**
    * Extracts maven coordinates from a comma-delimited string
-   * @param remoteRepos Comma-delimited string of remote repositories
-   * @param ivySettings The Ivy settings for this session
+   * @param defaultIvyUserDir The default user path for Ivy
    * @return A ChainResolver used by Ivy to search for and resolve dependencies.
    */
-  def createRepoResolvers(remoteRepos: Option[String], ivySettings: IvySettings): ChainResolver = {
+  def createRepoResolvers(defaultIvyUserDir: File): ChainResolver = {
     // We need a chain resolver if we want to check multiple repositories
     val cr = new ChainResolver
-    cr.setName("list")
-
-    val repositoryList = remoteRepos.getOrElse("")
-    // add any other remote repositories other than maven central
-    if (repositoryList.trim.nonEmpty) {
-      repositoryList.split(",").zipWithIndex.foreach { case (repo, i) =>
-        val brr: IBiblioResolver = new IBiblioResolver
-        brr.setM2compatible(true)
-        brr.setUsepoms(true)
-        brr.setRoot(repo)
-        brr.setName(s"repo-${i + 1}")
-        cr.add(brr)
-        // scalastyle:off println
-        printStream.println(s"$repo added as a remote repository with the name: ${brr.getName}")
-        // scalastyle:on println
-      }
-    }
+    cr.setName("spark-list")
 
     val localM2 = new IBiblioResolver
     localM2.setM2compatible(true)
@@ -929,7 +910,7 @@ private[spark] object SparkSubmitUtils {
     cr.add(localM2)
 
     val localIvy = new FileSystemResolver
-    val localIvyRoot = new File(ivySettings.getDefaultIvyUserDir, "local")
+    val localIvyRoot = new File(defaultIvyUserDir, "local")
     localIvy.setLocal(true)
     localIvy.setRepository(new FileRepository(localIvyRoot))
     val ivyPattern = Seq(localIvyRoot.getAbsolutePath, "[organisation]", "[module]", "[revision]",
@@ -1010,6 +991,87 @@ private[spark] object SparkSubmitUtils {
     }
   }
 
+  /**
+   * Build Ivy Settings using options with default resolvers
+   * @param remoteRepos Comma-delimited string of remote repositories other than maven central
+   * @param ivyPath The path to the local ivy repository
+   * @return An IvySettings object
+   */
+  def buildIvySettings(remoteRepos: Option[String], ivyPath: Option[String]): IvySettings = {
+    val ivySettings: IvySettings = new IvySettings
+    processIvyPathArg(ivySettings, ivyPath)
+
+    // create a pattern matcher
+    ivySettings.addMatcher(new GlobPatternMatcher)
+    // create the dependency resolvers
+    val repoResolver = createRepoResolvers(ivySettings.getDefaultIvyUserDir)
+    ivySettings.addResolver(repoResolver)
+    ivySettings.setDefaultResolver(repoResolver.getName)
+    processRemoteRepoArg(ivySettings, remoteRepos)
+    ivySettings
+  }
+
+  /**
+   * Load Ivy settings from a given filename, using supplied resolvers
+   * @param settingsFile Path to Ivy settings file
+   * @param remoteRepos Comma-delimited string of remote repositories other than maven central
+   * @param ivyPath The path to the local ivy repository
+   * @return An IvySettings object
+   */
+  def loadIvySettings(
+      settingsFile: String,
+      remoteRepos: Option[String],
+      ivyPath: Option[String]): IvySettings = {
+    val file = new File(settingsFile)
+    require(file.exists(), s"Ivy settings file $file does not exist")
+    require(file.isFile(), s"Ivy settings file $file is not a normal file")
+    val ivySettings: IvySettings = new IvySettings
+    try {
+      ivySettings.load(file)
+    } catch {
+      case e @ (_: IOException | _: ParseException) =>
+        throw new SparkException(s"Failed when loading Ivy settings from $settingsFile", e)
+    }
+    processIvyPathArg(ivySettings, ivyPath)
+    processRemoteRepoArg(ivySettings, remoteRepos)
+    ivySettings
+  }
+
+  /* Set ivy settings for location of cache, if option is supplied */
+  private def processIvyPathArg(ivySettings: IvySettings, ivyPath: Option[String]): Unit = {
+    ivyPath.filterNot(_.trim.isEmpty).foreach { alternateIvyDir =>
+      ivySettings.setDefaultIvyUserDir(new File(alternateIvyDir))
+      ivySettings.setDefaultCache(new File(alternateIvyDir, "cache"))
+    }
+  }
+
+  /* Add any optional additional remote repositories */
+  private def processRemoteRepoArg(ivySettings: IvySettings, remoteRepos: Option[String]): Unit = {
+    remoteRepos.filterNot(_.trim.isEmpty).map(_.split(",")).foreach { repositoryList =>
+      val cr = new ChainResolver
+      cr.setName("user-list")
+
+      // add current default resolver, if any
+      Option(ivySettings.getDefaultResolver).foreach(cr.add)
+
+      // add additional repositories, last resolution in chain takes precedence
+      repositoryList.zipWithIndex.foreach { case (repo, i) =>
+        val brr: IBiblioResolver = new IBiblioResolver
+        brr.setM2compatible(true)
+        brr.setUsepoms(true)
+        brr.setRoot(repo)
+        brr.setName(s"repo-${i + 1}")
+        cr.add(brr)
+        // scalastyle:off println
+        printStream.println(s"$repo added as a remote repository with the name: ${brr.getName}")
+        // scalastyle:on println
+      }
+
+      ivySettings.addResolver(cr)
+      ivySettings.setDefaultResolver(cr.getName)
+    }
+  }
+
   /** A nice function to use in tests as well. Values are dummy strings. */
   def getModuleDescriptor: DefaultModuleDescriptor = DefaultModuleDescriptor.newDefaultInstance(
     ModuleRevisionId.newInstance("org.apache.spark", "spark-submit-parent", "1.0"))
@@ -1017,16 +1079,14 @@ private[spark] object SparkSubmitUtils {
   /**
    * Resolves any dependencies that were supplied through maven coordinates
    * @param coordinates Comma-delimited string of maven coordinates
-   * @param remoteRepos Comma-delimited string of remote repositories other than maven central
-   * @param ivyPath The path to the local ivy repository
+   * @param ivySettings An IvySettings containing resolvers to use
    * @param exclusions Exclusions to apply when resolving transitive dependencies
    * @return The comma-delimited path to the jars of the given maven artifacts including their
    *         transitive dependencies
    */
   def resolveMavenCoordinates(
       coordinates: String,
-      remoteRepos: Option[String],
-      ivyPath: Option[String],
+      ivySettings: IvySettings,
       exclusions: Seq[String] = Nil,
       isTest: Boolean = false): String = {
     if (coordinates == null || coordinates.trim.isEmpty) {
@@ -1037,32 +1097,14 @@ private[spark] object SparkSubmitUtils {
         // To prevent ivy from logging to system out
         System.setOut(printStream)
         val artifacts = extractMavenCoordinates(coordinates)
-        // Default configuration name for ivy
-        val ivyConfName = "default"
-        // set ivy settings for location of cache
-        val ivySettings: IvySettings = new IvySettings
         // Directories for caching downloads through ivy and storing the jars when maven coordinates
         // are supplied to spark-submit
-        val alternateIvyCache = ivyPath.getOrElse("")
-        val packagesDirectory: File =
-          if (alternateIvyCache == null || alternateIvyCache.trim.isEmpty) {
-            new File(ivySettings.getDefaultIvyUserDir, "jars")
-          } else {
-            ivySettings.setDefaultIvyUserDir(new File(alternateIvyCache))
-            ivySettings.setDefaultCache(new File(alternateIvyCache, "cache"))
-            new File(alternateIvyCache, "jars")
-          }
+        val packagesDirectory: File = new File(ivySettings.getDefaultIvyUserDir, "jars")
         // scalastyle:off println
         printStream.println(
           s"Ivy Default Cache set to: ${ivySettings.getDefaultCache.getAbsolutePath}")
         printStream.println(s"The jars for the packages stored in: $packagesDirectory")
         // scalastyle:on println
-        // create a pattern matcher
-        ivySettings.addMatcher(new GlobPatternMatcher)
-        // create the dependency resolvers
-        val repoResolver = createRepoResolvers(remoteRepos, ivySettings)
-        ivySettings.addResolver(repoResolver)
-        ivySettings.setDefaultResolver(repoResolver.getName)
 
         val ivy = Ivy.newInstance(ivySettings)
         // Set resolve options to download transitive dependencies as well
@@ -1077,6 +1119,9 @@ private[spark] object SparkSubmitUtils {
         } else {
           resolveOptions.setDownload(true)
         }
+
+        // Default configuration name for ivy
+        val ivyConfName = "default"
 
         // A Module descriptor must be specified. Entries are dummy strings
         val md = getModuleDescriptor

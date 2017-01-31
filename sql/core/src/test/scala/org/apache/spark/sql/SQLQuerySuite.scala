@@ -982,6 +982,33 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     spark.sessionState.conf.clear()
   }
 
+  test("SPARK-19218 SET command should show a result in a sorted order") {
+    val overrideConfs = sql("SET").collect()
+    sql(s"SET test.key3=1")
+    sql(s"SET test.key2=2")
+    sql(s"SET test.key1=3")
+    val result = sql("SET").collect()
+    assert(result ===
+      (overrideConfs ++ Seq(
+        Row("test.key1", "3"),
+        Row("test.key2", "2"),
+        Row("test.key3", "1"))).sortBy(_.getString(0))
+    )
+    spark.sessionState.conf.clear()
+  }
+
+  test("SPARK-19218 `SET -v` should not fail with null value configuration") {
+    import SQLConf._
+    val confEntry = SQLConfigBuilder("spark.test").doc("doc").stringConf.createWithDefault(null)
+
+    try {
+      val result = sql("SET -v").collect()
+      assert(result === result.sortBy(_.getString(0)))
+    } finally {
+      SQLConf.unregister(confEntry)
+    }
+  }
+
   test("SET commands with illegal or inappropriate argument") {
     spark.sessionState.conf.clear()
     // Set negative mapred.reduce.tasks for automatically determining
@@ -1546,7 +1573,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("specifying database name for a temporary table is not allowed") {
     withTempPath { dir =>
-      val path = dir.getCanonicalPath
+      val path = dir.toURI.toString
       val df =
         sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
       df
@@ -2086,13 +2113,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-14986: Outer lateral view with empty generate expression") {
-    checkAnswer(
-      sql("select nil from (select 1 as x ) x lateral view outer explode(array()) n as nil"),
-      Row(null) :: Nil
-    )
-  }
-
   test("data source table created in InMemoryCatalog should be able to read/write") {
     withTable("tbl") {
       sql("CREATE TABLE tbl(i INT, j STRING) USING parquet")
@@ -2476,4 +2496,72 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-18053: ARRAY equality is broken") {
+    withTable("array_tbl") {
+      spark.range(10).select(array($"id").as("arr")).write.saveAsTable("array_tbl")
+      assert(sql("SELECT * FROM array_tbl where arr = ARRAY(1L)").count == 1)
+    }
+  }
+
+  test("SPARK-19157: should be able to change spark.sql.runSQLOnFiles at runtime") {
+    withTempPath { path =>
+      Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
+
+      val newSession = spark.newSession()
+      val originalValue = newSession.sessionState.conf.runSQLonFile
+
+      try {
+        newSession.sessionState.conf.setConf(SQLConf.RUN_SQL_ON_FILES, false)
+        intercept[AnalysisException] {
+          newSession.sql(s"SELECT i, j FROM parquet.`${path.getCanonicalPath}`")
+        }
+
+        newSession.sessionState.conf.setConf(SQLConf.RUN_SQL_ON_FILES, true)
+        checkAnswer(
+          newSession.sql(s"SELECT i, j FROM parquet.`${path.getCanonicalPath}`"),
+          Row(1, "a"))
+      } finally {
+        newSession.sessionState.conf.setConf(SQLConf.RUN_SQL_ON_FILES, originalValue)
+      }
+    }
+  }
+
+  test("should be able to resolve a persistent view") {
+    withTable("t1", "t2") {
+      withView("v1") {
+        sql("CREATE TABLE `t1` USING parquet AS SELECT * FROM VALUES(1, 1) AS t1(a, b)")
+        sql("CREATE TABLE `t2` USING parquet AS SELECT * FROM VALUES('a', 2, 1.0) AS t2(d, e, f)")
+        sql("CREATE VIEW `v1`(x, y) AS SELECT * FROM t1")
+        checkAnswer(spark.table("v1").orderBy("x"), Row(1, 1))
+
+        sql("ALTER VIEW `v1` AS SELECT * FROM t2")
+        checkAnswer(spark.table("v1").orderBy("f"), Row("a", 2, 1.0))
+      }
+    }
+  }
+
+  test("SPARK-19059: read file based table whose name starts with underscore") {
+    withTable("_tbl") {
+      sql("CREATE TABLE `_tbl`(i INT) USING parquet")
+      sql("INSERT INTO `_tbl` VALUES (1), (2), (3)")
+      checkAnswer( sql("SELECT * FROM `_tbl`"), Row(1) :: Row(2) :: Row(3) :: Nil)
+    }
+  }
+
+  test("SPARK-19334: check code injection is prevented") {
+    // The end of comment (*/) should be escaped.
+    val badQuery =
+      """|SELECT inline(array(cast(struct(1) AS
+         |  struct<`=
+         |    new Object() {
+         |      {f();}
+         |      public void f() {throw new RuntimeException("This exception is injected.");}
+         |      public int x;
+         |    }.x
+         |  `:int>)))""".stripMargin.replaceAll("\n", "")
+
+    checkAnswer(sql(badQuery), Row(1) :: Nil)
+  }
+
 }
