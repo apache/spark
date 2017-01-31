@@ -22,8 +22,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkException
 import org.apache.spark.sql.KeyedState
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution.KeyedStateImpl
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.{KeyedStateImpl, MemoryStream}
 import org.apache.spark.sql.execution.streaming.state.StateStore
 
 /** Class to check custom state types */
