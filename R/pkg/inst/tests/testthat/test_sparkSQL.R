@@ -2764,7 +2764,7 @@ test_that("Collect on DataFrame when NAs exists at the top of a timestamp column
   expect_equal(class(ldf1$col1), "numeric")
   expect_equal(class(ldf1$col2), c("POSIXct", "POSIXt"))
   expect_equal(class(ldf1$col3), c("POSIXct", "POSIXt"))
-  
+
   # Columns with NAs at the top
   sdf2 <- filter(sdf1, "col1 > 1")
   ldf2 <- collect(sdf2)
@@ -2774,7 +2774,7 @@ test_that("Collect on DataFrame when NAs exists at the top of a timestamp column
   expect_equal(class(ldf2$col1), "numeric")
   expect_equal(class(ldf2$col2), c("POSIXct", "POSIXt"))
   expect_equal(class(ldf2$col3), c("POSIXct", "POSIXt"))
-  
+
   # Columns with only NAs, the type will also be cast to PRIMITIVE_TYPE
   sdf3 <- filter(sdf1, "col1 == 0")
   ldf3 <- collect(sdf3)
