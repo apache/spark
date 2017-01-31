@@ -56,7 +56,7 @@ object SimplifyCreateArrayOps extends Rule[LogicalPlan] {
           elems(idx)
         } else {
           // out of bounds, mimic the runtime behavior and return null
-          Cast(Literal(null), ga.dataType)
+          Literal(null, ga.dataType)
         }
     }
   }

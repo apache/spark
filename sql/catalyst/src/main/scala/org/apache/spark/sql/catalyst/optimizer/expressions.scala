@@ -294,10 +294,10 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         // headOption (rather than head) added above is just an extra (and unnecessary) safeguard.
         branches.head._2
 
-      case e @ CaseWhen(branches, _) if branches.exists(_._1 == Literal(true)) =>
+      case CaseWhen(branches, _) if branches.exists(_._1 == TrueLiteral) =>
         // a branc with a TRue condition eliminates all following branches,
         // these branches can be pruned away
-        val (h, t) = branches.span(_._1 != Literal(true))
+        val (h, t) = branches.span(_._1 != TrueLiteral)
         CaseWhen( h :+ t.head, None)
     }
   }
