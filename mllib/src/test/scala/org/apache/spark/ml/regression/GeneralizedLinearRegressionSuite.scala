@@ -774,6 +774,7 @@ class GeneralizedLinearRegressionSuite
       val actual = model.intercept
       assert(actual ~== expected(idx) absTol 1E-3, "Model mismatch: intercept only GLM with " +
         s"useWeight = $useWeight.")
+      assert(model.coefficients === new DenseVector(Array.empty[Double]))
 
       val familyLink = FamilyAndLink(trainer)
       model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
