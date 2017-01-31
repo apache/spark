@@ -723,7 +723,7 @@ object SparkSubmit {
 
     val isSparkApp = mainClass.getMethods().filter(_.getName() == "sparkMain").length > 0
 
-    val childSparkConf = sysProps.filter( p => p._1.startsWith("spark.")).toMap
+    val childSparkConf = sysProps.filter{ p => p._1.startsWith("spark.")}.toMap
     val childSysProps = sys.env
     if (isSparkApp && threadEnabled) {
       sys.env.foreach { case (key, value) =>
@@ -738,7 +738,7 @@ object SparkSubmit {
     }
 
     val mainMethod = if (isSparkApp) {
-      mainClass.getMethods().filter(_.getName() == "sparkMain")(0)
+      mainClass.getMethods().filter{_.getName() == "sparkMain"}(0)
     } else {
       mainClass.getMethod("main", new Array[String](0).getClass)
     }
