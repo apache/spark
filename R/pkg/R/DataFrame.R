@@ -1138,7 +1138,6 @@ setMethod("collect",
                   if (!is.null(PRIMITIVE_TYPES[[colType]]) && colType != "binary") {
                     vec <- do.call(c, col)
                     stopifnot(class(vec) != "list")
-                    # NOTE: If vec is an vector with only NAs, the type will be cast to PRIMITIVE_TYPE
                     class(vec) <-
                       if (colType == "timestamp")
                         c("POSIXct", "POSIXt")
