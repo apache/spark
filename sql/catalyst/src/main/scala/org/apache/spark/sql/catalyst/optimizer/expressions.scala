@@ -297,7 +297,7 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case e @ CaseWhen(branches, _) if branches.exists(_._1 == Literal(true)) =>
         // a branc with a TRue condition eliminates all following branches,
         // these branches can be pruned away
-        val (h,t) = branches.span(_._1 != Literal(true))
+        val (h, t) = branches.span(_._1 != Literal(true))
         CaseWhen( h :+ t.head, None)
     }
   }

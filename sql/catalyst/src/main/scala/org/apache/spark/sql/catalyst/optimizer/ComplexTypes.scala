@@ -157,9 +157,9 @@ object SimplifyCreateMapOps extends Rule[LogicalPlan] {
     }
   }
 
-  override def apply(plan: LogicalPlan) = {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformExpressionsUp {
-      case GetMapValue(CreateMap(elems),key) => CaseKeyWhen(key, elems)
+      case GetMapValue(CreateMap(elems), key) => CaseKeyWhen(key, elems)
     }
   }
 }
