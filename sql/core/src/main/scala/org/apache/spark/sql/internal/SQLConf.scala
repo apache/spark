@@ -472,7 +472,7 @@ object SQLConf {
         "with the value you provide.")
       .intConf
       .checkValue(maxSize => maxSize >= 0, "The maximum size of the cache must not be negative")
-      .createWithDefault(1)
+      .createWithDefault(1000)
 
   val FILES_MAX_PARTITION_BYTES = SQLConfigBuilder("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
