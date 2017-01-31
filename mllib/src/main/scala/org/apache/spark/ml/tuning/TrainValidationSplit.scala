@@ -50,7 +50,7 @@ private[ml] trait TrainValidationSplitParams extends ValidatorParams {
   /** @group getParam */
   def getTrainRatio: Double = $(trainRatio)
 
-  setDefault(trainRatio -> 0.75)
+  setDefault(trainRatio -> 0.75, numParallelEval -> 1)
 }
 
 /**
@@ -87,6 +87,10 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /** @group setParam */
+  @Since("2.2.0")
+  def setNumParallelEval(value: Int): this.type = set(numParallelEval, value)
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): TrainValidationSplitModel = {
     val schema = dataset.schema
@@ -94,8 +98,8 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val est = $(estimator)
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
-    val numModels = epm.length
-    val metrics = new Array[Double](epm.length)
+    val numPar = $(numParallelEval)
+    logDebug(s"Running validation with level of parallelism: $numPar.")
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(trainRatio, seed)
@@ -106,18 +110,21 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     trainingDataset.cache()
     validationDataset.cache()
 
-    // multi-model training
     logDebug(s"Train split with multiple sets of parameters.")
-    val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model[_]]]
+    // Fit models concurrently, limited by using a sliding window over models
+    val models = epm.grouped(numPar).map { win =>
+      win.par.map(est.fit(trainingDataset, _))
+    }.toList.flatten.asInstanceOf[Seq[Model[_]]]
     trainingDataset.unpersist()
-    var i = 0
-    while (i < numModels) {
-      // TODO: duplicate evaluator to take extra params from input
-      val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)))
-      logDebug(s"Got metric $metric for model trained with ${epm(i)}.")
-      metrics(i) += metric
-      i += 1
-    }
+    // Evaluate models concurrently, limited by using a sliding window over models
+    val metrics = models.zip(epm).grouped(numPar).map { win =>
+      win.par.map { m =>
+        // TODO: duplicate evaluator to take extra params from input
+        val metric = eval.evaluate(m._1.transform(validationDataset, m._2))
+        logDebug(s"Got metric $metric for model trained with ${m._2}.")
+        metric
+      }
+    }.toList.flatten.toArray
     validationDataset.unpersist()
 
     logInfo(s"Train validation split metrics: ${metrics.toSeq}")

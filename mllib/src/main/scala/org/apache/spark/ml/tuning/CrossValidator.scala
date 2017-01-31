@@ -51,7 +51,7 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
   /** @group getParam */
   def getNumFolds: Int = $(numFolds)
 
-  setDefault(numFolds -> 3)
+  setDefault(numFolds -> 3, numParallelEval -> 1)
 }
 
 /**
@@ -91,6 +91,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /** @group setParam */
+  @Since("2.2.0")
+  def setNumParallelEval(value: Int): this.type = set(numParallelEval, value)
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): CrossValidatorModel = {
     val schema = dataset.schema
@@ -100,31 +104,44 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
     val numModels = epm.length
-    val metrics = new Array[Double](epm.length)
+    val numPar = $(numParallelEval)
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(numFolds, seed)
     logTuningParams(instr)
 
+    // Compute metrics for each model over each fold
+    logDebug(s"Running cross-validation with level of parallelism: $numPar.")
     val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
-    splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
+    val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
       // multi-model training
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
-      val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model[_]]]
+
+      // Fit models concurrently, limited by using a sliding window over models
+      val models = epm.grouped(numPar).map { win =>
+        win.par.map(est.fit(trainingDataset, _))
+      }.toList.flatten.asInstanceOf[Seq[Model[_]]]
       trainingDataset.unpersist()
-      var i = 0
-      while (i < numModels) {
-        // TODO: duplicate evaluator to take extra params from input
-        val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)))
-        logDebug(s"Got metric $metric for model trained with ${epm(i)}.")
-        metrics(i) += metric
-        i += 1
-      }
+
+      // Evaluate models concurrently, limited by using a sliding window over models
+      val foldMetrics = models.zip(epm).grouped(numPar).map { win =>
+        win.par.map { m =>
+          // TODO: duplicate evaluator to take extra params from input
+          val metric = eval.evaluate(m._1.transform(validationDataset, m._2))
+          logDebug(s"Got metric $metric for model trained with ${m._2}.")
+          metric
+        }
+      }.toList.flatten
+
       validationDataset.unpersist()
-    }
+      foldMetrics
+    }.reduce((mA, mB) => mA.zip(mB).map(m => m._1 + m._2)).toArray
+
+    // Calculate average metric for all folds
     f2jBLAS.dscal(numModels, 1.0 / $(numFolds), metrics, 1)
+
     logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
