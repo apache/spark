@@ -34,38 +34,43 @@ import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashMap
 
 
-@Since("2.1.0")
-class FeatureHasher(@Since("2.1.0") override val uid: String) extends Transformer
+@Since("2.2.0")
+class FeatureHasher(@Since("2.2.0") override val uid: String) extends Transformer
   with HasInputCols with HasOutputCol with DefaultParamsWritable {
 
-  @Since("2.1.0")
-  def this() = this(Identifiable.randomUID("featHasher"))
+  @Since("2.2.0")
+  def this() = this(Identifiable.randomUID("featureHasher"))
 
   /**
    * Number of features. Should be > 0.
    * (default = 2^18^)
    * @group param
    */
-  @Since("2.1.0")
+  @Since("2.2.0")
   val numFeatures = new IntParam(this, "numFeatures", "number of features (> 0)",
     ParamValidators.gt(0))
+
   setDefault(numFeatures -> (1 << 18))
 
   /** @group getParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def getNumFeatures: Int = $(numFeatures)
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setNumFeatures(value: Int): this.type = set(numFeatures, value)
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setInputCols(values: String*): this.type = setInputCols(values.toArray)
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
+
+  /** @group setParam */
+  @Since("2.2.0")
+  def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     val os = transformSchema(dataset.schema)
@@ -74,7 +79,7 @@ class FeatureHasher(@Since("2.1.0") override val uid: String) extends Transforme
     val featureCols = inputFields.map { f =>
       f.dataType match {
         case DoubleType | StringType => dataset(f.name)
-        case _: NumericType | BooleanType => dataset(f.name).cast(DoubleType)
+        case _: NumericType | BooleanType => dataset(f.name).cast(DoubleType).alias(f.name)
       }
     }
 
@@ -83,19 +88,22 @@ class FeatureHasher(@Since("2.1.0") override val uid: String) extends Transforme
 
     def hashFeatures = udf { row: Row =>
       val map = new OpenHashMap[Int, Double]()
-      val s = $(inputCols).zipWithIndex.map { case (field, i) =>
-        if (realFields(field)) {
-          val value = row.getDouble(i)
+      $(inputCols).foreach { case field =>
+        val (rawIdx, value) = if (realFields(field)) {
+          val value = row.getDouble(row.fieldIndex(field))
           val hash = hashFunc(field)
-          val idx = Utils.nonNegativeMod(hash, $(numFeatures))
-          (idx, value)
+          (hash, value)
         } else {
-          val value = row.getString(i)
-          val idx = Utils.nonNegativeMod(hashFunc(value), $(numFeatures))
-          (idx, 1.0)
+          val value = row.getString(row.fieldIndex(field))
+          val fieldName = s"$field=$value"
+          val hash = hashFunc(fieldName)
+          (hash, 1.0)
         }
+        val idx = Utils.nonNegativeMod(rawIdx, $(numFeatures))
+        map.changeValue(idx, value, v => v + value)
+        (idx, value)
       }
-      Vectors.sparse($(numFeatures), s.toSeq)
+      Vectors.sparse($(numFeatures), map.toSeq)
     }
 
     dataset.select(
