@@ -509,10 +509,10 @@ class StructType(DataType):
             self.fields.append(field)
             self.names.append(field.name)
         else:
-            if isinstance(field, str) and data_type is None:
+            if isinstance(field, basestring) and data_type is None:
                 raise ValueError("Must specify DataType if passing name of struct_field to create.")
 
-            if isinstance(data_type, str):
+            if isinstance(data_type, basestring):
                 data_type_f = _parse_datatype_json_value(data_type)
             else:
                 data_type_f = data_type
@@ -531,7 +531,7 @@ class StructType(DataType):
 
     def __getitem__(self, key):
         """Access fields by name or slice."""
-        if isinstance(key, str):
+        if isinstance(key, basestring):
             for field in self:
                 if field.name == key:
                     return field
