@@ -30,6 +30,8 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
+import org.apache.spark.storage.StorageLevel
+
 
 /** Params for Multilayer Perceptron. */
 private[classification] trait MultilayerPerceptronParams extends PredictorParams
@@ -263,8 +265,14 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
         s"The solver $solver is not supported by MultilayerPerceptronClassifier.")
     }
     trainer.setStackSize($(blockSize))
+
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
+
     val mlpModel = trainer.train(data)
     val model = new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights)
+
+    if (handlePersistence) data.unpersist()
 
     instr.logSuccess(model)
     model

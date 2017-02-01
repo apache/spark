@@ -36,6 +36,8 @@ import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTMod
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
+import org.apache.spark.storage.StorageLevel
+
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Gradient_boosting">Gradient-Boosted Trees (GBTs)</a>
@@ -153,9 +155,15 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval)
     instr.logNumFeatures(numFeatures)
 
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    if (handlePersistence) oldDataset.persist(StorageLevel.MEMORY_AND_DISK)
+
     val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
       $(seed))
     val m = new GBTRegressionModel(uid, baseLearners, learnerWeights, numFeatures)
+
+    if (handlePersistence) oldDataset.unpersist()
+
     instr.logSuccess(m)
     m
   }

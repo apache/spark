@@ -35,6 +35,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -342,7 +343,10 @@ class GaussianMixture @Since("2.0.0") (
 
     val instances: RDD[Vector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(features: Vector) => features
-    }.cache()
+    }
+
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     // Extract the number of features.
     val numFeatures = instances.first().size
@@ -420,6 +424,9 @@ class GaussianMixture @Since("2.0.0") (
     }
 
     val model = copyValues(new GaussianMixtureModel(uid, weights, gaussianDists)).setParent(this)
+
+    if (handlePersistence) instances.unpersist()
+
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood)
     model.setSummary(Some(summary))

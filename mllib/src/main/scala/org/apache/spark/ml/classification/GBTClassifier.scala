@@ -32,11 +32,12 @@ import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.tree.loss.LogLoss
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.storage.StorageLevel
+
 
 /**
  * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
@@ -172,9 +173,15 @@ class GBTClassifier @Since("1.4.0") (
     instr.logNumFeatures(numFeatures)
     instr.logNumClasses(numClasses)
 
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    if (handlePersistence) oldDataset.persist(StorageLevel.MEMORY_AND_DISK)
+
     val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
       $(seed))
     val m = new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
+
+    if (handlePersistence) oldDataset.unpersist()
+
     instr.logSuccess(m)
     m
   }
