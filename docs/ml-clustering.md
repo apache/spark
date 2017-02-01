@@ -170,9 +170,9 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.bisectingKmeans.html) for more details. {% include_example r/ml/bisectingKmeans.R %}
+Refer to the [R API docs](api/R/spark.bisectingKmeans.html) for more details. 
 
-{% include_example r/ml/lda.R %}
+{% include_example r/ml/bisectingKmeans.R %}
 </div>
 </div>
 
