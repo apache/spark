@@ -380,6 +380,8 @@ export("partitionBy",
 export("windowPartitionBy",
        "windowOrderBy")
 
+export("tweedie")
+
 S3method(print, jobj)
 S3method(print, structField)
 S3method(print, structType)

@@ -39,6 +39,19 @@ setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 #' @note IsotonicRegressionModel since 2.1.0
 setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 
+
+#' Family object for tweedie.
+#' Needs to be outside spark.glm because it is also used in R-compatible glm
+#' @param var.power the power index in the variance function.
+#' @param linkPower the power index in the link function.
+#' @return returns a list for internal use in spark.glm
+tweedie <- function(var.power = 0.0, link.power = 1.0 - var.power) {
+  list(family = "tweedie",
+       var.power = var.power,
+       link.power = link.power,
+       link = paste("mu^", as.character(link.power), sep = ""))
+}
+
 #' Generalized Linear Models
 #'
 #' Fits generalized linear model against a Spark DataFrame.
@@ -97,21 +110,8 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL,
                    regParam = 0.0) {
-
-            # create pseudo tweedie family to avoid dependence on statmod
-            tweedie <- function(var.power = 0.0, link.power = 1.0 - var.power) {
-              list(family = "tweedie",
-                   variance = function(mu) mu^var.power,
-                   linkfun = function(mu) mu^link.power)
-            }
-            family <- eval(substitute(family))
-
             if (is.character(family)) {
-              if (family == "tweedie") {
-                family <- tweedie
-              } else {
-                family <- get(family, mode = "function", envir = parent.frame())
-              }
+              family <- get(family, mode = "function", envir = parent.frame())
             }
             if (is.function(family)) {
               family <- family()
@@ -126,16 +126,13 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
               weightCol <- ""
             }
 
-            # recover variancePower and linkPower from the specified tweedie family
+            # set variancePower and linkPower 
+            variancePower <- 0.0
+            linkPower <- 1.0
             if (tolower(family$family) == "tweedie") {
-              variancePower <- log(family$variance(exp(1)))
-              linkPower <- log(family$linkfun(exp(1)))
-              family$link <- "identity"
-            } else {
-              # these default values are not used
-              variancePower <- 0.0
-              linkPower <- 1.0
-            }
+              variancePower <- family$var.power
+              linkPower <- family$link.power
+            } 
 
             # For known families, Gamma is upper-cased
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
