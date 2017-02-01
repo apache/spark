@@ -1376,10 +1376,10 @@ class DataFrame(object):
           could be very expensive. Note that values greater than 1 are
           accepted but give the same result as 1.
         :return:  the approximate quantiles at the given probabilities. If
-          the input `col` is a string, the output is a list of float. If the
+          the input `col` is a string, the output is a list of floats. If the
           input `col` is a list or tuple of strings, the output is also a
-          list, but each element in it is a list of float, i.e., the output
-          is a list of list of float.
+          list, but each element in it is a list of floats, i.e., the output
+          is a list of list of floats.
 
         .. versionchanged:: 2.2
            Added support for multiple columns.
