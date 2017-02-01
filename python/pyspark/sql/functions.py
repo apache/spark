@@ -1826,6 +1826,7 @@ class UserDefinedFunction(object):
     def __init__(self, func, returnType, name=None):
         self.func = func
         self.returnType = returnType
+        # Stores UserDefinedPythonFunctions jobj, once initialized
         self._judf_placeholder = None
         self._name = name or (
             func.__name__ if hasattr(func, '__name__')
