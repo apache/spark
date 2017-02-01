@@ -1845,8 +1845,8 @@ class UserDefinedFunction(object):
     def _create_judf(self):
         from pyspark.sql import SparkSession
 
-        sc = SparkContext.getOrCreate()
         spark = SparkSession.builder.getOrCreate()
+        sc = spark.sparkContext
 
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
