@@ -1854,9 +1854,9 @@ class UserDefinedFunction(object):
         return judf
 
     def __call__(self, *cols):
-        sc = SparkContext.getOrCreate()
-        jc = self._judf.apply(_to_seq(sc, cols, _to_java_column))
-        return Column(jc)
+        judf = self._judf
+        sc = SparkContext._active_spark_context
+        return Column(judf.apply(_to_seq(sc, cols, _to_java_column)))
 
 
 @since(1.3)
