@@ -1138,11 +1138,7 @@ setMethod("collect",
                   if (!is.null(PRIMITIVE_TYPES[[colType]]) && colType != "binary") {
                     vec <- do.call(c, col)
                     stopifnot(class(vec) != "list")
-                    class(vec) <-
-                      if (colType == "timestamp")
-                        c("POSIXct", "POSIXt")
-                      else
-                        PRIMITIVE_TYPES[[colType]]
+                    class(vec) <- PRIMITIVE_TYPES[[colType]]
                     df[[colIndex]] <- vec
                   } else {
                     df[[colIndex]] <- col
