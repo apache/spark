@@ -390,7 +390,7 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(model.getWindowSize(), 6)
 
     def test_copy_param_extras(self):
-        tp = TestParams()
+        tp = TestParams(seed=42)
         extra = {tp.getParam(TestParams.inputCol.name): "copy_input"}
         tp_copy = tp.copy(extra=extra)
         self.assertEqual(tp.uid, tp_copy.uid)
