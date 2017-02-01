@@ -196,13 +196,20 @@ test_that("spark.kmeans", {
   model2 <- spark.kmeans(data = df, ~ ., k = 5, maxIter = 10,
                          initMode = "random", seed = 22222, tol = 1E-5)
 
-  fitted.model1 <- fitted(model1)
-  fitted.model2 <- fitted(model2)
+  summary.model1 <- summary(model1)
+  summary.model2 <- summary(model2)
+  cluster1 <- summary.model1$cluster
+  cluster2 <- summary.model2$cluster
+  clusterSize1 <- summary.model1$clusterSize
+  clusterSize2 <- summary.model2$clusterSize
+
   # The predicted clusters are different
-  expect_equal(sort(collect(distinct(select(fitted.model1, "prediction")))$prediction),
+  expect_equal(sort(collect(distinct(select(cluster1, "prediction")))$prediction),
              c(0, 1, 2, 3))
-  expect_equal(sort(collect(distinct(select(fitted.model2, "prediction")))$prediction),
+  expect_equal(sort(collect(distinct(select(cluster2, "prediction")))$prediction),
              c(0, 1, 2))
+  expect_equal(clusterSize1, 4)
+  expect_equal(clusterSize2, 3)
 })
 
 test_that("spark.lda with libsvm", {
