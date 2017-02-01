@@ -1193,18 +1193,28 @@ class DAGScheduler(
             }
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
               // Check if there is active TaskSetManager.
-              val noActiveTaskSetManager = taskScheduler.rootPool == null ||
-                !taskScheduler.rootPool.getSortedTaskSetQueue.exists {
-                  tsm =>
-                    tsm.stageId == stageId && !tsm.isZombie
+              val activeTaskSetManagerOpt = Option(taskScheduler.rootPool).flatMap { rootPool =>
+                rootPool.getSortedTaskSetQueue.find { tsm =>
+                  tsm.stageId == stageId && !tsm.isZombie
                 }
-              if (noActiveTaskSetManager) {
-                markStageAsFinished(shuffleStage)
-              } else {
-                // There can be tasks running at this point for reasons like fetch failed.
-                // If so, should not mark the stage as finished. Thus the running tasks' results
-                // will be added to mapOutputTracker when succeed.
               }
+              activeTaskSetManagerOpt.foreach { activeTsm =>
+                // The scheduler thinks we don't need any more partitions for this stage, but there
+                // is still an active taskset for the stage.  This can happen when there are stage
+                // retries, and we get late task completions from earlier stages.  Note that all of
+                // the map output may or may not be available -- some of those map outputs may have
+                // been lost.  But the most consistent way to make that determination is to end
+                // the running taskset, and mark the stage as finished.  The DAGScheduler will
+                // automatically determine whether there are still partitions missing that need to
+                // be resubmitted.
+                // NOTE: this will get a lock on the TaskScheduler
+                // TODO yet another instance we should probably kill all running tasks when we abort
+                // the taskset
+                logInfo(s"Marking ${activeTsm.name} as zombie, as all map output may already be " +
+                  s"available for this stage (from previous attempts)")
+                taskScheduler.synchronized { activeTsm.isZombie = true }
+              }
+              markStageAsFinished(shuffleStage)
               logInfo("looking for newly runnable stages")
               logInfo("running: " + runningStages)
               logInfo("waiting: " + waitingStages)
@@ -1223,7 +1233,7 @@ class DAGScheduler(
 
               clearCacheLocs()
 
-              if (!shuffleStage.isAvailable && noActiveTaskSetManager) {
+              if (!shuffleStage.isAvailable) {
                 // Some tasks had failed; let's resubmit this shuffleStage.
                 // Do not resubmit shuffleStage if there is active tasks running.
                 // TODO: Lower-level scheduler should also deal with this

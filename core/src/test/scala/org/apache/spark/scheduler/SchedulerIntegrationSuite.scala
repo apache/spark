@@ -680,7 +680,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
               backend.taskFailed(taskDescription, fetchFailed)
             case (0, 1) =>
               // Wait until stage resubmission caused by FetchFailed is finished.
-              waitForCondition(taskScheduler.runningTaskSets.size==2, 5000,
+              waitForCondition(taskScheduler.runningTaskSets.size == 2, 5000,
                 "Wait until stage is resubmitted caused by fetch failed")
 
               // Task(stageAttempt=0, partition=1) will be bogus, because both two
