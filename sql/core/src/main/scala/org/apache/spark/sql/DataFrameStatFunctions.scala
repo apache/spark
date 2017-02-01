@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.stat._
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
@@ -75,13 +76,43 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
+   * Calculates the approximate quantiles of numerical columns of a DataFrame.
+   * @see [[DataFrameStatsFunctions.approxQuantile(col:Str* approxQuantile]] for
+   *     detailed description.
+   *
+   * Note that rows containing any null or NaN values values will be removed before
+   * calculation.
+   * @param cols the names of the numerical columns
+   * @param probabilities a list of quantile probabilities
+   *   Each number must belong to [0, 1].
+   *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+   * @param relativeError The relative target precision to achieve (>= 0).
+   *   If set to zero, the exact quantiles are computed, which could be very expensive.
+   *   Note that values greater than 1 are accepted but give the same result as 1.
+   * @return the approximate quantiles at the given probabilities of each column
+   *
+   * @note Rows containing any NaN values will be removed before calculation
+   *
+   * @since 2.2.0
+   */
+  def approxQuantile(
+      cols: Array[String],
+      probabilities: Array[Double],
+      relativeError: Double): Array[Array[Double]] = {
+    StatFunctions.multipleApproxQuantiles(df.select(cols.map(col): _*).na.drop(), cols,
+      probabilities, relativeError).map(_.toArray).toArray
+  }
+
+
+  /**
    * Python-friendly version of [[approxQuantile()]]
    */
   private[spark] def approxQuantile(
-      col: String,
+      cols: List[String],
       probabilities: List[Double],
-      relativeError: Double): java.util.List[Double] = {
-    approxQuantile(col, probabilities.toArray, relativeError).toList.asJava
+      relativeError: Double): java.util.List[java.util.List[Double]] = {
+    approxQuantile(cols.toArray, probabilities.toArray, relativeError)
+        .map(_.toList.asJava).toList.asJava
   }
 
   /**
