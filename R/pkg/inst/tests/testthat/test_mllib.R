@@ -384,9 +384,9 @@ test_that("spark.kmeans", {
   df <- createDataFrame(cols)
 
   model1 <- spark.kmeans(data = df, ~ ., k = 5, maxIter = 10,
-  initMode = "random", seed = 1, tol = 1E-5)
+                         initMode = "random", seed = 1, tol = 1E-5)
   model2 <- spark.kmeans(data = df, ~ ., k = 5, maxIter = 10,
-  initMode = "random", seed = 22222, tol = 1E-5)
+                         initMode = "random", seed = 22222, tol = 1E-5)
 
   summary.model1 <- summary(model1)
   summary.model2 <- summary(model2)
