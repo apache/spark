@@ -130,6 +130,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
             if (tolower(family$family) == "tweedie") {
               variancePower <- log(family$variance(exp(1)))
               linkPower <- log(family$linkfun(exp(1)))
+              family$link <- "identity"
             } else {
               # these default values are not used
               variancePower <- 0.0
