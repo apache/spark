@@ -274,8 +274,6 @@ class Column(object):
             raise TypeError("Unexpected type: %s" % type(startPos))
         return Column(jc)
 
-    __getslice__ = substr
-
     @ignore_unicode_prefix
     @since(1.5)
     def isin(self, *cols):
