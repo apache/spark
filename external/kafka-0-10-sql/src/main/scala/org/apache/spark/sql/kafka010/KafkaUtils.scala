@@ -22,6 +22,10 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 
 private[kafka010] object KafkaUtils {
 
+  // Used to denote unbounded offset positions
+  val LATEST = -1L
+  val EARLIEST = -2L
+
   def getSortedExecutorList(sc: SparkContext): Array[String] = {
     val bm = sc.env.blockManager
     bm.master.getPeers(bm.blockManagerId).toArray

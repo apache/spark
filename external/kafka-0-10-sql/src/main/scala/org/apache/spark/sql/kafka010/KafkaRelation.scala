@@ -111,10 +111,10 @@ private[kafka010] class KafkaRelation(
     // Obtain TopicPartition offsets with late binding support
     kafkaOffsets match {
       case EarliestOffsets => partitions.map {
-        case tp => tp -> -2L
+        case tp => tp -> KafkaUtils.EARLIEST
       }.toMap
       case LatestOffsets => partitions.map {
-        case tp => tp -> -1L
+        case tp => tp -> KafkaUtils.LATEST
       }.toMap
       case SpecificOffsets(partitionOffsets) =>
         validateTopicPartitions(partitions, partitionOffsets)

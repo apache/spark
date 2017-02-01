@@ -140,12 +140,16 @@ private[kafka010] class KafkaSourceRDD(
         if (range.fromOffset < 0 || range.untilOffset < 0) {
           // Late bind the offset range
           val fromOffset = if (range.fromOffset < 0) {
+            assert(range.fromOffset == KafkaUtils.EARLIEST,
+              s"earliest offset ${range.fromOffset} does not equal ${KafkaUtils.EARLIEST}")
             consumer.rawConsumer.seekToBeginning(ju.Arrays.asList(range.topicPartition))
             consumer.rawConsumer.position(range.topicPartition)
           } else {
             range.fromOffset
           }
           val untilOffset = if (range.untilOffset < 0) {
+            assert(range.untilOffset == KafkaUtils.LATEST,
+              s"latest offset ${range.untilOffset} does not equal ${KafkaUtils.LATEST}")
             consumer.rawConsumer.seekToEnd(ju.Arrays.asList(range.topicPartition))
             consumer.rawConsumer.position(range.topicPartition)
           } else {

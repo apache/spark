@@ -170,7 +170,7 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
         "log.retention.bytes" -> 1.asInstanceOf[AnyRef], // retain nothing
         "log.retention.ms" -> 1.asInstanceOf[AnyRef]     // no wait time
       )
-      testUtils = new KafkaTestUtils(withBrokerProps = Some(brokerProps))
+      testUtils = new KafkaTestUtils(withBrokerProps = brokerProps)
       testUtils.setup()
 
       val topic = newTopic()

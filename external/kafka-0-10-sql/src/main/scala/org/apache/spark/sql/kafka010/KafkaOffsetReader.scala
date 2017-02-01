@@ -117,7 +117,9 @@ private[kafka010] class KafkaOffsetReaderImpl(
     assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
     // Poll to get the latest assigned partitions
     consumer.poll(0)
-    consumer.assignment().asScala.toSet
+    val partitions = consumer.assignment()
+    consumer.pause(partitions)
+    partitions.asScala.toSet
   }
 
   override def fetchSpecificStartingOffsets(
