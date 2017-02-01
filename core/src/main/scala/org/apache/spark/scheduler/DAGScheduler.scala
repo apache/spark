@@ -1235,7 +1235,6 @@ class DAGScheduler(
 
               if (!shuffleStage.isAvailable) {
                 // Some tasks had failed; let's resubmit this shuffleStage.
-                // Do not resubmit shuffleStage if there is active tasks running.
                 // TODO: Lower-level scheduler should also deal with this
                 logInfo("Resubmitting " + shuffleStage + " (" + shuffleStage.name +
                   ") because some of its tasks had failed: " +
