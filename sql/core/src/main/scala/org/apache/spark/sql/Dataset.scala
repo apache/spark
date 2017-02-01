@@ -2432,7 +2432,8 @@ class Dataset[T] private[sql](
    * Returns a new Dataset that has exactly `numPartitions` partitions.
    * Similar to coalesce defined on an `RDD`, this operation results in a narrow dependency, e.g.
    * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
-   * the 100 new partitions will claim 10 of the current partitions.
+   * the 100 new partitions will claim 10 of the current partitions.  If a larger number of
+   * partitions is requested, it will stay at the current number of partitions.
    *
    * @group typedrel
    * @since 1.6.0

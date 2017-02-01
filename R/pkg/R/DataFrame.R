@@ -683,7 +683,8 @@ setMethod("storageLevel",
 #' Returns a new SparkDataFrame that has exactly \code{numPartitions} partitions.
 #' This operation results in a narrow dependency, e.g. if you go from 1000 partitions to 100
 #' partitions, there will not be a shuffle, instead each of the 100 new partitions will claim 10 of
-#' the current partitions.
+#' the current partitions. If a larger number of partitions is requested, it will stay at the
+#' current number of partitions.
 #'
 #' @param numPartitions the number of partitions to use.
 #'

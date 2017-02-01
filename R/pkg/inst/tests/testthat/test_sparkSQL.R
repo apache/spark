@@ -2491,7 +2491,7 @@ test_that("repartition by columns on DataFrame", {
     ("Please, specify the number of partitions and/or a column\\(s\\)", retError), TRUE)
 
   # repartition by column and number of partitions
-  actual <- repartition(df, 3L, col = df$"a")
+  actual <- repartition(df, 3, col = df$"a")
 
   # Checking that at least the dimensions are identical
   expect_identical(dim(df), dim(actual))
@@ -2502,6 +2502,7 @@ test_that("repartition by columns on DataFrame", {
   expect_identical(dim(df), dim(actual))
   expect_equal(getNumPartitions(actual), 13L)
 
+  expect_equal(getNumPartitions(coalesce(actual, 14)), 13L)
   expect_equal(getNumPartitions(coalesce(actual, 1L)), 1L)
 
   # a test case with a column and dapply
