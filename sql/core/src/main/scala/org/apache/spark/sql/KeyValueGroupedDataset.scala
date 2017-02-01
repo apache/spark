@@ -256,10 +256,10 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def mapGroupsWithState[STATE: Encoder, OUT: Encoder](
-      func: (K, Iterator[V], KeyedState[STATE]) => OUT): Dataset[OUT] = {
-    flatMapGroupsWithState[STATE, OUT](
-      (key: K, it: Iterator[V], s: KeyedState[STATE]) => Iterator(func(key, it, s)))
+  def mapGroupsWithState[S: Encoder, U: Encoder](
+      func: (K, Iterator[V], KeyedState[S]) => U): Dataset[U] = {
+    flatMapGroupsWithState[S, U](
+      (key: K, it: Iterator[V], s: KeyedState[S]) => Iterator(func(key, it, s)))
   }
 
   /**
@@ -300,12 +300,12 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def mapGroupsWithState[STATE, OUT](
-      func: MapGroupsWithStateFunction[K, V, STATE, OUT],
-      stateEncoder: Encoder[STATE],
-      outputEncoder: Encoder[OUT]): Dataset[OUT] = {
-    flatMapGroupsWithState[STATE, OUT](
-      (key: K, it: Iterator[V], s: KeyedState[STATE]) => Iterator(func.call(key, it.asJava, s))
+  def mapGroupsWithState[S, U](
+      func: MapGroupsWithStateFunction[K, V, S, U],
+      stateEncoder: Encoder[S],
+      outputEncoder: Encoder[U]): Dataset[U] = {
+    flatMapGroupsWithState[S, U](
+      (key: K, it: Iterator[V], s: KeyedState[S]) => Iterator(func.call(key, it.asJava, s))
     )(stateEncoder, outputEncoder)
   }
 
@@ -347,11 +347,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def flatMapGroupsWithState[STATE: Encoder, OUT: Encoder](
-      func: (K, Iterator[V], KeyedState[STATE]) => Iterator[OUT]): Dataset[OUT] = {
-    Dataset[OUT](
+  def flatMapGroupsWithState[S: Encoder, U: Encoder](
+      func: (K, Iterator[V], KeyedState[S]) => Iterator[U]): Dataset[U] = {
+    Dataset[U](
       sparkSession,
-      MapGroupsWithState[K, V, STATE, OUT](
+      MapGroupsWithState[K, V, S, U](
         func.asInstanceOf[(Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any]],
         groupingAttributes,
         dataAttributes,
@@ -396,12 +396,12 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def flatMapGroupsWithState[STATE, OUT](
-      func: FlatMapGroupsWithStateFunction[K, V, STATE, OUT],
-      stateEncoder: Encoder[STATE],
-      outputEncoder: Encoder[OUT]): Dataset[OUT] = {
-    flatMapGroupsWithState[STATE, OUT](
-      (key: K, it: Iterator[V], s: KeyedState[STATE]) => func.call(key, it.asJava, s).asScala
+  def flatMapGroupsWithState[S, U](
+      func: FlatMapGroupsWithStateFunction[K, V, S, U],
+      stateEncoder: Encoder[S],
+      outputEncoder: Encoder[U]): Dataset[U] = {
+    flatMapGroupsWithState[S, U](
+      (key: K, it: Iterator[V], s: KeyedState[S]) => func.call(key, it.asJava, s).asScala
     )(stateEncoder, outputEncoder)
   }
 
