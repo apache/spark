@@ -37,7 +37,7 @@ import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.util.Utils
 
 /**
- * Trait for [[MLWriter]] and [[MLReader]].
+ * Trait for `MLWriter` and `MLReader`.
  */
 private[util] sealed trait BaseReadWrite {
   private var optionSparkSession: Option[SparkSession] = None
@@ -112,7 +112,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   }
 
   /**
-   * [[save()]] handles overwriting and then calls this method.  Subclasses should override this
+   * `save()` handles overwriting and then calls this method.  Subclasses should override this
    * method to implement the actual saving of the instance.
    */
   @Since("1.6.0")
@@ -135,13 +135,13 @@ abstract class MLWriter extends BaseReadWrite with Logging {
 }
 
 /**
- * Trait for classes that provide [[MLWriter]].
+ * Trait for classes that provide `MLWriter`.
  */
 @Since("1.6.0")
 trait MLWritable {
 
   /**
-   * Returns an [[MLWriter]] instance for this ML instance.
+   * Returns an `MLWriter` instance for this ML instance.
    */
   @Since("1.6.0")
   def write: MLWriter
@@ -193,7 +193,7 @@ abstract class MLReader[T] extends BaseReadWrite {
 }
 
 /**
- * Trait for objects that provide [[MLReader]].
+ * Trait for objects that provide `MLReader`.
  *
  * @tparam T ML instance type
  */
@@ -201,7 +201,7 @@ abstract class MLReader[T] extends BaseReadWrite {
 trait MLReadable[T] {
 
   /**
-   * Returns an [[MLReader]] instance for this class.
+   * Returns an `MLReader` instance for this class.
    */
   @Since("1.6.0")
   def read: MLReader[T]
@@ -235,7 +235,7 @@ trait DefaultParamsReadable[T] extends MLReadable[T] {
 }
 
 /**
- * Default [[MLWriter]] implementation for transformers and estimators that contain basic
+ * Default `MLWriter` implementation for transformers and estimators that contain basic
  * (json4s-serializable) params and no data. This will not handle more complex params or types with
  * data (e.g., models with coefficients).
  *
@@ -309,7 +309,7 @@ private[ml] object DefaultParamsWriter {
 }
 
 /**
- * Default [[MLReader]] implementation for transformers and estimators that contain basic
+ * Default `MLReader` implementation for transformers and estimators that contain basic
  * (json4s-serializable) params and no data. This will not handle more complex params or types with
  * data (e.g., models with coefficients).
  *
