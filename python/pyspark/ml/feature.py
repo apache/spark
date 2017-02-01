@@ -19,7 +19,7 @@ import sys
 if sys.version > '3':
     basestring = str
 
-from pyspark import since, keyword_only
+from pyspark import since, keyword_only, SparkContext
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.linalg import _convert_to_vector
 from pyspark.ml.param.shared import *
@@ -437,6 +437,16 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
     >>> loadedModel = CountVectorizerModel.load(modelPath)
     >>> loadedModel.vocabulary == model.vocabulary
     True
+    >>> fromVocabModel = CountVectorizerModel.fromVocabulary(model.vocabulary,
+    ...     inputCol="raw", outputCol="vectors")
+    >>> fromVocabModel.transform(df).show(truncate=False)
+    +-----+---------------+-------------------------+
+    |label|raw            |vectors                  |
+    +-----+---------------+-------------------------+
+    |0    |[a, b, c]      |(3,[0,1,2],[1.0,1.0,1.0])|
+    |1    |[a, b, b, c, a]|(3,[0,1,2],[2.0,2.0,1.0])|
+    +-----+---------------+-------------------------+
+    ...
 
     .. versionadded:: 1.6.0
     """
@@ -550,12 +560,29 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
         return CountVectorizerModel(java_model)
 
 
-class CountVectorizerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class CountVectorizerModel(JavaModel, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`CountVectorizer`.
 
     .. versionadded:: 1.6.0
     """
+
+    @classmethod
+    @since("2.2.0")
+    def fromVocabulary(cls, vocab, inputCol, outputCol=None):
+        """
+        Construct the model directly from a vocabulary list, requires
+        an active SparkContext.
+        """
+        sc = SparkContext._active_spark_context
+        java_class = sc._gateway.jvm.java.lang.String
+        jvocab = CountVectorizerModel._new_java_array(vocab, java_class)
+        model = CountVectorizerModel._create_from_java_class(
+            "org.apache.spark.ml.feature.CountVectorizerModel", jvocab)
+        model.setInputCol(inputCol)
+        if outputCol is not None:
+            model.setOutputCol(outputCol)
+        return model
 
     @property
     @since("1.6.0")
