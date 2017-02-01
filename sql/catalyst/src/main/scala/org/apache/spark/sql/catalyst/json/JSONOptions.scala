@@ -31,10 +31,11 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs
  * Most of these map directly to Jackson's internal options, specified in [[JsonParser.Feature]].
  */
 private[sql] class JSONOptions(
-    @transient private val parameters: CaseInsensitiveMap)
+    @transient private val parameters: CaseInsensitiveMap, defaultTimeZoneId: String)
   extends Logging with Serializable  {
 
-  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
+  def this(parameters: Map[String, String], defaultTimeZoneId: String) =
+    this(new CaseInsensitiveMap(parameters), defaultTimeZoneId)
 
   val samplingRatio =
     parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
@@ -58,7 +59,7 @@ private[sql] class JSONOptions(
   private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
   val columnNameOfCorruptRecord = parameters.get("columnNameOfCorruptRecord")
 
-  val timeZone: TimeZone = TimeZone.getTimeZone(parameters("timeZone"))
+  val timeZone: TimeZone = TimeZone.getTimeZone(parameters.getOrElse("timeZone", defaultTimeZoneId))
 
   // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
   val dateFormat: FastDateFormat =

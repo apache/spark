@@ -26,10 +26,12 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
 
-private[csv] class CSVOptions(@transient private val parameters: CaseInsensitiveMap)
+private[csv] class CSVOptions(
+    @transient private val parameters: CaseInsensitiveMap, defaultTimeZoneId: String)
   extends Logging with Serializable {
 
-  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
+  def this(parameters: Map[String, String], defaultTimeZoneId: String) =
+    this(new CaseInsensitiveMap(parameters), defaultTimeZoneId)
 
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)
@@ -106,7 +108,7 @@ private[csv] class CSVOptions(@transient private val parameters: CaseInsensitive
     name.map(CompressionCodecs.getCodecClassName)
   }
 
-  val timeZone: TimeZone = TimeZone.getTimeZone(parameters("timeZone"))
+  val timeZone: TimeZone = TimeZone.getTimeZone(parameters.getOrElse("timeZone", defaultTimeZoneId))
 
   // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
   val dateFormat: FastDateFormat =

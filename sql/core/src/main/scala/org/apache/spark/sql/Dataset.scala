@@ -2670,11 +2670,12 @@ class Dataset[T] private[sql](
    */
   def toJSON: Dataset[String] = {
     val rowSchema = this.schema
-    val options = Map("timeZone" -> sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val sessionLocalTimeZone = sparkSession.sessionState.conf.sessionLocalTimeZone
     val rdd: RDD[String] = queryExecution.toRdd.mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
-      val gen = new JacksonGenerator(rowSchema, writer, new JSONOptions(options))
+      val gen = new JacksonGenerator(rowSchema, writer,
+        new JSONOptions(Map.empty[String, String], sessionLocalTimeZone))
 
       new Iterator[String] {
         override def hasNext: Boolean = iter.hasNext

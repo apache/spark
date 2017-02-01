@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
 private[csv] class UnivocityGenerator(
     schema: StructType,
     writer: Writer,
-    options: CSVOptions = new CSVOptions(Map.empty[String, String])) {
+    options: CSVOptions) {
   private val writerSettings = options.asWriterSettings
   writerSettings.setHeaders(schema.fieldNames: _*)
   private val gen = new CsvWriter(writer, writerSettings)

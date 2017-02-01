@@ -332,17 +332,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
-    val optionsWithTimeZone = {
-      val options = extraOptions.toMap
-      val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-      if (caseInsensitiveOptions.contains("timeZone")) {
-        caseInsensitiveOptions
-      } else {
-        new CaseInsensitiveMap(
-          options + ("timeZone" -> sparkSession.sessionState.conf.sessionLocalTimeZone))
-      }
-    }
-    val parsedOptions: JSONOptions = new JSONOptions(optionsWithTimeZone)
+    val parsedOptions: JSONOptions =
+      new JSONOptions(extraOptions.toMap, sparkSession.sessionState.conf.sessionLocalTimeZone)
     val columnNameOfCorruptRecord =
       parsedOptions.columnNameOfCorruptRecord
         .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)

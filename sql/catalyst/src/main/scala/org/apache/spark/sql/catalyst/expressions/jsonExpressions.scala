@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, ParseModes}
+import org.apache.spark.sql.catalyst.util.ParseModes
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -494,22 +494,11 @@ case class JsonToStruct(
     this(schema, options, child, None)
 
   @transient
-  lazy val optionsWithTimeZone = {
-    val caseInsensitiveOptions: CaseInsensitiveMap =
-      new CaseInsensitiveMap(options + ("mode" -> ParseModes.FAIL_FAST_MODE))
-    if (caseInsensitiveOptions.contains("timeZone")) {
-      caseInsensitiveOptions
-    } else {
-      new CaseInsensitiveMap(caseInsensitiveOptions + ("timeZone" -> timeZoneId.get))
-    }
-  }
-
-  @transient
   lazy val parser =
     new JacksonParser(
       schema,
       "invalid", // Not used since we force fail fast.  Invalid rows will be set to `null`.
-      new JSONOptions(optionsWithTimeZone))
+      new JSONOptions(options ++ Map("mode" -> ParseModes.FAIL_FAST_MODE), timeZoneId.get))
 
   override def dataType: DataType = schema
 
@@ -538,16 +527,6 @@ case class StructToJson(
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
 
   @transient
-  lazy val optionsWithTimeZone = {
-    val caseInsensitiveOptions: CaseInsensitiveMap = new CaseInsensitiveMap(options)
-    if (caseInsensitiveOptions.contains("timeZone")) {
-      caseInsensitiveOptions
-    } else {
-      new CaseInsensitiveMap(caseInsensitiveOptions + ("timeZone" -> timeZoneId.get))
-    }
-  }
-
-  @transient
   lazy val writer = new CharArrayWriter()
 
   @transient
@@ -555,7 +534,7 @@ case class StructToJson(
     new JacksonGenerator(
       child.dataType.asInstanceOf[StructType],
       writer,
-      new JSONOptions(optionsWithTimeZone))
+      new JSONOptions(options, timeZoneId.get))
 
   override def dataType: DataType = StringType
 
