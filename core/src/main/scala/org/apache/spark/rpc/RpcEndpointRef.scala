@@ -19,7 +19,6 @@ package org.apache.spark.rpc
 
 import scala.concurrent.Future
 import scala.reflect.ClassTag
-import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
@@ -106,7 +105,7 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
    * @tparam T type of the reply message
    * @return the reply message from the corresponding [[RpcEndpoint]]
    */
-  @deprecated("use 'askSync' instead.", "2.1.0")
+  @deprecated("use 'askSync' instead.", "2.2.0")
   def askWithRetry[T: ClassTag](message: Any): T = askWithRetry(message, defaultAskTimeout)
 
   /**
@@ -123,7 +122,7 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
    * @tparam T type of the reply message
    * @return the reply message from the corresponding [[RpcEndpoint]]
    */
-  @deprecated("use 'askSync' instead.", "2.1.0")
+  @deprecated("use 'askSync' instead.", "2.2.0")
   def askWithRetry[T: ClassTag](message: Any, timeout: RpcTimeout): T = {
     // TODO: Consider removing multiple attempts
     var attempts = 0
