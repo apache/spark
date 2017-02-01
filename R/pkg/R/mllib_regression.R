@@ -126,13 +126,13 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
               weightCol <- ""
             }
 
-            # set variancePower and linkPower 
+            # set variancePower and linkPower
             variancePower <- 0.0
             linkPower <- 1.0
             if (tolower(family$family) == "tweedie") {
               variancePower <- family$var.power
               linkPower <- family$link.power
-            } 
+            }
 
             # For known families, Gamma is upper-cased
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
