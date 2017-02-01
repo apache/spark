@@ -34,7 +34,8 @@ case class BroadcastNestedLoopJoinExec(
     right: SparkPlan,
     buildSide: BuildSide,
     joinType: JoinType,
-    condition: Option[Expression]) extends BinaryExecNode {
+    condition: Option[Expression],
+    withinBroadcastThreshold: Boolean = true) extends BinaryExecNode {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -337,6 +338,18 @@ case class BroadcastNestedLoopJoinExec(
       matchedStreamRows,
       sparkContext.makeRDD(notMatchedBroadcastRows)
     )
+  }
+
+  protected override def doPrepare(): Unit = {
+    if (!withinBroadcastThreshold && !sqlContext.conf.crossJoinEnabled) {
+      throw new AnalysisException(
+        s"""
+           |Both sides of this join are outside the broadcasting threshold and
+           |computing it could be prohibitively expensive. To explicitly enable it,
+           |Please set ${SQLConf.CROSS_JOINS_ENABLED.key} = true.
+         """.stripMargin)
+    }
+    super.doPrepare()
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

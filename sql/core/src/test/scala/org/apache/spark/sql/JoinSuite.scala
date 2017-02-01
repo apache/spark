@@ -215,18 +215,36 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row(1, null, 2, 2) ::
           Row(2, 2, 1, null) ::
           Row(2, 2, 2, 2) :: Nil)
+
+      checkAnswer(
+        testData3.as("x").join(testData3.as("y"), $"x.a" > $"y.a"),
+        Row(2, 2, 1, null) :: Nil)
     }
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
-      val e = intercept[Exception] {
-        checkAnswer(
-          testData3.join(testData3),
-          Row(1, null, 1, null) ::
-            Row(1, null, 2, 2) ::
-            Row(2, 2, 1, null) ::
-            Row(2, 2, 2, 2) :: Nil)
+      val msg = "Detected cartesian product for Inner join between logical plans"
+      var e = intercept[AnalysisException](testData3.join(testData3).collect())
+      assert(e.getMessage.contains(msg))
+      e = intercept[AnalysisException] {
+        testData3.as("x").join(testData3.as("y"), $"x.a" > $"y.a").collect()
       }
-      assert(e.getMessage.contains("Detected cartesian product for INNER join " +
-        "between logical plans"))
+      assert(e.getMessage.contains(msg))
+    }
+  }
+
+  test("outer join outside the broadcasting threshold") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      checkAnswer(
+        testData3.as("x").join(testData3.as("y"), $"x.a" > $"y.a", "outer"),
+        Row(1, null, null, null) ::
+          Row(2, 2, 1, null) ::
+          Row(null, null, 2, 2) :: Nil)
+    }
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      val e = intercept[AnalysisException] {
+        testData3.as("x").join(testData3.as("y"), $"x.a" > $"y.a", "outer").collect()
+      }
+      assert(e.getMessage.contains(
+        "Both sides of this join are outside the broadcasting threshold"))
     }
   }
 
@@ -584,24 +602,37 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val cartesianQueries = Seq(
       /** The following should error out since there is no explicit cross join */
       "SELECT * FROM testData inner join testData2",
-      "SELECT * FROM testData left outer join testData2",
-      "SELECT * FROM testData right outer join testData2",
-      "SELECT * FROM testData full outer join testData2",
+
       "SELECT * FROM testData, testData2",
       "SELECT * FROM testData, testData2 where testData.key = 1 and testData2.a = 22",
+      "SELECT * FROM testData, testData2 where testData.key > testData2.a",
+      "SELECT * FROM testData INNER JOIN testData2 ON testData.key + testData2.a = testData2.b",
       /** The following should fail because after reordering there are cartesian products */
       "select * from (A join B on (A.key = B.key)) join D on (A.key=D.a) join C",
       "select * from ((A join B on (A.key = B.key)) join C) join D on (A.key = D.a)",
       /** Cartesian product involving C, which is not involved in a CROSS join */
-      "select * from ((A join B on (A.key = B.key)) cross join D) join C on (A.key = D.a)");
+      "select * from ((A join B on (A.key = B.key)) cross join D) join C on (A.key = D.a)")
 
-     def checkCartesianDetection(query: String): Unit = {
-      val e = intercept[Exception] {
-        checkAnswer(sql(query), Nil);
-      }
-      assert(e.getMessage.contains("Detected cartesian product"))
+    def checkCartesianDetection(query: String): Unit = {
+      val e = intercept[AnalysisException](sql(query).collect()).getMessage
+      assert(e.contains("Detected cartesian product"))
     }
 
     cartesianQueries.foreach(checkCartesianDetection)
+
+    val broadcastNestedLoopJoinOutOfBroadcastThresholdQueries = Seq(
+      /** The following should error out since the flag spark.sql.crossJoin.enabled is not on */
+      "SELECT * FROM testData left outer join testData2",
+      "SELECT * FROM testData right outer join testData2",
+      "SELECT * FROM testData full outer join testData2",
+      "SELECT * FROM testData full outer join testData2 on testData.key > testData2.a")
+
+    def checkBroadcastNestedLoopJoinDetection(query: String): Unit = {
+      val e = intercept[AnalysisException](sql(query).collect()).getMessage
+      assert(e.contains("Both sides of this join are outside the broadcasting threshold"))
+    }
+
+    broadcastNestedLoopJoinOutOfBroadcastThresholdQueries
+      .foreach(checkBroadcastNestedLoopJoinDetection)
   }
 }

@@ -17,20 +17,13 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.annotation.tailrec
-import scala.collection.immutable.HashSet
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.api.java.function.FilterFunction
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
-import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -111,8 +104,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       RewriteCorrelatedScalarSubquery,
       EliminateSerialization,
       RemoveAliasOnlyProject) ::
-    Batch("Check Cartesian Products", Once,
-      CheckCartesianProducts(conf)) ::
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates(conf)) ::
     Batch("Typed Filter Optimization", fixedPoint,
@@ -978,46 +969,6 @@ object CombineLimits extends Rule[LogicalPlan] {
     case Limit(le, Limit(ne, grandChild)) =>
       Limit(Least(Seq(ne, le)), grandChild)
   }
-}
-
-/**
- * Check if there any cartesian products between joins of any type in the optimized plan tree.
- * Throw an error if a cartesian product is found without an explicit cross join specified.
- * This rule is effectively disabled if the CROSS_JOINS_ENABLED flag is true.
- *
- * This rule must be run AFTER the ReorderJoin rule since the join conditions for each join must be
- * collected before checking if it is a cartesian product. If you have
- * SELECT * from R, S where R.r = S.s,
- * the join between R and S is not a cartesian product and therefore should be allowed.
- * The predicate R.r = S.s is not recognized as a join condition until the ReorderJoin rule.
- */
-case class CheckCartesianProducts(conf: CatalystConf)
-    extends Rule[LogicalPlan] with PredicateHelper {
-  /**
-   * Check if a join is a cartesian product. Returns true if
-   * there are no join conditions involving references from both left and right.
-   */
-  def isCartesianProduct(join: Join): Boolean = {
-    val conditions = join.condition.map(splitConjunctivePredicates).getOrElse(Nil)
-    !conditions.map(_.references).exists(refs => refs.exists(join.left.outputSet.contains)
-        && refs.exists(join.right.outputSet.contains))
-  }
-
-  def apply(plan: LogicalPlan): LogicalPlan =
-    if (conf.crossJoinEnabled) {
-      plan
-    } else plan transform {
-      case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, condition)
-        if isCartesianProduct(j) =>
-          throw new AnalysisException(
-            s"""Detected cartesian product for ${j.joinType.sql} join between logical plans
-               |${left.treeString(false).trim}
-               |and
-               |${right.treeString(false).trim}
-               |Join condition is missing or trivial.
-               |Use the CROSS JOIN syntax to allow cartesian products between these relations."""
-            .stripMargin)
-    }
 }
 
 /**

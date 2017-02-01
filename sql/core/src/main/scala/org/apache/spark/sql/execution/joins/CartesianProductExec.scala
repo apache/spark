@@ -23,9 +23,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
+import org.apache.spark.sql.catalyst.plans.{Cross, JoinType}
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
@@ -85,11 +85,27 @@ class UnsafeCartesianRDD(left : RDD[UnsafeRow], right : RDD[UnsafeRow], numField
 case class CartesianProductExec(
     left: SparkPlan,
     right: SparkPlan,
+    joinType: JoinType,
     condition: Option[Expression]) extends BinaryExecNode {
   override def output: Seq[Attribute] = left.output ++ right.output
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
+  protected override def doPrepare(): Unit = {
+    if (!sqlContext.conf.crossJoinEnabled && joinType != Cross) {
+      throw new AnalysisException(
+        s"""
+          |Detected cartesian product for Inner join between logical plans
+          |${left.treeString(false).trim}
+          |and
+          |${right.treeString(false).trim}
+          |Join condition is missing or trivial.
+          |Use the CROSS JOIN syntax to allow cartesian products between these relations.
+         """.stripMargin)
+    }
+    super.doPrepare()
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
