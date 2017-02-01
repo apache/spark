@@ -19,8 +19,8 @@ package org.apache.spark.sql.hive
 
 import java.sql.Timestamp
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark._
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompatibilityTest, ParquetFileFormat}
 import org.apache.spark.sql.hive.test.{TestHiveContext, TestHiveSingleton}
@@ -207,10 +207,11 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
     }
   }
 
-  Seq(false, true).foreach { setTableTzByDefault =>
-    // we're cheating here, and changing the conf at runtime
-    test(s"SPARK-12297: Parquet Timestamp & Hive timezones write path, " +
-        s"default = $setTableTzByDefault") {
+  test(s"SPARK-12297: Parquet Timestamp & Hive timezones write path") {
+    Seq(false, true).foreach { setTableTzByDefault =>
+      // we're cheating a bit here, in general SparkConf isn't meant to be set at runtime,
+      // but its OK in this case, and lets us run this test, because these tests don't like
+      // creating multiple HiveContexts in the same jvm
       sparkContext.conf.set(
         SQLConf.PARQUET_TABLE_INCLUDE_TIMEZONE.key, setTableTzByDefault.toString)
       val key = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
@@ -224,17 +225,13 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
             tz => raw"""TBLPROPERTIES ($key="$tz")"""
           }.getOrElse("")
           val defaultTz = if (setTableTzByDefault) Some("UTC") else None
-          val stmt =
-            raw"""CREATE TABLE $baseTable (
-                  |  x int
-                  | )
-                  | STORED AS PARQUET
-                  | $tblProperties
-            """.stripMargin
-          println(stmt)
-          spark.sql(stmt)
+          spark.sql(raw"""CREATE TABLE $baseTable (
+                          |  x int
+                          | )
+                          | STORED AS PARQUET
+                          | $tblProperties
+            """.stripMargin)
           val expectedTableTz = explicitTz.orElse(defaultTz)
-          println(s"checking table tz for $baseTable, expecting $expectedTableTz")
           checkHasTz(baseTable, expectedTableTz)
           spark.sql(s"""CREATE TABLE like_$baseTable LIKE $baseTable""")
           checkHasTz(s"like_$baseTable", expectedTableTz)
@@ -251,8 +248,21 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
       checkCreateTableDefaultTz("no_tz", None)
 
       checkCreateTableDefaultTz("UTC", Some("UTC"))
-      checkCreateTableDefaultTz("LA", Some("America/Los Angeles"))
+      checkCreateTableDefaultTz("LA", Some("America/Los_Angeles"))
       // TODO create table w/ bad TZ
+
+      val badTzException = intercept[AnalysisException] {
+        spark.sql(
+          raw"""CREATE TABLE bad_tz_table (
+                |  x int
+                | )
+                | STORED AS PARQUET
+                | TBLPROPERTIES ($key="Blart Versenwald III")
+            """.stripMargin)
+      }
+      assert(badTzException.getMessage.contains("Blart Versenwald III"))
+
+      // TODO check on an ALTER TABLE
 
       // TODO insert data
       pending

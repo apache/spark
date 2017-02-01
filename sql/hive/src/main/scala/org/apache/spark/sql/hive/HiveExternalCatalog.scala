@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -202,10 +202,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     // add the extra tz property only if configured to do so, and the table does not include it
     // explicitly
-    val tableHasTz =
-      tableDefinition.properties.contains(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
+    val tableTz = tableDefinition.properties.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
+    tableTz.foreach { tz =>
+      if (!DateTimeUtils.isValidTimezone(tz)) {
+        throw new AnalysisException(s"Cannot set" +
+          s" ${ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY} to invalid timezone $tz")
+      }
+    }
     val extraTzProp =
-      if (conf.get(SQLConf.PARQUET_TABLE_INCLUDE_TIMEZONE) && !tableHasTz) {
+      if (conf.get(SQLConf.PARQUET_TABLE_INCLUDE_TIMEZONE) && tableTz.isEmpty) {
         Map(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY -> "UTC")
       } else {
         Map()
