@@ -16,7 +16,6 @@
 #
 
 import sys
-import warnings
 import random
 
 if sys.version >= '3':
@@ -1348,7 +1347,7 @@ class DataFrame(object):
     @since(2.0)
     def approxQuantile(self, col, probabilities, relativeError):
         """
-        Calculates the approximate quantiles of a numerical column of a
+        Calculates the approximate quantiles of numerical columns of a
         DataFrame.
 
         The result of this algorithm has the following deterministic bound:
@@ -1365,7 +1364,10 @@ class DataFrame(object):
         Space-efficient Online Computation of Quantile Summaries]]
         by Greenwald and Khanna.
 
-        :param col: the name of the numerical column
+        Note that rows containing any null values will be removed before calculation.
+
+        :param col: str, list.
+          Can be a single column name, or a list of names for multiple columns.
         :param probabilities: a list of quantile probabilities
           Each number must belong to [0, 1].
           For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
@@ -1373,10 +1375,30 @@ class DataFrame(object):
           (>= 0). If set to zero, the exact quantiles are computed, which
           could be very expensive. Note that values greater than 1 are
           accepted but give the same result as 1.
-        :return:  the approximate quantiles at the given probabilities
+        :return:  the approximate quantiles at the given probabilities. If
+          the input `col` is a string, the output is a list of floats. If the
+          input `col` is a list or tuple of strings, the output is also a
+          list, but each element in it is a list of floats, i.e., the output
+          is a list of list of floats.
+
+        .. versionchanged:: 2.2
+           Added support for multiple columns.
         """
-        if not isinstance(col, str):
-            raise ValueError("col should be a string.")
+
+        if not isinstance(col, (str, list, tuple)):
+            raise ValueError("col should be a string, list or tuple, but got %r" % type(col))
+
+        isStr = isinstance(col, str)
+
+        if isinstance(col, tuple):
+            col = list(col)
+        elif isinstance(col, str):
+            col = [col]
+
+        for c in col:
+            if not isinstance(c, str):
+                raise ValueError("columns should be strings, but got %r" % type(c))
+        col = _to_list(self._sc, col)
 
         if not isinstance(probabilities, (list, tuple)):
             raise ValueError("probabilities should be a list or tuple")
@@ -1392,7 +1414,8 @@ class DataFrame(object):
         relativeError = float(relativeError)
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
-        return list(jaq)
+        jaq_list = [list(j) for j in jaq]
+        return jaq_list[0] if isStr else jaq_list
 
     @since(1.4)
     def corr(self, col1, col2, method=None):
