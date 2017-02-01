@@ -31,6 +31,7 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
     val batches = Batch(
       "RemoveAliasOnlyProject",
       FixedPoint(50),
+      PushProjectionThroughUnion,
       RemoveRedundantAliases,
       RemoveRedundantProject) :: Nil
   }
@@ -79,12 +80,35 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
     comparePlans(optimized, query)
   }
 
-  test("do not dedup in cross join") {
+  test("retain deduplicating alias in self-join") {
     val relation = LocalRelation('a.int)
     val fragment = relation.select('a as 'a)
     val query = relation.join(relation.select('a as 'a)).analyze
     val optimized = Optimize.execute(
       fragment.select('a as 'a).join(fragment.select('a as 'a)).analyze)
+    comparePlans(optimized, query)
+  }
+
+  test("alias removal should not break after push project through union") {
+    val r1 = LocalRelation('a.int)
+    val r2 = LocalRelation('b.int)
+    val optimized = Optimize.execute(
+      r1.select('a as 'a).union(r2.select('b as 'b)).select('a).analyze)
+    val query = r1.union(r2)
+    comparePlans(optimized, query)
+  }
+
+  test("remove redundant alias from aggregate") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val optimized = Optimize.execute(relation.groupBy('a as 'a)('a as 'a, sum('b)).analyze)
+    val query = relation.groupBy('a)('a, sum('b)).analyze
+    comparePlans(optimized, query)
+  }
+
+  test("remove redundant alias from window") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val optimized = Optimize.execute(relation.window(Seq('b as 'b), Seq('a as 'a), Seq()).analyze)
+    val query = relation.window(Seq('b), Seq('a), Seq()).analyze
     comparePlans(optimized, query)
   }
 }
