@@ -20,7 +20,7 @@ package org.apache.spark.ml.source.libsvm
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 /**
- * Options for the Text data source.
+ * Options for the LibSVM data source.
  */
 private[libsvm] class LibSVMOptions(@transient private val parameters: CaseInsensitiveMap)
   extends Serializable {
