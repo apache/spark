@@ -1271,16 +1271,18 @@ class DataFrame(object):
         """Returns a new :class:`DataFrame` replacing a value with another value.
         :func:`DataFrame.replace` and :func:`DataFrameNaFunctions.replace` are
         aliases of each other.
+        Values `to_replace` and `value` should be homogeneous. Mixed string and numeric
+        replacements are not supported.
 
-        :param to_replace: int, long, float, string, or list.
+        :param to_replace: int, long, float, string, list or dict.
             Value to be replaced.
             If the value is a dict, then `value` is ignored and `to_replace` must be a
-            mapping from column name (string) to replacement value. The value to be
-            replaced must be an int, long, float, or string.
+            mapping between a value and a replacement.
         :param value: int, long, float, string, or list.
-            Value to use to replace holes.
             The replacement value must be an int, long, float, or string. If `value` is a
-            list or tuple, `value` should be of the same length with `to_replace`.
+            list, `value` should be of the same length and type as `to_replace`.
+            If `value` is a scalar and `to_replace` is a sequence, then `value` is replicated
+            len(`to_replace`) times.
         :param subset: optional list of column names to consider.
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
