@@ -389,6 +389,19 @@ class ParamTests(PySparkTestCase):
         # Check windowSize is set properly
         self.assertEqual(model.getWindowSize(), 6)
 
+    def test_copy_param_extras(self):
+        tp = TestParams()
+        extra = {tp.getParam(TestParams.inputCol.name): "copy_input"}
+        tp_copy = tp.copy(extra=extra)
+        self.assertEqual(tp.uid, tp_copy.uid)
+        self.assertEqual(tp.params, tp_copy.params)
+        for k, v in extra.iteritems():
+            self.assertTrue(tp_copy.isDefined(k))
+            self.assertEqual(tp_copy.getOrDefault(k), v)
+        self.assertEqual(tp._paramMap,
+                         {k: tp_copy._paramMap[k] for k in tp_copy._paramMap if k not in extra})
+        self.assertEqual(tp._defaultParamMap, tp_copy._defaultParamMap)
+
 
 class EvaluatorTests(SparkSessionTestCase):
 
