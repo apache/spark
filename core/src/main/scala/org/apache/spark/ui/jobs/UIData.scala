@@ -185,6 +185,7 @@ private[spark] object UIData {
       })
       newTaskInfo.finishTime = taskInfo.finishTime
       newTaskInfo.failed = taskInfo.failed
+      newTaskInfo.killed = taskInfo.killed
       newTaskInfo
     }
   }
