@@ -25,7 +25,7 @@ library(SparkR)
 sparkR.session(appName = "SparkR-ML-bisectingKmeans-example")
 
 # $example on$
-irisDF <- suppressWarnings(createDataFrame(iris))
+irisDF <- createDataFrame(iris)
 
 # Fit bisecting k-means model with four centers
 model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
@@ -34,7 +34,7 @@ model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
 fitted.model <- fitted(model, "centers")
 
 # Model summary
-showDF(fitted.model)
+summary(fitted.model)
 
 # fitted values on training data
 fitted <- predict(model, df)
