@@ -221,37 +221,17 @@ class KeyValueGroupedDataset[K, V] private[sql](
   /**
    * ::Experimental::
    * (Scala-specific)
-   * Applies the given function to each group of data, while maintaining some user-defined per-group
-   * state.
+   * Applies the given function to each group of data, while maintaining a user-defined per-group
+   * state. The result Dataset will represent the objects returned by the function.
+   * For a static batch Dataset, the function will be invoked once per group. For a streaming
+   * Dataset, the function will be invoked for each group repeatedly in every trigger, and
+   * updates to each group's state will be saved across invocations.
+   * See [[KeyedState]] for more details.
    *
-   * For each unique group, the given function will be invoked once for each group
-   * with the following arguments:
-   *  - The key of the group.
-   *  - An iterator containing all the values for this key.
-   *  - A user-defined state object set by previous invocations of the given function.
-   * Note that, for batch queries, there is only ever one invocation and thus the state object
-   * will always be empty. And the function can return an object of arbitrary type, and
-   * optionally update or remove the corresponding state. The returned object will form a new
-   * [[Dataset]].
+   * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
    *
-   * This operation can be applied on both batch and streaming Datasets. With a streaming dataset,
-   * the given function will be invoked once for each group in every trigger/batch that has
-   * data in the group. The updates to the state will be stored and passed to the function in the
-   * next invocation. However, for batch, `mapGroupsWithState` behaves exactly as `mapGroups` and
-   * the function is called only once per key without any prior state.
-   *
-   * Other points to note
-   *  - There is no guaranteed ordering of values in the iterator in the function.
-   *  - This function does not support partial aggregation, and as a result requires shuffling all
-   * the data in the [[Dataset]].
-   *  - Operations on [[KeyedState]] are not threadsafe. See corresponding docs for more details.
-   *
-   * Internally, the implementation will spill to disk if any given group is too large to fit into
-   * memory.  However, users must take care to avoid materializing the whole iterator for a group
-   * (for example, by calling `toList`) unless they are sure that this is possible given the memory
-   * constraints of their cluster.
-   *
-   * @see [[KeyedState]] for more details of how to update/remove state in the function.
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.1.1
    */
   @Experimental
@@ -265,37 +245,20 @@ class KeyValueGroupedDataset[K, V] private[sql](
   /**
    * ::Experimental::
    * (Java-specific)
-   * Applies the given function to each group of data, while maintaining some user-defined per-group
-   * state.
+   * Applies the given function to each group of data, while maintaining a user-defined per-group
+   * state. The result Dataset will represent the objects returned by the function.
+   * For a static batch Dataset, the function will be invoked once per group. For a streaming
+   * Dataset, the function will be invoked for each group repeatedly in every trigger, and
+   * updates to each group's state will be saved across invocations.
+   * See [[KeyedState]] for more details.
    *
-   * For each unique group, the given function will be invoked once for each group
-   * with the following arguments:
-   *  - The key of the group.
-   *  - An iterator containing all the values for this key.
-   *  - A user-defined state object set by previous invocations of the given function.
-   * Note that, for batch queries, there is only ever one invocation and thus the state object
-   * will always be empty. And the function can return an object of arbitrary type, and
-   * optionally update or remove the corresponding state. The returned object will form a new
-   * [[Dataset]].
+   * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func          Function to be called on every group.
+   * @param stateEncoder  Encoder for the state type.
+   * @param outputEncoder Encoder for the output type.
    *
-   * This operation can be applied on both batch and streaming Datasets. With a streaming dataset,
-   * the given function will be invoked once for each group in every trigger/batch that has
-   * data in the group. The updates to the state will be stored and passed to the function in the
-   * next invocation. However, for batch, `mapGroupsWithState` behaves exactly as `mapGroups` and
-   * the function is called only once per key without any prior state.
-   *
-   * Other points to note
-   *  - There is no guaranteed ordering of values in the iterator in the function.
-   *  - This function does not support partial aggregation, and as a result requires shuffling all
-   *    the data in the [[Dataset]].
-   *  - Operations on [[KeyedState]] are not threadsafe. See corresponding docs for more details.
-   *
-   * Internally, the implementation will spill to disk if any given group is too large to fit into
-   * memory.  However, users must take care to avoid materializing the whole iterator for a group
-   * (for example, by calling `toList`) unless they are sure that this is possible given the memory
-   * constraints of their cluster.
-   *
-   * @see [[KeyedState]] for more details of how to update/remove state in the function.
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.1.1
    */
   @Experimental
@@ -312,37 +275,17 @@ class KeyValueGroupedDataset[K, V] private[sql](
   /**
    * ::Experimental::
    * (Scala-specific)
-   * Applies the given function to each group of data, while maintaining some user-defined per-group
-   * state.
+   * Applies the given function to each group of data, while maintaining a user-defined per-group
+   * state. The result Dataset will represent the objects returned by the function.
+   * For a static batch Dataset, the function will be invoked once per group. For a streaming
+   * Dataset, the function will be invoked for each group repeatedly in every trigger, and
+   * updates to each group's state will be saved across invocations.
+   * See [[KeyedState]] for more details.
    *
-   * For each unique group, the given function will be invoked once for each group
-   * with the following arguments:
-   *  - The key of the group.
-   *  - An iterator containing all the values for this key.
-   *  - A user-defined state object set by previous invocations of the given function.
-   * Note that, for batch queries, there is only ever one invocation and thus the state object
-   * will always be empty. And the function can return an iterator of objects of arbitrary type, and
-   * optionally update or remove the corresponding state. The returned object will form a new
-   * [[Dataset]].
+   * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
    *
-   * This operation can be applied on both batch and streaming Datasets. With a streaming dataset,
-   * the given function will be invoked once for each group in every trigger/batch that has
-   * data in the group. The updates to the state will be stored and passed to the function in the
-   * next invocation. However, for batch, `mapGroupsWithState` behaves exactly as `mapGroups` and
-   * the function is called only once per key without any prior state.
-   *
-   * Other points to note
-   *  - There is no guaranteed ordering of values in the iterator in the function.
-   *  - This function does not support partial aggregation, and as a result requires shuffling all
-   * the data in the [[Dataset]].
-   *  - Operations on [[KeyedState]] are not threadsafe. See corresponding docs for more details.
-   *
-   * Internally, the implementation will spill to disk if any given group is too large to fit into
-   * memory.  However, users must take care to avoid materializing the whole iterator for a group
-   * (for example, by calling `toList`) unless they are sure that this is possible given the memory
-   * constraints of their cluster.
-   *
-   * @see [[KeyedState]] for more details of how to update/remove state in the function.
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.1.1
    */
   @Experimental
@@ -361,37 +304,20 @@ class KeyValueGroupedDataset[K, V] private[sql](
   /**
    * ::Experimental::
    * (Java-specific)
-   * Applies the given function to each group of data, while maintaining some user-defined per-group
-   * state.
+   * Applies the given function to each group of data, while maintaining a user-defined per-group
+   * state. The result Dataset will represent the objects returned by the function.
+   * For a static batch Dataset, the function will be invoked once per group. For a streaming
+   * Dataset, the function will be invoked for each group repeatedly in every trigger, and
+   * updates to each group's state will be saved across invocations.
+   * See [[KeyedState]] for more details.
    *
-   * For each unique group, the given function will be invoked once for each group
-   * with the following arguments:
-   *  - The key of the group.
-   *  - An iterator containing all the values for this key.
-   *  - A user-defined state object set by previous invocations of the given function.
-   * Note that, for batch queries, there is only ever one invocation and thus the state object
-   * will always be empty. And the function can return an iterator of objects of arbitrary type, and
-   * optionally update or remove the corresponding state. The returned object will form a new
-   * [[Dataset]].
+   * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func          Function to be called on every group.
+   * @param stateEncoder  Encoder for the state type.
+   * @param outputEncoder Encoder for the output type.
    *
-   * This operation can be applied on both batch and streaming Datasets. With a streaming dataset,
-   * the given function will be invoked once for each group in every trigger/batch that has
-   * data in the group. The updates to the state will be stored and passed to the function in the
-   * next invocation. However, for batch, `mapGroupsWithState` behaves exactly as `mapGroups` and
-   * the function is called only once per key without any prior state.
-   *
-   * Other points to note
-   *  - There is no guaranteed ordering of values in the iterator in the function.
-   *  - This function does not support partial aggregation, and as a result requires shuffling all
-   * the data in the [[Dataset]].
-   *  - Operations on [[KeyedState]] are not threadsafe. See corresponding docs for more details.
-   *
-   * Internally, the implementation will spill to disk if any given group is too large to fit into
-   * memory.  However, users must take care to avoid materializing the whole iterator for a group
-   * (for example, by calling `toList`) unless they are sure that this is possible given the memory
-   * constraints of their cluster.
-   *
-   * @see [[KeyedState]] for more details of how to update/remove state in the function.
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.1.1
    */
   @Experimental

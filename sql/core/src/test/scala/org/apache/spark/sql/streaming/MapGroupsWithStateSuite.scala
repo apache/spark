@@ -48,32 +48,25 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
       if (expectedData.isDefined) {
         assert(state.exists)
         assert(state.get === expectedData.get)
-        assert(state.getOption === expectedData)
       } else {
         assert(!state.exists)
-        intercept[NoSuchElementException] {
-          state.get
-        }
-        assert(state.getOption === None)
+        assert(state.get === null)
       }
-
       assert(state.isUpdated === shouldBeUpdated)
       assert(state.isRemoved === shouldBeRemoved)
     }
 
     // Updating empty state
-    state = KeyedStateImpl[String](None)
+    state = KeyedStateImpl[String](null)
     testState(None)
     state.update("")
     testState(Some(""), shouldBeUpdated = true)
 
-    // Updating exiting state, even if with null
-    state = KeyedStateImpl[String](Some("2"))
+    // Updating exiting state
+    state = KeyedStateImpl[String]("2")
     testState(Some("2"))
     state.update("3")
     testState(Some("3"), shouldBeUpdated = true)
-    state.update(null)
-    testState(Some(null), shouldBeUpdated = true)
 
     // Removing state
     state.remove()
@@ -81,6 +74,10 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     state.remove()      // should be still callable
     state.update("4")
     testState(Some("4"), shouldBeRemoved = false, shouldBeUpdated = true)
+
+    // Updating by null is same as remove
+    state.update(null)
+    testState(None, shouldBeRemoved = true, shouldBeUpdated = false)
   }
 
   test("flatMapGroupsWithState - streaming") {
@@ -88,7 +85,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     // Returns the data and the count if state is defined, otherwise does not return anything
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
 
-      var count = state.getOption.map(_.count).getOrElse(0L) + values.size
+      var count = Option(state.get).map(_.count).getOrElse(0L) + values.size
       if (count == 3) {
         state.remove()
         Iterator.empty
@@ -128,7 +125,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     // Function that returns running count only if its even, otherwise does not return
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
       if (state.exists) throw new IllegalArgumentException("state.exists should be false")
-      if (state.getOption.nonEmpty) {
+      if (state.exists) {
         throw new IllegalArgumentException("state.getOption should be empty")
       }
       Iterator((key, values.size))
@@ -143,7 +140,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
 
-      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
+      val count = Option(state.get).map(_.count).getOrElse(0L) + values.size
       if (count == 3) {
         state.remove()
         (key, "-1")
@@ -182,7 +179,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
   test("mapGroupsWithState - batch") {
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
       if (state.exists) throw new IllegalArgumentException("state.exists should be false")
-      if (state.getOption.nonEmpty) {
+      if (state.exists) {
         throw new IllegalArgumentException("state.getOption should be empty")
       }
       (key, values.size)
@@ -199,7 +196,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
   testQuietly("StateStore.abort on task failure handling") {
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
       if (MapGroupsWithStateSuite.failInTask) throw new Exception("expected failure")
-      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
+      val count = Option(state.get).map(_.count).getOrElse(0L) + values.size
       state.update(RunningCount(count))
       (key, count)
     }

@@ -287,7 +287,7 @@ case class MapGroupsWithStateExec(
           val keyObj = getKeyObj(keyRow)
           val valueObjIter = valueRowIter.map(getValueObj.apply)
           val stateObjOption = store.get(key).map(getStateObj)
-          val wrappedState = KeyedStateImpl[Any](stateObjOption)
+          val wrappedState = KeyedStateImpl[Any](stateObjOption.orNull)
           val mappedIterator = func(keyObj, valueObjIter, wrappedState)
 
           if (wrappedState.isRemoved) {

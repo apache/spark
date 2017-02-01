@@ -20,51 +20,38 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.KeyedState
 
 /** Internal implementation of the [[KeyedState]] interface */
-private[sql] class KeyedStateImpl[S](optionalValue: Option[S]) extends KeyedState[S] {
-  private var value: S = optionalValue.getOrElse(null.asInstanceOf[S])
-  private var defined: Boolean = optionalValue.isDefined
+private[sql] case class KeyedStateImpl[S](private var value: S) extends KeyedState[S] {
   private var updated: Boolean = false  // whether value has been updated (but not removed)
   private var removed: Boolean = false  // whether value has been removed
 
   // ========= Public API =========
-  override def exists: Boolean = {
-    defined
-  }
+  override def exists: Boolean = { value != null }
 
-  override def get: S = {
-    if (defined) {
-      value
+  override def get: S = value
+
+  override def update(newValue: S): Unit = {
+    if (newValue == null) {
+      remove()
     } else {
-      throw new NoSuchElementException("State is either not defined or has already been removed")
+      value = newValue
+      updated = true
+      removed = false
     }
   }
 
-  override def update(newValue: S): Unit = {
-    value = newValue
-    defined = true
-    updated = true
-    removed = false
-  }
-
   override def remove(): Unit = {
-    defined = false
+    value = null.asInstanceOf[S]
     updated = false
     removed = true
   }
 
+  override def toString: String = "KeyedState($value)"
+
   // ========= Internal API =========
 
   /** Whether the state has been marked for removing */
-  def isRemoved: Boolean = {
-    removed
-  }
+  def isRemoved: Boolean = removed
 
   /** Whether the state has been been updated */
-  def isUpdated: Boolean = {
-    updated
-  }
-}
-
-object KeyedStateImpl {
-  def apply[S](optionalValue: Option[S]): KeyedStateImpl[S] = new KeyedStateImpl[S](optionalValue)
+  def isUpdated: Boolean = updated
 }

@@ -25,17 +25,42 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *
  * Wrapper class for interacting with keyed state data in `mapGroupsWithState` and
  * `flatMapGroupsWithState` operations on
- * [[org.apache.spark.sql.KeyValueGroupedDataset KeyValueGroupedDataset]].
+ * [[KeyValueGroupedDataset]].
  *
- * Important points to note.
- * - State can be `null`. So updating the state to null is not same as removing the state.
- * - Operations on state are not threadsafe. This is to avoid memory barriers.
- * - If the `remove()` is called, then `exists()` will return `false`, and
- *   `getOption()` will return `None`.
- * - After that `update(newState)` is called, then `exists()` will return `true`,
- *   and `getOption()` will return `Some(...)`.
+ * Detail description on `[map/flatMap]GroupsWithState` operation
+ * ------------------------------------------------------------
+ * Both, `mapGroupsWithState` and `flatMapGroupsWithState` in [[KeyValueGroupedDataset]]
+ * will invoke the user-given function on each group (defined by the grouping function in
+ * `Dataset.groupByKey()`) while maintaining user-defined per-group state between invocations.
+ * For a static batch Dataset, the function will be invoked once per group. For a streaming
+ * Dataset, the function will be invoked for each group repeatedly in every trigger.
+ * That is, in every batch of the [[streaming.StreamingQuery StreamingQuery]],
+ * the function will be invoked once for each group that has data in the batch.
  *
- * Scala example of using `KeyedState`:
+ * The function is invoked with following parameters.
+ *  - The key of the group.
+ *  - An iterator containing all the values for this key.
+ *  - A user-defined state object set by previous invocations of the given function.
+ * In case of a batch Dataset, there is only invocation and state object will be empty as
+ * there is no prior state. Essentially, for batch Datasets, `[map/flatMap]GroupsWithState`
+ * is equivalent to `[map/flatMap]Groups`.
+ *
+ * Important points to note about the function.
+ *  - In a trigger, the function will be called only the groups present in the batch. So do not
+ *    assume that the function will be called in every trigger for every group that has state.
+ *  - There is no guaranteed ordering of values in the iterator in the function, neither with
+ *    batch, nor with streaming Datasets.
+ *  - All the data will be shuffled before applying the function.
+ *
+ * Important points to note about using KeyedState.
+ *  - The value of the state cannot be null. So updating state with null is same as removing it.
+ *  - Operations on `KeyedState` are not thread-safe. This is to avoid memory barriers.
+ *  - If the `remove()` is called, then `exists()` will return `false`, and
+ *    `getOption()` will return `None`.
+ *  - After that `update(newState)` is called, then `exists()` will return `true`,
+ *    and `getOption()` will return `Some(...)`.
+ *
+ * Scala example of using `KeyedState` in `mapGroupsWithState`:
  * {{{
  * // A mapping function that maintains an integer state for string keys and returns a string.
  * def mappingFunction(key: String, value: Iterable[Int], state: KeyedState[Int]): Option[String]= {
@@ -95,22 +120,15 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
   /** Whether state exists or not. */
   def exists: Boolean
 
-  /** Get the state object if it is defined, otherwise throws NoSuchElementException. */
+  /** Get the state object if it exists, or null. */
   def get: S
 
   /**
-   * Update the value of the state. Note that null is a valid value, and does not signify removing
-   * of the state.
+   * Update the value of the state. Note that null is not a valid value, and `update(null)` is
+   * same as `remove()`
    */
   def update(newState: S): Unit
 
   /** Remove this keyed state. */
   def remove(): Unit
-
-  /** (scala friendly) Get the state object as an [[Option]]. */
-  @inline final def getOption: Option[S] = if (exists) Some(get) else None
-
-  @inline final override def toString: String = {
-    getOption.map { _.toString }.getOrElse("<undefined>")
-  }
 }

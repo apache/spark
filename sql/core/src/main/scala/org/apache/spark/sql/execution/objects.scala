@@ -360,7 +360,7 @@ object MapGroupsExec {
       dataAttributes: Seq[Attribute],
       outputObjAttr: Attribute,
       child: SparkPlan): MapGroupsExec = {
-    val f = (key: Any, values: Iterator[Any]) => func(key, values, KeyedStateImpl[Any](None))
+    val f = (key: Any, values: Iterator[Any]) => func(key, values, KeyedStateImpl[Any](null))
     new MapGroupsExec(f, keyDeserializer, valueDeserializer,
       groupingAttributes, dataAttributes, outputObjAttr, child)
   }
