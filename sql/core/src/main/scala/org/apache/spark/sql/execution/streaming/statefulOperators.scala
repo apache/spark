@@ -41,7 +41,7 @@ case class OperatorStateId(
     batchId: Long)
 
 /**
- * An operator that saves or restores state from the [[StateStore]].  The [[OperatorStateId]] should
+ * An operator that reads or writes state from the [[StateStore]].  The [[OperatorStateId]] should
  * be filled in by `prepareForExecution` in [[IncrementalExecution]].
  */
 trait StatefulOperator extends SparkPlan {
@@ -54,11 +54,13 @@ trait StatefulOperator extends SparkPlan {
   }
 }
 
+/** An operator that reads from a StateStore. */
 trait StateStoreReader extends StatefulOperator {
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 }
 
+/** An operator that writes to a StateStore. */
 trait StateStoreWriter extends StatefulOperator {
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),

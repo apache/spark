@@ -221,22 +221,30 @@ class KeyValueGroupedDataset[K, V] private[sql](
   /**
    * ::Experimental::
    * (Scala-specific)
-   * Applies the given function to each group of data, while using an additional keyed state.
-   * For each unique group, the function will be passed the group key and an iterator that contains
-   * all of the elements in the group. The function can return an object of arbitrary type, and
+   * Applies the given function to each group of data, while maintaining some user-defined per-group
+   * state.
+   *
+   * For each unique group, the given function will be invoked once for each group
+   * with the following arguments:
+   *  - The key of the group.
+   *  - An iterator containing all the values for this key.
+   *  - A user-defined state object set by previous invocations of the given function.
+   * Note that, for batch queries, there is only ever one invocation and thus the state object
+   * will always be empty. And the function can return an object of arbitrary type, and
    * optionally update or remove the corresponding state. The returned object will form a new
    * [[Dataset]].
    *
-   * This function can be applied on both batch and streaming Datasets. With a streaming dataset,
-   * this function will be once for each in every trigger. For each key, the updated state from the
-   * function call in a trigger will be the state available in the function call in the next
-   * trigger. However, for batch, `mapGroupsWithState` behaves exactly as `mapGroups` and the
-   * function is called only once per key without any prior state.
+   * This operation can be applied on both batch and streaming Datasets. With a streaming dataset,
+   * the given function will be invoked once for each group in every trigger/batch that has
+   * data in the group. The updates to the state will be stored and passed to the function in the
+   * next invocation. However, for batch, `mapGroupsWithState` behaves exactly as `mapGroups` and
+   * the function is called only once per key without any prior state.
    *
-   * There is no guaranteed ordering of values in the iterator in the function.
-   *
-   * This function does not support partial aggregation, and as a result requires shuffling all
+   * Other points to note
+   *  - There is no guaranteed ordering of values in the iterator in the function.
+   *  - This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]].
+   *  - Operations on [[KeyedState]] are not threadsafe. See corresponding docs for more details.
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -257,22 +265,30 @@ class KeyValueGroupedDataset[K, V] private[sql](
   /**
    * ::Experimental::
    * (Java-specific)
-   * Applies the given function to each group of data, while using an additional keyed state.
-   * For each unique group, the function will be passed the group key and an iterator that contains
-   * all of the elements in the group. The function can return an object of arbitrary type, and
+   * Applies the given function to each group of data, while maintaining some user-defined per-group
+   * state.
+   *
+   * For each unique group, the given function will be invoked once for each group
+   * with the following arguments:
+   *  - The key of the group.
+   *  - An iterator containing all the values for this key.
+   *  - A user-defined state object set by previous invocations of the given function.
+   * Note that, for batch queries, there is only ever one invocation and thus the state object
+   * will always be empty. And the function can return an object of arbitrary type, and
    * optionally update or remove the corresponding state. The returned object will form a new
    * [[Dataset]].
    *
-   * This function can be applied on both batch and streaming Datasets. With a streaming dataset,
-   * this function will be once for each in every trigger. For each key, the updated state from the
-   * function call in a trigger will be the state available in the function call in the next
-   * trigger. However, for batch, `mapGroupsWithState` behaves exactly as `mapGroups` and the
-   * function is called only once per key without any prior state.
+   * This operation can be applied on both batch and streaming Datasets. With a streaming dataset,
+   * the given function will be invoked once for each group in every trigger/batch that has
+   * data in the group. The updates to the state will be stored and passed to the function in the
+   * next invocation. However, for batch, `mapGroupsWithState` behaves exactly as `mapGroups` and
+   * the function is called only once per key without any prior state.
    *
-   * There is no guaranteed ordering of values in the iterator in the function.
-   *
-   * This function does not support partial aggregation, and as a result requires shuffling all
-   * the data in the [[Dataset]].
+   * Other points to note
+   *  - There is no guaranteed ordering of values in the iterator in the function.
+   *  - This function does not support partial aggregation, and as a result requires shuffling all
+   *    the data in the [[Dataset]].
+   *  - Operations on [[KeyedState]] are not threadsafe. See corresponding docs for more details.
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -293,26 +309,33 @@ class KeyValueGroupedDataset[K, V] private[sql](
     )(stateEncoder, outputEncoder)
   }
 
-
   /**
    * ::Experimental::
    * (Scala-specific)
-   * Applies the given function to each group of data, while using an additional keyed state.
-   * For each unique group, the function will be passed the group key and an iterator that contains
-   * all of the elements in the group. The function can return an iteratior of object of arbitrary
-   * type, and optionally update or remove the corresponding state. The returned object will form a
-   * new [[Dataset]].
+   * Applies the given function to each group of data, while maintaining some user-defined per-group
+   * state.
    *
-   * This function can be applied on both batch and streaming Datasets. With a streaming dataset,
-   * this function will be once for each in every trigger. For each key, the updated state from the
-   * function call in a trigger will be the state available in the function call in the next
-   * trigger. However, for batch, `mapGroupsWithState` behaves exactly as `mapGroups` and the
-   * function is called only once per key without any prior state.
+   * For each unique group, the given function will be invoked once for each group
+   * with the following arguments:
+   *  - The key of the group.
+   *  - An iterator containing all the values for this key.
+   *  - A user-defined state object set by previous invocations of the given function.
+   * Note that, for batch queries, there is only ever one invocation and thus the state object
+   * will always be empty. And the function can return an iterator of objects of arbitrary type, and
+   * optionally update or remove the corresponding state. The returned object will form a new
+   * [[Dataset]].
    *
-   * There is no guaranteed ordering of values in the iterator in the function.
+   * This operation can be applied on both batch and streaming Datasets. With a streaming dataset,
+   * the given function will be invoked once for each group in every trigger/batch that has
+   * data in the group. The updates to the state will be stored and passed to the function in the
+   * next invocation. However, for batch, `mapGroupsWithState` behaves exactly as `mapGroups` and
+   * the function is called only once per key without any prior state.
    *
-   * This function does not support partial aggregation, and as a result requires shuffling all
+   * Other points to note
+   *  - There is no guaranteed ordering of values in the iterator in the function.
+   *  - This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]].
+   *  - Operations on [[KeyedState]] are not threadsafe. See corresponding docs for more details.
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -338,22 +361,30 @@ class KeyValueGroupedDataset[K, V] private[sql](
   /**
    * ::Experimental::
    * (Java-specific)
-   * Applies the given function to each group of data, while using an additional keyed state.
-   * For each unique group, the function will be passed the group key and an iterator that contains
-   * all of the elements in the group. The function can return an iteratior of object of arbitrary
-   * type, and optionally update or remove the corresponding state. The returned object will form a
-   * new [[Dataset]].
+   * Applies the given function to each group of data, while maintaining some user-defined per-group
+   * state.
    *
-   * This function can be applied on both batch and streaming Datasets. With a streaming dataset,
-   * this function will be once for each in every trigger. For each key, the updated state from the
-   * function call in a trigger will be the state available in the function call in the next
-   * trigger. However, for batch, `mapGroupsWithState` behaves exactly as `flatMapGroups` and the
-   * function is called only once per key without any prior state.
+   * For each unique group, the given function will be invoked once for each group
+   * with the following arguments:
+   *  - The key of the group.
+   *  - An iterator containing all the values for this key.
+   *  - A user-defined state object set by previous invocations of the given function.
+   * Note that, for batch queries, there is only ever one invocation and thus the state object
+   * will always be empty. And the function can return an iterator of objects of arbitrary type, and
+   * optionally update or remove the corresponding state. The returned object will form a new
+   * [[Dataset]].
    *
-   * There is no guaranteed ordering of values in the iterator in the function.
+   * This operation can be applied on both batch and streaming Datasets. With a streaming dataset,
+   * the given function will be invoked once for each group in every trigger/batch that has
+   * data in the group. The updates to the state will be stored and passed to the function in the
+   * next invocation. However, for batch, `mapGroupsWithState` behaves exactly as `mapGroups` and
+   * the function is called only once per key without any prior state.
    *
-   * This function does not support partial aggregation, and as a result requires shuffling all
+   * Other points to note
+   *  - There is no guaranteed ordering of values in the iterator in the function.
+   *  - This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]].
+   *  - Operations on [[KeyedState]] are not threadsafe. See corresponding docs for more details.
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
