@@ -221,10 +221,6 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       .sessionState.conf.warehousePath.stripSuffix("/"))
   }
 
-  test("default value of FILESOURCE_TABLE_RELATION_CACHE_SIZE") {
-    assert(spark.conf.get(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE) === 1000)
-  }
-
   test("MAX_CASES_BRANCHES") {
     withTable("tab1") {
       spark.range(10).write.saveAsTable("tab1")

@@ -90,7 +90,7 @@ private[spark] class TypedConfigBuilder[T](
     new TypedConfigBuilder(parent, s => fn(converter(s)), stringConverter)
   }
 
-  /** Check that user-provided value for the config match a validator */
+  /** Checks if the user-provided value for the config matches the validator. */
   def checkValue(validator: T => Boolean, errorMsg: String): TypedConfigBuilder[T] = {
     transform { v =>
       if (!validator(v)) throw new IllegalArgumentException(errorMsg)
