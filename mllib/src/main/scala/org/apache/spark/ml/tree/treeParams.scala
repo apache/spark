@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
 private[ml] trait DecisionTreeParams extends PredictorParams
-  with HasCheckpointInterval with HasSeed {
+  with HasCheckpointInterval with HasSeed with HasWeightCol {
 
   /**
    * Maximum depth of the tree (>= 0).

@@ -48,7 +48,7 @@ import org.apache.spark.sql.types.DoubleType
 class DecisionTreeClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
-  with DecisionTreeClassifierParams with HasWeightCol with DefaultParamsWritable {
+  with DecisionTreeClassifierParams with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("dtc"))

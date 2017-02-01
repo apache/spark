@@ -298,11 +298,11 @@ object MLTestingUtils extends SparkFunSuite {
       model2: M): Unit = {
     val pred1 = model1.transform(data).select(model1.getPredictionCol).collect()
     val pred2 = model2.transform(data).select(model2.getPredictionCol).collect()
-    val inTol = pred1.zip(pred2).map { case (p1, p2) =>
+    val inTol = pred1.zip(pred2).count { case (p1, p2) =>
       val x = p1.getDouble(0)
       val y = p2.getDouble(0)
       compareFunc(x, y)
     }
-    assert(inTol.count(b => b) / pred1.length.toDouble >= fractionInTol)
+    assert(inTol / pred1.length.toDouble >= fractionInTol)
   }
 }
