@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import java.sql.Timestamp
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompatibilityTest, ParquetFileFormat}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -143,7 +144,7 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
       "ARRAY<STRUCT<array_element: INT>>")
   }
 
-  test("SPARK-12297: Parquet Timestamps & Hive Timezones") {
+  test("SPARK-12297: Parquet Timestamps & Hive Timezones: read path") {
         // Test that we can correctly adjust parquet timestamps for Hive timezone bug.
     withTempPath { dir =>
       // First, lets generate some parquet data we can use to test this
@@ -179,6 +180,8 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
           | TBLPROPERTIES ($key="America/Los_Angeles")
         """.stripMargin
       )
+      val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("foobar"))
+      assert(tableMetadata.properties.get(key) === Some("America/Los_Angeles"))
       newTable.createOrReplaceTempView("newTable")
       spark.sql("INSERT INTO foobar SELECT year, timestamp FROM newTable")
 
@@ -198,5 +201,61 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
         }
       }
     }
+  }
+
+  test("SPARK-12297: Parquet Timestamp & Hive timezones: write path") {
+    val key = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
+    def checkHasTz(table: String, tz: Option[String]): Unit = {
+      val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
+      assert(tableMetadata.properties.get(key) === tz)
+    }
+    Seq(false, true).foreach { shouldSetGlobalDefault =>
+      withSQLConf((SQLConf.PARQUET_TABLE_INCLUDE_TIMEZONE.key, shouldSetGlobalDefault.toString)) {
+        println(s"testing w/ include tz = $shouldSetGlobalDefault")
+        def checkCreateTableDefaultTz(baseTable: String, explicitTz: Option[String]): Unit = {
+          println(s"about to enter withTable for $baseTable")
+          withTable(baseTable, s"like_$baseTable", s"select_$baseTable") {
+            println(s"inside withTable for $baseTable")
+            val tblProperties = explicitTz.map { tz => s"TBLPROPERTIES ($key=$tz)"}.getOrElse("")
+            val defaultTz = if (shouldSetGlobalDefault) Some("UTC") else None
+            spark.sql(
+              raw"""CREATE TABLE $baseTable (
+                    |  x int
+                    | )
+                    | STORED AS PARQUET
+                    | $tblProperties
+            """.stripMargin
+            )
+            val expectedTableTz = explicitTz.orElse { defaultTz }
+            println(s"checking table tz for base table, expecting $expectedTableTz")
+            checkHasTz(baseTable, expectedTableTz)
+            spark.sql( s"""CREATE TABLE like_$baseTable LIKE $baseTable""")
+            checkHasTz(s"like_$baseTable", expectedTableTz)
+
+            spark.sql(
+              raw"""CREATE TABLE select_$baseTable
+                    | STORED AS PARQUET
+                    | AS
+                    | SELECT * from $baseTable
+                """.stripMargin)
+            checkHasTz(s"select_$baseTable", defaultTz)
+          }
+        }
+
+        // check creating tables a few different ways, make sure the tz property is set correctly
+        checkCreateTableDefaultTz("no_tz", None)
+        checkCreateTableDefaultTz("UTC", Some("UTC"))
+        checkCreateTableDefaultTz("LA", Some("America/Los Angeles"))
+      }
+    }
+
+    // TODO create table w/ bad TZ
+
+    // TODO insert data
+
+
+
+
+    pending
   }
 }

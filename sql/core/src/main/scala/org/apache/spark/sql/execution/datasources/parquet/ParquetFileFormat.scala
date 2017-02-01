@@ -46,6 +46,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
+import org.apache.spark.sql.catalyst.util.ParquetTimestampTimezone
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -708,5 +709,5 @@ object ParquetFileFormat extends Logging {
     }.toOption
   }
 
-  val PARQUET_TIMEZONE_TABLE_PROPERTY = "parquet.mr.int96.write.zone"
+  val PARQUET_TIMEZONE_TABLE_PROPERTY = ParquetTimestampTimezone.PARQUET_TIMEZONE_TABLE_PROPERTY
 }

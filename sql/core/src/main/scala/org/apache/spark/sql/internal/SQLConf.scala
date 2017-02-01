@@ -666,6 +666,12 @@ object SQLConf {
       .stringConf
       .createWithDefault(TimeZone.getDefault().getID())
 
+  val PARQUET_TABLE_INCLUDE_TIMEZONE =
+    SQLConfigBuilder("spark.sql.session.parquet.timeZone")
+      .doc("""Enables inclusion of parquet timezone property in newly created parquet tables""")
+      .booleanConf
+      .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
