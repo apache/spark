@@ -41,8 +41,9 @@ import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -199,37 +200,49 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       throw new TableAlreadyExistsException(db = db, table = table)
     }
 
-    if (tableDefinition.tableType == VIEW) {
-      client.createTable(tableDefinition, ignoreIfExists)
+    // add the extra tz property only if configured to do so, and the table does not include it
+    // explicitly
+    val tableHasTz =
+      tableDefinition.properties.contains(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
+    val extraTzProp =
+      if (conf.get(SQLConf.PARQUET_TABLE_INCLUDE_TIMEZONE) && !tableHasTz) {
+        Map(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY -> "UTC")
+      } else {
+        Map()
+      }
+    val tableDef = tableDefinition.copy(properties = tableDefinition.properties ++ extraTzProp)
+    if (tableDef.tableType == VIEW) {
+      client.createTable(tableDef, ignoreIfExists)
     } else {
       // Ideally we should not create a managed table with location, but Hive serde table can
       // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
       // to create the table directory and write out data before we create this table, to avoid
       // exposing a partial written table.
-      val needDefaultTableLocation = tableDefinition.tableType == MANAGED &&
-        tableDefinition.storage.locationUri.isEmpty
+      val needDefaultTableLocation = tableDef.tableType == MANAGED &&
+        tableDef.storage.locationUri.isEmpty
 
       val tableLocation = if (needDefaultTableLocation) {
-        Some(defaultTablePath(tableDefinition.identifier))
+        Some(defaultTablePath(tableDef.identifier))
       } else {
-        tableDefinition.storage.locationUri
+        tableDef.storage.locationUri
       }
 
-      if (DDLUtils.isHiveTable(tableDefinition)) {
-        val tableWithDataSourceProps = tableDefinition.copy(
+      if (DDLUtils.isHiveTable(tableDef)) {
+
+        val tableWithDataSourceProps = tableDef.copy(
           // We can't leave `locationUri` empty and count on Hive metastore to set a default table
           // location, because Hive metastore uses hive.metastore.warehouse.dir to generate default
           // table location for tables in default database, while we expect to use the location of
           // default database.
-          storage = tableDefinition.storage.copy(locationUri = tableLocation),
+          storage = tableDef.storage.copy(locationUri = tableLocation),
           // Here we follow data source tables and put table metadata like table schema, partition
           // columns etc. in table properties, so that we can work around the Hive metastore issue
           // about not case preserving and make Hive serde table support mixed-case column names.
-          properties = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition))
+          properties = tableDef.properties ++ tableMetaToTableProps(tableDef))
         client.createTable(tableWithDataSourceProps, ignoreIfExists)
       } else {
         createDataSourceTable(
-          tableDefinition.withNewStorage(locationUri = tableLocation),
+          tableDef.withNewStorage(locationUri = tableLocation),
           ignoreIfExists)
       }
     }

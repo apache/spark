@@ -19,11 +19,14 @@ package org.apache.spark.sql.hive
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.Row
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompatibilityTest, ParquetFileFormat}
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{TestHiveContext, TestHiveSingleton}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{StructField, StructType, TimestampType}
 
 class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHiveSingleton {
@@ -139,12 +142,13 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
   }
 
   test("SPARK-16344: array of struct with a single field named 'array_element'") {
+
     testParquetHiveCompatibility(
       Row(Seq(Row(1))),
       "ARRAY<STRUCT<array_element: INT>>")
   }
 
-  test("SPARK-12297: Parquet Timestamps & Hive Timezones: read path") {
+  ignore("SPARK-12297: Parquet Timestamps & Hive Timezones: read path") {
         // Test that we can correctly adjust parquet timestamps for Hive timezone bug.
     withTempPath { dir =>
       // First, lets generate some parquet data we can use to test this
@@ -203,59 +207,58 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
     }
   }
 
-  test("SPARK-12297: Parquet Timestamp & Hive timezones: write path") {
-    val key = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
-    def checkHasTz(table: String, tz: Option[String]): Unit = {
-      val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
-      assert(tableMetadata.properties.get(key) === tz)
-    }
-    Seq(false, true).foreach { shouldSetGlobalDefault =>
-      withSQLConf((SQLConf.PARQUET_TABLE_INCLUDE_TIMEZONE.key, shouldSetGlobalDefault.toString)) {
-        println(s"testing w/ include tz = $shouldSetGlobalDefault")
-        def checkCreateTableDefaultTz(baseTable: String, explicitTz: Option[String]): Unit = {
-          println(s"about to enter withTable for $baseTable")
-          withTable(baseTable, s"like_$baseTable", s"select_$baseTable") {
-            println(s"inside withTable for $baseTable")
-            val tblProperties = explicitTz.map { tz => s"TBLPROPERTIES ($key=$tz)"}.getOrElse("")
-            val defaultTz = if (shouldSetGlobalDefault) Some("UTC") else None
-            spark.sql(
-              raw"""CREATE TABLE $baseTable (
-                    |  x int
-                    | )
-                    | STORED AS PARQUET
-                    | $tblProperties
-            """.stripMargin
-            )
-            val expectedTableTz = explicitTz.orElse { defaultTz }
-            println(s"checking table tz for base table, expecting $expectedTableTz")
-            checkHasTz(baseTable, expectedTableTz)
-            spark.sql( s"""CREATE TABLE like_$baseTable LIKE $baseTable""")
-            checkHasTz(s"like_$baseTable", expectedTableTz)
-
-            spark.sql(
-              raw"""CREATE TABLE select_$baseTable
-                    | STORED AS PARQUET
-                    | AS
-                    | SELECT * from $baseTable
-                """.stripMargin)
-            checkHasTz(s"select_$baseTable", defaultTz)
-          }
-        }
-
-        // check creating tables a few different ways, make sure the tz property is set correctly
-        checkCreateTableDefaultTz("no_tz", None)
-        checkCreateTableDefaultTz("UTC", Some("UTC"))
-        checkCreateTableDefaultTz("LA", Some("America/Los Angeles"))
+  Seq(false, true).foreach { setTableTzByDefault =>
+    // we're cheating here, and changing the conf at runtime
+    test(s"SPARK-12297: Parquet Timestamp & Hive timezones write path, " +
+        s"default = $setTableTzByDefault") {
+      sparkContext.conf.set(
+        SQLConf.PARQUET_TABLE_INCLUDE_TIMEZONE.key, setTableTzByDefault.toString)
+      val key = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
+      def checkHasTz(table: String, tz: Option[String]): Unit = {
+        val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
+        assert(tableMetadata.properties.get(key) === tz)
       }
+      println(s"$setTableTzByDefault;" +
+        s" ${sparkContext.conf.get(SQLConf.PARQUET_TABLE_INCLUDE_TIMEZONE)}")
+      def checkCreateTableDefaultTz(baseTable: String, explicitTz: Option[String]): Unit = {
+        withTable(baseTable, s"like_$baseTable", s"select_$baseTable") {
+          val tblProperties = explicitTz.map {
+            tz => raw"""TBLPROPERTIES ($key="$tz")"""
+          }.getOrElse("")
+          val defaultTz = if (setTableTzByDefault) Some("UTC") else None
+          val stmt =
+            raw"""CREATE TABLE $baseTable (
+                  |  x int
+                  | )
+                  | STORED AS PARQUET
+                  | $tblProperties
+            """.stripMargin
+          println(stmt)
+          spark.sql(stmt)
+          val expectedTableTz = explicitTz.orElse(defaultTz)
+          println(s"checking table tz for $baseTable, expecting $expectedTableTz")
+          checkHasTz(baseTable, expectedTableTz)
+          spark.sql(s"""CREATE TABLE like_$baseTable LIKE $baseTable""")
+          checkHasTz(s"like_$baseTable", expectedTableTz)
+          spark.sql(
+          raw"""CREATE TABLE select_$baseTable
+               | STORED AS PARQUET
+               | AS
+               | SELECT * from $baseTable
+              """.stripMargin)
+            checkHasTz(s"select_$baseTable", defaultTz)
+        }
+      }
+      // check creating tables a few different ways, make sure the tz property is set correctly
+      checkCreateTableDefaultTz("no_tz", None)
+
+      checkCreateTableDefaultTz("UTC", Some("UTC"))
+      checkCreateTableDefaultTz("LA", Some("America/Los Angeles"))
+      // TODO create table w/ bad TZ
+
+      // TODO insert data
+      pending
     }
-
-    // TODO create table w/ bad TZ
-
-    // TODO insert data
-
-
-
-
-    pending
   }
+
 }

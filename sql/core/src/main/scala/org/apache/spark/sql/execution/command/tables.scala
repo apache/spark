@@ -26,7 +26,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 import scala.util.Try
 
-import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -38,6 +37,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -70,6 +70,9 @@ case class CreateTableLikeCommand(
       sourceTableDesc.provider
     }
 
+    val properties = sourceTableDesc.properties.filter { case (k, _) =>
+      k == ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
+    }
     val newTableDesc =
       CatalogTable(
         identifier = targetTable,
@@ -78,6 +81,7 @@ case class CreateTableLikeCommand(
         storage = sourceTableDesc.storage.copy(locationUri = None),
         schema = sourceTableDesc.schema,
         provider = newProvider,
+        properties = properties,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
         bucketSpec = sourceTableDesc.bucketSpec)
 
