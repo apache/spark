@@ -80,7 +80,7 @@ class DetermineHiveSerde(conf: SQLConf) extends Rule[LogicalPlan] {
 /**
  * Replaces generic operations with specific variants that are designed to work with Hive.
  *
- * Note that, this rule must be run after [[PreprocessTableInsertion]].
+ * Note that, this rule must be run after `PreprocessTableInsertion`.
  */
 class HiveAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {

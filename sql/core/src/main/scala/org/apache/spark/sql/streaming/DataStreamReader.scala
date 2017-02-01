@@ -192,7 +192,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *
    * This function will go through the input once to determine the input schema if `inferSchema`
    * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
-   * specify the schema explicitly using [[schema]].
+   * specify the schema explicitly using `schema`.
    *
    * You can set the following CSV-specific options to deal with CSV files:
    * <ul>
