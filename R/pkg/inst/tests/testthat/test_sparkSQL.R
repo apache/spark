@@ -2502,7 +2502,6 @@ test_that("repartition by columns on DataFrame", {
   expect_identical(dim(df), dim(actual))
   expect_equal(getNumPartitions(actual), 13L)
 
-  expect_equal(getNumPartitions(coalesce(actual, 14)), 13L)
   expect_equal(getNumPartitions(coalesce(actual, 1L)), 1L)
 
   # a test case with a column and dapply
@@ -2517,6 +2516,25 @@ test_that("repartition by columns on DataFrame", {
 
   # Number of partitions is equal to 2
   expect_equal(nrow(df1), 2)
+})
+
+test_that("coalesce, repartition, numPartitions", {
+  df <- as.DataFrame(cars, numPartitions = 5)
+  expect_equal(getNumPartitions(df), 5)
+  expect_equal(getNumPartitions(coalesce(df, 3)), 3)
+  expect_equal(getNumPartitions(coalesce(df, 6)), 5)
+
+  df1 <- coalesce(df, 3)
+  expect_equal(getNumPartitions(df1), 3)
+  expect_equal(getNumPartitions(coalesce(df1, 6)), 5)
+  expect_equal(getNumPartitions(coalesce(df1, 4)), 4)
+  expect_equal(getNumPartitions(coalesce(df1, 2)), 2)
+
+  df2 <- repartition(df1, 10)
+  expect_equal(getNumPartitions(df2), 10)
+  expect_equal(getNumPartitions(coalesce(df2, 13)), 5)
+  expect_equal(getNumPartitions(coalesce(df2, 7)), 5)
+  expect_equal(getNumPartitions(coalesce(df2, 3)), 3)
 })
 
 test_that("gapply() and gapplyCollect() on a DataFrame", {
