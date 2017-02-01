@@ -218,8 +218,6 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
         val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
         assert(tableMetadata.properties.get(key) === tz)
       }
-      println(s"$setTableTzByDefault;" +
-        s" ${sparkContext.conf.get(SQLConf.PARQUET_TABLE_INCLUDE_TIMEZONE)}")
       def checkCreateTableDefaultTz(baseTable: String, explicitTz: Option[String]): Unit = {
         withTable(baseTable, s"like_$baseTable", s"select_$baseTable") {
           val tblProperties = explicitTz.map {
