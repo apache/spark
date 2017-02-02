@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.File
 import java.sql.Timestamp
+import java.util.TimeZone
 
 import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -27,7 +29,7 @@ import org.apache.spark.sql.hive.test.{TestHiveContext, TestHiveSingleton}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.{StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 
 class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHiveSingleton {
   /**
@@ -207,7 +209,8 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
     }
   }
 
-  test(s"SPARK-12297: Parquet Timestamp & Hive timezones write path") {
+  // TODO GMT / UTC should both use fast path
+  test(s"SPARK-12297: Parquet Timestamp & Hive timezone") {
     Seq(false, true).foreach { setTableTzByDefault =>
       // we're cheating a bit here, in general SparkConf isn't meant to be set at runtime,
       // but its OK in this case, and lets us run this test, because these tests don't like
@@ -219,37 +222,127 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
         val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
         assert(tableMetadata.properties.get(key) === tz)
       }
-      def checkCreateTableDefaultTz(baseTable: String, explicitTz: Option[String]): Unit = {
-        withTable(baseTable, s"like_$baseTable", s"select_$baseTable") {
+      def checkCreateReadWrite(baseTable: String, explicitTz: Option[String]): Unit = {
+        withTable(baseTable, s"like_$baseTable", s"select_$baseTable", s"external_$baseTable",
+            s"saveAsTable_$baseTable", s"insert_$baseTable") {
+
+          // check that created tables have correct TBLPROPERTIES
           val tblProperties = explicitTz.map {
             tz => raw"""TBLPROPERTIES ($key="$tz")"""
           }.getOrElse("")
           val defaultTz = if (setTableTzByDefault) Some("UTC") else None
-          spark.sql(raw"""CREATE TABLE $baseTable (
-                          |  x int
-                          | )
-                          | STORED AS PARQUET
-                          | $tblProperties
+          spark.sql(
+            raw"""CREATE TABLE $baseTable (
+                  |  x int
+                  | )
+                  | STORED AS PARQUET
+                  | $tblProperties
             """.stripMargin)
           val expectedTableTz = explicitTz.orElse(defaultTz)
           checkHasTz(baseTable, expectedTableTz)
           spark.sql(s"""CREATE TABLE like_$baseTable LIKE $baseTable""")
           checkHasTz(s"like_$baseTable", expectedTableTz)
           spark.sql(
-          raw"""CREATE TABLE select_$baseTable
+            raw"""CREATE TABLE select_$baseTable
                | STORED AS PARQUET
                | AS
                | SELECT * from $baseTable
-              """.stripMargin)
-            checkHasTz(s"select_$baseTable", defaultTz)
+            """.stripMargin)
+          checkHasTz(s"select_$baseTable", defaultTz)
+
+          // TODO check on an ALTER TABLE
+
+          import spark.implicits._
+          val rawData = spark.createDataset(Seq(
+            "2015-12-31 23:50:59.123",
+            "2015-12-31 22:49:59.123",
+            "2016-01-01 00:39:59.123",
+            "2016-01-01 01:29:59.123"
+          ).map { x => java.sql.Timestamp.valueOf(x) })
+
+          // Check writing data out.
+          // We write data into our tables, and then check the raw parquet files to see whether
+          // the correct conversion was applied.
+          rawData.write.saveAsTable(s"saveAsTable_$baseTable")
+          checkHasTz(s"saveAsTable_$baseTable", defaultTz)
+          spark.sql(
+            raw"""CREATE TABLE insert_$baseTable (
+                 |  ts timestamp
+                 | )
+                 | STORED AS PARQUET
+                 | $tblProperties
+               """.stripMargin)
+          checkHasTz(s"insert_$baseTable", expectedTableTz)
+          rawData.createOrReplaceTempView(s"tempView_$baseTable")
+          spark.sql(s"INSERT INTO insert_$baseTable SELECT value AS ts FROM tempView_$baseTable")
+          val readFromTable = spark.table(s"insert_$baseTable").collect().map(_.getAs[Timestamp](0))
+          // no matter what, roundtripping via the table should leave the data unchanged
+          assert(readFromTable === rawData.collect())
+          // lets load the raw parquet data on disk, and check if it was adjusted correctly
+          val onDiskLocation = """file:(.*)""".r.findFirstMatchIn(spark.sessionState.catalog
+            .getTableMetadata(TableIdentifier(s"insert_$baseTable")).location).get.group(1)
+          val readFromDisk = spark.read.parquet(onDiskLocation).collect().map(_.getAs[Timestamp](0))
+          val expectedReadFromDisk = expectedTableTz match {
+            case Some("America/Los_Angeles") =>
+              // we should take a timestamp that is assumed to be in LA time, and shift it to UTC
+              // by subtracting the offset from UTC.
+              val tz = TimeZone.getTimeZone("America/Los_Angeles")
+              rawData.collect().map { ts =>
+                new Timestamp(ts.getTime - tz.getOffset(ts.getTime))
+              }
+            case _ =>
+              rawData.collect()
+          }
+          assert(readFromDisk === expectedReadFromDisk, readFromDisk.mkString(","))
+
+          // check reading data back in
+          // TODO check predicate pushdown
+          // we intentionally save this data directly, without creating a table, so we can
+          // see that the data is read back differently depending on table properties
+          withTempPath { path =>
+            rawData.write.parquet(path.getCanonicalPath)
+            val options = Map("path" -> path.getCanonicalPath) ++
+              explicitTz.map { tz => Map(key -> tz) }.getOrElse(Map())
+
+            spark.catalog.createTable(
+              tableName = s"external_$baseTable",
+              source = "parquet",
+              schema = new StructType().add("value", TimestampType),
+              options = options
+            )
+            Seq(false, true).foreach { vectorized =>
+              withSQLConf((SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString)) {
+                withClue(s"vectorized = $vectorized") {
+                 val collectedFromExternal =
+                    spark.sql(s"select value from external_$baseTable").collect()
+                      .map(_.getAs[Timestamp](0))
+                  val expTimestamps = explicitTz match {
+                    case Some("America/Los_Angeles") =>
+                      // this is assuming that the times were adjusted *from* LA *to* UTC when they
+                      // were written out, so on reading we do the reverse.  Eg., originally the
+                      // data was 12pm, but it got written out as 8pm.  We need to read it back
+                      // as 12pm.  The offset is stored as the difference from UTC, so in this case
+                      // it would be -8.
+                      val tz = TimeZone.getTimeZone("America/Los_Angeles")
+                      rawData.collect().map { ts =>
+                        new Timestamp(ts.getTime + tz.getOffset(ts.getTime))
+                      }
+                    case _ =>
+                      // no modification to raw data in parquet
+                      rawData.collect()
+                  }
+                  assert(collectedFromExternal === expTimestamps)
+                }
+              }
+            }
+          }
         }
       }
       // check creating tables a few different ways, make sure the tz property is set correctly
-      checkCreateTableDefaultTz("no_tz", None)
+      checkCreateReadWrite("no_tz", None)
 
-      checkCreateTableDefaultTz("UTC", Some("UTC"))
-      checkCreateTableDefaultTz("LA", Some("America/Los_Angeles"))
-      // TODO create table w/ bad TZ
+      checkCreateReadWrite("UTC", Some("UTC"))
+      checkCreateReadWrite("LA", Some("America/Los_Angeles"))
 
       val badTzException = intercept[AnalysisException] {
         spark.sql(
@@ -262,10 +355,6 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
       }
       assert(badTzException.getMessage.contains("Blart Versenwald III"))
 
-      // TODO check on an ALTER TABLE
-
-      // TODO insert data
-      pending
     }
   }
 

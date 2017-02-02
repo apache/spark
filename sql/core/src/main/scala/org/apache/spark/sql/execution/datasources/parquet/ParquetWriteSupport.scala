@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.nio.{ByteBuffer, ByteOrder}
 import java.util
+import java.util.TimeZone
 
 import scala.collection.JavaConverters.mapAsJavaMapConverter
 
@@ -72,6 +73,8 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   // Reusable byte array used to write decimal values
   private val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
 
+  private var timezone: TimeZone = _
+
   override def init(configuration: Configuration): WriteContext = {
     val schemaString = configuration.get(ParquetWriteSupport.SPARK_ROW_SCHEMA)
     this.schema = StructType.fromString(schemaString)
@@ -81,6 +84,12 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
       configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean
     }
     this.rootFieldWriters = schema.map(_.dataType).map(makeWriter)
+    val tzString = configuration.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
+    timezone = if (tzString == null) {
+      DateTimeUtils.TimeZoneGMT
+    } else {
+      TimeZone.getTimeZone(tzString)
+    }
 
     val messageType = new ParquetSchemaConverter(configuration).convert(schema)
     val metadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> schemaString).asJava
@@ -163,7 +172,18 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
 
           // NOTE: Starting from Spark 1.5, Spark SQL `TimestampType` only has microsecond
           // precision.  Nanosecond parts of timestamp values read from INT96 are simply stripped.
-          val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
+          val rawMicros = row.getLong(ordinal)
+          val adjustedMicros = if (timezone == DateTimeUtils.TimeZoneGMT) {
+            rawMicros
+          } else {
+            // For compatibility with HIVE-12767, always write data in UTC, so adjust *from* the
+            // table timezone *to* UTC.  Eg., if the table was created with TZ = America/Los_Angeles
+            // (UTC-8 w/out DST), then add 8 hours to the timestamp when we save.
+            val millisOffset = timezone.getOffset(rawMicros / 1000)
+            // scalstyle:off
+            rawMicros - (millisOffset * 1000L)
+          }
+          val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(adjustedMicros)
           val buf = ByteBuffer.wrap(timestampBuffer)
           buf.order(ByteOrder.LITTLE_ENDIAN).putLong(timeOfDayNanos).putInt(julianDay)
           recordConsumer.addBinary(Binary.fromReusedByteArray(timestampBuffer))
