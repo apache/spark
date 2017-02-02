@@ -19,12 +19,23 @@ package org.apache.spark.sql.kafka010
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
+import org.apache.spark.sql.types._
 
 private[kafka010] object KafkaUtils {
 
   // Used to denote unbounded offset positions
   val LATEST = -1L
   val EARLIEST = -2L
+
+  def kafkaSchema: StructType = StructType(Seq(
+    StructField("key", BinaryType),
+    StructField("value", BinaryType),
+    StructField("topic", StringType),
+    StructField("partition", IntegerType),
+    StructField("offset", LongType),
+    StructField("timestamp", TimestampType),
+    StructField("timestampType", IntegerType)
+  ))
 
   def getSortedExecutorList(sc: SparkContext): Array[String] = {
     val bm = sc.env.blockManager

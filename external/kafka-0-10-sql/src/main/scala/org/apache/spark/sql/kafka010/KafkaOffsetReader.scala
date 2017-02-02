@@ -31,7 +31,6 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.kafka010.KafkaOffsetReader.ConsumerStrategy
-import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
 
 
@@ -336,16 +335,6 @@ private[kafka010] class UninterruptibleKafkaOffsetReader(kafkaOffsetReader: Kafk
 }
 
 private[kafka010] object KafkaOffsetReader {
-
-  def kafkaSchema: StructType = StructType(Seq(
-    StructField("key", BinaryType),
-    StructField("value", BinaryType),
-    StructField("topic", StringType),
-    StructField("partition", IntegerType),
-    StructField("offset", LongType),
-    StructField("timestamp", TimestampType),
-    StructField("timestampType", IntegerType)
-  ))
 
   sealed trait ConsumerStrategy {
     def createConsumer(kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]]

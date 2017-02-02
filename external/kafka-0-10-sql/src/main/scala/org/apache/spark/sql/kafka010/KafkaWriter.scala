@@ -20,8 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.{Await, Future, blocking}
-import scala.concurrent.duration._
+import scala.concurrent.{blocking, Future}
 
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord, RecordMetadata}
 
@@ -30,8 +29,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.datasources.FileFormatWriter._
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.types.{NullType, StringType}
 import org.apache.spark.util.Utils
@@ -48,9 +45,8 @@ object KafkaWriter extends Logging {
 
   def write(sparkSession: SparkSession,
     queryExecution: QueryExecution,
-    writerOptions: Map[String, String],
     kafkaParameters: ju.Map[String, Object],
-    defaultTopic: Option[String] = None) = {
+    defaultTopic: Option[String] = None): Unit = {
 
     val schema = queryExecution.logical.output
     schema.find(p => p.name == TOPIC_ATTRIBUTE_NAME).getOrElse(
@@ -65,12 +61,6 @@ object KafkaWriter extends Logging {
     schema.find(p => p.name == VALUE_ATTRIBUTE_NAME).getOrElse(
       throw new IllegalArgumentException(s"Required attribute '$VALUE_ATTRIBUTE_NAME' not found")
     )
-
-    val pollTimeoutMs = writerOptions.getOrElse(
-      "kafkaProducer.pollTimeoutMs",
-      sparkSession.sparkContext.conf.getTimeAsMs("spark.network.timeout", "120s").toString
-    ).toLong
-
     SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
       try {
         val ret = sparkSession.sparkContext.runJob(queryExecution.toRdd,
@@ -78,8 +68,6 @@ object KafkaWriter extends Logging {
             executeTask(
               iterator = iter,
               producerConfiguration = kafkaParameters,
-              writerOptions = writerOptions,
-              pollTimeoutMs = pollTimeoutMs,
               sparkStageId = taskContext.stageId(),
               sparkPartitionId = taskContext.partitionId(),
               sparkAttemptNumber = taskContext.attemptNumber(),
@@ -100,19 +88,58 @@ object KafkaWriter extends Logging {
   private def executeTask(
     iterator: Iterator[InternalRow],
     producerConfiguration: ju.Map[String, Object],
-    writerOptions: Map[String, String],
-    pollTimeoutMs: Long,
     sparkStageId: Int,
     sparkPartitionId: Int,
     sparkAttemptNumber: Int,
     inputSchema: Seq[Attribute],
     defaultTopic: Option[String]): TaskCommitMessage = {
-    import scala.concurrent.ExecutionContext.Implicits.global
+    val writeTask = new KafkaWriteTask(
+      producerConfiguration, inputSchema, defaultTopic)
+    try {
+      Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
+        // Execute the task to write rows out and commit the task.
+        writeTask.execute(iterator)
+        writeTask.releaseResources()
+      })(catchBlock = {
+        // If there is an error, release resource and then abort the task
+        try {
+          writeTask.releaseResources()
+        } finally {
+          logError(s"Stage $sparkStageId, task $sparkPartitionId aborted.")
+        }
+      })
+    } catch {
+      case t: Throwable =>
+        throw new SparkException("Task failed while writing rows", t)
+    }
+
+    if (writeTask.failedWrites.size == 0) {
+      assert(writeTask.confirmedWrites == writeTask.producerRecordCount,
+        s"Confirmed writes ${writeTask.confirmedWrites} != " +
+        s"records written ${writeTask.producerRecordCount}")
+      TaskCommitMessage(sparkStageId, sparkPartitionId, writeCommitted = true)
+    } else {
+      TaskCommitMessage(sparkStageId, sparkPartitionId, writeCommitted = false)
+    }
+  }
+
+  /**
+   * A simple trait for writing out data in a single Spark task, without any concerns about how
+   * to commit or abort tasks. Exceptions thrown by the implementation of this trait will
+   * automatically trigger task aborts.
+   */
+  private class KafkaWriteTask(
+    producerConfiguration: ju.Map[String, Object],
+    inputSchema: Seq[Attribute],
+    defaultTopic: Option[String]) {
+    var producerRecordCount = 0
+    var confirmedWrites = 0
+    var failedWrites = ListBuffer.empty[Throwable]
 
     val producer = new KafkaProducer[Array[Byte], Array[Byte]](producerConfiguration)
     val topicExpression = inputSchema.find(p => p.name == TOPIC_ATTRIBUTE_NAME).getOrElse(
       if (defaultTopic == None) {
-        throw new IllegalStateException()(s"Default topic required when no " +
+        throw new IllegalStateException(s"Default topic required when no " +
           s"'$TOPIC_ATTRIBUTE_NAME' attribute is present")
       } else {
         Literal(null, NullType)
@@ -139,67 +166,34 @@ object KafkaWriter extends Logging {
     // Use to extract the value from a Row
     val getValue = UnsafeProjection.create(Seq(valueExpression), inputSchema)
 
-    try {
-      Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-        // Execute the task to write rows out and commit the task.
-        val outputPartitions = writeTask.execute(iterator)
-        writeTask.releaseResources()
-        (committer.commitTask(taskAttemptContext), outputPartitions)
-      })(catchBlock = {
-        // If there is an error, release resource and then abort the task
-        try {
-          writeTask.releaseResources()
-        } finally {
-          committer.abortTask(taskAttemptContext)
-          logError(s"Job $jobId aborted.")
+    /**
+     * Writes key value data out to topics.
+     */
+    def execute(iterator: Iterator[InternalRow]): Unit = {
+      import scala.concurrent.ExecutionContext.Implicits.global
+      while (iterator.hasNext) {
+        val currentRow = iterator.next()
+        val topic = getTopic(currentRow).get(0, StringType).toString
+        val key = getKey(currentRow).getBytes
+        val value = getValue(currentRow).getBytes
+        val record = new ProducerRecord[Array[Byte], Array[Byte]](topic, key, value)
+        val future = Future[RecordMetadata] {
+          blocking {
+            producer.send(record).get()
+          }
         }
-      })
-    } catch {
-      case t: Throwable =>
-        throw new SparkException("Task failed while writing rows", t)
-    }
-    var futures = ListBuffer.empty[Future[RecordMetadata]]
-    while (iterator.hasNext) {
-      val currentRow = iterator.next()
-      val topic = getTopic(currentRow).get(0, StringType).toString
-      val key = getKey(currentRow).getBytes
-      val value = getValue(currentRow).getBytes
-      val record = new ProducerRecord[Array[Byte], Array[Byte]](topic, key, value)
-      futures += Future[RecordMetadata] {
-        blocking {
-          producer.send(record).get()
+        future.onSuccess {
+          case rm => confirmedWrites += 1
+        }
+        future.onFailure {
+          case e => failedWrites += e
         }
       }
-    }
-    val result =
-      Await.ready(Future.sequence(futures.toList), Duration.create(pollTimeoutMs, MILLISECONDS))
-    if (result.isCompleted) {
-      TaskCommitMessage(sparkStageId, sparkPartitionId, writeCommitted = true)
-    } else {
-      TaskCommitMessage(sparkStageId, sparkPartitionId, writeCommitted = false)
-    }
-  }
-
-  /**
-   * A simple trait for writing out data in a single Spark task, without any concerns about how
-   * to commit or abort tasks. Exceptions thrown by the implementation of this trait will
-   * automatically trigger task aborts.
-   */
-  private class KafkaWriteTask(
-    producerConfiguration: ju.Map[String, Object],
-    writerOptions: Map[String, String],
-    inputSchema: Seq[Attribute],
-    defaultTopic: Option[String]) {
-    /**
-     * Writes data out to files, and then returns the list of partition strings written out.
-     * The list of partitions is sent back to the driver and used to update the catalog.
-     */
-    def execute(iterator: Iterator[InternalRow]): List[Future[RecordMetadata]] {
-
+      producer.flush()
     }
 
-    def releaseResources(): Unit {
-
+    def releaseResources(): Unit = {
+      producer.close()
     }
   }
 }

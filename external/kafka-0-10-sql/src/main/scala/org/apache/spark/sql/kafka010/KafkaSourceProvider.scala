@@ -26,10 +26,11 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.execution.streaming.Source
+import org.apache.spark.sql._
+import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.kafka010.KafkaOffsetReader.{AssignStrategy, SubscribePatternStrategy, SubscribeStrategy}
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -37,8 +38,9 @@ import org.apache.spark.sql.types.StructType
  * IllegalArgumentException when the Kafka Dataset is created, so that it can catch
  * missing options even before the query is started.
  */
-private[kafka010] class KafkaSourceProvider extends DataSourceRegister with StreamSourceProvider
-  with RelationProvider with Logging {
+private[kafka010] class KafkaSourceProvider extends DataSourceRegister
+  with StreamSourceProvider with StreamSinkProvider
+  with RelationProvider with CreatableRelationProvider with Logging {
   import KafkaSourceProvider._
 
   override def shortName(): String = "kafka"
@@ -54,7 +56,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister with Stre
       parameters: Map[String, String]): (String, StructType) = {
     validateOptions(parameters, Stream)
     require(schema.isEmpty, "Kafka source has a fixed schema and cannot be set with a custom one")
-    (shortName(), KafkaOffsetReader.kafkaSchema)
+    (shortName(), KafkaUtils.kafkaSchema)
   }
 
   override def createSource(
@@ -152,6 +154,52 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister with Stre
       failOnDataLoss(caseInsensitiveParams),
       startingRelationOffsets,
       endingRelationOffsets)
+  }
+
+  override def createSink(sqlContext: SQLContext,
+    parameters: Map[String, String],
+    partitionColumns: Seq[String],
+    outputMode: OutputMode): Sink = {
+
+    if (outputMode != OutputMode.Append()) {
+      throw new IllegalArgumentException(s"Kafka supports ${OutputMode.Append()} only")
+    }
+    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
+    val defaultTopic = caseInsensitiveParams.get(DEFAULT_TOPIC).map(_.trim.toLowerCase)
+    val specifiedKafkaParams =
+      parameters
+        .keySet
+        .filter(_.toLowerCase.startsWith("kafka."))
+        .map { k => k.drop(6).toString -> parameters(k) }
+        .toMap
+    new KafkaSink(sqlContext,
+      new ju.HashMap[String, Object](specifiedKafkaParams.asJava),
+      defaultTopic)
+  }
+
+  override def createRelation(
+    outerSQLContext: SQLContext,
+    mode: SaveMode,
+    parameters: Map[String, String],
+    data: DataFrame): BaseRelation = {
+    logInfo(s"Save mode = $mode")
+    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
+    val defaultTopic = caseInsensitiveParams.get(DEFAULT_TOPIC).map(_.trim.toLowerCase)
+    val specifiedKafkaParams =
+      parameters
+        .keySet
+        .filter(_.toLowerCase.startsWith("kafka."))
+        .map { k => k.drop(6).toString -> parameters(k) }
+        .toMap
+    KafkaWriter.write(outerSQLContext.sparkSession, data.queryExecution,
+      new ju.HashMap[String, Object](specifiedKafkaParams.asJava),
+      defaultTopic)
+
+    new BaseRelation {
+      override def sqlContext: SQLContext = outerSQLContext
+
+      override def schema: StructType = KafkaUtils.kafkaSchema
+    }
   }
 
   private def kafkaParamsForDriver(specifiedKafkaParams: Map[String, String]) =
@@ -380,6 +428,7 @@ private[kafka010] object KafkaSourceProvider {
   private val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
   private val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
+  private val DEFAULT_TOPIC = "defaulttopic"
 
   // Used to check parameters for different source modes
   private sealed trait Mode
