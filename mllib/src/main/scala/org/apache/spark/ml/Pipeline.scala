@@ -30,6 +30,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
+import org.apache.spark.ml.param.shared.HasCheckpointInterval
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.impl.PeriodicDatasetCheckpointer
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -95,18 +96,11 @@ abstract class PipelineStage extends Params with Logging {
  */
 @Since("1.2.0")
 class Pipeline @Since("1.4.0") (
-  @Since("1.4.0") override val uid: String) extends Estimator[PipelineModel] with MLWritable {
+    @Since("1.4.0") override val uid: String)
+  extends Estimator[PipelineModel] with MLWritable with HasCheckpointInterval {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("pipeline"))
-
-  /**
-   * param for checkpoint interval of pipeline stages
-   * @group param
-   */
-  @Since("2.2.0")
-  val checkpointInterval: Param[Int] =
-    new Param(this, "checkpointInterval", "checkpoint interval for stages")
 
   /** @group setParam */
   @Since("2.2.0")
@@ -114,10 +108,6 @@ class Pipeline @Since("1.4.0") (
     set(checkpointInterval, value)
     this
   }
-
-  /** @group getParam */
-  @Since("2.2.0")
-  def getCheckpointInterval: Int = $(checkpointInterval)
 
   /**
    * param for pipeline stages
@@ -323,20 +313,12 @@ object Pipeline extends MLReadable[Pipeline] {
 class PipelineModel private[ml] (
     @Since("1.4.0") override val uid: String,
     @Since("1.4.0") val stages: Array[Transformer])
-  extends Model[PipelineModel] with MLWritable with Logging {
+  extends Model[PipelineModel] with MLWritable with HasCheckpointInterval with Logging {
 
   /** A Java/Python-friendly auxiliary constructor. */
   private[ml] def this(uid: String, stages: ju.List[Transformer]) = {
     this(uid, stages.asScala.toArray)
   }
-
-  /**
-   * param for checkpoint interval of pipeline stages
-   * @group param
-   */
-  @Since("2.2.0")
-  val checkpointInterval: Param[Int] =
-    new Param(this, "checkpointInterval", "checkpoint interval for stages")
 
   /** @group setParam */
   @Since("2.2.0")
@@ -344,10 +326,6 @@ class PipelineModel private[ml] (
     set(checkpointInterval, value)
     this
   }
-
-  /** @group getParam */
-  @Since("2.2.0")
-  def getCheckpointInterval: Int = $(checkpointInterval)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
