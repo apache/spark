@@ -46,8 +46,8 @@ class HeartbeatReceiverSuite
   with PrivateMethodTester
   with LocalSparkContext {
 
-  private val executorId1 = "executor-1"
-  private val executorId2 = "executor-2"
+  private val executorId1 = "1"
+  private val executorId2 = "2"
 
   // Shared state that must be reset before and after each test
   private var scheduler: TaskSchedulerImpl = null
@@ -173,11 +173,11 @@ class HeartbeatReceiverSuite
     val dummyExecutorEndpoint2 = new FakeExecutorEndpoint(rpcEnv)
     val dummyExecutorEndpointRef1 = rpcEnv.setupEndpoint("fake-executor-1", dummyExecutorEndpoint1)
     val dummyExecutorEndpointRef2 = rpcEnv.setupEndpoint("fake-executor-2", dummyExecutorEndpoint2)
-    fakeSchedulerBackend.driverEndpoint.askWithRetry[Boolean](
+    fakeSchedulerBackend.driverEndpoint.askSync[Boolean](
       RegisterExecutor(executorId1, dummyExecutorEndpointRef1, "1.2.3.4", 0, Map.empty))
-    fakeSchedulerBackend.driverEndpoint.askWithRetry[Boolean](
+    fakeSchedulerBackend.driverEndpoint.askSync[Boolean](
       RegisterExecutor(executorId2, dummyExecutorEndpointRef2, "1.2.3.5", 0, Map.empty))
-    heartbeatReceiverRef.askWithRetry[Boolean](TaskSchedulerIsSet)
+    heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
     addExecutorAndVerify(executorId1)
     addExecutorAndVerify(executorId2)
     triggerHeartbeat(executorId1, executorShouldReregister = false)
@@ -195,7 +195,7 @@ class HeartbeatReceiverSuite
     // Here we use a timeout of O(seconds), but in practice this whole test takes O(10ms).
     val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
     heartbeatReceiverClock.advance(executorTimeout * 2)
-    heartbeatReceiverRef.askWithRetry[Boolean](ExpireDeadHosts)
+    heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
     val killThread = heartbeatReceiver.invokePrivate(_killExecutorThread())
     killThread.shutdown() // needed for awaitTermination
     killThread.awaitTermination(10L, TimeUnit.SECONDS)
