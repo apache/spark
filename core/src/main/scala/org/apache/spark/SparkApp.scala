@@ -31,7 +31,7 @@ private[spark] trait SparkApp {
    * @param args    - all argouments for SparkApp.
    * @param conf    - Spark Configuration.
    * @param sysConf - system configurations.
-   **/
+   */
   def sparkMain(
     args: Array[String],
     conf: scala.collection.immutable.Map[String, String],
