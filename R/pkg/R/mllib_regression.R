@@ -41,9 +41,8 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 
 
 #' Family object for tweedie.
-#' Needs to be outside spark.glm because it is also used in R-compatible glm
 #' @param var.power the power index in the variance function.
-#' @param linkPower the power index in the link function.
+#' @param link.Power the power index in the link function.
 #' @return returns a list for internal use in spark.glm
 tweedie <- function(var.power = 0.0, link.power = 1.0 - var.power) {
   list(family = "tweedie",
