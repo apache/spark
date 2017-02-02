@@ -21,7 +21,9 @@ import java.nio.file.Paths
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+import com.google.common.base.Charsets
 import com.google.common.collect.ImmutableList
+import com.google.common.io.Files
 import com.google.common.util.concurrent.SettableFuture
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{Config, KubernetesClient, KubernetesClientException, Watcher}
@@ -62,10 +64,14 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
     .getOrElse(throw new IllegalStateException("Expected to find spark-examples jar; was the" +
         " pre-integration-test phase run?"))
 
+  private val TEST_EXISTENCE_FILE = Paths.get("test-data", "input.txt").toFile
+  private val TEST_EXISTENCE_FILE_CONTENTS = Files.toString(TEST_EXISTENCE_FILE, Charsets.UTF_8)
   private val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))
   private val INTERVAL = PatienceConfiguration.Interval(Span(2, Seconds))
-  private val MAIN_CLASS = "org.apache.spark.deploy.kubernetes" +
+  private val SPARK_PI_MAIN_CLASS = "org.apache.spark.deploy.kubernetes" +
     ".integrationtest.jobs.SparkPiWithInfiniteWait"
+  private val FILE_EXISTENCE_MAIN_CLASS = "org.apache.spark.deploy.kubernetes" +
+    ".integrationtest.jobs.FileExistenceTest"
   private val NAMESPACE = UUID.randomUUID().toString.replaceAll("-", "")
   private var minikubeKubernetesClient: KubernetesClient = _
   private var clientConfig: Config = _
@@ -179,7 +185,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
 
     new Client(
       sparkConf = sparkConf,
-      mainClass = MAIN_CLASS,
+      mainClass = SPARK_PI_MAIN_CLASS,
       mainAppResource = mainAppResource,
       appArgs = Array.empty[String]).run()
     val sparkMetricsService = getSparkMetricsService("spark-pi")
@@ -196,7 +202,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--executor-cores", "1",
       "--num-executors", "1",
       "--upload-jars", HELPER_JAR,
-      "--class", MAIN_CLASS,
+      "--class", SPARK_PI_MAIN_CLASS,
       "--conf", "spark.ui.enabled=true",
       "--conf", "spark.testing=false",
       "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
@@ -279,7 +285,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--executor-cores", "1",
       "--num-executors", "1",
       "--upload-jars", HELPER_JAR,
-      "--class", MAIN_CLASS,
+      "--class", SPARK_PI_MAIN_CLASS,
       "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
       "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
       "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
@@ -317,7 +323,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--executor-cores", "1",
       "--num-executors", "1",
       "--upload-jars", HELPER_JAR,
-      "--class", MAIN_CLASS,
+      "--class", SPARK_PI_MAIN_CLASS,
       "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
       "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
       "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
@@ -333,5 +339,74 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--conf", s"spark.ssl.kubernetes.driverlaunch.trustStorePassword=changeit",
       EXAMPLES_JAR)
     SparkSubmit.main(args)
+  }
+
+  test("Added files should exist on the driver.") {
+    val args = Array(
+      "--master", s"k8s://https://${Minikube.getMinikubeIp}:8443",
+      "--deploy-mode", "cluster",
+      "--kubernetes-namespace", NAMESPACE,
+      "--name", "spark-file-existence-test",
+      "--executor-memory", "512m",
+      "--executor-cores", "1",
+      "--num-executors", "1",
+      "--upload-jars", HELPER_JAR,
+      "--upload-files", TEST_EXISTENCE_FILE.getAbsolutePath,
+      "--class", FILE_EXISTENCE_MAIN_CLASS,
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.testing=true",
+      "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
+      "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
+      "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
+      "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
+      "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
+      EXAMPLES_JAR,
+      TEST_EXISTENCE_FILE.getName,
+      TEST_EXISTENCE_FILE_CONTENTS)
+    val podCompletedFuture = SettableFuture.create[Boolean]
+    val watch = new Watcher[Pod] {
+      override def eventReceived(action: Action, pod: Pod): Unit = {
+        val containerStatuses = pod.getStatus.getContainerStatuses.asScala
+        val allSuccessful = containerStatuses.nonEmpty && containerStatuses
+          .forall(status => {
+            status.getState.getTerminated != null && status.getState.getTerminated.getExitCode == 0
+        })
+        if (allSuccessful) {
+          podCompletedFuture.set(true)
+        } else {
+          val failedContainers = containerStatuses.filter(container => {
+            container.getState.getTerminated != null &&
+              container.getState.getTerminated.getExitCode != 0
+          })
+          if (failedContainers.nonEmpty) {
+            podCompletedFuture.setException(new SparkException(
+              "One or more containers in the driver failed with a nonzero exit code."))
+          }
+        }
+      }
+
+      override def onClose(e: KubernetesClientException): Unit = {
+        logWarning("Watch closed", e)
+      }
+    }
+    Utils.tryWithResource(minikubeKubernetesClient
+        .pods
+        .withLabel("spark-app-name", "spark-file-existence-test")
+        .watch(watch)) { _ =>
+      SparkSubmit.main(args)
+      assert(podCompletedFuture.get, "Failed to run driver pod")
+      val driverPod = minikubeKubernetesClient
+        .pods
+        .withLabel("spark-app-name", "spark-file-existence-test")
+        .list()
+        .getItems
+        .get(0)
+      val podLog = minikubeKubernetesClient
+        .pods
+        .withName(driverPod.getMetadata.getName)
+        .getLog
+      assert(podLog.contains(s"File found at /opt/spark/${TEST_EXISTENCE_FILE.getName}" +
+        s" with correct contents."), "Job did not find the file as expected.")
+    }
   }
 }

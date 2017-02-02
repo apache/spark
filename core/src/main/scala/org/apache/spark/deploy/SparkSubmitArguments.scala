@@ -74,6 +74,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   // Kubernetes only
   var kubernetesNamespace: String = null
   var kubernetesUploadJars: String = null
+  var kubernetesUploadFiles: String = null
 
   // Standalone cluster mode only
   var supervise: Boolean = false
@@ -195,6 +196,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orNull
     kubernetesUploadJars = Option(kubernetesUploadJars)
       .orElse(sparkProperties.get("spark.kubernetes.driver.uploads.jars"))
+      .orNull
+    kubernetesUploadFiles = Option(kubernetesUploadFiles)
+      .orElse(sparkProperties.get("spark.kubernetes.driver.uploads.files"))
       .orNull
 
     // Try to set main class from JAR if no --class argument is given
@@ -439,6 +443,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case KUBERNETES_UPLOAD_JARS =>
         kubernetesUploadJars = value
+
+      case KUBERNETES_UPLOAD_FILES =>
+        kubernetesUploadFiles = value
 
       case HELP =>
         printUsageAndExit(0)

@@ -464,6 +464,8 @@ object SparkSubmit extends CommandLineUtils {
         sysProp = "spark.kubernetes.namespace"),
       OptionAssigner(args.kubernetesUploadJars, KUBERNETES, CLUSTER,
         sysProp = "spark.kubernetes.driver.uploads.jars"),
+      OptionAssigner(args.kubernetesUploadFiles, KUBERNETES, CLUSTER,
+        sysProp = "spark.kubernetes.driver.uploads.files"),
 
         // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,

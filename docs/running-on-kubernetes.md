@@ -217,8 +217,18 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td><code>spark.kubernetes.driver.uploads.jars</code></td>
   <td>(none)</td>
   <td>
-    Comma-separated list of jars to sent to the driver and all executors when submitting the application in cluster
+    Comma-separated list of jars to send to the driver and all executors when submitting the application in cluster
     mode. Refer to <a href="running-on-kubernetes.html#adding-other-jars">adding other jars</a> for more information.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.uploads.files</code></td>
+  <td>(none)</td>
+  <td>
+    Comma-separated list of files to send to the driver and all executors when submitting the application in cluster
+    mode. The files are added in a flat hierarchy to the current working directory of the driver, having the same
+    names as the names of the original files. Note that two files with the same name cannot be added, even if they
+    were in different source directories on the client disk.
   </td>
 </tr>
 <tr>
