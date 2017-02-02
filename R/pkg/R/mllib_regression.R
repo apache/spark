@@ -39,11 +39,16 @@ setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 #' @note IsotonicRegressionModel since 2.1.0
 setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 
-
 #' Family object for tweedie.
+#'
 #' @param var.power the power index in the variance function.
 #' @param link.Power the power index in the link function.
 #' @return returns a list for internal use in spark.glm
+#' @rdname tweedie
+#' @aliases tweedie
+#' @name tweedie
+#' @export
+#' @seealso \link{spark.glm}
 tweedie <- function(var.power = 0.0, link.power = 1.0 - var.power) {
   list(family = "tweedie",
        var.power = var.power,
