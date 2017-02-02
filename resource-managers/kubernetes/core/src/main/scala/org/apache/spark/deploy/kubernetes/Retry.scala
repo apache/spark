@@ -19,24 +19,36 @@ package org.apache.spark.deploy.kubernetes
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-private[spark] object Retry {
+import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
+
+private[spark] object Retry extends Logging {
 
   private def retryableFuture[T]
-      (times: Int, interval: Duration)
+      (attempt: Int, maxAttempts: Int, interval: Duration, retryMessage: Option[String])
       (f: => Future[T])
       (implicit executionContext: ExecutionContext): Future[T] = {
     f recoverWith {
-      case _ if times > 0 => {
-        Thread.sleep(interval.toMillis)
-        retryableFuture(times - 1, interval)(f)
-      }
+      case error: Throwable =>
+        if (attempt <= maxAttempts) {
+          retryMessage.foreach { message =>
+            logWarning(s"$message - attempt $attempt of $maxAttempts", error)
+          }
+          Thread.sleep(interval.toMillis)
+          retryableFuture(attempt + 1, maxAttempts, interval, retryMessage)(f)
+        } else {
+          Future.failed(retryMessage.map(message =>
+            new SparkException(s"$message - reached $maxAttempts attempts," +
+              s" and aborting task.", error)
+          ).getOrElse(error))
+        }
     }
   }
 
   def retry[T]
-      (times: Int, interval: Duration)
+      (times: Int, interval: Duration, retryMessage: Option[String] = None)
       (f: => T)
       (implicit executionContext: ExecutionContext): Future[T] = {
-    retryableFuture(times, interval)(Future[T] { f })
+    retryableFuture(1, times, interval, retryMessage)(Future[T] { f })
   }
 }
