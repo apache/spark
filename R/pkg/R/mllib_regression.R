@@ -42,9 +42,9 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' Family object for tweedie.
 #'
 #' @param var.power the power index in the variance function.
-#' @param link.Power the power index in the link function.
-#' @return returns a list for internal use in spark.glm
+#' @param link.power the power index in the link function.
 #' @rdname tweedie
+#' @return a list for internal use in spark.glm
 #' @aliases tweedie
 #' @name tweedie
 #' @export
