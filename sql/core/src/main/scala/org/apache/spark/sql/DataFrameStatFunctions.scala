@@ -63,7 +63,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities
    *
-   * @note NaN values will be removed from the numerical column before calculation
+   * @note null and NaN values will be removed from the numerical column before calculation
    *
    * @since 2.0.0
    */
@@ -80,7 +80,6 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @see [[DataFrameStatsFunctions.approxQuantile(col:Str* approxQuantile]] for
    *     detailed description.
    *
-   * Note that rows containing any null or NaN values will be removed before calculation.
    * @param cols the names of the numerical columns
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].
@@ -90,7 +89,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities of each column
    *
-   * @note Rows containing any NaN values will be removed before calculation
+   * @note Rows containing any null or NaN values will be removed before calculation
    *
    * @since 2.2.0
    */
