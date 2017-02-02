@@ -395,11 +395,14 @@ class ParamTests(PySparkTestCase):
         tp_copy = tp.copy(extra=extra)
         self.assertEqual(tp.uid, tp_copy.uid)
         self.assertEqual(tp.params, tp_copy.params)
-        for k, v in extra.iteritems():
+        for k, v in extra.items():
             self.assertTrue(tp_copy.isDefined(k))
             self.assertEqual(tp_copy.getOrDefault(k), v)
-        self.assertEqual(tp._paramMap,
-                         {k: tp_copy._paramMap[k] for k in tp_copy._paramMap if k not in extra})
+        copied_no_extra = {}
+        for k, v in tp_copy._paramMap.items():
+            if k not in extra:
+                copied_no_extra[k] = v
+        self.assertEqual(tp._paramMap, copied_no_extra)
         self.assertEqual(tp._defaultParamMap, tp_copy._defaultParamMap)
 
 
