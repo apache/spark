@@ -18,6 +18,7 @@ package org.apache.spark.deploy.rest.kubernetes
 
 import java.io.File
 import java.net.URI
+import java.nio.file.Paths
 import java.util.concurrent.CountDownLatch
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
@@ -27,7 +28,7 @@ import org.apache.commons.codec.binary.Base64
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SecurityManager, SPARK_VERSION => sparkVersion, SparkConf, SparkException, SSLOptions}
+import org.apache.spark.{SecurityManager, SPARK_VERSION => sparkVersion, SparkConf, SSLOptions}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ShutdownHookManager, ThreadUtils, Utils}
@@ -149,7 +150,8 @@ private[spark] class KubernetesSparkRestServer(
             appArgs,
             sparkProperties,
             secret,
-            uploadedJars) =>
+            uploadedJars,
+            uploadedFiles) =>
               val decodedSecret = Base64.decodeBase64(secret)
               if (!expectedApplicationSecret.sameElements(decodedSecret)) {
                 responseServlet.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
@@ -157,28 +159,32 @@ private[spark] class KubernetesSparkRestServer(
               } else {
                 val tempDir = Utils.createTempDir()
                 val appResourcePath = resolvedAppResource(appResource, tempDir)
-                val jarsDirectory = new File(tempDir, "jars")
-                if (!jarsDirectory.mkdir) {
-                  throw new IllegalStateException("Failed to create jars dir at" +
-                    s"${jarsDirectory.getAbsolutePath}")
-                }
-                val writtenJars = writeBase64ContentsToFiles(uploadedJars, jarsDirectory)
-                val driverExtraClasspath = sparkProperties
-                  .get("spark.driver.extraClassPath")
-                  .map(_.split(","))
-                  .getOrElse(Array.empty[String])
+                val writtenJars = writeUploadedJars(uploadedJars, tempDir)
+                val writtenFiles = writeUploadedFiles(uploadedFiles)
+                val resolvedSparkProperties = new mutable.HashMap[String, String]
+                resolvedSparkProperties ++= sparkProperties
+
+                // Resolve driver classpath and jars
                 val originalJars = sparkProperties.get("spark.jars")
                   .map(_.split(","))
                   .getOrElse(Array.empty[String])
                 val resolvedJars = writtenJars ++ originalJars ++ Array(appResourcePath)
                 val sparkJars = new File(sparkHome, "jars").listFiles().map(_.getAbsolutePath)
+                val driverExtraClasspath = sparkProperties
+                  .get("spark.driver.extraClassPath")
+                  .map(_.split(","))
+                  .getOrElse(Array.empty[String])
                 val driverClasspath = driverExtraClasspath ++
                   resolvedJars ++
-                  sparkJars ++
-                  Array(appResourcePath)
-                val resolvedSparkProperties = new mutable.HashMap[String, String]
-                resolvedSparkProperties ++= sparkProperties
+                  sparkJars
                 resolvedSparkProperties("spark.jars") = resolvedJars.mkString(",")
+
+                // Resolve spark.files
+                val originalFiles = sparkProperties.get("spark.files")
+                  .map(_.split(","))
+                  .getOrElse(Array.empty[String])
+                val resolvedFiles = originalFiles ++ writtenFiles
+                resolvedSparkProperties("spark.files") = resolvedFiles.mkString(",")
 
                 val command = new ArrayBuffer[String]
                 command += javaExecutable
@@ -227,6 +233,21 @@ private[spark] class KubernetesSparkRestServer(
           }
         }
       }
+    }
+
+    private def writeUploadedJars(files: Option[TarGzippedData], rootTempDir: File):
+        Seq[String] = {
+      val resolvedDirectory = new File(rootTempDir, "jars")
+      if (!resolvedDirectory.mkdir()) {
+        throw new IllegalStateException(s"Failed to create jars dir at " +
+          resolvedDirectory.getAbsolutePath)
+      }
+      writeBase64ContentsToFiles(files, resolvedDirectory)
+    }
+
+    private def writeUploadedFiles(files: Option[TarGzippedData]): Seq[String] = {
+      val workingDir = Paths.get("").toFile.getAbsoluteFile
+      writeBase64ContentsToFiles(files, workingDir)
     }
 
     def resolvedAppResource(appResource: AppResource, tempDir: File): String = {

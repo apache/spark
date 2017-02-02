@@ -61,7 +61,9 @@ private[spark] class Client(
   private val sslSecretsDirectory = s"$DRIVER_CONTAINER_SECRETS_BASE_DIR/$kubernetesAppId-ssl"
   private val sslSecretsName = s"$SUBMISSION_SSL_SECRETS_PREFIX-$kubernetesAppId"
   private val driverDockerImage = sparkConf.get(DRIVER_DOCKER_IMAGE)
-  private val uploadedJars = sparkConf.get(KUBERNETES_DRIVER_UPLOAD_JARS)
+  private val uploadedJars = sparkConf.get(KUBERNETES_DRIVER_UPLOAD_JARS).filter(_.nonEmpty)
+  private val uploadedFiles = sparkConf.get(KUBERNETES_DRIVER_UPLOAD_FILES).filter(_.nonEmpty)
+  uploadedFiles.foreach(validateNoDuplicateUploadFileNames)
   private val uiPort = sparkConf.getInt("spark.ui.port", DEFAULT_UI_PORT)
   private val driverSubmitTimeoutSecs = sparkConf.get(KUBERNETES_DRIVER_SUBMIT_TIMEOUT)
 
@@ -513,18 +515,40 @@ private[spark] class Client(
       case "container" => ContainerAppResource(appResourceUri.getPath)
       case other => RemoteAppResource(other)
     }
-
-    val uploadJarsBase64Contents = compressJars(uploadedJars)
+    val uploadJarsBase64Contents = compressFiles(uploadedJars)
+    val uploadFilesBase64Contents = compressFiles(uploadedFiles)
     KubernetesCreateSubmissionRequest(
       appResource = resolvedAppResource,
       mainClass = mainClass,
       appArgs = appArgs,
       secret = secretBase64String,
       sparkProperties = sparkConf.getAll.toMap,
-      uploadedJarsBase64Contents = uploadJarsBase64Contents)
+      uploadedJarsBase64Contents = uploadJarsBase64Contents,
+      uploadedFilesBase64Contents = uploadFilesBase64Contents)
   }
 
-  private def compressJars(maybeFilePaths: Option[String]): Option[TarGzippedData] = {
+  // Because uploaded files should be added to the working directory of the driver, they
+  // need to not have duplicate file names. They are added to the working directory so the
+  // user can reliably locate them in their application. This is similar in principle to how
+  // YARN handles its `spark.files` setting.
+  private def validateNoDuplicateUploadFileNames(uploadedFilesCommaSeparated: String): Unit = {
+    val pathsWithDuplicateNames = uploadedFilesCommaSeparated
+      .split(",")
+      .groupBy(new File(_).getName)
+      .filter(_._2.length > 1)
+    if (pathsWithDuplicateNames.nonEmpty) {
+      val pathsWithDuplicateNamesSorted = pathsWithDuplicateNames
+        .values
+        .flatten
+        .toList
+        .sortBy(new File(_).getName)
+      throw new SparkException("Cannot upload files with duplicate names via" +
+        s" ${KUBERNETES_DRIVER_UPLOAD_FILES.key}. The following paths have a duplicated" +
+        s" file name: ${pathsWithDuplicateNamesSorted.mkString(",")}")
+    }
+  }
+
+  private def compressFiles(maybeFilePaths: Option[String]): Option[TarGzippedData] = {
     maybeFilePaths
       .map(_.split(","))
       .map(CompressionUtils.createTarGzip(_))

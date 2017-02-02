@@ -68,8 +68,8 @@ private[spark] object CompressionUtils extends Logging {
             while (usedFileNames.contains(resolvedFileName)) {
               val oldResolvedFileName = resolvedFileName
               resolvedFileName = s"$nameWithoutExtension-$deduplicationCounter.$extension"
-              logWarning(s"File with name $oldResolvedFileName already exists. Trying to add with" +
-                s" file name $resolvedFileName instead.")
+              logWarning(s"File with name $oldResolvedFileName already exists. Trying to add" +
+                s" with file name $resolvedFileName instead.")
               deduplicationCounter += 1
             }
             usedFileNames += resolvedFileName
