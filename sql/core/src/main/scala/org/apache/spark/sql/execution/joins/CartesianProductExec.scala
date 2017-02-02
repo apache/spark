@@ -95,13 +95,12 @@ case class CartesianProductExec(
   protected override def doPrepare(): Unit = {
     if (!sqlContext.conf.crossJoinEnabled && joinType != Cross) {
       throw new AnalysisException(
-        s"""
-          |Detected cartesian product for Inner join between logical plans
-          |${left.treeString(false).trim}
-          |and
-          |${right.treeString(false).trim}
-          |Join condition is missing or trivial.
-          |Use the CROSS JOIN syntax to allow cartesian products between these relations.
+        s"""Detected cartesian product for INNER join between logical plans
+           |${left.treeString(false).trim}
+           |and
+           |${right.treeString(false).trim}
+           |Join condition is missing or trivial.
+           |Use the CROSS JOIN syntax to allow cartesian products between these relations.
          """.stripMargin)
     }
     super.doPrepare()
