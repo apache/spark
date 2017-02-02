@@ -84,6 +84,7 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
       configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean
     }
     this.rootFieldWriters = schema.map(_.dataType).map(makeWriter)
+    // If the table has a timezone property, apply the correct conversions.  See SPARK-12297.
     val tzString = configuration.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
     timezone = if (tzString == null) {
       DateTimeUtils.TimeZoneGMT

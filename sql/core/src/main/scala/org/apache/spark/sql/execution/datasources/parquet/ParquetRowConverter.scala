@@ -19,10 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
-import java.sql.Timestamp
-import java.util.{Calendar, Date, TimeZone}
-import java.util.Formatter.DateTime
-import java.util.concurrent.TimeUnit
+import java.util.TimeZone
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -261,6 +258,7 @@ private[parquet] class ParquetRowConverter(
 
       case TimestampType =>
         // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
+        // If the table has a timezone property, apply the correct conversions.  See SPARK-12297.
         val tzString = hadoopConf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
         val tz = if (tzString == null) {
           DateTimeUtils.TimeZoneGMT
@@ -652,7 +650,7 @@ private[parquet] class ParquetRowConverter(
 
 private[parquet] object ParquetRowConverter {
 
-    def binaryToUnscaledLong(binary: Binary): Long = {
+  def binaryToUnscaledLong(binary: Binary): Long = {
     // The underlying `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here
     // we are using `Binary.toByteBuffer.array()` to steal the underlying byte array without
     // copying it.

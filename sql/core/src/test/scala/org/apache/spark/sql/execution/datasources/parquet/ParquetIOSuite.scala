@@ -755,52 +755,6 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       assert(option.compressionCodecClassName == "UNCOMPRESSED")
     }
   }
-
-  test("SPARK-12297: Parquet Timestamp & Hive Timezones") {
-    // Test that we can correctly adjust parquet timestamps for Hive timezone bug.
-    withTempPath { dir =>
-      // First, lets generate some parquet data we can use to test this
-      val schema = StructType(StructField("timestamp", TimestampType) :: Nil)
-      // intentionally pick a few times right around new years, so time zone will effect many fields
-      val data = spark.sparkContext.parallelize(Seq(
-        "2015-12-31 23:50:59.123",
-        "2015-12-31 22:49:59.123",
-        "2016-01-01 00:39:59.123",
-        "2016-01-01 01:29:59.123"
-      ).map { x => Row(java.sql.Timestamp.valueOf(x)) })
-      spark.createDataFrame(data, schema).write.parquet(dir.getCanonicalPath)
-
-      // Ideally, we'd check the parquet schema here, make sure it was int96
-
-      // now we should try to read that data back.  We'll fake a timezone on the table, to see
-      // what the resulting behavior is
-      ParquetRowConverter.setTimezone(TimeZone.getTimeZone("PST"))
-//      spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, false)
-      val readInPst = spark.read.parquet(dir.getCanonicalPath)
-      readInPst.show()
-
-      import functions._
-      val originalTsCol = readInPst("timestamp")
-      val newTable = readInPst.withColumn("year", expr("year(timestamp)"))
-      assert(newTable.filter("year > '2015'").count() === 0)
-
-      // TODO test:
-      // * w/ & w/out vectorization
-      // * filtering
-      // * partioning
-      // * DST?
-      spark.sql(
-        """CREATE TABLE foobar (
-          |   year int,
-          |   timestamp timestamp
-          | )
-          | STORED AS PARQUET
-        """.stripMargin
-      )
-      newTable.createOrReplaceTempView("newTable")
-      spark.sql("insert into foobar (year, timestamp) select  year, timestamp from newTable")
-    }
-  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)

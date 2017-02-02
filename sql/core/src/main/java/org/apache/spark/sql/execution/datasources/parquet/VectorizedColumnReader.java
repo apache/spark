@@ -99,6 +99,7 @@ public class VectorizedColumnReader {
       throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
+    // If the table has a timezone property, apply the correct conversions.  See SPARK-12297.
     String tzString = conf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY());
     if (tzString == null) {
       tz = DateTimeUtils.TimeZoneGMT();

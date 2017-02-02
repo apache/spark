@@ -150,7 +150,6 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
       "ARRAY<STRUCT<array_element: INT>>")
   }
 
-  // TODO GMT / UTC should both use fast path
   test(s"SPARK-12297: Parquet Timestamp & Hive timezone") {
     // Check creating parquet tables, writing data into them, and reading it back out under a
     // variety of conditions:
