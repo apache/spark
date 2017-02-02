@@ -123,7 +123,7 @@ private[spark] object Minikube extends Logging {
       .build()
     val sslContext = SSLUtils.sslContext(kubernetesConf)
     val trustManager = SSLUtils.trustManagers(kubernetesConf)(0).asInstanceOf[X509TrustManager]
-    HttpClientUtil.createClient[T](url, sslContext.getSocketFactory, trustManager)
+    HttpClientUtil.createClient[T](Array(url), sslContext.getSocketFactory, trustManager)
   }
 
   def executeMinikubeSsh(command: String): Unit = {

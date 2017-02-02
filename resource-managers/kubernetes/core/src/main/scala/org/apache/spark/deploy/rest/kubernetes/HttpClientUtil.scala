@@ -20,7 +20,7 @@ import javax.net.ssl.{SSLContext, SSLSocketFactory, X509TrustManager}
 
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import feign.Feign
+import feign.{Client, Feign, Request, Response}
 import feign.Request.Options
 import feign.jackson.{JacksonDecoder, JacksonEncoder}
 import feign.jaxrs.JAXRSContract
@@ -32,7 +32,7 @@ import org.apache.spark.status.api.v1.JacksonMessageWriter
 private[spark] object HttpClientUtil {
 
   def createClient[T: ClassTag](
-      uri: String,
+      uris: Array[String],
       sslSocketFactory: SSLSocketFactory = SSLContext.getDefault.getSocketFactory,
       trustContext: X509TrustManager = null,
       readTimeoutMillis: Int = 20000,
@@ -45,13 +45,24 @@ private[spark] object HttpClientUtil {
       .registerModule(new DefaultScalaModule)
       .setDateFormat(JacksonMessageWriter.makeISODateFormat)
     objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-    val clazz = implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]]
+    val target = new MultiServerFeignTarget[T](uris)
+    val baseHttpClient = new feign.okhttp.OkHttpClient(httpClientBuilder.build())
+    val resetTargetHttpClient = new Client {
+      override def execute(request: Request, options: Options): Response = {
+        val response = baseHttpClient.execute(request, options)
+        if (response.status() >= 200 && response.status() < 300) {
+          target.reset()
+        }
+        response
+      }
+    }
     Feign.builder()
-      .client(new feign.okhttp.OkHttpClient(httpClientBuilder.build()))
+      .client(resetTargetHttpClient)
       .contract(new JAXRSContract)
       .encoder(new JacksonEncoder(objectMapper))
       .decoder(new JacksonDecoder(objectMapper))
       .options(new Options(connectTimeoutMillis, readTimeoutMillis))
-      .target(clazz, uri)
+      .retryer(target)
+      .target(target)
   }
 }
