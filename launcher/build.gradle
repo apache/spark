@@ -34,6 +34,8 @@ dependencies {
     exclude(group: 'com.sun.jersey')
     exclude(group: 'com.sun.jersey.jersey-test-framework')
     exclude(group: 'com.sun.jersey.contribs')
+    exclude(group: 'io.netty', module: 'netty')
+    exclude(group: 'io.netty', module: 'netty-all')
   }
   testCompile group: 'org.slf4j', name: 'jul-to-slf4j', version: slf4jVersion
 }
