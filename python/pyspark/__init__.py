@@ -99,7 +99,6 @@ def keyword_only(func):
         # NOTE - this assumes we are wrapping a method and args[0] will be 'self'
         if len(args) > 1:
             raise TypeError("Method %s forces keyword arguments." % func.__name__)
-
         wrapper._input_kwargs = kwargs
         args[0]._input_kwargs = kwargs
         return func(*args, **kwargs)
