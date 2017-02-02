@@ -26,13 +26,14 @@ import org.scalatest.mock.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.Pipeline.SharedReadWrite
-import org.apache.spark.ml.feature.{HashingTF, MinMaxScaler}
+import org.apache.spark.ml.feature.{HashingTF, MinMaxScaler, OneHotEncoder, StringIndexer}
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -226,6 +227,53 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val stages1 = Array(new WritableStage("a"))
     val steps = stages0 ++ stages1
     val p = new Pipeline().setStages(steps)
+  }
+
+  test("Pipeline checkpoint interval") {
+    def fitPipeline(doCheckpoint: Boolean): Dataset[_] = {
+      val optTempDir = if (doCheckpoint) {
+        Some(Utils.createTempDir())
+      } else {
+        None
+      }
+
+      optTempDir.foreach { tempDir =>
+        val path = tempDir.toURI.toString
+        sc.setCheckpointDir(path)
+      }
+
+      val df = (1 to 5).foldLeft(Seq((1, "foo"), (2, "bar"), (3, "baz")).toDF("id", "x0"))(
+        (df, i) => df.withColumn(s"x$i", $"x0"))
+      val indexers = df.columns.tail.map(c => new StringIndexer()
+        .setInputCol(c)
+        .setOutputCol(s"${c}_indexed")
+        .setHandleInvalid("skip"))
+
+      val encoders = indexers.map(indexer => new OneHotEncoder()
+        .setInputCol(indexer.getOutputCol)
+        .setOutputCol(s"${indexer.getOutputCol}_encoded")
+        .setDropLast(true))
+
+      val stages: Array[PipelineStage] = indexers ++ encoders
+      val pipeline = new Pipeline().setStages(stages)
+      if (doCheckpoint) {
+        pipeline.setCheckpointInterval(2)
+      }
+
+      val outputDF = pipeline.fit(df).transform(df)
+
+      optTempDir.foreach { tempDir =>
+        sc.checkpointDir = None
+        Utils.deleteRecursively(tempDir)
+      }
+      outputDF
+    }
+    val outputWithoutCheckpoint = fitPipeline(false).collect()
+    val outputWithCheckpoint = fitPipeline(true).collect()
+    assert(outputWithoutCheckpoint.length == outputWithCheckpoint.length)
+    outputWithoutCheckpoint.zip(outputWithCheckpoint).foreach { case (noCheckout, checkout) =>
+      assert(noCheckout === checkout)
+    }
   }
 }
 
