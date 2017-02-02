@@ -1134,11 +1134,14 @@ private[spark] class BlockManager(
    * Called for pro-active replenishment of blocks lost due to executor failures
    *
    * @param blockId blockId being replicate
-   * @param replicas existing block managers that have a replica
-   * @param maxReps maximum replicas needed
+   * @param existingReplicas existing block managers that have a replica
+   * @param maxReplicas maximum replicas needed
    * @return
    */
-  def replicateBlock(blockId: BlockId, replicas: Set[BlockManagerId], maxReps: Int): Boolean = {
+  def replicateBlock(
+    blockId: BlockId,
+    existingReplicas: Set[BlockManagerId],
+    maxReplicas: Int): Unit = {
     logInfo(s"Pro-actively replicating $blockId")
     val infoForReplication = blockInfoManager.lockForReading(blockId).map { info =>
       val data = doGetLocalBytes(blockId, info)
@@ -1147,24 +1150,17 @@ private[spark] class BlockManager(
         info.level.useMemory,
         info.level.useOffHeap,
         info.level.deserialized,
-        maxReps)
+        maxReplicas)
       (data, storageLevel, info.classTag)
     }
     infoForReplication.foreach { case (data, storageLevel, classTag) =>
-      replicate(blockId, data, storageLevel, classTag, replicas)
+      replicate(blockId, data, storageLevel, classTag, existingReplicas)
     }
-    true
   }
 
   /**
    * Replicate block to another node. Note that this is a blocking call that returns after
    * the block has been replicated.
-   *
-   * @param blockId
-   * @param data
-   * @param level
-   * @param classTag
-   * @param existingReplicas
    */
   private def replicate(
     blockId: BlockId,
@@ -1189,10 +1185,7 @@ private[spark] class BlockManager(
     var peersFailedToReplicateTo = mutable.HashSet.empty[BlockManagerId]
     var numFailures = 0
 
-    val initialPeers = {
-      val peers = getPeers(false)
-      if(existingReplicas.isEmpty) peers else peers.filter(!existingReplicas.contains(_))
-    }
+    val initialPeers = getPeers(false).filterNot(existingReplicas.contains(_))
 
     var peersForReplication = blockReplicationPolicy.prioritize(
       blockManagerId,

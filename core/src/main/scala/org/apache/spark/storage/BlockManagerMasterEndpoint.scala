@@ -66,6 +66,8 @@ class BlockManagerMasterEndpoint(
     mapper
   }
 
+  val proactivelyReplicate = conf.get("spark.storage.replication.proactive", "false").toBoolean
+
   logInfo("BlockManagerMasterEndpoint up")
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -189,12 +191,13 @@ class BlockManagerMasterEndpoint(
   }
 
   private def removeBlockManager(blockManagerId: BlockManagerId) {
-    val proactivelyReplicate = conf.get("spark.storage.replication.proactive", "false").toBoolean
-
     val info = blockManagerInfo(blockManagerId)
 
     // Remove the block manager from blockManagerIdByExecutor.
     blockManagerIdByExecutor -= blockManagerId.executorId
+
+    // Remove it from blockManagerInfo and remove all the blocks.
+    blockManagerInfo.remove(blockManagerId)
 
     val iterator = info.blocks.keySet.iterator
     while (iterator.hasNext) {
@@ -204,8 +207,10 @@ class BlockManagerMasterEndpoint(
       if (locations.size == 0) {
         blockLocations.remove(blockId)
         logWarning(s"No more replicas available for $blockId !")
-      } else if ((blockId.isRDD || blockId.isInstanceOf[TestBlockId]) && proactivelyReplicate) {
-        // we only need to proactively replicate RDD blocks
+      } else if (proactivelyReplicate && (blockId.isRDD || blockId.isInstanceOf[TestBlockId])) {
+        // only RDD blocks store data that users explicitly cache so we only need to proactively
+        // replicate RDD blocks
+        // broadcast related blocks exist on all executors, so we don't worry about them
         // we also need to replicate this behavior for test blocks for unit tests
         // we send a message to a randomly chosen executor location to replicate block
         // assuming single executor failure, we find out how many replicas existed before failure
@@ -222,8 +227,6 @@ class BlockManagerMasterEndpoint(
         }
       }
     }
-    // Remove it from blockManagerInfo and remove all the blocks.
-    blockManagerInfo.remove(blockManagerId)
 
     listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
     logInfo(s"Removing block manager $blockManagerId")
