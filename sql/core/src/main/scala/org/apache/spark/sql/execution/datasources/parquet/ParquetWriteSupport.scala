@@ -173,7 +173,7 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
           // NOTE: Starting from Spark 1.5, Spark SQL `TimestampType` only has microsecond
           // precision.  Nanosecond parts of timestamp values read from INT96 are simply stripped.
           val rawMicros = row.getLong(ordinal)
-          val adjustedMicros = if (timezone == DateTimeUtils.TimeZoneGMT) {
+          val adjustedMicros = if (DateTimeUtils.isUtcOrGmt(timezone)) {
             rawMicros
           } else {
             // For compatibility with HIVE-12767, always write data in UTC, so adjust *from* the

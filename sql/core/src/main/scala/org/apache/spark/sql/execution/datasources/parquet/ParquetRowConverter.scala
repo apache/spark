@@ -652,12 +652,6 @@ private[parquet] class ParquetRowConverter(
 
 private[parquet] object ParquetRowConverter {
 
-    // just for testing
-    var tz: TimeZone = DateTimeUtils.TimeZoneGMT
-    def setTimezone(tz: TimeZone): Unit = {
-      this.tz = tz
-    }
-
     def binaryToUnscaledLong(binary: Binary): Long = {
     // The underlying `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here
     // we are using `Binary.toByteBuffer.array()` to steal the underlying byte array without
@@ -688,7 +682,7 @@ private[parquet] object ParquetRowConverter {
     val julianDay = buffer.getInt
     val utcEpochMicros = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
     // avoid expensive time logic if possible
-    if (tz != DateTimeUtils.TimeZoneGMT) {
+    if (!DateTimeUtils.isUtcOrGmt(tz)) {
       // TODO not really sure what the desired behavior here is ...
       val millis = utcEpochMicros / 1000
       val offset = tz.getOffset(millis)

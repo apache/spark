@@ -478,6 +478,10 @@ object DateTimeUtils {
     validTimezones.contains(timezoneId)
   }
 
+  def isUtcOrGmt(timeZone: TimeZone): Boolean = {
+    timeZone.getID == "UTC" || timeZone.getID() == "GMT"
+  }
+
   /**
    * Returns the microseconds since year zero (-17999) from microseconds since epoch.
    */
