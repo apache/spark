@@ -106,11 +106,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   /**
    * Implementation of RecordReader API.
    */
-  public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext,
-                         Configuration conf)
+  public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
       throws IOException, InterruptedException, UnsupportedOperationException {
     super.initialize(inputSplit, taskAttemptContext);
-    this.conf = conf;
+    this.conf = taskAttemptContext.getConfiguration();
     initializeInternal();
   }
 
