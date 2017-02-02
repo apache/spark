@@ -488,13 +488,13 @@ SparkR supports the following machine learning models and algorithms.
 
 #### Clustering
 
+* Bisecting $k$-means
+
 * Gaussian Mixture Model (GMM)
 
 * $k$-means Clustering
 
 * Latent Dirichlet Allocation (LDA)
-
-* Bisecting $k$-means
 
 #### Collaborative Filtering
 
@@ -740,6 +740,18 @@ summary(rfModel)
 predictions <- predict(rfModel, df)
 ```
 
+#### Bisecting k-Means
+
+`spark.bisectingKmeans` is a kind of [hierarchical clustering](https://en.wikipedia.org/wiki/Hierarchical_clustering) using a divisive (or "top-down") approach: all observations start in one cluster, and splits are performed recursively as one moves down the hierarchy.
+
+```{r}
+df <- createDataFrame(iris)
+model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
+summary(kmeansModel)
+fitted <- predict(model, df)
+head(select(fitted, "Sepal_Length", "prediction"))
+```
+
 #### Gaussian Mixture Model
 
 `spark.gaussianMixture` fits multivariate [Gaussian Mixture Model](https://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model) (GMM) against a `SparkDataFrame`. [Expectation-Maximization](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm) (EM) is used to approximate the maximum likelihood estimator (MLE) of the model.
@@ -819,18 +831,6 @@ head(posterior)
 ```{r}
 perplexity <- spark.perplexity(model, corpusDF)
 perplexity
-```
-
-#### Bisecting k-means
-
-`spark.bisectingKmeans` is a kind of [hierarchical clustering](https://en.wikipedia.org/wiki/Hierarchical_clustering) using a divisive (or "top-down") approach: all observations start in one cluster, and splits are performed recursively as one moves down the hierarchy.
-
-```{r}
-df <- createDataFrame(iris)
-model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
-summary(kmeansModel)
-fitted <- predict(model, df)
-head(select(fitted, "Sepal_Length", "prediction"))
 ```
 
 #### Alternating Least Squares
