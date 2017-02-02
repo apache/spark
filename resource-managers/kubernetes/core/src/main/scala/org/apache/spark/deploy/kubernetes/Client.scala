@@ -570,7 +570,8 @@ private[spark] class Client(
       .filter(_.getName == SUBMISSION_SERVER_PORT_NAME)
       .head.getNodePort
     val nodeUrls = kubernetesClient.nodes.list.getItems.asScala
-      .filterNot(_.getSpec.getUnschedulable)
+      .filterNot(node => node.getSpec.getUnschedulable != null &&
+        node.getSpec.getUnschedulable)
       .flatMap(_.getStatus.getAddresses.asScala.map(address => {
         s"$urlScheme://${address.getAddress}:$servicePort"
       })).toArray
