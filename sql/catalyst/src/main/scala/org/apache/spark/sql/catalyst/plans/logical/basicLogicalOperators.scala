@@ -865,8 +865,8 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 }
 
 /**
-  * Returns a new RDD that has exactly `numPartitions` partitions.
-  */
+ * Returns a new RDD that has exactly `numPartitions` partitions.
+ */
 case class CoalesceLogical(numPartitions: Int, partitionCoalescer: Option[PartitionCoalescer],
                     child: LogicalPlan)
   extends UnaryNode {
