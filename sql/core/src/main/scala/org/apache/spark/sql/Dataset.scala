@@ -493,6 +493,10 @@ class Dataset[T] private[sql](
   @InterfaceStability.Evolving
   def isStreaming: Boolean = logicalPlan.isStreaming
 
+  @Experimental
+  @InterfaceStability.Evolving
+  def isCheckpoint: Boolean = queryExecution.toRdd.isCheckpointed
+
   /**
    * Eagerly checkpoint a Dataset and return the new Dataset. Checkpointing can be used to truncate
    * the logical plan of this Dataset, which is especially useful in iterative algorithms where the

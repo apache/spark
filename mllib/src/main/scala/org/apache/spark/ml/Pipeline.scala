@@ -31,6 +31,7 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.ml.util._
+import org.apache.spark.mllib.impl.PeriodicDatasetCheckpointer
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
@@ -100,6 +101,25 @@ class Pipeline @Since("1.4.0") (
   def this() = this(Identifiable.randomUID("pipeline"))
 
   /**
+   * param for checkpoint interval of pipeline stages
+   * @group param
+   */
+  @Since("2.2.0")
+  val checkpointInterval: Param[Int] =
+    new Param(this, "checkpointInterval", "checkpoint interval for stages")
+
+  /** @group setParam */
+  @Since("2.2.0")
+  def setCheckpointInterval(value: Int): this.type = {
+    set(checkpointInterval, value)
+    this
+  }
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getCheckpointInterval: Int = $(checkpointInterval)
+
+  /**
    * param for pipeline stages
    * @group param
    */
@@ -144,10 +164,17 @@ class Pipeline @Since("1.4.0") (
         case _ =>
       }
     }
+    val checkpointer = if (isDefined(checkpointInterval)) {
+      Some(new PeriodicDatasetCheckpointer(
+        getCheckpointInterval, dataset.sparkSession.sparkContext))
+    } else {
+      None
+    }
     var curDataset = dataset
     val transformers = ListBuffer.empty[Transformer]
     theStages.view.zipWithIndex.foreach { case (stage, index) =>
       if (index <= indexOfLastEstimator) {
+        checkpointer.foreach(_.update(curDataset))
         val transformer = stage match {
           case estimator: Estimator[_] =>
             estimator.fit(curDataset)
@@ -166,7 +193,11 @@ class Pipeline @Since("1.4.0") (
       }
     }
 
-    new PipelineModel(uid, transformers.toArray).setParent(this)
+    val pipelineModel = new PipelineModel(uid, transformers.toArray).setParent(this)
+    if (isDefined(checkpointInterval)) {
+      pipelineModel.setCheckpointInterval(getCheckpointInterval)
+    }
+    pipelineModel
   }
 
   @Since("1.4.0")
@@ -299,10 +330,39 @@ class PipelineModel private[ml] (
     this(uid, stages.asScala.toArray)
   }
 
+  /**
+   * param for checkpoint interval of pipeline stages
+   * @group param
+   */
+  @Since("2.2.0")
+  val checkpointInterval: Param[Int] =
+    new Param(this, "checkpointInterval", "checkpoint interval for stages")
+
+  /** @group setParam */
+  @Since("2.2.0")
+  def setCheckpointInterval(value: Int): this.type = {
+    set(checkpointInterval, value)
+    this
+  }
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getCheckpointInterval: Int = $(checkpointInterval)
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    stages.foldLeft(dataset.toDF)((cur, transformer) => transformer.transform(cur))
+    val checkpointer = if (isDefined(checkpointInterval)) {
+      Some(new PeriodicDatasetCheckpointer(
+        getCheckpointInterval, dataset.sparkSession.sparkContext))
+    } else {
+      None
+    }
+    stages.foldLeft(dataset.toDF)((cur, transformer) => {
+      val newDF = transformer.transform(cur)
+      checkpointer.foreach(_.update(newDF))
+      newDF
+    })
   }
 
   @Since("1.2.0")
