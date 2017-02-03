@@ -1180,4 +1180,25 @@ class SessionCatalog(
     }
   }
 
+  /**
+    * Get an identical copy of the `SessionCatalog`.
+    * The temporary tables and function registry are retained.
+    * The table relation cache will not be populated.
+    */
+  override def clone: SessionCatalog = {
+    val catalog = new SessionCatalog(
+      externalCatalog,
+      globalTempViewManager,
+      functionResourceLoader,
+      functionRegistry,
+      conf,
+      hadoopConf,
+      parser)
+
+    catalog.currentDb = currentDb
+    tempTables.foreach(kv => catalog.tempTables.put(kv._1, kv._2)) // copy over temporary tables
+
+    catalog
+  }
+
 }

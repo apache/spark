@@ -38,8 +38,11 @@ import org.apache.spark.sql.util.ExecutionListenerManager
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
+ * If an `existingSessionState` is supplied, then its members will be copied over.
  */
-private[sql] class SessionState(sparkSession: SparkSession) {
+private[sql] class SessionState(
+    sparkSession: SparkSession,
+    existingSessionState: Option[SessionState] = None) {
 
   // Note: These are all lazy vals because they depend on each other (e.g. conf) and we
   // want subclasses to override some of the fields. Otherwise, we would get a lot of NPEs.
@@ -47,7 +50,15 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   /**
    * SQL-specific key-value configurations.
    */
-  lazy val conf: SQLConf = new SQLConf
+  lazy val conf: SQLConf = {
+    val result = new SQLConf
+    if (existingSessionState.nonEmpty) {
+      existingSessionState.get.conf.getAllConfs.foreach {
+        case (k, v) => if (v ne null) result.setConfString(k, v)
+      }
+    }
+    result
+  }
 
   def newHadoopConf(): Configuration = {
     val hadoopConf = new Configuration(sparkSession.sparkContext.hadoopConfiguration)
@@ -65,12 +76,29 @@ private[sql] class SessionState(sparkSession: SparkSession) {
     hadoopConf
   }
 
-  lazy val experimentalMethods = new ExperimentalMethods
+  lazy val experimentalMethods: ExperimentalMethods = {
+    existingSessionState
+      .map(_.experimentalMethods.clone)
+      .getOrElse(new ExperimentalMethods)
+  }
 
   /**
    * Internal catalog for managing functions registered by the user.
    */
-  lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
+  lazy val functionRegistry: FunctionRegistry = {
+    val registry = FunctionRegistry.builtin.copy()
+
+    if (existingSessionState.nonEmpty) {
+      val sourceRegistry = existingSessionState.get.functionRegistry
+      sourceRegistry
+        .listFunction()
+        .foreach(name => registry.registerFunction(
+          name,
+          sourceRegistry.lookupFunction(name).get,
+          sourceRegistry.lookupFunctionBuilder(name).get))
+    }
+    registry
+  }
 
   /**
    * A class for loading resources specified by a function.
@@ -93,14 +121,18 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   /**
    * Internal catalog for managing table and database states.
    */
-  lazy val catalog = new SessionCatalog(
-    sparkSession.sharedState.externalCatalog,
-    sparkSession.sharedState.globalTempViewManager,
-    functionResourceLoader,
-    functionRegistry,
-    conf,
-    newHadoopConf(),
-    sqlParser)
+  lazy val catalog: SessionCatalog = {
+    existingSessionState
+      .map(_.catalog.clone)
+      .getOrElse(new SessionCatalog(
+        sparkSession.sharedState.externalCatalog,
+        sparkSession.sharedState.globalTempViewManager,
+        functionResourceLoader,
+        functionRegistry,
+        conf,
+        newHadoopConf(),
+        sqlParser))
+  }
 
   /**
    * Interface exposed to the user for registering user-defined functions.
@@ -163,6 +195,13 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   // We need to call it after all of vals have been initialized.
   sparkSession.sparkContext.getConf.getAll.foreach { case (k, v) =>
     conf.setConfString(k, v)
+  }
+
+  /**
+    * Get an identical copy of the `SessionState`.
+    */
+  override def clone: SessionState = {
+    new SessionState(sparkSession, Some(this))
   }
 
   // ------------------------------------------------------

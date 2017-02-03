@@ -72,7 +72,8 @@ import org.apache.spark.util.Utils
 @InterfaceStability.Stable
 class SparkSession private(
     @transient val sparkContext: SparkContext,
-    @transient private val existingSharedState: Option[SharedState])
+    @transient private val existingSharedState: Option[SharedState],
+    existingSessionState: Option[SessionState] = None)
   extends Serializable with Closeable with Logging { self =>
 
   private[sql] def this(sc: SparkContext) {
@@ -107,9 +108,9 @@ class SparkSession private(
    */
   @transient
   private[sql] lazy val sessionState: SessionState = {
-    SparkSession.reflect[SessionState, SparkSession](
+    existingSessionState.getOrElse(SparkSession.reflect[SessionState, SparkSession](
       SparkSession.sessionStateClassName(sparkContext.conf),
-      self)
+      self))
   }
 
   /**
@@ -201,6 +202,8 @@ class SparkSession private(
   /**
    * Start a new session with isolated SQL configurations, temporary tables, registered
    * functions are isolated, but sharing the underlying `SparkContext` and cached data.
+   * If inherit is enabled, then SQL configurations, temporary tables, registered functions
+   * are copied over from parent `SparkSession`.
    *
    * @note Other than the `SparkContext`, all shared state is initialized lazily.
    * This method will force the initialization of the shared state to ensure that parent
@@ -209,8 +212,12 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def newSession(): SparkSession = {
-    new SparkSession(sparkContext, Some(sharedState))
+  def newSession(inheritSessionState: Boolean = false): SparkSession = {
+    if (inheritSessionState) {
+      new SparkSession(sparkContext, Some(sharedState), Some(sessionState.clone))
+    } else {
+      new SparkSession(sparkContext, Some(sharedState))
+    }
   }
 
 
