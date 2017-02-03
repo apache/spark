@@ -157,17 +157,21 @@ _window_functions = {
     'dense_rank':
         """returns the rank of rows within a window partition, without any gaps.
 
-        The difference between rank and denseRank is that denseRank leaves no gaps in ranking
-        sequence when there are ties. That is, if you were ranking a competition using denseRank
+        The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
+        sequence when there are ties. That is, if you were ranking a competition using dense_rank
         and had three people tie for second place, you would say that all three were in second
-        place and that the next person came in third.""",
+        place and that the next person came in third. Rank would give me sequential numbers, making
+        the person that came in third place (after the ties) would register as coming in fifth.
+
+        This is equivalent to the DENSE_RANK function in SQL.""",
     'rank':
         """returns the rank of rows within a window partition.
 
-        The difference between rank and denseRank is that denseRank leaves no gaps in ranking
-        sequence when there are ties. That is, if you were ranking a competition using denseRank
+        The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
+        sequence when there are ties. That is, if you were ranking a competition using dense_rank
         and had three people tie for second place, you would say that all three were in second
-        place and that the next person came in third.
+        place and that the next person came in third. Rank would give me sequential numbers, making
+        the person that came in third place (after the ties) would register as coming in fifth.
 
         This is equivalent to the RANK function in SQL.""",
     'cume_dist':
@@ -1822,31 +1826,38 @@ class UserDefinedFunction(object):
     def __init__(self, func, returnType, name=None):
         self.func = func
         self.returnType = returnType
-        self._broadcast = None
-        self._judf = self._create_judf(name)
+        # Stores UserDefinedPythonFunctions jobj, once initialized
+        self._judf_placeholder = None
+        self._name = name or (
+            func.__name__ if hasattr(func, '__name__')
+            else func.__class__.__name__)
 
-    def _create_judf(self, name):
+    @property
+    def _judf(self):
+        # It is possible that concurrent access, to newly created UDF,
+        # will initialize multiple UserDefinedPythonFunctions.
+        # This is unlikely, doesn't affect correctness,
+        # and should have a minimal performance impact.
+        if self._judf_placeholder is None:
+            self._judf_placeholder = self._create_judf()
+        return self._judf_placeholder
+
+    def _create_judf(self):
         from pyspark.sql import SparkSession
-        sc = SparkContext.getOrCreate()
-        wrapped_func = _wrap_function(sc, self.func, self.returnType)
+
         spark = SparkSession.builder.getOrCreate()
+        sc = spark.sparkContext
+
+        wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
-        if name is None:
-            f = self.func
-            name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            name, wrapped_func, jdt)
+            self._name, wrapped_func, jdt)
         return judf
 
-    def __del__(self):
-        if self._broadcast is not None:
-            self._broadcast.unpersist()
-            self._broadcast = None
-
     def __call__(self, *cols):
+        judf = self._judf
         sc = SparkContext._active_spark_context
-        jc = self._judf.apply(_to_seq(sc, cols, _to_java_column))
-        return Column(jc)
+        return Column(judf.apply(_to_seq(sc, cols, _to_java_column)))
 
 
 @since(1.3)

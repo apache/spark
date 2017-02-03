@@ -457,10 +457,12 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
-    val instrLog = Instrumentation.create(this, ratings)
-    instrLog.logParams(rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha,
-                       userCol, itemCol, ratingCol, predictionCol, maxIter,
-                       regParam, nonnegative, checkpointInterval, seed)
+
+    val instr = Instrumentation.create(this, ratings)
+    instr.logParams(rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha, userCol,
+      itemCol, ratingCol, predictionCol, maxIter, regParam, nonnegative, checkpointInterval,
+      seed, intermediateStorageLevel, finalStorageLevel)
+
     val (userFactors, itemFactors) = ALS.train(ratings, rank = $(rank),
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
@@ -471,7 +473,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")
     val model = new ALSModel(uid, $(rank), userDF, itemDF).setParent(this)
-    instrLog.logSuccess(model)
+    instr.logSuccess(model)
     copyValues(model)
   }
 
@@ -1036,14 +1038,12 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       uniqueSrcIdsBuilder += preSrcId
       var curCount = 1
       var i = 1
-      var j = 0
       while (i < sz) {
         val srcId = srcIds(i)
         if (srcId != preSrcId) {
           uniqueSrcIdsBuilder += srcId
           dstCountsBuilder += curCount
           preSrcId = srcId
-          j += 1
           curCount = 0
         }
         curCount += 1

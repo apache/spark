@@ -446,7 +446,7 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
 
-  /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
+  /** Creates a param pair with a `java.util.List` of values (for Java and Python). */
   def w(value: java.util.List[String]): ParamPair[Array[String]] = w(value.asScala.toArray)
 
   override def jsonEncode(value: Array[String]): String = {
@@ -471,7 +471,7 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
 
-  /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
+  /** Creates a param pair with a `java.util.List` of values (for Java and Python). */
   def w(value: java.util.List[java.lang.Double]): ParamPair[Array[Double]] =
     w(value.asScala.map(_.asInstanceOf[Double]).toArray)
 
@@ -501,7 +501,7 @@ class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[In
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
 
-  /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
+  /** Creates a param pair with a `java.util.List` of values (for Java and Python). */
   def w(value: java.util.List[java.lang.Integer]): ParamPair[Array[Int]] =
     w(value.asScala.map(_.asInstanceOf[Int]).toArray)
 
@@ -652,7 +652,9 @@ trait Params extends Identifiable with Serializable {
       throw new NoSuchElementException(s"Failed to find a default value for ${param.name}"))
   }
 
-  /** An alias for [[getOrDefault()]]. */
+  /**
+   * An alias for `getOrDefault()`.
+   */
   protected final def $[T](param: Param[T]): T = getOrDefault(param)
 
   /**
@@ -728,7 +730,7 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
-   * [[extractParamMap]] with no extra values.
+   * `extractParamMap` with no extra values.
    */
   final def extractParamMap(): ParamMap = {
     extractParamMap(ParamMap.empty)
@@ -749,14 +751,14 @@ trait Params extends Identifiable with Serializable {
    * Copies param values from this instance to another instance for params shared by them.
    *
    * This handles default Params and explicitly set Params separately.
-   * Default Params are copied from and to [[defaultParamMap]], and explicitly set Params are
-   * copied from and to [[paramMap]].
+   * Default Params are copied from and to `defaultParamMap`, and explicitly set Params are
+   * copied from and to `paramMap`.
    * Warning: This implicitly assumes that this [[Params]] instance and the target instance
    *          share the same set of default Params.
    *
    * @param to the target instance, which should work with the same set of default Params as this
    *           source instance
-   * @param extra extra params to be copied to the target's [[paramMap]]
+   * @param extra extra params to be copied to the target's `paramMap`
    * @return the target instance with param values copied
    */
   protected def copyValues[T <: Params](to: T, extra: ParamMap = ParamMap.empty): T = {
@@ -822,7 +824,7 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
     this
   }
 
-  /** Put param pairs with a [[java.util.List]] of values for Python. */
+  /** Put param pairs with a `java.util.List` of values for Python. */
   private[ml] def put(paramPairs: JList[ParamPair[_]]): this.type = {
     put(paramPairs.asScala: _*)
   }

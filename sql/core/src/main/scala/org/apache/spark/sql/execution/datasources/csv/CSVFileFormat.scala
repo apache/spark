@@ -19,13 +19,15 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.{Charset, StandardCharsets}
 
+import com.univocity.parsers.csv.CsvParser
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce._
 
 import org.apache.spark.TaskContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -60,7 +62,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val paths = files.map(_.getPath.toString)
     val lines: Dataset[String] = readText(sparkSession, csvOptions, paths)
     val firstLine: String = findFirstLine(csvOptions, lines)
-    val firstRow = new CsvReader(csvOptions).parseLine(firstLine)
+    val firstRow = new CsvParser(csvOptions.asParserSettings).parseLine(firstLine)
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     val header = makeSafeHeader(firstRow, csvOptions, caseSensitive)
 
@@ -130,7 +132,18 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
 
-    new CSVOutputWriterFactory(csvOptions)
+    new OutputWriterFactory {
+      override def newInstance(
+          path: String,
+          dataSchema: StructType,
+          context: TaskAttemptContext): OutputWriter = {
+        new CsvOutputWriter(path, dataSchema, context, csvOptions)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        ".csv" + CodecStreams.getCompressionExtension(context)
+      }
+    }
   }
 
   override def buildReader(
@@ -143,7 +156,6 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     val csvOptions = new CSVOptions(options)
     val commentPrefix = csvOptions.comment.toString
-    val headers = requiredSchema.fields.map(_.name)
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -158,23 +170,15 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         }
       }
 
+      // Consumes the header in the iterator.
       CSVRelation.dropHeaderLine(file, lineIterator, csvOptions)
 
-      val csvParser = new CsvReader(csvOptions)
-      val tokenizedIterator = lineIterator.filter { line =>
+      val filteredIter = lineIterator.filter { line =>
         line.trim.nonEmpty && !line.startsWith(commentPrefix)
-      }.map { line =>
-        csvParser.parseLine(line)
       }
-      val parser = CSVRelation.csvParser(dataSchema, requiredSchema.fieldNames, csvOptions)
-      var numMalformedRecords = 0
-      tokenizedIterator.flatMap { recordTokens =>
-        val row = parser(recordTokens, numMalformedRecords)
-        if (row.isEmpty) {
-          numMalformedRecords += 1
-        }
-        row
-      }
+
+      val parser = new UnivocityParser(dataSchema, requiredSchema, csvOptions)
+      filteredIter.flatMap(parser.parse)
     }
   }
 
@@ -227,4 +231,19 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     schema.foreach(field => verifyType(field.dataType))
   }
+}
+
+private[csv] class CsvOutputWriter(
+    path: String,
+    dataSchema: StructType,
+    context: TaskAttemptContext,
+    params: CSVOptions) extends OutputWriter with Logging {
+
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
+
+  private val gen = new UnivocityGenerator(dataSchema, writer, params)
+
+  override def write(row: InternalRow): Unit = gen.write(row)
+
+  override def close(): Unit = gen.close()
 }

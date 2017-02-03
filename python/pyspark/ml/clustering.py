@@ -175,18 +175,15 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     3
     >>> summary.clusterSizes
     [2, 2, 2]
+    >>> summary.logLikelihood
+    8.14636...
     >>> weights = model.weights
     >>> len(weights)
     3
-    >>> model.gaussiansDF.show()
-    +--------------------+--------------------+
-    |                mean|                 cov|
-    +--------------------+--------------------+
-    |[0.82500000140229...|0.005625000000006...|
-    |[-0.4777098016092...|0.167969502720916...|
-    |[-0.4472625243352...|0.167304119758233...|
-    +--------------------+--------------------+
-    ...
+    >>> model.gaussiansDF.select("mean").head()
+    Row(mean=DenseVector([0.825, 0.8675]))
+    >>> model.gaussiansDF.select("cov").head()
+    Row(cov=DenseMatrix(2, 2, [0.0056, -0.0051, -0.0051, 0.0046], False))
     >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
     >>> rows[4].prediction == rows[5].prediction
@@ -205,15 +202,10 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     False
     >>> model2.weights == model.weights
     True
-    >>> model2.gaussiansDF.show()
-    +--------------------+--------------------+
-    |                mean|                 cov|
-    +--------------------+--------------------+
-    |[0.82500000140229...|0.005625000000006...|
-    |[-0.4777098016092...|0.167969502720916...|
-    |[-0.4472625243352...|0.167304119758233...|
-    +--------------------+--------------------+
-    ...
+    >>> model2.gaussiansDF.select("mean").head()
+    Row(mean=DenseVector([0.825, 0.8675]))
+    >>> model2.gaussiansDF.select("cov").head()
+    Row(cov=DenseMatrix(2, 2, [0.0056, -0.0051, -0.0051, 0.0046], False))
 
     .. versionadded:: 2.0.0
     """
@@ -290,6 +282,14 @@ class GaussianMixtureSummary(ClusteringSummary):
         DataFrame of probabilities of each cluster for each training data point.
         """
         return self._call_java("probability")
+
+    @property
+    @since("2.2.0")
+    def logLikelihood(self):
+        """
+        Total log-likelihood for this model on the given data.
+        """
+        return self._call_java("logLikelihood")
 
 
 class KMeansSummary(ClusteringSummary):
@@ -699,7 +699,7 @@ class LDAModel(JavaModel):
     @since("2.0.0")
     def logPerplexity(self, dataset):
         """
-        Calculate an upper bound bound on perplexity.  (Lower is better.)
+        Calculate an upper bound on perplexity.  (Lower is better.)
         See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
 
         WARNING: If this model is an instance of :py:class:`DistributedLDAModel` (produced when

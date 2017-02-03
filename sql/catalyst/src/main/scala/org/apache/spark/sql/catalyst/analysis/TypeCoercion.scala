@@ -51,7 +51,6 @@ object TypeCoercion {
       PromoteStrings ::
       DecimalPrecision ::
       BooleanEquality ::
-      StringToIntegralCasts ::
       FunctionArgumentConversion ::
       CaseWhenCoercion ::
       IfCoercion ::
@@ -339,10 +338,13 @@ object TypeCoercion {
       case p @ BinaryComparison(left @ NullType(), right @ StringType()) =>
         p.makeCopy(Array(Literal.create(null, StringType), right))
 
-      case p @ BinaryComparison(left @ StringType(), right) if right.dataType != StringType =>
-        p.makeCopy(Array(Cast(left, DoubleType), right))
-      case p @ BinaryComparison(left, right @ StringType()) if left.dataType != StringType =>
-        p.makeCopy(Array(left, Cast(right, DoubleType)))
+      // When compare string with atomic type, case string to that type.
+      case p @ BinaryComparison(left @ StringType(), right @ AtomicType())
+        if right.dataType != StringType =>
+        p.makeCopy(Array(Cast(left, right.dataType), right))
+      case p @ BinaryComparison(left @ AtomicType(), right @ StringType())
+        if left.dataType != StringType =>
+        p.makeCopy(Array(left, Cast(right, left.dataType)))
 
       case i @ In(a @ DateType(), b) if b.forall(_.dataType == StringType) =>
         i.makeCopy(Array(Cast(a, StringType), b))
@@ -425,21 +427,6 @@ object TypeCoercion {
         EqualNullSafe(Cast(left, right.dataType), right)
       case EqualNullSafe(left @ NumericType(), right @ BooleanType()) =>
         EqualNullSafe(left, Cast(right, left.dataType))
-    }
-  }
-
-  /**
-   * When encountering a cast from a string representing a valid fractional number to an integral
-   * type the jvm will throw a `java.lang.NumberFormatException`.  Hive, in contrast, returns the
-   * truncated version of this number.
-   */
-  object StringToIntegralCasts extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
-      // Skip nodes who's children have not been resolved yet.
-      case e if !e.childrenResolved => e
-
-      case Cast(e @ StringType(), t: IntegralType) =>
-        Cast(Cast(e, DecimalType.forType(LongType)), t)
     }
   }
 

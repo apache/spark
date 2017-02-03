@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
+import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 private sealed trait OutputCommitCoordinationMessage extends Serializable
 
@@ -88,7 +89,8 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
     val msg = AskPermissionToCommitOutput(stage, partition, attemptNumber)
     coordinatorRef match {
       case Some(endpointRef) =>
-        endpointRef.askWithRetry[Boolean](msg)
+        ThreadUtils.awaitResult(endpointRef.ask[Boolean](msg),
+          RpcUtils.askRpcTimeout(conf).duration)
       case None =>
         logError(
           "canCommit called after coordinator was stopped (is SparkEnv shutdown in progress)?")
@@ -165,9 +167,18 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
             authorizedCommitters(partition) = attemptNumber
             true
           case existingCommitter =>
-            logDebug(s"Denying attemptNumber=$attemptNumber to commit for stage=$stage, " +
-              s"partition=$partition; existingCommitter = $existingCommitter")
-            false
+            // Coordinator should be idempotent when receiving AskPermissionToCommit.
+            if (existingCommitter == attemptNumber) {
+              logWarning(s"Authorizing duplicate request to commit for " +
+                s"attemptNumber=$attemptNumber to commit for stage=$stage," +
+                s" partition=$partition; existingCommitter = $existingCommitter." +
+                s" This can indicate dropped network traffic.")
+              true
+            } else {
+              logDebug(s"Denying attemptNumber=$attemptNumber to commit for stage=$stage, " +
+                s"partition=$partition; existingCommitter = $existingCommitter")
+              false
+            }
         }
       case None =>
         logDebug(s"Stage $stage has completed, so not allowing attempt number $attemptNumber of" +
