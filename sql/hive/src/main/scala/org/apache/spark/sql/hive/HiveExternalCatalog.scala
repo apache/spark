@@ -22,6 +22,7 @@ import java.lang.reflect.InvocationTargetException
 import java.util
 
 import scala.collection.mutable
+import scala.collection.Map
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -510,15 +511,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * Note: As of now, this doesn't support altering table schema, partition column names and bucket
    * specification. We will ignore them even if users do specify different values for these fields.
    */
-  override def alterTable(tableDefinition: CatalogTable): Unit = withClient {
-    assert(tableDefinition.identifier.database.isDefined)
-    val db = tableDefinition.identifier.database.get
-    requireTableExists(db, tableDefinition.identifier.table)
-    verifyTableProperties(tableDefinition)
+  override def alterTable(newTableDefinition: CatalogTable): Unit = withClient {
+    assert(newTableDefinition.identifier.database.isDefined)
+    val db = newTableDefinition.identifier.database.get
+    requireTableExists(db, newTableDefinition.identifier.table)
+    verifyTableProperties(newTableDefinition)
 
     // convert table statistics to properties so that we can persist them through hive api
-    val withStatsProps: CatalogTable = if (tableDefinition.stats.isDefined) {
-      val stats = tableDefinition.stats.get
+    val maybeWithStatsPropsTable: CatalogTable = if (newTableDefinition.stats.isDefined) {
+      val stats = newTableDefinition.stats.get
       var statsProperties: Map[String, String] =
         Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
       if (stats.rowCount.isDefined) {
@@ -529,28 +530,29 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           statsProperties += (columnStatKeyPropName(colName, k) -> v)
         }
       }
-      tableDefinition.copy(properties = tableDefinition.properties ++ statsProperties)
+      newTableDefinition.copy(properties = newTableDefinition.properties ++ statsProperties)
     } else {
-      tableDefinition
+      newTableDefinition
     }
 
-    if (tableDefinition.tableType == VIEW) {
-      client.alterTable(withStatsProps)
+    if (newTableDefinition.tableType == VIEW) {
+      client.alterTable(maybeWithStatsPropsTable)
     } else {
-      val oldTableDef = getRawTable(db, withStatsProps.identifier.table)
+      val oldRawTableDef = getRawTable(db, newTableDefinition.identifier.table)
 
-      val (tableSchema, schemaChange) =
-        if (getSchemaFromTableProperties(oldTableDef).equals(withStatsProps.schema)) {
-          // The table properties keep the original case-sensitiviy for column names
-          // so we use the schema derived from the old table's table properties for the
-          // comparison
-          (oldTableDef.schema, false)
+      // restore the table metadata in spark sql format for comparing with the input
+      // table metadata that is also in spark sql format
+      val oldRestoredTableDef = restoreTableMetadata(oldRawTableDef)
+      val (newSchema, schemaChange) =
+        if (!oldRestoredTableDef.schema.equals(newTableDefinition.schema)) {
+          (newTableDefinition.schema, true)
         } else {
-          (withStatsProps.schema, true)
+          // maintain the original format of the table schema
+          (oldRawTableDef.schema, false)
         }
 
-      val newStorage = if (DDLUtils.isHiveTable(tableDefinition)) {
-        tableDefinition.storage
+      val newStorage = if (DDLUtils.isHiveTable(newTableDefinition)) {
+        newTableDefinition.storage
       } else {
         // We can't alter the table storage of data source table directly for 2 reasons:
         //   1. internally we use path option in storage properties to store the value of table
@@ -579,38 +581,46 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         //       want to alter the table location to a file path, we will fail. This should be fixed
         //       in the future.
 
-        val newLocation = tableDefinition.storage.locationUri.map(CatalogUtils.URIToString(_))
-        val storageWithPathOption = tableDefinition.storage.copy(
-          properties = tableDefinition.storage.properties ++ newLocation.map("path" -> _))
+        val newLocation = newTableDefinition.storage.map(CatalogUtils.URIToString(_))
+        val storageWithPathOption = newTableDefinition.storage.copy(
+          properties = newTableDefinition.storage.properties ++ newLocation.map("path" -> _))
 
-        val oldLocation = getLocationFromStorageProps(oldTableDef)
+        val oldLocation = getLocationFromStorageProps(oldRawTableDef)
         if (oldLocation == newLocation) {
-          storageWithPathOption.copy(locationUri = oldTableDef.storage.locationUri)
+          storageWithPathOption.copy(locationUri = oldRawTableDef.storage.locationUri)
         } else {
           storageWithPathOption
         }
       }
 
-      val partitionProviderProp = if (tableDefinition.tracksPartitionsInCatalog) {
+      val partitionProviderProp = if (newTableDefinition.tracksPartitionsInCatalog) {
         TABLE_PARTITION_PROVIDER -> TABLE_PARTITION_PROVIDER_CATALOG
       } else {
         TABLE_PARTITION_PROVIDER -> TABLE_PARTITION_PROVIDER_FILESYSTEM
       }
 
-      // Sets the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
+      // Sets the `partitionColumnNames` and `bucketSpec` from the old table definition,
       // to retain the spark specific format if it is. Also add old data source properties to table
       // properties, to retain the data source table format.
       val dataSourceProps = if (schemaChange) {
-        tableMetaToTableProps(withStatsProps).filter(_._1.startsWith(DATASOURCE_PREFIX))
+        val props =
+          tableMetaToTableProps(newTableDefinition).filter(_._1.startsWith(DATASOURCE_PREFIX))
+        if (newTableDefinition.provider.isDefined
+          && newTableDefinition.provider.get.toLowerCase != DDLUtils.HIVE_PROVIDER) {
+          // we only need to populate non-hive provider to the tableprops
+          props.put(DATASOURCE_PROVIDER, newTableDefinition.provider.get)
+        }
+        props
       } else {
-        oldTableDef.properties.filter(_._1.startsWith(DATASOURCE_PREFIX))
+        oldRawTableDef.properties.filter(_._1.startsWith(DATASOURCE_PREFIX))
       }
-      val newTableProps = dataSourceProps ++ withStatsProps.properties + partitionProviderProp
-      val newDef = withStatsProps.copy(
+      val newTableProps =
+        dataSourceProps ++ maybeWithStatsPropsTable.properties + partitionProviderProp
+      val newDef = oldRestoredTableDef.copy(
         storage = newStorage,
-        schema = tableSchema,
-        partitionColumnNames = oldTableDef.partitionColumnNames,
-        bucketSpec = oldTableDef.bucketSpec,
+        schema = newSchema,
+        partitionColumnNames = oldRawTableDef.partitionColumnNames,
+        bucketSpec = oldRawTableDef.bucketSpec,
         properties = newTableProps.toMap)
 
       client.alterTable(newDef)

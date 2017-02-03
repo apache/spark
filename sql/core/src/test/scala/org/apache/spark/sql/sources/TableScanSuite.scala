@@ -416,4 +416,21 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
     val comments = planned.schema.fields.map(_.getComment().getOrElse("NO_COMMENT")).mkString(",")
     assert(comments === "SN,SA,NO_COMMENT")
   }
+
+  test("ALTER TABLE ADD COLUMNS does not support RelationProvider") {
+    withTable("ds_relationProvider") {
+      sql(
+        """
+          |CREATE TABLE ds_relationProvider
+          |USING org.apache.spark.sql.sources.SimpleScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10'
+          |)""".stripMargin)
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE ds_relationProvider ADD COLUMNS (c3 int)")
+      }.getMessage
+      assert(e.contains("does not support ALTER ADD COLUMNS"))
+    }
+  }
 }

@@ -1885,14 +1885,13 @@ class HiveDDLSuite
     }
   }
 
-  test("alter table add columns -- partitioned") {
-    val tableTypes = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
-    tableTypes.foreach{ tableType =>
+  Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO").foreach { tableType =>
+    test(s"alter hive serde table add columns -- partitioned - $tableType") {
       withTable("alter_add_partitioned") {
         sql(
           s"""
-            |CREATE TABLE alter_add_partitioned (c1 int, c2 int)
-            |PARTITIONED BY (c3 int) STORED AS $tableType
+             |CREATE TABLE alter_add_partitioned (c1 int, c2 int)
+             |PARTITIONED BY (c3 int) STORED AS $tableType
           """.stripMargin)
 
         sql("INSERT INTO alter_add_partitioned PARTITION (c3=1) VALUES (1, 2)")
@@ -1916,9 +1915,8 @@ class HiveDDLSuite
     }
   }
 
-  test("alter table add columns -- with predicate") {
-    val tableTypes = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
-    tableTypes.foreach { tableType =>
+  Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO").foreach { tableType =>
+    test(s"alter hive serde table add columns -- with predicate - $tableType ") {
       withTable("alter_add_predicate") {
         sql(s"CREATE TABLE alter_add_predicate (c1 int, c2 int) STORED AS $tableType")
         sql("INSERT INTO alter_add_predicate VALUES (1, 2)")
@@ -1942,6 +1940,80 @@ class HiveDDLSuite
     }
   }
 
+  Seq("parquet", "hive", "json", "csv").foreach { provider =>
+    test(s"alter datasource table add columns - $provider") {
+      withTable("alter_add_ds") {
+        sql(s"CREATE TABLE alter_add_ds (c1 int) USING $provider")
+        sql("INSERT INTO alter_add_ds VALUES (1)")
+        sql("ALTER TABLE alter_add_ds ADD COLUMNS (c2 int)")
+        checkAnswer(
+          sql("SELECT * FROM alter_add_ds"),
+          Seq(Row(1, null))
+        )
+        checkAnswer(
+          sql("SELECT * FROM alter_add_ds where c2 is null"),
+          Seq(Row(1, null))
+        )
+
+        sql("INSERT INTO alter_add_ds VALUES (3, 2)")
+        checkAnswer(
+          sql("SELECT * FROM alter_add_ds where c2 = 2"),
+          Seq(Row(3, 2))
+        )
+      }
+    }
+  }
+
+  Seq("parquet", "hive", "json", "csv").foreach { provider =>
+    test(s"alter datasource table add columns - partitioned - $provider") {
+      withTable("alter_add_ds") {
+        sql(s"CREATE TABLE alter_add_ds (c1 int, c2 int) USING $provider partitioned by (c2)")
+        sql("INSERT INTO alter_add_ds partition(c2 = 2) VALUES (1)")
+        sql("ALTER TABLE alter_add_ds ADD COLUMNS (c3 int)")
+        checkAnswer(
+          sql("SELECT * FROM alter_add_ds"),
+          Seq(Row(1, null, 2))
+        )
+        checkAnswer(
+          sql("SELECT * FROM alter_add_ds where c3 is null"),
+          Seq(Row(1, null, 2))
+        )
+        sql("INSERT INTO alter_add_ds partition(c2 =1) VALUES (2, 3)")
+        checkAnswer(
+          sql("SELECT * FROM alter_add_ds where c3 = 3"),
+          Seq(Row(2, 3, 1))
+        )
+        checkAnswer(
+          sql("SELECT * FROM alter_add_ds where c2 = 1"),
+          Seq(Row(2, 3, 1))
+        )
+      }
+    }
+  }
+
+  test("alter datasource table add columns - text format not supported") {
+    withTable("alter_add_ds_text") {
+      sql(s"CREATE TABLE alter_add_ds_text (c1 int) USING text")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE alter_add_ds_text ADD COLUMNS (c2 int)")
+      }.getMessage
+      assert(e.contains("does not support ALTER ADD COLUMNS"))
+    }
+  }
+
+  test("alter datasource table add columns - orc format not supported") {
+    Seq("orc", "ORC", "org.apache.spark.sql.hive.orc",
+      "org.apache.spark.sql.hive.orc.DefaultSource").foreach { source =>
+        withTable("alter_add_ds_text") {
+          sql(s"CREATE TABLE alter_add_ds_text (c1 int) USING $source")
+          val e = intercept[AnalysisException] {
+            sql("ALTER TABLE alter_add_ds_text ADD COLUMNS (c2 int)")
+          }.getMessage
+          assert(e.contains("does not support ALTER ADD COLUMNS"))
+        }
+      }
+  }
+
   test("alter table add columns -- not support temp view") {
     withTempView("tmp_v") {
       sql("create temporary view tmp_v as select 1 as c1, 2 as c2")
@@ -1959,18 +2031,6 @@ class HiveDDLSuite
         sql("alter table v1 add columns (c3 int)")
       }
       assert(e.message.contains("is a VIEW, which does not support ALTER ADD COLUMNS"))
-    }
-  }
-
-  test("alter table add columns -- not support datasource table") {
-    withTempDir { dir =>
-      withTable("t_ds") {
-        sql(s"create table t_ds (c1 int, c2 int) using parquet options(path '$dir')")
-        val e = intercept[AnalysisException] {
-          sql("alter table t_ds add columns (c3 int)")
-        }
-        assert(e.message.contains("datasource table, which does not support ALTER ADD COLUMNS yet"))
-      }
     }
   }
 }

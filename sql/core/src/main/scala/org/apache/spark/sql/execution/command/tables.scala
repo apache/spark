@@ -202,9 +202,11 @@ case class AlterTableAddColumnsCommand(
     // Invalidate the table last, otherwise uncaching the table would load the logical plan
     // back into the hive metastore cache
     catalog.refreshTable(table)
-
-    val newSchema = catalogTable.schema.copy(fields = catalogTable.schema.fields ++ columns)
-    catalog.alterTable(catalogTable.copy(schema = newSchema))
+    val partitionFields = catalogTable.schema.takeRight(catalogTable.partitionColumnNames.length)
+    val dataData = catalogTable.schema
+      .take(catalogTable.schema.length - catalogTable.partitionColumnNames.length)
+    catalog.alterTable(catalogTable.copy(schema =
+      catalogTable.schema.copy(fields = (dataData ++ columns ++ partitionFields).toArray)))
 
     Seq.empty[Row]
   }

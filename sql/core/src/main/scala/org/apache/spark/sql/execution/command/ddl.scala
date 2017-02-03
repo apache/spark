@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat, PartitioningUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
@@ -764,7 +764,9 @@ object DDLUtils {
   val HIVE_PROVIDER = "hive"
 
   def isHiveTable(table: CatalogTable): Boolean = {
-    table.provider.isDefined && table.provider.get.toLowerCase == HIVE_PROVIDER
+    // When `CatalogTable` is directly fetched from the catalog,
+    // CatalogTable.provider = None means the table is a Hive serde table.
+    !table.provider.isDefined || table.provider.get.toLowerCase == HIVE_PROVIDER
   }
 
   def isDatasourceTable(table: CatalogTable): Boolean = {
@@ -818,7 +820,7 @@ object DDLUtils {
 
   /**
    * ALTER TABLE ADD COLUMNS command does not support temporary view/table,
-   * view, or datasource table yet.
+   * view, or datasource table with text, orc formats or external provider.
    */
   def verifyAlterTableAddColumn(
       catalog: SessionCatalog,
@@ -833,10 +835,32 @@ object DDLUtils {
       throw new AnalysisException(
         s"${table.toString} is a VIEW, which does not support ALTER ADD COLUMNS.")
     }
+
     if (isDatasourceTable(catalogTable)) {
-      throw new AnalysisException(
-        s"${table.toString} is a datasource table, which does not support ALTER ADD COLUMNS yet.")
+      catalogTable.provider.get match {
+        case provider if provider.toLowerCase == "text" =>
+          // TextFileFormat can not support adding column either because text datasource table
+          // is resolved as a single-column table only.
+          throw new AnalysisException(
+            s"""${table.toString} is a text format datasource table,
+               |which does not support ALTER ADD COLUMNS.""".stripMargin)
+        case provider if provider.toLowerCase == "orc"
+          || provider.startsWith("org.apache.spark.sql.hive.orc") =>
+          // TODO Current native orc reader can not handle the difference between
+          // user-specified schema and inferred schema from ORC data file yet.
+          throw new AnalysisException(
+            s"""${table.toString} is an ORC datasource table,
+               |which does not support ALTER ADD COLUMNS.""".stripMargin)
+        case provider
+          if (!DataSource.lookupDataSource(provider).newInstance().isInstanceOf[FileFormat]) =>
+          // For datasource table, we only support HadoopFsRelation
+          throw new AnalysisException(
+            s"""${table.toString} is a datasource table with external provider,
+               |which does not support ALTER ADD COLUMNS.""".stripMargin)
+        case _ =>
+      }
     }
+
     catalogTable
   }
 }
