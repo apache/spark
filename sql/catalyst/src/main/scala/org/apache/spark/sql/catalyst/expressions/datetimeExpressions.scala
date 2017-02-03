@@ -1059,24 +1059,29 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
        2016-12-31
   """)
 // scalastyle:on line.size.limit
-case class ParseToDate(left: Expression, format: Expression, child: Expression)
+case class ParseToDate(left: Expression, format: Option[Expression], child: Expression)
   extends RuntimeReplaceable {
 
-  def this(left: Expression, format: Expression) = {
-    this(left, format, Cast(Cast(new UnixTimestamp(left, format), TimestampType), DateType))
+  def this(left: Expression, format: Expression) {
+      this(left, Option(format),
+        Cast(Cast(UnixTimestamp(left, format), TimestampType), DateType))
   }
 
   def this(left: Expression) = {
-    // RuntimeReplaceable forces the signature, the second value
-    // is ignored completely
-    this(left, Literal(""), ToDate(left))
+    // backwards compatability
+    this(left, Option(null), ToDate(left))
   }
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
-  override def sql: String = s"$prettyName(${left.sql}, ${format.sql})"
+  override def sql: String = {
+    if (format.isDefined) {
+      s"$prettyName(${left.sql}, ${format.get.sql}"
+    } else {
+      s"$prettyName(${left.sql})"
+    }
+  }
 
   override def prettyName: String = "to_date"
-  override def dataType: DataType = DateType
 }
 
 /**
