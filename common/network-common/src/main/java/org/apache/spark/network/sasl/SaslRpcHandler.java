@@ -29,8 +29,6 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.sasl.aes.AesCipher;
-import org.apache.spark.network.sasl.aes.AesConfigMessage;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.util.JavaUtils;
@@ -44,7 +42,7 @@ import org.apache.spark.network.util.TransportConf;
  * Note that the authentication process consists of multiple challenge-response pairs, each of
  * which are individual RPCs.
  */
-class SaslRpcHandler extends RpcHandler {
+public class SaslRpcHandler extends RpcHandler {
   private static final Logger logger = LoggerFactory.getLogger(SaslRpcHandler.class);
 
   /** Transport configuration. */
@@ -63,7 +61,7 @@ class SaslRpcHandler extends RpcHandler {
   private boolean isComplete;
   private boolean isAuthenticated;
 
-  SaslRpcHandler(
+  public SaslRpcHandler(
       TransportConf conf,
       Channel channel,
       RpcHandler delegate,
@@ -122,37 +120,10 @@ class SaslRpcHandler extends RpcHandler {
         return;
       }
 
-      if (!conf.aesEncryptionEnabled()) {
-        logger.debug("Enabling encryption for channel {}", client);
-        SaslEncryption.addToChannel(channel, saslServer, conf.maxSaslEncryptedBlockSize());
-        complete(false);
-        return;
-      }
-
-      // Extra negotiation should happen after authentication, so return directly while
-      // processing authenticate.
-      if (!isAuthenticated) {
-        logger.debug("SASL authentication successful for channel {}", client);
-        isAuthenticated = true;
-        return;
-      }
-
-      // Create AES cipher when it is authenticated
-      try {
-        byte[] encrypted = JavaUtils.bufferToArray(message);
-        ByteBuffer decrypted = ByteBuffer.wrap(saslServer.unwrap(encrypted, 0 , encrypted.length));
-
-        AesConfigMessage configMessage = AesConfigMessage.decodeMessage(decrypted);
-        AesCipher cipher = new AesCipher(configMessage, conf);
-
-        // Send response back to client to confirm that server accept config.
-        callback.onSuccess(JavaUtils.stringToBytes(AesCipher.TRANSFORM));
-        logger.info("Enabling AES cipher for Server channel {}", client);
-        cipher.addToChannel(channel);
-        complete(true);
-      } catch (IOException ioe) {
-        throw new RuntimeException(ioe);
-      }
+      logger.debug("Enabling encryption for channel {}", client);
+      SaslEncryption.addToChannel(channel, saslServer, conf.maxSaslEncryptedBlockSize());
+      complete(false);
+      return;
     }
   }
 
