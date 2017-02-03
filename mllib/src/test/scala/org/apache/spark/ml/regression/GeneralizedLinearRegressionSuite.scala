@@ -776,18 +776,6 @@ class GeneralizedLinearRegressionSuite
         s"useWeight = $useWeight.")
       assert(model.coefficients === new DenseVector(Array.empty[Double]))
 
-      val familyLink = FamilyAndLink(trainer)
-      model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
-        .foreach {
-          case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
-            val eta = BLAS.dot(features, model.coefficients) + model.intercept
-            val prediction2 = familyLink.fitted(eta)
-            val linkPrediction2 = eta
-            assert(prediction1 ~== prediction2 relTol 1E-5, "Prediction mismatch: intercept only " +
-              s"GLM with useWeight = $useWeight.")
-            assert(linkPrediction1 ~== linkPrediction2 relTol 1E-5, "Link prediction mismatch: " +
-              s"intercept only GLM with useWeight = $useWeight.")
-        }
       idx += 1
     }
   }
