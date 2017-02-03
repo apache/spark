@@ -181,6 +181,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       .set("spark.app.name", "spark-pi")
       .set("spark.ui.enabled", "true")
       .set("spark.testing", "false")
+      .set("spark.kubernetes.submit.waitAppCompletion", "false")
     val mainAppResource = s"file://$EXAMPLES_JAR"
 
     new Client(
@@ -210,6 +211,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
       "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
       "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
+      "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
       EXAMPLES_JAR)
     SparkSubmit.main(args)
     val sparkMetricsService = getSparkMetricsService("spark-pi")
@@ -231,6 +233,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
       "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
       "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
+      "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
       s"container:///opt/spark/examples/jars/$EXAMPLES_JAR_FILE_NAME")
     val allContainersSucceeded = SettableFuture.create[Boolean]
     val watcher = new Watcher[Pod] {
@@ -292,6 +295,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
       "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
       "--conf", "spark.kubernetes.driver.labels=label1=label1value,label2=label2value",
+      "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
       EXAMPLES_JAR)
     SparkSubmit.main(args)
     val driverPodLabels = minikubeKubernetesClient
@@ -337,6 +341,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--conf", "spark.ssl.kubernetes.submit.trustStore=" +
         s"file://${trustStoreFile.getAbsolutePath}",
       "--conf", s"spark.ssl.kubernetes.driverlaunch.trustStorePassword=changeit",
+      "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
       EXAMPLES_JAR)
     SparkSubmit.main(args)
   }
@@ -360,6 +365,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
       "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
       "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
+      "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
       EXAMPLES_JAR,
       TEST_EXISTENCE_FILE.getName,
       TEST_EXISTENCE_FILE_CONTENTS)
