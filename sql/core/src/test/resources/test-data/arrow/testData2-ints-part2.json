@@ -30,19 +30,19 @@
 
     "batches": [
         {
-            "count": 6,
+            "count": 3,
             "columns": [
                 {
                     "name": "a",
-                    "count": 6,
-                    "VALIDITY": [1, 1, 1, 1, 1, 1],
-                    "DATA": [1, 1, 2, 2, 3, 3]
+                    "count": 3,
+                    "VALIDITY": [1, 1, 1],
+                    "DATA": [2, 3, 3]
                 },
                 {
                     "name": "b",
-                    "count": 6,
-                    "VALIDITY": [1, 1, 1, 1, 1, 1],
-                    "DATA": [1, 2, 1, 2, 1, 2]
+                    "count": 3,
+                    "VALIDITY": [1, 1, 1],
+                    "DATA": [2, 1, 2]
                 }
             ]
         }

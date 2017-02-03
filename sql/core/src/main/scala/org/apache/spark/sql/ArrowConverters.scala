@@ -18,7 +18,8 @@
 package org.apache.spark.sql
 
 import java.io.ByteArrayOutputStream
-import java.nio.channels.Channels
+import java.nio.ByteBuffer
+import java.nio.channels.{SeekableByteChannel, Channels}
 
 import scala.collection.JavaConverters._
 
@@ -26,7 +27,7 @@ import io.netty.buffer.ArrowBuf
 import org.apache.arrow.memory.{BaseAllocator, RootAllocator}
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.BaseValueVector.BaseMutator
-import org.apache.arrow.vector.file.ArrowWriter
+import org.apache.arrow.vector.file.{ArrowReader, ArrowWriter}
 import org.apache.arrow.vector.schema.{ArrowFieldNode, ArrowRecordBatch}
 import org.apache.arrow.vector.types.{FloatingPointPrecision, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
@@ -34,10 +35,64 @@ import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
+
+/**
+ * ArrowReader requires a seekable byte channel.
+ * NOTE - this is taken from test org.apache.vector.file, see about moving to public util pkg
+ */
+private[sql] class ByteArrayReadableSeekableByteChannel(var byteArray: Array[Byte])
+  extends SeekableByteChannel {
+  var _position: Long = 0L
+
+  override def isOpen: Boolean = {
+    byteArray != null
+  }
+
+  override def close(): Unit = {
+    byteArray = null
+  }
+
+  override def read(dst: ByteBuffer): Int = {
+    val remainingBuf = byteArray.length - _position
+    val length = Math.min(dst.remaining(), remainingBuf).toInt
+    dst.put(byteArray, _position.toInt, length)
+    _position += length
+    length.toInt
+  }
+
+  override def position(): Long = _position
+
+  override def position(newPosition: Long): SeekableByteChannel = {
+    _position = newPosition.toLong
+    this
+  }
+
+  override def size: Long = {
+    byteArray.length.toLong
+  }
+
+  override def write(src: ByteBuffer): Int = {
+    throw new UnsupportedOperationException("Read Only")
+  }
+
+  override def truncate(size: Long): SeekableByteChannel = {
+    throw new UnsupportedOperationException("Read Only")
+  }
+}
+
 /**
  * Intermediate data structure returned from Arrow conversions
  */
 private[sql] abstract class ArrowPayload extends Iterator[ArrowRecordBatch]
+
+/**
+ * Build a payload from existing ArrowRecordBatches
+ */
+private[sql] class ArrowStaticPayload(batches: ArrowRecordBatch*) extends ArrowPayload {
+  private val iter = batches.iterator
+  override def next(): ArrowRecordBatch = iter.next()
+  override def hasNext: Boolean = iter.hasNext
+}
 
 /**
  * Class that wraps an Arrow RootAllocator used in conversion
@@ -47,16 +102,24 @@ private[sql] class ArrowConverters {
 
   private[sql] def allocator: RootAllocator = _allocator
 
-  private class ArrowStaticPayload(batches: ArrowRecordBatch*) extends ArrowPayload {
-    private val iter = batches.iterator
-
-    override def next(): ArrowRecordBatch = iter.next()
-    override def hasNext: Boolean = iter.hasNext
+  def interalRowIterToPayload(rowIter: Iterator[InternalRow], schema: StructType): ArrowPayload = {
+    val batch = ArrowConverters.internalRowIterToArrowBatch(rowIter, schema, allocator)
+    new ArrowStaticPayload(batch)
   }
 
-  def internalRowsToPayload(rows: Array[InternalRow], schema: StructType): ArrowPayload = {
-    val batch = ArrowConverters.internalRowsToArrowRecordBatch(rows, schema, allocator)
-    new ArrowStaticPayload(batch)
+  def readPayloadByteArrays(payloadByteArrays: Array[Array[Byte]]): ArrowPayload = {
+    val batches = scala.collection.mutable.ArrayBuffer.empty[ArrowRecordBatch]
+    var i = 0
+    while (i < payloadByteArrays.length) {
+      val payloadBytes = payloadByteArrays(i)
+      val in = new ByteArrayReadableSeekableByteChannel(payloadBytes)
+      val reader = new ArrowReader(in, _allocator)
+      val footer = reader.readFooter()
+      val batchBlocks = footer.getRecordBatches.asScala.toArray
+      batchBlocks.foreach(block => batches += reader.readRecordBatch(block))
+      i += 1
+    }
+    new ArrowStaticPayload(batches: _*)
   }
 }
 
@@ -83,50 +146,41 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Transfer an array of InternalRow to an ArrowRecordBatch.
+   * Iterate over InternalRows and write to an ArrowRecordBatch.
    */
-  private[sql] def internalRowsToArrowRecordBatch(
-      rows: Array[InternalRow],
+  private def internalRowIterToArrowBatch(
+      rowIter: Iterator[InternalRow],
       schema: StructType,
       allocator: RootAllocator): ArrowRecordBatch = {
-    val fieldAndBuf = schema.fields.zipWithIndex.map { case (field, ordinal) =>
-      internalRowToArrowBuf(rows, ordinal, field, allocator)
+
+    val columnWriters = schema.fields.zipWithIndex.map { case (field, ordinal) =>
+      ColumnWriter(ordinal, allocator, field.dataType)
+        .init()
+    }
+
+    val writerLength = columnWriters.length
+    while (rowIter.hasNext) {
+      val row = rowIter.next()
+      var i = 0
+      while (i < writerLength) {
+        columnWriters(i).write(row)
+        i += 1
+      }
+    }
+
+    val fieldAndBuf = columnWriters.map { writer =>
+      writer.finish()
     }.unzip
-    val fieldNodes = fieldAndBuf._1.flatten
+    val fieldNodes = fieldAndBuf._1
     val buffers = fieldAndBuf._2.flatten
 
-    val recordBatch = new ArrowRecordBatch(rows.length,
+    val rowLength = if(fieldNodes.nonEmpty) fieldNodes.head.getLength else 0
+
+    val recordBatch = new ArrowRecordBatch(rowLength,
       fieldNodes.toList.asJava, buffers.toList.asJava)
 
     buffers.foreach(_.release())
     recordBatch
-  }
-
-  /**
-   * Write a Field from array of InternalRow to an ArrowBuf.
-   */
-  private def internalRowToArrowBuf(
-      rows: Array[InternalRow],
-      ordinal: Int,
-      field: StructField,
-      allocator: RootAllocator): (Array[ArrowFieldNode], Array[ArrowBuf]) = {
-    val numOfRows = rows.length
-    val columnWriter = ColumnWriter(allocator, field.dataType)
-    columnWriter.init(numOfRows)
-    var index = 0
-
-    while(index < numOfRows) {
-      val row = rows(index)
-      if (row.isNullAt(ordinal)) {
-        columnWriter.writeNull()
-      } else {
-        columnWriter.write(row, ordinal)
-      }
-      index += 1
-    }
-
-    val (arrowFieldNodes, arrowBufs) = columnWriter.finish()
-    (arrowFieldNodes.toArray, arrowBufs.toArray)
   }
 
   /**
@@ -160,138 +214,139 @@ private[sql] object ArrowConverters {
 }
 
 private[sql] trait ColumnWriter {
-  def init(initialSize: Int): Unit
-  def writeNull(): Unit
-  def write(row: InternalRow, ordinal: Int): Unit
+  def init(): this.type
+  def write(row: InternalRow): Unit
 
   /**
    * Clear the column writer and return the ArrowFieldNode and ArrowBuf.
    * This should be called only once after all the data is written.
    */
-  def finish(): (Seq[ArrowFieldNode], Seq[ArrowBuf])
+  def finish(): (ArrowFieldNode, Array[ArrowBuf])
 }
 
 /**
  * Base class for flat arrow column writer, i.e., column without children.
  */
-private[sql] abstract class PrimitiveColumnWriter(protected val allocator: BaseAllocator)
+private[sql] abstract class PrimitiveColumnWriter(
+  val ordinal: Int,
+  val allocator: BaseAllocator)
     extends ColumnWriter {
-  protected def valueVector: BaseDataValueVector
-  protected def valueMutator: BaseMutator
+  def valueVector: BaseDataValueVector
+  def valueMutator: BaseMutator
 
-  protected def setNull(): Unit
-  protected def setValue(row: InternalRow, ordinal: Int): Unit
+  def setNull(): Unit
+  def setValue(row: InternalRow, ordinal: Int): Unit
 
   protected var count = 0
   protected var nullCount = 0
 
-  override def init(initialSize: Int): Unit = {
+  override def init(): this.type = {
     valueVector.allocateNew()
+    this
   }
 
-  override def writeNull(): Unit = {
-    setNull()
-    nullCount += 1
+  override def write(row: InternalRow): Unit = {
+    if (row.isNullAt(ordinal)) {
+      setNull()
+      nullCount += 1
+    } else {
+      setValue(row, ordinal)
+    }
     count += 1
   }
 
-  override def write(row: InternalRow, ordinal: Int): Unit = {
-    setValue(row, ordinal)
-    count += 1
-  }
-
-  override def finish(): (Seq[ArrowFieldNode], Seq[ArrowBuf]) = {
+  override def finish(): (ArrowFieldNode, Array[ArrowBuf]) = {
     valueMutator.setValueCount(count)
     val fieldNode = new ArrowFieldNode(count, nullCount)
-    val valueBuffers: Seq[ArrowBuf] = valueVector.getBuffers(true)
-    (List(fieldNode), valueBuffers)
+    val valueBuffers = valueVector.getBuffers(true)
+    (fieldNode, valueBuffers)
   }
 }
 
-private[sql] class BooleanColumnWriter(allocator: BaseAllocator)
-    extends PrimitiveColumnWriter(allocator) {
+private[sql] class BooleanColumnWriter(ordinal: Int, allocator: BaseAllocator)
+    extends PrimitiveColumnWriter(ordinal, allocator) {
   private def bool2int(b: Boolean): Int = if (b) 1 else 0
 
-  override protected val valueVector: NullableBitVector
+  override val valueVector: NullableBitVector
     = new NullableBitVector("BooleanValue", allocator)
-  override protected val valueMutator: NullableBitVector#Mutator = valueVector.getMutator
+  override val valueMutator: NullableBitVector#Mutator = valueVector.getMutator
 
   override def setNull(): Unit = valueMutator.setNull(count)
   override def setValue(row: InternalRow, ordinal: Int): Unit
     = valueMutator.setSafe(count, bool2int(row.getBoolean(ordinal)))
 }
 
-private[sql] class ShortColumnWriter(allocator: BaseAllocator)
-    extends PrimitiveColumnWriter(allocator) {
-  override protected val valueVector: NullableSmallIntVector
+private[sql] class ShortColumnWriter(ordinal: Int, allocator: BaseAllocator)
+    extends PrimitiveColumnWriter(ordinal, allocator) {
+  override val valueVector: NullableSmallIntVector
     = new NullableSmallIntVector("ShortValue", allocator)
-  override protected val valueMutator: NullableSmallIntVector#Mutator = valueVector.getMutator
+  override val valueMutator: NullableSmallIntVector#Mutator = valueVector.getMutator
 
   override def setNull(): Unit = valueMutator.setNull(count)
   override def setValue(row: InternalRow, ordinal: Int): Unit
     = valueMutator.setSafe(count, row.getShort(ordinal))
 }
 
-private[sql] class IntegerColumnWriter(allocator: BaseAllocator)
-    extends PrimitiveColumnWriter(allocator) {
-  override protected val valueVector: NullableIntVector
+private[sql] class IntegerColumnWriter(ordinal: Int, allocator: BaseAllocator)
+    extends PrimitiveColumnWriter(ordinal, allocator) {
+  override val valueVector: NullableIntVector
     = new NullableIntVector("IntValue", allocator)
-  override protected val valueMutator: NullableIntVector#Mutator = valueVector.getMutator
+  override val valueMutator: NullableIntVector#Mutator = valueVector.getMutator
 
   override def setNull(): Unit = valueMutator.setNull(count)
   override def setValue(row: InternalRow, ordinal: Int): Unit
     = valueMutator.setSafe(count, row.getInt(ordinal))
 }
 
-private[sql] class LongColumnWriter(allocator: BaseAllocator)
-    extends PrimitiveColumnWriter(allocator) {
-  override protected val valueVector: NullableBigIntVector
+private[sql] class LongColumnWriter(ordinal: Int, allocator: BaseAllocator)
+    extends PrimitiveColumnWriter(ordinal, allocator) {
+  override val valueVector: NullableBigIntVector
     = new NullableBigIntVector("LongValue", allocator)
-  override protected val valueMutator: NullableBigIntVector#Mutator = valueVector.getMutator
+  override val valueMutator: NullableBigIntVector#Mutator = valueVector.getMutator
 
   override def setNull(): Unit = valueMutator.setNull(count)
   override def setValue(row: InternalRow, ordinal: Int): Unit
     = valueMutator.setSafe(count, row.getLong(ordinal))
 }
 
-private[sql] class FloatColumnWriter(allocator: BaseAllocator)
-    extends PrimitiveColumnWriter(allocator) {
-  override protected val valueVector: NullableFloat4Vector
+private[sql] class FloatColumnWriter(ordinal: Int, allocator: BaseAllocator)
+    extends PrimitiveColumnWriter(ordinal, allocator) {
+  override val valueVector: NullableFloat4Vector
     = new NullableFloat4Vector("FloatValue", allocator)
-  override protected val valueMutator: NullableFloat4Vector#Mutator = valueVector.getMutator
+  override val valueMutator: NullableFloat4Vector#Mutator = valueVector.getMutator
 
   override def setNull(): Unit = valueMutator.setNull(count)
   override def setValue(row: InternalRow, ordinal: Int): Unit
     = valueMutator.setSafe(count, row.getFloat(ordinal))
 }
 
-private[sql] class DoubleColumnWriter(allocator: BaseAllocator)
-    extends PrimitiveColumnWriter(allocator) {
-  override protected val valueVector: NullableFloat8Vector
+private[sql] class DoubleColumnWriter(ordinal: Int, allocator: BaseAllocator)
+    extends PrimitiveColumnWriter(ordinal, allocator) {
+  override val valueVector: NullableFloat8Vector
     = new NullableFloat8Vector("DoubleValue", allocator)
-  override protected val valueMutator: NullableFloat8Vector#Mutator = valueVector.getMutator
+  override val valueMutator: NullableFloat8Vector#Mutator = valueVector.getMutator
 
   override def setNull(): Unit = valueMutator.setNull(count)
   override def setValue(row: InternalRow, ordinal: Int): Unit
     = valueMutator.setSafe(count, row.getDouble(ordinal))
 }
 
-private[sql] class ByteColumnWriter(allocator: BaseAllocator)
-    extends PrimitiveColumnWriter(allocator) {
-  override protected val valueVector: NullableUInt1Vector
+private[sql] class ByteColumnWriter(ordinal: Int, allocator: BaseAllocator)
+    extends PrimitiveColumnWriter(ordinal, allocator) {
+  override val valueVector: NullableUInt1Vector
     = new NullableUInt1Vector("ByteValue", allocator)
-  override protected val valueMutator: NullableUInt1Vector#Mutator = valueVector.getMutator
+  override val valueMutator: NullableUInt1Vector#Mutator = valueVector.getMutator
 
   override def setNull(): Unit = valueMutator.setNull(count)
   override def setValue(row: InternalRow, ordinal: Int): Unit
     = valueMutator.setSafe(count, row.getByte(ordinal))
 }
 
-private[sql] class UTF8StringColumnWriter(allocator: BaseAllocator)
-    extends PrimitiveColumnWriter(allocator) {
-  override protected val valueVector: NullableVarBinaryVector
+private[sql] class UTF8StringColumnWriter(ordinal: Int, allocator: BaseAllocator)
+    extends PrimitiveColumnWriter(ordinal, allocator) {
+  override val valueVector: NullableVarBinaryVector
     = new NullableVarBinaryVector("UTF8StringValue", allocator)
-  override protected val valueMutator: NullableVarBinaryVector#Mutator = valueVector.getMutator
+  override val valueMutator: NullableVarBinaryVector#Mutator = valueVector.getMutator
 
   override def setNull(): Unit = valueMutator.setNull(count)
   override def setValue(row: InternalRow, ordinal: Int): Unit = {
@@ -300,11 +355,11 @@ private[sql] class UTF8StringColumnWriter(allocator: BaseAllocator)
   }
 }
 
-private[sql] class BinaryColumnWriter(allocator: BaseAllocator)
-    extends PrimitiveColumnWriter(allocator) {
-  override protected val valueVector: NullableVarBinaryVector
+private[sql] class BinaryColumnWriter(ordinal: Int, allocator: BaseAllocator)
+    extends PrimitiveColumnWriter(ordinal, allocator) {
+  override val valueVector: NullableVarBinaryVector
     = new NullableVarBinaryVector("BinaryValue", allocator)
-  override protected val valueMutator: NullableVarBinaryVector#Mutator = valueVector.getMutator
+  override val valueMutator: NullableVarBinaryVector#Mutator = valueVector.getMutator
 
   override def setNull(): Unit = valueMutator.setNull(count)
   override def setValue(row: InternalRow, ordinal: Int): Unit = {
@@ -313,47 +368,45 @@ private[sql] class BinaryColumnWriter(allocator: BaseAllocator)
   }
 }
 
-private[sql] class DateColumnWriter(allocator: BaseAllocator)
-    extends PrimitiveColumnWriter(allocator) {
-  override protected val valueVector: NullableDateVector
+private[sql] class DateColumnWriter(ordinal: Int, allocator: BaseAllocator)
+    extends PrimitiveColumnWriter(ordinal, allocator) {
+  override val valueVector: NullableDateVector
     = new NullableDateVector("DateValue", allocator)
-  override protected val valueMutator: NullableDateVector#Mutator = valueVector.getMutator
+  override val valueMutator: NullableDateVector#Mutator = valueVector.getMutator
 
-  override protected def setNull(): Unit = valueMutator.setNull(count)
-  override protected def setValue(row: InternalRow, ordinal: Int): Unit = {
+  override def setNull(): Unit = valueMutator.setNull(count)
+  override def setValue(row: InternalRow, ordinal: Int): Unit = {
     // TODO: comment on diff btw value representations of date/timestamp
     valueMutator.setSafe(count, row.getInt(ordinal).toLong * 24 * 3600 * 1000)
   }
 }
 
-private[sql] class TimeStampColumnWriter(allocator: BaseAllocator)
-    extends PrimitiveColumnWriter(allocator) {
-  override protected val valueVector: NullableTimeStampVector
-    = new NullableTimeStampVector("TimeStampValue", allocator)
-  override protected val valueMutator: NullableTimeStampVector#Mutator = valueVector.getMutator
+private[sql] class TimeStampColumnWriter(ordinal: Int, allocator: BaseAllocator)
+    extends PrimitiveColumnWriter(ordinal, allocator) {
+  override val valueVector: NullableTimeStampMicroVector
+    = new NullableTimeStampMicroVector("TimeStampValue", allocator)
+  override val valueMutator: NullableTimeStampMicroVector#Mutator = valueVector.getMutator
 
-  override protected def setNull(): Unit = valueMutator.setNull(count)
-
-  override protected def setValue(row: InternalRow, ordinal: Int): Unit = {
-    // TODO: use microsecond timestamp when ARROW-477 is resolved
+  override def setNull(): Unit = valueMutator.setNull(count)
+  override def setValue(row: InternalRow, ordinal: Int): Unit = {
     valueMutator.setSafe(count, row.getLong(ordinal) / 1000)
   }
 }
 
 private[sql] object ColumnWriter {
-  def apply(allocator: BaseAllocator, dataType: DataType): ColumnWriter = {
+  def apply(ordinal: Int, allocator: BaseAllocator, dataType: DataType): ColumnWriter = {
     dataType match {
-      case BooleanType => new BooleanColumnWriter(allocator)
-      case ShortType => new ShortColumnWriter(allocator)
-      case IntegerType => new IntegerColumnWriter(allocator)
-      case LongType => new LongColumnWriter(allocator)
-      case FloatType => new FloatColumnWriter(allocator)
-      case DoubleType => new DoubleColumnWriter(allocator)
-      case ByteType => new ByteColumnWriter(allocator)
-      case StringType => new UTF8StringColumnWriter(allocator)
-      case BinaryType => new BinaryColumnWriter(allocator)
-      case DateType => new DateColumnWriter(allocator)
-      case TimestampType => new TimeStampColumnWriter(allocator)
+      case BooleanType => new BooleanColumnWriter(ordinal, allocator)
+      case ShortType => new ShortColumnWriter(ordinal, allocator)
+      case IntegerType => new IntegerColumnWriter(ordinal, allocator)
+      case LongType => new LongColumnWriter(ordinal, allocator)
+      case FloatType => new FloatColumnWriter(ordinal, allocator)
+      case DoubleType => new DoubleColumnWriter(ordinal, allocator)
+      case ByteType => new ByteColumnWriter(ordinal, allocator)
+      case StringType => new UTF8StringColumnWriter(ordinal, allocator)
+      case BinaryType => new BinaryColumnWriter(ordinal, allocator)
+      case DateType => new DateColumnWriter(ordinal, allocator)
+      case TimestampType => new TimeStampColumnWriter(ordinal, allocator)
       case _ => throw new UnsupportedOperationException(s"Unsupported data type: $dataType")
     }
   }

@@ -393,11 +393,11 @@ class DataFrame(object):
     @ignore_unicode_prefix
     @since(2.0)
     def collectAsArrow(self):
-        """Returns all the records as an ArrowRecordBatch
+        """Returns all records as list of deserialized ArrowPayloads
         """
         with SCCallSiteSync(self._sc) as css:
             port = self._jdf.collectAsArrowToPython()
-        return list(_load_from_socket(port, ArrowSerializer()))[0]
+        return list(_load_from_socket(port, ArrowSerializer()))
 
     @ignore_unicode_prefix
     @since(2.0)
@@ -1611,6 +1611,9 @@ class DataFrame(object):
 
         This is only available if Pandas is installed and available.
 
+        :param useArrow: Make use of Apache Arrow for conversion, pyarrow must be installed
+            on the calling Python process.
+
         .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
             to be small, as all the data is loaded into the driver's memory.
 
@@ -1619,11 +1622,13 @@ class DataFrame(object):
         0    2  Alice
         1    5    Bob
         """
-        import pandas as pd
-
         if useArrow:
-            return self.collectAsArrow().to_pandas()
+            from pyarrow.table import concat_tables
+            tables = self.collectAsArrow()
+            table = concat_tables(tables)
+            return table.to_pandas()
         else:
+            import pandas as pd
             return pd.DataFrame.from_records(self.collect(), columns=self.columns)
 
     ##########################################################################################

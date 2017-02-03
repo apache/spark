@@ -24,8 +24,10 @@ import java.util.Locale
 import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.file.json.JsonFileReader
 import org.apache.arrow.vector.util.Validator
+import org.apache.spark.SparkException
 
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.StructType
 
 
 // NOTE - nullable type can be declared as Option[*] or java.lang.*
@@ -39,16 +41,26 @@ private[sql] case class DoubleData(i: Int, a_d: Double, b_d: Option[Double])
 class ArrowConvertersSuite extends SharedSQLContext {
   import testImplicits._
 
+  private def collectAsArrow(df: DataFrame,
+                             converter: Option[ArrowConverters] = None): ArrowPayload = {
+    val cnvtr = converter.getOrElse(new ArrowConverters)
+    val payloadByteArrays = df.toArrowPayloadBytes().collect()
+    cnvtr.readPayloadByteArrays(payloadByteArrays)
+  }
+
   private def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).getFile
   }
 
   test("collect to arrow record batch") {
-    val arrowPayload = indexData.collectAsArrow()
+    val arrowPayload = collectAsArrow(indexData)
     assert(arrowPayload.nonEmpty)
-    arrowPayload.foreach(arrowRecordBatch => assert(arrowRecordBatch.getLength > 0))
-    arrowPayload.foreach(arrowRecordBatch => assert(arrowRecordBatch.getNodes.size() > 0))
-    arrowPayload.foreach(arrowRecordBatch => arrowRecordBatch.close())
+    val arrowBatches = arrowPayload.toArray
+    assert(arrowBatches.length == indexData.rdd.getNumPartitions)
+    val rowCount = arrowBatches.map(batch => batch.getLength).sum
+    assert(rowCount === indexData.count())
+    arrowBatches.foreach(batch => assert(batch.getNodes.size() > 0))
+    arrowBatches.foreach(batch => batch.close())
   }
 
   test("standard type conversion") {
@@ -82,7 +94,16 @@ class ArrowConvertersSuite extends SharedSQLContext {
   }
 
   test("partitioned DataFrame") {
-    collectAndValidate(testData2, "test-data/arrow/testData2-ints.json")
+    val converter = new ArrowConverters
+    val schema = testData2.schema
+    val arrowPayload = collectAsArrow(testData2, Some(converter))
+    val arrowBatches = arrowPayload.toArray
+    // NOTE: testData2 should have 2 partitions -> 2 arrow batches in payload
+    assert(arrowBatches.length === 2)
+    val pl1 = new ArrowStaticPayload(arrowBatches(0))
+    val pl2 = new ArrowStaticPayload(arrowBatches(1))
+    validateConversion(schema, pl1,"test-data/arrow/testData2-ints-part1.json", Some(converter))
+    validateConversion(schema, pl2,"test-data/arrow/testData2-ints-part2.json", Some(converter))
   }
 
   test("string type conversion") {
@@ -105,11 +126,14 @@ class ArrowConvertersSuite extends SharedSQLContext {
     collectAndValidate(binaryData, "test-data/arrow/binaryData.json")
   }
 
-  test("nested type conversion") { }
+  // Type not yet supported
+  ignore("nested type conversion") { }
 
-  test("array type conversion") { }
+  // Type not yet supported
+  ignore("array type conversion") { }
 
-  test("mapped type conversion") { }
+  // Type not yet supported
+  ignore("mapped type conversion") { }
 
   test("floating-point NaN") {
     val nanData = Seq((1, 1.2F, Double.NaN), (2, Float.NaN, 1.23)).toDF("i", "NaN_f", "NaN_d")
@@ -123,22 +147,32 @@ class ArrowConvertersSuite extends SharedSQLContext {
   }
 
   test("empty frame collect") {
-    val arrowPayload = spark.emptyDataFrame.collectAsArrow()
-    assert(arrowPayload.nonEmpty)
-    arrowPayload.foreach(emptyBatch => assert(emptyBatch.getLength == 0))
+    val arrowPayload = collectAsArrow(spark.emptyDataFrame)
+    assert(arrowPayload.isEmpty)
+  }
+
+  test("empty partition collect") {
+    val emptyPart = spark.sparkContext.parallelize(Seq(1), 2).toDF("i")
+    val arrowPayload = collectAsArrow(emptyPart)
+    val arrowBatches = arrowPayload.toArray
+    assert(arrowBatches.length === 2)
+    assert(arrowBatches.count(_.getLength == 0) === 1)
+    assert(arrowBatches.count(_.getLength == 1) === 1)
   }
 
   test("unsupported types") {
     def runUnsupported(block: => Unit): Unit = {
-      val msg = intercept[UnsupportedOperationException] {
+      val msg = intercept[SparkException] {
         block
       }
       assert(msg.getMessage.contains("Unsupported data type"))
+      assert(msg.getCause.getClass === classOf[UnsupportedOperationException])
     }
 
-    runUnsupported {
-      collectAndValidate(decimalData, "test-data/arrow/decimalData-BigDecimal.json")
-    }
+    runUnsupported { collectAsArrow(decimalData) }
+    runUnsupported { collectAsArrow(arrayData.toDF()) }
+    runUnsupported { collectAsArrow(mapData.toDF()) }
+    runUnsupported { collectAsArrow(complexData) }
   }
 
   test("test Arrow Validator") {
@@ -160,22 +194,29 @@ class ArrowConvertersSuite extends SharedSQLContext {
   }
 
   /** Test that a converted DataFrame to Arrow record batch equals batch read from JSON file */
-  private def collectAndValidate(df: DataFrame, arrowFile: String) {
-    val jsonFilePath = testFile(arrowFile)
-
+  private def collectAndValidate(df: DataFrame, arrowFile: String): Unit = {
     val converter = new ArrowConverters
+    // NOTE: coalesce to single partition because can only load 1 batch in validator
+    val arrowPayload = collectAsArrow(df.coalesce(1), Some(converter))
+    validateConversion(df.schema, arrowPayload, arrowFile, Some(converter))
+  }
+
+  private def validateConversion(sparkSchema: StructType,
+                                 arrowPayload: ArrowPayload,
+                                 arrowFile: String,
+                                 converterOpt: Option[ArrowConverters] = None): Unit = {
+    val converter = converterOpt.getOrElse(new ArrowConverters)
+    val jsonFilePath = testFile(arrowFile)
     val jsonReader = new JsonFileReader(new File(jsonFilePath), converter.allocator)
 
-    val arrowSchema = ArrowConverters.schemaToArrowSchema(df.schema)
+    val arrowSchema = ArrowConverters.schemaToArrowSchema(sparkSchema)
     val jsonSchema = jsonReader.start()
     Validator.compareSchemas(arrowSchema, jsonSchema)
 
-    val arrowPayload = df.collectAsArrow(Some(converter))
     val arrowRoot = new VectorSchemaRoot(arrowSchema, converter.allocator)
     val vectorLoader = new VectorLoader(arrowRoot)
     arrowPayload.foreach(vectorLoader.load)
     val jsonRoot = jsonReader.read()
-
     Validator.compareVectorSchemaRoot(arrowRoot, jsonRoot)
   }
 

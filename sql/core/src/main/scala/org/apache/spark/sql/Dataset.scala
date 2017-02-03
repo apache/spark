@@ -2363,26 +2363,6 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Collect a Dataset to an ArrowRecordBatch.
-   *
-   * @group action
-   * @since 2.2.0
-   */
-  @DeveloperApi
-  def collectAsArrow(converter: Option[ArrowConverters] = None): ArrowPayload = {
-    val cnvtr = converter.getOrElse(new ArrowConverters)
-    withNewExecutionId {
-      try {
-        val collectedRows = queryExecution.executedPlan.executeCollect()
-        cnvtr.internalRowsToPayload(collectedRows, this.schema)
-      } catch {
-        case e: Exception =>
-          throw e
-      }
-    }
-  }
-
-  /**
    * Return an iterator that contains all rows in this Dataset.
    *
    * The iterator will consume as much memory as the largest partition in this Dataset.
@@ -2768,14 +2748,13 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Collect a Dataset as an ArrowRecordBatch, and serve the ArrowRecordBatch to PySpark.
+   * Collect a Dataset as ArrowPayload byte arrays and serve to PySpark.
    */
   private[sql] def collectAsArrowToPython(): Int = {
-    val payload = collectAsArrow()
-    val payloadBytes = ArrowConverters.payloadToByteArray(payload, this.schema)
-
+    val payloadRdd = toArrowPayloadBytes()
+    val payloadByteArrays = payloadRdd.collect()
     withNewExecutionId {
-      PythonRDD.serveIterator(Iterator(payloadBytes), "serve-Arrow")
+      PythonRDD.serveIterator(payloadByteArrays.iterator, "serve-Arrow")
     }
   }
 
@@ -2858,6 +2837,18 @@ class Dataset[T] private[sql](
       Dataset.ofRows(sparkSession, logicalPlan).asInstanceOf[Dataset[U]]
     } else {
       Dataset(sparkSession, logicalPlan)
+    }
+  }
+
+  /** Convert to an RDD of ArrowPayload byte arrays */
+  private[sql] def toArrowPayloadBytes(): RDD[Array[Byte]] = {
+    val schema_captured = this.schema
+    queryExecution.toRdd.mapPartitionsInternal { iter =>
+      val converter = new ArrowConverters
+      val payload = converter.interalRowIterToPayload(iter, schema_captured)
+      val payloadBytes = ArrowConverters.payloadToByteArray(payload, schema_captured)
+      payload.foreach(_.close())
+      Iterator(payloadBytes)
     }
   }
 }
