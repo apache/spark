@@ -88,21 +88,21 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
 
   /** Verify whether the given executor has the active instance of a state store */
   private[state] def verifyIfInstanceActive(storeId: StateStoreId, executorId: String): Boolean = {
-    rpcEndpointRef.askWithRetry[Boolean](VerifyIfInstanceActive(storeId, executorId))
+    rpcEndpointRef.askSync[Boolean](VerifyIfInstanceActive(storeId, executorId))
   }
 
   /** Get the location of the state store */
   private[state] def getLocation(storeId: StateStoreId): Option[String] = {
-    rpcEndpointRef.askWithRetry[Option[String]](GetLocation(storeId))
+    rpcEndpointRef.askSync[Option[String]](GetLocation(storeId))
   }
 
   /** Deactivate instances related to a set of operator */
   private[state] def deactivateInstances(storeRootLocation: String): Unit = {
-    rpcEndpointRef.askWithRetry[Boolean](DeactivateInstances(storeRootLocation))
+    rpcEndpointRef.askSync[Boolean](DeactivateInstances(storeRootLocation))
   }
 
   private[state] def stop(): Unit = {
-    rpcEndpointRef.askWithRetry[Boolean](StopCoordinator)
+    rpcEndpointRef.askSync[Boolean](StopCoordinator)
   }
 }
 
