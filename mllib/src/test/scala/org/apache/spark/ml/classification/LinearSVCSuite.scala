@@ -41,6 +41,9 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   @transient var smallValidationDataset: Dataset[_] = _
   @transient var binaryDataset: Dataset[_] = _
 
+  @transient var smallSparseBinaryDataset: Dataset[_] = _
+  @transient var smallSparseValidationDataset: Dataset[_] = _
+
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -51,6 +54,12 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     smallBinaryDataset = generateSVMInput(A, Array[Double](B, C), nPoints, 42).toDF()
     smallValidationDataset = generateSVMInput(A, Array[Double](B, C), nPoints, 17).toDF()
     binaryDataset = generateSVMInput(1.0, Array[Double](1.0, 2.0, 3.0, 4.0), 10000, 42).toDF()
+
+    // Dataset for testing SparseVector
+    smallSparseBinaryDataset = generateSVMInput(A, Array[Double](B, C), nPoints, 42, false).toDF()
+    smallSparseValidationDataset =
+      generateSVMInput(A, Array[Double](B, C), nPoints, 17, false).toDF()
+
   }
 
   /**
@@ -68,12 +77,18 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val model = svm.fit(smallBinaryDataset)
     assert(model.transform(smallValidationDataset)
       .where("prediction=label").count() > nPoints * 0.8)
+    val sparseModel = svm.fit(smallSparseBinaryDataset)
+    assert(sparseModel.transform(smallSparseValidationDataset)
+      .where("prediction=label").count() > nPoints * 0.8)
   }
 
   test("Linear SVC binary classification with regularization") {
     val svm = new LinearSVC()
     val model = svm.setRegParam(0.1).fit(smallBinaryDataset)
     assert(model.transform(smallValidationDataset)
+      .where("prediction=label").count() > nPoints * 0.8)
+    val sparseModel = svm.fit(smallSparseBinaryDataset)
+    assert(sparseModel.transform(smallSparseValidationDataset)
       .where("prediction=label").count() > nPoints * 0.8)
   }
 
@@ -117,10 +132,14 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val lsvc = new LinearSVC().setFitIntercept(false).setMaxIter(5)
     val model = lsvc.fit(smallBinaryDataset)
     assert(model.intercept === 0.0)
+    val sparseModel = lsvc.fit(smallSparseBinaryDataset)
+    assert(sparseModel.intercept === 0.0)
 
     val lsvc2 = new LinearSVC().setFitIntercept(true).setMaxIter(5)
     val model2 = lsvc2.fit(smallBinaryDataset)
     assert(model2.intercept !== 0.0)
+    val sparseModel2 = lsvc2.fit(smallSparseBinaryDataset)
+    assert(sparseModel2.intercept !== 0.0)
   }
 
   test("linearSVC with sample weights") {
@@ -129,14 +148,19 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       assert(m1.intercept ~== m2.intercept absTol 0.05)
     }
 
+    def mlTestingUtils(dataset: Dataset[_], estimator: LinearSVC): Unit = {
+      MLTestingUtils.testArbitrarilyScaledWeights[LinearSVCModel, LinearSVC](
+        dataset.as[LabeledPoint], estimator, modelEquals)
+      MLTestingUtils.testOutliersWithSmallWeights[LinearSVCModel, LinearSVC](
+        dataset.as[LabeledPoint], estimator, 2, modelEquals)
+      MLTestingUtils.testOversamplingVsWeighting[LinearSVCModel, LinearSVC](
+        dataset.as[LabeledPoint], estimator, modelEquals, 42L)
+    }
+
     val estimator = new LinearSVC().setRegParam(0.01).setTol(0.01)
-    val dataset = smallBinaryDataset
-    MLTestingUtils.testArbitrarilyScaledWeights[LinearSVCModel, LinearSVC](
-      dataset.as[LabeledPoint], estimator, modelEquals)
-    MLTestingUtils.testOutliersWithSmallWeights[LinearSVCModel, LinearSVC](
-      dataset.as[LabeledPoint], estimator, 2, modelEquals)
-    MLTestingUtils.testOversamplingVsWeighting[LinearSVCModel, LinearSVC](
-      dataset.as[LabeledPoint], estimator, modelEquals, 42L)
+    mlTestingUtils(smallBinaryDataset, estimator)
+    mlTestingUtils(smallSparseBinaryDataset, estimator)
+
   }
 
   test("linearSVC comparison with R e1071 and scikit-learn") {
@@ -203,6 +227,8 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val svm = new LinearSVC()
     testEstimatorAndModelReadWrite(svm, smallBinaryDataset, LinearSVCSuite.allParamSettings,
       checkModelData)
+    testEstimatorAndModelReadWrite(svm, smallSparseBinaryDataset, LinearSVCSuite.allParamSettings,
+      checkModelData)
   }
 }
 
@@ -220,12 +246,13 @@ object LinearSVCSuite {
     "aggregationDepth" -> 3
   )
 
-    // Generate noisy input of the form Y = signum(x.dot(weights) + intercept + noise)
+  // Generate noisy input of the form Y = signum(x.dot(weights) + intercept + noise)
   def generateSVMInput(
       intercept: Double,
       weights: Array[Double],
       nPoints: Int,
-      seed: Int): Seq[LabeledPoint] = {
+      seed: Int,
+      isDense: Boolean = true): Seq[LabeledPoint] = {
     val rnd = new Random(seed)
     val weightsMat = new BDV(weights)
     val x = Array.fill[Array[Double]](nPoints)(
@@ -235,14 +262,11 @@ object LinearSVCSuite {
       if (yD > 0) 1.0 else 0.0
     }
     val index = (0 to weights.length - 1).toArray
-    val (yd, ys) = y.splitAt(y.length/2)
-    val (xd, xs) = x.splitAt(x.length/2)
-    val first = yd.zip(xd).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
-    val second = ys.zip(xs).map(p => LabeledPoint(p._1,
-      Vectors.sparse(weights.length *10, index, p._2)))
-    first ++ second
-//    y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
-//    y.zip(x).map(p => LabeledPoint(p._1, Vectors.sparse(weights.length *10, index, p._2)))
+    if (isDense) {
+      y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
+    } else {
+      y.zip(x).map(p => LabeledPoint(p._1, Vectors.sparse(weights.length * 10, index, p._2)))
+    }
   }
 
 }
