@@ -28,13 +28,14 @@ import org.apache.kafka.common.TopicPartition
 /**
  * Subscribe allows you to subscribe to a fixed collection of topics.
  * SubscribePattern allows you to use a regex to specify topics of interest.
- * Note that unlike the 0.8 integration, * using Subscribe or SubscribePattern
+ * Note that unlike the 0.8 integration, using Subscribe or SubscribePattern
  * should respond to adding partitions during a running stream.
  * Finally, Assign allows you to specify a fixed collection of partitions.
  * All three strategies have overloaded constructors that allow you to specify
  * the starting offset for a particular partition.
  */
 sealed trait ConsumerStrategy {
+  /** Create a [[KafkaConsumer]] and subscribe to topics according to a desired strategy */
   def createConsumer(kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]]
 }
 

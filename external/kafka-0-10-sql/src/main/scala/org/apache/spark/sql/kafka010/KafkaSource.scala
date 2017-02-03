@@ -45,11 +45,11 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * - The [[KafkaSource]] written to do the following.
  *
- *  - As soon as the source is created, the pre-configured [[KafkaTopicPartitionOffsetReader]]
+ *  - As soon as the source is created, the pre-configured [[KafkaOffsetReader]]
  *    is used to query the initial offsets that this source should
  *    start reading from. This is used to create the first batch.
  *
- *   - `getOffset()` uses the [[KafkaTopicPartitionOffsetReader]] to query the latest
+ *   - `getOffset()` uses the [[KafkaOffsetReader]] to query the latest
  *      available offsets, which are returned as a [[KafkaSourceOffset]].
  *
  *   - `getBatch()` returns a DF that reads from the 'start offset' until the 'end offset' in
@@ -69,13 +69,13 @@ import org.apache.spark.unsafe.types.UTF8String
  * and not use wrong broker addresses.
  */
 private[kafka010] class KafkaSource(
-    sqlContext: SQLContext,
-    kafkaReader: KafkaTopicPartitionOffsetReader,
-    executorKafkaParams: ju.Map[String, Object],
-    sourceOptions: Map[String, String],
-    metadataPath: String,
-    startingOffsets: KafkaOffsets,
-    failOnDataLoss: Boolean)
+                                     sqlContext: SQLContext,
+                                     kafkaReader: KafkaOffsetReader,
+                                     executorKafkaParams: ju.Map[String, Object],
+                                     sourceOptions: Map[String, String],
+                                     metadataPath: String,
+                                     startingOffsets: KafkaOffsetRangeLimit,
+                                     failOnDataLoss: Boolean)
   extends Source with Logging {
 
   private val sc = sqlContext.sparkContext
@@ -112,9 +112,9 @@ private[kafka010] class KafkaSource(
 
     metadataLog.get(0).getOrElse {
       val offsets = startingOffsets match {
-        case EarliestOffsets => KafkaSourceOffset(kafkaReader.fetchEarliestOffsets())
-        case LatestOffsets => KafkaSourceOffset(kafkaReader.fetchLatestOffsets())
-        case SpecificOffsets(p) => fetchAndVerify(p)
+        case EarliestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchEarliestOffsets())
+        case LatestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchLatestOffsets())
+        case SpecificOffsetRangeLimit(p) => fetchAndVerify(p)
       }
       metadataLog.add(0, offsets)
       logInfo(s"Initial offsets: $offsets")
@@ -125,7 +125,8 @@ private[kafka010] class KafkaSource(
   private def fetchAndVerify(specificOffsets: Map[TopicPartition, Long]) = {
     val result = kafkaReader.fetchSpecificOffsets(specificOffsets)
     specificOffsets.foreach {
-      case (tp, off) if off != KafkaOffsets.LATEST && off != KafkaOffsets.EARLIEST =>
+      case (tp, off) if off != KafkaOffsetRangeLimit.LATEST &&
+          off != KafkaOffsetRangeLimit.EARLIEST =>
         if (result(tp) != off) {
           reportDataLoss(
             s"startingOffsets for $tp was $off but consumer reset to ${result(tp)}")
@@ -138,7 +139,7 @@ private[kafka010] class KafkaSource(
 
   private var currentPartitionOffsets: Option[Map[TopicPartition, Long]] = None
 
-  override def schema: StructType = KafkaTopicPartitionOffsetReader.kafkaSchema
+  override def schema: StructType = KafkaOffsetReader.kafkaSchema
 
   /** Returns the maximum available offset for this source. */
   override def getOffset: Option[Offset] = {

@@ -44,6 +44,9 @@ private[kafka010] case class CachedKafkaConsumer private(
 
   private var consumer = createConsumer
 
+  /** indicates whether this consumer is in use or not */
+  private var inuse = true
+
   /** Iterator to the already fetch data */
   private var fetchedData = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
   private var nextOffsetInFetchedData = UNKNOWN_OFFSET
@@ -138,7 +141,7 @@ private[kafka010] case class CachedKafkaConsumer private(
       //   offset   untilOffset   earliestOffset   latestOffset
       val warningMessage =
         s"""
-          |The current available offset range is [${range.earliest}, ${range.latest}).
+          |The current available offset range is $range.
           | Offset ${offset} is out of range, and records in [$offset, $untilOffset) will be
           | skipped ${additionalMessage(failOnDataLoss = false)}
         """.stripMargin
@@ -163,7 +166,7 @@ private[kafka010] case class CachedKafkaConsumer private(
       //   offset   earliestOffset   min(untilOffset,latestOffset)   max(untilOffset, latestOffset)
       val warningMessage =
         s"""
-           |The current available offset range is [${range.earliest}, ${range.latest}).
+           |The current available offset range is $range.
            | Offset ${offset} is out of range, and records in [$offset, ${range.earliest}) will be
            | skipped ${additionalMessage(failOnDataLoss = false)}
         """.stripMargin
@@ -312,7 +315,7 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
     new ju.LinkedHashMap[CacheKey, CachedKafkaConsumer](capacity, 0.75f, true) {
       override def removeEldestEntry(
         entry: ju.Map.Entry[CacheKey, CachedKafkaConsumer]): Boolean = {
-        if (this.size > capacity) {
+        if (entry.getValue.inuse == false && this.size > capacity) {
           logWarning(s"KafkaConsumer cache hitting max capacity of $capacity, " +
             s"removing consumer for ${entry.getKey}")
           try {
@@ -329,6 +332,39 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
     }
   }
 
+  def releaseKafkaConsumer(
+      topic: String,
+      partition: Int,
+      kafkaParams: ju.Map[String, Object]): Unit = {
+    val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
+    val topicPartition = new TopicPartition(topic, partition)
+    val key = CacheKey(groupId, topicPartition)
+
+    val consumer = cache.get(key)
+    if (consumer != null) {
+      consumer.inuse = false
+    } else {
+      logWarning(s"Attempting to release consumer that does not exist")
+    }
+  }
+
+  /**
+   * Removes (and closes) the Kafka Consumer for the given topic, partition and group id.
+   */
+  def removeKafkaConsumer(
+      topic: String,
+      partition: Int,
+      kafkaParams: ju.Map[String, Object]): Unit = {
+    val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
+    val topicPartition = new TopicPartition(topic, partition)
+    val key = CacheKey(groupId, topicPartition)
+
+    val removedConsumer = cache.remove(key)
+    if (removedConsumer != null) {
+      removedConsumer.close()
+    }
+  }
+
   /**
    * Get a cached consumer for groupId, assigned to topic and partition.
    * If matching consumer doesn't already exist, will be created using kafkaParams.
@@ -336,25 +372,26 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
   def getOrCreate(
       topic: String,
       partition: Int,
-      kafkaParams: ju.Map[String, Object],
-      reuseExistingIfPresent: Boolean): CachedKafkaConsumer = synchronized {
+      kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer = synchronized {
     val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
     val topicPartition = new TopicPartition(topic, partition)
     val key = CacheKey(groupId, topicPartition)
 
     // If this is reattempt at running the task, then invalidate cache and start with
     // a new consumer
-    if (!reuseExistingIfPresent || TaskContext.get != null && TaskContext.get.attemptNumber > 1) {
-      val removedConsumer = cache.remove(key)
-      if (removedConsumer != null) {
-        removedConsumer.close()
-      }
-      new CachedKafkaConsumer(topicPartition, kafkaParams)
+    if (TaskContext.get != null && TaskContext.get.attemptNumber > 1) {
+      removeKafkaConsumer(topic, partition, kafkaParams)
+      val consumer = new CachedKafkaConsumer(topicPartition, kafkaParams)
+      consumer.inuse = true
+      cache.put(key, consumer)
+      consumer
     } else {
       if (!cache.containsKey(key)) {
         cache.put(key, new CachedKafkaConsumer(topicPartition, kafkaParams))
       }
-      cache.get(key)
+      val consumer = cache.get(key)
+      consumer.inuse = true
+      consumer
     }
   }
 }

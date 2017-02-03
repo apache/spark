@@ -53,7 +53,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister with Stre
       parameters: Map[String, String]): (String, StructType) = {
     validateStreamOptions(parameters)
     require(schema.isEmpty, "Kafka source has a fixed schema and cannot be set with a custom one")
-    (shortName(), KafkaTopicPartitionOffsetReader.kafkaSchema)
+    (shortName(), KafkaOffsetReader.kafkaSchema)
   }
 
   override def createSource(
@@ -78,13 +78,13 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister with Stre
 
     val startingStreamOffsets =
       caseInsensitiveParams.get(STARTING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
-        case Some("latest") => LatestOffsets
-        case Some("earliest") => EarliestOffsets
-        case Some(json) => SpecificOffsets(JsonUtils.partitionOffsets(json))
-        case None => LatestOffsets
+        case Some("latest") => LatestOffsetRangeLimit
+        case Some("earliest") => EarliestOffsetRangeLimit
+        case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
+        case None => LatestOffsetRangeLimit
       }
 
-    val kafkaOffsetReader = new KafkaTopicPartitionOffsetReader(
+    val kafkaOffsetReader = new KafkaOffsetReader(
       strategy(caseInsensitiveParams),
       kafkaParamsForDriver(specifiedKafkaParams),
       parameters,
@@ -109,7 +109,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister with Stre
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-      validateBatchOptions(parameters)
+    validateBatchOptions(parameters)
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
@@ -124,19 +124,19 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister with Stre
 
     val startingRelationOffsets =
       caseInsensitiveParams.get(STARTING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
-        case Some("earliest") => EarliestOffsets
-        case Some(json) => SpecificOffsets(JsonUtils.partitionOffsets(json))
-        case None => EarliestOffsets
+        case Some("earliest") => EarliestOffsetRangeLimit
+        case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
+        case None => EarliestOffsetRangeLimit
       }
 
     val endingRelationOffsets =
       caseInsensitiveParams.get(ENDING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
-        case Some("latest") => LatestOffsets
-        case Some(json) => SpecificOffsets(JsonUtils.partitionOffsets(json))
-        case None => LatestOffsets
+        case Some("latest") => LatestOffsetRangeLimit
+        case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
+        case None => LatestOffsetRangeLimit
       }
 
-    val kafkaOffsetReader = new KafkaTopicPartitionOffsetReader(
+    val kafkaOffsetReader = new KafkaOffsetReader(
       strategy(caseInsensitiveParams),
       kafkaParamsForDriver(specifiedKafkaParams),
       parameters,
@@ -321,9 +321,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister with Stre
       case Some("latest") =>
         throw new IllegalArgumentException("starting offset can't be latest " +
           "for batch queries on Kafka")
-      case Some(json) => (SpecificOffsets(JsonUtils.partitionOffsets(json)))
+      case Some(json) => (SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json)))
         .partitionOffsets.foreach {
-          case (tp, off) if off == KafkaOffsets.LATEST =>
+          case (tp, off) if off == KafkaOffsetRangeLimit.LATEST =>
             throw new IllegalArgumentException(s"startingOffsets for $tp can't " +
               "be latest for batch queries on Kafka")
           case _ => // ignore
@@ -336,9 +336,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister with Stre
         throw new IllegalArgumentException("ending offset can't be earliest " +
           "for batch queries on Kafka")
       case Some("latest") => // good to go
-      case Some(json) => (SpecificOffsets(JsonUtils.partitionOffsets(json)))
+      case Some(json) => (SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json)))
         .partitionOffsets.foreach {
-          case (tp, off) if off == KafkaOffsets.EARLIEST =>
+          case (tp, off) if off == KafkaOffsetRangeLimit.EARLIEST =>
             throw new IllegalArgumentException(s"ending offset for $tp can't be " +
               "earliest for batch queries on Kafka")
           case _ => // ignore

@@ -33,16 +33,16 @@ import org.apache.spark.unsafe.types.UTF8String
 
 private[kafka010] class KafkaRelation(
                                        override val sqlContext: SQLContext,
-                                       kafkaReader: KafkaTopicPartitionOffsetReader,
+                                       kafkaReader: KafkaOffsetReader,
                                        executorKafkaParams: ju.Map[String, Object],
                                        sourceOptions: Map[String, String],
                                        failOnDataLoss: Boolean,
-                                       startingOffsets: KafkaOffsets,
-                                       endingOffsets: KafkaOffsets)
-  extends BaseRelation with TableScan with Logging {
-  assert(startingOffsets != LatestOffsets,
+                                       startingOffsets: KafkaOffsetRangeLimit,
+                                       endingOffsets: KafkaOffsetRangeLimit)
+    extends BaseRelation with TableScan with Logging {
+  assert(startingOffsets != LatestOffsetRangeLimit,
     "Starting offset not allowed to be set to latest offsets.")
-  assert(endingOffsets != EarliestOffsets,
+  assert(endingOffsets != EarliestOffsetRangeLimit,
     "Ending offset not allowed to be set to earliest offsets.")
 
   private val pollTimeoutMs = sourceOptions.getOrElse(
@@ -50,7 +50,7 @@ private[kafka010] class KafkaRelation(
     sqlContext.sparkContext.conf.getTimeAsMs("spark.network.timeout", "120s").toString
   ).toLong
 
-  override def schema: StructType = KafkaTopicPartitionOffsetReader.kafkaSchema
+  override def schema: StructType = KafkaOffsetReader.kafkaSchema
 
   override def buildScan(): RDD[Row] = {
     // Leverage the KafkaReader to obtain the relevant partition offsets
@@ -97,7 +97,8 @@ private[kafka010] class KafkaRelation(
     sqlContext.internalCreateDataFrame(rdd, schema).rdd
   }
 
-  private def getPartitionOffsets(kafkaOffsets: KafkaOffsets): Map[TopicPartition, Long] = {
+  private def getPartitionOffsets(
+      kafkaOffsets: KafkaOffsetRangeLimit): Map[TopicPartition, Long] = {
     def validateTopicPartitions(partitions: Set[TopicPartition],
       partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
       assert(partitions == partitionOffsets.keySet,
@@ -110,13 +111,13 @@ private[kafka010] class KafkaRelation(
     val partitions = kafkaReader.fetchTopicPartitions()
     // Obtain TopicPartition offsets with late binding support
     kafkaOffsets match {
-      case EarliestOffsets => partitions.map {
-        case tp => tp -> KafkaOffsets.EARLIEST
+      case EarliestOffsetRangeLimit => partitions.map {
+        case tp => tp -> KafkaOffsetRangeLimit.EARLIEST
       }.toMap
-      case LatestOffsets => partitions.map {
-        case tp => tp -> KafkaOffsets.LATEST
+      case LatestOffsetRangeLimit => partitions.map {
+        case tp => tp -> KafkaOffsetRangeLimit.LATEST
       }.toMap
-      case SpecificOffsets(partitionOffsets) =>
+      case SpecificOffsetRangeLimit(partitionOffsets) =>
         validateTopicPartitions(partitions, partitionOffsets)
     }
   }

@@ -43,7 +43,7 @@ import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
  *
  * Note: This class is not ThreadSafe
  */
-private[kafka010] class KafkaTopicPartitionOffsetReader(
+private[kafka010] class KafkaOffsetReader(
     consumerStrategy: ConsumerStrategy,
     driverKafkaParams: ju.Map[String, Object],
     readerOptions: Map[String, String],
@@ -128,8 +128,10 @@ private[kafka010] class KafkaTopicPartitionOffsetReader(
         logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
 
         partitionOffsets.foreach {
-          case (tp, KafkaOffsets.LATEST) => consumer.seekToEnd(ju.Arrays.asList(tp))
-          case (tp, KafkaOffsets.EARLIEST) => consumer.seekToBeginning(ju.Arrays.asList(tp))
+          case (tp, KafkaOffsetRangeLimit.LATEST) =>
+            consumer.seekToEnd(ju.Arrays.asList(tp))
+          case (tp, KafkaOffsetRangeLimit.EARLIEST) =>
+            consumer.seekToBeginning(ju.Arrays.asList(tp))
           case (tp, off) => consumer.seek(tp, off)
         }
         partitionOffsets.map {
@@ -139,7 +141,8 @@ private[kafka010] class KafkaTopicPartitionOffsetReader(
     }
 
   /**
-   * Fetch the earliest offsets of partitions.
+   * Fetch the earliest offsets for the topic partitions that are indicated
+   * in the [[ConsumerStrategy]].
    */
   def fetchEarliestOffsets(): Map[TopicPartition, Long] = runUninterruptibly {
     withRetriesWithoutInterrupt {
@@ -157,7 +160,8 @@ private[kafka010] class KafkaTopicPartitionOffsetReader(
   }
 
   /**
-   * Fetch the latest offsets of partitions.
+   * Fetch the latest offsets for the topic partitions that are indicated
+   * in the [[ConsumerStrategy]].
    */
   def fetchLatestOffsets(): Map[TopicPartition, Long] = runUninterruptibly {
     withRetriesWithoutInterrupt {
@@ -175,7 +179,7 @@ private[kafka010] class KafkaTopicPartitionOffsetReader(
   }
 
   /**
-   * Fetch the earliest offsets for specific partitions.
+   * Fetch the earliest offsets for specific topic partitions.
    * The return result may not contain some partitions if they are deleted.
    */
   def fetchEarliestOffsets(
@@ -205,9 +209,17 @@ private[kafka010] class KafkaTopicPartitionOffsetReader(
     }
   }
 
+  /**
+   * This method ensures that the closure is called in an [[UninterruptibleThread]].
+   * This is required when communicating with the [[KafkaConsumer]]. In the case
+   * of streaming queries, we are already running in an [[UninterruptibleThread]],
+   * however for batch mode this is not the case.
+   */
   private def runUninterruptibly[T](body: => T): T = {
     if (!Thread.currentThread.isInstanceOf[UninterruptibleThread]) {
-      val future = Future { body }(execContext)
+      val future = Future {
+        body
+      }(execContext)
       ThreadUtils.awaitResult(future, Duration.Inf)
     } else {
       body
@@ -215,7 +227,7 @@ private[kafka010] class KafkaTopicPartitionOffsetReader(
   }
 
   /**
-   * Helper function that does multiple retries on the a body of code that returns offsets.
+   * Helper function that does multiple retries on a body of code that returns offsets.
    * Retries are needed to handle transient failures. For e.g. race conditions between getting
    * assignment and getting position while topics/partitions are deleted can cause NPEs.
    *
@@ -286,7 +298,7 @@ private[kafka010] class KafkaTopicPartitionOffsetReader(
   }
 }
 
-private[kafka010] object KafkaTopicPartitionOffsetReader {
+private[kafka010] object KafkaOffsetReader {
 
   def kafkaSchema: StructType = StructType(Seq(
     StructField("key", BinaryType),

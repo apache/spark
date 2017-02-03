@@ -53,12 +53,15 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
     }
   }
 
-  private def createDF(topic: String,
-      withOptions: Map[String, String] = Map.empty[String, String]) = {
+  private def createDF(
+      topic: String,
+      withOptions: Map[String, String] = Map.empty[String, String],
+      brokerAddress: Option[String] = None) = {
     val df = spark
       .read
       .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.bootstrap.servers",
+        brokerAddress.getOrElse(testUtils.brokerAddress))
       .option("subscribe", topic)
     withOptions.foreach {
       case (key, value) => df.option(key, value)
@@ -144,45 +147,41 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
   }
 
   test("test late binding start offsets") {
+    var kafkaUtils: KafkaTestUtils = null
     try {
-      // First, establish a new KafkaUtils instance that will clear
-      // all messages when cleanupLogs is called.
-      if (testUtils != null) {
-        testUtils.teardown()
-        testUtils = null
-      }
-      // The following settings will ensure that all log entries
-      // are removed following a call to cleanupLogs
+      /**
+       * The following settings will ensure that all log entries
+       * are removed following a call to cleanupLogs
+       */
       val brokerProps = Map[String, Object](
         "log.retention.bytes" -> 1.asInstanceOf[AnyRef], // retain nothing
         "log.retention.ms" -> 1.asInstanceOf[AnyRef]     // no wait time
       )
-      testUtils = new KafkaTestUtils(withBrokerProps = brokerProps)
-      testUtils.setup()
+      kafkaUtils = new KafkaTestUtils(withBrokerProps = brokerProps)
+      kafkaUtils.setup()
 
       val topic = newTopic()
-      testUtils.createTopic(topic, partitions = 1)
-      testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
+      kafkaUtils.createTopic(topic, partitions = 1)
+      kafkaUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
       // Specify explicit earliest and latest offset values
       val df = createDF(topic,
-        withOptions = Map("startingOffsets" -> "earliest", "endingOffsets" -> "latest"))
+        withOptions = Map("startingOffsets" -> "earliest", "endingOffsets" -> "latest"),
+        Some(kafkaUtils.brokerAddress))
       checkAnswer(df, (0 to 9).map(_.toString).toDF)
       // Blow away current set of messages.
-      testUtils.cleanupLogs()
+      kafkaUtils.cleanupLogs()
       // Add some more data, but do not call cleanup
-      testUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(0))
+      kafkaUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(0))
       // Ensure that we late bind to the new starting position
       checkAnswer(df, (10 to 19).map(_.toString).toDF)
     } finally {
-      if (testUtils != null) {
-        testUtils.teardown()
+      if (kafkaUtils != null) {
+        kafkaUtils.teardown()
       }
-      testUtils = new KafkaTestUtils
-      testUtils.setup()
     }
   }
 
-  test("bad source options") {
+  test("bad batch query options") {
     def testBadOptions(options: (String, String)*)(expectedMsgs: String*): Unit = {
       val ex = intercept[IllegalArgumentException] {
         val reader = spark
