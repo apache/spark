@@ -23,7 +23,9 @@ import java.nio.charset.StandardCharsets
 
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -47,8 +49,8 @@ import org.apache.spark.unsafe.types.UTF8String
  *    is used to query the initial offsets that this source should
  *    start reading from. This is used to create the first batch.
  *
- *   - `getOffset()` uses the [[KafkaOffsetReader]] to query the latest available offsets, which are
- *     returned as a [[KafkaSourceOffset]].
+ *   - `getOffset()` uses the [[KafkaOffsetReader]] to query the latest
+ *      available offsets, which are returned as a [[KafkaSourceOffset]].
  *
  *   - `getBatch()` returns a DF that reads from the 'start offset' until the 'end offset' in
  *     for each partition. The end offset is excluded to be consistent with the semantics of
@@ -67,13 +69,13 @@ import org.apache.spark.unsafe.types.UTF8String
  * and not use wrong broker addresses.
  */
 private[kafka010] class KafkaSource(
-    sqlContext: SQLContext,
-    kafkaReader: KafkaOffsetReader,
-    executorKafkaParams: ju.Map[String, Object],
-    sourceOptions: Map[String, String],
-    metadataPath: String,
-    startingOffsets: KafkaOffsets,
-    failOnDataLoss: Boolean)
+                                     sqlContext: SQLContext,
+                                     kafkaReader: KafkaOffsetReader,
+                                     executorKafkaParams: ju.Map[String, Object],
+                                     sourceOptions: Map[String, String],
+                                     metadataPath: String,
+                                     startingOffsets: KafkaOffsetRangeLimit,
+                                     failOnDataLoss: Boolean)
   extends Source with Logging {
 
   private val sc = sqlContext.sparkContext
@@ -110,9 +112,9 @@ private[kafka010] class KafkaSource(
 
     metadataLog.get(0).getOrElse {
       val offsets = startingOffsets match {
-        case EarliestOffsets => KafkaSourceOffset(kafkaReader.fetchEarliestOffsets())
-        case LatestOffsets => KafkaSourceOffset(kafkaReader.fetchLatestOffsets())
-        case SpecificOffsets(p) => fetchAndVerify(p)
+        case EarliestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchEarliestOffsets())
+        case LatestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchLatestOffsets())
+        case SpecificOffsetRangeLimit(p) => fetchAndVerify(p)
       }
       metadataLog.add(0, offsets)
       logInfo(s"Initial offsets: $offsets")
@@ -121,9 +123,10 @@ private[kafka010] class KafkaSource(
   }
 
   private def fetchAndVerify(specificOffsets: Map[TopicPartition, Long]) = {
-    val result = kafkaReader.fetchSpecificStartingOffsets(specificOffsets)
+    val result = kafkaReader.fetchSpecificOffsets(specificOffsets)
     specificOffsets.foreach {
-      case (tp, off) if off != KafkaUtils.LATEST && off != KafkaUtils.EARLIEST =>
+      case (tp, off) if off != KafkaOffsetRangeLimit.LATEST &&
+          off != KafkaOffsetRangeLimit.EARLIEST =>
         if (result(tp) != off) {
           reportDataLoss(
             s"startingOffsets for $tp was $off but consumer reset to ${result(tp)}")
@@ -163,7 +166,7 @@ private[kafka010] class KafkaSource(
       limit: Long,
       from: Map[TopicPartition, Long],
       until: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
-    val fromNew = kafkaReader.fetchNewPartitionEarliestOffsets(until.keySet.diff(from.keySet).toSeq)
+    val fromNew = kafkaReader.fetchEarliestOffsets(until.keySet.diff(from.keySet).toSeq)
     val sizes = until.flatMap {
       case (tp, end) =>
         // If begin isn't defined, something's wrong, but let alert logic in getBatch handle it
@@ -213,7 +216,7 @@ private[kafka010] class KafkaSource(
 
     // Find the new partitions, and get their earliest offsets
     val newPartitions = untilPartitionOffsets.keySet.diff(fromPartitionOffsets.keySet)
-    val newPartitionOffsets = kafkaReader.fetchNewPartitionEarliestOffsets(newPartitions.toSeq)
+    val newPartitionOffsets = kafkaReader.fetchEarliestOffsets(newPartitions.toSeq)
     if (newPartitionOffsets.keySet != newPartitions) {
       // We cannot get from offsets for some partitions. It means they got deleted.
       val deletedPartitions = newPartitions.diff(newPartitionOffsets.keySet)
@@ -239,7 +242,7 @@ private[kafka010] class KafkaSource(
     }.toSeq
     logDebug("TopicPartitions: " + topicPartitions.mkString(", "))
 
-    val sortedExecutors = KafkaUtils.getSortedExecutorList(sc)
+    val sortedExecutors = getSortedExecutorList(sc)
     val numExecutors = sortedExecutors.length
     logDebug("Sorted executors: " + sortedExecutors.mkString(", "))
 
@@ -256,7 +259,7 @@ private[kafka010] class KafkaSource(
       val preferredLoc = if (numExecutors > 0) {
         // This allows cached KafkaConsumers in the executors to be re-used to read the same
         // partition in every batch.
-        Some(sortedExecutors(KafkaUtils.floorMod(tp.hashCode, numExecutors)))
+        Some(sortedExecutors(floorMod(tp.hashCode, numExecutors)))
       } else None
       KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
     }.filter { range =>
@@ -331,4 +334,18 @@ private[kafka010] object KafkaSource {
       | topic was processed. If you don't want your streaming query to fail on such cases, set the
       | source option "failOnDataLoss" to "false".
     """.stripMargin
+
+  def getSortedExecutorList(sc: SparkContext): Array[String] = {
+    val bm = sc.env.blockManager
+    bm.master.getPeers(bm.blockManagerId).toArray
+      .map(x => ExecutorCacheTaskLocation(x.host, x.executorId))
+      .sortWith(compare)
+      .map(_.toString)
+  }
+
+  private def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
+    if (a.host == b.host) { a.executorId > b.executorId } else { a.host > b.host }
+  }
+
+  def floorMod(a: Long, b: Int): Int = ((a % b).toInt + b) % b
 }

@@ -26,65 +26,43 @@ import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsumer}
-import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.kafka010.KafkaOffsetReader.ConsumerStrategy
+import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
-
-
-private[kafka010] trait KafkaOffsetReader {
-
-  /**
-   * Closes the connection to Kafka, and cleans up state.
-   */
-  def close()
-
-  /**
-   * @return The Set of TopicPartitions for a given topic
-   */
-  def fetchTopicPartitions(): Set[TopicPartition]
-
-  /**
-   * Set consumer position to specified offsets, making sure all assignments are set.
-   */
-  def fetchSpecificStartingOffsets(
-    partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long]
-
-  /**
-   * Fetch the earliest offsets of partitions.
-   */
-  def fetchEarliestOffsets(): Map[TopicPartition, Long]
-
-  /**
-   * Fetch the latest offsets of partitions.
-   */
-  def fetchLatestOffsets(): Map[TopicPartition, Long]
-
-  /**
-   * Fetch the earliest offsets for newly discovered partitions. The return result may not contain
-   * some partitions if they are deleted.
-   */
-  def fetchNewPartitionEarliestOffsets(
-    newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long]
-}
 
 /**
  * This class uses Kafka's own [[KafkaConsumer]] API to read data offsets from Kafka.
+ * The [[ConsumerStrategy]] class defines which Kafka topics and partitions should be read
+ * by this source. These strategies directly correspond to the different consumption options
+ * in. This class is designed to return a configured [[KafkaConsumer]] that is used by the
+ * [[KafkaSource]] to query for the offsets. See the docs on
+ * [[org.apache.spark.sql.kafka010.ConsumerStrategy]]
+ * for more details.
  *
- * - The [[ConsumerStrategy]] class defines which Kafka topics and partitions should be read
- *   by this source. These strategies directly correspond to the different consumption options
- *   in . This class is designed to return a configured [[KafkaConsumer]] that is used by the
- *   [[KafkaSource]] to query for the offsets. See the docs on
- *   [[org.apache.spark.sql.kafka010.KafkaOffsetReader.ConsumerStrategy]] for more details.
+ * Note: This class is not ThreadSafe
  */
-private[kafka010] class KafkaOffsetReaderImpl(
+private[kafka010] class KafkaOffsetReader(
     consumerStrategy: ConsumerStrategy,
     driverKafkaParams: ju.Map[String, Object],
     readerOptions: Map[String, String],
-    driverGroupIdPrefix: String)
-  extends KafkaOffsetReader with Logging {
+    driverGroupIdPrefix: String) extends Logging {
+  /**
+   * Used to ensure execute fetch operations execute in an UninterruptibleThread
+   */
+  val kafkaReaderThread = Executors.newSingleThreadExecutor(new ThreadFactory {
+    override def newThread(r: Runnable): Thread = {
+      val t = new UninterruptibleThread("Kafka Offset Reader") {
+        override def run(): Unit = {
+          r.run()
+        }
+      }
+      t.setDaemon(true)
+      t
+    }
+  })
+  val execContext = ExecutionContext.fromExecutorService(kafkaReaderThread)
 
   /**
    * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the
@@ -110,9 +88,18 @@ private[kafka010] class KafkaOffsetReaderImpl(
 
   override def toString(): String = consumerStrategy.toString
 
-  def close(): Unit = consumer.close()
+  /**
+   * Closes the connection to Kafka, and cleans up state.
+   */
+  def close(): Unit = {
+    consumer.close()
+    kafkaReaderThread.shutdownNow()
+  }
 
-  override def fetchTopicPartitions(): Set[TopicPartition] = {
+  /**
+   * @return The Set of TopicPartitions for a given topic
+   */
+  def fetchTopicPartitions(): Set[TopicPartition] = runUninterruptibly {
     assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
     // Poll to get the latest assigned partitions
     consumer.poll(0)
@@ -121,82 +108,126 @@ private[kafka010] class KafkaOffsetReaderImpl(
     partitions.asScala.toSet
   }
 
-  override def fetchSpecificStartingOffsets(
+  /**
+   * Resolves the specific offsets based on Kafka seek positions.
+   * This method resolves offset value -1 to the latest and -2 to the
+   * earliest Kafka seek position.
+   */
+  def fetchSpecificOffsets(
       partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
-    withRetriesWithoutInterrupt {
-      // Poll to get the latest assigned partitions
-      consumer.poll(0)
-      val partitions = consumer.assignment()
-      consumer.pause(partitions)
-      assert(partitions.asScala == partitionOffsets.keySet,
-        "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
-          "Use -1 for latest, -2 for earliest, if you don't care.\n" +
-          s"Specified: ${partitionOffsets.keySet} Assigned: ${partitions.asScala}")
-      logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
-
-      partitionOffsets.foreach {
-        case (tp, -1) => consumer.seekToEnd(ju.Arrays.asList(tp))
-        case (tp, -2) => consumer.seekToBeginning(ju.Arrays.asList(tp))
-        case (tp, off) => consumer.seek(tp, off)
-      }
-      partitionOffsets.map {
-        case (tp, _) => tp -> consumer.position(tp)
-      }
-    }
-
-  override def fetchEarliestOffsets(): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
-    // Poll to get the latest assigned partitions
-    consumer.poll(0)
-    val partitions = consumer.assignment()
-    consumer.pause(partitions)
-    logDebug(s"Partitions assigned to consumer: $partitions. Seeking to the beginning")
-
-    consumer.seekToBeginning(partitions)
-    val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
-    logDebug(s"Got earliest offsets for partition : $partitionOffsets")
-    partitionOffsets
-  }
-
-  override def fetchLatestOffsets(): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
-    // Poll to get the latest assigned partitions
-    consumer.poll(0)
-    val partitions = consumer.assignment()
-    consumer.pause(partitions)
-    logDebug(s"Partitions assigned to consumer: $partitions. Seeking to the end.")
-
-    consumer.seekToEnd(partitions)
-    val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
-    logDebug(s"Got latest offsets for partition : $partitionOffsets")
-    partitionOffsets
-  }
-
-  override def fetchNewPartitionEarliestOffsets(
-      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = {
-    if (newPartitions.isEmpty) {
-      Map.empty[TopicPartition, Long]
-    } else {
+    runUninterruptibly {
       withRetriesWithoutInterrupt {
         // Poll to get the latest assigned partitions
         consumer.poll(0)
         val partitions = consumer.assignment()
         consumer.pause(partitions)
-        logDebug(s"\tPartitions assigned to consumer: $partitions")
+        assert(partitions.asScala == partitionOffsets.keySet,
+          "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
+            "Use -1 for latest, -2 for earliest, if you don't care.\n" +
+            s"Specified: ${partitionOffsets.keySet} Assigned: ${partitions.asScala}")
+        logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
 
-        // Get the earliest offset of each partition
-        consumer.seekToBeginning(partitions)
-        val partitionOffsets = newPartitions.filter { p =>
-          // When deleting topics happen at the same time, some partitions may not be in
-          // `partitions`. So we need to ignore them
-          partitions.contains(p)
-        }.map(p => p -> consumer.position(p)).toMap
-        logDebug(s"Got earliest offsets for new partitions: $partitionOffsets")
-        partitionOffsets
+        partitionOffsets.foreach {
+          case (tp, KafkaOffsetRangeLimit.LATEST) =>
+            consumer.seekToEnd(ju.Arrays.asList(tp))
+          case (tp, KafkaOffsetRangeLimit.EARLIEST) =>
+            consumer.seekToBeginning(ju.Arrays.asList(tp))
+          case (tp, off) => consumer.seek(tp, off)
+        }
+        partitionOffsets.map {
+          case (tp, _) => tp -> consumer.position(tp)
+        }
+      }
+    }
+
+  /**
+   * Fetch the earliest offsets for the topic partitions that are indicated
+   * in the [[ConsumerStrategy]].
+   */
+  def fetchEarliestOffsets(): Map[TopicPartition, Long] = runUninterruptibly {
+    withRetriesWithoutInterrupt {
+      // Poll to get the latest assigned partitions
+      consumer.poll(0)
+      val partitions = consumer.assignment()
+      consumer.pause(partitions)
+      logDebug(s"Partitions assigned to consumer: $partitions. Seeking to the beginning")
+
+      consumer.seekToBeginning(partitions)
+      val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
+      logDebug(s"Got earliest offsets for partition : $partitionOffsets")
+      partitionOffsets
+    }
+  }
+
+  /**
+   * Fetch the latest offsets for the topic partitions that are indicated
+   * in the [[ConsumerStrategy]].
+   */
+  def fetchLatestOffsets(): Map[TopicPartition, Long] = runUninterruptibly {
+    withRetriesWithoutInterrupt {
+      // Poll to get the latest assigned partitions
+      consumer.poll(0)
+      val partitions = consumer.assignment()
+      consumer.pause(partitions)
+      logDebug(s"Partitions assigned to consumer: $partitions. Seeking to the end.")
+
+      consumer.seekToEnd(partitions)
+      val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
+      logDebug(s"Got latest offsets for partition : $partitionOffsets")
+      partitionOffsets
+    }
+  }
+
+  /**
+   * Fetch the earliest offsets for specific topic partitions.
+   * The return result may not contain some partitions if they are deleted.
+   */
+  def fetchEarliestOffsets(
+      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = {
+    if (newPartitions.isEmpty) {
+      Map.empty[TopicPartition, Long]
+    } else {
+      runUninterruptibly {
+        withRetriesWithoutInterrupt {
+          // Poll to get the latest assigned partitions
+          consumer.poll(0)
+          val partitions = consumer.assignment()
+          consumer.pause(partitions)
+          logDebug(s"\tPartitions assigned to consumer: $partitions")
+
+          // Get the earliest offset of each partition
+          consumer.seekToBeginning(partitions)
+          val partitionOffsets = newPartitions.filter { p =>
+            // When deleting topics happen at the same time, some partitions may not be in
+            // `partitions`. So we need to ignore them
+            partitions.contains(p)
+          }.map(p => p -> consumer.position(p)).toMap
+          logDebug(s"Got earliest offsets for new partitions: $partitionOffsets")
+          partitionOffsets
+        }
       }
     }
   }
 
   /**
-   * Helper function that does multiple retries on the a body of code that returns offsets.
+   * This method ensures that the closure is called in an [[UninterruptibleThread]].
+   * This is required when communicating with the [[KafkaConsumer]]. In the case
+   * of streaming queries, we are already running in an [[UninterruptibleThread]],
+   * however for batch mode this is not the case.
+   */
+  private def runUninterruptibly[T](body: => T): T = {
+    if (!Thread.currentThread.isInstanceOf[UninterruptibleThread]) {
+      val future = Future {
+        body
+      }(execContext)
+      ThreadUtils.awaitResult(future, Duration.Inf)
+    } else {
+      body
+    }
+  }
+
+  /**
+   * Helper function that does multiple retries on a body of code that returns offsets.
    * Retries are needed to handle transient failures. For e.g. race conditions between getting
    * assignment and getting position while topics/partitions are deleted can cause NPEs.
    *
@@ -267,112 +298,15 @@ private[kafka010] class KafkaOffsetReaderImpl(
   }
 }
 
-/**
- * The Kafka Consumer must be called in an UninterruptibleThread. This naturally occurs
- * in Structured Streaming, but not in Spark SQL, which will use this call to communicate
- * with Kafak for obtaining offsets.
- *
- * @param kafkaOffsetReader Basically in instance of [[KafkaOffsetReaderImpl]] that
- *                          this class wraps and executes in an [[UninterruptibleThread]]
- */
-private[kafka010] class UninterruptibleKafkaOffsetReader(kafkaOffsetReader: KafkaOffsetReader)
-  extends KafkaOffsetReader with Logging {
-
-  val kafkaReaderThread = Executors.newSingleThreadExecutor(new ThreadFactory {
-    override def newThread(r: Runnable): Thread = {
-      val t = new UninterruptibleThread("Kafka Offset Reader") {
-        override def run(): Unit = {
-          r.run()
-        }
-      }
-      t.setDaemon(true)
-      t
-    }
-  })
-  val execContext = ExecutionContext.fromExecutorService(kafkaReaderThread)
-
-  override def close(): Unit = {
-    kafkaOffsetReader.close()
-    kafkaReaderThread.shutdownNow()
-  }
-
-  override def fetchTopicPartitions(): Set[TopicPartition] = {
-    val future = Future {
-      kafkaOffsetReader.fetchTopicPartitions()
-    }(execContext)
-    ThreadUtils.awaitResult(future, Duration.Inf)
-  }
-
-  override def fetchSpecificStartingOffsets(
-    partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
-    val future = Future {
-      kafkaOffsetReader.fetchSpecificStartingOffsets(partitionOffsets)
-    }(execContext)
-    ThreadUtils.awaitResult(future, Duration.Inf)
-  }
-
-  override def fetchEarliestOffsets(): Map[TopicPartition, Long] = {
-      val future = Future {
-        kafkaOffsetReader.fetchEarliestOffsets()
-      }(execContext)
-      ThreadUtils.awaitResult(future, Duration.Inf)
-  }
-
-  override def fetchLatestOffsets(): Map[TopicPartition, Long] = {
-    val future = Future {
-      kafkaOffsetReader.fetchLatestOffsets()
-    }(execContext)
-    ThreadUtils.awaitResult(future, Duration.Inf)
-  }
-
-  override def fetchNewPartitionEarliestOffsets(
-    newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = {
-    val future = Future {
-      kafkaOffsetReader.fetchNewPartitionEarliestOffsets(newPartitions)
-    }(execContext)
-    ThreadUtils.awaitResult(future, Duration.Inf)
-  }
-}
-
 private[kafka010] object KafkaOffsetReader {
 
-  sealed trait ConsumerStrategy {
-    def createConsumer(kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]]
-  }
-
-  case class AssignStrategy(partitions: Array[TopicPartition]) extends ConsumerStrategy {
-    override def createConsumer(
-        kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
-      val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
-      consumer.assign(ju.Arrays.asList(partitions: _*))
-      consumer
-    }
-
-    override def toString: String = s"Assign[${partitions.mkString(", ")}]"
-  }
-
-  case class SubscribeStrategy(topics: Seq[String]) extends ConsumerStrategy {
-    override def createConsumer(
-        kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
-      val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
-      consumer.subscribe(topics.asJava)
-      consumer
-    }
-
-    override def toString: String = s"Subscribe[${topics.mkString(", ")}]"
-  }
-
-  case class SubscribePatternStrategy(topicPattern: String)
-    extends ConsumerStrategy {
-    override def createConsumer(
-        kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
-      val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
-      consumer.subscribe(
-        ju.regex.Pattern.compile(topicPattern),
-        new NoOpConsumerRebalanceListener())
-      consumer
-    }
-
-    override def toString: String = s"SubscribePattern[$topicPattern]"
-  }
+  def kafkaSchema: StructType = StructType(Seq(
+    StructField("key", BinaryType),
+    StructField("value", BinaryType),
+    StructField("topic", StringType),
+    StructField("partition", IntegerType),
+    StructField("offset", LongType),
+    StructField("timestamp", TimestampType),
+    StructField("timestampType", IntegerType)
+  ))
 }

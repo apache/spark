@@ -26,9 +26,8 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql._
+import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
-import org.apache.spark.sql.kafka010.KafkaOffsetReader.{AssignStrategy, SubscribePatternStrategy, SubscribeStrategy}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -54,7 +53,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): (String, StructType) = {
-    validateOptions(parameters, Stream)
+    validateStreamOptions(parameters)
     require(schema.isEmpty, "Kafka source has a fixed schema and cannot be set with a custom one")
     (shortName(), KafkaUtils.kafkaSchema)
   }
@@ -65,7 +64,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): Source = {
-    validateOptions(parameters, Stream)
+    validateStreamOptions(parameters)
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
@@ -81,13 +80,13 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
     val startingStreamOffsets =
       caseInsensitiveParams.get(STARTING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
-        case Some("latest") => LatestOffsets
-        case Some("earliest") => EarliestOffsets
-        case Some(json) => SpecificOffsets(JsonUtils.partitionOffsets(json))
-        case None => LatestOffsets
+        case Some("latest") => LatestOffsetRangeLimit
+        case Some("earliest") => EarliestOffsetRangeLimit
+        case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
+        case None => LatestOffsetRangeLimit
       }
 
-    val kafkaOffsetReader = new KafkaOffsetReaderImpl(
+    val kafkaOffsetReader = new KafkaOffsetReader(
       strategy(caseInsensitiveParams),
       kafkaParamsForDriver(specifiedKafkaParams),
       parameters,
@@ -110,9 +109,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
    *       by the Map that is passed to the function.
    */
   override def createRelation(
-    sqlContext: SQLContext,
-    parameters: Map[String, String]): BaseRelation = {
-    validateOptions(parameters, Batch)
+      sqlContext: SQLContext,
+      parameters: Map[String, String]): BaseRelation = {
+    validateBatchOptions(parameters)
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
@@ -127,24 +126,23 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
     val startingRelationOffsets =
       caseInsensitiveParams.get(STARTING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
-        case Some("earliest") => EarliestOffsets
-        case Some(json) => SpecificOffsets(JsonUtils.partitionOffsets(json))
-        case None => EarliestOffsets
+        case Some("earliest") => EarliestOffsetRangeLimit
+        case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
+        case None => EarliestOffsetRangeLimit
       }
 
     val endingRelationOffsets =
       caseInsensitiveParams.get(ENDING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
-        case Some("latest") => LatestOffsets
-        case Some(json) => SpecificOffsets(JsonUtils.partitionOffsets(json))
-        case None => LatestOffsets
+        case Some("latest") => LatestOffsetRangeLimit
+        case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
+        case None => LatestOffsetRangeLimit
       }
 
-    val kafkaOffsetReaderImpl = new KafkaOffsetReaderImpl(
+    val kafkaOffsetReader = new KafkaOffsetReader(
       strategy(caseInsensitiveParams),
       kafkaParamsForDriver(specifiedKafkaParams),
       parameters,
       driverGroupIdPrefix = s"$uniqueGroupId-driver")
-    val kafkaOffsetReader = new UninterruptibleKafkaOffsetReader(kafkaOffsetReaderImpl)
 
     new KafkaRelation(
       sqlContext,
@@ -223,7 +221,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       .build()
 
   private def kafkaParamsForExecutors(
-    specifiedKafkaParams: Map[String, String], uniqueGroupId: String) =
+      specifiedKafkaParams: Map[String, String], uniqueGroupId: String) =
     ConfigUpdater("executor", specifiedKafkaParams)
       .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
       .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
@@ -243,7 +241,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       .build()
 
   private def strategy(caseInsensitiveParams: Map[String, String]) =
-    caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
+      caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
     case ("assign", value) =>
       AssignStrategy(JsonUtils.partitions(value))
     case ("subscribe", value) =>
@@ -259,17 +257,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   private def failOnDataLoss(caseInsensitiveParams: Map[String, String]) =
     caseInsensitiveParams.getOrElse(FAIL_ON_DATA_LOSS_OPTION_KEY, "true").toBoolean
 
-
-  private def validateOptions(parameters: Map[String, String], mode: Mode): Unit = {
+  private def validateGeneralOptions(parameters: Map[String, String]): Unit = {
     // Validate source options
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
     val specifiedStrategies =
       caseInsensitiveParams.filter { case (k, _) => STRATEGY_OPTION_KEYS.contains(k) }.toSeq
-
-    mode match {
-      case Stream => validateStream(caseInsensitiveParams)
-      case Batch => validateBatch(caseInsensitiveParams)
-    }
 
     if (specifiedStrategies.isEmpty) {
       throw new IllegalArgumentException(
@@ -363,20 +355,25 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  private def validateStream(caseInsensitiveParams: Map[String, String]) = {
+  private def validateStreamOptions(caseInsensitiveParams: Map[String, String]) = {
+    // Stream specific options
     caseInsensitiveParams.get(ENDING_OFFSETS_OPTION_KEY).map(_ =>
-      throw new IllegalArgumentException("ending offset not valid in stream mode"))
+      throw new IllegalArgumentException("ending offset not valid in streaming queries"))
+    validateGeneralOptions(caseInsensitiveParams)
   }
 
-  private def validateBatch(caseInsensitiveParams: Map[String, String]) = {
+  private def validateBatchOptions(caseInsensitiveParams: Map[String, String]) = {
+    // Batch specific options
     caseInsensitiveParams.get(STARTING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
       case Some("earliest") => // good to go
       case Some("latest") =>
-        throw new IllegalArgumentException("starting relation offset can't be latest")
-      case Some(json) => (SpecificOffsets(JsonUtils.partitionOffsets(json)))
+        throw new IllegalArgumentException("starting offset can't be latest " +
+          "for batch queries on Kafka")
+      case Some(json) => (SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json)))
         .partitionOffsets.foreach {
-          case (tp, off) if off == KafkaUtils.LATEST =>
-            throw new IllegalArgumentException(s"startingOffsets for $tp can't be latest")
+          case (tp, off) if off == KafkaOffsetRangeLimit.LATEST =>
+            throw new IllegalArgumentException(s"startingOffsets for $tp can't " +
+              "be latest for batch queries on Kafka")
           case _ => // ignore
         }
       case _ => // default to earliest
@@ -384,20 +381,24 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
     caseInsensitiveParams.get(ENDING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
       case Some("earliest") =>
-        throw new IllegalArgumentException("ending relation offset can't be earliest")
+        throw new IllegalArgumentException("ending offset can't be earliest " +
+          "for batch queries on Kafka")
       case Some("latest") => // good to go
-      case Some(json) => (SpecificOffsets(JsonUtils.partitionOffsets(json)))
+      case Some(json) => (SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json)))
         .partitionOffsets.foreach {
-          case (tp, off) if off == KafkaUtils.EARLIEST =>
-            throw new IllegalArgumentException(s"ending offset for $tp can't be earliest")
+          case (tp, off) if off == KafkaOffsetRangeLimit.EARLIEST =>
+            throw new IllegalArgumentException(s"ending offset for $tp can't be " +
+              "earliest for batch queries on Kafka")
           case _ => // ignore
         }
       case _ => // default to latest
     }
 
+    validateGeneralOptions(caseInsensitiveParams)
+
     // Don't want to throw an error, but at least log a warning.
     if (caseInsensitiveParams.get("maxoffsetspertrigger").isDefined) {
-      logWarning("maxOffsetsPerTrigger option ignored in batch mode")
+      logWarning("maxOffsetsPerTrigger option ignored in batch queries")
     }
   }
 
@@ -429,11 +430,6 @@ private[kafka010] object KafkaSourceProvider {
   private val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
   private val DEFAULT_TOPIC = "defaulttopic"
-
-  // Used to check parameters for different source modes
-  private sealed trait Mode
-  private case object Batch extends Mode
-  private case object Stream extends Mode
 
   private val deserClassName = classOf[ByteArrayDeserializer].getName
 }
