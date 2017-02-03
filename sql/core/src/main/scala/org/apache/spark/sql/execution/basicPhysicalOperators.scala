@@ -570,9 +570,10 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  * current upstream partitions will be executed in parallel (per whatever
  * the current partitioning is).
  */
-case class CoalesceExec(numPartitions: Int, child: SparkPlan,
-                        partitionCoalescer: Option[PartitionCoalescer]
-                       ) extends UnaryExecNode {
+case class CoalesceExec(
+    numPartitions: Int,
+    child: SparkPlan,
+    partitionCoalescer: Option[PartitionCoalescer]) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = {
