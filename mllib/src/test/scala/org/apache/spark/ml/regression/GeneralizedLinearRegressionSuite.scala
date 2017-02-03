@@ -19,6 +19,7 @@ package org.apache.spark.ml.regression
 
 import scala.util.Random
 
+import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.Instance
@@ -768,7 +769,6 @@ class GeneralizedLinearRegressionSuite
     var idx = 0
     for (useWeight <- Seq(false, true)) {
       val trainer = new GeneralizedLinearRegression().setFamily("poisson")
-        .setLinkPredictionCol("linkPrediction")
       if (useWeight) trainer.setWeightCol("weight")
       val model = trainer.fit(dataset)
       val actual = model.intercept
@@ -777,6 +777,12 @@ class GeneralizedLinearRegressionSuite
       assert(model.coefficients === new DenseVector(Array.empty[Double]))
 
       idx += 1
+    }
+
+    // throw exception for empty model
+    val trainer = new GeneralizedLinearRegression().setFitIntercept(false)
+    intercept[SparkException] {
+      trainer.fit(dataset)
     }
   }
 
