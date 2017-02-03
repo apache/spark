@@ -34,7 +34,7 @@ class OptimizeInSuite extends PlanTest {
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
       Batch("ConstantFolding", FixedPoint(10),
-        NullPropagation,
+        NullPropagation(SimpleCatalystConf(caseSensitiveAnalysis = true)),
         ConstantFolding,
         BooleanSimplification,
         OptimizeIn(SimpleCatalystConf(caseSensitiveAnalysis = true))) :: Nil
