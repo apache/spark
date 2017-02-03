@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql
 
-import java.io.{Externalizable, File, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import org.apache.hadoop.mapred.FileSplit
-import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.rdd.{CoalescedRDDPartition, HadoopPartition, SizeBasedCoalescer}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
@@ -33,25 +32,12 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
 
-class DatasetSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
+class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
-
-  private var path: File = null
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    path = Utils.createTempDir()
-    path.delete()
-  }
-
-  after {
-    Utils.deleteRecursively(path)
-  }
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
 
@@ -140,27 +126,34 @@ class DatasetSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
     val maxSplitSize = 512
     // Similar to the implementation of `test("custom RDD coalescer")` from [[RDDSuite]] we first
     // write out to disk, to ensure that our splits are in fact [[FileSplit]] instances.
-    val data = (1 to 1000).map(i => ClassData(i.toString, i))
-    data.toDS().repartition(10).write.format("csv").save(path.toString)
+    withTempPath { path =>
+      val data = (1 to 1000).map(i => ClassData(i.toString, i))
+      data.toDS().repartition(10).write.format("csv").save(path.toString)
 
-    val ds = spark.read.format("csv").load(path.toString).as[ClassData]
-    val coalescedDataSet =
-      ds.coalesce(2, partitionCoalescer = Option(new SizeBasedCoalescer(maxSplitSize)))
+      val schema = StructType(Seq($"a".string, $"b".int))
+      val ds = spark.read.format("csv")
+        .schema(schema)
+        .load(path.toString)
+        .as[ClassData]
 
-    assert(coalescedDataSet.rdd.partitions.length <= 10)
+      val coalescedDataSet =
+        ds.coalesce(2, partitionCoalescer = Option(new SizeBasedCoalescer(maxSplitSize)))
 
-    var totalPartitionCount = 0L
-    coalescedDataSet.rdd.partitions.foreach(partition => {
-      var splitSizeSum = 0L
-      partition.asInstanceOf[CoalescedRDDPartition].parents.foreach(partition => {
-        val split = partition.asInstanceOf[HadoopPartition].inputSplit.value.asInstanceOf[FileSplit]
-        splitSizeSum += split.getLength
-        totalPartitionCount += 1
+      assert(coalescedDataSet.rdd.partitions.length <= 10)
+
+      var totalPartitionCount = 0L
+      coalescedDataSet.rdd.partitions.foreach(partition => {
+        var splitSizeSum = 0L
+        partition.asInstanceOf[CoalescedRDDPartition].parents.foreach(partition => {
+          val split =
+            partition.asInstanceOf[HadoopPartition].inputSplit.value.asInstanceOf[FileSplit]
+          splitSizeSum += split.getLength
+          totalPartitionCount += 1
+        })
+        assert(splitSizeSum <= maxSplitSize)
       })
-      assert(splitSizeSum <= maxSplitSize)
-    })
-    assert(totalPartitionCount == 10)
-
+      assert(totalPartitionCount == 10)
+    }
   }
 
   test("as tuple") {
