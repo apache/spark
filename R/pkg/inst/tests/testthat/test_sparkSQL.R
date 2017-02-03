@@ -877,7 +877,6 @@ test_that("names() colnames() set the column names", {
                "Column names must have the same length as the number of columns in the dataset.")
   expect_error(names(df) <- c("1", NA), "Column names cannot be NA.")
 
-  expect_error(colnames(df) <- NULL, "Invalid column names.")
   expect_error(colnames(df) <- c("sepal.length", "sepal_width"),
                "Column names cannot contain the '.' symbol.")
   expect_error(colnames(df) <- c(1, 2), "Invalid column names.")
