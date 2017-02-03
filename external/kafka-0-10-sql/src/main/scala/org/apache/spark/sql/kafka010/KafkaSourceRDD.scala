@@ -123,7 +123,12 @@ private[kafka010] class KafkaSourceRDD(
   override def compute(
       thePart: Partition,
       context: TaskContext): Iterator[ConsumerRecord[Array[Byte], Array[Byte]]] = {
-    var range = thePart.asInstanceOf[KafkaSourceRDDPartition].offsetRange
+    val sourcePartition = thePart.asInstanceOf[KafkaSourceRDDPartition]
+    val topic = sourcePartition.offsetRange.topic
+    val partition = sourcePartition.offsetRange.partition
+    val consumer = CachedKafkaConsumer.getOrCreate(
+      topic, partition, executorKafkaParams, reuseKafkaConsumer)
+    val range = resolveRange(consumer, sourcePartition.offsetRange)
     assert(
       range.fromOffset <= range.untilOffset,
       s"Beginning offset ${range.fromOffset} is after the ending offset ${range.untilOffset} " +
@@ -135,29 +140,6 @@ private[kafka010] class KafkaSourceRDD(
       Iterator.empty
     } else {
       new NextIterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
-        val consumer = CachedKafkaConsumer.getOrCreate(
-            range.topic, range.partition, executorKafkaParams, reuseKafkaConsumer)
-        if (range.fromOffset < 0 || range.untilOffset < 0) {
-          // Late bind the offset range
-          val fromOffset = if (range.fromOffset < 0) {
-            assert(range.fromOffset == KafkaUtils.EARLIEST,
-              s"earliest offset ${range.fromOffset} does not equal ${KafkaUtils.EARLIEST}")
-            consumer.rawConsumer.seekToBeginning(ju.Arrays.asList(range.topicPartition))
-            consumer.rawConsumer.position(range.topicPartition)
-          } else {
-            range.fromOffset
-          }
-          val untilOffset = if (range.untilOffset < 0) {
-            assert(range.untilOffset == KafkaUtils.LATEST,
-              s"latest offset ${range.untilOffset} does not equal ${KafkaUtils.LATEST}")
-            consumer.rawConsumer.seekToEnd(ju.Arrays.asList(range.topicPartition))
-            consumer.rawConsumer.position(range.topicPartition)
-          } else {
-            range.untilOffset
-          }
-          range = KafkaSourceRDDOffsetRange(range.topicPartition,
-            fromOffset, untilOffset, range.preferredLoc)
-        }
         var requestOffset = range.fromOffset
 
         override def getNext(): ConsumerRecord[Array[Byte], Array[Byte]] = {
@@ -180,6 +162,31 @@ private[kafka010] class KafkaSourceRDD(
 
         override protected def close(): Unit = {}
       }
+    }
+  }
+
+  private def resolveRange(consumer: CachedKafkaConsumer, range: KafkaSourceRDDOffsetRange) = {
+    if (range.fromOffset < 0 || range.untilOffset < 0) {
+      // Late bind the offset range
+      val availableOffsetRange = consumer.getAvailableOffsetRange()
+      val fromOffset = if (range.fromOffset < 0) {
+        assert(range.fromOffset == KafkaOffsets.EARLIEST,
+          s"earliest offset ${range.fromOffset} does not equal ${KafkaOffsets.EARLIEST}")
+        availableOffsetRange.earliest
+      } else {
+        range.fromOffset
+      }
+      val untilOffset = if (range.untilOffset < 0) {
+        assert(range.untilOffset == KafkaOffsets.LATEST,
+          s"latest offset ${range.untilOffset} does not equal ${KafkaOffsets.LATEST}")
+        availableOffsetRange.latest
+      } else {
+        range.untilOffset
+      }
+      KafkaSourceRDDOffsetRange(range.topicPartition,
+        fromOffset, untilOffset, range.preferredLoc)
+    } else {
+      range
     }
   }
 }

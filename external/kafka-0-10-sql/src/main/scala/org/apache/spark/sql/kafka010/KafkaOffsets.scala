@@ -19,14 +19,31 @@ package org.apache.spark.sql.kafka010
 
 import org.apache.kafka.common.TopicPartition
 
-/*
- * Values that can be specified for config startingOffsets
+/**
+ * Values that can be specified to configure starting,
+ * ending, and specific offsets.
  */
 private[kafka010] sealed trait KafkaOffsets
 
+/**
+ * Bind to the earliest offsets in Kafka
+ */
 private[kafka010] case object EarliestOffsets extends KafkaOffsets
 
+/**
+ * Bind to the latest offsets in Kafka
+ */
 private[kafka010] case object LatestOffsets extends KafkaOffsets
 
+/**
+ * Bind to the specific offsets. A offset == -1 binds to the latest
+ * offset, and offset == -2 binds to the earliest offset.
+ */
 private[kafka010] case class SpecificOffsets(
-  partitionOffsets: Map[TopicPartition, Long]) extends KafkaOffsets
+    partitionOffsets: Map[TopicPartition, Long]) extends KafkaOffsets
+
+private[kafka010] object KafkaOffsets {
+  // Used to denote unbounded offset positions
+  val LATEST = -1L
+  val EARLIEST = -2L
+}

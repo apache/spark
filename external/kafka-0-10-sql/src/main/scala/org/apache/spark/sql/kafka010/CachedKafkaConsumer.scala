@@ -42,7 +42,7 @@ private[kafka010] case class CachedKafkaConsumer private(
 
   private val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
 
-  var rawConsumer = createConsumer
+  private var consumer = createConsumer
 
   /** Iterator to the already fetch data */
   private var fetchedData = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
@@ -55,6 +55,20 @@ private[kafka010] case class CachedKafkaConsumer private(
     tps.add(topicPartition)
     c.assign(tps)
     c
+  }
+
+  case class AvailableOffsetRange(earliest: Long, latest: Long)
+
+  /**
+   * Return the available offset range of the current partition. It's a pair of the earliest offset
+   * and the latest offset.
+   */
+  def getAvailableOffsetRange(): AvailableOffsetRange = {
+    consumer.seekToBeginning(Set(topicPartition).asJava)
+    val earliestOffset = consumer.position(topicPartition)
+    consumer.seekToEnd(Set(topicPartition).asJava)
+    val latestOffset = consumer.position(topicPartition)
+    AvailableOffsetRange(earliestOffset, latestOffset)
   }
 
   /**
@@ -107,9 +121,9 @@ private[kafka010] case class CachedKafkaConsumer private(
    * `UNKNOWN_OFFSET`.
    */
   private def getEarliestAvailableOffsetBetween(offset: Long, untilOffset: Long): Long = {
-    val (earliestOffset, latestOffset) = getAvailableOffsetRange()
-    logWarning(s"Some data may be lost. Recovering from the earliest offset: $earliestOffset")
-    if (offset >= latestOffset || earliestOffset >= untilOffset) {
+    val range = getAvailableOffsetRange()
+    logWarning(s"Some data may be lost. Recovering from the earliest offset: ${range.earliest}")
+    if (offset >= range.latest || range.earliest >= untilOffset) {
       // [offset, untilOffset) and [earliestOffset, latestOffset) have no overlap,
       // either
       // --------------------------------------------------------
@@ -124,13 +138,13 @@ private[kafka010] case class CachedKafkaConsumer private(
       //   offset   untilOffset   earliestOffset   latestOffset
       val warningMessage =
         s"""
-          |The current available offset range is [$earliestOffset, $latestOffset).
+          |The current available offset range is [${range.earliest}, ${range.latest}).
           | Offset ${offset} is out of range, and records in [$offset, $untilOffset) will be
           | skipped ${additionalMessage(failOnDataLoss = false)}
         """.stripMargin
       logWarning(warningMessage)
       UNKNOWN_OFFSET
-    } else if (offset >= earliestOffset) {
+    } else if (offset >= range.earliest) {
       // -----------------------------------------------------------------------------
       //         ^            ^                  ^                                 ^
       //         |            |                  |                                 |
@@ -149,12 +163,12 @@ private[kafka010] case class CachedKafkaConsumer private(
       //   offset   earliestOffset   min(untilOffset,latestOffset)   max(untilOffset, latestOffset)
       val warningMessage =
         s"""
-           |The current available offset range is [$earliestOffset, $latestOffset).
-           | Offset ${offset} is out of range, and records in [$offset, $earliestOffset) will be
+           |The current available offset range is [${range.earliest}, ${range.latest}).
+           | Offset ${offset} is out of range, and records in [$offset, ${range.earliest}) will be
            | skipped ${additionalMessage(failOnDataLoss = false)}
         """.stripMargin
       logWarning(warningMessage)
-      earliestOffset
+      range.earliest
     }
   }
 
@@ -183,8 +197,8 @@ private[kafka010] case class CachedKafkaConsumer private(
       // - `offset` is out of range so that Kafka returns nothing. Just throw
       // `OffsetOutOfRangeException` to let the caller handle it.
       // - Cannot fetch any data before timeout. TimeoutException will be thrown.
-      val (earliestOffset, latestOffset) = getAvailableOffsetRange()
-      if (offset < earliestOffset || offset >= latestOffset) {
+      val range = getAvailableOffsetRange()
+      if (offset < range.earliest || offset >= range.latest) {
         throw new OffsetOutOfRangeException(
           Map(topicPartition -> java.lang.Long.valueOf(offset)).asJava)
       } else {
@@ -224,8 +238,8 @@ private[kafka010] case class CachedKafkaConsumer private(
 
   /** Create a new consumer and reset cached states */
   private def resetConsumer(): Unit = {
-    rawConsumer.close()
-    rawConsumer = createConsumer
+    consumer.close()
+    consumer = createConsumer
     resetFetchedData()
   }
 
@@ -271,30 +285,18 @@ private[kafka010] case class CachedKafkaConsumer private(
     }
   }
 
-  private def close(): Unit = rawConsumer.close()
+  private def close(): Unit = consumer.close()
 
   private def seek(offset: Long): Unit = {
     logDebug(s"Seeking to $groupId $topicPartition $offset")
-    rawConsumer.seek(topicPartition, offset)
+    consumer.seek(topicPartition, offset)
   }
 
   private def poll(pollTimeoutMs: Long): Unit = {
-    val p = rawConsumer.poll(pollTimeoutMs)
+    val p = consumer.poll(pollTimeoutMs)
     val r = p.records(topicPartition)
     logDebug(s"Polled $groupId ${p.partitions()}  ${r.size}")
     fetchedData = r.iterator
-  }
-
-  /**
-   * Return the available offset range of the current partition. It's a pair of the earliest offset
-   * and the latest offset.
-   */
-  private def getAvailableOffsetRange(): (Long, Long) = {
-    rawConsumer.seekToBeginning(Set(topicPartition).asJava)
-    val earliestOffset = rawConsumer.position(topicPartition)
-    rawConsumer.seekToEnd(Set(topicPartition).asJava)
-    val latestOffset = rawConsumer.position(topicPartition)
-    (earliestOffset, latestOffset)
   }
 }
 
@@ -335,14 +337,14 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
       topic: String,
       partition: Int,
       kafkaParams: ju.Map[String, Object],
-      reuse: Boolean): CachedKafkaConsumer = synchronized {
+      reuseExistingIfPresent: Boolean): CachedKafkaConsumer = synchronized {
     val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
     val topicPartition = new TopicPartition(topic, partition)
     val key = CacheKey(groupId, topicPartition)
 
     // If this is reattempt at running the task, then invalidate cache and start with
     // a new consumer
-    if (!reuse || TaskContext.get != null && TaskContext.get.attemptNumber > 1) {
+    if (!reuseExistingIfPresent || TaskContext.get != null && TaskContext.get.attemptNumber > 1) {
       val removedConsumer = cache.remove(key)
       if (removedConsumer != null) {
         removedConsumer.close()

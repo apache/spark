@@ -53,6 +53,20 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
     }
   }
 
+  private def createDF(topic: String,
+      withOptions: Map[String, String] = Map.empty[String, String]) = {
+    val df = spark
+      .read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+    withOptions.foreach {
+      case (key, value) => df.option(key, value)
+    }
+    df.load().selectExpr("CAST(value AS STRING)")
+  }
+
+
   test("explicit earliest to latest offsets") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
@@ -61,15 +75,8 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
     testUtils.sendMessages(topic, Array("20"), Some(2))
 
     // Specify explicit earliest and latest offset values
-    val df = spark
-      .read
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("subscribe", topic)
-      .option("startingOffsets", "earliest")
-      .option("endingOffsets", "latest")
-      .load()
-      .selectExpr("CAST(value AS STRING)")
+    val df = createDF(topic,
+      withOptions = Map("startingOffsets" -> "earliest", "endingOffsets" -> "latest"))
     checkAnswer(df, (0 to 20).map(_.toString).toDF)
 
     // "latest" should late bind to the current (latest) offset in the df
@@ -85,13 +92,7 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
     testUtils.sendMessages(topic, Array("20"), Some(2))
 
     // Implicit offset values, should default to earliest and latest
-    val df = spark
-      .read
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("subscribe", topic)
-      .load()
-      .selectExpr("CAST(value AS STRING)")
+    val df = createDF(topic)
     // Test that we default to "earliest" and "latest"
     checkAnswer(df, (0 to 20).map(_.toString).toDF)
   }
@@ -117,15 +118,8 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
       new TopicPartition(topic, 2) -> 1L  // explicit offset happens to = the latest
     )
     val endingOffsets = JsonUtils.partitionOffsets(endPartitionOffsets)
-    val df = spark
-      .read
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("subscribe", topic)
-      .option("startingOffsets", startingOffsets)
-      .option("endingOffsets", endingOffsets)
-      .load()
-      .selectExpr("CAST(value as STRING)")
+    val df = createDF(topic,
+        withOptions = Map("startingOffsets" -> startingOffsets, "endingOffsets" -> endingOffsets))
     checkAnswer(df, (0 to 20).map(_.toString).toDF)
 
     // static offset partition 2, nothing should change
@@ -144,15 +138,8 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
     testUtils.sendMessages(topic, (0 to 10).map(_.toString).toArray, Some(0))
 
     // Specify explicit earliest and latest offset values
-    val df = spark
-      .read
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("subscribe", topic)
-      .option("startingOffsets", "earliest")
-      .option("endingOffsets", "latest")
-      .load()
-      .selectExpr("CAST(value AS STRING)")
+    val df = createDF(topic,
+      withOptions = Map("startingOffsets" -> "earliest", "endingOffsets" -> "latest"))
     checkAnswer(df.union(df), ((0 to 10) ++ (0 to 10)).map(_.toString).toDF)
   }
 
@@ -177,15 +164,8 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
       testUtils.createTopic(topic, partitions = 1)
       testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
       // Specify explicit earliest and latest offset values
-      val df = spark
-        .read
-        .format("kafka")
-        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-        .option("subscribe", topic)
-        .option("startingOffsets", "earliest")
-        .option("endingOffsets", "latest")
-        .load()
-        .selectExpr("CAST(value AS STRING)")
+      val df = createDF(topic,
+        withOptions = Map("startingOffsets" -> "earliest", "endingOffsets" -> "latest"))
       checkAnswer(df, (0 to 9).map(_.toString).toDF)
       // Blow away current set of messages.
       testUtils.cleanupLogs()
@@ -217,26 +197,25 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
     }
 
     // Specifying an ending offset as the starting point
-    testBadOptions("startingOffsets" -> "latest")("starting relation offset can't be latest")
+    testBadOptions("startingOffsets" -> "latest")("starting offset can't be latest " +
+      "for batch queries on Kafka")
 
-    // Now do it with an explicit json offset
-    val startPartitionOffsets = Map(
-      new TopicPartition("t", 0) -> -1L // specify latest
-    )
+    // Now do it with an explicit json start offset indicating latest
+    val startPartitionOffsets = Map( new TopicPartition("t", 0) -> -1L)
     val startingOffsets = JsonUtils.partitionOffsets(startPartitionOffsets)
     testBadOptions("subscribe" -> "t", "startingOffsets" -> startingOffsets)(
-      "startingoffsets for t-0 can't be latest")
+      "startingOffsets for t-0 can't be latest for batch queries on Kafka")
 
 
     // Make sure we catch ending offsets that indicate earliest
-    testBadOptions("endingOffsets" -> "earliest")("ending relation offset can't be earliest")
+    testBadOptions("endingOffsets" -> "earliest")("ending offset can't be earliest " +
+      "for batch queries on Kafka")
 
-    val endPartitionOffsets = Map(
-      new TopicPartition("t", 0) -> -2L // specify earliest
-    )
+    // Make sure we catch ending offsets that indicating earliest
+    val endPartitionOffsets = Map(new TopicPartition("t", 0) -> -2L)
     val endingOffsets = JsonUtils.partitionOffsets(endPartitionOffsets)
     testBadOptions("subscribe" -> "t", "endingOffsets" -> endingOffsets)(
-      "ending offset for t-0 can't be earliest")
+      "ending offset for t-0 can't be earliest for batch queries on Kafka")
 
     // No strategy specified
     testBadOptions()("options must be specified", "subscribe", "subscribePattern")

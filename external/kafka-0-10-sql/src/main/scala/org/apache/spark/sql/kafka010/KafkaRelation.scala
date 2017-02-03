@@ -32,13 +32,13 @@ import org.apache.spark.unsafe.types.UTF8String
 
 
 private[kafka010] class KafkaRelation(
-    override val sqlContext: SQLContext,
-    kafkaReader: KafkaOffsetReader,
-    executorKafkaParams: ju.Map[String, Object],
-    sourceOptions: Map[String, String],
-    failOnDataLoss: Boolean,
-    startingOffsets: KafkaOffsets,
-    endingOffsets: KafkaOffsets)
+                                       override val sqlContext: SQLContext,
+                                       kafkaReader: KafkaTopicPartitionOffsetReader,
+                                       executorKafkaParams: ju.Map[String, Object],
+                                       sourceOptions: Map[String, String],
+                                       failOnDataLoss: Boolean,
+                                       startingOffsets: KafkaOffsets,
+                                       endingOffsets: KafkaOffsets)
   extends BaseRelation with TableScan with Logging {
   assert(startingOffsets != LatestOffsets,
     "Starting offset not allowed to be set to latest offsets.")
@@ -50,7 +50,7 @@ private[kafka010] class KafkaRelation(
     sqlContext.sparkContext.conf.getTimeAsMs("spark.network.timeout", "120s").toString
   ).toLong
 
-  override def schema: StructType = KafkaOffsetReader.kafkaSchema
+  override def schema: StructType = KafkaTopicPartitionOffsetReader.kafkaSchema
 
   override def buildScan(): RDD[Row] = {
     // Leverage the KafkaReader to obtain the relevant partition offsets
@@ -111,10 +111,10 @@ private[kafka010] class KafkaRelation(
     // Obtain TopicPartition offsets with late binding support
     kafkaOffsets match {
       case EarliestOffsets => partitions.map {
-        case tp => tp -> KafkaUtils.EARLIEST
+        case tp => tp -> KafkaOffsets.EARLIEST
       }.toMap
       case LatestOffsets => partitions.map {
-        case tp => tp -> KafkaUtils.LATEST
+        case tp => tp -> KafkaOffsets.LATEST
       }.toMap
       case SpecificOffsets(partitionOffsets) =>
         validateTopicPartitions(partitions, partitionOffsets)

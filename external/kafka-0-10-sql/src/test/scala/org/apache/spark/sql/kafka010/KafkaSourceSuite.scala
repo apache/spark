@@ -385,7 +385,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
     }
 
     // Specifying an ending offset
-    testBadOptions("endingOffsets" -> "latest")("Ending offset not valid in stream mode")
+    testBadOptions("endingOffsets" -> "latest")("Ending offset not valid in streaming queries")
 
     // No strategy specified
     testBadOptions()("options must be specified", "subscribe", "subscribePattern")
