@@ -1750,7 +1750,7 @@ setMethod("toRadians",
 #' to_date(df$c)
 #' to_date(df$c, 'yyyy-MM-dd')
 #' }
-#' @note to_date(Column) since 1.5
+#' @note to_date(Column) since 1.5.0
 setMethod("to_date",
           signature(x = "Column", format = "missing"),
           function(x, format) {
