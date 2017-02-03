@@ -18,6 +18,13 @@
 # mllib_regression.R: Provides methods for MLlib classification algorithms
 #                     (except for tree-based algorithms) integration
 
+#' S4 class that represents an LinearSVCModel
+#'
+#' @param jobj a Java object reference to the backing Scala LinearSVCModel
+#' @export
+#' @note LinearSVCModel since 2.2.0
+setClass("LinearSVCModel", representation(jobj = "jobj"))
+
 #' S4 class that represents an LogisticRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala LogisticRegressionModel
@@ -38,6 +45,116 @@ setClass("MultilayerPerceptronClassificationModel", representation(jobj = "jobj"
 #' @export
 #' @note NaiveBayesModel since 2.0.0
 setClass("NaiveBayesModel", representation(jobj = "jobj"))
+
+#' linear SVM Model
+#'
+#' Fits an linear SVM model against a SparkDataFrame. It is a binary classifier, similar to svm in glmnet package
+#' Users can print, make predictions on the produced model and save the model to the input path.
+#'
+#' @param data SparkDataFrame for training.
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#' @param regParam The regularization parameter.
+#' @param maxIter Maximum iteration number.
+#' @param tol Convergence tolerance of iterations.
+#' @param standardization Whether to standardize the training features before fitting the model. The coefficients
+#'                        of models will be always returned on the original scale, so it will be transparent for
+#'                        users. Note that with/without standardization, the models should be always converged
+#'                        to the same solution when no regularization is applied. Default is TRUE, same as glmnet.
+#' @param threshold The threshold in binary classification, in range [0, 1].
+#' @param weightCol The weight column name.
+#' @param ... additional arguments passed to the method.
+#' @return \code{spark.linearSvc} returns a fitted linear SVM model.
+#' @rdname spark.linearSvc
+#' @aliases spark.linearSvc,SparkDataFrame,formula-method
+#' @name spark.linearSvc
+#' @export
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' df <- createDataFrame(iris)
+#' training <- df[df$Species %in% c("versicolor", "virginica"), ]
+#' model <- spark.linearSvc(training, Species ~ ., regParam = 0.5)
+#' summary <- summary(model)
+#'
+#' # fitted values on training data
+#' fitted <- predict(model, training)
+#'
+#' # save fitted model to input path
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#'
+#' # can also read back the saved model and predict
+#' # Note that summary deos not work on loaded model
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#' }
+#' @note spark.linearSvc since 2.2.0
+setMethod("spark.linearSvc", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, regParam = 0.0, maxIter = 100, tol = 1E-6, standardization = TRUE,
+                   threshold = 0.5, weightCol = NULL) {
+            formula <- paste(deparse(formula), collapse = "")
+
+            if (is.null(weightCol)) {
+              weightCol <- ""
+            }
+
+            jobj <- callJStatic("org.apache.spark.ml.r.LinearSVCWrapper", "fit",
+                                data@sdf, formula, as.numeric(regParam), as.integer(maxIter),
+                                as.numeric(tol), as.logical(standardization), as.numeric(threshold),
+                                as.character(weightCol))
+            new("LinearSVCModel", jobj = jobj)
+          })
+
+#  Predicted values based on an LinearSVCModel model
+
+#' @param newData a SparkDataFrame for testing.
+#' @return \code{predict} returns the predicted values based on an LinearSVCModel.
+#' @rdname spark.linearSvc
+#' @aliases predict,LogisticRegressionModel,SparkDataFrame-method
+#' @export
+#' @note predict(LinearSVCModel) since 2.2.0
+setMethod("predict", signature(object = "LinearSVCModel"),
+          function(object, newData) {
+            predict_internal(object, newData)
+          })
+
+#  Get the summary of an LinearSVCModel
+
+#' @param object an LinearSVCModel fitted by \code{spark.linearSvc}.
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'         The list includes \code{coefficients} (coefficients of the fitted model),
+#'         \code{intercept} (intercept of the fitted model), \code{numClasses} (number of classes),
+#'         \code{numFeatures} (number of features).
+#' @rdname spark.linearSvc
+#' @aliases summary,LinearSVCModel-method
+#' @export
+#' @note summary(LinearSVCModel) since 2.2.0
+setMethod("summary", signature(object = "LinearSVCModel"),
+          function(object) {
+            jobj <- object@jobj
+            coefficients <- callJMethod(jobj, "coefficients")
+            intercept <- callJMethod(jobj, "intercept")
+            numClasses <- callJMethod(jobj, "numClasses")
+            numFeatures <- callJMethod(jobj, "numFeatures")
+            list(coefficients = coefficients, intercept = intercept,
+                 numClasses = numClasses, numFeatures = numFeatures)
+          })
+
+#  Save fitted LinearSVCModel to the input path
+
+#' @param path The directory where the model is saved.
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.linearSvc
+#' @aliases write.ml,LinearSVCModel,character-method
+#' @export
+#' @note write.ml(LogisticRegression, character) since 2.2.0
+setMethod("write.ml", signature(object = "LinearSVCModel", path = "character"),
+function(object, path, overwrite = FALSE) {
+    write_internal(object, path, overwrite)
+})
 
 #' Logistic Regression Model
 #'

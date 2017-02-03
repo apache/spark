@@ -35,7 +35,8 @@
 #' @seealso \link{spark.als}, \link{spark.bisectingKmeans}, \link{spark.gaussianMixture},
 #' @seealso \link{spark.gbt}, \link{spark.glm}, \link{glm}, \link{spark.isoreg},
 #' @seealso \link{spark.kmeans},
-#' @seealso \link{spark.lda}, \link{spark.logit}, \link{spark.mlp}, \link{spark.naiveBayes},
+#' @seealso \link{spark.lda}, \link{spark.logit}, \link{spark.linearSvc},
+#' @seealso \link{spark.mlp}, \link{spark.naiveBayes},
 #' @seealso \link{spark.randomForest}, \link{spark.survreg},
 #' @seealso \link{read.ml}
 NULL
@@ -50,7 +51,7 @@ NULL
 #' @seealso \link{spark.als}, \link{spark.bisectingKmeans}, \link{spark.gaussianMixture},
 #' @seealso \link{spark.gbt}, \link{spark.glm}, \link{glm}, \link{spark.isoreg},
 #' @seealso \link{spark.kmeans},
-#' @seealso \link{spark.logit}, \link{spark.mlp}, \link{spark.naiveBayes},
+#' @seealso \link{spark.logit}, \link{spark.linearSvc}, \link{spark.mlp}, \link{spark.naiveBayes},
 #' @seealso \link{spark.randomForest}, \link{spark.survreg}
 NULL
 
@@ -115,6 +116,8 @@ read.ml <- function(path) {
     new("GBTClassificationModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.BisectingKMeansWrapper")) {
     new("BisectingKMeansModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.LinearSVCWrapper")) {
+    new("LinearSVCModel", jobj = jobj)
   } else {
     stop("Unsupported model: ", jobj)
   }

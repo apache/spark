@@ -1380,6 +1380,10 @@ setGeneric("spark.kstest", function(data, ...) { standardGeneric("spark.kstest")
 #' @export
 setGeneric("spark.lda", function(data, ...) { standardGeneric("spark.lda") })
 
+#' @rdname spark.linearSvc
+#' @export
+setGeneric("spark.linearSvc", function(data, formula, ...) { standardGeneric("spark.linearSvc") })
+
 #' @rdname spark.logit
 #' @export
 setGeneric("spark.logit", function(data, formula, ...) { standardGeneric("spark.logit") })
