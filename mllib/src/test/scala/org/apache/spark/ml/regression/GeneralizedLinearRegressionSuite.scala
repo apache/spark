@@ -781,8 +781,10 @@ class GeneralizedLinearRegressionSuite
 
     // throw exception for empty model
     val trainer = new GeneralizedLinearRegression().setFitIntercept(false)
-    intercept[SparkException] {
-      trainer.fit(dataset)
+    withClue("Specified model is empty with neither intercept nor feature") {
+      intercept[SparkException] {
+        trainer.fit(dataset)
+      }
     }
   }
 
