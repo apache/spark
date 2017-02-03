@@ -25,7 +25,7 @@ import org.apache.spark.sql.util.{OutputParams, QueryExecutionListener}
 
 /**
  * Test cases for the property 'spark.sql.queryExecutionListeners' that adds the
- * @see[[QueryExecutionListener]] to a @see[[SparkSession]]
+ * @see `QueryExecutionListener` to a @see `SparkSession`
  */
 class SparkSQLQueryExecutionListenerSuite
     extends SparkFunSuite

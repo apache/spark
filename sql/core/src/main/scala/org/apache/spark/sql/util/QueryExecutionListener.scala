@@ -45,7 +45,7 @@ trait QueryExecutionListener {
    *           physical plan, etc.
    * @param durationNs the execution time for this query in nanoseconds.
    * @param outputParams The output parameters in case the method is invoked as a result of a
-   *                     write operation. In case of a read will be @see[[None]]
+   *                     write operation. In case of a read will be @see `None`
    */
   @DeveloperApi
   def onSuccess(
@@ -61,7 +61,7 @@ trait QueryExecutionListener {
    *           physical plan, etc.
    * @param exception the exception that failed this query.
    * @param outputParams The output parameters in case the method is invoked as a result of a
-   *                     write operation. In case of a read will be @see[[None]]
+   *                     write operation. In case of a read will be @see `None`
    *
    * @note This can be invoked by multiple different threads.
    */
@@ -75,13 +75,14 @@ trait QueryExecutionListener {
 
 /**
  * Contains extra information useful for query analysis passed on from the methods in
- * @see[[org.apache.spark.sql.DataFrameWriter]] while writing to a datasource
+ * @see `org.apache.spark.sql.DataFrameWriter` while writing to a datasource
  * @param datasourceType type of data source written to like csv, parquet, json, hive, jdbc etc.
  * @param destination path or table name written to
  * @param options the map containing the output options for the underlying datasource
- *                specified by using the @see [[org.apache.spark.sql.DataFrameWriter#option]] method
+ *                specified by using the @see `org.apache.spark.sql.DataFrameWriter#option` method
  * @param writeParams will contain any extra information that the write method wants to provide
  */
+@DeveloperApi
 case class OutputParams(
     datasourceType: String,
     destination: Option[String],

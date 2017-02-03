@@ -174,7 +174,6 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       Seq(1 -> 100).toDF("x", "y").write.saveAsTable("bar")
     }
     assert(onWriteSuccessCalled)
-    spark.listenerManager.clear()
   }
 
   private def callSave(source: String, callSaveFunction: (DataFrame, String) => Unit): Unit = {
@@ -184,7 +183,6 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       callSaveFunction(Seq(1 -> 100).toDF("x", "y"), path.getAbsolutePath)
     }
     assert(testQueryExecutionListener.onWriteSuccessCalled)
-    spark.listenerManager.clear()
   }
 
   // TODO: Currently some LongSQLMetric use -1 as initial value, so if the accumulator is never
@@ -263,6 +261,11 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       assert(durationNs > 0)
       onWriteSuccessCalled = true
     }
+  }
+
+  protected override def afterEach(): Unit = {
+    super.afterEach()
+    spark.listenerManager.clear()
   }
 
 }

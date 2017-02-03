@@ -192,16 +192,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Executes the query and calls the {@link org.apache.spark.sql.util.QueryExecutionListener}
-   * methods.
+   * Wrap a DataFrameWriter action to track the query execution and time cost, then report to the
+   * user-registered callback functions.
    *
    * @param funcName A identifier for the method executing the query
-   * @param qe the @see [[QueryExecution]] object associated with the query
+   * @param qe the @see `QueryExecution` object associated with the query
    * @param outputParams The output parameters useful for query analysis
    * @param action the function that executes the query after which the listener methods gets
    *               called.
    */
-  private def executeAndCallQEListener(
+  private def withAction(
       funcName: String,
       qe: QueryExecution,
       outputParams: OutputParams)(action: => Unit) = {
@@ -250,11 +250,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case "jdbc" => extraOptions.get("dbtable")
       case _ => extraOptions.get("path")
     }
-
-    executeAndCallQEListener(
-      "save",
-      df.queryExecution,
-      OutputParams(source, destination, extraOptions.toMap)) {
+    val outputParams = OutputParams(source, destination, extraOptions.toMap)
+    withAction("save", df.queryExecution, outputParams) {
       dataSource.write(mode, df)
     }
   }
@@ -282,11 +279,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *
    * Because it inserts data to an existing table, format or options will be ignored.
    *
-   * Calls the callback methods of @see[[QueryExecutionListener]] after query execution with
-   * @see[[OutputParams]] having datasourceType set as the string parameter passed to the
-   * @see[[DataFrameWriter#format]] method and destination set as the name of the table into which
-   * data is being inserted into.
-   *
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
@@ -311,12 +303,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         child = df.logicalPlan,
         overwrite = mode == SaveMode.Overwrite,
         ifNotExists = false))
-    executeAndCallQEListener(
-      "insertInto",
-      qe,
-      new OutputParams(source, Some(tableIdent.unquotedString), extraOptions.toMap)) {
-        qe.toRdd
-    }
+    val outputParams = OutputParams(source, Some(tableIdent.unquotedString), extraOptions.toMap)
+    withAction("insertInto", qe, outputParams)(qe.toRdd)
   }
 
   private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
@@ -408,10 +396,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
    * specific format.
    *
-   * Calls the callback methods of @see[[QueryExecutionListener]] after query execution with a
-   * @see[[OutputParams]] object having datasourceType set as the string parameter passed to the
-   * @see[[DataFrameWriter#format]] and destination set as the name of the table being
-   * written to
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
@@ -483,12 +467,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     )
     val qe = df.sparkSession.sessionState.executePlan(
       CreateTable(tableDesc, mode, Some(df.logicalPlan)))
-    executeAndCallQEListener(
-      "saveAsTable",
-      qe,
-      new OutputParams(source, Some(tableIdent.unquotedString), extraOptions.toMap)) {
-      qe.toRdd
-    }
+    val outputParams = new OutputParams(source, Some(tableIdent.unquotedString), extraOptions.toMap)
+    withAction("saveAsTable", qe, outputParams)(qe.toRdd)
   }
 
   /**
@@ -552,9 +532,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * </ul>
-   * Calls the callback methods in @see[[QueryExecutionListener]] methods after query execution with
-   * @see[[OutputParams]] having datasourceType set as string constant "json" and
-   * destination set as the path to which the data is written
    *
    * @since 1.4.0
    */
@@ -576,9 +553,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * shorten names(none, `snappy`, `gzip`, and `lzo`). This will override
    * `spark.sql.parquet.compression.codec`.</li>
    * </ul>
-   * Calls the callback methods in @see[[QueryExecutionListener]] methods after query execution with
-   * @see[[OutputParams]] having datasourceType set as string constant "parquet" and
-   * destination set as the path to which the data is written
    *
    * @since 1.4.0
    */
@@ -599,9 +573,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).
    * This will override `orc.compress`.</li>
    * </ul>
-   * Calls the callback methods in @see[[QueryExecutionListener]] methods after query execution with
-   * @see[[OutputParams]] having datasourceType set as string constant "orc" and
-   * destination set as the path to which the data is written
    *
    * @since 1.5.0
    * @note Currently, this method can only be used after enabling Hive support
@@ -628,9 +599,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
    * </ul>
-   * Calls the callback methods in e@see[[QueryExecutionListener]] methods after query execution
-   * with @see[[OutputParams]] having datasourceType set as string constant "text" and
-   * destination set as the path to which the data is written
    *
    * @since 1.6.0
    */
@@ -670,9 +638,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * </ul>
-   * Calls the callback methods in @see[[QueryExecutionListener]] methods after query execution with
-   * @see[[OutputParams]] having datasourceType set as string constant "csv" and
-   * destination set as the path to which the data is written
    *
    * @since 2.0.0
    */
