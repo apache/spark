@@ -23,10 +23,10 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.common.serialization.ByteArrayDeserializer
+import org.apache.kafka.common.serialization.{ByteArrayDeserializer, BytesSerializer}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
+import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
@@ -55,7 +55,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters: Map[String, String]): (String, StructType) = {
     validateStreamOptions(parameters)
     require(schema.isEmpty, "Kafka source has a fixed schema and cannot be set with a custom one")
-    (shortName(), KafkaUtils.kafkaSchema)
+    (shortName(), KafkaOffsetReader.kafkaSchema)
   }
 
   override def createSource(
@@ -169,7 +169,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         .keySet
         .filter(_.toLowerCase.startsWith("kafka."))
         .map { k => k.drop(6).toString -> parameters(k) }
-        .toMap
+        .toMap + ("value.serializer" -> classOf[BytesSerializer].getName,
+                  "key.serializer" -> classOf[BytesSerializer].getName)
     new KafkaSink(sqlContext,
       new ju.HashMap[String, Object](specifiedKafkaParams.asJava),
       defaultTopic)
@@ -188,7 +189,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         .keySet
         .filter(_.toLowerCase.startsWith("kafka."))
         .map { k => k.drop(6).toString -> parameters(k) }
-        .toMap
+        .toMap + ("value.serializer" -> classOf[BytesSerializer].getName,
+                  "key.serializer" -> classOf[BytesSerializer].getName)
     KafkaWriter.write(outerSQLContext.sparkSession, data.queryExecution,
       new ju.HashMap[String, Object](specifiedKafkaParams.asJava),
       defaultTopic)
@@ -196,7 +198,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     new BaseRelation {
       override def sqlContext: SQLContext = outerSQLContext
 
-      override def schema: StructType = KafkaUtils.kafkaSchema
+      override def schema: StructType = KafkaOffsetReader.kafkaSchema
     }
   }
 

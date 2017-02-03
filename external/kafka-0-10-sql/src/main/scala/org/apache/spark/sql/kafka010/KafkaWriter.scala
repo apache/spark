@@ -18,6 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.nio.ByteBuffer
 
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.{blocking, Future}
@@ -30,7 +31,8 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
-import org.apache.spark.sql.types.{NullType, StringType}
+import org.apache.spark.sql.types.StringType
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 object KafkaWriter extends Logging {
@@ -142,14 +144,14 @@ object KafkaWriter extends Logging {
         throw new IllegalStateException(s"Default topic required when no " +
           s"'$TOPIC_ATTRIBUTE_NAME' attribute is present")
       } else {
-        Literal(null, NullType)
+        Literal(null, StringType)
       }
     ).map{c =>
       if (defaultTopic == None) {
         c   // return null if we can't fall back on a default value
       } else {
         // fall back on a default value in case we evaluate c to null
-        If(IsNull(c), Literal(defaultTopic.get, StringType), c)
+        If(IsNull(c), Literal(UTF8String.fromString(defaultTopic.get), StringType), c)
       }}
     //  Use to extract the topic from either the Row or default value
     val getTopic = UnsafeProjection.create(topicExpression, inputSchema)
@@ -176,6 +178,7 @@ object KafkaWriter extends Logging {
         val topic = getTopic(currentRow).get(0, StringType).toString
         val key = getKey(currentRow).getBytes
         val value = getValue(currentRow).getBytes
+        println(s"topic $topic, key ${ByteBuffer.wrap(key).getInt}, value $value")
         val record = new ProducerRecord[Array[Byte], Array[Byte]](topic, key, value)
         val future = Future[RecordMetadata] {
           blocking {

@@ -139,7 +139,7 @@ private[kafka010] class KafkaSource(
 
   private var currentPartitionOffsets: Option[Map[TopicPartition, Long]] = None
 
-  override def schema: StructType = KafkaUtils.kafkaSchema
+  override def schema: StructType = KafkaOffsetReader.kafkaSchema
 
   /** Returns the maximum available offset for this source. */
   override def getOffset: Option[Offset] = {
