@@ -215,7 +215,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       df.sparkSession,
       className = source,
       partitionColumns = partitioningColumns.getOrElse(Nil),
-      bucketSpec = getBucketSpec,
+      bucketSpec = None,
       options = extraOptions.toMap)
 
     dataSource.write(mode, df)
