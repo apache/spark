@@ -419,12 +419,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       sql(s"CREATE TABLE $tableName STORED AS SEQUENCEFILE AS SELECT 1 AS key, 'abc' AS value")
 
       val df = sql(s"SELECT key, value FROM $tableName")
-      val e = intercept[AnalysisException] {
-        df.write.mode(SaveMode.Append).saveAsTable(tableName)
-      }.getMessage
-      assert(e.contains("Saving data in the Hive serde table default.tab1 is not supported " +
-        "yet. Please use the insertInto() API as an alternative."))
-
       df.write.insertInto(tableName)
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -1167,8 +1161,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
   test("create a temp view using hive") {
     val tableName = "tab1"
-    withTable (tableName) {
-      val e = intercept[ClassNotFoundException] {
+    withTable(tableName) {
+      val e = intercept[AnalysisException] {
         sql(
           s"""
              |CREATE TEMPORARY VIEW $tableName
@@ -1176,7 +1170,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
              |USING hive
            """.stripMargin)
       }.getMessage
-      assert(e.contains("Failed to find data source: hive"))
+      assert(e.contains("Hive data source can only be used with tables, you can't use it with " +
+        "CREATE TEMP VIEW USING"))
     }
   }
 

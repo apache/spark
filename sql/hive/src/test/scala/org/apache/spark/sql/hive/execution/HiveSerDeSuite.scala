@@ -34,7 +34,7 @@ class HiveSerDeSuite extends HiveComparisonTest with BeforeAndAfterAll {
        |ROW FORMAT SERDE '${classOf[RegexSerDe].getCanonicalName}'
        |WITH SERDEPROPERTIES ("input.regex" = "([^ ]*)\t([^ ]*)")
        """.stripMargin)
-    sql(s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/sales.txt")}' INTO TABLE sales")
+    sql(s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/sales.txt").toURI}' INTO TABLE sales")
   }
 
   // table sales is not a cache table, and will be clear after reset
