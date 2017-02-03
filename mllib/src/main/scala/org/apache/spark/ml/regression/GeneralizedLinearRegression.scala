@@ -335,6 +335,11 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       throw new SparkException(msg)
     }
 
+    if (numFeatures == 0 && !$(fitIntercept)) {
+      val msg = "Specified model is empty with neither intercept nor feature."
+      throw new SparkException(msg)
+    }
+
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
