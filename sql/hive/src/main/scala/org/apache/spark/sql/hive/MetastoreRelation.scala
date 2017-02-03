@@ -61,8 +61,8 @@ private[hive] case class MetastoreRelation(
   override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
 
   // here used to call some helper functions, not used for storing persistent metadata
-  @transient val hiveClientImpl = HiveUtils.newClientForExecution(sparkSession.sparkContext.conf,
-    sparkSession.sessionState.newHadoopConf())
+  @transient private val hiveClientImpl = HiveUtils.newClientForExecution(
+    sparkSession.sparkContext.conf, sparkSession.sessionState.newHadoopConf())
 
   @transient val hiveQlTable: HiveTable = hiveClientImpl.toHiveTable(catalogTable)
 
