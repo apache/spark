@@ -188,4 +188,23 @@ package object config {
       .internal()
       .stringConf
       .createOptional
+
+  private[spark] val WAIT_FOR_APP_COMPLETION =
+    ConfigBuilder("spark.kubernetes.submit.waitAppCompletion")
+      .doc(
+        """
+          | In cluster mode, whether to wait for the application to finish before exiting the
+          | launcher process.
+        """.stripMargin)
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val REPORT_INTERVAL =
+    ConfigBuilder("spark.kubernetes.report.interval")
+      .doc(
+        """
+          | Interval between reports of the current app status in cluster mode.
+        """.stripMargin)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("1s")
 }
