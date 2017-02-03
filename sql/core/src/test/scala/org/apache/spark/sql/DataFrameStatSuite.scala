@@ -160,12 +160,33 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       assert(math.abs(md2 - 2 * q2 * n) < error_double)
     }
 
-    // test relativeError greater than 1 return the same result as 1
+    // quantile should be in the range [0.0, 1.0]
+    val e = intercept[IllegalArgumentException] {
+      df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2, -0.1), epsilons.head)
+    }
+    assert(e.getMessage.contains("quantile should be in the range [0.0, 1.0]"))
+
+    // relativeError should be non-negative
+    val e2 = intercept[IllegalArgumentException] {
+      df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), -1.0)
+    }
+    assert(e2.getMessage.contains("Relative Error must be non-negative"))
+  }
+
+  test("approximate quantile 2: test relativeError greater than 1 return the same result as 1") {
+    val n = 1000
+    val df = Seq.tabulate(n)(i => (i, 2.0 * i)).toDF("singles", "doubles")
+
+    val q1 = 0.5
+    val q2 = 0.8
+    val epsilons = List(2.0, 5.0, 100.0)
+
     val Array(single1_1) = df.stat.approxQuantile("singles", Array(q1), 1.0)
     val Array(s1_1, s2_1) = df.stat.approxQuantile("singles", Array(q1, q2), 1.0)
     val Array(Array(ms1_1, ms2_1), Array(md1_1, md2_1)) =
       df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), 1.0)
-    for (epsilon <- Seq(2.0, 100.0)) {
+
+    for (epsilon <- epsilons) {
       val Array(single1) = df.stat.approxQuantile("singles", Array(q1), epsilon)
       val Array(s1, s2) = df.stat.approxQuantile("singles", Array(q1, q2), epsilon)
       val Array(Array(ms1, ms2), Array(md1, md2)) =
@@ -178,32 +199,24 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       assert(md1_1 === md1)
       assert(md2_1 === md2)
     }
+  }
 
-    // quantile should be in the range [0.0, 1.0]
-    val e: IllegalArgumentException = intercept[IllegalArgumentException] {
-      df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2, -0.1), epsilons.head)
-    }
-    assert(e.getMessage.contains("quantile should be in the range [0.0, 1.0]"))
-
-    // relativeError should be non-negative
-    val e2: IllegalArgumentException = intercept[IllegalArgumentException] {
-      df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), -1.0)
-    }
-    assert(e2.getMessage.contains("Relative Error must be non-negative"))
-
-    // test approxQuantile on NaN and null values
+  test("approximate quantile 3: test on NaN and null values") {
+    val q1 = 0.5
+    val q2 = 0.8
+    val epsilon = 0.1
     val rows = spark.sparkContext.parallelize(Seq(Row(Double.NaN, 1.0), Row(1.0, 1.0),
       Row(-1.0, Double.NaN), Row(Double.NaN, Double.NaN), Row(null, null), Row(null, 1.0),
       Row(-1.0, null), Row(Double.NaN, null)))
     val schema = StructType(Seq(StructField("input1", DoubleType, nullable = true),
       StructField("input2", DoubleType, nullable = true)))
     val dfNaN = spark.createDataFrame(rows, schema)
-    val resNaN = dfNaN.stat.approxQuantile("input1", Array(q1, q2), epsilons.head)
+    val resNaN = dfNaN.stat.approxQuantile("input1", Array(q1, q2), epsilon)
     assert(resNaN.count(_.isNaN) === 0)
     assert(resNaN.count(_ == null) === 0)
 
     val resNaN2 = dfNaN.stat.approxQuantile(Array("input1", "input2"),
-      Array(q1, q2), epsilons.head)
+      Array(q1, q2), epsilon)
     assert(resNaN2.flatten.count(_.isNaN) === 0)
     assert(resNaN2.flatten.count(_ == null) === 0)
   }
