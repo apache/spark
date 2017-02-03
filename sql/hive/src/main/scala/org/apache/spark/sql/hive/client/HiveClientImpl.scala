@@ -789,7 +789,7 @@ private[hive] class HiveClientImpl(
     Utils.classForName(name)
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
-  private def toHiveColumn(c: StructField): FieldSchema = {
+  private[hive] def toHiveColumn(c: StructField): FieldSchema = {
     val typeString = if (c.metadata.contains(HiveUtils.hiveTypeString)) {
       c.metadata.getString(HiveUtils.hiveTypeString)
     } else {
@@ -815,7 +815,7 @@ private[hive] class HiveClientImpl(
     Option(hc.getComment).map(field.withComment).getOrElse(field)
   }
 
-  private def toHiveTable(table: CatalogTable): HiveTable = {
+  private[hive] def toHiveTable(table: CatalogTable): HiveTable = {
     val hiveTable = new HiveTable(table.database, table.identifier.table)
     // For EXTERNAL_TABLE, we also need to set EXTERNAL field in the table properties.
     // Otherwise, Hive metastore will change the table to a MANAGED_TABLE.
