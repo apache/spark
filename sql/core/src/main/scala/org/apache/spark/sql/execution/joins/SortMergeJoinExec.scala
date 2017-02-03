@@ -34,8 +34,8 @@ import org.apache.spark.util.collection.BitSet
  * Performs a sort merge join of two child relations.
  */
 case class SortMergeJoinExec(
-    leftKeys: Seq[Expression],
-    rightKeys: Seq[Expression],
+    var leftKeys: Seq[Expression],
+    var rightKeys: Seq[Expression],
     joinType: JoinType,
     condition: Option[Expression],
     left: SparkPlan,
@@ -77,8 +77,59 @@ case class SortMergeJoinExec(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
-  override def requiredChildDistribution: Seq[Distribution] =
+  private var isJoinKeysOrderingResolved = false
+
+  private def resolveOrderingOfJoinKeys: Unit = {
+    if (isJoinKeysOrderingResolved) {
+      return
+    }
+    isJoinKeysOrderingResolved = true
+
+    left.outputPartitioning match {
+      case HashPartitioning(expressions, _)
+        if expressions.length == leftKeys.length &&
+          leftKeys.forall(x => expressions.exists(_.semanticEquals(x))) =>
+
+        val leftKeysBuffer = ArrayBuffer[Expression]()
+        val rightKeysBuffer = ArrayBuffer[Expression]()
+
+        expressions.foreach(expression => {
+          val index = leftKeys.indexWhere(e => e.semanticEquals(expression))
+
+          leftKeysBuffer.append(leftKeys(index))
+          rightKeysBuffer.append(rightKeys(index))
+        })
+
+        leftKeys = leftKeysBuffer
+        rightKeys = rightKeysBuffer
+
+      case _ => right.outputPartitioning match {
+        case HashPartitioning(expressions, _)
+          if expressions.length == rightKeys.length &&
+            rightKeys.forall(x => expressions.exists(_.semanticEquals(x))) =>
+
+          val leftKeysBuffer = ArrayBuffer[Expression]()
+          val rightKeysBuffer = ArrayBuffer[Expression]()
+
+          expressions.foreach(expression => {
+            val index = rightKeys.indexWhere(e => e.semanticEquals(expression))
+
+            leftKeysBuffer.append(leftKeys(index))
+            rightKeysBuffer.append(rightKeys(index))
+          })
+
+          leftKeys = leftKeysBuffer
+          rightKeys = rightKeysBuffer
+
+        case _ => // do nothing
+      }
+    }
+  }
+
+  override def requiredChildDistribution: Seq[Distribution] = {
+    resolveOrderingOfJoinKeys
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+  }
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
     // For inner join, orders of both sides keys should be kept.
