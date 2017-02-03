@@ -184,20 +184,6 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
   }
 
   /**
-   * Get an appropriate alias cleaning method for the given node.
-   *
-   * We currently clean Project, Aggregate & Window nodes.
-   */
-  private def getAliasCleaner(plan: LogicalPlan): (Expression, AttributeSet) => Expression = {
-    plan match {
-      case _: Project => removeRedundantAlias
-      case _: Aggregate => removeRedundantAlias
-      case _: Window => removeRedundantAlias
-      case _ => (e, _) => e
-    }
-  }
-
-  /**
    * Remove redundant alias expression from a LogicalPlan and its subtree. A blacklist is used to
    * prevent the removal of seemingly redundant aliases used to deduplicate the input for a (self)
    * join.
@@ -220,14 +206,10 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         Join(newLeft, newRight, joinType, newCondition)
 
       case _ =>
-        // Drop blacklisted attributes that are masked in the current project. This allows us to
-        // remove redundant aliases in the subtree.
-        val childBlacklist = blacklist -- (plan.inputSet -- plan.outputSet)
-
         // Remove redundant aliases in the subtree(s).
         val currentNextAttrPairs = mutable.Buffer.empty[(Attribute, Attribute)]
         val newNode = plan.mapChildren { child =>
-          val newChild = removeRedundantAliases(child, childBlacklist)
+          val newChild = removeRedundantAliases(child, blacklist)
           currentNextAttrPairs ++= createAttributeMapping(child, newChild)
           newChild
         }
@@ -237,13 +219,20 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         // case we use the the first mapping (which should be provided by the first child).
         val mapping = AttributeMap(currentNextAttrPairs)
 
+        // Create a an expression cleaning function for nodes that can actually produce redundant
+        // aliases, use identity otherwise.
+        val clean: Expression => Expression = plan match {
+          case _: Project => removeRedundantAlias(_, blacklist)
+          case _: Aggregate => removeRedundantAlias(_, blacklist)
+          case _: Window => removeRedundantAlias(_, blacklist)
+          case _ => identity[Expression]
+        }
+
         // Transform the expressions.
-        val cleanExpression = getAliasCleaner(plan)
         newNode.mapExpressions { expr =>
-          val newExpr = expr.transform {
+          clean(expr.transform {
             case a: Attribute => mapping.getOrElse(a, a)
-          }
-          cleanExpression(newExpr, blacklist)
+          })
         }
     }
   }
