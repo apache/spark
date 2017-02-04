@@ -83,17 +83,6 @@ object SparkHadoopMapReduceWriter extends Logging {
       isAppend = false).asInstanceOf[HadoopMapReduceCommitProtocol]
     committer.setupJob(jobContext)
 
-    // When speculation is on and output committer class name contains "Direct", we should warn
-    // users that they may loss data if they are using a direct output committer.
-    if (SparkHadoopWriterUtils.isSpeculationEnabled(sparkConf) && committer.isDirectOutput) {
-      val warningMessage =
-        s"$committer may be an output committer that writes data directly to " +
-          "the final location. Because speculation is enabled, this output committer may " +
-          "cause data loss (see the case in SPARK-10063). If possible, please use an output " +
-          "committer that does not have this behavior (e.g. FileOutputCommitter)."
-      logWarning(warningMessage)
-    }
-
     // Try to write all RDD partitions as a Hadoop OutputFormat.
     try {
       val ret = sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
@@ -228,10 +217,6 @@ object SparkHadoopWriterUtils {
     val validationDisabled = disableOutputSpecValidation.value
     val enabledInConf = conf.getBoolean("spark.hadoop.validateOutputSpecs", true)
     enabledInConf && !validationDisabled
-  }
-
-  def isSpeculationEnabled(conf: SparkConf): Boolean = {
-    conf.getBoolean("spark.speculation", false)
   }
 
   // TODO: these don't seem like the right abstractions.
