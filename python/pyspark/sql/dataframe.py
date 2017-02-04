@@ -1281,8 +1281,8 @@ class DataFrame(object):
         :param value: int, long, float, string, or list.
             The replacement value must be an int, long, float, or string. If `value` is a
             list, `value` should be of the same length and type as `to_replace`.
-            If `value` is a scalar and `to_replace` is a sequence, then `value` is replicated
-            len(`to_replace`) times.
+            If `value` is a scalar and `to_replace` is a sequence, then `value` is
+            used as a replacement for each item in `to_replace`.
         :param subset: optional list of column names to consider.
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
