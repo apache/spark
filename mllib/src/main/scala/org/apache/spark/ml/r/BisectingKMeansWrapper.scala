@@ -24,32 +24,31 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
+import org.apache.spark.ml.clustering.{BisectingKMeans, BisectingKMeansModel}
 import org.apache.spark.ml.feature.RFormula
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
-private[r] class KMeansWrapper private (
+private[r] class BisectingKMeansWrapper private (
     val pipeline: PipelineModel,
     val features: Array[String],
     val size: Array[Long],
     val isLoaded: Boolean = false) extends MLWritable {
+  private val bisectingKmeansModel: BisectingKMeansModel =
+    pipeline.stages.last.asInstanceOf[BisectingKMeansModel]
 
-  private val kMeansModel: KMeansModel = pipeline.stages(1).asInstanceOf[KMeansModel]
+  lazy val coefficients: Array[Double] = bisectingKmeansModel.clusterCenters.flatMap(_.toArray)
 
-  lazy val coefficients: Array[Double] = kMeansModel.clusterCenters.flatMap(_.toArray)
+  lazy val k: Int = bisectingKmeansModel.getK
 
-  lazy val k: Int = kMeansModel.getK
-
-  lazy val cluster: DataFrame = kMeansModel.summary.cluster
-
-  lazy val clusterSize: Int = kMeansModel.clusterCenters.size
+  // If the model is loaded from a saved model, cluster is NULL. It is checked on R side
+  lazy val cluster: DataFrame = bisectingKmeansModel.summary.cluster
 
   def fitted(method: String): DataFrame = {
     if (method == "centers") {
-      kMeansModel.summary.predictions.drop(kMeansModel.getFeaturesCol)
+      bisectingKmeansModel.summary.predictions.drop(bisectingKmeansModel.getFeaturesCol)
     } else if (method == "classes") {
-      kMeansModel.summary.cluster
+      bisectingKmeansModel.summary.cluster
     } else {
       throw new UnsupportedOperationException(
         s"Method (centers or classes) required but $method found.")
@@ -57,23 +56,22 @@ private[r] class KMeansWrapper private (
   }
 
   def transform(dataset: Dataset[_]): DataFrame = {
-    pipeline.transform(dataset).drop(kMeansModel.getFeaturesCol)
+    pipeline.transform(dataset).drop(bisectingKmeansModel.getFeaturesCol)
   }
 
-  override def write: MLWriter = new KMeansWrapper.KMeansWrapperWriter(this)
+  override def write: MLWriter = new BisectingKMeansWrapper.BisectingKMeansWrapperWriter(this)
 }
 
-private[r] object KMeansWrapper extends MLReadable[KMeansWrapper] {
+private[r] object BisectingKMeansWrapper extends MLReadable[BisectingKMeansWrapper] {
 
   def fit(
       data: DataFrame,
       formula: String,
       k: Int,
       maxIter: Int,
-      initMode: String,
       seed: String,
-      initSteps: Int,
-      tol: Double): KMeansWrapper = {
+      minDivisibleClusterSize: Double
+      ): BisectingKMeansWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
@@ -87,31 +85,30 @@ private[r] object KMeansWrapper extends MLReadable[KMeansWrapper] {
       .attributes.get
     val features = featureAttrs.map(_.name.get)
 
-    val kMeans = new KMeans()
+    val bisectingKmeans = new BisectingKMeans()
       .setK(k)
       .setMaxIter(maxIter)
-      .setInitMode(initMode)
+      .setMinDivisibleClusterSize(minDivisibleClusterSize)
       .setFeaturesCol(rFormula.getFeaturesCol)
-      .setInitSteps(initSteps)
-      .setTol(tol)
 
-    if (seed != null && seed.length > 0) kMeans.setSeed(seed.toInt)
+    if (seed != null && seed.length > 0) bisectingKmeans.setSeed(seed.toInt)
 
     val pipeline = new Pipeline()
-      .setStages(Array(rFormulaModel, kMeans))
+      .setStages(Array(rFormulaModel, bisectingKmeans))
       .fit(data)
 
-    val kMeansModel: KMeansModel = pipeline.stages(1).asInstanceOf[KMeansModel]
-    val size: Array[Long] = kMeansModel.summary.clusterSizes
+    val bisectingKmeansModel: BisectingKMeansModel =
+      pipeline.stages.last.asInstanceOf[BisectingKMeansModel]
+    val size: Array[Long] = bisectingKmeansModel.summary.clusterSizes
 
-    new KMeansWrapper(pipeline, features, size)
+    new BisectingKMeansWrapper(pipeline, features, size)
   }
 
-  override def read: MLReader[KMeansWrapper] = new KMeansWrapperReader
+  override def read: MLReader[BisectingKMeansWrapper] = new BisectingKMeansWrapperReader
 
-  override def load(path: String): KMeansWrapper = super.load(path)
+  override def load(path: String): BisectingKMeansWrapper = super.load(path)
 
-  class KMeansWrapperWriter(instance: KMeansWrapper) extends MLWriter {
+  class BisectingKMeansWrapperWriter(instance: BisectingKMeansWrapper) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
       val rMetadataPath = new Path(path, "rMetadata").toString
@@ -127,9 +124,9 @@ private[r] object KMeansWrapper extends MLReadable[KMeansWrapper] {
     }
   }
 
-  class KMeansWrapperReader extends MLReader[KMeansWrapper] {
+  class BisectingKMeansWrapperReader extends MLReader[BisectingKMeansWrapper] {
 
-    override def load(path: String): KMeansWrapper = {
+    override def load(path: String): BisectingKMeansWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
@@ -139,7 +136,8 @@ private[r] object KMeansWrapper extends MLReadable[KMeansWrapper] {
       val rMetadata = parse(rMetadataStr)
       val features = (rMetadata \ "features").extract[Array[String]]
       val size = (rMetadata \ "size").extract[Array[Long]]
-      new KMeansWrapper(pipeline, features, size, isLoaded = true)
+      new BisectingKMeansWrapper(pipeline, features, size, isLoaded = true)
     }
   }
+
 }

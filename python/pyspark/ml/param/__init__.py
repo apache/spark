@@ -24,11 +24,9 @@ if sys.version > '3':
 from abc import ABCMeta
 import copy
 import numpy as np
-import warnings
 
 from py4j.java_gateway import JavaObject
 
-from pyspark import since
 from pyspark.ml.linalg import DenseVector, Vector
 from pyspark.ml.util import Identifiable
 
@@ -251,7 +249,6 @@ class Params(Identifiable):
             setattr(self, name, param._copy_new_parent(self))
 
     @property
-    @since("1.3.0")
     def params(self):
         """
         Returns all params ordered by name. The default implementation
@@ -264,7 +261,6 @@ class Params(Identifiable):
                                         not isinstance(getattr(type(self), x, None), property)]))
         return self._params
 
-    @since("1.4.0")
     def explainParam(self, param):
         """
         Explains a single param and returns its name, doc, and optional
@@ -282,7 +278,6 @@ class Params(Identifiable):
         valueStr = "(" + ", ".join(values) + ")"
         return "%s: %s %s" % (param.name, param.doc, valueStr)
 
-    @since("1.4.0")
     def explainParams(self):
         """
         Returns the documentation of all params with their optionally
@@ -290,7 +285,6 @@ class Params(Identifiable):
         """
         return "\n".join([self.explainParam(param) for param in self.params])
 
-    @since("1.4.0")
     def getParam(self, paramName):
         """
         Gets a param by its name.
@@ -301,7 +295,6 @@ class Params(Identifiable):
         else:
             raise ValueError("Cannot find param with name %s." % paramName)
 
-    @since("1.4.0")
     def isSet(self, param):
         """
         Checks whether a param is explicitly set by user.
@@ -309,7 +302,6 @@ class Params(Identifiable):
         param = self._resolveParam(param)
         return param in self._paramMap
 
-    @since("1.4.0")
     def hasDefault(self, param):
         """
         Checks whether a param has a default value.
@@ -317,7 +309,6 @@ class Params(Identifiable):
         param = self._resolveParam(param)
         return param in self._defaultParamMap
 
-    @since("1.4.0")
     def isDefined(self, param):
         """
         Checks whether a param is explicitly set by user or has
@@ -325,7 +316,6 @@ class Params(Identifiable):
         """
         return self.isSet(param) or self.hasDefault(param)
 
-    @since("1.4.0")
     def hasParam(self, paramName):
         """
         Tests whether this instance contains a param with a given
@@ -337,7 +327,6 @@ class Params(Identifiable):
         else:
             raise TypeError("hasParam(): paramName must be a string")
 
-    @since("1.4.0")
     def getOrDefault(self, param):
         """
         Gets the value of a param in the user-supplied param map or its
@@ -349,7 +338,6 @@ class Params(Identifiable):
         else:
             return self._defaultParamMap[param]
 
-    @since("1.4.0")
     def extractParamMap(self, extra=None):
         """
         Extracts the embedded default param values and user-supplied
@@ -368,7 +356,6 @@ class Params(Identifiable):
         paramMap.update(extra)
         return paramMap
 
-    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with the same uid and some

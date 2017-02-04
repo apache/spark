@@ -14,13 +14,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-context("Windows-specific tests")
 
-test_that("sparkJars tag in SparkContext", {
-  if (.Platform$OS.type != "windows") {
-    skip("This test is only for Windows, skipped")
-  }
-  testOutput <- launchScript("ECHO", "a/b/c", wait = TRUE)
-  abcPath <- testOutput[1]
-  expect_equal(abcPath, "a\\b\\c")
-})
+# To run this example use
+# ./bin/spark-submit examples/src/main/r/ml/bisectingKmeans.R
+
+# Load SparkR library into your R session
+library(SparkR)
+
+# Initialize SparkSession
+sparkR.session(appName = "SparkR-ML-bisectingKmeans-example")
+
+# $example on$
+irisDF <- createDataFrame(iris)
+
+# Fit bisecting k-means model with four centers
+model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
+
+# get fitted result from a bisecting k-means model
+fitted.model <- fitted(model, "centers")
+
+# Model summary
+summary(fitted.model)
+
+# fitted values on training data
+fitted <- predict(model, df)
+head(select(fitted, "Sepal_Length", "prediction"))
+# $example off$
