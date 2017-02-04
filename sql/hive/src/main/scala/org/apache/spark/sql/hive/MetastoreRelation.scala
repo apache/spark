@@ -22,10 +22,9 @@ import java.io.IOException
 import scala.collection.JavaConverters._
 
 import com.google.common.base.Objects
+
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.hive.common.StatsSetupConst
-import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata.{Partition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
@@ -36,6 +35,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.FileRelation
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.types.StructField
 
 
@@ -60,11 +60,7 @@ private[hive] case class MetastoreRelation(
 
   override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
 
-  // here used to call some helper functions, not used for storing persistent metadata
-  @transient private val hiveClientImpl = HiveUtils.newClientForExecution(
-    sparkSession.sparkContext.conf, sparkSession.sessionState.newHadoopConf())
-
-  @transient val hiveQlTable: HiveTable = hiveClientImpl.toHiveTable(catalogTable)
+  @transient val hiveQlTable: HiveTable = HiveClientImpl.toHiveTable(catalogTable)
 
   @transient override def computeStats(conf: CatalystConf): Statistics = {
     catalogTable.stats.map(_.toPlanStats(output)).getOrElse(Statistics(
@@ -130,7 +126,7 @@ private[hive] case class MetastoreRelation(
       tPartition.setSd(sd)
 
       // Note: In Hive the schema and partition columns must be disjoint sets
-      val schema = catalogTable.schema.map(hiveClientImpl.toHiveColumn).filter { c =>
+      val schema = catalogTable.schema.map(HiveClientImpl.toHiveColumn).filter { c =>
         !catalogTable.partitionColumnNames.contains(c.getName)
       }
       sd.setCols(schema.asJava)
