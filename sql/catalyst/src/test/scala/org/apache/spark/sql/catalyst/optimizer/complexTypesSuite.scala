@@ -18,13 +18,11 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.scalatest.Matchers
-
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types._
 
@@ -52,7 +50,7 @@ class ComplexTypesSuite extends PlanTest{
 
   val idAtt = ('id).long.notNull
 
-  lazy val baseOptimizedPlan = Range(1L, 1000L, 1, Some(2), idAtt :: Nil)
+  lazy val baseOptimizedPlan = LocalRelation(idAtt)
 
   val idRef = baseOptimizedPlan.output.head
 
@@ -115,22 +113,22 @@ class ComplexTypesSuite extends PlanTest{
     comparePlans(optimized, expected)
   }
 
-  ignore("explicit - deduced att name") {
+  test("explicit get from named_struct- expression maintains original deduced alias") {
     val rel = baseOptimizedPlan.select(
       CreateNamedStruct("att" :: idRef :: Nil).getStructField("att")
-   )
+   ).analyze
     assertResult(StructType(
-      StructField("named_struct(att, id AS `att`).att", LongType, nullable = false) :: Nil
+      StructField("named_struct(att, id).att", LongType, nullable = false) :: Nil
     ))(rel.schema)
 
     val optimized = Optimize execute rel
 
-    val expected = baseOptimizedPlan.select(idRef as "named_struct(att, id AS `att`).att")
+    val expected = baseOptimizedPlan.select(idRef as "named_struct(att, id).att")
 
     comparePlans(optimized, expected)
   }
 
-  test("collapsed") {
+  test("collapsed getStructField ontop of namedStruct") {
     val rel = baseOptimizedPlan.select(
       CreateNamedStruct("att" :: idRef :: Nil) as "struct1"
     )
@@ -160,7 +158,7 @@ class ComplexTypesSuite extends PlanTest{
     comparePlans(optimized, expected)
   }
 
-  test("collapsed2") {
+  test("collapse multiple CreateNamedStruct/GetStructField pairs") {
     val rel = baseOptimizedPlan.select(
       CreateNamedStruct(
         Literal("att1") :: idRef ::
@@ -204,14 +202,14 @@ class ComplexTypesSuite extends PlanTest{
     comparePlans(optimized, expected)
   }
 
-  ignore("collapsed2 - deduced names") {
+  test("collapsed2 - deduced names") {
     val rel = baseOptimizedPlan.select(
       CreateNamedStruct(
         Literal("att1") :: idRef ::
         Literal("att2") :: (idRef * idRef) ::
         Nil
      ) as "struct1"
-   )
+   ).analyze
     assertResult(
       StructType(
         StructField(
@@ -227,7 +225,7 @@ class ComplexTypesSuite extends PlanTest{
     val structRef = rel.output.head
     val rel2 = rel.select(
       structRef.getStructField("att1"),
-      structRef.getStructField("att2"))
+      structRef.getStructField("att2")).analyze
 
     assertResult(
       StructType(
