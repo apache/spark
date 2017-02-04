@@ -136,7 +136,7 @@ private[hive] object IsolatedClientLoader extends Logging {
 
   // A map from a given pair of HiveVersion and Hadoop version to jar files.
   // It is only used by forVersion.
-  private val resolvedVersions =
+  private[hive] val resolvedVersions =
     new scala.collection.mutable.HashMap[(HiveVersion, String), Seq[URL]]
 }
 

@@ -31,7 +31,7 @@ import org.apache.ivy.core.settings.IvySettings
 import org.apache.spark.TestUtils.{createCompiledClass, JavaSourceFromString}
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 
-private[deploy] object IvyTestUtils {
+object IvyTestUtils {
 
   /**
    * Create the path for the jar and pom from the maven coordinate. Extension should be `jar`
@@ -355,7 +355,7 @@ private[deploy] object IvyTestUtils {
    * @param withPython Whether to pack python files inside the jar for extensive testing.
    * @return Root path of the repository. Will be `rootDir` if supplied.
    */
-  private[deploy] def withRepository(
+  def withRepository(
       artifact: MavenCoordinate,
       dependencies: Option[String],
       rootDir: Option[File],

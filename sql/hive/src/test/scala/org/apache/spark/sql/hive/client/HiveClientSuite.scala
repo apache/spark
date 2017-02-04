@@ -19,8 +19,9 @@ package org.apache.spark.sql.hive.client
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
-
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.IvyTestUtils
+import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.hive.HiveUtils

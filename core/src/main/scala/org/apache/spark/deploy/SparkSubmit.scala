@@ -1031,10 +1031,8 @@ private[spark] object SparkSubmitUtils {
       val cr = new ChainResolver
       cr.setName("user-list")
 
-      // add current default resolver, if any
-      Option(ivySettings.getDefaultResolver).foreach(cr.add)
-
-      // add additional repositories, last resolution in chain takes precedence
+      // before default resolvers, add additional repositories,
+      // last resolution in chain takes precedence
       repositoryList.zipWithIndex.foreach { case (repo, i) =>
         val brr: IBiblioResolver = new IBiblioResolver
         brr.setM2compatible(true)
@@ -1046,6 +1044,9 @@ private[spark] object SparkSubmitUtils {
         printStream.println(s"$repo added as a remote repository with the name: ${brr.getName}")
         // scalastyle:on println
       }
+
+      // add current default resolver, if any
+      Option(ivySettings.getDefaultResolver).foreach(cr.add)
 
       ivySettings.addResolver(cr)
       ivySettings.setDefaultResolver(cr.getName)

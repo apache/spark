@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.IvyTestUtils
+import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.hive.client.IsolatedClientLoader
 
 class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
