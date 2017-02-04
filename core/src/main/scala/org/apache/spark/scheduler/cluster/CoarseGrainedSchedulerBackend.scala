@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
@@ -31,7 +32,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.ENDPOINT_NAME
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.abortTaskSetManager
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.prepareSerializedTask
 import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
 
 /**
@@ -244,45 +245,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Launch tasks returned by a set of resource offers
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
+      val abortTaskSet = new HashSet[TaskSetManager]()
       for (task <- tasks.flatten) {
-        val serializedTask = try {
-          TaskDescription.encode(task)
-        } catch {
-          case NonFatal(e) =>
-            abortTaskSetManager(scheduler, task.taskId,
-              s"Failed to serialize task ${task.taskId}, not attempting to retry it.", Some(e))
-            null
-        }
-
-        if (serializedTask != null && serializedTask.limit >= maxRpcMessageSize) {
-          val msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
-            "spark.rpc.message.maxSize (%d bytes). Consider increasing " +
-            "spark.rpc.message.maxSize or using broadcast variables for large values."
-          abortTaskSetManager(scheduler, task.taskId,
-            msg.format(task.taskId, task.index, serializedTask.limit, maxRpcMessageSize))
-        } else if (serializedTask != null) {
-          if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024) {
-            scheduler.taskIdToTaskSetManager.get(task.taskId).filterNot(_.emittedTaskSizeWarning).
-              foreach { taskSetMgr =>
-                taskSetMgr.emittedTaskSizeWarning = true
-                val stageId = taskSetMgr.taskSet.stageId
-                logWarning(s"Stage $stageId contains a task of very large size " +
-                  s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
-                  s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
-              }
-          }
+        val serializedTask = prepareSerializedTask(scheduler, task,
+          abortTaskSet, maxRpcMessageSize)
+        if (serializedTask != null) {
           val executorData = executorDataMap(task.executorId)
           executorData.freeCores -= scheduler.CPUS_PER_TASK
-
           logDebug(s"Launching task ${task.taskId} on executor id: ${task.executorId} " +
             s" hostname: ${executorData.executorHost}.")
-
           executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
         }
-
       }
     }
-
 
     // Remove a disconnected slave from the cluster
     private def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
@@ -618,18 +593,78 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
 private[spark] object CoarseGrainedSchedulerBackend extends Logging {
   val ENDPOINT_NAME = "CoarseGrainedScheduler"
+
   // abort TaskSetManager without exception
-  def abortTaskSetManager(
-    scheduler: TaskSchedulerImpl,
-    taskId: Long,
-    msg: => String,
-    exception: Option[Throwable] = None): Unit = {
+  private[scheduler] def abortTaskSetManager(
+      scheduler: TaskSchedulerImpl,
+      taskId: Long,
+      msg: => String,
+      exception: Option[Throwable] = None): Unit = scheduler.synchronized {
     scheduler.taskIdToTaskSetManager.get(taskId).foreach { taskSetMgr =>
       try {
         taskSetMgr.abort(msg, exception)
       } catch {
         case e: Exception => logError("Exception in error callback", e)
       }
+    }
+  }
+
+  private[scheduler] def isZombieTaskSetManager(
+    scheduler: TaskSchedulerImpl,
+    taskId: Long): Unit = scheduler.synchronized {
+    !scheduler.taskIdToTaskSetManager.get(taskId).exists(_.isZombie)
+  }
+
+  private[scheduler] def getTaskSetManager(
+    scheduler: TaskSchedulerImpl,
+    taskId: Long): Option[TaskSetManager] = scheduler.synchronized {
+    scheduler.taskIdToTaskSetManager.get(taskId)
+  }
+
+  private[scheduler] def prepareSerializedTask(
+    scheduler: TaskSchedulerImpl,
+    task: TaskDescription,
+    abortSet: HashSet[TaskSetManager],
+    maxRpcMessageSize: Long): ByteBuffer = {
+    var serializedTask: ByteBuffer = null
+    if (abortSet.isEmpty || !getTaskSetManager(scheduler, task.taskId).exists(_.isZombie)) {
+      try {
+        serializedTask = TaskDescription.encode(task)
+      } catch {
+        case NonFatal(e) =>
+          abortTaskSetManager(scheduler, task.taskId,
+            s"Failed to serialize task ${task.taskId}, not attempting to retry it.", Some(e))
+          scheduler.taskIdToTaskSetManager.get(task.taskId).foreach(t => abortSet.add(t))
+      }
+    }
+
+    if (serializedTask != null && serializedTask.limit >= maxRpcMessageSize) {
+      val msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
+        "spark.rpc.message.maxSize (%d bytes). Consider increasing " +
+        "spark.rpc.message.maxSize or using broadcast variables for large values."
+      abortTaskSetManager(scheduler, task.taskId,
+        msg.format(task.taskId, task.index, serializedTask.limit, maxRpcMessageSize))
+      getTaskSetManager(scheduler, task.taskId).foreach(t => abortSet.add(t))
+      serializedTask = null
+    } else if (serializedTask != null) {
+      emittedTaskSizeWarning(scheduler, serializedTask, task.taskId)
+    }
+    serializedTask
+  }
+
+  private[scheduler] def emittedTaskSizeWarning(
+    scheduler: TaskSchedulerImpl,
+    serializedTask: ByteBuffer,
+    taskId: Long): Unit = {
+    if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024) {
+      getTaskSetManager(scheduler, taskId).filterNot(_.emittedTaskSizeWarning).
+        foreach { taskSetMgr =>
+          taskSetMgr.emittedTaskSizeWarning = true
+          val stageId = taskSetMgr.taskSet.stageId
+          logWarning(s"Stage $stageId contains a task of very large size " +
+            s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
+            s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
+        }
     }
   }
 }

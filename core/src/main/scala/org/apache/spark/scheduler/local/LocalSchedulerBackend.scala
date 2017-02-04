@@ -21,6 +21,8 @@ import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 
+import scala.collection.mutable.HashSet
+
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
@@ -28,7 +30,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.prepareSerializedTask
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.util.RpcUtils
 
 private case class ReviveOffers()
 
@@ -59,6 +63,8 @@ private[spark] class LocalEndpoint(
   private val executor = new Executor(
     localExecutorId, localExecutorHostname, SparkEnv.get, userClassPath, isLocal = true)
 
+  private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(SparkEnv.get.conf)
+
   override def receive: PartialFunction[Any, Unit] = {
     case ReviveOffers =>
       reviveOffers()
@@ -82,9 +88,14 @@ private[spark] class LocalEndpoint(
 
   def reviveOffers() {
     val offers = IndexedSeq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
+    val abortTaskSet = new HashSet[TaskSetManager]()
     for (task <- scheduler.resourceOffers(offers).flatten) {
-      freeCores -= scheduler.CPUS_PER_TASK
-      executor.launchTask(executorBackend, task)
+      val serializedTask = prepareSerializedTask(scheduler, task,
+        abortTaskSet, maxRpcMessageSize)
+      if (serializedTask != null) {
+        freeCores -= scheduler.CPUS_PER_TASK
+        executor.launchTask(executorBackend, TaskDescription.decode(serializedTask))
+      }
     }
   }
 }

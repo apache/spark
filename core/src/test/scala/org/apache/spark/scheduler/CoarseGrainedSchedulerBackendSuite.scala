@@ -24,8 +24,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{RpcUtils, SerializableBuffer}
 
 class NotSerializablePartitionRDD(
-  sc: SparkContext,
-  numPartitions: Int) extends RDD[(Int, Int)](sc, Nil) with Serializable {
+    sc: SparkContext,
+    numPartitions: Int) extends RDD[(Int, Int)](sc, Nil) with Serializable {
 
   override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
     throw new RuntimeException("should not be reached")
@@ -75,6 +75,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       myRDD.count()
     }
     assert(e.getMessage.contains("Failed to serialize task"))
-
+    assertResult(10) {
+      sc.parallelize(1 to 10).count()
+    }
   }
 }
