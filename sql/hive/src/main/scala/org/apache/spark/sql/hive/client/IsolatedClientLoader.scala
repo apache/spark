@@ -293,5 +293,5 @@ private[hive] class IsolatedClientLoader(
    * The place holder for shared Hive client for all the HiveContext sessions (they share an
    * IsolatedClientLoader).
    */
-  private[hive] var cachedHive: Any = null
+  private var cachedHive: Any = null
 }
