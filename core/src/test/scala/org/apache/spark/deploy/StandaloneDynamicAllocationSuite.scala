@@ -20,7 +20,8 @@ package org.apache.spark.deploy
 import scala.collection.mutable
 import scala.concurrent.duration._
 
-import org.mockito.Mockito.{mock, when}
+import org.mockito.Matchers.any
+import org.mockito.Mockito.{mock, verify, when}
 import org.scalatest.{BeforeAndAfterAll, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 
@@ -29,10 +30,11 @@ import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMaste
 import org.apache.spark.deploy.master.ApplicationInfo
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.Worker
+import org.apache.spark.internal.config
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster._
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RegisterExecutorFailed}
 
 /**
  * End-to-end tests for dynamic allocation in standalone mode.
@@ -487,6 +489,29 @@ class StandaloneDynamicAllocationSuite
     eventually(timeout(10.seconds), interval(100.millis)) {
       assert(beforeList.intersect(afterList).size == 0)
     }
+  }
+
+  test("executor registration on a blacklisted host must fail") {
+    sc = new SparkContext(appConf.set(config.BLACKLIST_ENABLED.key, "true"))
+    val endpointRef = mock(classOf[RpcEndpointRef])
+    val mockAddress = mock(classOf[RpcAddress])
+    when(endpointRef.address).thenReturn(mockAddress)
+    val message = RegisterExecutor("one", endpointRef, "localhost", 10, Map.empty)
+
+    // Get "localhost" on a blacklist.
+    val taskScheduler = mock(classOf[TaskSchedulerImpl])
+    when(taskScheduler.nodeBlacklist()).thenReturn(Set("localhost"))
+    when(taskScheduler.sc).thenReturn(sc)
+    sc.taskScheduler = taskScheduler
+
+    // Create a fresh scheduler backend to blacklist "localhost".
+    sc.schedulerBackend.stop()
+    val backend =
+     new StandaloneSchedulerBackend(taskScheduler, sc, Array(masterRpcEnv.address.toSparkURL))
+    backend.start()
+
+    backend.driverEndpoint.ask[Boolean](message)
+    verify(endpointRef).send(RegisterExecutorFailed(any()))
   }
 
   // ===============================
