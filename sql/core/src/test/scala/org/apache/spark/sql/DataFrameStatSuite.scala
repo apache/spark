@@ -171,6 +171,12 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), -1.0)
     }
     assert(e2.getMessage.contains("Relative Error must be non-negative"))
+
+    // dataset should be non-empty
+    intercept[NoSuchElementException] {
+      df.selectExpr("*").limit(0)
+        .stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), epsilons.head)
+    }
   }
 
   test("approximate quantile 2: test relativeError greater than 1 return the same result as 1") {
