@@ -32,13 +32,13 @@ import org.apache.spark.unsafe.types.UTF8String
 
 
 private[kafka010] class KafkaRelation(
-                                       override val sqlContext: SQLContext,
-                                       kafkaReader: KafkaOffsetReader,
-                                       executorKafkaParams: ju.Map[String, Object],
-                                       sourceOptions: Map[String, String],
-                                       failOnDataLoss: Boolean,
-                                       startingOffsets: KafkaOffsetRangeLimit,
-                                       endingOffsets: KafkaOffsetRangeLimit)
+    override val sqlContext: SQLContext,
+    kafkaReader: KafkaOffsetReader,
+    executorKafkaParams: ju.Map[String, Object],
+    sourceOptions: Map[String, String],
+    failOnDataLoss: Boolean,
+    startingOffsets: KafkaOffsetRangeLimit,
+    endingOffsets: KafkaOffsetRangeLimit)
     extends BaseRelation with TableScan with Logging {
   assert(startingOffsets != LatestOffsetRangeLimit,
     "Starting offset not allowed to be set to latest offsets.")
