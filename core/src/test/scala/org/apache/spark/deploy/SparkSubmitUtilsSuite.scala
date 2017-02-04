@@ -143,7 +143,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("search for artifact at local repositories") {
     val main = new MavenCoordinate("my.great.lib", "mylib", "0.1")
     val dep = "my.great.dep:mydep:0.5"
-    // Local M2 repositorya
+    // Local M2 repository
     IvyTestUtils.withRepository(main, Some(dep), Some(SparkSubmitUtils.m2Path)) { repo =>
       val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
         main.toString,
