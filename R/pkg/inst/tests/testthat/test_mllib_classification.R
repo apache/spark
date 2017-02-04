@@ -27,6 +27,10 @@ absoluteSparkPath <- function(x) {
   file.path(sparkHome, x)
 }
 
+test_that("spark.linearSvc", {
+
+})
+
 test_that("spark.logit", {
   # R code to reproduce the result.
   # nolint start
