@@ -203,10 +203,10 @@ case class AlterTableAddColumnsCommand(
     // back into the hive metastore cache
     catalog.refreshTable(table)
     val partitionFields = catalogTable.schema.takeRight(catalogTable.partitionColumnNames.length)
-    val dataData = catalogTable.schema
+    val dataSchema = catalogTable.schema
       .take(catalogTable.schema.length - catalogTable.partitionColumnNames.length)
     catalog.alterTable(catalogTable.copy(schema =
-      catalogTable.schema.copy(fields = (dataData ++ columns ++ partitionFields).toArray)))
+      catalogTable.schema.copy(fields = (dataSchema ++ columns ++ partitionFields).toArray)))
 
     Seq.empty[Row]
   }

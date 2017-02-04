@@ -107,13 +107,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       footer = readFooter(configuration, file, range(split.getStart(), split.getEnd()));
       MessageType fileSchema = footer.getFileMetaData().getSchema();
       FilterCompat.Filter filter = getFilter(configuration);
-      try {
-        blocks = filterRowGroups(filter, footer.getBlocks(), fileSchema);
-      } catch (IllegalArgumentException e) {
-        // In the case where a particular parquet files does not contain
-        // the column(s) in the filter, we don't do filtering at this level
-        blocks = footer.getBlocks();
-      }
+      blocks = filterRowGroups(filter, footer.getBlocks(), fileSchema);
     } else {
       // otherwise we find the row groups that were selected on the client
       footer = readFooter(configuration, file, NO_FILTER);
