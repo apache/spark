@@ -22,7 +22,6 @@ import java.io.IOException
 import scala.collection.JavaConverters._
 
 import com.google.common.base.Objects
-
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.metadata.{Partition, Table => HiveTable}
