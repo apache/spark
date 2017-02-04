@@ -744,10 +744,10 @@ predictions <- predict(rfModel, df)
 
 `spark.bisectingKmeans` is a kind of [hierarchical clustering](https://en.wikipedia.org/wiki/Hierarchical_clustering) using a divisive (or "top-down") approach: all observations start in one cluster, and splits are performed recursively as one moves down the hierarchy.
 
-```{r}
+```{r, warning=FALSE}
 df <- createDataFrame(iris)
 model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
-summary(kmeansModel)
+summary(model)
 fitted <- predict(model, df)
 head(select(fitted, "Sepal_Length", "prediction"))
 ```
