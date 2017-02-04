@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 
+"""
+Standalone tests for PySpark - can be used to quickly test PySpark pip installation. When launched
+without spark-submit verifies Jupyter redirection.
+"""
+
 from __future__ import print_function
 
 import os
