@@ -1457,8 +1457,31 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitColType(ctx: ColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
-    val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
-    if (STRING == null) structField else structField.withComment(string(STRING))
+
+    val builder = new MetadataBuilder
+    // Add comment to metadata
+    if (STRING != null) {
+      builder.putString("comment", string(STRING))
+    }
+    // Add Hive type string to metadata.
+    dataType match {
+      case p: PrimitiveDataTypeContext =>
+        val dt = p.identifier.getText.toLowerCase
+        (dt, p.INTEGER_VALUE().asScala.toList) match {
+          case ("varchar" | "char", Nil) =>
+            builder.putString(HIVE_TYPE_STRING, dt)
+          case ("varchar" | "char", size :: Nil) =>
+            builder.putString(HIVE_TYPE_STRING, dt + "(" + size.getText + ")")
+          case _ =>
+        }
+      case _ =>
+    }
+
+    StructField(
+      identifier.getText,
+      typedVisit(dataType),
+      nullable = true,
+      builder.build())
   }
 
   /**

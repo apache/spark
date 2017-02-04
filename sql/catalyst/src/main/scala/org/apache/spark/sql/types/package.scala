@@ -21,4 +21,10 @@ package org.apache.spark.sql
  * Contains a type system for attributes produced by relations, including complex types like
  * structs, arrays and maps.
  */
-package object types
+package object types {
+  /**
+   * Metadata key used to store the Hive type name. This is relevant for datatypes that do not
+   * have a direct Spark SQL counterpart, such as CHAR and VARCHAR.
+   */
+  val HIVE_TYPE_STRING = "HIVE_TYPE_STRING"
+}

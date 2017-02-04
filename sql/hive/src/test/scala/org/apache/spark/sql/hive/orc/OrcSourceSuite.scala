@@ -162,6 +162,27 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
       hiveClient.runSqlHive("DROP TABLE IF EXISTS orc_varchar")
     }
   }
+
+  test("read varchar column from orc tables created by hive") {
+    try {
+      // This is an ORC file with a single VARCHAR(10) column that's created using Hive 1.2.1
+      val hiveOrc = new File(Thread.currentThread().getContextClassLoader
+        .getResource(s"data/files/orc/").getFile).toURI
+      sql(
+        s"""
+          |CREATE EXTERNAL TABLE test_hive_orc(
+          |  a STRING,
+          |  b CHAR(10),
+          |  c VARCHAR(10)
+          |)
+          |STORED AS ORC
+          |LOCATION '$hiveOrc'
+        """.stripMargin)
+      checkAnswer(spark.table("test_hive_orc"), Row("a", "b         ", "c"))
+    } finally {
+      sql("DROP TABLE IF EXISTS test_hive_orc")
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite {
