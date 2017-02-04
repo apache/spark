@@ -221,13 +221,38 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(2, 2, 1, null) :: Nil)
     }
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
-      val msg = "Detected cartesian product for Inner join between logical plans"
+      val msg = "Detected cartesian product for INNER join between logical plans"
       var e = intercept[AnalysisException](testData3.join(testData3).collect())
       assert(e.getMessage.contains(msg))
       e = intercept[AnalysisException] {
         testData3.as("x").join(testData3.as("y"), $"x.a" > $"y.a").collect()
       }
       assert(e.getMessage.contains(msg))
+    }
+  }
+
+  test("subquery converted to cartesian product join") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      val msg1 = "Both sides of this join are outside the broadcasting threshold"
+      val msg2 = "Please set spark.sql.crossJoin.enabled = true"
+      val e = intercept[AnalysisException] {
+        sql(
+          """
+            |SELECT b FROM testData2
+            |WHERE EXISTS(SELECT a FROM testData3)
+          """.stripMargin).collect()
+      }.getMessage
+      assert(e.contains(msg1) && e.contains(msg2))
+    }
+
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      checkAnswer(
+        sql(
+          """
+            |SELECT b FROM testData2
+            |WHERE EXISTS(SELECT a FROM testData3)
+          """.stripMargin),
+        Row(1) :: Row(1) :: Row(1) :: Row(2) :: Row(2) :: Row(2) :: Nil)
     }
   }
 

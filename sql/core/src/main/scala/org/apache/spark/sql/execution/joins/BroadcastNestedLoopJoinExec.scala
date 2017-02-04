@@ -341,25 +341,27 @@ case class BroadcastNestedLoopJoinExec(
   }
 
   protected override def doPrepare(): Unit = {
-    if (!sqlContext.conf.crossJoinEnabled) { joinType match {
-      case Cross => // Do nothing
-      case Inner =>
-        if (condition.isEmpty) {
+    if (!sqlContext.conf.crossJoinEnabled) {
+      joinType match {
+        case Cross => // Do nothing
+        case Inner =>
+          if (condition.isEmpty) {
+            throw new AnalysisException(
+              s"""Detected cartesian product for INNER join between logical plans
+                 |${left.treeString(false).trim}
+                 |and
+                 |${right.treeString(false).trim}
+                 |Join condition is missing or trivial.
+                 |Use the CROSS JOIN syntax to allow cartesian products between these relations.
+               """.stripMargin)
+          }
+        case _ if !withinBroadcastThreshold || condition.isEmpty =>
           throw new AnalysisException(
-            s"""Detected cartesian product for INNER join between logical plans
-               |${left.treeString(false).trim}
-               |and
-               |${right.treeString(false).trim}
-               |Join condition is missing or trivial.
-               |Use the CROSS JOIN syntax to allow cartesian products between these relations.
+            s"""Both sides of this join are outside the broadcasting threshold and
+               |computing it could be prohibitively expensive. To explicitly enable it,
+               |Please set ${SQLConf.CROSS_JOINS_ENABLED.key} = true.
              """.stripMargin)
-        }
-      case _ if !withinBroadcastThreshold || condition.isEmpty =>
-        throw new AnalysisException(
-          s"""Both sides of this join are outside the broadcasting threshold and
-             |computing it could be prohibitively expensive. To explicitly enable it,
-             |Please set ${SQLConf.CROSS_JOINS_ENABLED.key} = true.
-           """.stripMargin)
+        case _ =>
       }
     }
     super.doPrepare()
