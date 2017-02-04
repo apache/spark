@@ -328,7 +328,6 @@ private[spark] object HiveUtils extends Logging {
         sparkConf = conf,
         hadoopConf = hadoopConf,
         config = configurations,
-        ivyPath = conf.getOption("spark.jars.ivy"),
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else {
