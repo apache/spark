@@ -51,51 +51,6 @@ class ComplexTypesSuite extends PlanTest{
 
   lazy val relation = LocalRelation(idAtt )
 
-  implicit class ComplexTypeDslSupport(e : Expression) {
-    def getStructField(f : String): GetStructField = {
-      assert(e.resolved)
-      assert(e.dataType.isInstanceOf[StructType])
-      val structType = e.dataType.asInstanceOf[StructType]
-      val ord = structType.fieldNames.indexOf(f)
-      assert(-1 != ord)
-      GetStructField(e, ord, Some(f))
-    }
-
-    def getArrayStructField(f : String) : Expression = {
-      assert(e.resolved)
-      assert(e.dataType.isInstanceOf[ArrayType])
-      val arrType = e.dataType.asInstanceOf[ArrayType]
-      assert(arrType.elementType.isInstanceOf[StructType])
-      val structType = arrType.elementType.asInstanceOf[StructType]
-      val ord = structType.fieldNames.indexOf(f)
-      assert(-1 != ord)
-      GetArrayStructFields(e, structType(ord), ord, 1, arrType.containsNull)
-    }
-
-    def getArrayItem(i : Int) : GetArrayItem = {
-      assert(e.resolved)
-      assert(e.dataType.isInstanceOf[ArrayType])
-      GetArrayItem(e, Literal(i))
-    }
-
-    def getMapValue(k : Expression) : Expression = {
-      assert(e.resolved)
-      assert(e.dataType.isInstanceOf[MapType])
-      val mapType = e.dataType.asInstanceOf[MapType]
-      assert(k.dataType == mapType.keyType)
-      GetMapValue(e, k)
-    }
-
-    def addCaseWhen( cond : Expression, v : Expression) : Expression = {
-      assert(e.resolved)
-      assert(e.isInstanceOf[CaseWhen])
-      assert(cond.dataType == BooleanType)
-      assert(v.dataType == e.dataType)
-      val CaseWhen(branches, default) = e
-      CaseWhen( branches :+ (cond, v), default)
-    }
-  }
-
   test("explicit get from namedStruct") {
     val query = relation
       .select(
