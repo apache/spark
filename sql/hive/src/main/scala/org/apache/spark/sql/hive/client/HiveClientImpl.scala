@@ -781,7 +781,7 @@ private[hive] class HiveClientImpl(
 }
 
 private[hive] object HiveClientImpl {
-  private lazy val shimDefault = IsolatedClientLoader.hiveVersion(
+  private lazy val shimForHiveExecution = IsolatedClientLoader.hiveVersion(
     HiveUtils.hiveExecutionVersion) match {
       case hive.v12 => new Shim_v0_12()
       case hive.v13 => new Shim_v0_13()
@@ -829,8 +829,13 @@ private[hive] object HiveClientImpl {
     Option(hc.getComment).map(field.withComment).getOrElse(field)
   }
 
-  def toHiveTable(table: CatalogTable, conf: Option[HiveConf] = None, shim: Shim = shimDefault)
-    : HiveTable = {
+  // the default value shimForHiveExecution is only used for hive execution,
+  // a Shim instance with a specific metastore version should be passed to this function
+  // to interact with metastore
+  def toHiveTable(
+      table: CatalogTable,
+      conf: Option[HiveConf] = None,
+      shim: Shim = shimForHiveExecution): HiveTable = {
     val hiveTable = new HiveTable(table.database, table.identifier.table)
     // For EXTERNAL_TABLE, we also need to set EXTERNAL field in the table properties.
     // Otherwise, Hive metastore will change the table to a MANAGED_TABLE.
