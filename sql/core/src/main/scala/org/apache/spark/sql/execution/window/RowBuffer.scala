@@ -17,99 +17,33 @@
 
 package org.apache.spark.sql.execution.window
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, UnsafeSorterIterator}
-
+import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 
 /**
- * The interface of row buffer for a partition. In absence of a buffer pool (with locking), the
+ * Represents row buffer for a partition. In absence of a buffer pool (with locking), the
  * row buffer is used to materialize a partition of rows since we need to repeatedly scan these
  * rows in window function processing.
  */
-private[window] abstract class RowBuffer {
+private[window] class RowBuffer(appendOnlyExternalArray: ExternalAppendOnlyUnsafeRowArray) {
+  val iterator: Iterator[UnsafeRow] = appendOnlyExternalArray.generateIterator()
 
   /** Number of rows. */
-  def size: Int
+  def size: Int = appendOnlyExternalArray.length
 
   /** Return next row in the buffer, null if no more left. */
-  def next(): InternalRow
+  def next(): InternalRow = if (iterator.hasNext) iterator.next() else null
 
   /** Skip the next `n` rows. */
-  def skip(n: Int): Unit
-
-  /** Return a new RowBuffer that has the same rows. */
-  def copy(): RowBuffer
-}
-
-/**
- * A row buffer based on ArrayBuffer (the number of rows is limited).
- */
-private[window] class ArrayRowBuffer(buffer: ArrayBuffer[UnsafeRow]) extends RowBuffer {
-
-  private[this] var cursor: Int = -1
-
-  /** Number of rows. */
-  override def size: Int = buffer.length
-
-  /** Return next row in the buffer, null if no more left. */
-  override def next(): InternalRow = {
-    cursor += 1
-    if (cursor < buffer.length) {
-      buffer(cursor)
-    } else {
-      null
-    }
-  }
-
-  /** Skip the next `n` rows. */
-  override def skip(n: Int): Unit = {
-    cursor += n
-  }
-
-  /** Return a new RowBuffer that has the same rows. */
-  override def copy(): RowBuffer = {
-    new ArrayRowBuffer(buffer)
-  }
-}
-
-/**
- * An external buffer of rows based on UnsafeExternalSorter.
- */
-private[window] class ExternalRowBuffer(sorter: UnsafeExternalSorter, numFields: Int)
-  extends RowBuffer {
-
-  private[this] val iter: UnsafeSorterIterator = sorter.getIterator
-
-  private[this] val currentRow = new UnsafeRow(numFields)
-
-  /** Number of rows. */
-  override def size: Int = iter.getNumRecords()
-
-  /** Return next row in the buffer, null if no more left. */
-  override def next(): InternalRow = {
-    if (iter.hasNext) {
-      iter.loadNext()
-      currentRow.pointTo(iter.getBaseObject, iter.getBaseOffset, iter.getRecordLength)
-      currentRow
-    } else {
-      null
-    }
-  }
-
-  /** Skip the next `n` rows. */
-  override def skip(n: Int): Unit = {
+  def skip(n: Int): Unit = {
     var i = 0
-    while (i < n && iter.hasNext) {
-      iter.loadNext()
+    while (i < n && iterator.hasNext) {
+      iterator.next()
       i += 1
     }
   }
 
   /** Return a new RowBuffer that has the same rows. */
-  override def copy(): RowBuffer = {
-    new ExternalRowBuffer(sorter, numFields)
-  }
+  def copy(): RowBuffer = new RowBuffer(appendOnlyExternalArray)
 }
