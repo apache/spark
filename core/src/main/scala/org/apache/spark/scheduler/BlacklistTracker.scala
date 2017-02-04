@@ -177,7 +177,8 @@ private[scheduler] class BlacklistTracker (
         if (conf.get(config.BLACKLIST_KILL_ENABLED)) {
           allocationClient match {
             case Some(allocationClient) =>
-              logInfo(s"Killing blacklisted executor id $exec since spark.blacklist.kill is set.")
+              logInfo(s"Killing blacklisted executor id $exec " +
+                s"since spark.blacklist.killBlacklistedExecutors is set.")
               allocationClient.killExecutors(Seq(exec), true, true)
             case None =>
               logWarning(s"Not attempting to kill blacklisted executor id $exec " +
@@ -202,8 +203,8 @@ private[scheduler] class BlacklistTracker (
             allocationClient match {
               case Some(allocationClient) =>
                 logInfo(s"Killing all executors on blacklisted host $node " +
-                  s"since spark.blacklist.kill is set.")
-                if(allocationClient.killExecutorsOnHost(node) == false) {
+                  s"since spark.blacklist.killBlacklistedExecutors is set.")
+                if (allocationClient.killExecutorsOnHost(node) == false) {
                   logError(s"Killing executors on node $node failed.")
                 }
               case None =>
