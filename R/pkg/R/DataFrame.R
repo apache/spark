@@ -417,7 +417,7 @@ setMethod("coltypes",
                   type <- PRIMITIVE_TYPES[[specialtype]]
                 }
               }
-              type
+              type[[1]]
             })
 
             # Find which types don't have mapping to R
