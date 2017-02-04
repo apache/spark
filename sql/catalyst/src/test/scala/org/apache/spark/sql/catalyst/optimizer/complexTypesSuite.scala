@@ -33,7 +33,7 @@ import org.apache.spark.sql.types._
 */
 class ComplexTypesSuite extends PlanTest{
 
-  object Optimize extends RuleExecutor[LogicalPlan] {
+  object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("collapse projections", FixedPoint(10),
           CollapseProject) ::
@@ -50,9 +50,7 @@ class ComplexTypesSuite extends PlanTest{
 
   val idAtt = ('id).long.notNull
 
-  lazy val baseOptimizedPlan = LocalRelation(idAtt)
-
-  val idRef = baseOptimizedPlan.output.head
+  lazy val relation = LocalRelation(idAtt )
 
   implicit class ComplexTypeDslSupport(e : Expression) {
     def getStructField(f : String): GetStructField = {
@@ -99,399 +97,260 @@ class ComplexTypesSuite extends PlanTest{
     }
   }
 
-  test("explicit") {
-    val rel = baseOptimizedPlan.select(
-      CreateNamedStruct("att" :: idRef :: Nil).getStructField("att") as "outerAtt"
-   )
+  test("explicit get from namedStruct") {
+    val query = relation.select(GetStructField(CreateNamedStruct(Seq("att", 'id )), 0, None) as "outerAtt").analyze
+    val expected = relation.select('id as "outerAtt").analyze
 
-    assertResult(StructType(StructField("outerAtt", LongType, nullable = false) :: Nil))(rel.schema)
-
-    val optimized = Optimize execute rel
-
-    val expected = baseOptimizedPlan.select(idRef as "outerAtt")
-
-    comparePlans(optimized, expected)
+    comparePlans(Optimizer execute query, expected)
   }
 
   test("explicit get from named_struct- expression maintains original deduced alias") {
-    val rel = baseOptimizedPlan.select(
-      CreateNamedStruct("att" :: idRef :: Nil).getStructField("att")
-   ).analyze
-    assertResult(StructType(
-      StructField("named_struct(att, id).att", LongType, nullable = false) :: Nil
-    ))(rel.schema)
+    val query = relation
+      .select(GetStructField(CreateNamedStruct(Seq("att", 'id)), 0, None))
+      .analyze
 
-    val optimized = Optimize execute rel
+    val expected = relation
+      .select('id as "named_struct(att, id).att")
+      .analyze
 
-    val expected = baseOptimizedPlan.select(idRef as "named_struct(att, id).att")
-
-    comparePlans(optimized, expected)
+    comparePlans(Optimizer execute query, expected)
   }
 
   test("collapsed getStructField ontop of namedStruct") {
-    val rel = baseOptimizedPlan.select(
-      CreateNamedStruct("att" :: idRef :: Nil) as "struct1"
-    )
-    assertResult(
-      StructType(
-        StructField(
-          "struct1",
-          StructType(StructField("att", LongType, false) :: Nil),
-          false
-       ) :: Nil
-      )
-    )(rel.schema)
-
-    val struct1Ref = rel.output.head
-    val rel2 = rel.select(struct1Ref.getStructField("att").as("struct1Att"))
-
-    assertResult(
-      StructType(
-        StructField("struct1Att", LongType, false) :: Nil
-     )
-    )(rel2.schema)
-
-    val optimized = Optimize execute rel2
-    val expected =
-      baseOptimizedPlan.select(idRef as "struct1Att" )
-
-    comparePlans(optimized, expected)
+    val query = relation
+      .select(CreateNamedStruct(Seq("att", 'id)) as "struct1")
+      .select(GetStructField('struct1, 0, None) as "struct1Att")
+      .analyze
+    val expected = relation.select('id as "struct1Att").analyze
+    comparePlans(Optimizer execute query, expected)
   }
 
   test("collapse multiple CreateNamedStruct/GetStructField pairs") {
-    val rel = baseOptimizedPlan.select(
-      CreateNamedStruct(
-        Literal("att1") :: idRef ::
-        Literal("att2") :: (idRef * idRef) ::
-        Nil) as "struct1"
-   )
-    assertResult(
-      StructType(
-        StructField(
-          "struct1",
-          StructType(
-            StructField("att1", LongType, false) ::
-            StructField("att2", LongType, false) :: Nil
-          ),
-          false
-        ) :: Nil
-      )
-    )(rel.schema)
+    val query = relation
+      .select(
+        CreateNamedStruct(Seq(
+          "att1", 'id,
+          "att2", 'id * 'id)) as "struct1")
+      .select(
+        GetStructField('struct1, 0, None) as "struct1Att1",
+        GetStructField('struct1, 1, None) as "struct1Att2")
+      .analyze
 
-    val structRef = rel.output.head
-
-    val rel2 = rel.select(
-      structRef.getStructField("att1").as("struct1Att1"),
-      structRef.getStructField("att2").as("struct1Att2"))
-
-    assertResult(
-      StructType(
-        StructField("struct1Att1", LongType, false) ::
-        StructField("struct1Att2", LongType, false) ::
-        Nil
-     )
-    )(rel2.schema)
-
-    val optimized = Optimize execute rel2
     val expected =
-      baseOptimizedPlan.select(
-        idRef as "struct1Att1",
-        (idRef * idRef) as "struct1Att2"
-     )
+      relation.
+        select(
+          'id as "struct1Att1",
+          ('id * 'id) as "struct1Att2")
+      .analyze
 
-    comparePlans(optimized, expected)
+    comparePlans(Optimizer execute query, expected)
   }
 
   test("collapsed2 - deduced names") {
-    val rel = baseOptimizedPlan.select(
-      CreateNamedStruct(
-        Literal("att1") :: idRef ::
-        Literal("att2") :: (idRef * idRef) ::
-        Nil
-     ) as "struct1"
-   ).analyze
-    assertResult(
-      StructType(
-        StructField(
-          "struct1",
-          StructType(
-            StructField("att1", LongType, false) ::
-            StructField("att2", LongType, false) :: Nil
-          ),
-          false
-        ) :: Nil
-      )
-    )(rel.schema)
-    val structRef = rel.output.head
-    val rel2 = rel.select(
-      structRef.getStructField("att1"),
-      structRef.getStructField("att2")).analyze
+    val query = relation
+      .select(
+        CreateNamedStruct(Seq(
+          "att1", 'id,
+          "att2", 'id * 'id)) as "struct1")
+      .select(
+        GetStructField('struct1, 0, None),
+        GetStructField('struct1, 1, None))
+      .analyze
 
-    assertResult(
-      StructType(
-        StructField("struct1.att1", LongType, false) ::
-        StructField("struct1.att2", LongType, false) ::
-        Nil
-      )
-    )(rel2.schema)
-
-    val optimized = Optimize execute rel2
     val expected =
-      baseOptimizedPlan.select(
-        idRef as "struct1.att1",
-        (idRef * idRef) as "struct1.att2"
-     )
+      relation.
+        select(
+          'id as "struct1.att1",
+          ('id * 'id) as "struct1.att2")
+        .analyze
 
-    comparePlans(optimized, expected)
+    comparePlans(Optimizer execute query, expected)
   }
 
   test("simplified array ops") {
-    val rel = baseOptimizedPlan.select(
-      CreateArray(
-        CreateNamedStruct(
-          Literal("att1") :: idRef ::
-          Literal("att2") :: (idRef * idRef) ::
-          Nil
-       ) ::
-        CreateNamedStruct(
-          Literal("att1") :: (idRef + 1L) ::
-            Literal("att2") :: ((idRef + 1L) * (idRef + 1L)) ::
-            Nil
-       ) ::
-        Nil
-     ) as "arr"
-   )
-    assertResult(
-      StructType(
-        StructField(
-          "arr",
-          ArrayType(
-            StructType(
-              StructField("att1", LongType, false) ::
-              StructField("att2", LongType, false) ::
-              Nil
-            ),
-            false
-          ),
-          nullable = false
-        ) :: Nil
-      )
-    )(rel.schema)
-
-    val arrRef = rel.output.head
-    val rel2 = rel.select(
-      arrRef.getArrayStructField("att1") as "a1",
-      arrRef.getArrayItem(1) as "a2",
-      arrRef.getArrayItem(1).getStructField("att1") as "a3",
-      arrRef.getArrayStructField("att1").getArrayItem(1) as "a4"
-   )
-
-    assertResult(
-      StructType(
-        StructField("a1", ArrayType(LongType, false), nullable = false) ::
-          StructField("a2",
-            StructType(
-              StructField("att1", LongType, nullable = false) ::
-              StructField("att2", LongType, nullable = false) ::
-              Nil
-           ),
-            nullable = true
-         ) ::
-          StructField("a3", LongType, nullable = true) ::
-          StructField("a4", LongType, nullable = true) ::
-          Nil
-     )
-    )(rel2.schema)
-
-    val optimized = Optimize execute rel2
-    val expected =
-      baseOptimizedPlan.select(
-        CreateArray(idRef :: idRef + 1L :: Nil) as "a1",
-        CreateNamedStruct(
-          "att1" :: (idRef + 1L) ::
-          Literal("att2") :: ((idRef + 1L) * (idRef + 1L)) ::
-          Nil
-       ) as "a2",
-        (idRef + 1L) as "a3",
-        (idRef + 1L) as "a4"
-     )
-    comparePlans(optimized, expected)
+    val rel = relation.select(
+      CreateArray(Seq(
+        CreateNamedStruct(Seq(
+          "att1", 'id,
+          "att2", 'id * 'id)),
+        CreateNamedStruct(Seq(
+          "att1", 'id + 1,
+          "att2", ('id + 1) * ('id + 1))
+       ))
+      ) as "arr"
+    )
+    val query = rel
+      .select(
+        GetArrayStructFields('arr, StructField("att1", LongType, false), 0, 1, false) as "a1",
+        GetArrayItem('arr, 1) as "a2",
+        GetStructField(GetArrayItem('arr, 1), 0, None) as "a3",
+        GetArrayItem(GetArrayStructFields('arr, StructField("att1", LongType, false), 0, 1, false), 1) as "a4")
+      .analyze
+    
+    val expected = relation
+      .select(
+        CreateArray(Seq('id, 'id + 1L)) as "a1",
+        CreateNamedStruct(Seq(
+          "att1", ('id + 1L),
+          "att2", (('id + 1L) * ('id + 1L)))) as "a2",
+        ('id + 1L) as "a3",
+        ('id + 1L) as "a4")
+      .analyze
+    comparePlans(Optimizer execute query, expected)
   }
 
   test("simplify map ops") {
-    val rel = baseOptimizedPlan.select(
-      CreateMap(
-        Literal("r1") ::
-        CreateNamedStruct(Literal("att1") :: idRef :: Nil) ::
-        Literal("r2") ::
-        CreateNamedStruct(Literal("att1") :: (idRef + 1L) :: Nil)
-        :: Nil
-     ) as "m"
-   )
-    assertResult(
-      StructType(
-        StructField(
-          "m",
-          MapType(
-            StringType,
-            StructType(StructField ("att1", LongType, nullable = false) :: Nil),
-            valueContainsNull = false
-         ),
-          nullable = false
-       )
-        :: Nil
-     )
-    )(rel.schema)
-
-    val mapRef = rel.output.head
-
-    val rel2 = rel.select(
-      mapRef.getMapValue("r1") as "a1",
-      mapRef.getMapValue("r1").getStructField("att1") as "a2",
-      mapRef.getMapValue("r32") as "a3",
-      mapRef.getMapValue("r32").getStructField("att1") as "a4"
-   )
-    val optimized = Optimize execute rel2
+    val rel = relation
+      .select(
+        CreateMap(Seq(
+          "r1", CreateNamedStruct(Seq("att1",'id)),
+          "r2", CreateNamedStruct(Seq("att1", ('id + 1L))))) as "m")
+    val query = rel
+      .select(
+        GetMapValue('m, "r1") as "a1",
+        GetStructField(GetMapValue('m, "r1"), 0, None) as "a2",
+        GetMapValue('m, "r32") as "a3",
+        GetStructField(GetMapValue('m, "r32"), 0, None) as "a4")
+      .analyze
 
     val expected =
-      baseOptimizedPlan.select(
-        CreateNamedStruct("att1" :: idRef:: Nil) as "a1",
-        idRef as "a2",
+      relation.select(
+        CreateNamedStruct(Seq("att1", 'id)) as "a1",
+        'id as "a2",
         Literal.create(
           null,
           StructType(
             StructField("att1", LongType, nullable = false) :: Nil
-         )
-       ) as "a3",
-        Literal.create(null, LongType) as "a4"
-     )
-    comparePlans(optimized, expected)
+          )
+        ) as "a3",
+        Literal.create(null, LongType) as "a4")
+      .analyze
+    comparePlans(Optimizer execute query, expected)
   }
 
   test("simplify map ops, constant lookup, dynamic keys") {
-    val rel = baseOptimizedPlan.select(
-      CreateMap(
-        idRef :: (idRef + 1L) ::
-        (idRef + 1L) :: (idRef + 2L) ::
-        (idRef + 2L) :: (idRef + 3L) ::
-        Literal(13L) :: idRef ::
-        (idRef + 3L) :: (idRef + 4L) ::
-        (idRef + 4L) :: (idRef + 5L)::
-        Nil
-     ).getMapValue(13L) as "a"
-   )
-    val optimized = Optimize execute rel
-    val expected = baseOptimizedPlan.select(
-      CaseKeyWhen(13L,
-        idRef :: (idRef + 1L) ::
-          (idRef + 1L) :: (idRef + 2L) ::
-          (idRef + 2L) :: (idRef + 3L) ::
-          Nil
-      ).addCaseWhen(Literal(true), idRef)
-      as "a"
-   )
-    comparePlans(optimized, expected)
+    val query = relation.select(
+      GetMapValue(
+        CreateMap(Seq(
+          'id, ('id + 1L),
+          ('id + 1L), ('id + 2L),
+          ('id + 2L), ('id + 3L),
+          Literal(13L), 'id,
+          ('id + 3L), ('id + 4L),
+          ('id + 4L), ('id + 5L))),
+        13L) as "a")
+      .analyze
+
+    val expected = relation
+      .select(
+        CaseWhen(Seq(
+          (EqualTo(13L, 'id), ('id + 1L)),
+          (EqualTo(13L, ('id + 1L)), ('id + 2L)),
+          (EqualTo(13L, ('id + 2L)), ('id + 3L)),
+          (Literal(true), 'id))) as "a")
+      .analyze
+    comparePlans(Optimizer execute query, expected)
   }
 
   test("simplify map ops, dynamic lookup, dynamic keys, lookup is equivalent to one of the keys") {
-    val rel = baseOptimizedPlan.select(
-      CreateMap(
-        idRef :: (idRef + 1L) ::
-        (idRef + 1L) :: (idRef + 2L) ::
-        (idRef + 2L) :: (idRef + 3L) ::
-        (idRef + 3L) :: (idRef + 4L) ::
-        (idRef + 4L) :: (idRef + 5L)::
-        Nil
-     ).getMapValue(idRef + 3L) as "a"
-   )
-    val optimized = Optimize execute rel
-    val expected = baseOptimizedPlan.select(
-      CaseKeyWhen(idRef + 3L,
-        idRef :: (idRef + 1L) ::
-          (idRef + 1L) :: (idRef + 2L) ::
-          (idRef + 2L) :: (idRef + 3L) ::
-          Nil
-      ).addCaseWhen(true, (idRef + 4L)) as "a"
-   )
-    comparePlans(optimized, expected)
+    val query = relation
+      .select(
+        GetMapValue(
+          CreateMap(Seq(
+            'id,('id + 1L),
+            ('id + 1L), ('id + 2L),
+            ('id + 2L), ('id + 3L),
+            ('id + 3L), ('id + 4L),
+            ('id + 4L), ('id + 5L))),
+            ('id + 3L)) as "a")
+      .analyze
+    val expected = relation
+      .select(
+        CaseWhen(Seq(
+          (EqualTo('id + 3L, 'id), ('id + 1L)),
+          (EqualTo('id + 3L, ('id + 1L)), ('id + 2L)),
+          (EqualTo('id + 3L, ('id + 2L)), ('id + 3L)),
+          (Literal(true), ('id + 4L)))) as "a")
+      .analyze
+    comparePlans(Optimizer execute query, expected)
   }
 
   test("simplify map ops, no positive match") {
-    val rel = baseOptimizedPlan.select(
-      CreateMap(
-        idRef :: (idRef + 1L) ::
-        (idRef + 1L) :: (idRef + 2L) ::
-        (idRef + 2L) :: (idRef + 3L) ::
-        (idRef + 3L) :: (idRef + 4L) ::
-        (idRef + 4L) :: (idRef + 5L)::
-        Nil
-     ).getMapValue(idRef + 30L) as "a"
-   )
-    val optimized = Optimize execute rel
-    val expected = baseOptimizedPlan.select(
-      CaseKeyWhen(idRef + 30L,
-        idRef :: (idRef + 1L) ::
-          (idRef + 1L) :: (idRef + 2L) ::
-          (idRef + 2L) :: (idRef + 3L) ::
-          (idRef + 3L) :: (idRef + 4L) ::
-          (idRef + 4L) :: (idRef + 5L)::
-          Nil
-      ) as "a"
-    )
-    comparePlans(optimized, expected)
+    val rel = relation
+      .select(
+        GetMapValue(
+          CreateMap(Seq(
+            'id, ('id + 1L),
+            ('id + 1L), ('id + 2L),
+            ('id + 2L), ('id + 3L),
+            ('id + 3L), ('id + 4L),
+            ('id + 4L), ('id + 5L))),
+          'id + 30L) as "a")
+      .analyze
+    val expected = relation.select(
+      CaseWhen(Seq(
+        (EqualTo('id + 30L, 'id), ('id + 1L)),
+        (EqualTo('id + 30L, ('id + 1L)), ('id + 2L)),
+        (EqualTo('id + 30L, ('id + 2L)), ('id + 3L)),
+        (EqualTo('id + 30L, ('id + 3L)), ('id + 4L)),
+        (EqualTo('id + 30L, ('id + 4L)), ('id + 5L)))) as "a")
+      .analyze
+    comparePlans(Optimizer execute rel, expected)
   }
 
   test("simplify map ops, constant lookup, mixed keys, eliminated constants") {
-    val rel = baseOptimizedPlan.select(
-      CreateMap(
-        idRef :: (idRef + 1L) ::
-        (idRef + 1L) :: (idRef + 2L) ::
-        (idRef + 2L) :: (idRef + 3L) ::
-        Literal(14L) :: idRef ::
-        (idRef + 3L) :: (idRef + 4L) ::
-        (idRef + 4L) :: (idRef + 5L)::
-        Nil
-     ).getMapValue(13L) as "a"
-   )
-    val optimized = Optimize execute rel
-    val expected = baseOptimizedPlan.select(
-      CaseKeyWhen(13L,
-        idRef :: (idRef + 1L) ::
-          (idRef + 1L) :: (idRef + 2L) ::
-          (idRef + 2L) :: (idRef + 3L) ::
-          (idRef + 3L) :: (idRef + 4L) ::
-          (idRef + 4L) :: (idRef + 5L) ::
-          Nil
-     ) as "a"
-   )
-    comparePlans(optimized, expected)
+    val rel = relation
+      .select(
+        GetMapValue(
+          CreateMap(Seq(
+            'id, ('id + 1L),
+            ('id + 1L), ('id + 2L),
+            ('id + 2L), ('id + 3L),
+            Literal(14L), 'id,
+            ('id + 3L), ('id + 4L),
+            ('id + 4L), ('id + 5L))),
+          13L) as "a")
+      .analyze
+
+    val expected = relation
+      .select(
+        CaseKeyWhen(13L,
+          Seq('id, ('id + 1L),
+            ('id + 1L), ('id + 2L),
+            ('id + 2L), ('id + 3L),
+            ('id + 3L), ('id + 4L),
+            ('id + 4L), ('id + 5L))) as "a")
+      .analyze
+
+    comparePlans(Optimizer execute rel, expected)
   }
 
   test("simplify map ops, potential dynamic match with null value + an absolute constant match") {
-    val rel = baseOptimizedPlan.select(
-      CreateMap(
-        idRef :: (idRef + 1L) ::
-          (idRef + 1L) :: (idRef + 2L) ::
-          (idRef + 2L) :: Literal.create(null, LongType) ::
-          Literal(2L) :: idRef ::
-          (idRef + 3L) :: (idRef + 4L) ::
-          (idRef + 4L) :: (idRef + 5L) ::
-          Nil
-      ).getMapValue( 2L ) as "a"
-    )
-    val optimized = Optimize execute rel
-    val expected = baseOptimizedPlan.select(
-      CaseKeyWhen(2L,
-        idRef :: (idRef + 1L) ::
+    val rel = relation
+      .select(
+        GetMapValue(
+          CreateMap(Seq(
+            'id, ('id + 1L),
+            ('id + 1L), ('id + 2L),
+            ('id + 2L), Literal.create(null, LongType),
+            Literal(2L), 'id,
+            ('id + 3L), ('id + 4L),
+            ('id + 4L), ('id + 5L))),
+          2L ) as "a")
+      .analyze
+
+    val expected = relation
+      .select(
+        CaseWhen(Seq(
+          (EqualTo(2L, 'id), ('id + 1L)),
           // these two are possible matches, we can't tell untill runtime
-          (idRef + 1L) :: (idRef + 2L) ::
-          (idRef + 2L) :: Literal.create(null, LongType) ::
+          (EqualTo(2L, ('id + 1L)), ('id + 2L)),
+          (EqualTo(2L, 'id + 2L), Literal.create(null, LongType)),
           // this is a definite match (two constants),
-          // but it cannot override a potential match with (idRef + 2L),
+          // but it cannot override a potential match with ('id + 2L),
           // which is exactly what [[Coalesce]] would do in this case.
-          Nil
-      ).addCaseWhen(true, idRef) as "a"
-    )
-    comparePlans(optimized, expected)
+          (Literal.TrueLiteral, 'id))) as "a")
+      .analyze
+    comparePlans(Optimizer execute rel, expected)
   }
 }
