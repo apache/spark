@@ -19,7 +19,6 @@ package org.apache.spark.ml.regression
 
 import scala.util.Random
 
-import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.Instance
@@ -752,7 +751,14 @@ class GeneralizedLinearRegressionSuite
       model1 <- glm(y ~ 1, family = poisson)
       model2 <- glm(y ~ 1, family = poisson, weights = w)
       as.vector(c(coef(model1), coef(model2)))
+      for (fam in c("gaussian", "poisson", "Gamma")) {
+        model1 <- glm(y ~ 1, family = fam)
+        model2 <- glm(y ~ 1, family = fam, weights = w)
+        print(as.vector(c(coef(model1), coef(model2))))
+      }
+      [1] 22 24
       [1] 3.091042 3.178054
+      [1] 0.04545455 0.04166667
      */
 
     val dataset = Seq(
@@ -762,27 +768,28 @@ class GeneralizedLinearRegressionSuite
       Instance(29.0, 4.0, Vectors.zeros(0))
     ).toDF()
 
-    val expected = Seq(3.091, 3.178)
+    val expected = Seq(22.0, 24.0, 3.0910, 3.1781, 0.0455, 0.0417)
 
     import GeneralizedLinearRegression._
 
     var idx = 0
-    for (useWeight <- Seq(false, true)) {
-      val trainer = new GeneralizedLinearRegression().setFamily("poisson")
-      if (useWeight) trainer.setWeightCol("weight")
-      val model = trainer.fit(dataset)
-      val actual = model.intercept
-      assert(actual ~== expected(idx) absTol 1E-3, "Model mismatch: intercept only GLM with " +
-        s"useWeight = $useWeight.")
-      assert(model.coefficients === new DenseVector(Array.empty[Double]))
-
-      idx += 1
+    for (family <- Seq("gaussian", "poisson", "gamma")) {
+      for (useWeight <- Seq(false, true)) {
+        val trainer = new GeneralizedLinearRegression().setFamily(family)
+        if (useWeight) trainer.setWeightCol("weight")
+        val model = trainer.fit(dataset)
+        val actual = model.intercept
+        assert(actual ~== expected(idx) absTol 1E-3, "Model mismatch: intercept only GLM with " +
+          s"useWeight = $useWeight and family = $family.")
+        assert(model.coefficients === new DenseVector(Array.empty[Double]))
+        idx += 1
+      }
     }
 
     // throw exception for empty model
     val trainer = new GeneralizedLinearRegression().setFitIntercept(false)
     withClue("Specified model is empty with neither intercept nor feature") {
-      intercept[SparkException] {
+      intercept[IllegalArgumentException] {
         trainer.fit(dataset)
       }
     }
