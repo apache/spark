@@ -62,16 +62,16 @@ private[r] object LinearSVCWrapper
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
 
-  def fit( // scalastyle:ignore
-           data: DataFrame,
-           formula: String,
-           regParam: Double,
-           maxIter: Int,
-           tol: Double,
-           standardization: Boolean,
-           threshold: Double,
-           weightCol: String
-         ): LinearSVCWrapper = {
+  def fit(
+      data: DataFrame,
+      formula: String,
+      regParam: Double,
+      maxIter: Int,
+      tol: Double,
+      standardization: Boolean,
+      threshold: Double,
+      weightCol: String
+      ): LinearSVCWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
