@@ -1051,19 +1051,21 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       testName: String,
       parquetSchema: String,
       catalystSchema: StructType,
-      expectedSchema: String): Unit = {
+      expectedSchema: String,
+      caseInsensitive: Boolean = true): Unit = {
     testSchemaClipping(testName, parquetSchema, catalystSchema,
-      MessageTypeParser.parseMessageType(expectedSchema))
+      MessageTypeParser.parseMessageType(expectedSchema), caseInsensitive)
   }
 
   private def testSchemaClipping(
       testName: String,
       parquetSchema: String,
       catalystSchema: StructType,
-      expectedSchema: MessageType): Unit = {
+      expectedSchema: MessageType,
+      caseInsensitive: Boolean): Unit = {
     test(s"Clipping - $testName") {
       val actual = ParquetReadSupport.clipParquetSchema(
-        MessageTypeParser.parseMessageType(parquetSchema), catalystSchema)
+        MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseInsensitive)
 
       try {
         expectedSchema.checkContains(actual)
@@ -1079,6 +1081,36 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       }
     }
   }
+
+  testSchemaClipping(
+    "falls back to case insensitive resolution",
+
+    parquetSchema =
+      """message root {
+        |  required group A {
+        |    optional int32 B;
+        |  }
+        |  optional int32 c;
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val nestedType = new StructType().add("b", IntegerType, nullable = true)
+      new StructType()
+        .add("a", nestedType, nullable = true)
+        .add("c", IntegerType, nullable = true)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group A {
+        |    optional int32 B;
+        |  }
+        |  optional int32 c;
+        |}
+      """.stripMargin,
+
+    caseInsensitive = true)
 
   testSchemaClipping(
     "simple nested struct",
@@ -1424,7 +1456,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     catalystSchema = new StructType(),
 
-    expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE)
+    expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE,
+
+    caseInsensitive = false)
 
   testSchemaClipping(
     "disjoint field sets",
