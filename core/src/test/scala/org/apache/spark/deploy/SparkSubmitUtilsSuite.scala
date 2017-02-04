@@ -143,13 +143,12 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("search for artifact at local repositories") {
     val main = new MavenCoordinate("my.great.lib", "mylib", "0.1")
     val dep = "my.great.dep:mydep:0.5"
-
     // Local M2 repositorya
     IvyTestUtils.withRepository(main, Some(dep), Some(SparkSubmitUtils.m2Path)) { repo =>
       val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
         main.toString,
         SparkSubmitUtils.buildIvySettings(None, None),
-        isTest = false)
+        isTest = true)
       assert(jarPath.indexOf("mylib") >= 0, "should find artifact")
       assert(jarPath.indexOf("mydep") >= 0, "should find dependency")
     }
@@ -260,7 +259,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       assert(jarPath.indexOf("mydep") >= 0, "should find dependency")
     }
   }
-  
+
   test("search for artifact taking order from user defined repositories to default repositories") {
     val main = new MavenCoordinate("a", "b", "0.1")
 
