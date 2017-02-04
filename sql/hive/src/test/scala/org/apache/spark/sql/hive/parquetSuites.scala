@@ -612,7 +612,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   test("Explicitly added partitions should be readable after load") {
     withTable("test_added_partitions") {
       withTempDir { src =>
-        val newPartitionDir = src.getCanonicalPath
+        val newPartitionDir = src.toURI.toString
         spark.range(2).selectExpr("cast(id as string)").toDF("a").write
           .mode("overwrite")
           .parquet(newPartitionDir)
@@ -645,7 +645,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   test("Non-partitioned table readable after load") {
     withTable("tab") {
       withTempDir { src =>
-        val newPartitionDir = src.getCanonicalPath
+        val newPartitionDir = src.toURI.toString
         spark.range(2).selectExpr("cast(id as string)").toDF("a").write
           .mode("overwrite")
           .parquet(newPartitionDir)

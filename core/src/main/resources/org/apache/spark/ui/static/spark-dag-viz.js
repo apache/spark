@@ -35,7 +35,7 @@
  * primitives (e.g. take, any SQL query).
  *
  * In the visualization, an RDD is expressed as a node, and its dependencies
- * as directed edges (from parent to child). operation scopes, stages, and
+ * as directed edges (from parent to child). Operation scopes, stages, and
  * jobs are expressed as clusters that may contain one or many nodes. These
  * clusters may be nested inside of each other in the scenarios described
  * above.
@@ -173,6 +173,7 @@ function renderDagViz(forJob) {
   });
 
   resizeSvg(svg);
+  interpretLineBreak(svg);
 }
 
 /* Render the RDD DAG visualization on the stage page. */
@@ -363,6 +364,27 @@ function resizeSvg(svg) {
 }
 
 /*
+ * Helper function to interpret line break for tag 'tspan'.
+ * For tag 'tspan', line break '/n' is display in UI as raw for both stage page and job page,
+ * here this function is to enable line break.
+ */
+function interpretLineBreak(svg) {
+  var allTSpan = svg.selectAll("tspan").each(function() {
+    node = d3.select(this);
+    var original = node[0][0].innerHTML;
+    if (original.indexOf("\\n") != -1) {
+      var arr = original.split("\\n");
+      var newNode = this.cloneNode(this);
+
+      node[0][0].innerHTML = arr[0];
+      newNode.innerHTML = arr[1];
+
+      this.parentNode.appendChild(newNode);
+    }
+  });
+}
+
+/*
  * (Job page only) Helper function to draw edges that cross stage boundaries.
  * We need to do this manually because we render each stage separately in dagre-d3.
  */
@@ -470,15 +492,23 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
   edgesContainer.append("path").datum(points).attr("d", line);
 }
 
+/*
+ * Replace `/n` with `<br/>`
+ */
+function replaceLineBreak(str) {
+    return str.replace("\\n", "<br/>");
+}
+
 /* (Job page only) Helper function to add tooltips for RDDs. */
 function addTooltipsForRDDs(svgContainer) {
   svgContainer.selectAll("g.node").each(function() {
     var node = d3.select(this);
-    var tooltipText = node.attr("name");
+    var tooltipText = replaceLineBreak(node.attr("name"));
     if (tooltipText) {
       node.select("circle")
         .attr("data-toggle", "tooltip")
         .attr("data-placement", "bottom")
+        .attr("data-html", "true") // to interpret line break, tooltipText is showing <circle> title
         .attr("title", tooltipText);
     }
     // Link tooltips for all nodes that belong to the same RDD

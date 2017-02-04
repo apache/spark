@@ -342,6 +342,15 @@ class SQLTests(ReusedPySparkTestCase):
         df = df.withColumn('b', udf(lambda x: 'x')(df.a))
         self.assertEqual(df.filter('b = "x"').collect(), [Row(a=1, b='x')])
 
+    def test_udf_in_filter_on_top_of_join(self):
+        # regression test for SPARK-18589
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1)])
+        right = self.spark.createDataFrame([Row(b=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.crossJoin(right).filter(f("a", "b"))
+        self.assertEqual(df.collect(), [Row(a=1, b=1)])
+
     def test_udf_without_arguments(self):
         self.spark.catalog.registerFunction("foo", lambda: "bar")
         [row] = self.spark.sql("SELECT foo()").collect()
@@ -434,6 +443,51 @@ class SQLTests(ReusedPySparkTestCase):
         filePath = "python/test_support/sql/people1.json"
         row = self.spark.read.json(filePath).select(sourceFile(input_file_name())).first()
         self.assertTrue(row[0].find("people1.json") != -1)
+
+    def test_udf_with_input_file_name_for_hadooprdd(self):
+        from pyspark.sql.functions import udf, input_file_name
+        from pyspark.sql.types import StringType
+
+        def filename(path):
+            return path
+
+        sameText = udf(filename, StringType())
+
+        rdd = self.sc.textFile('python/test_support/sql/people.json')
+        df = self.spark.read.json(rdd).select(input_file_name().alias('file'))
+        row = df.select(sameText(df['file'])).first()
+        self.assertTrue(row[0].find("people.json") != -1)
+
+        rdd2 = self.sc.newAPIHadoopFile(
+            'python/test_support/sql/people.json',
+            'org.apache.hadoop.mapreduce.lib.input.TextInputFormat',
+            'org.apache.hadoop.io.LongWritable',
+            'org.apache.hadoop.io.Text')
+
+        df2 = self.spark.read.json(rdd2).select(input_file_name().alias('file'))
+        row2 = df2.select(sameText(df2['file'])).first()
+        self.assertTrue(row2[0].find("people.json") != -1)
+
+    def test_udf_defers_judf_initalization(self):
+        # This is separate of  UDFInitializationTests
+        # to avoid context initialization
+        # when udf is called
+
+        from pyspark.sql.functions import UserDefinedFunction
+
+        f = UserDefinedFunction(lambda x: x, StringType())
+
+        self.assertIsNone(
+            f._judf_placeholder,
+            "judf should not be initialized before the first call."
+        )
+
+        self.assertIsInstance(f("foo"), Column, "UDF call should return a Column.")
+
+        self.assertIsNotNone(
+            f._judf_placeholder,
+            "judf should be initialized after UDF has been called."
+        )
 
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
@@ -841,11 +895,32 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual([Row(a=None, b=1, c=None, d=98)], df3.collect())
 
     def test_approxQuantile(self):
-        df = self.sc.parallelize([Row(a=i) for i in range(10)]).toDF()
+        df = self.sc.parallelize([Row(a=i, b=i+10) for i in range(10)]).toDF()
         aq = df.stat.approxQuantile("a", [0.1, 0.5, 0.9], 0.1)
         self.assertTrue(isinstance(aq, list))
         self.assertEqual(len(aq), 3)
         self.assertTrue(all(isinstance(q, float) for q in aq))
+        aqs = df.stat.approxQuantile(["a", "b"], [0.1, 0.5, 0.9], 0.1)
+        self.assertTrue(isinstance(aqs, list))
+        self.assertEqual(len(aqs), 2)
+        self.assertTrue(isinstance(aqs[0], list))
+        self.assertEqual(len(aqs[0]), 3)
+        self.assertTrue(all(isinstance(q, float) for q in aqs[0]))
+        self.assertTrue(isinstance(aqs[1], list))
+        self.assertEqual(len(aqs[1]), 3)
+        self.assertTrue(all(isinstance(q, float) for q in aqs[1]))
+        aqt = df.stat.approxQuantile(("a", "b"), [0.1, 0.5, 0.9], 0.1)
+        self.assertTrue(isinstance(aqt, list))
+        self.assertEqual(len(aqt), 2)
+        self.assertTrue(isinstance(aqt[0], list))
+        self.assertEqual(len(aqt[0]), 3)
+        self.assertTrue(all(isinstance(q, float) for q in aqt[0]))
+        self.assertTrue(isinstance(aqt[1], list))
+        self.assertEqual(len(aqt[1]), 3)
+        self.assertTrue(all(isinstance(q, float) for q in aqt[1]))
+        self.assertRaises(ValueError, lambda: df.stat.approxQuantile(123, [0.1, 0.9], 0.1))
+        self.assertRaises(ValueError, lambda: df.stat.approxQuantile(("a", 123), [0.1, 0.9], 0.1))
+        self.assertRaises(ValueError, lambda: df.stat.approxQuantile(["a", 123], [0.1, 0.9], 0.1))
 
     def test_corr(self):
         import math
@@ -1684,8 +1759,8 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEquals(spark.catalog.listTables(), [])
         self.assertEquals(spark.catalog.listTables("some_db"), [])
         spark.createDataFrame([(1, 1)]).createOrReplaceTempView("temp_tab")
-        spark.sql("CREATE TABLE tab1 (name STRING, age INT)")
-        spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT)")
+        spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+        spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
         tables = sorted(spark.catalog.listTables(), key=lambda t: t.name)
         tablesDefault = sorted(spark.catalog.listTables("default"), key=lambda t: t.name)
         tablesSomeDb = sorted(spark.catalog.listTables("some_db"), key=lambda t: t.name)
@@ -1763,8 +1838,8 @@ class SQLTests(ReusedPySparkTestCase):
         spark = self.spark
         spark.catalog._reset()
         spark.sql("CREATE DATABASE some_db")
-        spark.sql("CREATE TABLE tab1 (name STRING, age INT)")
-        spark.sql("CREATE TABLE some_db.tab2 (nickname STRING, tolerance FLOAT)")
+        spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+        spark.sql("CREATE TABLE some_db.tab2 (nickname STRING, tolerance FLOAT) USING parquet")
         columns = sorted(spark.catalog.listColumns("tab1"), key=lambda c: c.name)
         columnsDefault = sorted(spark.catalog.listColumns("tab1", "default"), key=lambda c: c.name)
         self.assertEquals(columns, columnsDefault)
@@ -1912,6 +1987,29 @@ class SQLTests2(ReusedPySparkTestCase):
         spark = SparkSession.builder.getOrCreate()
         df = spark.createDataFrame([(1, 2)], ["c", "c"])
         df.collect()
+
+
+class UDFInitializationTests(unittest.TestCase):
+    def tearDown(self):
+        if SparkSession._instantiatedSession is not None:
+            SparkSession._instantiatedSession.stop()
+
+        if SparkContext._active_spark_context is not None:
+            SparkContext._active_spark_contex.stop()
+
+    def test_udf_init_shouldnt_initalize_context(self):
+        from pyspark.sql.functions import UserDefinedFunction
+
+        UserDefinedFunction(lambda x: x, StringType())
+
+        self.assertIsNone(
+            SparkContext._active_spark_context,
+            "SparkContext shouldn't be initialized when UserDefinedFunction is created."
+        )
+        self.assertIsNone(
+            SparkSession._instantiatedSession,
+            "SparkSession shouldn't be initialized when UserDefinedFunction is created."
+        )
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):

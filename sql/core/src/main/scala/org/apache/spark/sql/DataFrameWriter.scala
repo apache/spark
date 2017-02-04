@@ -386,7 +386,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           case relation: CatalogRelation if DDLUtils.isHiveTable(relation.catalogTable) =>
             relation.catalogTable.identifier
         }
-        EliminateSubqueryAliases(catalog.lookupRelation(tableIdentWithDB)) match {
+
+        val tableRelation = df.sparkSession.table(tableIdentWithDB).queryExecution.analyzed
+        EliminateSubqueryAliases(tableRelation) match {
           // check if the table is a data source table (the relation is a BaseRelation).
           case LogicalRelation(dest: BaseRelation, _, _) if srcRelations.contains(dest) =>
             throw new AnalysisException(

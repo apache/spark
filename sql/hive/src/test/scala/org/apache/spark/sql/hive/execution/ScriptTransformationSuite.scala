@@ -55,7 +55,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     checkAnswer(
       rowsDf,
-      (child: SparkPlan) => new ScriptTransformation(
+      (child: SparkPlan) => new ScriptTransformationExec(
         input = Seq(rowsDf.col("a").expr),
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
@@ -71,7 +71,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     checkAnswer(
       rowsDf,
-      (child: SparkPlan) => new ScriptTransformation(
+      (child: SparkPlan) => new ScriptTransformationExec(
         input = Seq(rowsDf.col("a").expr),
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
@@ -88,7 +88,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
     val e = intercept[TestFailedException] {
       checkAnswer(
         rowsDf,
-        (child: SparkPlan) => new ScriptTransformation(
+        (child: SparkPlan) => new ScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
@@ -107,7 +107,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
     val e = intercept[TestFailedException] {
       checkAnswer(
         rowsDf,
-        (child: SparkPlan) => new ScriptTransformation(
+        (child: SparkPlan) => new ScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
@@ -126,7 +126,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
 
     val e = intercept[SparkException] {
       val plan =
-        new ScriptTransformation(
+        new ScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),

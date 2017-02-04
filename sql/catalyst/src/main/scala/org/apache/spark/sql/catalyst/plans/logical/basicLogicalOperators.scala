@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTypes}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{AggregateEstimation, ProjectEstimation}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{AggregateEstimation, EstimationUtils, ProjectEstimation}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -101,10 +101,17 @@ case class Generate(
 
   override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)
 
-  def qualifiedGeneratorOutput: Seq[Attribute] = qualifier.map { q =>
-    // prepend the new qualifier to the existed one
-    generatorOutput.map(a => a.withQualifier(Some(q)))
-  }.getOrElse(generatorOutput)
+  def qualifiedGeneratorOutput: Seq[Attribute] = {
+    val qualifiedOutput = qualifier.map { q =>
+      // prepend the new qualifier to the existed one
+      generatorOutput.map(a => a.withQualifier(Some(q)))
+    }.getOrElse(generatorOutput)
+    val nullableOutput = qualifiedOutput.map {
+      // if outer, make all attributes nullable, otherwise keep existing nullability
+      a => a.withNullability(outer || a.nullable)
+    }
+    nullableOutput
+  }
 
   def output: Seq[Attribute] = {
     if (join) child.output ++ qualifiedGeneratorOutput else qualifiedGeneratorOutput
@@ -534,7 +541,10 @@ case class Aggregate(
   override def computeStats(conf: CatalystConf): Statistics = {
     def simpleEstimation: Statistics = {
       if (groupingExpressions.isEmpty) {
-        super.computeStats(conf).copy(sizeInBytes = 1)
+        Statistics(
+          sizeInBytes = EstimationUtils.getOutputSize(output, outputRowCount = 1),
+          rowCount = Some(1),
+          isBroadcastable = child.stats(conf).isBroadcastable)
       } else {
         super.computeStats(conf)
       }
