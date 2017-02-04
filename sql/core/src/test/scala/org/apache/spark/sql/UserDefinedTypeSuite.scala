@@ -150,6 +150,10 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     MyLabeledPoint(1.0, new UDT.MyDenseVector(Array(0.1, 1.0))),
     MyLabeledPoint(0.0, new UDT.MyDenseVector(Array(0.2, 2.0)))).toDF()
 
+  private lazy val pointsRDD2 = Seq(
+    MyLabeledPoint(1.0, new UDT.MyDenseVector(Array(0.1, 1.0))),
+    MyLabeledPoint(0.0, new UDT.MyDenseVector(Array(0.3, 3.0)))).toDF()
+
   test("register user type: MyDenseVector for MyLabeledPoint") {
     val labels: RDD[Double] = pointsRDD.select('label).rdd.map { case Row(v: Double) => v }
     val labelsArrays: Array[Double] = labels.collect()
@@ -297,4 +301,9 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     sql("SELECT doOtherUDF(doSubTypeUDF(42))")
   }
 
+  test("except on UDT") {
+    checkAnswer(
+      pointsRDD.except(pointsRDD2),
+      Seq(Row(0.0, new UDT.MyDenseVector(Array(0.2, 2.0)))))
+  }
 }
