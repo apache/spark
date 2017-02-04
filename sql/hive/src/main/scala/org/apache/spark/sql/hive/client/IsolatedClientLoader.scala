@@ -111,13 +111,14 @@ private[hive] object IsolatedClientLoader extends Logging {
         s"org.apache.hadoop:hadoop-client:$hadoopVersion")
 
     // if repositories contain a local repo, it will not download jars from remote repo
-    val repos: Option[String] = Option(sparkConf.get("spark.jars.repositories")).map {
-      repo =>
+    val repos: Option[String] = Option(sparkConf.get("spark.jars.repositories", ""))
+      .filterNot(_.isEmpty).map { repo =>
         Seq(repo, "http://www.datanucleus.org/downloads/maven2").mkString(",")
     }.orElse(Some("http://www.datanucleus.org/downloads/maven2"))
 
-    val ivyRepoPath = Option(sparkConf.get("spark.jars.ivy"))
-    val ivySettings = Option(sparkConf.get("spark.jars.ivySettings")).map { ivySettingsFile =>
+    val ivyRepoPath = Option(sparkConf.get("spark.jars.ivy", "")).filterNot(_.isEmpty)
+    val ivySettings = Option(sparkConf.get("spark.jars.ivySettings", ""))
+      .filterNot(_.isEmpty).map { ivySettingsFile =>
       SparkSubmitUtils.loadIvySettings(ivySettingsFile, repos, ivyRepoPath)
     }.getOrElse {
       SparkSubmitUtils.buildIvySettings(repos, ivyRepoPath)
