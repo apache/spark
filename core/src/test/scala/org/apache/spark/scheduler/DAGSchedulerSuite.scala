@@ -27,9 +27,8 @@ import scala.util.control.NonFatal
 
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
-import org.apache.spark._
 
-import org.apache.spark.TaskState.TaskState
+import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
