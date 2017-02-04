@@ -588,7 +588,7 @@ private[spark] object HiveUtils extends Logging {
       // partition columns are part of the schema
       val partCols = hiveTable.getPartCols.asScala.map(fromHiveColumn)
       val schema = StructType(hiveTable.getCols.asScala.map(fromHiveColumn) ++ partCols)
-      table.copy(schema = schema, partitionColumnNames = partCols.map(_.name))
+      table.copy(schema = schema)
     }
   }
 }
