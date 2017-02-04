@@ -234,7 +234,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     }
     for (stageId <- jobData.stageIds) {
       stageIdToActiveJobIds.get(stageId).foreach { jobsUsingStage =>
-        jobsUsingStage.remove(jobEnd.jobId)
         if (jobsUsingStage.isEmpty) {
           stageIdToActiveJobIds.remove(stageId)
         }
