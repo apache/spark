@@ -57,6 +57,7 @@ private[spark] class TaskDescription(
     val properties: Properties,
     private var serializedTask_ : ByteBuffer) extends  Logging {
 
+  // Only be called in driver
   def this(
       taskId: Long,
       attemptNumber: Int,
@@ -72,7 +73,8 @@ private[spark] class TaskDescription(
       task_ = task
   }
 
-  private var task_ : Task[_] = null
+  // This is only used on the driver to pass the Task object between various scheduler components.
+  @transient private var task_ : Task[_] = null
 
   def serializedTask: ByteBuffer = {
     if (serializedTask_ == null) {
