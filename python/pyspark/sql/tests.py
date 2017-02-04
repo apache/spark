@@ -2069,8 +2069,8 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         from pyspark.sql import functions
         from datetime import date, datetime
         df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
-        parse_result = df.select(functions.to_date(functions.col("dateCol"))).first()['to_date(dateCol)']
-        self.assertEquals(date(2017, 1, 22), parse_result)
+        parse_result = df.select(functions.to_date(functions.col("dateCol"))).first()
+        self.assertEquals(date(2017, 1, 22), parse_result['to_date(dateCol)'])
 
     @unittest.skipIf(sys.version_info < (3, 3), "Unittest < 3.3 doesn't support mocking")
     def test_unbounded_frames(self):
