@@ -128,4 +128,13 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
       spark.sql("DROP TABLE IF EXISTS libsvmTable")
     }
   }
+
+  test("create libsvmTable table without schema and path") {
+    try {
+      val e = intercept[IOException](spark.sql("CREATE TABLE libsvmTable USING libsvm"))
+      assert(e.getMessage.contains("No input path specified for libsvm data"))
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS libsvmTable")
+    }
+  }
 }
