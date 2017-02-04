@@ -273,7 +273,7 @@ class VectorUDT extends UserDefinedType[Vector] {
 /**
  * Factory methods for [[org.apache.spark.mllib.linalg.Vector]].
  * We don't use the name `Vector` because Scala imports
- * [[scala.collection.immutable.Vector]] by default.
+ * `scala.collection.immutable.Vector` by default.
  */
 @Since("1.0.0")
 object Vectors {
