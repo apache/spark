@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.scalatest.Matchers
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -98,7 +97,12 @@ class ComplexTypesSuite extends PlanTest{
   }
 
   test("explicit get from namedStruct") {
-    val query = relation.select(GetStructField(CreateNamedStruct(Seq("att", 'id )), 0, None) as "outerAtt").analyze
+    val query = relation
+      .select(
+        GetStructField(
+          CreateNamedStruct(Seq("att", 'id )),
+          0,
+          None) as "outerAtt").analyze
     val expected = relation.select('id as "outerAtt").analyze
 
     comparePlans(Optimizer execute query, expected)
@@ -184,9 +188,15 @@ class ComplexTypesSuite extends PlanTest{
         GetArrayStructFields('arr, StructField("att1", LongType, false), 0, 1, false) as "a1",
         GetArrayItem('arr, 1) as "a2",
         GetStructField(GetArrayItem('arr, 1), 0, None) as "a3",
-        GetArrayItem(GetArrayStructFields('arr, StructField("att1", LongType, false), 0, 1, false), 1) as "a4")
+        GetArrayItem(
+          GetArrayStructFields('arr,
+            StructField("att1", LongType, false),
+            0,
+            1,
+            false),
+          1) as "a4")
       .analyze
-    
+
     val expected = relation
       .select(
         CreateArray(Seq('id, 'id + 1L)) as "a1",
@@ -203,7 +213,7 @@ class ComplexTypesSuite extends PlanTest{
     val rel = relation
       .select(
         CreateMap(Seq(
-          "r1", CreateNamedStruct(Seq("att1",'id)),
+          "r1", CreateNamedStruct(Seq("att1", 'id)),
           "r2", CreateNamedStruct(Seq("att1", ('id + 1L))))) as "m")
     val query = rel
       .select(
@@ -257,7 +267,7 @@ class ComplexTypesSuite extends PlanTest{
       .select(
         GetMapValue(
           CreateMap(Seq(
-            'id,('id + 1L),
+            'id, ('id + 1L),
             ('id + 1L), ('id + 2L),
             ('id + 2L), ('id + 3L),
             ('id + 3L), ('id + 4L),
