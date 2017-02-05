@@ -152,10 +152,7 @@ private[yarn] class ExecutorRunnable(
     }
 
     javaOpts += "-Djava.io.tmpdir=" +
-      new Path(
-        YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
-        YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR
-      )
+      new Path(Environment.PWD.$$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
 
     // Certain configs need to be passed here because they are needed before the Executor
     // registers with the Scheduler and transfers the spark configs. Since the Executor backend
@@ -206,9 +203,8 @@ private[yarn] class ExecutorRunnable(
     }.toSeq
 
     YarnSparkHadoopUtil.addOutOfMemoryErrorArgument(javaOpts)
-    val commands = prefixEnv ++ Seq(
-      YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java",
-      "-server") ++
+    val commands = prefixEnv ++
+      Seq(Environment.JAVA_HOME.$$() + "/bin/java", "-server") ++
       javaOpts ++
       Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
         "--driver-url", masterAddress,

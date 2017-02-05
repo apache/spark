@@ -67,19 +67,18 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   }
 
   test("default Yarn application classpath") {
-    getDefaultYarnApplicationClasspath should be(Some(Fixtures.knownDefYarnAppCP))
+    getDefaultYarnApplicationClasspath should be(Seq(Fixtures.knownDefYarnAppCP))
   }
 
   test("default MR application classpath") {
-    getDefaultMRApplicationClasspath should be(Some(Fixtures.knownDefMRAppCP))
+    getDefaultMRApplicationClasspath should be(Seq(Fixtures.knownDefMRAppCP))
   }
 
   test("resultant classpath for an application that defines a classpath for YARN") {
     withAppConf(Fixtures.mapYARNAppConf) { conf =>
       val env = newEnv
       populateHadoopClasspath(conf, env)
-      classpath(env) should be(
-        flatten(Fixtures.knownYARNAppCP, getDefaultMRApplicationClasspath))
+      classpath(env) should be(Fixtures.knownYARNAppCP +: getDefaultMRApplicationClasspath)
     }
   }
 
@@ -87,8 +86,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     withAppConf(Fixtures.mapMRAppConf) { conf =>
       val env = newEnv
       populateHadoopClasspath(conf, env)
-      classpath(env) should be(
-        flatten(getDefaultYarnApplicationClasspath, Fixtures.knownMRAppCP))
+      classpath(env) should be(getDefaultYarnApplicationClasspath :+ Fixtures.knownMRAppCP)
     }
   }
 
@@ -96,7 +94,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     withAppConf(Fixtures.mapAppConf) { conf =>
       val env = newEnv
       populateHadoopClasspath(conf, env)
-      classpath(env) should be(flatten(Fixtures.knownYARNAppCP, Fixtures.knownMRAppCP))
+      classpath(env) should be(Array(Fixtures.knownYARNAppCP, Fixtures.knownMRAppCP))
     }
   }
 
@@ -104,14 +102,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   private val USER = "local:/userJar"
   private val ADDED = "local:/addJar1,local:/addJar2,/addJar3"
 
-  private val PWD =
-    if (classOf[Environment].getMethods().exists(_.getName == "$$")) {
-      "{{PWD}}"
-    } else if (Utils.isWindows) {
-      "%PWD%"
-    } else {
-      Environment.PWD.$()
-    }
+  private val PWD = "{{PWD}}"
 
   test("Local jar URIs") {
     val conf = new Configuration()
@@ -399,15 +390,13 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
         "DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH",
         Seq[String]())(a => a.split(","))(a => a.toSeq)
 
-    val knownYARNAppCP = Some(Seq("/known/yarn/path"))
+    val knownYARNAppCP = "/known/yarn/path"
 
-    val knownMRAppCP = Some(Seq("/known/mr/path"))
+    val knownMRAppCP = "/known/mr/path"
 
-    val mapMRAppConf =
-      Map("mapreduce.application.classpath" -> knownMRAppCP.map(_.mkString(":")).get)
+    val mapMRAppConf = Map("mapreduce.application.classpath" -> knownMRAppCP)
 
-    val mapYARNAppConf =
-      Map(YarnConfiguration.YARN_APPLICATION_CLASSPATH -> knownYARNAppCP.map(_.mkString(":")).get)
+    val mapYARNAppConf = Map(YarnConfiguration.YARN_APPLICATION_CLASSPATH -> knownYARNAppCP)
 
     val mapAppConf = mapYARNAppConf ++ mapMRAppConf
   }
@@ -422,9 +411,6 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
   def classpath(env: MutableHashMap[String, String]): Array[String] =
     env(Environment.CLASSPATH.name).split(":|;|<CPS>")
-
-  def flatten(a: Option[Seq[String]], b: Option[Seq[String]]): Array[String] =
-    (a ++ b).flatten.toArray
 
   def getFieldValue[A, B](clazz: Class[_], field: String, defaults: => B)(mapTo: A => B): B = {
     Try(clazz.getField(field))
