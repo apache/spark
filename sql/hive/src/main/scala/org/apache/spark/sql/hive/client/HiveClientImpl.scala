@@ -800,7 +800,7 @@ private[hive] object HiveClientImpl {
   private def toOutputFormat(name: String) =
     Utils.classForName(name)
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
-  
+
   def toHiveColumn(c: StructField): FieldSchema = {
     val typeString = if (c.metadata.contains(HiveUtils.hiveTypeString)) {
       c.metadata.getString(HiveUtils.hiveTypeString)
