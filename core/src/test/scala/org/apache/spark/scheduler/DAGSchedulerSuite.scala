@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+// scalastyle:off
 package org.apache.spark.scheduler
 
 import java.util.Properties
@@ -2233,8 +2233,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0, 1))
 
-    resourceOffer(getTaskSetManagerByTask(taskSets(0).tasks(0)), "hostA", "0")
-    resourceOffer(getTaskSetManagerByTask(taskSets(0).tasks(1)), "hostA", "0")
+    mockTaskSchedulerImpl.resourceOffers(Seq(new WorkerOffer("0", "hostA", 2)).toIndexedSeq)
 
     taskFailed(getTaskSetManagerByTask(taskSets(0).tasks(0)), taskSets(0).tasks(0),
       FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"))
@@ -2243,8 +2242,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     taskSuccessful(getTaskSetManagerByTask(taskSets(0).tasks(1)),
       taskSets(0).tasks(1), makeMapStatus("hostA", 2))
 
-    resourceOffer(getTaskSetManagerByTask(taskSets(1).tasks(0)), "hostB", "1")
-    resourceOffer(getTaskSetManagerByTask(taskSets(1).tasks(1)), "hostB", "1")
+    mockTaskSchedulerImpl.resourceOffers(Seq(new WorkerOffer("0", "hostB", 2)).toIndexedSeq)
 
     taskSuccessful(getTaskSetManagerByTask(taskSets(1).tasks(0)),
       taskSets(1).tasks(0), makeMapStatus("hostB", 2))
