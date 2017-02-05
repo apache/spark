@@ -114,6 +114,14 @@ class UnivocityParserSuite extends SparkFunSuite {
     assert(exception.getMessage.contains("null value found but field _1 is not nullable."))
   }
 
+  test("Throws exception for invalid boolean value") {
+    val exception = intercept[IllegalArgumentException] {
+      assert(parser.makeConverter("_1", BooleanType, nullable = true, CSVOptions())
+        .apply("yes") == true)
+    }
+    assert(exception.getMessage.contains("For input string: \"yes\""))
+  }
+
   test("Types are cast correctly") {
     assert(parser.makeConverter("_1", ByteType).apply("10") == 10)
     assert(parser.makeConverter("_1", ShortType).apply("10") == 10)
@@ -122,6 +130,13 @@ class UnivocityParserSuite extends SparkFunSuite {
     assert(parser.makeConverter("_1", FloatType).apply("1.00") == 1.0)
     assert(parser.makeConverter("_1", DoubleType).apply("1.00") == 1.0)
     assert(parser.makeConverter("_1", BooleanType).apply("true") == true)
+
+    val trueValueOptions = CSVOptions("trueValue", "yes")
+    assert(parser.makeConverter("_1", BooleanType, nullable = true, trueValueOptions)
+      .apply("yes") == true)
+    val falseValueOptions = CSVOptions("falseValue", "no")
+    assert(parser.makeConverter("_1", BooleanType, nullable = true, falseValueOptions)
+      .apply("no") == false)
 
     val timestampsOptions = CSVOptions("timestampFormat", "dd/MM/yyyy hh:mm")
     val customTimestamp = "31/01/2015 00:00"

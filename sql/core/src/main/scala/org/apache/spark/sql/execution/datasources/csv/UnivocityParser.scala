@@ -110,7 +110,11 @@ private[csv] class UnivocityParser(
       }
 
     case _: BooleanType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(_.toBoolean)
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        if (datum.equalsIgnoreCase(options.trueValue)) true
+        else if (datum.equalsIgnoreCase(options.falseValue)) false
+        else datum.toBoolean
+      }
 
     case dt: DecimalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>

@@ -56,6 +56,10 @@ private[csv] class UnivocityGenerator(
     case dt: DataType =>
       (row: InternalRow, ordinal: Int) =>
         row.get(ordinal, dt).toString
+
+    case BooleanType =>
+      (row: InternalRow, ordinal: Int) =>
+        if (row.getBoolean(ordinal)) options.trueValue else options.falseValue
   }
 
   private def convertRow(row: InternalRow): Seq[String] = {

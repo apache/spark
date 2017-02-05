@@ -48,6 +48,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val commentsFile = "test-data/comments.csv"
   private val disableCommentsFile = "test-data/disable_comments.csv"
   private val boolFile = "test-data/bool.csv"
+  private val boolCustomFile = "test-data/bool-custom.csv"
   private val decimalFile = "test-data/decimal.csv"
   private val simpleSparseFile = "test-data/simple_sparse.csv"
   private val numbersFile = "test-data/numbers.csv"
@@ -133,6 +134,20 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .option("header", "true")
       .option("inferSchema", "true")
       .load(testFile(boolFile))
+
+    val expectedSchema = StructType(List(
+      StructField("bool", BooleanType, nullable = true)))
+    assert(result.schema === expectedSchema)
+  }
+
+  test("test inferring booleans with custom values") {
+    val result = spark.read
+      .format("csv")
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .option("trueValue", "yes")
+      .option("falseValue", "no")
+      .load(testFile(boolCustomFile))
 
     val expectedSchema = StructType(List(
       StructField("bool", BooleanType, nullable = true)))

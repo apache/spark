@@ -153,7 +153,7 @@ private[csv] object CSVInferSchema {
   }
 
   private def tryParseBoolean(field: String, options: CSVOptions): DataType = {
-    if ((allCatch opt field.toBoolean).isDefined) {
+    if (options.trueValue.equalsIgnoreCase(field) || options.falseValue.equalsIgnoreCase(field)) {
       BooleanType
     } else {
       stringType()

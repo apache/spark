@@ -100,6 +100,8 @@ private[csv] class CSVOptions(@transient private val parameters: CaseInsensitive
   val positiveInf = parameters.getOrElse("positiveInf", "Inf")
   val negativeInf = parameters.getOrElse("negativeInf", "-Inf")
 
+  val trueValue = parameters.getOrElse("trueValue", "true")
+  val falseValue = parameters.getOrElse("falseValue", "false")
 
   val compressionCodec: Option[String] = {
     val name = parameters.get("compression").orElse(parameters.get("codec"))
