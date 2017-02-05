@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{BLAS, Vector, VectorUDT, Vectors}
@@ -311,9 +312,9 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
 
       val wordVectors = instance.wordVectors.getVectors
-      val dataArray = wordVectors.toSeq.map { case (word, vector) => Data(word, vector) }.toArray
+      val dataSeq = wordVectors.toSeq.map { case (word, vector) => Data(word, vector) }
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(dataArray)
+      sparkSession.createDataFrame(dataSeq)
         .repartition(calculateNumberOfPartitions)
         .write
         .parquet(dataPath)
@@ -348,7 +349,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
 
       val dataPath = new Path(path, "data").toString
 
-      val oldModel = if (major.toInt < 2 || (major.toInt == 2 && minor.toInt < 2)) {
+      val oldModel = if (major < 2 || (major == 2 && minor < 2)) {
         val data = spark.read.parquet(dataPath)
           .select("wordIndex", "wordVectors")
           .head()
