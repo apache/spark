@@ -172,7 +172,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     }
     assert(e2.getMessage.contains("Relative Error must be non-negative"))
 
-    // dataset should be non-empty
+    // return null if the dataset is empty
     val res1 = df.selectExpr("*").limit(0)
       .stat.approxQuantile("singles", Array(q1, q2), epsilons.head)
     assert(res1 === null)
