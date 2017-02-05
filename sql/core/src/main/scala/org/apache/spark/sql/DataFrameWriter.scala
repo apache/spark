@@ -29,9 +29,10 @@ import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.{OutputParams, QueryExecutionListener}
+import org.apache.spark.sql.util.{OutputParams}
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
@@ -247,7 +248,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       options = extraOptions.toMap)
 
     val destination = source match {
-      case "jdbc" => extraOptions.get("dbtable")
+      case "jdbc" => extraOptions.get(JDBCOptions.JDBC_TABLE_NAME)
       case _ => extraOptions.get("path")
     }
     val outputParams = OutputParams(source, destination, extraOptions.toMap)
@@ -467,7 +468,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     )
     val qe = df.sparkSession.sessionState.executePlan(
       CreateTable(tableDesc, mode, Some(df.logicalPlan)))
-    val outputParams = new OutputParams(source, Some(tableIdent.unquotedString), extraOptions.toMap)
+    val outputParams = OutputParams(source, Some(tableIdent.unquotedString), extraOptions.toMap)
     withAction("saveAsTable", qe, outputParams)(qe.toRdd)
   }
 
