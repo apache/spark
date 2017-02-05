@@ -86,8 +86,8 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     val expected = repos.split(",").map(r => s"$r/")
     resolver.getResolvers.toArray.zipWithIndex.foreach { case (resolver: AbstractResolver, i) =>
       if (1 < i && i < 3) {
-        assert(resolver.getName === s"repo-$i")
-        assert(resolver.asInstanceOf[IBiblioResolver].getRoot === expected(i - 1))
+        assert(resolver.getName === s"repo-${i + 1}")
+        assert(resolver.asInstanceOf[IBiblioResolver].getRoot === expected(i))
       }
     }
   }
