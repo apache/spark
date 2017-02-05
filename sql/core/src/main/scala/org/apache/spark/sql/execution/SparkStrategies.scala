@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
+import org.apache.spark.sql.execution.script.{ScriptTransformationExec, ScriptTransformIOSchema}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQuery
@@ -309,6 +310,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         StreamingRelationExec(s.sourceName, s.output) :: Nil
       case s: StreamingExecutionRelation =>
         StreamingRelationExec(s.toString, s.output) :: Nil
+      case _ => Nil
+    }
+  }
+
+  object Scripts extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.ScriptTransformation(input, script, output, child, ioschema) =>
+        ScriptTransformationExec(
+          input,
+          script,
+          output,
+          planLater(child),
+          ScriptTransformIOSchema(ioschema)
+        ) :: Nil
       case _ => Nil
     }
   }

@@ -41,6 +41,7 @@ class SparkPlanner(
       Aggregation ::
       JoinSelection ::
       InMemoryScans ::
+      Scripts ::
       BasicOperators :: Nil)
 
   override protected def collectPlaceholders(plan: SparkPlan): Seq[(SparkPlan, LogicalPlan)] = {

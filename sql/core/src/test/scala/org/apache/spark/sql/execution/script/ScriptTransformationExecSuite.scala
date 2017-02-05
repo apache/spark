@@ -15,43 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark.sql.execution.script
 
-import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.{SparkException, TaskContext, TestUtils}
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StringType
 
-class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
-  import spark.implicits._
+class ScriptTransformationExecSuite extends SparkPlanTest with SharedSQLContext {
+  import testImplicits._
 
-  private val noSerdeIOSchema = HiveScriptIOSchema(
+  private val ioSchema = new ScriptTransformIOSchema(
     inputRowFormat = Seq.empty,
     outputRowFormat = Seq.empty,
-    inputSerdeClass = None,
-    outputSerdeClass = None,
-    inputSerdeProps = Seq.empty,
-    outputSerdeProps = Seq.empty,
-    recordReaderClass = None,
-    recordWriterClass = None,
     schemaLess = false
   )
 
-  private val serdeIOSchema = noSerdeIOSchema.copy(
-    inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
-    outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
-  )
-
-  test("cat without SerDe") {
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
-
+  test("cat") {
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     checkAnswer(
       rowsDf,
@@ -60,30 +45,12 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
-        ioschema = noSerdeIOSchema
+        ioschema = ioSchema
       ),
       rowsDf.collect())
   }
 
-  test("cat with LazySimpleSerDe") {
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
-
-    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
-    checkAnswer(
-      rowsDf,
-      (child: SparkPlan) => new ScriptTransformationExec(
-        input = Seq(rowsDf.col("a").expr),
-        script = "cat",
-        output = Seq(AttributeReference("a", StringType)()),
-        child = child,
-        ioschema = serdeIOSchema
-      ),
-      rowsDf.collect())
-  }
-
-  test("script transformation should not swallow errors from upstream operators (no serde)") {
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
-
+  test("script transformation should not swallow errors from upstream operators") {
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     val e = intercept[TestFailedException] {
       checkAnswer(
@@ -93,26 +60,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
-          ioschema = noSerdeIOSchema
-        ),
-        rowsDf.collect())
-    }
-    assert(e.getMessage().contains("intentional exception"))
-  }
-
-  test("script transformation should not swallow errors from upstream operators (with serde)") {
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
-
-    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
-    val e = intercept[TestFailedException] {
-      checkAnswer(
-        rowsDf,
-        (child: SparkPlan) => new ScriptTransformationExec(
-          input = Seq(rowsDf.col("a").expr),
-          script = "cat",
-          output = Seq(AttributeReference("a", StringType)()),
-          child = ExceptionInjectingOperator(child),
-          ioschema = serdeIOSchema
+          ioschema = ioSchema
         ),
         rowsDf.collect())
     }
@@ -120,8 +68,6 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
   }
 
   test("SPARK-14400 script transformation should fail for bad script command") {
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
-
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
 
     val e = intercept[SparkException] {
@@ -131,14 +77,15 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
-          ioschema = serdeIOSchema)
-      SparkPlanTest.executePlan(plan, hiveContext)
+          ioschema = ioSchema)
+      SparkPlanTest.executePlan(plan, sqlContext)
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
   }
 }
 
-private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {
+private [sql]
+case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().map { x =>
       assert(TaskContext.get() != null) // Make sure that TaskContext is defined.
@@ -148,6 +95,4 @@ private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExe
   }
 
   override def output: Seq[Attribute] = child.output
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
 }
