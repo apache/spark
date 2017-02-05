@@ -323,10 +323,8 @@ setMethod("names",
 setMethod("names<-",
           signature(x = "SparkDataFrame"),
           function(x, value) {
-            if (!is.null(value)) {
-              sdf <- callJMethod(x@sdf, "toDF", as.list(value))
-              dataFrame(sdf)
-            }
+            colnames(x) <- value
+            x
           })
 
 #' @rdname columns
