@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.client.HiveClientImpl._
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 import org.apache.spark.util.{CircularBuffer, Utils}
 
@@ -365,8 +366,8 @@ private[hive] class HiveClientImpl(
     Option(client.getTable(dbName, tableName, false)).map { h =>
       // Note: Hive separates partition columns and the schema, but for us the
       // partition columns are part of the schema
-      val partCols = h.getPartCols.asScala.map(HiveClientImpl.fromHiveColumn)
-      val schema = StructType(h.getCols.asScala.map(HiveClientImpl.fromHiveColumn) ++ partCols)
+      val partCols = h.getPartCols.asScala.map(fromHiveColumn)
+      val schema = StructType(h.getCols.asScala.map(fromHiveColumn) ++ partCols)
 
       // Skew spec, storage handler, and bucketing info can't be mapped to CatalogTable (yet)
       val unsupportedFeatures = ArrayBuffer.empty[String]
@@ -435,7 +436,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
-    client.createTable(HiveClientImpl.toHiveTable(table, Some(conf), shim), ignoreIfExists)
+    client.createTable(toHiveTable(table, Some(conf), shim), ignoreIfExists)
   }
 
   override def dropTable(
@@ -447,7 +448,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def alterTable(tableName: String, table: CatalogTable): Unit = withHiveState {
-    val hiveTable = HiveClientImpl.toHiveTable(table, Some(conf), shim)
+    val hiveTable = toHiveTable(table, Some(conf), shim)
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"${table.database}.$tableName"
     client.alterTable(qualifiedTableName, hiveTable)
@@ -516,10 +517,10 @@ private[hive] class HiveClientImpl(
       newSpecs: Seq[TablePartitionSpec]): Unit = withHiveState {
     require(specs.size == newSpecs.size, "number of old and new partition specs differ")
     val catalogTable = getTable(db, table)
-    val hiveTable = HiveClientImpl.toHiveTable(catalogTable, Some(conf), shim)
+    val hiveTable = toHiveTable(catalogTable, Some(conf), shim)
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
       val hivePart = getPartitionOption(catalogTable, oldSpec)
-        .map { p => HiveClientImpl.toHivePartition(p.copy(spec = newSpec), hiveTable) }
+        .map { p => toHivePartition(p.copy(spec = newSpec), hiveTable) }
         .getOrElse { throw new NoSuchPartitionException(db, table, oldSpec) }
       client.renamePartition(hiveTable, oldSpec.asJava, hivePart)
     }
@@ -529,9 +530,8 @@ private[hive] class HiveClientImpl(
       db: String,
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit = withHiveState {
-    val hiveTable = HiveClientImpl.toHiveTable(getTable(db, table), Some(conf), shim)
-    client.alterPartitions(table, newParts.map {
-      p => HiveClientImpl.toHivePartition(p, hiveTable) }.asJava)
+    val hiveTable = toHiveTable(getTable(db, table), Some(conf), shim)
+    client.alterPartitions(table, newParts.map { p => toHivePartition(p, hiveTable) }.asJava)
   }
 
   /**
@@ -558,9 +558,9 @@ private[hive] class HiveClientImpl(
   override def getPartitionOption(
       table: CatalogTable,
       spec: TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
-    val hiveTable = HiveClientImpl.toHiveTable(table, Some(conf), shim)
+    val hiveTable = toHiveTable(table, Some(conf), shim)
     val hivePartition = client.getPartition(hiveTable, spec.asJava, false)
-    Option(hivePartition).map(HiveClientImpl.fromHivePartition)
+    Option(hivePartition).map(fromHivePartition)
   }
 
   /**
@@ -570,12 +570,12 @@ private[hive] class HiveClientImpl(
   override def getPartitions(
       table: CatalogTable,
       spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = withHiveState {
-    val hiveTable = HiveClientImpl.toHiveTable(table, Some(conf), shim)
+    val hiveTable = toHiveTable(table, Some(conf), shim)
     val parts = spec match {
-      case None => shim.getAllPartitions(client, hiveTable).map(HiveClientImpl.fromHivePartition)
+      case None => shim.getAllPartitions(client, hiveTable).map(fromHivePartition)
       case Some(s) =>
         assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
-        client.getPartitions(hiveTable, s.asJava).asScala.map(HiveClientImpl.fromHivePartition)
+        client.getPartitions(hiveTable, s.asJava).asScala.map(fromHivePartition)
     }
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts
@@ -584,9 +584,8 @@ private[hive] class HiveClientImpl(
   override def getPartitionsByFilter(
       table: CatalogTable,
       predicates: Seq[Expression]): Seq[CatalogTablePartition] = withHiveState {
-    val hiveTable = HiveClientImpl.toHiveTable(table, Some(conf), shim)
-    val parts = shim.getPartitionsByFilter(client, hiveTable, predicates)
-      .map(HiveClientImpl.fromHivePartition)
+    val hiveTable = toHiveTable(table, Some(conf), shim)
+    val parts = shim.getPartitionsByFilter(client, hiveTable, predicates).map(fromHivePartition)
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts
   }
