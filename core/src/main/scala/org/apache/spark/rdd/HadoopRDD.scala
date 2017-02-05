@@ -314,8 +314,11 @@ class HadoopRDD[K, V](
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     val hsplit = split.asInstanceOf[HadoopPartition].inputSplit.value
-    val lsplit = hsplit.asInstanceOf[InputSplitWithLocationInfo]
-    val locs = HadoopRDD.convertSplitLocationInfo(lsplit.getLocationInfo)
+    val locs = hsplit match {
+      case lsplit: InputSplitWithLocationInfo =>
+        HadoopRDD.convertSplitLocationInfo(lsplit.getLocationInfo)
+      case _ => None
+    }
     locs.getOrElse(hsplit.getLocations.filter(_ != "localhost"))
   }
 
