@@ -212,7 +212,7 @@ WHERE  t1a >= (SELECT   min(t2a)
                WHERE    t2c = t1c
                GROUP BY t2c);
 
--- TC 02.07
+-- TC 02.07.01
 -- set op
 SELECT t1a
 FROM   t1
@@ -221,6 +221,22 @@ WHERE  t1a <= (SELECT   max(t2a)
                WHERE    t2c = t1c
                GROUP BY t2c)
 UNION ALL
+SELECT t1a
+FROM   t1
+WHERE  t1a >= (SELECT   min(t2a)
+               FROM     t2
+               WHERE    t2c = t1c
+               GROUP BY t2c);
+
+-- TC 02.07.02
+-- set op
+SELECT t1a
+FROM   t1
+WHERE  t1a <= (SELECT   max(t2a)
+               FROM     t2
+               WHERE    t2c = t1c
+               GROUP BY t2c)
+UNION DISTINCT
 SELECT t1a
 FROM   t1
 WHERE  t1a >= (SELECT   min(t2a)
