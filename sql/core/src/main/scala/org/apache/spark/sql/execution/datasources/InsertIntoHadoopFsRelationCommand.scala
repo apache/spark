@@ -132,6 +132,9 @@ case class InsertIntoHadoopFsRelationCommand(
             }
           }
         }
+
+        sparkSession.catalog.refreshByPath(outputPath.toString)
+
       }
 
       FileFormatWriter.write(
