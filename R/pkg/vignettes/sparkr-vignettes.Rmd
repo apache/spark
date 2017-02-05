@@ -488,6 +488,8 @@ SparkR supports the following machine learning models and algorithms.
 
 #### Clustering
 
+* Bisecting $k$-means
+
 * Gaussian Mixture Model (GMM)
 
 * $k$-means Clustering
@@ -738,6 +740,18 @@ summary(rfModel)
 predictions <- predict(rfModel, df)
 ```
 
+#### Bisecting k-Means
+
+`spark.bisectingKmeans` is a kind of [hierarchical clustering](https://en.wikipedia.org/wiki/Hierarchical_clustering) using a divisive (or "top-down") approach: all observations start in one cluster, and splits are performed recursively as one moves down the hierarchy.
+
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
+summary(model)
+fitted <- predict(model, df)
+head(select(fitted, "Sepal_Length", "prediction"))
+```
+
 #### Gaussian Mixture Model
 
 `spark.gaussianMixture` fits multivariate [Gaussian Mixture Model](https://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model) (GMM) against a `SparkDataFrame`. [Expectation-Maximization](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm) (EM) is used to approximate the maximum likelihood estimator (MLE) of the model.
@@ -923,9 +937,9 @@ The main method calls of actual computation happen in the Spark JVM of the drive
 
 Two kinds of RPCs are supported in the SparkR JVM backend: method invocation and creating new objects. Method invocation can be done in two ways.
 
-* `sparkR.invokeJMethod` takes a reference to an existing Java object and a list of arguments to be passed on to the method.
+* `sparkR.callJMethod` takes a reference to an existing Java object and a list of arguments to be passed on to the method.
 
-* `sparkR.invokeJStatic` takes a class name for static method and a list of arguments to be passed on to the method.
+* `sparkR.callJStatic` takes a class name for static method and a list of arguments to be passed on to the method.
 
 The arguments are serialized using our custom wire format which is then deserialized on the JVM side. We then use Java reflection to invoke the appropriate method.
 

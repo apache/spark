@@ -175,6 +175,8 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     val isotonicRegression = new MLlibIsotonicRegression().setIsotonic($(isotonic))
     val oldModel = isotonicRegression.run(instances)
 
+    if (handlePersistence) instances.unpersist()
+
     val model = copyValues(new IsotonicRegressionModel(uid, oldModel).setParent(this))
     instr.logSuccess(model)
     model
