@@ -182,7 +182,7 @@ WHERE  NOT EXISTS (SELECT *
                      WHERE  dept_id >= 30 
                             AND dept_id <= 50); 
 
--- Union in outer query and except,intersect in subqueries. 
+-- Union all in outer query and except,intersect in subqueries. 
 -- TC.02.04       
 SELECT * 
 FROM   emp 
@@ -193,6 +193,28 @@ WHERE  EXISTS (SELECT *
                  FROM   dept 
                  WHERE  dept_id > 50)
 UNION ALL 
+SELECT * 
+FROM   emp 
+WHERE  EXISTS (SELECT * 
+                 FROM   dept 
+                 WHERE  dept_id < 30 
+                 INTERSECT 
+                 SELECT * 
+                 FROM   dept 
+                 WHERE  dept_id >= 30 
+                        AND dept_id <= 50);
+
+-- Union in outer query and except,intersect in subqueries. 
+-- TC.02.05       
+SELECT * 
+FROM   emp 
+WHERE  EXISTS (SELECT * 
+                 FROM   dept 
+                 EXCEPT 
+                 SELECT * 
+                 FROM   dept 
+                 WHERE  dept_id > 50)
+UNION
 SELECT * 
 FROM   emp 
 WHERE  EXISTS (SELECT * 
