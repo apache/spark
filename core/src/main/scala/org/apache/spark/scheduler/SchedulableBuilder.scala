@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import java.io.{FileInputStream, InputStream}
 import java.util.{NoSuchElementException, Properties}
 
+import scala.util.control.NonFatal
 import scala.xml.{Node, XML}
 
 import org.apache.spark.SparkConf
@@ -55,6 +56,8 @@ private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
 private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   extends SchedulableBuilder with Logging {
 
+  private case class FileData(inputStream: InputStream, fileName: String)
+
   val schedulerAllocFile = conf.getOption("spark.scheduler.allocation.file")
   val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml"
   val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.pool"
@@ -69,19 +72,29 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   val DEFAULT_WEIGHT = 1
 
   override def buildPools() {
-    var is: Option[InputStream] = None
+    var fileData: Option[FileData] = None
     try {
-      is = Option {
-        schedulerAllocFile.map { f =>
-          new FileInputStream(f)
-        }.getOrElse {
-          Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_SCHEDULER_FILE)
+      fileData = schedulerAllocFile.map { f =>
+        Some(FileData(new FileInputStream(f), f))
+      }.getOrElse {
+        val is = Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_SCHEDULER_FILE)
+        if(is != null) Some(FileData(is, DEFAULT_SCHEDULER_FILE))
+        else {
+          logWarning(s"No Fair Scheduler file found.")
+          None
         }
       }
 
-      is.foreach { i => buildFairSchedulerPool(i) }
+      fileData.foreach { data =>
+        logInfo(s"Fair Scheduler file: ${data.fileName} is found successfully and will be parsed.")
+        buildFairSchedulerPool(data.inputStream)
+      }
+    } catch {
+      case NonFatal(t) =>
+        logError("Fair Scheduler can not be built.", t)
+        throw t
     } finally {
-      is.foreach(_.close())
+      fileData.foreach(_.inputStream.close())
     }
 
     // finally create "default" pool
@@ -173,4 +186,5 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     parentPool.addSchedulable(manager)
     logInfo("Added task set " + manager.name + " tasks to pool " + poolName)
   }
+
 }
