@@ -165,7 +165,8 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
 
   test("read varchar column from orc tables created by hive") {
     try {
-      // This is an ORC file with a single VARCHAR(10) column that's created using Hive 1.2.1
+      // This is an ORC file with a STRING, a CHAR(10) and a VARCHAR(10) column that has been
+      // created using Hive 1.2.1
       val hiveOrc = new File(Thread.currentThread().getContextClassLoader
         .getResource(s"data/files/orc/").getFile).toURI
       sql(
