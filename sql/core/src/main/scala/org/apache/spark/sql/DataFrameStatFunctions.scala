@@ -71,8 +71,12 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       col: String,
       probabilities: Array[Double],
       relativeError: Double): Array[Double] = {
-    StatFunctions.multipleApproxQuantiles(df.select(col).na.drop(),
-      Seq(col), probabilities, relativeError).head.toArray
+    val res = approxQuantile(Array(col), probabilities, relativeError)
+    if (res != null) {
+      res.head
+    } else {
+      null
+    }
   }
 
   /**
@@ -96,8 +100,12 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       cols: Array[String],
       probabilities: Array[Double],
       relativeError: Double): Array[Array[Double]] = {
-    StatFunctions.multipleApproxQuantiles(df.select(cols.map(col): _*).na.drop(), cols,
-      probabilities, relativeError).map(_.toArray).toArray
+    try {
+      StatFunctions.multipleApproxQuantiles(df.select(cols.map(col): _*).na.drop(), cols,
+        probabilities, relativeError).map(_.toArray).toArray
+    } catch {
+      case e: NoSuchElementException => null
+    }
   }
 
 
