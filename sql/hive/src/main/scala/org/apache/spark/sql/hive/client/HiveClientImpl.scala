@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CircularBuffer
 
@@ -83,7 +83,6 @@ private[hive] class HiveClientImpl(
   extends HiveClient
   with Logging {
 
-  import HiveUtils._
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   private val outputBuffer = new CircularBuffer()
 
