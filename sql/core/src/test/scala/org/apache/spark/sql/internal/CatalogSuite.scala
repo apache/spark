@@ -493,6 +493,21 @@ class CatalogSuite
     }
   }
 
+  test("clone SessionCatalog") {
+    // need to test tempTables are cloned
+    assert(spark.catalog.listTables().collect().isEmpty)
+
+    createTempTable("my_temp_table")
+    assert(spark.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))
+
+    val forkedSession = spark.newSession(inheritSessionState = true)
+    assert(forkedSession.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))
+
+    dropTable("my_temp_table")
+    assert(spark.catalog.listTables().collect().map(_.name).toSet == Set())
+    assert(forkedSession.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))
+  }
+
   // TODO: add tests for the rest of them
 
 }

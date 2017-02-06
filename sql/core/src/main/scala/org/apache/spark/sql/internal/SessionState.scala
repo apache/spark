@@ -42,7 +42,11 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  */
 private[sql] class SessionState(
     sparkSession: SparkSession,
-    existingSessionState: Option[SessionState] = None) {
+    existingSessionState: Option[SessionState]) {
+
+  private[sql] def this(sparkSession: SparkSession) = {
+    this(sparkSession, None)
+  }
 
   // Note: These are all lazy vals because they depend on each other (e.g. conf) and we
   // want subclasses to override some of the fields. Otherwise, we would get a lot of NPEs.
@@ -198,8 +202,8 @@ private[sql] class SessionState(
   }
 
   /**
-    * Get an identical copy of the `SessionState`.
-    */
+   * Get an identical copy of the `SessionState`.
+   */
   override def clone: SessionState = {
     new SessionState(sparkSession, Some(this))
   }

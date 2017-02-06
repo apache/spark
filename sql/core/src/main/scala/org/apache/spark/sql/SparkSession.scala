@@ -44,7 +44,7 @@ import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.types.{DataType, LongType, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.Utils
 
@@ -202,8 +202,6 @@ class SparkSession private(
   /**
    * Start a new session with isolated SQL configurations, temporary tables, registered
    * functions are isolated, but sharing the underlying `SparkContext` and cached data.
-   * If inherit is enabled, then SQL configurations, temporary tables, registered functions
-   * are copied over from parent `SparkSession`.
    *
    * @note Other than the `SparkContext`, all shared state is initialized lazily.
    * This method will force the initialization of the shared state to ensure that parent
@@ -212,11 +210,25 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def newSession(inheritSessionState: Boolean = false): SparkSession = {
+  def newSession(): SparkSession = {
+    new SparkSession(sparkContext, Some(sharedState))
+  }
+
+  /**
+   * Start a new session, sharing the underlying `SparkContext` and cached data.
+   * If inheritSessionState is enabled, then SQL configurations, temporary tables,
+   * registered functions are copied over from parent `SparkSession`.
+   *
+   * @note Other than the `SparkContext`, all shared state is initialized lazily.
+   * This method will force the initialization of the shared state to ensure that parent
+   * and child sessions are set up with the same shared state. If the underlying catalog
+   * implementation is Hive, this will initialize the metastore, which may take some time.
+   */
+  def newSession(inheritSessionState: Boolean): SparkSession = {
     if (inheritSessionState) {
       new SparkSession(sparkContext, Some(sharedState), Some(sessionState.clone))
     } else {
-      new SparkSession(sparkContext, Some(sharedState))
+      newSession()
     }
   }
 

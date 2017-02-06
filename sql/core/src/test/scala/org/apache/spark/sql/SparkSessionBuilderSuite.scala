@@ -18,6 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
@@ -122,5 +124,71 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
       session.sparkContext.hadoopConfiguration.unset(mySpecialKey)
       session.stop()
     }
+  }
+
+  test("fork new session and inherit a copy of the session state") {
+    val activeSession = SparkSession.builder().master("local").getOrCreate()
+    val forkedSession = activeSession.newSession(inheritSessionState = true)
+
+    assert(forkedSession ne activeSession)
+    assert(forkedSession.sessionState ne activeSession.sessionState)
+
+    forkedSession.stop()
+    activeSession.stop()
+  }
+
+  test("fork new session and inherit sql config options") {
+    val activeSession = SparkSession
+      .builder()
+      .master("local")
+      .config("spark-configb", "b")
+      .getOrCreate()
+    val forkedSession = activeSession.newSession(inheritSessionState = true)
+
+    assert(forkedSession ne activeSession)
+    assert(forkedSession.conf ne activeSession.conf)
+    assert(forkedSession.conf.get("spark-configb") == "b")
+
+    forkedSession.stop()
+    activeSession.stop()
+  }
+
+  test("fork new session and inherit function registry and udf") {
+    val activeSession = SparkSession.builder().master("local").getOrCreate()
+    activeSession.udf.register("strlenScala", (_: String).length + (_: Int))
+    val forkedSession = activeSession.newSession(inheritSessionState = true)
+
+    assert(forkedSession ne activeSession)
+    assert(forkedSession.sessionState.functionRegistry ne
+      activeSession.sessionState.functionRegistry)
+    assert(forkedSession.sessionState.functionRegistry.lookupFunction("strlenScala").nonEmpty)
+
+    forkedSession.stop()
+    activeSession.stop()
+  }
+
+  test("fork new session and inherit experimental methods") {
+    object DummyRule1 extends Rule[LogicalPlan] {
+      def apply(p: LogicalPlan): LogicalPlan = p
+    }
+    object DummyRule2 extends Rule[LogicalPlan] {
+      def apply(p: LogicalPlan): LogicalPlan = p
+    }
+    val optimizations = List(DummyRule1, DummyRule2)
+
+    val activeSession = SparkSession.builder().master("local").getOrCreate()
+    activeSession.experimental.extraOptimizations = optimizations
+
+    val forkedSession = activeSession.newSession(inheritSessionState = true)
+
+    assert(forkedSession ne activeSession)
+    assert(forkedSession.experimental ne activeSession.experimental)
+    assert(forkedSession.experimental.extraOptimizations ne
+      activeSession.experimental.extraOptimizations)
+    assert(forkedSession.experimental.extraOptimizations.toSet ==
+      activeSession.experimental.extraOptimizations.toSet)
+
+    forkedSession.stop()
+    activeSession.stop()
   }
 }

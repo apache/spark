@@ -1181,10 +1181,10 @@ class SessionCatalog(
   }
 
   /**
-    * Get an identical copy of the `SessionCatalog`.
-    * The temporary tables and function registry are retained.
-    * The table relation cache will not be populated.
-    */
+   * Get an identical copy of the `SessionCatalog`.
+   * The temporary tables and function registry are retained.
+   * The table relation cache will not be populated.
+   */
   override def clone: SessionCatalog = {
     val catalog = new SessionCatalog(
       externalCatalog,
