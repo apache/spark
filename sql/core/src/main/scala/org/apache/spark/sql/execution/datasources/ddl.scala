@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
 
 /**
  * Create a table and optionally insert some data into it. Note that this plan is unresolved and
- * has to be replaced by the concrete implementations during analyse.
+ * has to be replaced by the concrete implementations during analysis.
  *
  * @param tableDesc the metadata of the table to be created.
  * @param mode the data writing mode
