@@ -62,8 +62,15 @@ private[spark] object HiveUtils extends Logging {
   /** The version of hive used internally by Spark SQL. */
   val hiveExecutionVersion: String = "1.2.1"
 
-  private lazy val shimForHiveExecution = HiveClientImpl.shim(IsolatedClientLoader.hiveVersion(
-    HiveUtils.hiveExecutionVersion))
+  private lazy val shimForHiveExecution = IsolatedClientLoader.hiveVersion(
+    HiveUtils.hiveExecutionVersion) match {
+    case org.apache.spark.sql.hive.client.hive.v12 => new Shim_v0_12()
+    case org.apache.spark.sql.hive.client.hive.v13 => new Shim_v0_13()
+    case org.apache.spark.sql.hive.client.hive.v14 => new Shim_v0_14()
+    case org.apache.spark.sql.hive.client.hive.v1_0 => new Shim_v1_0()
+    case org.apache.spark.sql.hive.client.hive.v1_1 => new Shim_v1_1()
+    case org.apache.spark.sql.hive.client.hive.v1_2 => new Shim_v1_2()
+  }
 
   /**
    * The property key that is used to store the raw hive type string in the metadata of StructField.
