@@ -405,32 +405,4 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => Nil
     }
   }
-
-  object DDLStrategy extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
-        val cmd = CreateTableCommand(tableDesc, ifNotExists = mode == SaveMode.Ignore)
-        ExecutedCommandExec(cmd) :: Nil
-
-      case CreateTable(tableDesc, mode, None) =>
-        val cmd =
-          CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
-        ExecutedCommandExec(cmd) :: Nil
-
-      // CREATE TABLE ... AS SELECT ... for hive serde table is handled in hive module, by rule
-      // `CreateTables`
-
-      case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isDatasourceTable(tableDesc) =>
-        val cmd =
-          CreateDataSourceTableAsSelectCommand(
-            tableDesc,
-            mode,
-            query)
-        ExecutedCommandExec(cmd) :: Nil
-
-      case c: CreateTempViewUsing => ExecutedCommandExec(c) :: Nil
-
-      case _ => Nil
-    }
-  }
 }

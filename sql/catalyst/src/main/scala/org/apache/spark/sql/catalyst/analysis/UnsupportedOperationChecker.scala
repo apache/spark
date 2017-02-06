@@ -111,9 +111,6 @@ object UnsupportedOperationChecker {
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
             "streaming DataFrames/Datasets")
 
-        case _: InsertIntoTable =>
-          throwError("InsertIntoTable is not supported with streaming DataFrames/Datasets")
-
         case Join(left, right, joinType, _) =>
 
           joinType match {

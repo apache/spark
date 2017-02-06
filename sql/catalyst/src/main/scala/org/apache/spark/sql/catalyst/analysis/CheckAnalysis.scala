@@ -376,28 +376,6 @@ trait CheckAnalysis extends PredicateHelper {
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                """.stripMargin)
 
-          case InsertIntoTable(t, _, _, _, _)
-            if !t.isInstanceOf[LeafNode] ||
-              t.isInstanceOf[Range] ||
-              t == OneRowRelation ||
-              t.isInstanceOf[LocalRelation] =>
-            failAnalysis(s"Inserting into an RDD-based table is not allowed.")
-
-          case i @ InsertIntoTable(table, partitions, query, _, _) =>
-            val numStaticPartitions = partitions.values.count(_.isDefined)
-            if (table.output.size != (query.output.size + numStaticPartitions)) {
-              failAnalysis(
-                s"$table requires that the data to be inserted have the same number of " +
-                  s"columns as the target table: target table has ${table.output.size} " +
-                  s"column(s) but the inserted data has " +
-                  s"${query.output.size + numStaticPartitions} column(s), including " +
-                  s"$numStaticPartitions partition column(s) having constant value(s).")
-            }
-
-          case o if !o.resolved =>
-            failAnalysis(
-              s"unresolved operator ${operator.simpleString}")
-
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
             !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
@@ -413,6 +391,10 @@ trait CheckAnalysis extends PredicateHelper {
         }
     }
     extendedCheckRules.foreach(_(plan))
+    plan.foreachUp {
+      case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
+      case _ =>
+    }
 
     plan.foreach(_.setAnalyzed())
   }

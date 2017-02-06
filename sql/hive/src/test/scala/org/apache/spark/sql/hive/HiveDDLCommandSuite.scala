@@ -52,7 +52,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
 
   private def analyzeCreateTable(sql: String): CatalogTable = {
     TestHive.sessionState.analyzer.execute(parser.parsePlan(sql)).collect {
-      case CreateTable(tableDesc, mode, _) => tableDesc
+      case CreateTableCommand(tableDesc, _) => tableDesc
     }.head
   }
 
