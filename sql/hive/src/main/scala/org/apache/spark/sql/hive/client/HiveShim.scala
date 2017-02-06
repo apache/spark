@@ -57,7 +57,7 @@ import org.apache.spark.util.Utils
  * - initialize methods in lazy vals, both for quicker access for multiple invocations, and to
  *   avoid runtime errors due to the above guideline.
  */
-private[hive] sealed abstract class Shim {
+private[client] sealed abstract class Shim {
 
   /**
    * Set the current SessionState to the given SessionState. Also, set the context classloader of
