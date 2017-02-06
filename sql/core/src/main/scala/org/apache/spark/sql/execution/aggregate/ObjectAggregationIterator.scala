@@ -30,6 +30,7 @@ import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 class ObjectAggregationIterator(
+    partIndex: Int,
     outputAttributes: Seq[Attribute],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
@@ -41,6 +42,7 @@ class ObjectAggregationIterator(
     inputRows: Iterator[InternalRow],
     fallbackCountThreshold: Int)
   extends AggregationIterator(
+    partIndex,
     groupingExpressions,
     originalInputAttributes,
     aggregateExpressions,
