@@ -73,11 +73,15 @@ import org.apache.spark.util.Utils
 class SparkSession private(
     @transient val sparkContext: SparkContext,
     @transient private val existingSharedState: Option[SharedState],
-    existingSessionState: Option[SessionState] = None)
+    existingSessionState: Option[SessionState])
   extends Serializable with Closeable with Logging { self =>
 
+  private[sql] def this(sc: SparkContext, existingSharedState: Option[SharedState]) {
+    this(sc, existingSharedState, None)
+  }
+
   private[sql] def this(sc: SparkContext) {
-    this(sc, None)
+    this(sc, None, None)
   }
 
   sparkContext.assertNotStopped()
