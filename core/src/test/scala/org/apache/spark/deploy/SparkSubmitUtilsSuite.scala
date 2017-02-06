@@ -265,12 +265,10 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     def isSameFile(left: String, right: String): Boolean = {
       val leftInput: FileInputStream = new FileInputStream(left)
-      val leftMd5 = UTF8String.fromString(org.apache.commons.codec
-        .digest.DigestUtils.md5Hex(leftInput))
+      val leftMd5 = org.apache.commons.codec.digest.DigestUtils.md5Hex(leftInput)
 
       val rightInput: FileInputStream = new FileInputStream(left)
-      val rightMd5 = UTF8String.fromString(org.apache.commons.codec
-        .digest.DigestUtils.md5Hex(rightInput))
+      val rightMd5 = org.apache.commons.codec.digest.DigestUtils.md5Hex(rightInput)
 
       leftMd5 == rightMd5
     }
