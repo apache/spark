@@ -771,7 +771,6 @@ private[hive] class HiveClientImpl(
 }
 
 private[hive] object HiveClientImpl {
-
   def shim(version: HiveVersion): Shim = {
     version match {
       case hive.v12 => new Shim_v0_12()
