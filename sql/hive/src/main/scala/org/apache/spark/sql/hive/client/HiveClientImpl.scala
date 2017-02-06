@@ -27,9 +27,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema}
+import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.Driver
-import org.apache.hadoop.hive.ql.metadata.Hive
+import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.UserGroupInformation
@@ -43,10 +44,12 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPa
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.hive.HiveUtils._
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.CircularBuffer
+import org.apache.spark.sql.hive.client.HiveClientImpl._
+import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
+import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
@@ -775,4 +778,156 @@ private[hive] class HiveClientImpl(
       }
   }
 }
+
+private[hive] object HiveClientImpl {
+  private lazy val shimForHiveExecution = IsolatedClientLoader.hiveVersion(
+    HiveUtils.hiveExecutionVersion) match {
+    case hive.v12 => new Shim_v0_12()
+    case hive.v13 => new Shim_v0_13()
+    case hive.v14 => new Shim_v0_14()
+    case hive.v1_0 => new Shim_v1_0()
+    case hive.v1_1 => new Shim_v1_1()
+    case hive.v1_2 => new Shim_v1_2()
+  }
+
+  /** Converts the native StructField to Hive's FieldSchema. */
+  def toHiveColumn(c: StructField): FieldSchema = {
+    val typeString = if (c.metadata.contains(HiveUtils.hiveTypeString)) {
+      c.metadata.getString(HiveUtils.hiveTypeString)
+    } else {
+      c.dataType.catalogString
+    }
+    new FieldSchema(c.name, typeString, c.getComment.orNull)
+  }
+
+  /** Builds the native StructField from Hive's FieldSchema. */
+  def fromHiveColumn(hc: FieldSchema): StructField = {
+    val columnType = try {
+      CatalystSqlParser.parseDataType(hc.getType)
+    } catch {
+      case e: ParseException =>
+        throw new SparkException("Cannot recognize hive type string: " + hc.getType, e)
+    }
+
+    val metadata = new MetadataBuilder().putString(HiveUtils.hiveTypeString, hc.getType).build()
+    val field = StructField(
+      name = hc.getName,
+      dataType = columnType,
+      nullable = true,
+      metadata = metadata)
+    Option(hc.getComment).map(field.withComment).getOrElse(field)
+  }
+
+  private def toInputFormat(name: String) =
+    Utils.classForName(name).asInstanceOf[Class[_ <: org.apache.hadoop.mapred.InputFormat[_, _]]]
+
+  private def toOutputFormat(name: String) =
+    Utils.classForName(name)
+      .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
+
+  /** Converts the native table metadata representation format CatalogTable to Hive's Table.
+    * the default value shimForHiveExecution is only used for hive execution, a Shim instance
+    * with a specific metastore version should be passed to this function to interact with metastore
+    */
+  def toHiveTable(
+      table: CatalogTable,
+      conf: Option[HiveConf] = None,
+      shim: Shim = shimForHiveExecution): HiveTable = {
+    val hiveTable = new HiveTable(table.database, table.identifier.table)
+    // For EXTERNAL_TABLE, we also need to set EXTERNAL field in the table properties.
+    // Otherwise, Hive metastore will change the table to a MANAGED_TABLE.
+    // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
+    hiveTable.setTableType(table.tableType match {
+      case CatalogTableType.EXTERNAL =>
+        hiveTable.setProperty("EXTERNAL", "TRUE")
+        HiveTableType.EXTERNAL_TABLE
+      case CatalogTableType.MANAGED =>
+        HiveTableType.MANAGED_TABLE
+      case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
+    })
+    // Note: In Hive the schema and partition columns must be disjoint sets
+    val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
+      table.partitionColumnNames.contains(c.getName)
+    }
+    if (schema.isEmpty) {
+      // This is a hack to preserve existing behavior. Before Spark 2.0, we do not
+      // set a default serde here (this was done in Hive), and so if the user provides
+      // an empty schema Hive would automatically populate the schema with a single
+      // field "col". However, after SPARK-14388, we set the default serde to
+      // LazySimpleSerde so this implicit behavior no longer happens. Therefore,
+      // we need to do it in Spark ourselves.
+      hiveTable.setFields(
+        Seq(new FieldSchema("col", "array<string>", "from deserializer")).asJava)
+    } else {
+      hiveTable.setFields(schema.asJava)
+    }
+    hiveTable.setPartCols(partCols.asJava)
+    conf.foreach(c => hiveTable.setOwner(c.getUser))
+    hiveTable.setCreateTime((table.createTime / 1000).toInt)
+    hiveTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)
+    table.storage.locationUri.foreach { loc => shim.setDataLocation(hiveTable, loc) }
+    table.storage.inputFormat.map(toInputFormat).foreach(hiveTable.setInputFormatClass)
+    table.storage.outputFormat.map(toOutputFormat).foreach(hiveTable.setOutputFormatClass)
+    hiveTable.setSerializationLib(
+      table.storage.serde.getOrElse("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+    table.storage.properties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
+    table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
+    table.comment.foreach { c => hiveTable.setProperty("comment", c) }
+    // Hive will expand the view text, so it needs 2 fields: viewOriginalText and viewExpandedText.
+    // Since we don't expand the view text, but only add table properties, we map the `viewText` to
+    // the both fields in hive table.
+    table.viewText.foreach { t =>
+      hiveTable.setViewOriginalText(t)
+      hiveTable.setViewExpandedText(t)
+    }
+    hiveTable
+  }
+
+  /**
+    * Converts the native partition metadata representation format CatalogTablePartition to
+    * Hive's Partition.
+    */
+  def toHivePartition(
+      p: CatalogTablePartition,
+      ht: HiveTable): HivePartition = {
+    val tpart = new org.apache.hadoop.hive.metastore.api.Partition
+    val partValues = ht.getPartCols.asScala.map { hc =>
+      p.spec.get(hc.getName).getOrElse {
+        throw new IllegalArgumentException(
+          s"Partition spec is missing a value for column '${hc.getName}': ${p.spec}")
+      }
+    }
+    val storageDesc = new StorageDescriptor
+    val serdeInfo = new SerDeInfo
+    p.storage.locationUri.foreach(storageDesc.setLocation)
+    p.storage.inputFormat.foreach(storageDesc.setInputFormat)
+    p.storage.outputFormat.foreach(storageDesc.setOutputFormat)
+    p.storage.serde.foreach(serdeInfo.setSerializationLib)
+    serdeInfo.setParameters(p.storage.properties.asJava)
+    storageDesc.setSerdeInfo(serdeInfo)
+    tpart.setDbName(ht.getDbName)
+    tpart.setTableName(ht.getTableName)
+    tpart.setValues(partValues.asJava)
+    tpart.setSd(storageDesc)
+    new HivePartition(ht, tpart)
+  }
+
+  def fromHivePartition(hp: HivePartition): CatalogTablePartition = {
+    val apiPartition = hp.getTPartition
+    CatalogTablePartition(
+      spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
+      storage = CatalogStorageFormat(
+        locationUri = Option(apiPartition.getSd.getLocation),
+        inputFormat = Option(apiPartition.getSd.getInputFormat),
+        outputFormat = Option(apiPartition.getSd.getOutputFormat),
+        serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
+        compressed = apiPartition.getSd.isCompressed,
+        properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
+          .map(_.asScala.toMap).orNull),
+      parameters =
+        if (hp.getParameters() != null) hp.getParameters().asScala.toMap else Map.empty)
+  }
+
+}
+
 

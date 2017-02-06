@@ -57,7 +57,7 @@ private[hive] case class MetastoreRelation(
 
   override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
 
-  @transient val hiveQlTable: HiveTable = HiveUtils.toHiveTable(catalogTable)
+  @transient val hiveQlTable: HiveTable = HiveClientImpl.toHiveTable(catalogTable)
 
   @transient override def computeStats(conf: CatalystConf): Statistics = {
     catalogTable.stats.map(_.toPlanStats(output)).getOrElse(Statistics(
@@ -113,7 +113,7 @@ private[hive] case class MetastoreRelation(
       allPartitions
     }
 
-    rawPartitions.map(HiveUtils.toHivePartition(_, hiveQlTable))
+    rawPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
   }
 
   /** Only compare database and tablename, not alias. */
