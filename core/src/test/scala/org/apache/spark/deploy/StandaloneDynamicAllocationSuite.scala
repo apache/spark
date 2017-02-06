@@ -506,7 +506,7 @@ class StandaloneDynamicAllocationSuite
     // Create a fresh scheduler backend to blacklist "localhost".
     sc.schedulerBackend.stop()
     val backend =
-     new StandaloneSchedulerBackend(taskScheduler, sc, Array(masterRpcEnv.address.toSparkURL))
+      new StandaloneSchedulerBackend(taskScheduler, sc, Array(masterRpcEnv.address.toSparkURL))
     backend.start()
 
     backend.driverEndpoint.ask[Boolean](message)
