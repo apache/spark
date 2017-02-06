@@ -151,6 +151,8 @@ private[spark] class Client(
       yarnClient.init(yarnConf)
       yarnClient.start()
 
+      setMaxNumExecutors()
+
       logInfo("Requesting a new application from cluster with %d NodeManagers"
         .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
 
@@ -1191,6 +1193,26 @@ private[spark] class Client(
           s"$py4jFile not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
       }
+  }
+
+  /**
+   * If using dynamic allocation and user doesn't set spark.dynamicAllocation.maxExecutors
+   * then set the max number of executors depends on yarn cluster VCores Total.
+   * If not using dynamic allocation don't set it.
+   */
+  def setMaxNumExecutors(): Unit = {
+    if (Utils.isDynamicAllocationEnabled(sparkConf)) {
+
+      val defaultMaxNumExecutors = DYN_ALLOCATION_MAX_EXECUTORS.defaultValue.get
+      if (defaultMaxNumExecutors == sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS)) {
+        val executorCores = sparkConf.getInt("spark.executor.cores", 1)
+        val maxNumExecutors = yarnClient.getNodeReports().asScala.
+          filter(_.getNodeState == NodeState.RUNNING).
+          map(_.getCapability.getVirtualCores / executorCores).sum
+
+        sparkConf.set(DYN_ALLOCATION_MAX_EXECUTORS, maxNumExecutors)
+      }
+    }
   }
 
 }
