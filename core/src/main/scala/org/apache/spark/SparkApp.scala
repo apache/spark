@@ -30,11 +30,11 @@ private[spark] trait SparkApp {
    *
    * @param args    - all argouments for SparkApp.
    * @param conf    - Spark Configuration.
-   * @param sysConf - system configurations.
+   * @param envVars - system environment Variables.
    */
   def sparkMain(
     args: Array[String],
     conf: scala.collection.immutable.Map[String, String],
-    sysConf: scala.collection.immutable.Map[String, String]): Unit
+    envVars: scala.collection.immutable.Map[String, String]): Unit
 
 }

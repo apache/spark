@@ -722,14 +722,7 @@ object SparkSubmit extends CommandLineUtils {
     val isSparkApp = mainClass.getMethods().filter{_.getName() == "sparkMain"}.length > 0
 
     val childSparkConf = sysProps.filter{ p => p._1.startsWith("spark.")}.toMap
-    val childSysProps = sys.env
-    if (isSparkApp && threadEnabled) {
-      sys.env.foreach { case (key, value) =>
-        if (!sysProps.contains(key)) {
-          sysProps.put(key, value)
-        }
-      }
-    } else {
+    if (!isSparkApp || !threadEnabled) {
       sysProps.foreach { case (key, value) =>
         System.setProperty(key, value)
       }
@@ -756,7 +749,7 @@ object SparkSubmit extends CommandLineUtils {
 
     try {
       if (isSparkApp) {
-        mainMethod.invoke(null, childArgs.toArray, childSparkConf, childSysProps)
+        mainMethod.invoke(null, childArgs.toArray, childSparkConf, sys.env)
       } else {
         mainMethod.invoke(null, childArgs.toArray)
       }
