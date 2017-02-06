@@ -36,7 +36,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
 
   override def beforeAll() {
     super.beforeAll()
-    sc = new SparkContext("local[2]", "test")
+    sc = new SparkContext("local[4]", "test")
   }
 
   override def afterAll() {

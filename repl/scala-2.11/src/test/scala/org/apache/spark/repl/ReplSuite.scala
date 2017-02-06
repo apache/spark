@@ -374,7 +374,7 @@ class ReplSuite extends SparkFunSuite {
   }
 
   test("collecting objects of class defined in repl") {
-    val output = runInterpreter("local[2]",
+    val output = runInterpreter("local[4]",
       """
         |case class Foo(i: Int)
         |val ret = sc.parallelize((1 to 100).map(Foo), 10).collect()

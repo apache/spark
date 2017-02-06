@@ -33,7 +33,7 @@ class WriteAheadLogBackedBlockRDDSuite
   extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
 
   val conf = new SparkConf()
-    .setMaster("local[2]")
+    .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
 
   val hadoopConf = new Configuration()

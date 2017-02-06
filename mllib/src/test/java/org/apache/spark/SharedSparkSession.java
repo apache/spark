@@ -34,7 +34,7 @@ public abstract class SharedSparkSession implements Serializable {
   @Before
   public void setUp() throws IOException {
     spark = SparkSession.builder()
-      .master("local[2]")
+      .master("local[4]")
       .appName(getClass().getSimpleName())
       .getOrCreate();
     jsc = new JavaSparkContext(spark.sparkContext());

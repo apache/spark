@@ -121,7 +121,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
   }
 
   test("receiver info reporting") {
-    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    ssc = new StreamingContext("local[4]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD(_.count)
 
@@ -146,7 +146,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
   }
 
   test("output operation reporting") {
-    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    ssc = new StreamingContext("local[4]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD(_.count())
     inputStream.foreachRDD(_.collect())
@@ -167,7 +167,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
   }
 
   test("don't call ssc.stop in listener") {
-    ssc = new StreamingContext("local[2]", "ssc", Milliseconds(1000))
+    ssc = new StreamingContext("local[4]", "ssc", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD(_.count)
 
@@ -175,7 +175,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
   }
 
   test("onBatchCompleted with successful batch") {
-    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    ssc = new StreamingContext("local[4]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD(_.count)
 
@@ -185,7 +185,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
   }
 
   test("onBatchCompleted with failed batch and one failed job") {
-    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    ssc = new StreamingContext("local[4]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD { _ =>
       throw new RuntimeException("This is a failed job")
@@ -200,7 +200,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
   }
 
   test("onBatchCompleted with failed batch and multiple failed jobs") {
-    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    ssc = new StreamingContext("local[4]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD { _ =>
       throw new RuntimeException("This is a failed job")
@@ -223,7 +223,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
   test("StreamingListener receives no events after stopping StreamingListenerBus") {
     val streamingListener = mock(classOf[StreamingListener])
 
-    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    ssc = new StreamingContext("local[4]", "test", Milliseconds(1000))
     ssc.addStreamingListener(streamingListener)
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD(_.count)

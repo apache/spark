@@ -43,7 +43,7 @@ import org.apache.spark.util.Utils
 
 class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeouts with Logging {
 
-  val master = "local[2]"
+  val master = "local[4]"
   val appName = this.getClass.getSimpleName
   val batchDuration = Milliseconds(500)
   val sparkHome = "someDir"
