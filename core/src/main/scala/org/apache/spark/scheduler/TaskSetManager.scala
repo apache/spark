@@ -799,7 +799,7 @@ private[spark] class TaskSetManager(
     if (successful(index)) {
       logInfo(
         s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed, " +
-        "but another instance of the task has already succeeded, " +
+        "but it is already marked as successful, " +
         "so not re-queuing the task to be re-executed.")
     } else {
       addPendingTask(index)
