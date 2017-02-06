@@ -214,8 +214,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
   private def readDataSourceTable(table: CatalogTable): LogicalPlan = {
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
     val cache = sparkSession.sessionState.catalog.tableRelationCache
-    val withHiveSupport =
-      sparkSession.sparkContext.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive"
+    val inMemoryCatalog =
+      sparkSession.sparkContext.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "in-memory"
 
     cache.get(qualifiedTableName, new Callable[LogicalPlan]() {
       override def call(): LogicalPlan = {
@@ -231,7 +231,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
             className = table.provider.get,
             options = table.storage.properties ++ pathOption,
             // TODO: improve `InMemoryCatalog` and remove this limitation.
-            catalogTable = if (withHiveSupport) Some(table) else None)
+            catalogTable = if (inMemoryCatalog) None else Some(table))
 
         LogicalRelation(dataSource.resolveRelation(checkFilesExist = false),
           catalogTable = Some(table))
