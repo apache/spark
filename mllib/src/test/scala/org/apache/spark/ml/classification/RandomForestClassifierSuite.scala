@@ -129,7 +129,7 @@ class RandomForestClassifierSuite
   }
 
   test("predictRaw and predictProbability") {
-    val rdd = orderedLabeledPoints5_20.map(_.toInstance)
+    val rdd = orderedLabeledPoints5_20.map(_.toInstance(1.0))
     val rf = new RandomForestClassifier()
       .setImpurity("Gini")
       .setMaxDepth(3)
@@ -178,7 +178,7 @@ class RandomForestClassifierSuite
       .setSeed(123)
 
     // In this data, feature 1 is very important.
-    val data: RDD[Instance] = TreeTests.featureImportanceData(sc).map(_.toInstance)
+    val data: RDD[Instance] = TreeTests.featureImportanceData(sc).map(_.toInstance(1.0))
     val categoricalFeatures = Map.empty[Int, Int]
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
 
@@ -211,7 +211,7 @@ class RandomForestClassifierSuite
     }
 
     val rf = new RandomForestClassifier().setNumTrees(2)
-    val rdd = TreeTests.getTreeReadWriteData(sc).map(_.toInstance)
+    val rdd = TreeTests.getTreeReadWriteData(sc).map(_.toInstance(1.0))
 
     val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "entropy")
 
@@ -239,7 +239,7 @@ private object RandomForestClassifierSuite extends SparkFunSuite {
       data.map(OldLabeledPoint.fromML), oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy,
       rf.getSeed.toInt)
     val newData: DataFrame =
-      TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, numClasses)
+      TreeTests.setMetadata(data.map(_.toInstance(1.0)), categoricalFeatures, numClasses)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = RandomForestClassificationModel.fromOld(

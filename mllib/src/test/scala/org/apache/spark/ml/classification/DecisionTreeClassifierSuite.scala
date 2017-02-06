@@ -72,7 +72,7 @@ class DecisionTreeClassifierSuite
       val xVariance = Array(0.6856, 0.1899)
 
       val testData = LogisticRegressionSuite.generateMultinomialLogisticInput(
-        coefficients, xMean, xVariance, addIntercept = true, nPoints, 42)
+        coefficients, xMean, xVariance, addIntercept = true, nPoints, seed)
 
       sc.parallelize(testData, 4).toDF()
     }
@@ -265,7 +265,7 @@ class DecisionTreeClassifierSuite
     val numClasses = 3
 
     val newData: DataFrame =
-      TreeTests.setMetadata(rdd.map(_.toInstance), categoricalFeatures, numClasses)
+      TreeTests.setMetadata(rdd.map(_.toInstance(1.0)), categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
 
     // copied model must have the same parent.
@@ -292,7 +292,7 @@ class DecisionTreeClassifierSuite
       LabeledPoint(1, Vectors.dense(0, 3, 9)),
       LabeledPoint(0, Vectors.dense(0, 2, 6))
     ))
-    val df = TreeTests.setMetadata(data.map(_.toInstance), Map(0 -> 1), 2)
+    val df = TreeTests.setMetadata(data.map(_.toInstance(1.0)), Map(0 -> 1), 2)
     val dt = new DecisionTreeClassifier().setMaxDepth(3)
     dt.fit(df)
   }
@@ -314,7 +314,7 @@ class DecisionTreeClassifierSuite
       LabeledPoint(0.0, Vectors.dense(2.0)),
       LabeledPoint(1.0, Vectors.dense(2.0)))
     val data = sc.parallelize(arr)
-    val df = TreeTests.setMetadata(data.map(_.toInstance), Map(0 -> 3), 2)
+    val df = TreeTests.setMetadata(data.map(_.toInstance(1.0)), Map(0 -> 3), 2)
 
     // Must set maxBins s.t. the feature will be treated as an ordered categorical feature.
     val dt = new DecisionTreeClassifier()
@@ -345,7 +345,7 @@ class DecisionTreeClassifierSuite
     val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
     val numFeatures = data.first().features.size
     val categoricalFeatures = (0 to numFeatures).map(i => (i, 2)).toMap
-    val df = TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, 2)
+    val df = TreeTests.setMetadata(data.map(_.toInstance(1.0)), categoricalFeatures, 2)
 
     val model = dt.fit(df)
 
@@ -420,12 +420,12 @@ class DecisionTreeClassifierSuite
 
     // Categorical splits with tree depth 2
     val categoricalData: DataFrame =
-      TreeTests.setMetadata(rdd.map(_.toInstance), Map(0 -> 2, 1 -> 3), numClasses = 2)
+      TreeTests.setMetadata(rdd.map(_.toInstance(1.0)), Map(0 -> 2, 1 -> 3), numClasses = 2)
     testEstimatorAndModelReadWrite(dt, categoricalData, allParamSettings, checkModelData)
 
     // Continuous splits with tree depth 2
     val continuousData: DataFrame =
-      TreeTests.setMetadata(rdd.map(_.toInstance), Map.empty[Int, Int], numClasses = 2)
+      TreeTests.setMetadata(rdd.map(_.toInstance(1.0)), Map.empty[Int, Int], numClasses = 2)
     testEstimatorAndModelReadWrite(dt, continuousData, allParamSettings, checkModelData)
 
     // Continuous splits with tree depth 0
@@ -449,7 +449,7 @@ private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
     val oldStrategy = dt.getOldStrategy(categoricalFeatures, numClasses)
     val oldTree = OldDecisionTree.train(data.map(OldLabeledPoint.fromML), oldStrategy)
     val newData: DataFrame =
-      TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, numClasses)
+      TreeTests.setMetadata(data.map(_.toInstance(1.0)), categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(

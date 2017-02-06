@@ -88,7 +88,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     // In this data, feature 1 is very important.
     val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
     val categoricalFeatures = Map.empty[Int, Int]
-    val df: DataFrame = TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, 0)
+    val df: DataFrame = TreeTests.setMetadata(data.map(_.toInstance(1.0)), categoricalFeatures, 0)
 
     val model = rf.fit(df)
 
@@ -125,7 +125,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "variance")
 
     val continuousData: DataFrame =
-      TreeTests.setMetadata(rdd.map(_.toInstance), Map.empty[Int, Int], numClasses = 0)
+      TreeTests.setMetadata(rdd.map(_.toInstance(1.0)), Map.empty[Int, Int], numClasses = 0)
     testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings, checkModelData)
   }
 }
@@ -145,7 +145,7 @@ private object RandomForestRegressorSuite extends SparkFunSuite {
       rf.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, rf.getOldImpurity)
     val oldModel = OldRandomForest.trainRegressor(data.map(OldLabeledPoint.fromML), oldStrategy,
       rf.getNumTrees, rf.getFeatureSubsetStrategy, rf.getSeed.toInt)
-    val newData: DataFrame = TreeTests.setMetadata(data.map(_.toInstance),
+    val newData: DataFrame = TreeTests.setMetadata(data.map(_.toInstance(1.0)),
       categoricalFeatures, numClasses = 0)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.

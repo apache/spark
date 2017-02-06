@@ -25,6 +25,7 @@ import scala.util.Random
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.util.Instrumentation
@@ -599,8 +600,8 @@ private[spark] object RandomForest extends Logging {
         if (!isLeaf) {
           node.split = Some(split)
           val childIsLeaf = (LearningNode.indexToLevel(nodeIndex) + 1) == metadata.maxDepth
-          val leftChildIsLeaf = childIsLeaf || (math.abs(stats.leftImpurity) < 1e-16)
-          val rightChildIsLeaf = childIsLeaf || (math.abs(stats.rightImpurity) < 1e-16)
+          val leftChildIsLeaf = childIsLeaf || (math.abs(stats.leftImpurity) < Utils.EPSILON)
+          val rightChildIsLeaf = childIsLeaf || (math.abs(stats.rightImpurity) < Utils.EPSILON)
           node.leftChild = Some(LearningNode(LearningNode.leftChildIndex(nodeIndex),
             leftChildIsLeaf, ImpurityStats.getEmptyImpurityStats(stats.leftImpurityCalculator)))
           node.rightChild = Some(LearningNode(LearningNode.rightChildIndex(nodeIndex),

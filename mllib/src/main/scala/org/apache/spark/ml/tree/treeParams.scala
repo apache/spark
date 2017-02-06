@@ -82,7 +82,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
   final val minWeightFractionPerNode: DoubleParam = new DoubleParam(this,
     "minWeightFractionPerNode", "Minimum fraction of the weighted sample count that each child " +
     "must have after split. If a split causes the fraction of the total weight in the left or " +
-    "or right child to be less than minWeightFractionPerNode, the split will be discarded as " +
+    "right child to be less than minWeightFractionPerNode, the split will be discarded as " +
     "invalid. Should be in interval [0.0, 0.5)",
     ParamValidators.inRange(0.0, 0.5, lowerInclusive = true, upperInclusive = false))
 

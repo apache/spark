@@ -32,12 +32,15 @@ import org.apache.spark.rdd.RDD
 /**
  * Learning and dataset metadata for DecisionTree.
  *
+ * @param weightedNumExamples  Weighted count of samples in the tree.
  * @param numClasses    For classification: labels can take values {0, ..., numClasses - 1}.
  *                      For regression: fixed at 0 (no meaning).
  * @param maxBins  Maximum number of bins, for all features.
  * @param featureArity  Map: categorical feature index to arity.
  *                      I.e., the feature takes values in {0, ..., arity - 1}.
  * @param numBins  Number of bins for each feature.
+ * @param minWeightFractionPerNode  The minimum fraction of the total sample weight that must be
+ *                                  present in a leaf node in order to be considered a valid split.
  */
 private[spark] class DecisionTreeMetadata(
     val numFeatures: Int,

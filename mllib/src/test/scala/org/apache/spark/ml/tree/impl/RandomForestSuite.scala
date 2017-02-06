@@ -44,7 +44,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   /////////////////////////////////////////////////////////////////////////////
 
   test("Binary classification with continuous features: split calculation") {
-    val arr = OldDTSuite.generateOrderedLabeledPointsWithLabel1().map(_.asML.toInstance)
+    val arr = OldDTSuite.generateOrderedLabeledPointsWithLabel1().map(_.asML.toInstance(1.0))
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new OldStrategy(OldAlgo.Classification, Gini, 3, 2, 100)
@@ -56,7 +56,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("Binary classification with binary (ordered) categorical features: split calculation") {
-    val arr = OldDTSuite.generateCategoricalDataPoints().map(_.asML.toInstance)
+    val arr = OldDTSuite.generateCategoricalDataPoints().map(_.asML.toInstance(1.0))
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new OldStrategy(OldAlgo.Classification, Gini, maxDepth = 2, numClasses = 2,
@@ -73,7 +73,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Binary classification with 3-ary (ordered) categorical features," +
     " with no samples for one category: split calculation") {
-    val arr = OldDTSuite.generateCategoricalDataPoints().map(_.asML.toInstance)
+    val arr = OldDTSuite.generateCategoricalDataPoints().map(_.asML.toInstance(1.0))
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new OldStrategy(OldAlgo.Classification, Gini, maxDepth = 2, numClasses = 2,
@@ -182,7 +182,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("train with empty arrays") {
-    val lp = LabeledPoint(1.0, Vectors.dense(Array.empty[Double])).toInstance
+    val lp = LabeledPoint(1.0, Vectors.dense(Array.empty[Double])).toInstance(1.0)
     val data = Array.fill(5)(lp)
     val rdd = sc.parallelize(data)
 
@@ -197,7 +197,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("train with constant features") {
-    val instance = LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0)).toInstance
+    val instance = LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0)).toInstance(1.0)
     val data = Array.fill(5)(instance)
     val rdd = sc.parallelize(data)
     val strategy = new OldStrategy(
@@ -225,7 +225,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("Multiclass classification with unordered categorical features: split calculations") {
-    val arr = OldDTSuite.generateCategoricalDataPoints().map(_.asML.toInstance)
+    val arr = OldDTSuite.generateCategoricalDataPoints().map(_.asML.toInstance(1.0))
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new OldStrategy(
@@ -267,7 +267,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Multiclass classification with ordered categorical features: split calculations") {
     val arr = OldDTSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
-      .map(_.asML.toInstance)
+      .map(_.asML.toInstance(1.0))
     assert(arr.length === 3000)
     val rdd = sc.parallelize(arr)
     val strategy = new OldStrategy(OldAlgo.Classification, Gini, maxDepth = 2, numClasses = 100,
@@ -299,7 +299,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0)),
       LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0)),
       LabeledPoint(1.0, Vectors.dense(0.0, 2.0, 1.0)))
-    val input = sc.parallelize(arr.map(_.toInstance))
+    val input = sc.parallelize(arr.map(_.toInstance(1.0)))
 
     val strategy = new OldStrategy(algo = OldAlgo.Classification, impurity = Gini, maxDepth = 1,
       numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
@@ -341,7 +341,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0)),
       LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0)),
       LabeledPoint(1.0, Vectors.dense(0.0, 2.0, 1.0)))
-    val input = sc.parallelize(arr.map(_.toInstance))
+    val input = sc.parallelize(arr.map(_.toInstance(1.0)))
 
     val strategy = new OldStrategy(algo = OldAlgo.Classification, impurity = Gini, maxDepth = 5,
       numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
@@ -393,7 +393,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       LabeledPoint(0.0, Vectors.dense(2.0)),
       LabeledPoint(0.0, Vectors.dense(2.0)),
       LabeledPoint(1.0, Vectors.dense(2.0)))
-    val input = sc.parallelize(arr.map(_.toInstance))
+    val input = sc.parallelize(arr.map(_.toInstance(1.0)))
 
     // Must set maxBins s.t. the feature will be treated as an ordered categorical feature.
     val strategy = new OldStrategy(algo = OldAlgo.Classification, impurity = Gini, maxDepth = 1,
@@ -412,7 +412,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("Second level node building with vs. without groups") {
-    val arr = OldDTSuite.generateOrderedLabeledPoints().map(_.asML.toInstance)
+    val arr = OldDTSuite.generateOrderedLabeledPoints().map(_.asML.toInstance(1.0))
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     // For tree with 1 group
@@ -456,7 +456,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   def binaryClassificationTestWithContinuousFeaturesAndSubsampledFeatures(strategy: OldStrategy) {
     val numFeatures = 50
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures, 1000)
-    val rdd = sc.parallelize(arr).map(_.asML.toInstance)
+    val rdd = sc.parallelize(arr).map(_.asML.toInstance(1.0))
 
     // Select feature subset for top nodes.  Return true if OK.
     def checkFeatureSubsetStrategy(
@@ -627,7 +627,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("weights at arbitrary scale") {
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(3, 10)
-    val rddWithUnitWeights = sc.parallelize(arr.map(_.asML.toInstance))
+    val rddWithUnitWeights = sc.parallelize(arr.map(_.asML.toInstance(1.0)))
     val rddWithSmallWeights = rddWithUnitWeights.map { inst =>
       Instance(inst.label, 0.001, inst.features)
     }

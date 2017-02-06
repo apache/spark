@@ -66,7 +66,11 @@ object Variance extends Impurity {
 
 /**
  * Class for updating views of a vector of sufficient statistics,
- * in order to compute impurity from a sample.
+ * in order to compute impurity from a sample. For variance, we track:
+ *   - sum(w_i)
+ *   - sum(w_i * y_i)
+ *   - sum(w_i * y_i * y_i)
+ *   - count(y_i)
  * Note: Instances of this class do not hold the data; they operate on views of the data.
  */
 private[spark] class VarianceAggregator()
