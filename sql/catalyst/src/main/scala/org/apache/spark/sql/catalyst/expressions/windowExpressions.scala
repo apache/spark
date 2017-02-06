@@ -140,8 +140,8 @@ sealed trait FrameBoundary {
  * Extractor for making working with frame boundaries easier.
  */
 object FrameBoundary {
-  def apply(boundary: FrameBoundary): Option[Int] = unapply(boundary)
-  def unapply(boundary: FrameBoundary): Option[Int] = boundary match {
+  def apply(boundary: FrameBoundary): Option[Long] = unapply(boundary)
+  def unapply(boundary: FrameBoundary): Option[Long] = boundary match {
     case CurrentRow => Some(0)
     case ValuePreceding(offset) => Some(-offset)
     case ValueFollowing(offset) => Some(offset)
@@ -163,7 +163,7 @@ case object UnboundedPreceding extends FrameBoundary {
 }
 
 /** <value> PRECEDING boundary. */
-case class ValuePreceding(value: Int) extends FrameBoundary {
+case class ValuePreceding(value: Long) extends FrameBoundary {
   def notFollows(other: FrameBoundary): Boolean = other match {
     case UnboundedPreceding => false
     case ValuePreceding(anotherValue) => value >= anotherValue
@@ -189,7 +189,7 @@ case object CurrentRow extends FrameBoundary {
 }
 
 /** <value> FOLLOWING boundary. */
-case class ValueFollowing(value: Int) extends FrameBoundary {
+case class ValueFollowing(value: Long) extends FrameBoundary {
   def notFollows(other: FrameBoundary): Boolean = other match {
     case UnboundedPreceding => false
     case vp: ValuePreceding => false

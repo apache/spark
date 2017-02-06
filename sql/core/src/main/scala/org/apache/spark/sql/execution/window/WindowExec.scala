@@ -115,7 +115,7 @@ case class WindowExec(
    * @param offset with respect to the row.
    * @return a bound ordering object.
    */
-  private[this] def createBoundOrdering(frameType: FrameType, offset: Int): BoundOrdering = {
+  private[this] def createBoundOrdering(frameType: FrameType, offset: Long): BoundOrdering = {
     frameType match {
       case RangeFrame =>
         val (exprs, current, bound) = if (offset == 0) {
@@ -159,7 +159,7 @@ case class WindowExec(
    * WindowExpressions and factory function for the WindowFrameFunction.
    */
   private[this] lazy val windowFrameExpressionFactoryPairs = {
-    type FrameKey = (String, FrameType, Option[Int], Option[Int])
+    type FrameKey = (String, FrameType, Option[Long], Option[Long])
     type ExpressionBuffer = mutable.Buffer[Expression]
     val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
 
@@ -379,7 +379,7 @@ case class WindowExec(
         }
 
         // Iteration
-        var rowIndex = 0
+        var rowIndex = 0L
         var rowsSize = 0L
 
         override final def hasNext: Boolean = rowIndex < rowsSize || nextRowAvailable

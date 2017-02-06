@@ -40,7 +40,7 @@ private[window] abstract class WindowFunctionFrame {
   /**
    * Write the current results to the target row.
    */
-  def write(index: Int, current: InternalRow): Unit
+  def write(index: Long, current: InternalRow): Unit
 }
 
 /**
@@ -61,14 +61,14 @@ private[window] final class OffsetWindowFunctionFrame(
     expressions: Array[OffsetWindowFunction],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
-    offset: Int)
+    offset: Long)
   extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
   private[this] var input: RowBuffer = null
 
   /** Index of the input row currently used for output. */
-  private[this] var inputIndex = 0
+  private[this] var inputIndex = 0L
 
   /**
    * Create the projection used when the offset row exists.
@@ -114,7 +114,7 @@ private[window] final class OffsetWindowFunctionFrame(
     inputIndex = offset
   }
 
-  override def write(index: Int, current: InternalRow): Unit = {
+  override def write(index: Long, current: InternalRow): Unit = {
     if (inputIndex >= 0 && inputIndex < input.size) {
       val r = input.next()
       projection(r)
@@ -173,7 +173,7 @@ private[window] final class SlidingWindowFunctionFrame(
   }
 
   /** Write the frame columns for the current row to the given target row. */
-  override def write(index: Int, current: InternalRow): Unit = {
+  override def write(index: Long, current: InternalRow): Unit = {
     var bufferUpdated = index == 0
 
     // Add all rows to the buffer for which the input row value is equal to or less than
@@ -233,7 +233,7 @@ private[window] final class UnboundedWindowFunctionFrame(
   }
 
   /** Write the frame columns for the current row to the given target row. */
-  override def write(index: Int, current: InternalRow): Unit = {
+  override def write(index: Long, current: InternalRow): Unit = {
     // Unfortunately we cannot assume that evaluation is deterministic. So we need to re-evaluate
     // for each row.
     processor.evaluate(target)
@@ -281,7 +281,7 @@ private[window] final class UnboundedPrecedingWindowFunctionFrame(
   }
 
   /** Write the frame columns for the current row to the given target row. */
-  override def write(index: Int, current: InternalRow): Unit = {
+  override def write(index: Long, current: InternalRow): Unit = {
     var bufferUpdated = index == 0
 
     // Add all rows to the aggregates for which the input row value is equal to or less than
@@ -338,7 +338,7 @@ private[window] final class UnboundedFollowingWindowFunctionFrame(
   }
 
   /** Write the frame columns for the current row to the given target row. */
-  override def write(index: Int, current: InternalRow): Unit = {
+  override def write(index: Long, current: InternalRow): Unit = {
     var bufferUpdated = index == 0
 
     // Duplicate the input to have a new iterator

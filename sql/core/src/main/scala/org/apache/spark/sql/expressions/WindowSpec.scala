@@ -181,15 +181,15 @@ class WindowSpec private[sql](
     val boundaryStart = start match {
       case 0 => CurrentRow
       case Long.MinValue => UnboundedPreceding
-      case x if x < 0 => ValuePreceding(-start.toInt)
-      case x if x > 0 => ValueFollowing(start.toInt)
+      case x if x < 0 => ValuePreceding(-start)
+      case x if x > 0 => ValueFollowing(start)
     }
 
     val boundaryEnd = end match {
       case 0 => CurrentRow
       case Long.MaxValue => UnboundedFollowing
-      case x if x < 0 => ValuePreceding(-end.toInt)
-      case x if x > 0 => ValueFollowing(end.toInt)
+      case x if x < 0 => ValuePreceding(-end)
+      case x if x > 0 => ValueFollowing(end)
     }
 
     new WindowSpec(
