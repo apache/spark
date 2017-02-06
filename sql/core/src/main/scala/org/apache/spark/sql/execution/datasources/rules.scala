@@ -29,9 +29,9 @@ import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
 
 /**
- * Try to replaces [[UnresolvedRelation]]s with [[ResolveDataSource]].
+ * Try to replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
  */
-class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
     sparkSession.sessionState.conf.runSQLonFile && u.tableIdentifier.database.isDefined
   }

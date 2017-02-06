@@ -79,7 +79,7 @@ object TypeCoercion {
    * with primitive types, because in that case the precision and scale of the result depends on
    * the operation. Those rules are implemented in [[DecimalPrecision]].
    */
-  val findTightestCommonTypeOfTwo: (DataType, DataType) => Option[DataType] = {
+  val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
     case (t1, t2) if t1 == t2 => Some(t1)
     case (NullType, t1) => Some(t1)
     case (t1, NullType) => Some(t1)
@@ -103,7 +103,7 @@ object TypeCoercion {
 
   /** Similar to [[findTightestCommonType]], but can promote all the way to StringType. */
   def findTightestCommonTypeToString(left: DataType, right: DataType): Option[DataType] = {
-    findTightestCommonTypeOfTwo(left, right).orElse((left, right) match {
+    findTightestCommonType(left, right).orElse((left, right) match {
       case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
       case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
       case _ => None
@@ -111,21 +111,10 @@ object TypeCoercion {
   }
 
   /**
-   * Find the tightest common type of a set of types by continuously applying
-   * `findTightestCommonTypeOfTwo` on these types.
-   */
-  private def findTightestCommonType(types: Seq[DataType]): Option[DataType] = {
-    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
-      case None => None
-      case Some(d) => findTightestCommonTypeOfTwo(d, c)
-    })
-  }
-
-  /**
    * Case 2 type widening (see the classdoc comment above for TypeCoercion).
    *
-   * i.e. the main difference with [[findTightestCommonTypeOfTwo]] is that here we allow some
-   * loss of precision when widening decimal and double.
+   * i.e. the main difference with [[findTightestCommonType]] is that here we allow some
+   * loss of precision when widening decimal and double, and promotion to string.
    */
   private def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = (t1, t2) match {
     case (t1: DecimalType, t2: DecimalType) =>
@@ -148,13 +137,13 @@ object TypeCoercion {
   }
 
   /**
-   * Similar to [[findWiderCommonType]], but can't promote to string. This is also similar to
-   * [[findTightestCommonType]], but can handle decimal types. If the wider decimal type exceeds
-   * system limitation, this rule will truncate the decimal type before return it.
+   * Similar to [[findWiderCommonType]] that can handle decimal types, but can't promote to
+   * string. If the wider decimal type exceeds system limitation, this rule will truncate
+   * the decimal type before return it.
    */
   def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {
     types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
-      case Some(d) => findTightestCommonTypeOfTwo(d, c).orElse((d, c) match {
+      case Some(d) => findTightestCommonType(d, c).orElse((d, c) match {
         case (t1: DecimalType, t2: DecimalType) =>
           Some(DecimalPrecision.widerDecimalType(t1, t2))
         case (t: IntegralType, d: DecimalType) =>
@@ -621,7 +610,7 @@ object TypeCoercion {
       case e if !e.childrenResolved => e
 
       case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
-        findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { commonType =>
+        findTightestCommonType(left.dataType, right.dataType).map { commonType =>
           if (b.inputType.acceptsType(commonType)) {
             // If the expression accepts the tightest common type, cast to that.
             val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
