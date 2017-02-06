@@ -927,7 +927,4 @@ private[hive] object HiveClientImpl {
       parameters =
         if (hp.getParameters() != null) hp.getParameters().asScala.toMap else Map.empty)
   }
-
 }
-
-
