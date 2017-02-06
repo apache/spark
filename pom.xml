@@ -143,7 +143,6 @@
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>3.1.2</codahale.metrics.version>
     <avro.version>1.7.7</avro.version>
-    <avro.parquet.version>1.8.0</avro.parquet.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <jets3t.version>0.7.1</jets3t.version>
     <aws.kinesis.client.version>1.6.2</aws.kinesis.client.version>
@@ -869,12 +868,6 @@
         <artifactId>avro</artifactId>
         <version>${avro.version}</version>
         <scope>${hadoop.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.avro</groupId>
-        <artifactId>avro</artifactId>
-        <version>${avro.parquet.version}</version>
-        <scope>${parquet.test.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
