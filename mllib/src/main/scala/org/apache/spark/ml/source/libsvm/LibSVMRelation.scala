@@ -77,7 +77,7 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
       dataSchema.size != 2 ||
         !dataSchema(0).dataType.sameType(DataTypes.DoubleType) ||
         !dataSchema(1).dataType.sameType(new VectorUDT()) ||
-        !(dataSchema(1).metadata.getLong(LibSVMOptions.NUMFEATURES).toInt > 0)
+        !(dataSchema(1).metadata.getLong(LibSVMOptions.NUM_FEATURES).toInt > 0)
     ) {
       throw new IOException(s"Illegal schema for libsvm data, schema=$dataSchema")
     }
@@ -105,7 +105,7 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
     }
 
     val featuresMetadata = new MetadataBuilder()
-      .putLong(LibSVMOptions.NUMFEATURES, numFeatures)
+      .putLong(LibSVMOptions.NUM_FEATURES, numFeatures)
       .build()
 
     Some(
@@ -143,7 +143,7 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     verifySchema(dataSchema)
-    val numFeatures = dataSchema("features").metadata.getLong(LibSVMOptions.NUMFEATURES).toInt
+    val numFeatures = dataSchema("features").metadata.getLong(LibSVMOptions.NUM_FEATURES).toInt
     assert(numFeatures > 0)
 
     val libSVMOptions = new LibSVMOptions(options)

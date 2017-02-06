@@ -33,19 +33,19 @@ private[libsvm] class LibSVMOptions(@transient private val parameters: CaseInsen
    * Number of features. If unspecified or nonpositive, the number of features will be determined
    * automatically at the cost of one additional pass.
    */
-  val numFeatures = parameters.get(NUMFEATURES).map(_.toInt)
+  val numFeatures = parameters.get(NUM_FEATURES).map(_.toInt)
 
-  val isSparse = parameters.getOrElse(VECTORTYPE, SPARSEVECTORTYPE) match {
-    case SPARSEVECTORTYPE => true
-    case DENSEVECTORTYPE => false
+  val isSparse = parameters.getOrElse(VECTOR_TYPE, SPARSE_VECTOR_TYPE) match {
+    case SPARSE_VECTOR_TYPE => true
+    case DENSE_VECTOR_TYPE => false
     case o => throw new IllegalArgumentException(s"Invalid value `$o` for parameter " +
-      s"`$VECTORTYPE`. Expected types are `sparse` and `dense`.")
+      s"`$VECTOR_TYPE`. Expected types are `sparse` and `dense`.")
   }
 }
 
 private[libsvm] object LibSVMOptions {
-  val NUMFEATURES = "numFeatures"
-  val VECTORTYPE = "vectorType"
-  val DENSEVECTORTYPE = "dense"
-  val SPARSEVECTORTYPE = "sparse"
+  val NUM_FEATURES = "numFeatures"
+  val VECTOR_TYPE = "vectorType"
+  val DENSE_VECTOR_TYPE = "dense"
+  val SPARSE_VECTOR_TYPE = "sparse"
 }
