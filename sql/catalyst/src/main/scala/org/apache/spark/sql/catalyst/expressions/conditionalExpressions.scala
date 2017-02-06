@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.annotation.tailrec
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
-
-import scala.annotation.tailrec
-import scala.collection.mutable.ArrayBuffer
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -329,6 +328,7 @@ object CaseKeyWhen {
  * with any value.
  * To also point out, no implicit cast will be done in this expression.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr, expr1, expr2, ...) - Returns the index of expr in the expr1, expr2, ... or 0 if not found.",
   extended = """
@@ -340,6 +340,7 @@ object CaseKeyWhen {
       > SELECT _FUNC_('999', 'a', 999, 9.99, '999');
        4
   """)
+// scalastyle:on line.size.limit
 case class Field(children: Seq[Expression]) extends Expression {
 
   /** Even if expr is not found in (expr1, expr2, ...) list, the value will be 0, not null */
@@ -357,8 +358,9 @@ case class Field(children: Seq[Expression]) extends Expression {
     } else if (!children.forall(
         e => e.dataType.isInstanceOf[AtomicType] || e.dataType.isInstanceOf[NullType])) {
       TypeCheckResult.TypeCheckFailure(s"FIELD requires all arguments to be of AtomicType")
-    } else
+    } else {
       TypeCheckResult.TypeCheckSuccess
+    }
   }
 
   override def dataType: DataType = IntegerType
@@ -406,11 +408,13 @@ case class Field(children: Seq[Expression]) extends Expression {
 
     ev.copy(code =
       code"""
-         |${target.code}
-         |boolean ${ev.isNull} = false;
-         |int ${ev.value} = 0;
-         |${evalChildren.zip(dataTypes).zipWithIndex.tail.filter(
-        x => dataTypeMatchIndex.contains(x._2)).map(updateEval).reduceRight(genIfElseStructure)}
+         ${target.code}
+         boolean ${ev.isNull} = false;
+         int ${ev.value} = 0;
+         if (!${target.isNull}) {
+           ${evalChildren.zip(dataTypes).zipWithIndex.tail.filter(
+            x => dataTypeMatchIndex.contains(x._2)).map(updateEval).reduceRight(genIfElseStructure)}
+         }
        """.stripMargin)
   }
 }
