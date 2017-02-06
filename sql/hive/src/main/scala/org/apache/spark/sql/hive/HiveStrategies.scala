@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, SimpleCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, SimpleCatalogRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, ScriptTransformation}
@@ -27,21 +27,24 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, PreprocessTableInsertion}
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.HiveSerDe
 
 
 /**
- * Determine the serde/format of the Hive serde table, according to the storage properties.
+ * Determine the database, serde/format and schema of the Hive serde table, according to the storage
+ * properties.
  */
-class DetermineHiveSerde(conf: SQLConf) extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case c @ CreateTable(t, _, query) if DDLUtils.isHiveTable(t) && t.storage.serde.isEmpty =>
-      if (t.bucketSpec.isDefined) {
+class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
+  private def determineHiveSerde(table: CatalogTable): CatalogTable = {
+    if (table.storage.serde.nonEmpty) {
+      table
+    } else {
+      if (table.bucketSpec.isDefined) {
         throw new AnalysisException("Creating bucketed Hive serde table is not supported yet.")
       }
 
-      val defaultStorage = HiveSerDe.getDefaultStorage(conf)
-      val options = new HiveOptions(t.storage.properties)
+      val defaultStorage = HiveSerDe.getDefaultStorage(session.sessionState.conf)
+      val options = new HiveOptions(table.storage.properties)
 
       val fileStorage = if (options.fileFormat.isDefined) {
         HiveSerDe.sourceToSerDe(options.fileFormat.get) match {
@@ -67,13 +70,39 @@ class DetermineHiveSerde(conf: SQLConf) extends Rule[LogicalPlan] {
         CatalogStorageFormat.empty
       }
 
-      val storage = t.storage.copy(
+      val storage = table.storage.copy(
         inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
         outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
         serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
         properties = options.serdeProperties)
 
-      c.copy(tableDesc = t.copy(storage = storage))
+      table.copy(storage = storage)
+    }
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case c @ CreateTable(t, _, query) if DDLUtils.isHiveTable(t) =>
+      // Finds the database name if the name does not exist.
+      val dbName = t.identifier.database.getOrElse(session.catalog.currentDatabase)
+      val table = t.copy(identifier = t.identifier.copy(database = Some(dbName)))
+
+      // Determines the serde/format of Hive tables
+      val withStorage = determineHiveSerde(table)
+
+      // Infers the schema, if empty, because the schema could be determined by Hive
+      // serde.
+      val catalogTable = if (query.isEmpty) {
+        val withSchema = HiveUtils.inferSchema(withStorage)
+        if (withSchema.schema.length <= 0) {
+          throw new AnalysisException("Unable to infer the schema. " +
+            s"The schema specification is required to create the table ${withSchema.identifier}.")
+        }
+        withSchema
+      } else {
+        withStorage
+      }
+
+      c.copy(tableDesc = catalogTable)
   }
 }
 
@@ -82,17 +111,13 @@ class DetermineHiveSerde(conf: SQLConf) extends Rule[LogicalPlan] {
  *
  * Note that, this rule must be run after `PreprocessTableInsertion`.
  */
-class HiveAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
+object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case InsertIntoTable(table: MetastoreRelation, partSpec, query, overwrite, ifNotExists) =>
       InsertIntoHiveTable(table, partSpec, query, overwrite, ifNotExists)
 
     case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
-      val dbName = tableDesc.identifier.database.getOrElse(session.catalog.currentDatabase)
-      CreateHiveTableAsSelectCommand(
-        tableDesc.copy(identifier = tableDesc.identifier.copy(database = Some(dbName))),
-        query,
-        mode)
+      CreateHiveTableAsSelectCommand(tableDesc, query, mode)
   }
 }
 

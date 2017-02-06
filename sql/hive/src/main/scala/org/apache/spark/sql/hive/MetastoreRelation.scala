@@ -19,13 +19,9 @@ package org.apache.spark.sql.hive
 
 import java.io.IOException
 
-import scala.collection.JavaConverters._
-
 import com.google.common.base.Objects
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.hive.common.StatsSetupConst
-import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata.{Partition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
@@ -60,57 +56,7 @@ private[hive] case class MetastoreRelation(
 
   override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
 
-  private def toHiveColumn(c: StructField): FieldSchema = {
-    val typeString = if (c.metadata.contains(HiveUtils.hiveTypeString)) {
-      c.metadata.getString(HiveUtils.hiveTypeString)
-    } else {
-      c.dataType.catalogString
-    }
-    new FieldSchema(c.name, typeString, c.getComment.orNull)
-  }
-
-  // TODO: merge this with HiveClientImpl#toHiveTable
-  @transient val hiveQlTable: HiveTable = {
-    // We start by constructing an API table as Hive performs several important transformations
-    // internally when converting an API table to a QL table.
-    val tTable = new org.apache.hadoop.hive.metastore.api.Table()
-    tTable.setTableName(catalogTable.identifier.table)
-    tTable.setDbName(catalogTable.database)
-
-    val tableParameters = new java.util.HashMap[String, String]()
-    tTable.setParameters(tableParameters)
-    catalogTable.properties.foreach { case (k, v) => tableParameters.put(k, v) }
-
-    tTable.setTableType(catalogTable.tableType match {
-      case CatalogTableType.EXTERNAL => HiveTableType.EXTERNAL_TABLE.toString
-      case CatalogTableType.MANAGED => HiveTableType.MANAGED_TABLE.toString
-      case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW.toString
-    })
-
-    val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
-    tTable.setSd(sd)
-
-    // Note: In Hive the schema and partition columns must be disjoint sets
-    val (partCols, schema) = catalogTable.schema.map(toHiveColumn).partition { c =>
-      catalogTable.partitionColumnNames.contains(c.getName)
-    }
-    sd.setCols(schema.asJava)
-    tTable.setPartitionKeys(partCols.asJava)
-
-    catalogTable.storage.locationUri.foreach(sd.setLocation)
-    catalogTable.storage.inputFormat.foreach(sd.setInputFormat)
-    catalogTable.storage.outputFormat.foreach(sd.setOutputFormat)
-
-    val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
-    catalogTable.storage.serde.foreach(serdeInfo.setSerializationLib)
-    sd.setSerdeInfo(serdeInfo)
-
-    val serdeParameters = new java.util.HashMap[String, String]()
-    catalogTable.storage.properties.foreach { case (k, v) => serdeParameters.put(k, v) }
-    serdeInfo.setParameters(serdeParameters)
-
-    new HiveTable(tTable)
-  }
+  @transient val hiveQlTable: HiveTable = HiveUtils.toHiveTable(catalogTable)
 
   @transient override def computeStats(conf: CatalystConf): Statistics = {
     catalogTable.stats.map(_.toPlanStats(output)).getOrElse(Statistics(
@@ -165,38 +111,7 @@ private[hive] case class MetastoreRelation(
     } else {
       allPartitions
     }
-
-    rawPartitions.map { p =>
-      val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
-      tPartition.setDbName(databaseName)
-      tPartition.setTableName(tableName)
-      tPartition.setValues(partitionKeys.map(a => p.spec(a.name)).asJava)
-
-      val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
-      tPartition.setSd(sd)
-
-      // Note: In Hive the schema and partition columns must be disjoint sets
-      val schema = catalogTable.schema.map(toHiveColumn).filter { c =>
-        !catalogTable.partitionColumnNames.contains(c.getName)
-      }
-      sd.setCols(schema.asJava)
-
-      p.storage.locationUri.foreach(sd.setLocation)
-      p.storage.inputFormat.foreach(sd.setInputFormat)
-      p.storage.outputFormat.foreach(sd.setOutputFormat)
-
-      val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
-      sd.setSerdeInfo(serdeInfo)
-      // maps and lists should be set only after all elements are ready (see HIVE-7975)
-      p.storage.serde.foreach(serdeInfo.setSerializationLib)
-
-      val serdeParameters = new java.util.HashMap[String, String]()
-      catalogTable.storage.properties.foreach { case (k, v) => serdeParameters.put(k, v) }
-      p.storage.properties.foreach { case (k, v) => serdeParameters.put(k, v) }
-      serdeInfo.setParameters(serdeParameters)
-
-      new Partition(hiveQlTable, tPartition)
-    }
+    rawPartitions.map(HiveUtils.toHivePartition(catalogTable, hiveQlTable, _))
   }
 
   /** Only compare database and tablename, not alias. */

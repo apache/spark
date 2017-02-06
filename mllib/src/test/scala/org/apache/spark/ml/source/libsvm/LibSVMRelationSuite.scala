@@ -110,4 +110,31 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     df.select("features").rdd.map { case Row(d: Vector) => d }.first
     df.select("features").collect
   }
+
+  test("create libsvmTable table without schema") {
+    try {
+      spark.sql(
+        s"""
+           |CREATE TABLE libsvmTable
+           |USING libsvm
+           |OPTIONS (
+           |  path '$path'
+           |)
+         """.stripMargin)
+      val df = spark.table("libsvmTable")
+      assert(df.columns(0) == "label")
+      assert(df.columns(1) == "features")
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS libsvmTable")
+    }
+  }
+
+  test("create libsvmTable table without schema and path") {
+    try {
+      val e = intercept[IOException](spark.sql("CREATE TABLE libsvmTable USING libsvm"))
+      assert(e.getMessage.contains("No input path specified for libsvm data"))
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS libsvmTable")
+    }
+  }
 }
