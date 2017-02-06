@@ -826,9 +826,9 @@ private[hive] object HiveClientImpl {
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
   /** Converts the native table metadata representation format CatalogTable to Hive's Table.
-    * the default value shimForHiveExecution is only used for hive execution, a Shim instance
-    * with a specific metastore version should be passed to this function to interact with metastore
-    */
+   * the default value shimForHiveExecution is only used for hive execution, a Shim instance
+   * with a specific metastore version should be passed to this function to interact with metastore
+   */
   def toHiveTable(
       table: CatalogTable,
       conf: Option[HiveConf] = None,
@@ -884,9 +884,9 @@ private[hive] object HiveClientImpl {
   }
 
   /**
-    * Converts the native partition metadata representation format CatalogTablePartition to
-    * Hive's Partition.
-    */
+   * Converts the native partition metadata representation format CatalogTablePartition to
+   * Hive's Partition.
+   */
   def toHivePartition(
       p: CatalogTablePartition,
       ht: HiveTable): HivePartition = {
