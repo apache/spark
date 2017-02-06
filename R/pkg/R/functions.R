@@ -1743,7 +1743,7 @@ setMethod("toRadians",
 #' @rdname to_date
 #' @name to_date
 #' @family datetime_funcs
-#' @aliases to_date,Column-method
+#' @aliases to_date,Column,missing-method
 #' @export
 #' @examples
 #' \dontrun{
@@ -1786,7 +1786,7 @@ setMethod("to_date",
 #' @rdname to_timestamp
 #' @name to_timestamp
 #' @family datetime_funcs
-#' @aliases to_timestamp,Column-method
+#' @aliases to_timestamp,Column,missing-method
 #' @export
 #' @examples
 #' \dontrun{
