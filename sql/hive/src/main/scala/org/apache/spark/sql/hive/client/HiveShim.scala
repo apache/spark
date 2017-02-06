@@ -843,3 +843,16 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
   }
 
 }
+
+private[hive] object HiveShimUtils {
+  def shim(version: HiveVersion): Shim = {
+    version match {
+      case hive.v12 => new Shim_v0_12()
+      case hive.v13 => new Shim_v0_13()
+      case hive.v14 => new Shim_v0_14()
+      case hive.v1_0 => new Shim_v1_0()
+      case hive.v1_1 => new Shim_v1_1()
+      case hive.v1_2 => new Shim_v1_2()
+    }
+  }
+}

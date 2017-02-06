@@ -62,7 +62,7 @@ private[spark] object HiveUtils extends Logging {
   /** The version of hive used internally by Spark SQL. */
   val hiveExecutionVersion: String = "1.2.1"
 
-  private lazy val shimForHiveExecution = HiveClientImpl.shim(IsolatedClientLoader.hiveVersion(
+  private val shimForHiveExecution = HiveShimUtils.shim(IsolatedClientLoader.hiveVersion(
     HiveUtils.hiveExecutionVersion))
 
   /**
