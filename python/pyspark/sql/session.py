@@ -51,8 +51,10 @@ def _monkey_patch_RDD(sparkSession):
         :param samplingRatio: the sample ratio of rows used for inferring
         :return: a DataFrame
 
+        >>> from pyspark.sql import Row
+        >>> rdd = sc.parallelize([Row(field1=1, field2="row1"), Row(field1=2, field2="row2")])
         >>> rdd.toDF().collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(field1=1, field2=u'row1'), Row(field1=2, field2=u'row2')]
         """
         return sparkSession.createDataFrame(self, schema, sampleRatio)
 
@@ -537,6 +539,8 @@ class SparkSession(object):
 
         :return: :class:`DataFrame`
 
+        >>> df = spark.createDataFrame([(1, 'row1'), (2, 'row2'), (3, 'row3')],
+        ...                            ['field1', 'field2'])
         >>> df.createOrReplaceTempView("table1")
         >>> df2 = spark.sql("SELECT field1 AS f1, field2 as f2 from table1")
         >>> df2.collect()
@@ -550,6 +554,8 @@ class SparkSession(object):
 
         :return: :class:`DataFrame`
 
+        >>> df = spark.createDataFrame([(1, 'row1'), (2, 'row2'), (3, 'row3')],
+        ...                            ['field1', 'field2'])
         >>> df.createOrReplaceTempView("table1")
         >>> df2 = spark.table("table1")
         >>> sorted(df.collect()) == sorted(df2.collect())
@@ -631,11 +637,6 @@ def _test():
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['spark'] = SparkSession(sc)
-    globs['rdd'] = rdd = sc.parallelize(
-        [Row(field1=1, field2="row1"),
-         Row(field1=2, field2="row2"),
-         Row(field1=3, field2="row3")])
-    globs['df'] = rdd.toDF()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.session, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)

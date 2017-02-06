@@ -471,6 +471,9 @@ class DataFrameWriter(OptionUtils):
         * `error`: Throw an exception if data already exists.
         * `ignore`: Silently ignore this operation if data already exists.
 
+        >>> import os
+        >>> import tempfile
+        >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         # At the JVM side, the default value of mode is already set to "error".
@@ -485,6 +488,9 @@ class DataFrameWriter(OptionUtils):
 
         :param source: string, name of the data source, e.g. 'json', 'parquet'.
 
+        >>> import os
+        >>> import tempfile
+        >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.write.format('json').save(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self._jwrite = self._jwrite.format(source)
@@ -514,6 +520,9 @@ class DataFrameWriter(OptionUtils):
 
         :param cols: name of columns
 
+        >>> import os
+        >>> import tempfile
+        >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.write.partitionBy('year', 'month').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
@@ -540,6 +549,9 @@ class DataFrameWriter(OptionUtils):
         :param partitionBy: names of partitioning columns
         :param options: all other string options
 
+        >>> import os
+        >>> import tempfile
+        >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode).options(**options)
@@ -613,6 +625,9 @@ class DataFrameWriter(OptionUtils):
                                 This applies to timestamp type. If None is set, it uses the
                                 default value value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
 
+        >>> import os
+        >>> import tempfile
+        >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
@@ -638,6 +653,9 @@ class DataFrameWriter(OptionUtils):
                             is set, it uses the value specified in
                             ``spark.sql.parquet.compression.codec``.
 
+        >>> import os
+        >>> import tempfile
+        >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
@@ -705,6 +723,9 @@ class DataFrameWriter(OptionUtils):
                                 This applies to timestamp type. If None is set, it uses the
                                 default value value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
 
+        >>> import os
+        >>> import tempfile
+        >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
@@ -732,6 +753,8 @@ class DataFrameWriter(OptionUtils):
                             This will override ``orc.compress``. If None is set, it uses the
                             default value, ``snappy``.
 
+        >>> import os
+        >>> import tempfile
         >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -771,10 +794,9 @@ class DataFrameWriter(OptionUtils):
 def _test():
     import doctest
     import os
-    import tempfile
     import py4j
     from pyspark.context import SparkContext
-    from pyspark.sql import SparkSession, Row
+    from pyspark.sql import SparkSession
     import pyspark.sql.readwriter
 
     os.chdir(os.environ["SPARK_HOME"])
@@ -786,8 +808,6 @@ def _test():
     except py4j.protocol.Py4JError:
         spark = SparkSession(sc)
 
-    globs['tempfile'] = tempfile
-    globs['os'] = os
     globs['sc'] = sc
     globs['spark'] = spark
     globs['df'] = spark.read.parquet('python/test_support/sql/parquet_partitioned')

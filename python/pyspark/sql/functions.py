@@ -208,6 +208,7 @@ def approxCountDistinct(col, rsd=None):
 def approx_count_distinct(col, rsd=None):
     """Returns a new :class:`Column` for approximate distinct count of ``col``.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.agg(approx_count_distinct(df.age).alias('c')).collect()
     [Row(c=2)]
     """
@@ -313,6 +314,7 @@ def covar_samp(col1, col2):
 def countDistinct(col, *cols):
     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.agg(countDistinct(df.age, df.name).alias('c')).collect()
     [Row(c=2)]
 
@@ -342,6 +344,7 @@ def grouping(col):
     Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
     or not, returns 1 for aggregated or 0 for not aggregated in the result set.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.cube("name").agg(grouping("name"), sum("age")).orderBy("name").show()
     +-----+--------------+--------+
     | name|grouping(name)|sum(age)|
@@ -366,6 +369,7 @@ def grouping_id(*cols):
     .. note:: The list of columns should match with grouping columns exactly, or empty (means all
         the grouping columns).
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.cube("name").agg(grouping_id(), sum("age")).orderBy("name").show()
     +-----+-------------+--------+
     | name|grouping_id()|sum(age)|
@@ -553,6 +557,7 @@ def spark_partition_id():
 
     .. note:: This is indeterministic because it depends on data partitioning and task scheduling.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.repartition(1).select(spark_partition_id().alias("pid")).collect()
     [Row(pid=0), Row(pid=0)]
     """
@@ -564,6 +569,7 @@ def spark_partition_id():
 def expr(str):
     """Parses the expression string into the column that it represents
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(expr("length(name)")).collect()
     [Row(length(name)=5), Row(length(name)=3)]
     """
@@ -578,6 +584,7 @@ def struct(*cols):
 
     :param cols: list of column names (string) or list of :class:`Column` expressions
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(struct('age', 'name').alias("struct")).collect()
     [Row(struct=Row(age=2, name=u'Alice')), Row(struct=Row(age=5, name=u'Bob'))]
     >>> df.select(struct([df.age, df.name]).alias("struct")).collect()
@@ -630,6 +637,7 @@ def when(condition, value):
     :param condition: a boolean :class:`Column` expression.
     :param value: a literal value, or a :class:`Column` expression.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(when(df['age'] == 2, 3).otherwise(4).alias("age")).collect()
     [Row(age=3), Row(age=4)]
 
@@ -650,6 +658,7 @@ def log(arg1, arg2=None):
 
     If there is only one argument, then this takes the natural logarithm of the argument.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(log(10.0, df.age).alias('ten')).rdd.map(lambda l: str(l.ten)[:7]).collect()
     ['0.30102', '0.69897']
 
@@ -1188,6 +1197,7 @@ def sha2(col, numBits):
     and SHA-512). The numBits indicates the desired bit length of the result, which must have a
     value of 224, 256, 384, 512, or 0 (which is equivalent to 256).
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> digests = df.select(sha2(df.name, 256).alias('s')).collect()
     >>> digests[0]
     Row(s=u'3bc51062973c458d5a6f2d8d64a023246354ad7e064b1e4e009ec8a0699a3043')
@@ -1526,6 +1536,7 @@ def soundex(col):
 def bin(col):
     """Returns the string representation of the binary value of the given column.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(bin(df.age).alias('c')).collect()
     [Row(c=u'10'), Row(c=u'101')]
     """
@@ -1600,6 +1611,7 @@ def create_map(*cols):
     :param cols: list of column names (string) or list of :class:`Column` expressions that grouped
         as key-value pairs, e.g. (key1, value1, key2, value2, ...).
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(create_map('name', 'age').alias("map")).collect()
     [Row(map={u'Alice': 2}), Row(map={u'Bob': 5})]
     >>> df.select(create_map([df.name, df.age]).alias("map")).collect()
@@ -1619,6 +1631,7 @@ def array(*cols):
     :param cols: list of column names (string) or list of :class:`Column` expressions that have
         the same data type.
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> df.select(array('age', 'age').alias("arr")).collect()
     [Row(arr=[2, 2]), Row(arr=[5, 5])]
     >>> df.select(array([df.age, df.age]).alias("arr")).collect()
@@ -1763,7 +1776,6 @@ def to_json(col, options={}):
     :param options: options to control converting. accepts the same options as the json datasource
 
     >>> from pyspark.sql import Row
-    >>> from pyspark.sql.types import *
     >>> data = [(1, Row(name='Alice', age=2))]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
@@ -1871,6 +1883,7 @@ def udf(f, returnType=StringType()):
     :param f: python function
     :param returnType: a :class:`pyspark.sql.types.DataType` object
 
+    >>> df = spark.createDataFrame([('Alice', 2), ('Bob', 5)], ['name', 'age'])
     >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
     >>> df.select(slen(df.name).alias('slen')).collect()
@@ -1896,7 +1909,6 @@ def _test():
     sc = spark.sparkContext
     globs['sc'] = sc
     globs['spark'] = spark
-    globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)

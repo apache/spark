@@ -105,6 +105,8 @@ class DataFrame(object):
 
         Each row is turned into a JSON document as one element in the returned RDD.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.toJSON().first()
         u'{"age":2,"name":"Alice"}'
         """
@@ -118,6 +120,8 @@ class DataFrame(object):
         The lifetime of this temporary table is tied to the :class:`SQLContext`
         that was used to create this :class:`DataFrame`.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.registerTempTable("people")
         >>> df2 = spark.sql("select * from people")
         >>> sorted(df.collect()) == sorted(df2.collect())
@@ -137,6 +141,8 @@ class DataFrame(object):
         throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
         catalog.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.createTempView("people")
         >>> df2 = spark.sql("select * from people")
         >>> sorted(df.collect()) == sorted(df2.collect())
@@ -157,6 +163,8 @@ class DataFrame(object):
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.createOrReplaceTempView("people")
         >>> df2 = df.filter(df.age > 3)
         >>> df2.createOrReplaceTempView("people")
@@ -176,6 +184,8 @@ class DataFrame(object):
         throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
         catalog.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.createGlobalTempView("people")
         >>> df2 = spark.sql("select * from global_temp.people")
         >>> sorted(df.collect()) == sorted(df2.collect())
@@ -218,8 +228,10 @@ class DataFrame(object):
     def schema(self):
         """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.schema
-        StructType(List(StructField(age,IntegerType,true),StructField(name,StringType,true)))
+        StructType(List(StructField(age,LongType,true),StructField(name,StringType,true)))
         """
         if self._schema is None:
             try:
@@ -233,11 +245,13 @@ class DataFrame(object):
     def printSchema(self):
         """Prints out the schema in the tree format.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.printSchema()
         root
-         |-- age: integer (nullable = true)
+         |-- age: long (nullable = true)
          |-- name: string (nullable = true)
-        <BLANKLINE>
+
         """
         print(self._jdf.schema().treeString())
 
@@ -247,9 +261,11 @@ class DataFrame(object):
 
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.explain()
         == Physical Plan ==
-        Scan ExistingRDD[age#0,name#1]
+        Scan ExistingRDD[age#...,name#...]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -296,8 +312,10 @@ class DataFrame(object):
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df
-        DataFrame[age: int, name: string]
+        DataFrame[age: bigint, name: string]
         >>> df.show()
         +---+-----+
         |age| name|
@@ -359,6 +377,8 @@ class DataFrame(object):
 
         .. note:: Experimental
 
+        >>> sdf = spark.createDataFrame([('Tom', 1479441846), ('Bob', 1479442946)],
+        ...                             ['name', 'time'])
         >>> sdf.select('name', sdf.time.cast('timestamp')).withWatermark('time', '10 minutes')
         DataFrame[name: string, time: timestamp]
         """
@@ -373,6 +393,8 @@ class DataFrame(object):
     def count(self):
         """Returns the number of rows in this :class:`DataFrame`.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.count()
         2
         """
@@ -383,6 +405,8 @@ class DataFrame(object):
     def collect(self):
         """Returns all the records as a list of :class:`Row`.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.collect()
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
@@ -397,6 +421,8 @@ class DataFrame(object):
         Returns an iterator that contains all of the rows in this :class:`DataFrame`.
         The iterator will consume as much memory as the largest partition in this DataFrame.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> list(df.toLocalIterator())
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
@@ -409,6 +435,8 @@ class DataFrame(object):
     def limit(self, num):
         """Limits the result count to the number specified.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.limit(1).collect()
         [Row(age=2, name=u'Alice')]
         >>> df.limit(0).collect()
@@ -422,6 +450,8 @@ class DataFrame(object):
     def take(self, num):
         """Returns the first ``num`` rows as a :class:`list` of :class:`Row`.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.take(2)
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
@@ -433,6 +463,8 @@ class DataFrame(object):
 
         This is a shorthand for ``df.rdd.foreach()``.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> def f(person):
         ...     print(person.name)
         >>> df.foreach(f)
@@ -445,6 +477,8 @@ class DataFrame(object):
 
         This a shorthand for ``df.rdd.foreachPartition()``.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> def f(people):
         ...     for person in people:
         ...         print(person.name)
@@ -481,6 +515,9 @@ class DataFrame(object):
     def storageLevel(self):
         """Get the :class:`DataFrame`'s current storage level.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
+        >>> df2 = spark.createDataFrame([Row(name='Tom', height=80), Row(name='Bob', height=85)])
         >>> df.storageLevel
         StorageLevel(False, False, False, False, 1)
         >>> df.cache().storageLevel
@@ -517,6 +554,8 @@ class DataFrame(object):
         there will not be a shuffle, instead each of the 100 new partitions will
         claim 10 of the current partitions.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.coalesce(1).rdd.getNumPartitions()
         1
         """
@@ -536,6 +575,8 @@ class DataFrame(object):
            Added optional arguments to specify the partitioning columns. Also made numPartitions
            optional if partitioning columns are specified.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.repartition(10).rdd.getNumPartitions()
         10
         >>> data = df.union(df).repartition("age")
@@ -553,10 +594,10 @@ class DataFrame(object):
         +---+-----+
         |age| name|
         +---+-----+
-        |  2|Alice|
+        |  5|  Bob|
         |  5|  Bob|
         |  2|Alice|
-        |  5|  Bob|
+        |  2|Alice|
         +---+-----+
         >>> data.rdd.getNumPartitions()
         7
@@ -565,10 +606,10 @@ class DataFrame(object):
         +---+-----+
         |age| name|
         +---+-----+
-        |  5|  Bob|
-        |  5|  Bob|
         |  2|Alice|
         |  2|Alice|
+        |  5|  Bob|
+        |  5|  Bob|
         +---+-----+
         """
         if isinstance(numPartitions, int):
@@ -587,6 +628,8 @@ class DataFrame(object):
     def distinct(self):
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.distinct().count()
         2
         """
@@ -599,6 +642,8 @@ class DataFrame(object):
         .. note:: This is not guaranteed to provide exactly the fraction specified of the total
             count of the given :class:`DataFrame`.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.sample(False, 0.5, 42).count()
         2
         """
@@ -651,6 +696,11 @@ class DataFrame(object):
             be normalized if they don't sum up to 1.0.
         :param seed: The seed for sampling.
 
+        >>> from pyspark.sql import Row
+        >>> df4 = spark.createDataFrame([Row(name='Alice', age=10, height=80),
+        ...                              Row(name='Bob', age=5, height=None),
+        ...                              Row(name='Tom', age=None, height=None),
+        ...                              Row(name=None, age=None, height=None)])
         >>> splits = df4.randomSplit([1.0, 2.0], 24)
         >>> splits[0].count()
         1
@@ -670,8 +720,10 @@ class DataFrame(object):
     def dtypes(self):
         """Returns all column names and their data types as a list.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.dtypes
-        [('age', 'int'), ('name', 'string')]
+        [('age', 'bigint'), ('name', 'string')]
         """
         return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
 
@@ -680,6 +732,8 @@ class DataFrame(object):
     def columns(self):
         """Returns all column names as a list.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.columns
         ['age', 'name']
         """
@@ -690,7 +744,9 @@ class DataFrame(object):
     def alias(self, alias):
         """Returns a new :class:`DataFrame` with an alias set.
 
-        >>> from pyspark.sql.functions import *
+        >>> from pyspark.sql import Row
+        >>> from pyspark.sql.functions import col
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df_as1 = df.alias("df_as1")
         >>> df_as2 = df.alias("df_as2")
         >>> joined_df = df_as1.join(df_as2, col("df_as1.name") == col("df_as2.name"), 'inner')
@@ -707,6 +763,9 @@ class DataFrame(object):
 
         :param other: Right side of the cartesian product.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
+        >>> df2 = spark.createDataFrame([Row(name='Tom', height=80), Row(name='Bob', height=85)])
         >>> df.select("age", "name").collect()
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         >>> df2.select("name", "height").collect()
@@ -735,12 +794,16 @@ class DataFrame(object):
 
         The following performs a full outer join between ``df1`` and ``df2``.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
+        >>> df2 = spark.createDataFrame([Row(name='Tom', height=80), Row(name='Bob', height=85)])
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
 
         >>> df.join(df2, 'name', 'outer').select('name', 'height').collect()
         [Row(name=u'Tom', height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
 
+        >>> df3 = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> cond = [df.name == df3.name, df.age == df3.age]
         >>> df.join(df3, cond, 'outer').select(df.name, df3.age).collect()
         [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
@@ -748,6 +811,10 @@ class DataFrame(object):
         >>> df.join(df2, 'name').select(df.name, df2.height).collect()
         [Row(name=u'Bob', height=85)]
 
+        >>> df4 = spark.createDataFrame([Row(name='Alice', age=10, height=80),
+        ...                              Row(name='Bob', age=5, height=None),
+        ...                              Row(name='Tom', age=None, height=None),
+        ...                              Row(name=None, age=None, height=None)])
         >>> df.join(df4, ['name', 'age']).select(df.name, df.age).collect()
         [Row(name=u'Bob', age=5)]
         """
@@ -781,6 +848,8 @@ class DataFrame(object):
             Sort ascending vs. descending. Specify list for multiple sort orders.
             If a list is specified, length of the list must equal length of the `cols`.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.sortWithinPartitions("age", ascending=False).show()
         +---+-----+
         |age| name|
@@ -802,6 +871,8 @@ class DataFrame(object):
             Sort ascending vs. descending. Specify list for multiple sort orders.
             If a list is specified, length of the list must equal length of the `cols`.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.sort(df.age.desc()).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
         >>> df.sort("age", ascending=False).collect()
@@ -867,6 +938,8 @@ class DataFrame(object):
         .. note:: This function is meant for exploratory data analysis, as we make no
             guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.describe(['age']).show()
         +-------+------------------+
         |summary|               age|
@@ -877,6 +950,7 @@ class DataFrame(object):
         |    min|                 2|
         |    max|                 5|
         +-------+------------------+
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.describe().show()
         +-------+------------------+-----+
         |summary|               age| name|
@@ -905,6 +979,8 @@ class DataFrame(object):
         :return: If n is greater than 1, return a list of :class:`Row`.
             If n is 1, return a single Row.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.head()
         Row(age=2, name=u'Alice')
         >>> df.head(1)
@@ -920,6 +996,8 @@ class DataFrame(object):
     def first(self):
         """Returns the first row as a :class:`Row`.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.first()
         Row(age=2, name=u'Alice')
         """
@@ -930,6 +1008,8 @@ class DataFrame(object):
     def __getitem__(self, item):
         """Returns the column as a :class:`Column`.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.select(df['age']).collect()
         [Row(age=2), Row(age=5)]
         >>> df[ ["name", "age"]].collect()
@@ -956,6 +1036,8 @@ class DataFrame(object):
     def __getattr__(self, name):
         """Returns the :class:`Column` denoted by ``name``.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.select(df.age).collect()
         [Row(age=2), Row(age=5)]
         """
@@ -974,6 +1056,8 @@ class DataFrame(object):
             If one of the column names is '*', that column is expanded to include all columns
             in the current DataFrame.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.select('*').collect()
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         >>> df.select('name', 'age').collect()
@@ -990,6 +1074,8 @@ class DataFrame(object):
 
         This is a variant of :func:`select` that accepts SQL expressions.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.selectExpr("age * 2", "abs(age)").collect()
         [Row((age * 2)=4, abs(age)=2), Row((age * 2)=10, abs(age)=5)]
         """
@@ -1008,6 +1094,8 @@ class DataFrame(object):
         :param condition: a :class:`Column` of :class:`types.BooleanType`
             or a string of SQL expression.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.filter(df.age > 3).collect()
         [Row(age=5, name=u'Bob')]
         >>> df.where(df.age == 2).collect()
@@ -1038,6 +1126,8 @@ class DataFrame(object):
         :param cols: list of columns to group by.
             Each element should be a column name (string) or an expression (:class:`Column`).
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.groupBy().avg().collect()
         [Row(avg(age)=3.5)]
         >>> sorted(df.groupBy('name').agg({'age': 'mean'}).collect())
@@ -1057,6 +1147,8 @@ class DataFrame(object):
         Create a multi-dimensional rollup for the current :class:`DataFrame` using
         the specified columns, so we can run aggregation on them.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.rollup("name", df.age).count().orderBy("name", "age").show()
         +-----+----+-----+
         | name| age|count|
@@ -1078,6 +1170,8 @@ class DataFrame(object):
         Create a multi-dimensional cube for the current :class:`DataFrame` using
         the specified columns, so we can run aggregation on them.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.cube("name", df.age).count().orderBy("name", "age").show()
         +-----+----+-----+
         | name| age|count|
@@ -1100,6 +1194,8 @@ class DataFrame(object):
         """ Aggregate on the entire :class:`DataFrame` without groups
         (shorthand for ``df.groupBy.agg()``).
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.agg({"age": "max"}).collect()
         [Row(max(age)=5)]
         >>> from pyspark.sql import functions as F
@@ -1191,6 +1287,12 @@ class DataFrame(object):
             This overwrites the `how` parameter.
         :param subset: optional list of column names to consider.
 
+
+        >>> from pyspark.sql import Row
+        >>> df4 = spark.createDataFrame([Row(name='Alice', age=10, height=80),
+        ...                              Row(name='Bob', age=5, height=None),
+        ...                              Row(name='Tom', age=None, height=None),
+        ...                              Row(name=None, age=None, height=None)])
         >>> df4.na.drop().show()
         +---+------+-----+
         |age|height| name|
@@ -1228,6 +1330,11 @@ class DataFrame(object):
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
 
+        >>> from pyspark.sql import Row
+        >>> df4 = spark.createDataFrame([Row(name='Alice', age=10, height=80),
+        ...                              Row(name='Bob', age=5, height=None),
+        ...                              Row(name='Tom', age=None, height=None),
+        ...                              Row(name=None, age=None, height=None)])
         >>> df4.na.fill(50).show()
         +---+------+-----+
         |age|height| name|
@@ -1286,6 +1393,11 @@ class DataFrame(object):
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
 
+        >>> from pyspark.sql import Row
+        >>> df4 = spark.createDataFrame([Row(name='Alice', age=10, height=80),
+        ...                              Row(name='Bob', age=5, height=None),
+        ...                              Row(name='Tom', age=None, height=None),
+        ...                              Row(name=None, age=None, height=None)])
         >>> df4.na.replace(10, 20).show()
         +----+------+-----+
         | age|height| name|
@@ -1510,6 +1622,8 @@ class DataFrame(object):
         :param colName: string, name of the new column.
         :param col: a :class:`Column` expression for the new column.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.withColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
         """
@@ -1525,6 +1639,8 @@ class DataFrame(object):
         :param existing: string, name of the existing column to rename.
         :param col: string, new name of the column.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.withColumnRenamed('age', 'age2').collect()
         [Row(age2=2, name=u'Alice'), Row(age2=5, name=u'Bob')]
         """
@@ -1539,6 +1655,9 @@ class DataFrame(object):
         :param cols: a string name of the column to drop, or a
             :class:`Column` to drop, or a list of string name of the columns to drop.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
+        >>> df2 = spark.createDataFrame([Row(name='Tom', height=80), Row(name='Bob', height=85)])
         >>> df.drop('age').collect()
         [Row(name=u'Alice'), Row(name=u'Bob')]
 
@@ -1576,6 +1695,8 @@ class DataFrame(object):
 
         :param cols: list of new column names (string)
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.toDF('f1', 'f2').collect()
         [Row(f1=2, f2=u'Alice'), Row(f1=5, f2=u'Bob')]
         """
@@ -1591,6 +1712,8 @@ class DataFrame(object):
         .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
             to be small, as all the data is loaded into the driver's memory.
 
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
         >>> df.toPandas()  # doctest: +SKIP
            age   name
         0    2  Alice
@@ -1694,26 +1817,13 @@ class DataFrameStatFunctions(object):
 def _test():
     import doctest
     from pyspark.context import SparkContext
-    from pyspark.sql import Row, SQLContext, SparkSession
+    from pyspark.sql import SQLContext, SparkSession
     import pyspark.sql.dataframe
-    from pyspark.sql.functions import from_unixtime
     globs = pyspark.sql.dataframe.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
     globs['spark'] = SparkSession(sc)
-    globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')])\
-        .toDF(StructType([StructField('age', IntegerType()),
-                          StructField('name', StringType())]))
-    globs['df2'] = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)]).toDF()
-    globs['df3'] = sc.parallelize([Row(name='Alice', age=2),
-                                   Row(name='Bob', age=5)]).toDF()
-    globs['df4'] = sc.parallelize([Row(name='Alice', age=10, height=80),
-                                   Row(name='Bob', age=5, height=None),
-                                   Row(name='Tom', age=None, height=None),
-                                   Row(name=None, age=None, height=None)]).toDF()
-    globs['sdf'] = sc.parallelize([Row(name='Tom', time=1479441846),
-                                   Row(name='Bob', time=1479442946)]).toDF()
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,

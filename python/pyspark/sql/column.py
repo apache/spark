@@ -254,6 +254,7 @@ class Column(object):
         :param startPos: start position (int or Column)
         :param length:  length of the substring (int or Column)
 
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob')], ['age', 'name'])
         >>> df.select(df.name.substr(1, 3).alias("col")).collect()
         [Row(col=u'Ali'), Row(col=u'Bob')]
         """
@@ -276,6 +277,7 @@ class Column(object):
         A boolean expression that is evaluated to true if the value of this
         expression is contained by the evaluated values of the arguments.
 
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob')], ['age', 'name'])
         >>> df[df.name.isin("Bob", "Mike")].collect()
         [Row(age=5, name=u'Bob')]
         >>> df[df.age.isin([1, 2, 3])].collect()
@@ -303,6 +305,7 @@ class Column(object):
         Returns this column aliased with a new name or names (in the case of expressions that
         return more than one column, such as explode).
 
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob')], ['age', 'name'])
         >>> df.select(df.age.alias("age2")).collect()
         [Row(age2=2), Row(age2=5)]
         """
@@ -320,6 +323,7 @@ class Column(object):
     def cast(self, dataType):
         """ Convert the column into type ``dataType``.
 
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob')], ['age', 'name'])
         >>> df.select(df.age.cast("string").alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
         >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
@@ -344,6 +348,7 @@ class Column(object):
         A boolean expression that is evaluated to true if the value of this
         expression is between the given columns.
 
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob')], ['age', 'name'])
         >>> df.select(df.name, df.age.between(2, 4)).show()
         +-----+---------------------------+
         | name|((age >= 2) AND (age <= 4))|
@@ -366,6 +371,7 @@ class Column(object):
         :param value: a literal value, or a :class:`Column` expression.
 
         >>> from pyspark.sql import functions as F
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob')], ['age', 'name'])
         >>> df.select(df.name, F.when(df.age > 4, 1).when(df.age < 3, -1).otherwise(0)).show()
         +-----+------------------------------------------------------------+
         | name|CASE WHEN (age > 4) THEN 1 WHEN (age < 3) THEN -1 ELSE 0 END|
@@ -391,6 +397,7 @@ class Column(object):
         :param value: a literal value, or a :class:`Column` expression.
 
         >>> from pyspark.sql import functions as F
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob')], ['age', 'name'])
         >>> df.select(df.name, F.when(df.age > 3, 1).otherwise(0)).show()
         +-----+-------------------------------------+
         | name|CASE WHEN (age > 3) THEN 1 ELSE 0 END|
@@ -412,9 +419,17 @@ class Column(object):
         :return: a Column
 
         >>> from pyspark.sql import Window
-        >>> window = Window.partitionBy("name").orderBy("age").rowsBetween(-1, 1)
-        >>> from pyspark.sql.functions import rank, min
-        >>> # df.select(rank().over(window), min('age').over(window))
+        >>> window = Window.partitionBy("name").orderBy("age")
+        >>> from pyspark.sql.functions import rank
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob'), (3, 'Bob')], ['age', 'name'])
+        >>> df.select('name', 'age', rank().over(window)).show()
+        +-----+---+-----------------------------------------------------------------------------+
+        | name|age|RANK() OVER (PARTITION BY name ORDER BY age ASC NULLS FIRST UnspecifiedFrame)|
+        +-----+---+-----------------------------------------------------------------------------+
+        |  Bob|  3|                                                                            1|
+        |  Bob|  5|                                                                            2|
+        |Alice|  2|                                                                            1|
+        +-----+---+-----------------------------------------------------------------------------+
         """
         from pyspark.sql.window import WindowSpec
         if not isinstance(window, WindowSpec):
@@ -442,9 +457,7 @@ def _test():
         .getOrCreate()
     sc = spark.sparkContext
     globs['sc'] = sc
-    globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
-        .toDF(StructType([StructField('age', IntegerType()),
-                          StructField('name', StringType())]))
+    globs['spark'] = spark
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.column, globs=globs,

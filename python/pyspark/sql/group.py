@@ -73,6 +73,7 @@ class GroupedData(object):
         :param exprs: a dict mapping from column name (string) to aggregate functions (string),
             or a list of :class:`Column`.
 
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob')], ['age', 'name'])
         >>> gdf = df.groupBy(df.name)
         >>> sorted(gdf.agg({"*": "count"}).collect())
         [Row(name=u'Alice', count(1)=1), Row(name=u'Bob', count(1)=1)]
@@ -96,6 +97,7 @@ class GroupedData(object):
     def count(self):
         """Counts the number of records for each group.
 
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob')], ['age', 'name'])
         >>> sorted(df.groupBy(df.age).count().collect())
         [Row(age=2, count=1), Row(age=5, count=1)]
         """
@@ -109,8 +111,12 @@ class GroupedData(object):
 
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob')], ['age', 'name'])
         >>> df.groupBy().mean('age').collect()
         [Row(avg(age)=3.5)]
+
+        >>> df3 = spark.createDataFrame([(2, 'Alice', 80), (5, 'Bob', 85)],
+        ...                             ['age', 'name', 'height'])
         >>> df3.groupBy().mean('age', 'height').collect()
         [Row(avg(age)=3.5, avg(height)=82.5)]
         """
@@ -124,8 +130,12 @@ class GroupedData(object):
 
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob')], ['age', 'name'])
         >>> df.groupBy().avg('age').collect()
         [Row(avg(age)=3.5)]
+
+        >>> df3 = spark.createDataFrame([(2, 'Alice', 80), (5, 'Bob', 85)],
+        ...                             ['age', 'name', 'height'])
         >>> df3.groupBy().avg('age', 'height').collect()
         [Row(avg(age)=3.5, avg(height)=82.5)]
         """
@@ -135,8 +145,12 @@ class GroupedData(object):
     def max(self, *cols):
         """Computes the max value for each numeric columns for each group.
 
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob')], ['age', 'name'])
         >>> df.groupBy().max('age').collect()
         [Row(max(age)=5)]
+
+        >>> df3 = spark.createDataFrame([(2, 'Alice', 80), (5, 'Bob', 85)],
+        ...                             ['age', 'name', 'height'])
         >>> df3.groupBy().max('age', 'height').collect()
         [Row(max(age)=5, max(height)=85)]
         """
@@ -148,8 +162,12 @@ class GroupedData(object):
 
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob')], ['age', 'name'])
         >>> df.groupBy().min('age').collect()
         [Row(min(age)=2)]
+
+        >>> df3 = spark.createDataFrame([(2, 'Alice', 80), (5, 'Bob', 85)],
+        ...                             ['age', 'name', 'height'])
         >>> df3.groupBy().min('age', 'height').collect()
         [Row(min(age)=2, min(height)=80)]
         """
@@ -161,8 +179,12 @@ class GroupedData(object):
 
         :param cols: list of column names (string). Non-numeric columns are ignored.
 
+        >>> df = spark.createDataFrame([(2, 'Alice'), (5, 'Bob')], ['age', 'name'])
         >>> df.groupBy().sum('age').collect()
         [Row(sum(age)=7)]
+
+        >>> df3 = spark.createDataFrame([(2, 'Alice', 80), (5, 'Bob', 85)],
+        ...                             ['age', 'name', 'height'])
         >>> df3.groupBy().sum('age', 'height').collect()
         [Row(sum(age)=7, sum(height)=165)]
         """
@@ -180,6 +202,12 @@ class GroupedData(object):
 
         # Compute the sum of earnings for each year by course with each course as a separate column
 
+        >>> df4 = spark.createDataFrame([("dotNET", 10000, 2012),
+        ...                              ("Java", 20000, 2012),
+        ...                              ("dotNET", 5000, 2012),
+        ...                              ("dotNET", 48000, 2013),
+        ...                              ("Java", 30000, 2013)],
+        ...                             ['course', 'earnings', 'year'])
         >>> df4.groupBy("year").pivot("course", ["dotNET", "Java"]).sum("earnings").collect()
         [Row(year=2012, dotNET=15000, Java=20000), Row(year=2013, dotNET=48000, Java=30000)]
 
@@ -204,18 +232,7 @@ def _test():
         .master("local[4]")\
         .appName("sql.group tests")\
         .getOrCreate()
-    sc = spark.sparkContext
-    globs['sc'] = sc
-    globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
-        .toDF(StructType([StructField('age', IntegerType()),
-                          StructField('name', StringType())]))
-    globs['df3'] = sc.parallelize([Row(name='Alice', age=2, height=80),
-                                   Row(name='Bob', age=5, height=85)]).toDF()
-    globs['df4'] = sc.parallelize([Row(course="dotNET", year=2012, earnings=10000),
-                                   Row(course="Java",   year=2012, earnings=20000),
-                                   Row(course="dotNET", year=2012, earnings=5000),
-                                   Row(course="dotNET", year=2013, earnings=48000),
-                                   Row(course="Java",   year=2013, earnings=30000)]).toDF()
+    globs['spark'] = spark
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.group, globs=globs,
