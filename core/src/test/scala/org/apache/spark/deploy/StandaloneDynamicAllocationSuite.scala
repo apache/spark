@@ -480,7 +480,6 @@ class StandaloneDynamicAllocationSuite
       assert(apps.head.getExecutorLimit === Int.MaxValue)
     }
     val beforeList = getApplications().head.executors.keys.toSet
-    // kill all executors without replacement
     assert(killExecutorsOnHost(sc, "localhost").equals(true))
 
     syncExecutors(sc)
@@ -496,11 +495,11 @@ class StandaloneDynamicAllocationSuite
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
     when(endpointRef.address).thenReturn(mockAddress)
-    val message = RegisterExecutor("one", endpointRef, "localhost", 10, Map.empty)
+    val message = RegisterExecutor("one", endpointRef, "blacklisted-host", 10, Map.empty)
 
     // Get "localhost" on a blacklist.
     val taskScheduler = mock(classOf[TaskSchedulerImpl])
-    when(taskScheduler.nodeBlacklist()).thenReturn(Set("localhost"))
+    when(taskScheduler.nodeBlacklist()).thenReturn(Set("blacklisted-host"))
     when(taskScheduler.sc).thenReturn(sc)
     sc.taskScheduler = taskScheduler
 
@@ -511,7 +510,9 @@ class StandaloneDynamicAllocationSuite
     backend.start()
 
     backend.driverEndpoint.ask[Boolean](message)
-    verify(endpointRef).send(RegisterExecutorFailed(any()))
+    eventually(timeout(10.seconds), interval(100.millis)) {
+      verify(endpointRef).send(RegisterExecutorFailed(any()))
+    }
   }
 
   // ===============================
