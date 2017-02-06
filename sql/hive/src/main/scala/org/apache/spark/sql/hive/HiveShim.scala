@@ -277,4 +277,3 @@ private[hive] object HiveShim {
     }
   }
 }
-
