@@ -226,8 +226,9 @@ class Word2VecModel private[ml] (
 
   /**
    * Find "num" number of words closest in similarity to the given word, not
-   * including the word itself. Returns a dataframe with the words and the
-   * cosine similarities between the synonyms and the given word.
+   * including the word itself.
+   * @return a dataframe with columns "word" and "similarity" of the word and the cosine
+   * similarities between the synonyms and the given word vector.
    */
   @Since("1.5.0")
   def findSynonyms(word: String, num: Int): DataFrame = {
@@ -238,7 +239,8 @@ class Word2VecModel private[ml] (
   /**
    * Find "num" number of words whose vector representation is most similar to the supplied vector.
    * If the supplied vector is the vector representation of a word in the model's vocabulary,
-   * that word will be in the results.  Returns a dataframe with the words and the cosine
+   * that word will be in the results.
+   * @return a dataframe with columns "word" and "similarity" of the word and the cosine
    * similarities between the synonyms and the given word vector.
    */
   @Since("2.0.0")
@@ -250,8 +252,9 @@ class Word2VecModel private[ml] (
   /**
    * Find "num" number of words whose vector representation is most similar to the supplied vector.
    * If the supplied vector is the vector representation of a word in the model's vocabulary,
-   * that word will be in the results. Returns an array of the words and the cosine
-   * similarities between the synonyms and the given word vector.
+   * that word will be in the results.
+   * @return an array of the words and the cosine similarities between the synonyms given
+   * word vector.
    */
   @Since("2.2.0")
   def findSynonymsLocal(vec: Vector, num: Int): Array[(String, Double)] = {
@@ -260,8 +263,9 @@ class Word2VecModel private[ml] (
 
   /**
    * Find "num" number of words closest in similarity to the given word, not
-   * including the word itself. Returns a dataframe with the words and the
-   * cosine similarities between the synonyms and the given word.
+   * including the word itself.
+   * @return an array of the words and the cosine similarities between the synonyms given
+   * word vector.
    */
   @Since("2.2.0")
   def findSynonymsLocal(word: String, num: Int): Array[(String, Double)] = {
