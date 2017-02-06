@@ -244,6 +244,14 @@ package object config {
       .stringConf
       .createWithDefault("(?i)secret|password")
 
+  private[spark] val OUTPUT_RATIO_KILL_THRESHOLD =
+    ConfigBuilder("spark.outputRatioKillThreshold")
+      .doc("The maximum allowed ratio of the number of output rows to the number of input rows. " +
+        "Jobs with tasks exceeding this threshold will be cancelled. " +
+        "Use -1 to turn off.")
+      .longConf
+      .createWithDefault(-1)
+
   private[spark] val NETWORK_AUTH_ENABLED =
     ConfigBuilder("spark.authenticate")
       .booleanConf

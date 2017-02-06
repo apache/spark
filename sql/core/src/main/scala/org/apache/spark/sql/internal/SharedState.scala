@@ -22,7 +22,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkException, TaskOutputListener}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog._
@@ -78,6 +78,11 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
    * A listener for SQL-specific [[org.apache.spark.scheduler.SparkListenerEvent]]s.
    */
   val listener: SQLListener = createListenerAndUI(sparkContext)
+
+  /**
+   * A listener for cancelling tasks generating excessive output.
+   */
+  val taskOutputListener: TaskOutputListener = new TaskOutputListener(sparkContext)
 
   /**
    * A catalog that interacts with external systems.
