@@ -87,14 +87,7 @@ private[hive] class HiveClientImpl(
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   private val outputBuffer = new CircularBuffer()
 
-  private val shim = version match {
-    case hive.v12 => new Shim_v0_12()
-    case hive.v13 => new Shim_v0_13()
-    case hive.v14 => new Shim_v0_14()
-    case hive.v1_0 => new Shim_v1_0()
-    case hive.v1_1 => new Shim_v1_1()
-    case hive.v1_2 => new Shim_v1_2()
-  }
+  private val shim = HiveClientImpl.shim(version)
 
   // Create an internal session state for this HiveClientImpl.
   val state: SessionState = {
@@ -774,5 +767,19 @@ private[hive] class HiveClientImpl(
         logDebug(s"Dropping Database: $db")
         client.dropDatabase(db, true, false, true)
       }
+  }
+}
+
+private[hive] object HiveClientImpl {
+
+  def shim(version: HiveVersion): Shim = {
+    version match {
+      case hive.v12 => new Shim_v0_12()
+      case hive.v13 => new Shim_v0_13()
+      case hive.v14 => new Shim_v0_14()
+      case hive.v1_0 => new Shim_v1_0()
+      case hive.v1_1 => new Shim_v1_1()
+      case hive.v1_2 => new Shim_v1_2()
+    }
   }
 }
