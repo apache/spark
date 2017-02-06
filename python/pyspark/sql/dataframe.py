@@ -1271,10 +1271,14 @@ class DataFrame(object):
         """Returns a new :class:`DataFrame` replacing a value with another value.
         :func:`DataFrame.replace` and :func:`DataFrameNaFunctions.replace` are
         aliases of each other.
-        Values `to_replace` and `value` should be homogeneous. Mixed string and numeric
-        replacements are not supported.
+        Values to_replace and value should contain either all numerics, all booleans,
+        or all strings. When replacing, the new value will be cast
+        to the type of the existing column.
+        For numeric replacements all values to be replaced should have unique
+        floating point representation. In case of conflicts (for example with `{42: -1, 42.0: 1}`)
+        and arbitrary replacement will be used.
 
-        :param to_replace: int, long, float, string, list or dict.
+        :param to_replace: bool, int, long, float, string, list or dict.
             Value to be replaced.
             If the value is a dict, then `value` is ignored and `to_replace` must be a
             mapping between a value and a replacement.
