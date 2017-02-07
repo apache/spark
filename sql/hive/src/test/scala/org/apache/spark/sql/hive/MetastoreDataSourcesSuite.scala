@@ -1330,7 +1330,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           storage = CatalogStorageFormat.empty.copy(
             properties = Map("path" -> path.getAbsolutePath)
           ),
-          schema = new StructType,
+          schema = new StructType(),
           properties = Map(
             DATASOURCE_PROVIDER -> "parquet",
             SPARK_TEST_OLD_SOURCE_TABLE_CREATE -> "true"))
