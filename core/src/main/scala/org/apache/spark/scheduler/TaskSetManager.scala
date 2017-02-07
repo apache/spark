@@ -163,7 +163,12 @@ private[spark] class TaskSetManager(
     addPendingTask(i)
   }
 
-  // Figure out which locality levels we have in our TaskSet, so we can do delay scheduling
+  /**
+   * Track the set of locality levels which are valid given the tasks locality preferences and
+   * the set of currently available executors.  This is updated as executors are added and removed.
+   * This allows a performance optimization, of skipping levels that aren't relevant (eg., skip
+   * PROCESS_LOCAL if no tasks could be run PROCESS_LOCAL for the current set of executors).
+   */
   var myLocalityLevels = computeValidLocalityLevels()
   var localityWaits = myLocalityLevels.map(getLocalityWait) // Time to wait at each level
 
@@ -961,18 +966,18 @@ private[spark] class TaskSetManager(
   private def computeValidLocalityLevels(): Array[TaskLocality.TaskLocality] = {
     import TaskLocality.{PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY}
     val levels = new ArrayBuffer[TaskLocality.TaskLocality]
-    if (!pendingTasksForExecutor.isEmpty && getLocalityWait(PROCESS_LOCAL) != 0 &&
+    if (!pendingTasksForExecutor.isEmpty &&
         pendingTasksForExecutor.keySet.exists(sched.isExecutorAlive(_))) {
       levels += PROCESS_LOCAL
     }
-    if (!pendingTasksForHost.isEmpty && getLocalityWait(NODE_LOCAL) != 0 &&
+    if (!pendingTasksForHost.isEmpty &&
         pendingTasksForHost.keySet.exists(sched.hasExecutorsAliveOnHost(_))) {
       levels += NODE_LOCAL
     }
     if (!pendingTasksWithNoPrefs.isEmpty) {
       levels += NO_PREF
     }
-    if (!pendingTasksForRack.isEmpty && getLocalityWait(RACK_LOCAL) != 0 &&
+    if (!pendingTasksForRack.isEmpty &&
         pendingTasksForRack.keySet.exists(sched.hasHostAliveOnRack(_))) {
       levels += RACK_LOCAL
     }
