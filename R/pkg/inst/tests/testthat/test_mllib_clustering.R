@@ -27,6 +27,46 @@ absoluteSparkPath <- function(x) {
   file.path(sparkHome, x)
 }
 
+test_that("spark.bisectingKmeans", {
+  newIris <- iris
+  newIris$Species <- NULL
+  training <- suppressWarnings(createDataFrame(newIris))
+
+  take(training, 1)
+
+  model <- spark.bisectingKmeans(data = training, ~ .)
+  sample <- take(select(predict(model, training), "prediction"), 1)
+  expect_equal(typeof(sample$prediction), "integer")
+  expect_equal(sample$prediction, 1)
+
+  # Test fitted works on Bisecting KMeans
+  fitted.model <- fitted(model)
+  expect_equal(sort(collect(distinct(select(fitted.model, "prediction")))$prediction),
+               c(0, 1, 2, 3))
+
+  # Test summary works on KMeans
+  summary.model <- summary(model)
+  cluster <- summary.model$cluster
+  k <- summary.model$k
+  expect_equal(k, 4)
+  expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction),
+               c(0, 1, 2, 3))
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-bisectingkmeans", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  summary2 <- summary(model2)
+  expect_equal(sort(unlist(summary.model$size)), sort(unlist(summary2$size)))
+  expect_equal(summary.model$coefficients, summary2$coefficients)
+  expect_true(!summary.model$is.loaded)
+  expect_true(summary2$is.loaded)
+
+  unlink(modelPath)
+})
+
 test_that("spark.gaussianMixture", {
   # R code to reproduce the result.
   # nolint start
@@ -126,6 +166,10 @@ test_that("spark.kmeans", {
   expect_equal(k, 2)
   expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
 
+  # test summary coefficients return matrix type
+  expect_true(class(summary.model$coefficients) == "matrix")
+  expect_true(class(summary.model$coefficients[1, ]) == "numeric")
+
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-kmeans", fileext = ".tmp")
   write.ml(model, modelPath)
@@ -152,13 +196,20 @@ test_that("spark.kmeans", {
   model2 <- spark.kmeans(data = df, ~ ., k = 5, maxIter = 10,
                          initMode = "random", seed = 22222, tol = 1E-5)
 
-  fitted.model1 <- fitted(model1)
-  fitted.model2 <- fitted(model2)
+  summary.model1 <- summary(model1)
+  summary.model2 <- summary(model2)
+  cluster1 <- summary.model1$cluster
+  cluster2 <- summary.model2$cluster
+  clusterSize1 <- summary.model1$clusterSize
+  clusterSize2 <- summary.model2$clusterSize
+
   # The predicted clusters are different
-  expect_equal(sort(collect(distinct(select(fitted.model1, "prediction")))$prediction),
+  expect_equal(sort(collect(distinct(select(cluster1, "prediction")))$prediction),
              c(0, 1, 2, 3))
-  expect_equal(sort(collect(distinct(select(fitted.model2, "prediction")))$prediction),
+  expect_equal(sort(collect(distinct(select(cluster2, "prediction")))$prediction),
              c(0, 1, 2))
+  expect_equal(clusterSize1, 4)
+  expect_equal(clusterSize2, 3)
 })
 
 test_that("spark.lda with libsvm", {

@@ -1730,21 +1730,87 @@ setMethod("toRadians",
 
 #' to_date
 #'
-#' Converts the column into DateType.
+#' Converts the column into a DateType. You may optionally specify a format
+#' according to the rules in:
+#' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
+#' If the string cannot be parsed according to the specified format (or default),
+#' the value of the column will be null.
+#' The default format is 'yyyy-MM-dd'.
 #'
-#' @param x Column to compute on.
+#' @param x Column to parse.
+#' @param format string to use to parse x Column to DateType. (optional)
 #'
 #' @rdname to_date
 #' @name to_date
 #' @family datetime_funcs
-#' @aliases to_date,Column-method
+#' @aliases to_date,Column,missing-method
 #' @export
-#' @examples \dontrun{to_date(df$c)}
-#' @note to_date since 1.5.0
+#' @examples
+#' \dontrun{
+#' to_date(df$c)
+#' to_date(df$c, 'yyyy-MM-dd')
+#' }
+#' @note to_date(Column) since 1.5.0
 setMethod("to_date",
-          signature(x = "Column"),
-          function(x) {
+          signature(x = "Column", format = "missing"),
+          function(x, format) {
             jc <- callJStatic("org.apache.spark.sql.functions", "to_date", x@jc)
+            column(jc)
+          })
+
+#' @rdname to_date
+#' @name to_date
+#' @family datetime_funcs
+#' @aliases to_date,Column,character-method
+#' @export
+#' @note to_date(Column, character) since 2.2.0
+setMethod("to_date",
+          signature(x = "Column", format = "character"),
+          function(x, format) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "to_date", x@jc, format)
+            column(jc)
+          })
+
+#' to_timestamp
+#'
+#' Converts the column into a TimestampType. You may optionally specify a format
+#' according to the rules in:
+#' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
+#' If the string cannot be parsed according to the specified format (or default),
+#' the value of the column will be null.
+#' The default format is 'yyyy-MM-dd HH:mm:ss'.
+#'
+#' @param x Column to parse.
+#' @param format string to use to parse x Column to DateType. (optional)
+#'
+#' @rdname to_timestamp
+#' @name to_timestamp
+#' @family datetime_funcs
+#' @aliases to_timestamp,Column,missing-method
+#' @export
+#' @examples
+#' \dontrun{
+#' to_timestamp(df$c)
+#' to_timestamp(df$c, 'yyyy-MM-dd')
+#' }
+#' @note to_timestamp(Column) since 2.2.0
+setMethod("to_timestamp",
+          signature(x = "Column", format = "missing"),
+          function(x, format) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "to_timestamp", x@jc)
+            column(jc)
+          })
+
+#' @rdname to_timestamp
+#' @name to_timestamp
+#' @family datetime_funcs
+#' @aliases to_timestamp,Column,character-method
+#' @export
+#' @note to_timestamp(Column, character) since 2.2.0
+setMethod("to_timestamp",
+          signature(x = "Column", format = "character"),
+          function(x, format) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "to_timestamp", x@jc, format)
             column(jc)
           })
 

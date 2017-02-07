@@ -298,6 +298,8 @@ class ExpressionParserSuite extends PlanTest {
       CaseKeyWhen("a" ===  "a", Seq(true, 1)))
     assertEqual("case when a = 1 then b when a = 2 then c else d end",
       CaseWhen(Seq(('a === 1, 'b.expr), ('a === 2, 'c.expr)), 'd))
+    assertEqual("case when (1) + case when a > b then c else d end then f else g end",
+      CaseWhen(Seq((Literal(1) + CaseWhen(Seq(('a > 'b, 'c.expr)), 'd.expr), 'f.expr)), 'g))
   }
 
   test("dereference") {
