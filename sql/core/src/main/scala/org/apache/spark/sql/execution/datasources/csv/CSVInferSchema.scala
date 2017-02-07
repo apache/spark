@@ -98,6 +98,11 @@ private[csv] object CSVInferSchema {
     }
   }
 
+  private def isInfOrNan(field: String, options: CSVOptions): Boolean = {
+    val infOrNan = Seq(options.nanValue, options.negativeInf, options.positiveInf)
+    infOrNan.contains(field)
+  }
+
   private def tryParseInteger(field: String, options: CSVOptions): DataType = {
     if ((allCatch opt field.toInt).isDefined) {
       IntegerType
@@ -133,7 +138,7 @@ private[csv] object CSVInferSchema {
   }
 
   private def tryParseDouble(field: String, options: CSVOptions): DataType = {
-    if ((allCatch opt field.toDouble).isDefined) {
+    if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field, options)) {
       DoubleType
     } else {
       tryParseTimestamp(field, options)
