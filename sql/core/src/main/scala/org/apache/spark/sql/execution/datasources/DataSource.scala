@@ -85,7 +85,12 @@ case class DataSource(
 
   lazy val providingClass: Class[_] = DataSource.lookupDataSource(className)
   lazy val sourceInfo: SourceInfo = sourceSchema()
-  private val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+  private lazy val dataSourceOptions = providingClass.newInstance() match {
+    case r : JdbcRelationProvider =>
+      // JDBC source requires options as user specified, case-sensitivity is handled by the source
+      options
+    case _ => new CaseInsensitiveMap(options)
+  }
 
   /**
    * Get the schema of the given FileFormat, if provided by `userSpecifiedSchema`, or try to infer
@@ -114,7 +119,7 @@ case class DataSource(
     // in streaming mode, we have already inferred and registered partition columns, we will
     // never have to materialize the lazy val below
     lazy val tempFileIndex = {
-      val allPaths = caseInsensitiveOptions.get("path") ++ paths
+      val allPaths = dataSourceOptions.get("path") ++ paths
       val hadoopConf = sparkSession.sessionState.newHadoopConf()
       val globbedPaths = allPaths.toSeq.flatMap { path =>
         val hdfsPath = new Path(path)
@@ -173,7 +178,7 @@ case class DataSource(
     }.orElse {
       format.inferSchema(
         sparkSession,
-        caseInsensitiveOptions,
+        dataSourceOptions,
         tempFileIndex.allFiles())
     }.getOrElse {
       throw new AnalysisException(
@@ -187,11 +192,11 @@ case class DataSource(
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
         val (name, schema) = s.sourceSchema(
-          sparkSession.sqlContext, userSpecifiedSchema, className, caseInsensitiveOptions)
+          sparkSession.sqlContext, userSpecifiedSchema, className, dataSourceOptions)
         SourceInfo(name, schema, Nil)
 
       case format: FileFormat =>
-        val path = caseInsensitiveOptions.getOrElse("path", {
+        val path = dataSourceOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
 
@@ -237,10 +242,10 @@ case class DataSource(
           metadataPath,
           userSpecifiedSchema,
           className,
-          caseInsensitiveOptions)
+          dataSourceOptions)
 
       case format: FileFormat =>
-        val path = caseInsensitiveOptions.getOrElse("path", {
+        val path = dataSourceOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
         new FileStreamSource(
@@ -250,7 +255,7 @@ case class DataSource(
           schema = sourceInfo.schema,
           partitionColumns = sourceInfo.partitionColumns,
           metadataPath = metadataPath,
-          options = caseInsensitiveOptions)
+          options = dataSourceOptions)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")
@@ -261,17 +266,17 @@ case class DataSource(
   def createSink(outputMode: OutputMode): Sink = {
     providingClass.newInstance() match {
       case s: StreamSinkProvider =>
-        s.createSink(sparkSession.sqlContext, caseInsensitiveOptions, partitionColumns, outputMode)
+        s.createSink(sparkSession.sqlContext, dataSourceOptions, partitionColumns, outputMode)
 
       case fileFormat: FileFormat =>
-        val path = caseInsensitiveOptions.getOrElse("path", {
+        val path = dataSourceOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
         if (outputMode != OutputMode.Append) {
           throw new AnalysisException(
             s"Data source $className does not support $outputMode output mode")
         }
-        new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, caseInsensitiveOptions)
+        new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, dataSourceOptions)
 
       case _ =>
         throw new UnsupportedOperationException(
@@ -315,14 +320,14 @@ case class DataSource(
     val relation = (providingClass.newInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
-        dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions, schema)
+        dataSource.createRelation(sparkSession.sqlContext, dataSourceOptions, schema)
       case (dataSource: RelationProvider, None) =>
-        dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
+        dataSource.createRelation(sparkSession.sqlContext, dataSourceOptions)
       case (_: SchemaRelationProvider, None) =>
         throw new AnalysisException(s"A schema needs to be specified when using $className.")
       case (dataSource: RelationProvider, Some(schema)) =>
         val baseRelation =
-          dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
+          dataSource.createRelation(sparkSession.sqlContext, dataSourceOptions)
         if (baseRelation.schema != schema) {
           throw new AnalysisException(s"$className does not allow user-specified schemas.")
         }
@@ -331,13 +336,13 @@ case class DataSource(
       // We are reading from the results of a streaming query. Load files from the metadata log
       // instead of listing them using HDFS APIs.
       case (format: FileFormat, _)
-          if hasMetadata(caseInsensitiveOptions.get("path").toSeq ++ paths) =>
-        val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
+          if hasMetadata(dataSourceOptions.get("path").toSeq ++ paths) =>
+        val basePath = new Path((dataSourceOptions.get("path").toSeq ++ paths).head)
         val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath)
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sparkSession,
-            caseInsensitiveOptions,
+            dataSourceOptions,
             fileCatalog.allFiles())
         }.getOrElse {
           throw new AnalysisException(
@@ -351,11 +356,11 @@ case class DataSource(
           dataSchema = dataSchema,
           bucketSpec = None,
           format,
-          caseInsensitiveOptions)(sparkSession)
+          dataSourceOptions)(sparkSession)
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
-        val allPaths = caseInsensitiveOptions.get("path") ++ paths
+        val allPaths = dataSourceOptions.get("path") ++ paths
         val hadoopConf = sparkSession.sessionState.newHadoopConf()
         val globbedPaths = allPaths.flatMap { path =>
           val hdfsPath = new Path(path)
@@ -393,7 +398,7 @@ case class DataSource(
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
-          caseInsensitiveOptions)(sparkSession)
+          dataSourceOptions)(sparkSession)
 
       case _ =>
         throw new AnalysisException(
@@ -411,7 +416,7 @@ case class DataSource(
     //  1. Only one output path can be specified on the write path;
     //  2. Output path must be a legal HDFS style file system path;
     //  3. It's OK that the output path doesn't exist yet;
-    val allPaths = paths ++ caseInsensitiveOptions.get("path")
+    val allPaths = paths ++ dataSourceOptions.get("path")
     val outputPath = if (allPaths.length == 1) {
       val path = new Path(allPaths.head)
       val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
@@ -468,7 +473,7 @@ case class DataSource(
 
     providingClass.newInstance() match {
       case dataSource: CreatableRelationProvider =>
-        dataSource.createRelation(sparkSession.sqlContext, mode, caseInsensitiveOptions, data)
+        dataSource.createRelation(sparkSession.sqlContext, mode, dataSourceOptions, data)
       case format: FileFormat =>
         writeInFileFormat(format, mode, data)
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
@@ -488,7 +493,7 @@ case class DataSource(
 
     providingClass.newInstance() match {
       case dataSource: CreatableRelationProvider =>
-        dataSource.createRelation(sparkSession.sqlContext, mode, caseInsensitiveOptions, data)
+        dataSource.createRelation(sparkSession.sqlContext, mode, dataSourceOptions, data)
       case format: FileFormat =>
         writeInFileFormat(format, mode, data)
       case _ =>

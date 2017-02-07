@@ -23,20 +23,27 @@ import java.util.Properties
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 /**
- * Options for the JDBC data source.
+ * Options for the JDBC data source. Parameters to this class should be passed as user specified.
+ * JDBC data source parameters are treated in case-insensitive manner, and RDBMS connection
+ * parameters in case-sensitive manner.
  */
 class JDBCOptions(
-    @transient private val parameters: CaseInsensitiveMap)
+    @transient private val parameters: Map[String, String])
   extends Serializable {
 
   import JDBCOptions._
 
-  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
-
   def this(url: String, table: String, parameters: Map[String, String]) = {
-    this(new CaseInsensitiveMap(parameters ++ Map(
+    this(parameters ++ Map(
       JDBCOptions.JDBC_URL -> url,
-      JDBCOptions.JDBC_TABLE_NAME -> table)))
+      JDBCOptions.JDBC_TABLE_NAME -> table))
+  }
+
+  /**
+   * Parameter for JDBC data source that are handled in case-insensitive way.
+   */
+  val caseInsensitiveParams : Map[String, String] = {
+    new CaseInsensitiveMap(parameters.filterKeys(key => jdbcOptionNames(key.toLowerCase)))
   }
 
   /**
@@ -63,18 +70,19 @@ class JDBCOptions(
   // ------------------------------------------------------------
   // Required parameters
   // ------------------------------------------------------------
-  require(parameters.isDefinedAt(JDBC_URL), s"Option '$JDBC_URL' is required.")
-  require(parameters.isDefinedAt(JDBC_TABLE_NAME), s"Option '$JDBC_TABLE_NAME' is required.")
+  require(caseInsensitiveParams.isDefinedAt(JDBC_URL), s"Option '$JDBC_URL' is required.")
+  require(caseInsensitiveParams
+    .isDefinedAt(JDBC_TABLE_NAME), s"Option '$JDBC_TABLE_NAME' is required.")
   // a JDBC URL
-  val url = parameters(JDBC_URL)
+  val url = caseInsensitiveParams(JDBC_URL)
   // name of table
-  val table = parameters(JDBC_TABLE_NAME)
+  val table = caseInsensitiveParams(JDBC_TABLE_NAME)
 
   // ------------------------------------------------------------
   // Optional parameters
   // ------------------------------------------------------------
   val driverClass = {
-    val userSpecifiedDriverClass = parameters.get(JDBC_DRIVER_CLASS)
+    val userSpecifiedDriverClass = caseInsensitiveParams.get(JDBC_DRIVER_CLASS)
     userSpecifiedDriverClass.foreach(DriverRegistry.register)
 
     // Performing this part of the logic on the driver guards against the corner-case where the
@@ -86,17 +94,17 @@ class JDBCOptions(
   }
 
   // the number of partitions
-  val numPartitions = parameters.get(JDBC_NUM_PARTITIONS).map(_.toInt)
+  val numPartitions = caseInsensitiveParams.get(JDBC_NUM_PARTITIONS).map(_.toInt)
 
   // ------------------------------------------------------------
   // Optional parameters only for reading
   // ------------------------------------------------------------
   // the column used to partition
-  val partitionColumn = parameters.get(JDBC_PARTITION_COLUMN)
+  val partitionColumn = caseInsensitiveParams.get(JDBC_PARTITION_COLUMN)
   // the lower bound of partition column
-  val lowerBound = parameters.get(JDBC_LOWER_BOUND).map(_.toLong)
+  val lowerBound = caseInsensitiveParams.get(JDBC_LOWER_BOUND).map(_.toLong)
   // the upper bound of the partition column
-  val upperBound = parameters.get(JDBC_UPPER_BOUND).map(_.toLong)
+  val upperBound = caseInsensitiveParams.get(JDBC_UPPER_BOUND).map(_.toLong)
   require(partitionColumn.isEmpty ||
     (lowerBound.isDefined && upperBound.isDefined && numPartitions.isDefined),
     s"If '$JDBC_PARTITION_COLUMN' is specified then '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND'," +
@@ -114,20 +122,20 @@ class JDBCOptions(
   // Optional parameters only for writing
   // ------------------------------------------------------------
   // if to truncate the table from the JDBC database
-  val isTruncate = parameters.getOrElse(JDBC_TRUNCATE, "false").toBoolean
+  val isTruncate = caseInsensitiveParams.getOrElse(JDBC_TRUNCATE, "false").toBoolean
   // the create table option , which can be table_options or partition_options.
   // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
   // TODO: to reuse the existing partition parameters for those partition specific options
-  val createTableOptions = parameters.getOrElse(JDBC_CREATE_TABLE_OPTIONS, "")
+  val createTableOptions = caseInsensitiveParams.getOrElse(JDBC_CREATE_TABLE_OPTIONS, "")
   val batchSize = {
-    val size = parameters.getOrElse(JDBC_BATCH_INSERT_SIZE, "1000").toInt
+    val size = caseInsensitiveParams.getOrElse(JDBC_BATCH_INSERT_SIZE, "1000").toInt
     require(size >= 1,
       s"Invalid value `${size.toString}` for parameter " +
         s"`$JDBC_BATCH_INSERT_SIZE`. The minimum value is 1.")
     size
   }
   val isolationLevel =
-    parameters.getOrElse(JDBC_TXN_ISOLATION_LEVEL, "READ_UNCOMMITTED") match {
+    caseInsensitiveParams.getOrElse(JDBC_TXN_ISOLATION_LEVEL, "READ_UNCOMMITTED") match {
       case "NONE" => Connection.TRANSACTION_NONE
       case "READ_UNCOMMITTED" => Connection.TRANSACTION_READ_UNCOMMITTED
       case "READ_COMMITTED" => Connection.TRANSACTION_READ_COMMITTED

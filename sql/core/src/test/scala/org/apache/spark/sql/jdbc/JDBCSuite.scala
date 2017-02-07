@@ -925,4 +925,32 @@ class JDBCSuite extends SparkFunSuite
     assert(res.generatedRows.isEmpty)
     assert(res.outputRows === foobarCnt :: Nil)
   }
+
+  test("SPARK-19318: Connection properties keys should be treated case-sensitivie.") {
+    val parameters = Map(
+      "url" -> urlWithUserAndPass,
+      "dbtable" -> "t1",
+      "numPartitions" -> "10",
+      "oracle.jdbc.mapDateToTimestamp" -> "false"
+    )
+    assert(new JDBCOptions(parameters)
+      .asConnectionProperties.keySet().toArray()(0) == "oracle.jdbc.mapDateToTimestamp")
+  }
+
+  test("SPARK-19318: jdbc data source options should be treated case-insensitivie.") {
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("dbTable", "TEST.PEOPLE")
+      .load()
+    assert(df.count() == 3)
+
+    sql(
+      s"""
+         |CREATE TEMPORARY VIEW fooview
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (uRl '$url', dbTable 'TEST.PEOPLE', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
+    assert(sql("select * from fooview").count() == 3)
+  }
 }
