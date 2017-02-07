@@ -187,15 +187,6 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
       "spark.sql.sources.schema.numParts" -> "1",
       "spark.sql.sources.schema.part.0" -> simpleSchemaJson))
 
-  lazy val dataSourceTableWithoutSchema = CatalogTable(
-    identifier = TableIdentifier("tbl9", Some("test_db")),
-    tableType = CatalogTableType.EXTERNAL,
-    storage = CatalogStorageFormat.empty.copy(
-      locationUri = Some(defaultTableURI("tbl9").toString + "-__PLACEHOLDER__"),
-      properties = Map("path" -> tempDirUri)),
-    schema = new StructType(),
-    properties = Map("spark.sql.sources.provider" -> "json"))
-
   // A list of all raw tables we want to test, with their expected schema.
   lazy val rawTablesAndExpectations = Seq(
     hiveTable -> simpleSchema,
@@ -205,8 +196,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
     hiveCompatibleDataSourceTable -> simpleSchema,
     partitionedDataSourceTable -> partitionedSchema,
     externalDataSourceTable -> simpleSchema,
-    hiveCompatibleExternalDataSourceTable -> simpleSchema,
-    dataSourceTableWithoutSchema -> new StructType())
+    hiveCompatibleExternalDataSourceTable -> simpleSchema)
 
   test("make sure we can read table created by old version of Spark") {
     for ((tbl, expectedSchema) <- rawTablesAndExpectations) {
