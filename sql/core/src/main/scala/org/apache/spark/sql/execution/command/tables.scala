@@ -37,7 +37,10 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
+import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -187,7 +190,7 @@ case class AlterTableAddColumnsCommand(
     columns: Seq[StructField]) extends RunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val catalogTable = DDLUtils.verifyAlterTableAddColumn(catalog, table)
+    val catalogTable = verifyAlterTableAddColumn(catalog, table)
 
     // If an exception is thrown here we can just assume the table is uncached;
     // this can happen with Hive tables when the underlying catalog is in-memory.
@@ -209,6 +212,41 @@ case class AlterTableAddColumnsCommand(
       catalogTable.schema.copy(fields = (dataSchema ++ columns ++ partitionFields).toArray)))
 
     Seq.empty[Row]
+  }
+
+  /**
+   * ALTER TABLE ADD COLUMNS command does not support temporary view/table,
+   * view, or datasource table with text, orc formats or external provider.
+   */
+  private def verifyAlterTableAddColumn(
+    catalog: SessionCatalog,
+    table: TableIdentifier): CatalogTable = {
+    val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
+
+    if (catalogTable.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException(
+        s"${table.toString} is a VIEW, which does not support ALTER ADD COLUMNS.")
+    }
+
+    if (DDLUtils.isDatasourceTable(catalogTable)) {
+      DataSource.lookupDataSource(catalogTable.provider.get).newInstance() match {
+        // For datasource table, this command can only support the following File format.
+        // TextFileFormat only default to one column "value"
+        // OrcFileFormat can not handle difference between user-specified schema and
+        // inferred schema yet. TODO, once this issue is resolved , we can add Orc back.
+        // Hive type is already considered as hive serde table, so the logic will not
+        // come in here.
+        case _: JsonFileFormat =>
+        case _: CSVFileFormat =>
+        case _: ParquetFileFormat =>
+        case s =>
+          throw new AnalysisException(
+            s"""${table.toString} is a datasource table with type $s,
+               |which does not support ALTER ADD COLUMNS.""".stripMargin)
+      }
+    }
+
+    catalogTable
   }
 }
 

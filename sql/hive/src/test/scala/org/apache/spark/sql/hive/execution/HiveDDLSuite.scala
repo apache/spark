@@ -2001,17 +2001,17 @@ class HiveDDLSuite
     }
   }
 
-  test("alter datasource table add columns - orc format not supported") {
-    Seq("orc", "ORC", "org.apache.spark.sql.hive.orc",
-      "org.apache.spark.sql.hive.orc.DefaultSource").foreach { source =>
-        withTable("alter_add_ds_text") {
-          sql(s"CREATE TABLE alter_add_ds_text (c1 int) USING $source")
-          val e = intercept[AnalysisException] {
-            sql("ALTER TABLE alter_add_ds_text ADD COLUMNS (c2 int)")
-          }.getMessage
-          assert(e.contains("does not support ALTER ADD COLUMNS"))
-        }
+  Seq("orc", "ORC", "org.apache.spark.sql.hive.orc",
+    "org.apache.spark.sql.hive.orc.DefaultSource").foreach { source =>
+    test(s"alter datasource table add columns - $source format not supported") {
+      withTable("alter_add_ds_text") {
+        sql(s"CREATE TABLE alter_add_ds_text (c1 int) USING $source")
+        val e = intercept[AnalysisException] {
+          sql("ALTER TABLE alter_add_ds_text ADD COLUMNS (c2 int)")
+        }.getMessage
+        assert(e.contains("does not support ALTER ADD COLUMNS"))
       }
+    }
   }
 
   test("alter table add columns -- not support temp view") {
@@ -2020,7 +2020,7 @@ class HiveDDLSuite
       val e = intercept[AnalysisException] {
         sql("alter table tmp_v add columns (c3 int)")
       }
-      assert(e.message.contains("is a temporary VIEW, which does not support ALTER ADD COLUMNS"))
+      assert(e.message.contains("is a VIEW, which does not support ALTER ADD COLUMNS"))
     }
   }
 
