@@ -132,7 +132,8 @@ class CSVInferSchemaSuite extends SparkFunSuite {
       == StringType)
   }
 
-  test("DoubleType should be infered when a user defined nanValue/negativeInf/positiveInf") {
+  test("DoubleType should be infered when user defined nanValue/negativeInf/positiveInf" +
+    "are provided") {
     val options = new CSVOptions(Map("nanValue" -> "nan", "negativeInf" -> "-inf",
       "positiveInf" -> "inf"))
     assert(CSVInferSchema.inferField(NullType, "nan", options) == DoubleType)
