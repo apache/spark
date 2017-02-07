@@ -21,7 +21,7 @@ if sys.version > '3':
     basestring = str
 
 from pyspark import since, keyword_only, SparkContext
-from pyspark.ml import Estimator, Model, Transformer
+from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import JavaMLWriter, JavaMLReader, MLReadable, MLWritable
 from pyspark.ml.wrapper import JavaParams
