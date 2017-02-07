@@ -120,6 +120,13 @@ private[kafka010] class KafkaSource(
   }
 
   /**
+   * Number of partitions to read from Kafka. If this value is greater than the number of Kafka
+   * topicPartitions, we will not use the CachedConsumer.
+   */
+  private val numPartitions =
+    sourceOptions.getOrElse("numPartitions", "0").toInt
+
+  /**
    * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the
    * offsets and never commits them.
    */
@@ -279,39 +286,15 @@ private[kafka010] class KafkaSource(
     }.toSeq
     logDebug("TopicPartitions: " + topicPartitions.mkString(", "))
 
-    val sortedExecutors = getSortedExecutorList(sc)
-    val numExecutors = sortedExecutors.length
-    logDebug("Sorted executors: " + sortedExecutors.mkString(", "))
-
-    // Calculate offset ranges
-    val offsetRanges = topicPartitions.map { tp =>
-      val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
-        newPartitionOffsets.getOrElse(tp, {
-          // This should not happen since newPartitionOffsets contains all partitions not in
-          // fromPartitionOffsets
-          throw new IllegalStateException(s"$tp doesn't have a from offset")
-        })
-      }
-      val untilOffset = untilPartitionOffsets(tp)
-      val preferredLoc = if (numExecutors > 0) {
-        // This allows cached KafkaConsumers in the executors to be re-used to read the same
-        // partition in every batch.
-        Some(sortedExecutors(floorMod(tp.hashCode, numExecutors)))
-      } else None
-      KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
-    }.filter { range =>
-      if (range.untilOffset < range.fromOffset) {
-        reportDataLoss(s"Partition ${range.topicPartition}'s offset was changed from " +
-          s"${range.fromOffset} to ${range.untilOffset}, some data may have been missed")
-        false
-      } else {
-        true
-      }
-    }.toArray
+    val offsetRanges = getOffsetRanges(topicPartitions, fromPartitionOffsets, newPartitionOffsets,
+      untilPartitionOffsets)
+    // We can't re-use CachedConsumers if we are using multiple partitions to read from a
+    // single Kafka TopicPartition
+    val reuseCachedConsumers = canReuseCachedConsumers(topicPartitions.length)
 
     // Create an RDD that reads from Kafka and get the (key, value) pair as byte arrays.
-    val rdd = new KafkaSourceRDD(
-      sc, executorKafkaParams, offsetRanges, pollTimeoutMs, failOnDataLoss).map { cr =>
+    val rdd = new KafkaSourceRDD(sc, executorKafkaParams, offsetRanges, pollTimeoutMs,
+      failOnDataLoss, reuseCachedConsumers).map { cr =>
       InternalRow(
         cr.key,
         cr.value,
@@ -391,6 +374,83 @@ private[kafka010] class KafkaSource(
     val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
     logDebug(s"Got earliest offsets for partition : $partitionOffsets")
     partitionOffsets
+  }
+
+  /**
+   * If we divide topic partitions into multiple read tasks, we can't re-use CachedConsumers on
+   * the executors.
+   */
+  private def canReuseCachedConsumers(numTopicPartitions: Int): Boolean = {
+    math.max(numPartitions, numTopicPartitions) == numTopicPartitions
+  }
+
+  /**
+   * Calculate the offset ranges that we are going to process this batch. If `numPartitions`
+   * is not set or is set less than or equal the number of `topicPartitions` that we're going to
+   * consume, then we fall back to a 1-1 mapping of Spark tasks to Kafka partitions. If
+   * `numPartitions` is set higher than the number of our `topicPartitions`, then we will split up
+   * the read tasks of the skewed partitions to multiple Spark tasks.
+   * The number of Spark tasks will be *approximately* `numPartitions`. It can be less or more
+   * depending on rounding errors or Kafka partitions that didn't receive any new data.
+   */
+  private def getOffsetRanges(
+      topicPartitions: Seq[TopicPartition],
+      fromPartitionOffsets: Map[TopicPartition, Long],
+      newPartitionOffsets: Map[TopicPartition, Long],
+      untilPartitionOffsets: Map[TopicPartition, Long]): Seq[KafkaSourceRDDOffsetRange] = {
+    val numPartitionsToRead = math.max(numPartitions, topicPartitions.length)
+
+    val offsets = topicPartitions.flatMap { tp =>
+      val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
+        newPartitionOffsets.getOrElse(tp, {
+          // This should not happen since newPartitionOffsets contains all partitions not in
+          // fromPartitionOffsets
+          throw new IllegalStateException(s"$tp doesn't have a from offset")
+        })
+      }
+      val untilOffset = untilPartitionOffsets(tp)
+      if (untilOffset < fromOffset) {
+        reportDataLoss(s"Partition $tp's offset was changed from " +
+          s"$fromOffset to $untilOffset, some data may have been missed")
+        None
+      } else {
+        Some((tp, fromOffset, untilOffset, untilOffset - fromOffset))
+      }
+    }
+
+    if (numPartitionsToRead == topicPartitions.length) {
+      val sortedExecutors = getSortedExecutorList(sc)
+      val numExecutors = sortedExecutors.length
+      logDebug("Sorted executors: " + sortedExecutors.mkString(", "))
+
+      // One-to-One mapping
+      offsets.map { case (tp, fromOffset, untilOffset, _) =>
+        val preferredLoc = if (numExecutors > 0) {
+          // This allows cached KafkaConsumers in the executors to be re-used to read the same
+          // partition in every batch.
+          Some(sortedExecutors(floorMod(tp.hashCode, numExecutors)))
+        } else None
+        KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
+      }.toList
+    } else {
+      // one-to-many mapping. We can't re-use CachedConsumers in this instance.
+      val totalOffsets = offsets.map(o => o._4).sum
+      offsets.flatMap { case (tp, fromOffset, _, delta) =>
+        // number of partitions to divvy up this topic partition to
+        val parts = math.round(delta * 1.0 / totalOffsets * numPartitionsToRead).toInt
+        var remaining = delta
+        var startOffset = fromOffset
+        (0 until parts).map { part =>
+          // Fine to do integer division. Last partition will consume all the round off errors
+          val thisPartition = remaining / (parts - part)
+          remaining -= thisPartition
+          val endOffset = startOffset + thisPartition
+          val offsetRange = KafkaSourceRDDOffsetRange(tp, startOffset, endOffset, None)
+          startOffset = endOffset
+          offsetRange
+        }
+      }.toList
+    }
   }
 
   /**

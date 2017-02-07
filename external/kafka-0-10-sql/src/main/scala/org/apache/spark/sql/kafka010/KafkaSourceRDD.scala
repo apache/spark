@@ -21,13 +21,14 @@ import java.{util => ju}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.NextIterator
 
 
@@ -63,7 +64,8 @@ private[kafka010] class KafkaSourceRDD(
     executorKafkaParams: ju.Map[String, Object],
     offsetRanges: Seq[KafkaSourceRDDOffsetRange],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean)
+    failOnDataLoss: Boolean,
+    reuseCachedConsumers: Boolean = true)
   extends RDD[ConsumerRecord[Array[Byte], Array[Byte]]](sc, Nil) {
 
   override def persist(newLevel: StorageLevel): this.type = {
@@ -133,9 +135,18 @@ private[kafka010] class KafkaSourceRDD(
         s"skipping ${range.topic} ${range.partition}")
       Iterator.empty
     } else {
-      new NextIterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
+      if (!reuseCachedConsumers) {
+        // if we can't reuse CachedKafkaConsumers, let's reset the groupId, because we will have
+        // multiple tasks reading from the same topic partitions
+        val old = executorKafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
+        executorKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, old + "-" + thePart.index.toString)
+      }
+
+      logDebug(s"Creating iterator for $range")
+
+      val underlying = new NextIterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
         val consumer = CachedKafkaConsumer.getOrCreate(
-          range.topic, range.partition, executorKafkaParams)
+          range.topic, range.partition, executorKafkaParams, reuseCachedConsumers)
         var requestOffset = range.fromOffset
 
         override def getNext(): ConsumerRecord[Array[Byte], Array[Byte]] = {
@@ -156,7 +167,17 @@ private[kafka010] class KafkaSourceRDD(
           }
         }
 
-        override protected def close(): Unit = {}
+        override protected def close(): Unit = {
+          consumer.close()
+        }
+      }
+      if (!reuseCachedConsumers) {
+        // Don't forget to close consumers! You may take down your Kafka cluster.
+        CompletionIterator[ConsumerRecord[Array[Byte], Array[Byte]],
+          NextIterator[ConsumerRecord[Array[Byte], Array[Byte]]]](underlying,
+          underlying.closeIfNeeded())
+      } else {
+        underlying
       }
     }
   }

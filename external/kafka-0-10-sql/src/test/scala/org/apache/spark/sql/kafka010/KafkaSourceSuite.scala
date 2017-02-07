@@ -27,6 +27,7 @@ import scala.util.Random
 
 import org.apache.kafka.clients.producer.RecordMetadata
 import org.apache.kafka.common.TopicPartition
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
@@ -135,7 +136,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 }
 
 
-class KafkaSourceSuite extends KafkaSourceTest {
+class KafkaSourceSuite extends KafkaSourceTest with PrivateMethodTester {
 
   import testImplicits._
 
@@ -452,6 +453,100 @@ class KafkaSourceSuite extends KafkaSourceTest {
         recordsRead == 3
       }
     )
+  }
+
+  private lazy val getOffsetRanges = PrivateMethod[Seq[KafkaSourceRDDOffsetRange]]('getOffsetRanges)
+
+  private def withKafkaSource(
+      extraConf: Map[String, String] = Map.empty)(f: Source => Unit): Unit = {
+    val provider = new KafkaSourceProvider()
+    withTempDir { metadata =>
+      val source = provider.createSource(spark.sqlContext, metadata.toString, None, "test-provider",
+        Map(
+          "subscribe" -> "some-topic",
+          "kafka.bootstrap.servers" -> testUtils.brokerAddress) ++ extraConf)
+      f(source)
+    }
+  }
+
+  test("getOffsetRanges: 1-1 mapping of TopicPartition to Spark partition") {
+    withKafkaSource() { source =>
+      val tp = new TopicPartition("some-topic", 1)
+      val from = Map(tp -> 1L)
+      val until = Map(tp -> 5L)
+      val offsetRanges = source.invokePrivate(getOffsetRanges(Seq(tp), from, Map.empty, until))
+      assert(offsetRanges.length === 1)
+      val range = offsetRanges.head
+      assert(range.topicPartition === tp)
+      assert(range.fromOffset === 1)
+      assert(range.untilOffset === 5)
+    }
+  }
+
+  test("getOffsetRanges: 1-many mapping of TopicPartition to Spark partition") {
+    withKafkaSource(Map("numPartitions" -> "4")) { source =>
+      val tp = new TopicPartition("some-topic", 1)
+      val from = Map(tp -> 1L)
+      val until = Map(tp -> 5L)
+      val offsetRanges = source.invokePrivate(getOffsetRanges(Seq(tp), from, Map.empty, until))
+      assert(offsetRanges.length === 4)
+      assert(offsetRanges.forall(_.topicPartition === tp))
+      assert(offsetRanges.map(r => (r.fromOffset, r.untilOffset)) ===
+        Seq((1, 2), (2, 3), (3, 4), (4, 5)))
+      assert(offsetRanges.forall(_.preferredLoc === None))
+    }
+  }
+
+  test("getOffsetRanges: 1-many mapping handling skewed partitions") {
+    withKafkaSource(Map("numPartitions" -> "4")) { source =>
+      val tp1 = new TopicPartition("some-topic", 1)
+      val tp2 = new TopicPartition("some-topic", 2)
+      val from = Map(tp1 -> 1L, tp2 -> 1L)
+      val until = Map(tp1 -> 5L, tp2 -> 21L)
+      val offsetRanges =
+        source.invokePrivate(getOffsetRanges(Seq(tp1, tp2), from, Map.empty, until))
+      val expectedRanges = Seq(
+        KafkaSourceRDDOffsetRange(tp1, 1L, 5L, None),
+        KafkaSourceRDDOffsetRange(tp2, 1L, 7L, None), // 1 + 20 / 3 => 1 + 6 = 7
+        KafkaSourceRDDOffsetRange(tp2, 7L, 14L, None), // 7 + 14 / 2 => 7 + 7 = 14
+        KafkaSourceRDDOffsetRange(tp2, 14L, 21L, None) // 14 + 7 / 1 => 14 + 7 = 21
+      )
+      assert(offsetRanges === expectedRanges)
+    }
+  }
+
+  test("getOffsetRanges: number of partitions being less than topic partitions") {
+    withKafkaSource(Map("numPartitions" -> "1")) { source =>
+      val tp1 = new TopicPartition("some-topic", 1)
+      val tp2 = new TopicPartition("some-topic", 2)
+      val from = Map(tp1 -> 1L, tp2 -> 1L)
+      val until = Map(tp1 -> 5L, tp2 -> 21L)
+      val offsetRanges =
+        source.invokePrivate(getOffsetRanges(Seq(tp1, tp2), from, Map.empty, until))
+      val expectedRanges = Seq(
+        KafkaSourceRDDOffsetRange(tp1, 1L, 5L, None),
+        KafkaSourceRDDOffsetRange(tp2, 1L, 21L, None)
+      )
+      assert(offsetRanges === expectedRanges)
+    }
+  }
+
+  test("can reuse cached consumers when we have a 1-1 mapping of Spark to Kafka partitions") {
+    val canReuse = PrivateMethod[Boolean]('canReuseCachedConsumers)
+    withKafkaSource() { source =>
+      assert(source.invokePrivate(canReuse(4)))
+    }
+    withKafkaSource(Map("numPartitions" -> "1")) { source =>
+      assert(source.invokePrivate(canReuse(4)))
+    }
+    withKafkaSource(Map("numPartitions" -> "4")) { source =>
+      assert(source.invokePrivate(canReuse(4)),
+        "Can re-use because there is a 1-1 mapping of Spark partitions to Kafka")
+    }
+    withKafkaSource(Map("numPartitions" -> "8")) { source =>
+      assert(!source.invokePrivate(canReuse(4)),
+        "Can't re-use because there are more Spark partitions than Kafka")
+    }
   }
 
   test("delete a topic when a Spark job is running") {
