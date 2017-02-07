@@ -1047,4 +1047,14 @@ object StaticSQLConf {
       "SQL configuration and the current database.")
     .booleanConf
     .createWithDefault(false)
+
+  val QUERY_EXECUTION_LISTENERS = buildConf("spark.sql.queryExecutionListeners")
+    .doc("A comma-separated list of classes that implement QueryExecutionListener. When creating " +
+      "a SparkSession, instances of these listeners will be added to it. These classes " +
+      "needs to have a zero-argument constructor. If the specified class can't be found or" +
+      " the class specified doesn't have a valid constructor the SparkSession creation " +
+      "will fail with an exception.")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
 }

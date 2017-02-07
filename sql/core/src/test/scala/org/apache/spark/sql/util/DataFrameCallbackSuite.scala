@@ -20,7 +20,7 @@ package org.apache.spark.sql.util
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
-import org.apache.spark.sql.{functions, QueryTest}
+import org.apache.spark.sql.{functions, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -33,9 +33,17 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     val metrics = ArrayBuffer.empty[(String, QueryExecution, Long)]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception,
+          outputParams: Option[OutputParams]): Unit = {}
 
-      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+      override def onSuccess(
+          funcName: String,
+          qe: QueryExecution,
+          duration: Long,
+          outputParams: Option[OutputParams]): Unit = {
         metrics += ((funcName, qe, duration))
       }
     }
@@ -61,12 +69,20 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
   test("execute callback functions when a DataFrame action failed") {
     val metrics = ArrayBuffer.empty[(String, QueryExecution, Exception)]
     val listener = new QueryExecutionListener {
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception,
+          outputParams: Option[OutputParams]): Unit = {
         metrics += ((funcName, qe, exception))
       }
 
       // Only test failed case here, so no need to implement `onSuccess`
-      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {}
+      override def onSuccess(
+          funcName: String,
+          qe: QueryExecution,
+          duration: Long,
+          outputParams: Option[OutputParams]): Unit = {}
     }
     spark.listenerManager.register(listener)
 
@@ -89,9 +105,17 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     val metrics = ArrayBuffer.empty[Long]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception,
+          outputParams: Option[OutputParams]): Unit = {}
 
-      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+      override def onSuccess(
+          funcName: String,
+          qe: QueryExecution,
+          duration: Long,
+          outputParams: Option[OutputParams]): Unit = {
         val metric = qe.executedPlan match {
           case w: WholeStageCodegenExec => w.child.longMetric("numOutputRows")
           case other => other.longMetric("numOutputRows")
@@ -114,6 +138,53 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     spark.listenerManager.unregister(listener)
   }
 
+  test("QueryExecutionListener gets called on DataFrameWriter.parquet method") {
+    callSave("parquet", (df: DataFrame, path: String) => df.write.parquet(path))
+  }
+
+  test("QueryExecutionListener gets called on DataFrameWriter.json method") {
+    callSave("json", (df: DataFrame, path: String) => df.write.json(path))
+  }
+
+  test("QueryExecutionListener gets called on DataFrameWriter.csv method") {
+    callSave("csv", (df: DataFrame, path: String) => df.write.csv(path))
+  }
+
+  test("QueryExecutionListener gets called on DataFrameWriter.saveAsTable method") {
+    var onWriteSuccessCalled = false
+    spark.listenerManager.register(new QueryExecutionListener {
+
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception,
+          outputParams: Option[OutputParams]): Unit = {}
+
+      override def onSuccess(
+          funcName: String,
+          qe: QueryExecution,
+          durationNs: Long,
+          outputParams: Option[OutputParams]): Unit = {
+        assert(durationNs > 0)
+        assert(qe ne null)
+        onWriteSuccessCalled = true
+      }
+    })
+    withTable("bar") {
+      Seq(1 -> 100).toDF("x", "y").write.saveAsTable("bar")
+    }
+    assert(onWriteSuccessCalled)
+  }
+
+  private def callSave(source: String, callSaveFunction: (DataFrame, String) => Unit): Unit = {
+    val testQueryExecutionListener = new TestQueryExecutionListener(source)
+    spark.listenerManager.register(testQueryExecutionListener)
+    withTempPath { path =>
+      callSaveFunction(Seq(1 -> 100).toDF("x", "y"), path.getAbsolutePath)
+    }
+    assert(testQueryExecutionListener.onWriteSuccessCalled)
+  }
+
   // TODO: Currently some LongSQLMetric use -1 as initial value, so if the accumulator is never
   // updated, we can filter it out later.  However, when we aggregate(sum) accumulator values at
   // driver side for SQL physical operators, these -1 values will make our result smaller.
@@ -123,9 +194,17 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     val metrics = ArrayBuffer.empty[Long]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String,
+          qe: QueryExecution,
+          exception: Exception,
+          outputParams: Option[OutputParams]): Unit = {}
 
-      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+      override def onSuccess(
+          funcName: String,
+          qe: QueryExecution,
+          duration: Long,
+          outputParams: Option[OutputParams]): Unit = {
         metrics += qe.executedPlan.longMetric("dataSize").value
         val bottomAgg = qe.executedPlan.children(0).children(0)
         metrics += bottomAgg.longMetric("dataSize").value
@@ -159,4 +238,34 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
     spark.listenerManager.unregister(listener)
   }
+
+  class TestQueryExecutionListener(source: String) extends QueryExecutionListener {
+    var onWriteSuccessCalled = false
+
+    // Only test successful case here, so no need to implement `onFailure`
+    override def onFailure(
+        funcName: String,
+        qe: QueryExecution,
+        exception: Exception,
+        outputParams: Option[OutputParams]): Unit = {}
+
+    override def onSuccess(
+        funcName: String,
+        qe: QueryExecution,
+        durationNs: Long,
+        outputParams: Option[OutputParams]): Unit = {
+      assert(qe ne null)
+      assert(outputParams.isDefined)
+      assert(!outputParams.get.destination.isEmpty)
+      assert(!outputParams.get.datasourceType.isEmpty)
+      assert(durationNs > 0)
+      onWriteSuccessCalled = true
+    }
+  }
+
+  protected override def afterEach(): Unit = {
+    super.afterEach()
+    spark.listenerManager.clear()
+  }
+
 }

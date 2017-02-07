@@ -1300,10 +1300,28 @@ Configuration of in-memory caching can be done using the `setConf` method on `Sp
 
 </table>
 
+## QueryExecutionListener Options
+Use this configuration option to attach query execution listeners
+
+<table class="table">
+  <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+  <tr>
+    <td><code>spark.sql.queryExecutionListeners</code></td>
+    <td></td>
+    <td>
+      A comma-separated list of classes that implement QueryExecutionListener. When creating a SparkSession,
+      instances of these listeners will be added to it. These classes needs to have a zero-argument
+      constructor. If the specified class can't be found or the class specified doesn't have a valid
+      constructor the SparkSession creation will fail with an exception.
+    </td>
+  </tr>
+ </table>
+
 ## Other Configuration Options
 
 The following options can also be used to tune the performance of query execution. It is possible
-that these options will be deprecated in future release as more optimizations are performed automatically.
+that these options will be deprecated in future release as more optimizations are performed
+automatically.
 
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>

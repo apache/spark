@@ -26,10 +26,13 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogRelation, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.{OutputParams}
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
@@ -190,6 +193,32 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
+   * Wrap a DataFrameWriter action to track the query execution and time cost, then report to the
+   * user-registered callback functions.
+   *
+   * @param funcName A identifier for the method executing the query
+   * @param qe the @see `QueryExecution` object associated with the query
+   * @param outputParams The output parameters useful for query analysis
+   * @param action the function that executes the query after which the listener methods gets
+   *               called.
+   */
+  private def withAction(
+      funcName: String,
+      qe: QueryExecution,
+      outputParams: OutputParams)(action: => Unit) = {
+    try {
+      val start = System.nanoTime()
+      action
+      val end = System.nanoTime()
+      df.sparkSession.listenerManager.onSuccess(funcName, qe, end - start, Some(outputParams))
+    } catch {
+      case e: Exception =>
+        df.sparkSession.listenerManager.onFailure(funcName, qe, e, Some(outputParams))
+        throw e
+    }
+  }
+
+  /**
    * Saves the content of the `DataFrame` at the specified path.
    *
    * @since 1.4.0
@@ -218,7 +247,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       bucketSpec = getBucketSpec,
       options = extraOptions.toMap)
 
-    dataSource.write(mode, df)
+    val destination = source match {
+      case "jdbc" => extraOptions.get(JDBCOptions.JDBC_TABLE_NAME)
+      case _ => extraOptions.get("path")
+    }
+    val outputParams = OutputParams(source, destination, extraOptions.toMap)
+    withAction("save", df.queryExecution, outputParams) {
+      dataSource.write(mode, df)
+    }
   }
 
   /**
@@ -261,13 +297,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       )
     }
 
-    df.sparkSession.sessionState.executePlan(
+    val qe = df.sparkSession.sessionState.executePlan(
       InsertIntoTable(
         table = UnresolvedRelation(tableIdent),
         partition = Map.empty[String, Option[String]],
         query = df.logicalPlan,
         overwrite = mode == SaveMode.Overwrite,
-        ifNotExists = false)).toRdd
+        ifNotExists = false))
+    val outputParams = OutputParams(source, Some(tableIdent.unquotedString), extraOptions.toMap)
+    withAction("insertInto", qe, outputParams)(qe.toRdd)
   }
 
   private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
@@ -324,7 +362,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def assertNotPartitioned(operation: String): Unit = {
     if (partitioningColumns.isDefined) {
-      throw new AnalysisException( s"'$operation' does not support partitioning")
+      throw new AnalysisException(s"'$operation' does not support partitioning")
     }
   }
 
@@ -428,8 +466,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       partitionColumnNames = partitioningColumns.getOrElse(Nil),
       bucketSpec = getBucketSpec
     )
-    df.sparkSession.sessionState.executePlan(
-      CreateTable(tableDesc, mode, Some(df.logicalPlan))).toRdd
+    val qe = df.sparkSession.sessionState.executePlan(
+      CreateTable(tableDesc, mode, Some(df.logicalPlan)))
+    val outputParams = OutputParams(source, Some(tableIdent.unquotedString), extraOptions.toMap)
+    withAction("saveAsTable", qe, outputParams)(qe.toRdd)
   }
 
   /**
