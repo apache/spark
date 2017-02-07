@@ -849,18 +849,8 @@ private[hive] object HiveClientImpl {
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
       table.partitionColumnNames.contains(c.getName)
     }
-    if (schema.isEmpty) {
-      // This is a hack to preserve existing behavior. Before Spark 2.0, we do not
-      // set a default serde here (this was done in Hive), and so if the user provides
-      // an empty schema Hive would automatically populate the schema with a single
-      // field "col". However, after SPARK-14388, we set the default serde to
-      // LazySimpleSerde so this implicit behavior no longer happens. Therefore,
-      // we need to do it in Spark ourselves.
-      hiveTable.setFields(
-        Seq(new FieldSchema("col", "array<string>", "from deserializer")).asJava)
-    } else {
-      hiveTable.setFields(schema.asJava)
-    }
+
+    hiveTable.setFields(schema.asJava)
     hiveTable.setPartCols(partCols.asJava)
     conf.foreach(c => hiveTable.setOwner(c.getUser))
     hiveTable.setCreateTime((table.createTime / 1000).toInt)
