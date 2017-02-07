@@ -402,7 +402,6 @@ private[spark] abstract class MockBackend(
         val task = taskSet.tasks(taskDescription.index)
         (taskDescription, task)
       }
-
       newTasks.foreach { case (taskDescription, _) =>
         executorIdToExecutor(taskDescription.executorId).freeCores -= taskScheduler.CPUS_PER_TASK
       }
