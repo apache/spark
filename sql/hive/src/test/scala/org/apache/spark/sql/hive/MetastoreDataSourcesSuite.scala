@@ -748,7 +748,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val hiveTable = CatalogTable(
         identifier = TableIdentifier(tableName, Some("default")),
         tableType = CatalogTableType.MANAGED,
-        schema = simpleSchema,
+        schema = new StructType(),
         storage = CatalogStorageFormat(
           locationUri = None,
           inputFormat = None,
@@ -761,6 +761,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         properties = Map(
           DATASOURCE_PROVIDER -> "json",
           DATASOURCE_SCHEMA -> schema.json,
+          SPARK_TEST_OLD_SOURCE_TABLE_CREATE -> "true",
           "EXTERNAL" -> "FALSE"))
 
       hiveClient.createTable(hiveTable, ignoreIfExists = false)
@@ -1276,12 +1277,13 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val hiveTable = CatalogTable(
         identifier = TableIdentifier("t", Some("default")),
         tableType = CatalogTableType.MANAGED,
-        schema = simpleSchema,
+        schema = new StructType(),
         storage = CatalogStorageFormat.empty,
         properties = Map(
           DATASOURCE_PROVIDER -> "json",
           // no DATASOURCE_SCHEMA_NUMPARTS
-          DATASOURCE_SCHEMA_PART_PREFIX + 0 -> schema.json))
+          DATASOURCE_SCHEMA_PART_PREFIX + 0 -> schema.json,
+          SPARK_TEST_OLD_SOURCE_TABLE_CREATE -> "true"))
 
       hiveClient.createTable(hiveTable, ignoreIfExists = false)
 
@@ -1330,9 +1332,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           storage = CatalogStorageFormat.empty.copy(
             properties = Map("path" -> path.getAbsolutePath)
           ),
-          schema = simpleSchema,
+          schema = new StructType(),
           properties = Map(
-            HiveExternalCatalog.DATASOURCE_PROVIDER -> "parquet"))
+            DATASOURCE_PROVIDER -> "parquet",
+            SPARK_TEST_OLD_SOURCE_TABLE_CREATE -> "true"))
         hiveClient.createTable(tableDesc, ignoreIfExists = false)
 
         checkAnswer(spark.table("old"), Row(1, "a"))
