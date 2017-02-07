@@ -17,7 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import java.io.FileNotFoundException
 import java.util.Properties
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
@@ -29,11 +28,11 @@ import org.apache.spark.scheduler.SchedulingMode._
  */
 class PoolSuite extends SparkFunSuite with LocalSparkContext {
 
-  private val LOCAL = "local"
-  private val APP_NAME = "PoolSuite"
-  private val SCHEDULER_ALLOCATION_FILE_PROPERTY = "spark.scheduler.allocation.file"
+  val LOCAL = "local"
+  val APP_NAME = "PoolSuite"
+  val SCHEDULER_ALLOCATION_FILE_PROPERTY = "spark.scheduler.allocation.file"
 
-  private def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl)
+  def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl)
     : TaskSetManager = {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, Nil)
@@ -41,7 +40,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     new TaskSetManager(taskScheduler, new TaskSet(tasks, stageId, 0, 0, null), 0)
   }
 
-  private def scheduleTaskAndVerifyId(taskId: Int, rootPool: Pool, expectedStageId: Int) {
+  def scheduleTaskAndVerifyId(taskId: Int, rootPool: Pool, expectedStageId: Int) {
     val taskSetQueue = rootPool.getSortedTaskSetQueue
     val nextTaskSetToSchedule =
       taskSetQueue.find(t => (t.runningTasks + t.tasksSuccessful) < t.numTasks)
@@ -200,49 +199,6 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     verifyPool(rootPool, "pool_with_empty_weight", 2, 1, FAIR)
     verifyPool(rootPool, "pool_with_empty_scheduling_mode", 2, 2, FIFO)
     verifyPool(rootPool, "pool_with_surrounded_whitespace", 3, 2, FAIR)
-  }
-
-  test("SPARK-19466: Fair Scheduler should build fair scheduler when " +
-      "valid spark.scheduler.allocation.file property is set") {
-    val xmlPath = getClass.getClassLoader.getResource("fairscheduler-with-valid-data.xml").getFile()
-    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE_PROPERTY, xmlPath)
-    sc = new SparkContext(LOCAL, APP_NAME, conf)
-
-    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
-    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
-    schedulableBuilder.buildPools()
-
-    verifyPool(rootPool, schedulableBuilder.DEFAULT_POOL_NAME, 0, 1, FIFO)
-    verifyPool(rootPool, "pool1", 3, 1, FIFO)
-    verifyPool(rootPool, "pool2", 4, 2, FAIR)
-    verifyPool(rootPool, "pool3", 2, 3, FAIR)
-  }
-
-  test("SPARK-19466: Fair Scheduler should use default file(fairscheduler.xml) if it exists " +
-      "in classpath and spark.scheduler.allocation.file property is not set") {
-    val conf = new SparkConf()
-    sc = new SparkContext(LOCAL, APP_NAME, conf)
-
-    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
-    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
-    schedulableBuilder.buildPools()
-
-    verifyPool(rootPool, schedulableBuilder.DEFAULT_POOL_NAME, 0, 1, FIFO)
-    verifyPool(rootPool, "1", 2, 1, FIFO)
-    verifyPool(rootPool, "2", 3, 1, FIFO)
-    verifyPool(rootPool, "3", 0, 1, FIFO)
-  }
-
-  test("SPARK-19466: Fair Scheduler should throw FileNotFoundException " +
-      "when invalid spark.scheduler.allocation.file property is set") {
-    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE_PROPERTY, "INVALID_FILE_PATH")
-    sc = new SparkContext(LOCAL, APP_NAME, conf)
-
-    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
-    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
-    intercept[FileNotFoundException] {
-      schedulableBuilder.buildPools()
-    }
   }
 
   private def verifyPool(rootPool: Pool, poolName: String, expectedInitMinShare: Int,
