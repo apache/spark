@@ -1027,7 +1027,7 @@ object StaticSQLConf {
   // threshold. Note that, this conf is only read in HiveExternalCatalog which is cross-session,
   // that's why this conf has to be a static SQL conf.
   val SCHEMA_STRING_LENGTH_THRESHOLD =
-  buildStaticConf("spark.sql.sources.schemaStringLengthThreshold")
+    buildStaticConf("spark.sql.sources.schemaStringLengthThreshold")
       .doc("The maximum length allowed in a single cell when " +
         "storing additional schema information in Hive's metastore.")
       .internal()
